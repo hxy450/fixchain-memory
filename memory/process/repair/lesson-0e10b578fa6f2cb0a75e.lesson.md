@@ -30,5 +30,5 @@ round-0 fixer 把 .lineHeight 换成 lineSpacing(lineHeight − naturalHeight, o
 
 经验是有适用范围的历史建议。核查来源时同时看结论与 unknown；来源卡未随阅读包复制。
 
-- [case-04c6d6166ebb2bcc3dfa](../../../store/cases/case-04c6d6166ebb2bcc3dfa/08cc614b7fd6dff41319ea673aceed9490eb8275b4fefb40e2711fb1fa952fdd.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
-  卡片版本：`08cc614b7fd6dff41319ea673aceed9490eb8275b4fefb40e2711fb1fa952fdd`
+- [case-04c6d6166ebb2bcc3dfa](../../../store/cases/case-04c6d6166ebb2bcc3dfa/ee2b729899efde4dc3621d23c0f8d674640e9b9acb11eb543bb42cb0c8db015e.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
+  卡片版本：`ee2b729899efde4dc3621d23c0f8d674640e9b9acb11eb543bb42cb0c8db015e`

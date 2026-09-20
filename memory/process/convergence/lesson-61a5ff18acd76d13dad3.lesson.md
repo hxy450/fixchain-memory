@@ -28,5 +28,5 @@ G1 W2b 已读到 §5「e=3 自绘 Categories 卡」与 shadowFor 导出，整文
 
 经验是有适用范围的历史建议。核查来源时同时看结论与 unknown；来源卡未随阅读包复制。
 
-- [case-75329cae60986f74dc43](../../../store/cases/case-75329cae60986f74dc43/d5524cf137d18a758b217157eec484d6896c05cab1517209af89d0e620e6eb07.json) · 结论：recommendation:3
-  卡片版本：`d5524cf137d18a758b217157eec484d6896c05cab1517209af89d0e620e6eb07`
+- [case-75329cae60986f74dc43](../../../store/cases/case-75329cae60986f74dc43/e05464cbccdf6181891a9fd2ddf2bbc2143a88e5f4fc4dcc3b1be803917b20cf.json) · 结论：recommendation:3
+  卡片版本：`e05464cbccdf6181891a9fd2ddf2bbc2143a88e5f4fc4dcc3b1be803917b20cf`

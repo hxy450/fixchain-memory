@@ -30,5 +30,5 @@ converter 在 spec、源码、合成 view.xml 都没有横向留白的情况下�
 
 经验是有适用范围的历史建议。核查来源时同时看结论与 unknown；来源卡未随阅读包复制。
 
-- [case-2280cf8a2bf7682ff26b](../../../../store/cases/case-2280cf8a2bf7682ff26b/fb66b756db6239a68a90d290915c7f952fb80cf460b3c14484bb91ab77ace622.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
-  卡片版本：`fb66b756db6239a68a90d290915c7f952fb80cf460b3c14484bb91ab77ace622`
+- [case-2280cf8a2bf7682ff26b](../../../../store/cases/case-2280cf8a2bf7682ff26b/cc8fc7c67dc300609c7e0e3f4aade4d9a14da59a39a9ca7d03283e9b02a90e48.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
+  卡片版本：`cc8fc7c67dc300609c7e0e3f4aade4d9a14da59a39a9ca7d03283e9b02a90e48`

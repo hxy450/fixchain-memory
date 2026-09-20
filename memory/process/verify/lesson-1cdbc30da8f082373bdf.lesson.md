@@ -34,9 +34,9 @@ round-1/2 judge 量到 Details 行距 25.4≠28 并指到具体公式，却按�
 
 经验是有适用范围的历史建议。核查来源时同时看结论与 unknown；来源卡未随阅读包复制。
 
-- [case-049d48a5d4b79983dde3](../../../store/cases/case-049d48a5d4b79983dde3/03f1b058dbcb5149df2c8ad8d5cfcb27ff741f3cd3461e45e1f13f562864d130.json) · 结论：recommendation:4
-  卡片版本：`03f1b058dbcb5149df2c8ad8d5cfcb27ff741f3cd3461e45e1f13f562864d130`
-- [case-04c6d6166ebb2bcc3dfa](../../../store/cases/case-04c6d6166ebb2bcc3dfa/08cc614b7fd6dff41319ea673aceed9490eb8275b4fefb40e2711fb1fa952fdd.json) · 结论：recommendation:4
-  卡片版本：`08cc614b7fd6dff41319ea673aceed9490eb8275b4fefb40e2711fb1fa952fdd`
-- [case-0ff695bbe2304e899b77](../../../store/cases/case-0ff695bbe2304e899b77/d09e7f05d59d04549d82e8746a0de8d433534c1e9100e3f82d843c77249ee7b0.json) · 结论：recommendation:4
-  卡片版本：`d09e7f05d59d04549d82e8746a0de8d433534c1e9100e3f82d843c77249ee7b0`
+- [case-049d48a5d4b79983dde3](../../../store/cases/case-049d48a5d4b79983dde3/885de52567f08e89c62cff463fa18952050fa0c9697ba7f0836264cdc97ff94b.json) · 结论：recommendation:4
+  卡片版本：`885de52567f08e89c62cff463fa18952050fa0c9697ba7f0836264cdc97ff94b`
+- [case-04c6d6166ebb2bcc3dfa](../../../store/cases/case-04c6d6166ebb2bcc3dfa/ee2b729899efde4dc3621d23c0f8d674640e9b9acb11eb543bb42cb0c8db015e.json) · 结论：recommendation:4
+  卡片版本：`ee2b729899efde4dc3621d23c0f8d674640e9b9acb11eb543bb42cb0c8db015e`
+- [case-0ff695bbe2304e899b77](../../../store/cases/case-0ff695bbe2304e899b77/be35123f388a055305b4b37bd2d99d9274ca70c27c5b0c0082f6a7d3d52a4bcd.json) · 结论：recommendation:4
+  卡片版本：`be35123f388a055305b4b37bd2d99d9274ca70c27c5b0c0082f6a7d3d52a4bcd`

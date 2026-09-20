@@ -34,5 +34,5 @@ ArkUI .border 在无定尺容器上计入容器测量：高亮卡 Stack 172×250
 
 经验是有适用范围的历史建议。核查来源时同时看结论与 unknown；来源卡未随阅读包复制。
 
-- [case-77c4d0c99ad4a6486b79](../../../../store/cases/case-77c4d0c99ad4a6486b79/27e777a50597a4025558e4e2acc40fb81182444305b104b7c319f379abb5735f.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
-  卡片版本：`27e777a50597a4025558e4e2acc40fb81182444305b104b7c319f379abb5735f`
+- [case-77c4d0c99ad4a6486b79](../../../../store/cases/case-77c4d0c99ad4a6486b79/286ff5c4b52e33ee2cc428e7db64dedfa354a34e6bdf3ca4a9c44631b01ceffb.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
+  卡片版本：`286ff5c4b52e33ee2cc428e7db64dedfa354a34e6bdf3ca4a9c44631b01ceffb`

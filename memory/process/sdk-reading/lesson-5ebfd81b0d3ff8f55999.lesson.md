@@ -29,11 +29,11 @@ grep 命令只保留签名行（`radius: number | Resource;`、`lineHeight(value
 
 经验是有适用范围的历史建议。核查来源时同时看结论与 unknown；来源卡未随阅读包复制。
 
-- [case-0e3ff99e6b2aa8afcfff](../../../store/cases/case-0e3ff99e6b2aa8afcfff/08bee2db10230570995be1ac03f4f0a07ebf80600f0c6bf1ce80029468144a01.json) · 结论：recommendation:4
-  卡片版本：`08bee2db10230570995be1ac03f4f0a07ebf80600f0c6bf1ce80029468144a01`
-- [case-4056358e68946ac061c6](../../../store/cases/case-4056358e68946ac061c6/980c776952de91263454455e666febd0d02220b342fff42af8732f8bb40c165d.json) · 结论：recommendation:1
-  卡片版本：`980c776952de91263454455e666febd0d02220b342fff42af8732f8bb40c165d`
-- [case-75329cae60986f74dc43](../../../store/cases/case-75329cae60986f74dc43/d5524cf137d18a758b217157eec484d6896c05cab1517209af89d0e620e6eb07.json) · 结论：recommendation:1
-  卡片版本：`d5524cf137d18a758b217157eec484d6896c05cab1517209af89d0e620e6eb07`
-- [case-77c4d0c99ad4a6486b79](../../../store/cases/case-77c4d0c99ad4a6486b79/27e777a50597a4025558e4e2acc40fb81182444305b104b7c319f379abb5735f.json) · 结论：recommendation:2
-  卡片版本：`27e777a50597a4025558e4e2acc40fb81182444305b104b7c319f379abb5735f`
+- [case-0e3ff99e6b2aa8afcfff](../../../store/cases/case-0e3ff99e6b2aa8afcfff/b2cd27b13b55dc1007d5bd4cfcc7bc3eb62178557df5bf1e801f6b2960507c36.json) · 结论：recommendation:4
+  卡片版本：`b2cd27b13b55dc1007d5bd4cfcc7bc3eb62178557df5bf1e801f6b2960507c36`
+- [case-4056358e68946ac061c6](../../../store/cases/case-4056358e68946ac061c6/c064fce84bd61cbdd2a7d203b85e576c31033aba00f2dd902f4e42414cad012d.json) · 结论：recommendation:1
+  卡片版本：`c064fce84bd61cbdd2a7d203b85e576c31033aba00f2dd902f4e42414cad012d`
+- [case-75329cae60986f74dc43](../../../store/cases/case-75329cae60986f74dc43/e05464cbccdf6181891a9fd2ddf2bbc2143a88e5f4fc4dcc3b1be803917b20cf.json) · 结论：recommendation:1
+  卡片版本：`e05464cbccdf6181891a9fd2ddf2bbc2143a88e5f4fc4dcc3b1be803917b20cf`
+- [case-77c4d0c99ad4a6486b79](../../../store/cases/case-77c4d0c99ad4a6486b79/286ff5c4b52e33ee2cc428e7db64dedfa354a34e6bdf3ca4a9c44631b01ceffb.json) · 结论：recommendation:2
+  卡片版本：`286ff5c4b52e33ee2cc428e7db64dedfa354a34e6bdf3ca4a9c44631b01ceffb`

@@ -32,5 +32,5 @@ Compose Row 先度量不带 weight 的 fillMaxWidth 文本，尾部 IconButton �
 
 经验是有适用范围的历史建议。核查来源时同时看结论与 unknown；来源卡未随阅读包复制。
 
-- [case-72a54efb333474d03d1a](../../../../store/cases/case-72a54efb333474d03d1a/94bccd83bcb9e1df1557f29dfae3ee6909aa7675f2c947d4aea0fa86828ac880.json) · 结论：diagnosis, recommendation:1
-  卡片版本：`94bccd83bcb9e1df1557f29dfae3ee6909aa7675f2c947d4aea0fa86828ac880`
+- [case-72a54efb333474d03d1a](../../../../store/cases/case-72a54efb333474d03d1a/9ad6a4ed2bf9f3d9f783fc402bbd30da0d113c1560aff110134af9367ef644d7.json) · 结论：diagnosis, recommendation:1
+  卡片版本：`9ad6a4ed2bf9f3d9f783fc402bbd30da0d113c1560aff110134af9367ef644d7`

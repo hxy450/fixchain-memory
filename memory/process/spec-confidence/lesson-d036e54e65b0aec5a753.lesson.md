@@ -33,7 +33,7 @@ ID：`lesson-d036e54e65b0aec5a753` · 版本：1
 
 经验是有适用范围的历史建议。核查来源时同时看结论与 unknown；来源卡未随阅读包复制。
 
-- [case-6eec56e15cefd5c659cb](../../../store/cases/case-6eec56e15cefd5c659cb/f8f8a7033af1e730dc2c95dbe7c81b1f51fa0a89de63da4d5f391cb31626d4cc.json) · 结论：recommendation:2
-  卡片版本：`f8f8a7033af1e730dc2c95dbe7c81b1f51fa0a89de63da4d5f391cb31626d4cc`
-- [case-72a54efb333474d03d1a](../../../store/cases/case-72a54efb333474d03d1a/94bccd83bcb9e1df1557f29dfae3ee6909aa7675f2c947d4aea0fa86828ac880.json) · 结论：recommendation:2
-  卡片版本：`94bccd83bcb9e1df1557f29dfae3ee6909aa7675f2c947d4aea0fa86828ac880`
+- [case-6eec56e15cefd5c659cb](../../../store/cases/case-6eec56e15cefd5c659cb/c485b924cd70665967de43755b2e70352a1b4ceb7eb6723c9079f3d09eba0b93.json) · 结论：recommendation:2
+  卡片版本：`c485b924cd70665967de43755b2e70352a1b4ceb7eb6723c9079f3d09eba0b93`
+- [case-72a54efb333474d03d1a](../../../store/cases/case-72a54efb333474d03d1a/9ad6a4ed2bf9f3d9f783fc402bbd30da0d113c1560aff110134af9367ef644d7.json) · 结论：recommendation:2
+  卡片版本：`9ad6a4ed2bf9f3d9f783fc402bbd30da0d113c1560aff110134af9367ef644d7`

@@ -33,5 +33,5 @@ F001 spec 把 `constraints.maxWidth / (itemCount + 1)` 写成「W = barWidth（v
 
 经验是有适用范围的历史建议。核查来源时同时看结论与 unknown；来源卡未随阅读包复制。
 
-- [case-0ff695bbe2304e899b77](../../../../store/cases/case-0ff695bbe2304e899b77/d09e7f05d59d04549d82e8746a0de8d433534c1e9100e3f82d843c77249ee7b0.json) · 结论：diagnosis, recommendation:1, recommendation:2
-  卡片版本：`d09e7f05d59d04549d82e8746a0de8d433534c1e9100e3f82d843c77249ee7b0`
+- [case-0ff695bbe2304e899b77](../../../../store/cases/case-0ff695bbe2304e899b77/be35123f388a055305b4b37bd2d99d9274ca70c27c5b0c0082f6a7d3d52a4bcd.json) · 结论：diagnosis, recommendation:1, recommendation:2
+  卡片版本：`be35123f388a055305b4b37bd2d99d9274ca70c27c5b0c0082f6a7d3d52a4bcd`

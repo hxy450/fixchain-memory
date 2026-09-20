@@ -33,5 +33,5 @@ Compose/StaticLayout 末行按字符贪心填满再接「…」；ArkUI 默认�
 
 经验是有适用范围的历史建议。核查来源时同时看结论与 unknown；来源卡未随阅读包复制。
 
-- [case-b57f1b660260b8843ce3](../../../../store/cases/case-b57f1b660260b8843ce3/e3123fe0ca30a069842ecf2ce3d9530c4110071886e0fa7c9492dded08044631.json) · 结论：diagnosis, recommendation:1, recommendation:2
-  卡片版本：`e3123fe0ca30a069842ecf2ce3d9530c4110071886e0fa7c9492dded08044631`
+- [case-b57f1b660260b8843ce3](../../../../store/cases/case-b57f1b660260b8843ce3/6be8a93eda7e3ab3d2d6439f2891be2a742037ef97f4e39b0f675053efcb3a2a.json) · 结论：diagnosis, recommendation:1, recommendation:2
+  卡片版本：`6be8a93eda7e3ab3d2d6439f2891be2a742037ef97f4e39b0f675053efcb3a2a`

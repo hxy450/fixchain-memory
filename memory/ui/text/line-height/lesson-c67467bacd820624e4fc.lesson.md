@@ -33,5 +33,5 @@ Compose 默认 LineHeightStyle 下单行文本盒 = 字体 ascent+descent（Andr
 
 经验是有适用范围的历史建议。核查来源时同时看结论与 unknown；来源卡未随阅读包复制。
 
-- [case-4056358e68946ac061c6](../../../../store/cases/case-4056358e68946ac061c6/980c776952de91263454455e666febd0d02220b342fff42af8732f8bb40c165d.json) · 结论：diagnosis, recommendation:1
-  卡片版本：`980c776952de91263454455e666febd0d02220b342fff42af8732f8bb40c165d`
+- [case-4056358e68946ac061c6](../../../../store/cases/case-4056358e68946ac061c6/c064fce84bd61cbdd2a7d203b85e576c31033aba00f2dd902f4e42414cad012d.json) · 结论：diagnosis, recommendation:1
+  卡片版本：`c064fce84bd61cbdd2a7d203b85e576c31033aba00f2dd902f4e42414cad012d`

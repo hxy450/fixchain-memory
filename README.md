@@ -11,11 +11,17 @@
 | 来源 | Jetsnack915 迁移后的 15 张情景卡 |
 | 经验 | 27 条：24 active、3 candidate |
 | 阅读目录 | 24 条 active 经验、23 个主题；candidate 不发布到阅读目录 |
-| Memory revision | `7e883fd55d598c95ff43352ccaf038c6e7f1c5e78a908e0e0b21e78aaf790107` |
-| 数据格式 | `migloop-memory/1`、`migloop-case/1` |
-| 阅读包格式 / 发布器 | `migloop-memory-files/1` / `0.5.0` |
+| Memory revision | `16e116f9809b6f1557e3f083436ef42d4b860da501387b52ae43073c6c6e9096` |
+| 数据格式 | `migloop-memory/1`、精简的 `migloop-case/2`；维护脚本兼容旧卡 `/1` |
+| 阅读包格式 / 发布器 | `migloop-memory-files/1` / `0.6.0` |
 
 首次 Git 提交导入现有版本，保留原 store 的 3 个快照和全部卡片，未重做归并、修改结论或提升核验状态。Git 初始提交时间不是这些经验的形成时间。
+
+2026-09-20 对卡片存储做了一次格式精简：15 张卡从 7,216,738 字节降至 626,471 字节（减少 91.3%）。其中原 10,050 行的卡片降至 731 行；调查员正文、全部声明树、已绑定证据引用、27 条经验及其状态均未改写。
+
+卡片现在只保存正文、必要身份与相关来源指纹、关系的证据定位和简短核验结果。全会话逐转录统计、模型时间线、重复节点正文、完整校验回执不再逐卡保存，也没有另拆一批大文件入库。排查时可用制卡脚本的 `--debug-receipts .validation/receipts.json` 临时保存完整回执；该目录不提交。
+
+本次格式迁移同步更新了 3 个快照中的卡片哈希、73 处经验来源绑定及阅读目录链接。原始大卡和旧快照仍可在 Git 提交 `486b377` 中恢复；历史归并提案保留当时的旧 revision，未伪装成新提案。后续新提案使用上表的新 revision。
 
 ## 目录与职责
 
@@ -23,7 +29,7 @@
 store/
   HEAD.json              当前 memory revision
   snapshots/             原有不可变经验库快照
-  cases/<id>/<hash>.json  卡片、证据链、原始身份与来源信息
+  cases/<id>/<hash>.json  正文、证据引用、必要来源及简短核验状态
 memory/
   index.md               分层阅读入口
   ui/                    组件、布局、渲染、文本、输入

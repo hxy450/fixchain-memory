@@ -29,5 +29,5 @@ F005 spec 的 AC67 要求本身正确（返回后 focused=false），但复位�
 
 经验是有适用范围的历史建议。核查来源时同时看结论与 unknown；来源卡未随阅读包复制。
 
-- [case-c6aa20bd8974dabefc7b](../../../../store/cases/case-c6aa20bd8974dabefc7b/fc740a36590fa4c9a52edf158f69ec7319f08de2ed7f9fd69f6265b8ec20cd72.json) · 结论：diagnosis, recommendation:1
-  卡片版本：`fc740a36590fa4c9a52edf158f69ec7319f08de2ed7f9fd69f6265b8ec20cd72`
+- [case-c6aa20bd8974dabefc7b](../../../../store/cases/case-c6aa20bd8974dabefc7b/9d7bebdf60e8f37ea22ecebf4a50628741a64bae1510b36814dbd2008f49b057.json) · 结论：diagnosis, recommendation:1
+  卡片版本：`9d7bebdf60e8f37ea22ecebf4a50628741a64bae1510b36814dbd2008f49b057`

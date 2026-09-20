@@ -1,0 +1,614 @@
+{
+  "schema": "migloop-case/2",
+  "id": "case-0e3ff99e6b2aa8afcfff",
+  "created_at": "2026-09-18T11:09:29.570421+00:00",
+  "job": "issue-0e3ff99e6b2aa8afcfff",
+  "identity_basis": "local material location; preserve job ID across relocation/retitling",
+  "migration_key": "C:\\Users\\hongy\\.claude\\projects\\C--Users-hongy-projects-transfer-app-jetnack915",
+  "draft": {
+    "title": "把 Compose 同画布 blendMode 叠加映射成 ArkUI 独立兄弟节点的离屏混合",
+    "when": "规格提取阶段，为 Compose drawWithContent/drawRect(brush, blendMode) 这类依赖画布已有内容的绘制修饰符确定 ArkUI 渲染映射并定为 HARD 决策时；界面实现阶段按该映射写 .blendMode(mode, OFFSCREEN) 层时",
+    "description": "源码用 Modifier.drawWithContent { drawContent(); drawRect(Brush.linearGradient(colors), blendMode = Plus/Darken) } 给图标着色，效果依赖同一画布上已画好的底盘与字形（白底加法饱和仍白，只有深色字形像素变成渐变色）；目标侧准备用 ArkUI .blendMode(mode, BlendApplyType.OFFSCREEN)，而渐变层、图标、底盘是 Stack 中并列的兄弟节点，SDK 文档只说「与其下方画布已有内容混合」且 skill 参考里没有 blendMode 指引。",
+    "summary": "F002 spec 作者已读到 Gradient.kt:35-41 的 drawWithContent { drawContent(); drawRect(brush, blendMode) }、\nGradientTintedIconButton.kt:64 的 isDark ? Darken : Plus，以及源码注释 :52「This should use a layer + srcIn but needs investigation」；\ngrep 全部 skill 参考无 blendMode 指引，只读到 SDK common.d.ts:26470-26499 的 blendMode 文档「与其下方画布已有内容混合（possibly offscreen canvas）」。\n输出却把这句未定义「下方画布」范围的文档写成定论：mapping §7.1/§8「blendMode 语义 = 本组件内容与其下方画布已有内容混合，与 Compose drawRect(blendMode) 一致；混合基底 = 底色 + 已着色图标」，\n在 F002-design-system.md 第 151 行与 AC54 把独立兄弟节点 Column().blendMode(isDark ? DARKEN : PLUS, BlendApplyType.OFFSCREEN) 定为 HARD「M-12 由 F002 统一决策」，\n把源码提示且后来真正生效的 SRC_IN 蒙版法只列为「真机偏色则退回」的回退——而 a2h-execute 全阶段禁止编译、没有真机比对，这个回退条件在生成期不可能触发。偏差从这一环开始。\nSlice 2 worker（agent-aa6556475b75bfe0c）读到该 spec 行、AC54、mapping §7.1（读取窗口 136-230 未含 §8 的回退段）、Android 源码与 Batch1 页面私有版（同一写法且带 P-S6-002 forward-ref-uncertain 标记），\n只 grep 了 SDK 的 blendMode 签名，按处方写出 tintBlendMode() 与 20×20 渐变 Column .blendMode(…, OFFSCREEN)（Write 10:27:08Z），并在回执风险 #2 点名「真机颜色须由 visual-verify 确认，M-12 回退 SRC_IN」。\n该风险经主会话进入 migration-report「运行期待验」，P-S6-002 则以「共享件已由 G1 定型」为由删 marker；生成期无人核验。\nround-0 judge（Cart / SnackDetail）在 6 枚 −/+ 圆钮上看到 20×20 半透明淡色方块压断 2vp 渐变环，指认 :100-106 PLUS/OFFSCREEN 层（agent-a7cf6264b6400e506.jsonl:L178）。\n最终修改（agent-a2819b36090b54dd5.jsonl:L100-L101，提交 03ba744）：删 tintBlendMode() 与兄弟节点 PLUS/DARKEN 层，改为 24×24 Stack.blendMode(SRC_OVER, OFFSCREEN) 离屏组，\n组内 Image(glyph) + 渐变 Column.blendMode(SRC_IN, OFFSCREEN)（渐变只留在字形 alpha），pressed 圆盘留组外；round-1 两页判 fixed（Cart 0.92→0.99、SnackDetail 0.93→0.98）。\n已核实范围：本文件生成期唯一一次写入及其两处小改（@Require / content 箭头包装、borderWidth→borderSize）均不涉及混合结构；观察截止时文件还叠了 round-3 的色标/遮罩改动，不在本卡归因。\n",
+    "recommendations": [
+      "规格阶段：遇到 Compose blendMode 绘制先判断「混合结果是否依赖画布上已画好的兄弟内容」（白底 + PLUS 饱和为白、深底 + DARKEN 取 min 都依赖底色）；是则映射必须把参与混合的节点（字形与渐变，必要时含底盘）放进同一个 .blendMode(SRC_OVER, OFFSCREEN) 离屏组，组内用只依赖源/目标 alpha 的 SRC_IN/DST_IN，不能把独立兄弟节点的 PLUS/DARKEN 写成 HARD 定案。",
+      "规格阶段：SDK 文档只给「与其下方画布已有内容混合」这类未定义「下方画布」范围的措辞、且 skill 参考 grep 为空时，把该映射标为待真机核验项并写明核验方法，不定 HARD；若已想到不依赖画布状态的等价方案（SRC_IN 蒙版），把它设为主方案、依赖画布状态的方案设为回退。",
+      "规格阶段：源码里原作者的实现提示（如 `// This should use a layer + srcIn but needs investigation`）是对目标结构的直接线索，映射决策要引用并给出采纳或不采纳的理由。",
+      "实现阶段：按 spec 写 .blendMode(…, OFFSCREEN) 前读 SDK 的语义段（common.d.ts blendMode / BlendApplyType 文档），不只 grep 签名；发现 spec 主方案的回退条件（「真机偏色」）在本阶段不可能触发时，把 spec 自带的回退结构直接写进头注释并在回执风险里点名该层与切换方法，让 verify 阶段的 fixer 可一步切换。",
+      "收敛阶段：forward-ref-uncertain 占位（如 P-S6-002 iconTintLayer）解除须附核验证据（截图/dump 或等价单测），不能因「共享件已由另一切片定型」而删 marker。"
+    ],
+    "unknown": [
+      "SDK 文档「blended with the existing content on the canvas (possibly offscreen canvas) below」是否足以推出「独立节点的 OFFSCREEN 混合目标不含兄弟节点已画内容」：spec 作者（agent-a7fb652b222432f97.jsonl:L174-L175）与 fixer（agent-a2819b36090b54dd5.jsonl:L87-L88）读的是同一段，前者定为等价、后者在看到截图后定为不等价；写前输入中没有任何一处明确说明该事实（skill 参考 grep 为空：spec 作者 L157-L161、fixer L77-L78），该事实在写前不可得，属外部材料边界。SDK 文件不在本索引内，无法作为节点。",
+      "worker 把渐变层从 spec 的 100%×100% 改成 innerSize 20×20 是否加重「方块」观感：判官 §4 提到方块边与圆环内侧重叠（agent-a7cf6264b6400e506.jsonl:L178），但根因（混合目标不含兄弟内容）与尺寸无关，本卡不单独归因。",
+      "深色主题 DARKEN 分支在 round-0 未被截图核验；修复后 light/dark 收敛为同一 SRC_IN 结构，round-1 只核了 light。"
+    ],
+    "graphs": [
+      {
+        "target": {
+          "key": "C:/Users/hongy/projects/transfer-app-jetnack915/entry/src/main/ets/components/common/JetsnackGradientTintedIconButtonComponent.ets",
+          "since": "2026-09-17T13:04:20.107Z",
+          "at": "2026-09-18T03:35:57.255Z"
+        },
+        "summary": "源码与 SDK 文档已交付，spec 作者把独立兄弟节点的 PLUS/DARKEN 离屏混合定为 HARD M-12 并把 SRC_IN 蒙版法降为真机回退；Slice 2 worker 按处方实现并点名风险；生成期无核验，round-0 判出淡色方块，修复即 spec 自己的回退方案。",
+        "recommendations": [
+          "在把 blendMode 映射写成 HARD 决策前，确认混合是否依赖兄弟节点已画内容；依赖则用离屏组 + SRC_IN 作主方案。",
+          "实现 blendMode 层时读 SDK 语义段而不只签名，并把 spec 的回退结构写进注释与回执风险。"
+        ],
+        "nodes": [
+          {
+            "key": "C:/Users/hongy/projects/demo-Jetsnack-android/app/src/main/java/com/example/jetsnack/ui/components/Gradient.kt",
+            "at": "2026-09-17T04:25:28.607Z",
+            "reason": "正常输入：spec 作者 cat -n 读到 :35-41 diagonalGradientTint = drawWithContent { drawContent(); drawRect(Brush.linearGradient(colors), blendMode) }——渐变矩形在已画好内容的同一画布上按 blendMode 叠加，混合基底包含此前画出的图标与底色（agent-a7fb652b222432f97.jsonl:L93-L94）。"
+          },
+          {
+            "key": "C:/Users/hongy/projects/demo-Jetsnack-android/app/src/main/java/com/example/jetsnack/ui/components/GradientTintedIconButton.kt",
+            "at": "2026-09-17T04:25:33.429Z",
+            "reason": "正常输入：同一作者读到 :64 `val blendMode = if (isDark) BlendMode.Darken else BlendMode.Plus`、:65-78 diagonalGradientTint 两分支，以及源码注释 :52 `// This should use a layer + srcIn but needs investigation`——原作者已指出该效果应以「图层 + SrcIn」实现（agent-a7fb652b222432f97.jsonl:L96-L97）。"
+          },
+          {
+            "key": "agent-a7fb652b222432f97.jsonl",
+            "at": "2026-09-17T04:49:03.063Z",
+            "reason": "已收到节点 1、2；grep 全部 skill 参考无 blendMode 指引（L157-L161 返回空），只读到 SDK common.d.ts:26470-26499 的 blendMode 文档「与其下方画布已有内容混合（possibly offscreen canvas）」（L174-L175，SDK 文件不在索引内）。输出把这句未定义「下方画布」范围的文档写成定论：F002-design-system.mapping.md §7.1「blendMode 语义 = 本组件内容与其下方画布已有内容混合，与 Compose drawRect(blendMode) 一致」、§8「混合基底 = 底色 + 已着色图标……与 Compose 逐像素同公式」（L233-L234，04:41:24Z）；F002-design-system.md 第 151 行与 AC54 把独立兄弟节点 `Column().blendMode(isDark ? DARKEN : PLUS, BlendApplyType.OFFSCREEN)` 定为 HARD「M-12 由 F002 统一决策」，把源码提示且后来真正生效的 SRC_IN 蒙版法只列为「真机偏色则退回」（L237-L238）。ArkUI 独立节点的 OFFSCREEN 混合目标不含兄弟节点已画内容，与 Compose 同画布 drawRect 不等价；偏差从此处开始。SDK 文档措辞能否推出该事实属外部材料边界，见 unknown。",
+            "problem": true
+          },
+          {
+            "key": "C:/Users/hongy/projects/transfer-app-jetnack915/spec/baseline/features/F002-design-system.md",
+            "at": "2026-09-17T10:05:28.357Z",
+            "reason": "中间文件：Slice 2 worker 读到第 151 行映射「Stack 顶层渐变 Column().blendMode(isDark ? BlendMode.DARKEN : BlendMode.PLUS, BlendApplyType.OFFSCREEN)… HARD … M-12 由 F002 统一决策：PLUS/DARKEN 叠加复刻源公式；真机偏色则退回 SRC_IN 蒙版」（agent-aa6556475b75bfe0c.jsonl:L54-L55，10:05:23Z），随后读到 AC54「标:.blendMode(isDark ? BlendMode.DARKEN : BlendMode.PLUS, BlendApplyType.OFFSCREEN)　判:visual | 图标区域呈渐变色、圆内背景保持 uiBackground 不被渐变污染」与 AC55（同转录 L57-L58）。派工词同样写明「图标 blend tint，isDark 选 blendMode」（同转录 L1）。"
+          },
+          {
+            "key": "C:/Users/hongy/projects/transfer-app-jetnack915/spec/baseline/features/F002-design-system.mapping.md",
+            "at": "2026-09-17T10:05:46.370Z",
+            "reason": "中间文件：worker Read offset 136 / limit 95 读到 §7.1（L200-203）「ArkTS：Stack 顶层 Column()…blendMode(mode, BlendApplyType.OFFSCREEN)——blendMode 语义（common.d.ts:26499）= 本组件内容与其下方画布已有内容混合，与 Compose drawRect(blendMode) 一致」；读取窗口止于 L230，§8（L231-251）中「若真机比对发现 PLUS 叠加偏色，改用 SRC_IN 蒙版法（渐变层作源、图标作目标、BlendApplyType.OFFSCREEN）」的回退段未被读到，worker 回执把 §8 记入 deferred_addenda（agent-aa6556475b75bfe0c.jsonl:L64-L65、L312）。"
+          },
+          {
+            "key": "C:/Users/hongy/projects/demo-Jetsnack-android/app/src/main/java/com/example/jetsnack/ui/components/GradientTintedIconButton.kt",
+            "at": "2026-09-17T10:06:07.236Z",
+            "reason": "正常输入：worker 自己也读了 Kotlin 源（同一 Bash 返回含 Gradient.kt 的 drawWithContent/drawRect(brush, blendMode) 与本文件 `blendMode = if (isDark) Darken else Plus`、注释 `// This should use a layer + srcIn but needs investigation`）（agent-aa6556475b75bfe0c.jsonl:L72-L73）。"
+          },
+          {
+            "key": "C:/Users/hongy/projects/transfer-app-jetnack915/entry/src/main/ets/components/cart/GradientTintedIconButtonComponent.ets",
+            "at": "2026-09-17T10:06:45.188Z",
+            "reason": "中间文件（Batch1 page_0006 converter agent-aac707432e165e869 于 08:07:51Z 所写的页面私有版）：worker 只读对齐 API 时看到其 L113-121 同样按 F002 M-12 写了 `Column().blendMode(this.isDark ? BlendMode.DARKEN : BlendMode.PLUS, BlendApplyType.OFFSCREEN)`，且标着 `FWD-REF: P-S6-002 resolve_by=Slice 6 Step 3a kind=forward-ref-uncertain`（agent-aa6556475b75bfe0c.jsonl:L94-L95；registry 行见 L98-L99）。该层的不确定性此时已被登记，但登记只要求「Slice 6 Step 3a 确认」，不是渲染核验；后来 Slice 6 worker 以「已由 G1 定型」删 marker（c25e76ab-ae01-4697-83f6-bc9751dbaa87.jsonl:L2648）。"
+          },
+          {
+            "key": "agent-aa6556475b75bfe0c.jsonl",
+            "at": "2026-09-17T10:27:08.845Z",
+            "reason": "传递节点：按节点 4、5 的 M-12 与派工词 Write 出 JetsnackGradientTintedIconButtonComponent.ets（L247-L248）：`tintBlendMode()` 返回 isDark ? DARKEN : PLUS；20×20（innerSize）渐变 Column `.blendMode(this.tintBlendMode(), BlendApplyType.OFFSCREEN)` 作为 Image 的兄弟节点叠在 Stack 顶层，与 spec 处方一致（仅把 100% 改成内径 20 并在头注释解释）。写前对 SDK 只 grep 了签名 `blendMode(value: BlendMode, type?: BlendApplyType): T`（L121-L122），未读语义段；派工「禁止编译」、M-12 为 HARD 统一决策且回退条件是「真机」，本阶段无核验手段。回执风险 #2 明确写「Icon tint uses blendMode(PLUS|DARKEN, OFFSCREEN)… real-device colour must be confirmed by visual-verify (M-12 fallback SRC_IN if off)」（L312）。后续 L251 只改 @Require 与 content 箭头包装，不涉及混合结构。不据此认定其另有失职。"
+          },
+          {
+            "key": "agent-a2819b36090b54dd5.jsonl",
+            "at": "2026-09-17T15:56:33.146Z",
+            "reason": "修复记录（不参与归因，仅作目标修复窗口的写入锚点）：round-0 第二批 visual-fixer 读 Android GradientTintedIconButton.kt / Gradient.kt（L66-L67）、工程组件（L73-L74）、SDK blendMode 与 BlendApplyType 文档（L84-L88）后，以 python 原地替换脚本改写目标文件（L100 请求、L101 回执 ok）：删 tintBlendMode() 与兄弟节点 PLUS/DARKEN 层，改为 24×24 Stack.blendMode(SRC_OVER, OFFSCREEN) 离屏组内 Image + 渐变 Column.blendMode(SRC_IN, OFFSCREEN)，头注释写明 Compose 与 ArkUI 离屏混合目标差异；该改动随主会话提交 03ba744（c25e76ab-ae01-4697-83f6-bc9751dbaa87.jsonl:L5247）。脚本写入未被解析为原生 Write。"
+          }
+        ],
+        "edges": [
+          {
+            "from": 1,
+            "to": 3,
+            "force": true,
+            "reason": "spec 作者以 Bash `cat -n ui/components/Gradient.kt | sed -n '17,83p'` 读到 diagonalGradientTint 的 drawWithContent/drawRect(brush, blendMode) 全文（返回含 :35-41），是其后写 M-12 的直接输入；检查器未把该 Bash 读取解析为 read。",
+            "evidence": [
+              {
+                "source": "c25e76ab-ae01-4697-83f6-bc9751dbaa87/subagents/agent-a7fb652b222432f97.jsonl",
+                "line": 93
+              },
+              {
+                "source": "c25e76ab-ae01-4697-83f6-bc9751dbaa87/subagents/agent-a7fb652b222432f97.jsonl",
+                "line": 94
+              }
+            ]
+          },
+          {
+            "from": 2,
+            "to": 3,
+            "force": true,
+            "reason": "spec 作者以 Bash `cat -n ui/components/GradientTintedIconButton.kt | sed -n '17,111p'` 读到 :52 `// This should use a layer + srcIn but needs investigation` 与 :64 blendMode 选择，是 M-12 的直接输入；检查器未把该 Bash 读取解析为 read。",
+            "evidence": [
+              {
+                "source": "c25e76ab-ae01-4697-83f6-bc9751dbaa87/subagents/agent-a7fb652b222432f97.jsonl",
+                "line": 96
+              },
+              {
+                "source": "c25e76ab-ae01-4697-83f6-bc9751dbaa87/subagents/agent-a7fb652b222432f97.jsonl",
+                "line": 97
+              }
+            ]
+          },
+          {
+            "from": 3,
+            "to": 4
+          },
+          {
+            "from": 3,
+            "to": 5
+          },
+          {
+            "from": 4,
+            "to": 8
+          },
+          {
+            "from": 5,
+            "to": 8
+          },
+          {
+            "from": 6,
+            "to": 8,
+            "force": true,
+            "reason": "Slice 2 worker 以 Bash 循环 `grep -v … | cat -n` 读 Gradient.kt / GradientTintedIconButton.kt / QuantitySelector.kt / Grid.kt，返回含 drawRect(brush, blendMode)、`blendMode = if (isDark) Darken else Plus` 与 `// This should use a layer + srcIn` 注释，是其写 tintBlendMode()/渐变层前的源码输入；检查器未把该 Bash 读取解析为 read。",
+            "evidence": [
+              {
+                "source": "c25e76ab-ae01-4697-83f6-bc9751dbaa87/subagents/agent-aa6556475b75bfe0c.jsonl",
+                "line": 72
+              },
+              {
+                "source": "c25e76ab-ae01-4697-83f6-bc9751dbaa87/subagents/agent-aa6556475b75bfe0c.jsonl",
+                "line": 73
+              }
+            ]
+          },
+          {
+            "from": 7,
+            "to": 8,
+            "force": true,
+            "reason": "Slice 2 worker 以 Bash `cat -n cart/GradientTintedIconButtonComponent.ets` 只读页面私有版做 API 对齐，返回含 L113-121 同一 PLUS/DARKEN OFFSCREEN 写法与 `FWD-REF: P-S6-002 … forward-ref-uncertain` 标记；检查器未把该 Bash 读取解析为 read。",
+            "evidence": [
+              {
+                "source": "c25e76ab-ae01-4697-83f6-bc9751dbaa87/subagents/agent-aa6556475b75bfe0c.jsonl",
+                "line": 94
+              },
+              {
+                "source": "c25e76ab-ae01-4697-83f6-bc9751dbaa87/subagents/agent-aa6556475b75bfe0c.jsonl",
+                "line": 95
+              }
+            ]
+          },
+          {
+            "from": 8,
+            "to": "target"
+          },
+          {
+            "from": 9,
+            "to": "target",
+            "force": true,
+            "reason": "round-0 visual-fixer 以 Bash 内嵌 python 脚本原地改写目标文件（L100 请求：assert 旧头注释/tintBlendMode/PLUS-OFFSCREEN 片段存在后 replace 为 SRC_OVER 离屏组 + SRC_IN 渐变层，io.open(p,'w') 落盘并 sed 打印 60-120 行；L101 回执 ok 且回显新结构），是目标修复窗口内对本文件的真实写入；脚本写盘未被解析为原生 Write，此处仅作修复锚点，不改变上游归因。",
+            "evidence": [
+              {
+                "source": "c25e76ab-ae01-4697-83f6-bc9751dbaa87/subagents/agent-a2819b36090b54dd5.jsonl",
+                "line": 100
+              },
+              {
+                "source": "c25e76ab-ae01-4697-83f6-bc9751dbaa87/subagents/agent-a2819b36090b54dd5.jsonl",
+                "line": 101
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "unresolved_targets": []
+  },
+  "claims": {
+    "diagnosis": {
+      "text": "F002 spec 作者已读到 Gradient.kt:35-41 的 drawWithContent { drawContent(); drawRect(brush, blendMode) }、\nGradientTintedIconButton.kt:64 的 isDark ? Darken : Plus，以及源码注释 :52「This should use a layer + srcIn but needs investigation」；\ngrep 全部 skill 参考无 blendMode 指引，只读到 SDK common.d.ts:26470-26499 的 blendMode 文档「与其下方画布已有内容混合（possibly offscreen canvas）」。\n输出却把这句未定义「下方画布」范围的文档写成定论：mapping §7.1/§8「blendMode 语义 = 本组件内容与其下方画布已有内容混合，与 Compose drawRect(blendMode) 一致；混合基底 = 底色 + 已着色图标」，\n在 F002-design-system.md 第 151 行与 AC54 把独立兄弟节点 Column().blendMode(isDark ? DARKEN : PLUS, BlendApplyType.OFFSCREEN) 定为 HARD「M-12 由 F002 统一决策」，\n把源码提示且后来真正生效的 SRC_IN 蒙版法只列为「真机偏色则退回」的回退——而 a2h-execute 全阶段禁止编译、没有真机比对，这个回退条件在生成期不可能触发。偏差从这一环开始。\nSlice 2 worker（agent-aa6556475b75bfe0c）读到该 spec 行、AC54、mapping §7.1（读取窗口 136-230 未含 §8 的回退段）、Android 源码与 Batch1 页面私有版（同一写法且带 P-S6-002 forward-ref-uncertain 标记），\n只 grep 了 SDK 的 blendMode 签名，按处方写出 tintBlendMode() 与 20×20 渐变 Column .blendMode(…, OFFSCREEN)（Write 10:27:08Z），并在回执风险 #2 点名「真机颜色须由 visual-verify 确认，M-12 回退 SRC_IN」。\n该风险经主会话进入 migration-report「运行期待验」，P-S6-002 则以「共享件已由 G1 定型」为由删 marker；生成期无人核验。\nround-0 judge（Cart / SnackDetail）在 6 枚 −/+ 圆钮上看到 20×20 半透明淡色方块压断 2vp 渐变环，指认 :100-106 PLUS/OFFSCREEN 层（agent-a7cf6264b6400e506.jsonl:L178）。\n最终修改（agent-a2819b36090b54dd5.jsonl:L100-L101，提交 03ba744）：删 tintBlendMode() 与兄弟节点 PLUS/DARKEN 层，改为 24×24 Stack.blendMode(SRC_OVER, OFFSCREEN) 离屏组，\n组内 Image(glyph) + 渐变 Column.blendMode(SRC_IN, OFFSCREEN)（渐变只留在字形 alpha），pressed 圆盘留组外；round-1 两页判 fixed（Cart 0.92→0.99、SnackDetail 0.93→0.98）。\n已核实范围：本文件生成期唯一一次写入及其两处小改（@Require / content 箭头包装、borderWidth→borderSize）均不涉及混合结构；观察截止时文件还叠了 round-3 的色标/遮罩改动，不在本卡归因。\n",
+      "kind": "diagnosis",
+      "status": "model_claim"
+    },
+    "recommendation:1": {
+      "text": "规格阶段：遇到 Compose blendMode 绘制先判断「混合结果是否依赖画布上已画好的兄弟内容」（白底 + PLUS 饱和为白、深底 + DARKEN 取 min 都依赖底色）；是则映射必须把参与混合的节点（字形与渐变，必要时含底盘）放进同一个 .blendMode(SRC_OVER, OFFSCREEN) 离屏组，组内用只依赖源/目标 alpha 的 SRC_IN/DST_IN，不能把独立兄弟节点的 PLUS/DARKEN 写成 HARD 定案。",
+      "kind": "recommendation",
+      "status": "model_claim"
+    },
+    "recommendation:2": {
+      "text": "规格阶段：SDK 文档只给「与其下方画布已有内容混合」这类未定义「下方画布」范围的措辞、且 skill 参考 grep 为空时，把该映射标为待真机核验项并写明核验方法，不定 HARD；若已想到不依赖画布状态的等价方案（SRC_IN 蒙版），把它设为主方案、依赖画布状态的方案设为回退。",
+      "kind": "recommendation",
+      "status": "model_claim"
+    },
+    "recommendation:3": {
+      "text": "规格阶段：源码里原作者的实现提示（如 `// This should use a layer + srcIn but needs investigation`）是对目标结构的直接线索，映射决策要引用并给出采纳或不采纳的理由。",
+      "kind": "recommendation",
+      "status": "model_claim"
+    },
+    "recommendation:4": {
+      "text": "实现阶段：按 spec 写 .blendMode(…, OFFSCREEN) 前读 SDK 的语义段（common.d.ts blendMode / BlendApplyType 文档），不只 grep 签名；发现 spec 主方案的回退条件（「真机偏色」）在本阶段不可能触发时，把 spec 自带的回退结构直接写进头注释并在回执风险里点名该层与切换方法，让 verify 阶段的 fixer 可一步切换。",
+      "kind": "recommendation",
+      "status": "model_claim"
+    },
+    "recommendation:5": {
+      "text": "收敛阶段：forward-ref-uncertain 占位（如 P-S6-002 iconTintLayer）解除须附核验证据（截图/dump 或等价单测），不能因「共享件已由另一切片定型」而删 marker。",
+      "kind": "recommendation",
+      "status": "model_claim"
+    }
+  },
+  "targets": [
+    "C:/Users/hongy/projects/transfer-app-jetnack915/entry/src/main/ets/components/common/JetsnackGradientTintedIconButtonComponent.ets"
+  ],
+  "changes": [
+    {
+      "files": [
+        "entry/src/main/ets/components/common/JetsnackGradientTintedIconButtonComponent.ets"
+      ],
+      "change": "删除 `tintBlendMode()`（isDark ? DARKEN : PLUS）与 20×20 渐变 Column 的 `.blendMode(…, OFFSCREEN)`；改为 24×24 `Stack.blendMode(BlendMode.SRC_OVER, BlendApplyType.OFFSCREEN)` 离屏组，组内 `Image(glyph).fillColor(iconTint())` + 24×24 渐变 `Column.blendMode(BlendMode.SRC_IN, OFFSCREEN)`（r = s·da，渐变只留在 glyph alpha），组 `hitTestBehavior(None)`；pressed 态圆盘留组外；头注释改写说明 Compose 与 ArkUI 离屏混合目标差异。注意：该文件在 round-3 又被改色标与遮罩（见「Qty ± 字形色」任务），观察截止时保留的是 round-3 状态叠加本改动的结构。",
+      "evidence": [
+        "c25e76ab-ae01-4697-83f6-bc9751dbaa87/subagents/agent-a2819b36090b54dd5.jsonl:L100 (toolu_011cEdVVzve5STdKYSHAnYWL) python 原地替换脚本，L101 回执 ok",
+        "c25e76ab-ae01-4697-83f6-bc9751dbaa87/subagents/agent-a2819b36090b54dd5.jsonl:L243、L251（git diff 复核）、L311（hit_chain_probe 0 阻断）、L319（handback 摘要「1.」）",
+        "c25e76ab-ae01-4697-83f6-bc9751dbaa87.jsonl:L5247：提交 `03ba744`（round-0 第二批 7 ALIGN + 重编）"
+      ]
+    }
+  ],
+  "participants": [
+    {
+      "agent": "c25e76ab-ae01-4697-83f6-bc9751dbaa87/subagents/agent-a7cf6264b6400e506.jsonl",
+      "role": "发现/立单（round-0 judge Cart）",
+      "action": "对比 sbs 与 dump 判出 P0 单，指认 :100-106 PLUS/OFFSCREEN 混合层，并提示与 SnackDetail 单同根、建议合并派修。",
+      "evidence": [
+        "c25e76ab-ae01-4697-83f6-bc9751dbaa87/subagents/agent-a7cf6264b6400e506.jsonl:L154-L155（render skeleton）、L178（填 §4/§5）、L212（handback）"
+      ]
+    },
+    {
+      "agent": "c25e76ab-ae01-4697-83f6-bc9751dbaa87/subagents/agent-abf9f17f6f28b4c96.jsonl",
+      "role": "发现/立单（round-0 judge SnackDetail/Search）",
+      "action": "判出 SnackDetail 同根 P0 单并与 Cart 单 related 互链。",
+      "evidence": [
+        "c25e76ab-ae01-4697-83f6-bc9751dbaa87/subagents/agent-abf9f17f6f28b4c96.jsonl:L240-L241、L255、L305（handback）"
+      ]
+    },
+    {
+      "agent": "c25e76ab-ae01-4697-83f6-bc9751dbaa87.jsonl",
+      "role": "协调/验收",
+      "action": "派 round-0 第二批 visual-fixer，要求两单按同一根因修一次；fixer 返回后 precheck、重编重装、冷启冒烟，派 reviewer，提交 03ba744，推进 round-1。",
+      "evidence": [
+        "c25e76ab-ae01-4697-83f6-bc9751dbaa87.jsonl:L5182（派工）、L5205、L5213-L5230（重编+冒烟）、L5211（派 reviewer）、L5247"
+      ]
+    },
+    {
+      "agent": "c25e76ab-ae01-4697-83f6-bc9751dbaa87/subagents/agent-a2819b36090b54dd5.jsonl",
+      "role": "修复",
+      "action": "读 Android GradientTintedIconButton.kt / Gradient.kt、工程组件、SDK blendMode 文档（L84/L87）后重写混合结构；两单各追加 §6 attempt；跑 hit-chain 探针。",
+      "evidence": [
+        "c25e76ab-ae01-4697-83f6-bc9751dbaa87/subagents/agent-a2819b36090b54dd5.jsonl:L1（派工）、L66-L95（取证）、L100-L101、L277-L280（append_attempt）、L319"
+      ]
+    },
+    {
+      "agent": "c25e76ab-ae01-4697-83f6-bc9751dbaa87/subagents/agent-af3e09a7ddc27c293.jsonl",
+      "role": "代码审查",
+      "action": "attempt #2/#3 PASS，认定为一次改动覆盖两处消费点、非雷同假设；提示 verifier 两单应合判。",
+      "evidence": [
+        "c25e76ab-ae01-4697-83f6-bc9751dbaa87/subagents/agent-af3e09a7ddc27c293.jsonl:L33、L36"
+      ]
+    },
+    {
+      "agent": "c25e76ab-ae01-4697-83f6-bc9751dbaa87/subagents/agent-adabc2b4b7137d436.jsonl",
+      "role": "复核关单（round-1 judge Cart）",
+      "action": "round-1 三张 Cart 单全部 disposition=fixed。",
+      "evidence": [
+        "c25e76ab-ae01-4697-83f6-bc9751dbaa87/subagents/agent-adabc2b4b7137d436.jsonl:L176-L177、L217"
+      ]
+    },
+    {
+      "agent": "c25e76ab-ae01-4697-83f6-bc9751dbaa87/subagents/agent-af2adf41870bdafbd.jsonl",
+      "role": "复核关单（round-1 judge SnackDetail/Search）",
+      "action": "SnackDetail 三张单 fixed（−/+ 完整 24vp 渐变环+白底+渐变细线）。",
+      "evidence": [
+        "c25e76ab-ae01-4697-83f6-bc9751dbaa87/subagents/agent-af2adf41870bdafbd.jsonl:L244-L245、L269"
+      ]
+    }
+  ],
+  "scope": {
+    "project_roots": [
+      "C:/Users/hongy/projects/transfer-app-jetnack915"
+    ],
+    "source_roots": [
+      "C:/Users/hongy/projects/demo-Jetsnack-android"
+    ],
+    "materials": [
+      "C:/Users/hongy/.claude/projects/C--Users-hongy-projects-transfer-app-jetnack915"
+    ],
+    "generation_end": "2026-09-17T13:04:20.107Z",
+    "observation_end": "2026-09-18T03:35:57.255Z",
+    "boundary_evidence": [
+      "c25e76ab-ae01-4697-83f6-bc9751dbaa87.jsonl:L3093-L3094 (toolu_01AvYL77eWdC8FbeiCdfRKhw)：a2h-execute 终态 checkpoint `333f978` 提交于 2026-09-17T13:04:00.082Z，工作树干净",
+      "c25e76ab-ae01-4697-83f6-bc9751dbaa87.jsonl:L3096：主会话 2026-09-17T13:04:20.107Z 报告「a2h-execute 全流程完成，终态 checkpoint 333f978」——取此为生成结束",
+      "c25e76ab-ae01-4697-83f6-bc9751dbaa87.jsonl:L3099：用户 2026-09-17T13:10:09.846Z「开始visual verify」，此后进入 a2h-verify / arkts-visual-verify（修复阶段）",
+      "c25e76ab-ae01-4697-83f6-bc9751dbaa87.jsonl:L6142 (toolu_01Pgqn54EJMF2do2aFubKc37)：最后一次提交 `dafef83` 2026-09-18T03:32:32.781Z；L6144 最终报告 03:32:49.787Z",
+      "c25e76ab-ae01-4697-83f6-bc9751dbaa87.jsonl:L6146：主转录最后一条记录（away_summary）2026-09-18T03:35:57.255Z——取此为观察截止；最晚子转录结束为 agent-a7a127a584e6fd0bb.jsonl 2026-09-18T03:29:53.831Z",
+      "两次上下文压缩：主转录 L1778（2026-09-17T08:44:00Z，生成期内）与 L4533（2026-09-17T15:00:12Z，修复期内）；压缩前原始记录仍在同一文件，本盘点按原始记录取证"
+    ]
+  },
+  "packager": {
+    "name": "migloop-memory-skills",
+    "version": "0.4.0",
+    "bundle_sha256": "5de3fe6bd20c743808c03375eac5ebef6cf761eb565b4644e31de00ab64b7e75"
+  },
+  "provenance": {
+    "schema": "migloop-case-provenance/1",
+    "materials": "C:\\Users\\hongy\\.claude\\projects\\C--Users-hongy-projects-transfer-app-jetnack915",
+    "db_root_session_id": null,
+    "source_set_id": "sources-43e634af0e22f1458466",
+    "collector": {
+      "name": "migloop-memory-skills",
+      "version": "0.4.0",
+      "bundle_sha256": "5de3fe6bd20c743808c03375eac5ebef6cf761eb565b4644e31de00ab64b7e75",
+      "implementation_sha256": "e66388a9c3b2c7ffe9970b84c48d640d98a0d19b177c2c3e124d7779e72c3dab"
+    },
+    "observed": {
+      "session_ids": [
+        "c25e76ab-ae01-4697-83f6-bc9751dbaa87"
+      ],
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5",
+        "claude-sonnet-5"
+      ],
+      "providers": [],
+      "client_versions": [
+        "2.1.273"
+      ],
+      "projects": [
+        "C:\\Users\\hongy\\projects\\transfer-app-jetnack915",
+        "C:\\Users\\hongy\\projects\\transfer-app-jetnack915\\.claude\\skills",
+        "C:\\Users\\hongy\\projects\\transfer-app-jetnack915\\.claude\\skills\\a2h-spec\\scripts",
+        "C:\\Users\\hongy\\projects\\transfer-app-jetnack915\\.claude\\skills\\arkts-structural-closure\\scripts",
+        "C:\\Users\\hongy\\projects\\transfer-app-jetnack915\\.claude\\skills\\arkts-visual-verify\\scripts",
+        "C:\\Users\\hongy\\projects\\transfer-app-jetnack915\\spec\\baseline\\features"
+      ]
+    },
+    "migration": {},
+    "analysis": {},
+    "unknown": [
+      "providers",
+      "historical_migration_tool_versions",
+      "analysis_models"
+    ],
+    "sources": {
+      "c25e76ab-ae01-4697-83f6-bc9751dbaa87/subagents/agent-a2819b36090b54dd5.jsonl": "ed103f44e512ce197677a82b5dc1af0d28a36873aca0642e1bc8bafeaaac9733",
+      "c25e76ab-ae01-4697-83f6-bc9751dbaa87/subagents/agent-a7cf6264b6400e506.jsonl": "42fe6dc793b28b8da9765b847e4cda7af446cba59de617026914f5e5d69c9da0",
+      "c25e76ab-ae01-4697-83f6-bc9751dbaa87/subagents/agent-a7fb652b222432f97.jsonl": "dfd2458f75e3b49ee429f9a5246abded8d200401478e29926a39d3ddcbca662b",
+      "c25e76ab-ae01-4697-83f6-bc9751dbaa87/subagents/agent-aa6556475b75bfe0c.jsonl": "83802dbad8f9b20887507cc8d39c3feacee81aa58fadceec08dd2f0e7b63cf5c",
+      "c25e76ab-ae01-4697-83f6-bc9751dbaa87/subagents/agent-abf9f17f6f28b4c96.jsonl": "c58b142beaf5d6a061090dc48e76002285afa7aab5996eb989e4401729b01d6a",
+      "c25e76ab-ae01-4697-83f6-bc9751dbaa87/subagents/agent-adabc2b4b7137d436.jsonl": "a9da861cdb796318f5472dd749a741a10a96ddcfe8f95544a25d9f0a111f295f",
+      "c25e76ab-ae01-4697-83f6-bc9751dbaa87/subagents/agent-af2adf41870bdafbd.jsonl": "fa71997c20ea63f57ad1ff0c80d899ab31f19d2c0d202290cb50719396f903e3",
+      "c25e76ab-ae01-4697-83f6-bc9751dbaa87/subagents/agent-af3e09a7ddc27c293.jsonl": "c45e8682e74d55be6540b644f407a97e87fcc007de09a541a44f96606af58965",
+      "c25e76ab-ae01-4697-83f6-bc9751dbaa87.jsonl": "a1b74f53241746503b9b77a870fb672a2ac1ea8d87c3948b01902f863889eb14"
+    }
+  },
+  "graph_evidence": [
+    {
+      "graph": 1,
+      "nodes": [
+        {
+          "id": "card:n-250356d380b9df02",
+          "kind": "file",
+          "key": "C:/Users/hongy/projects/demo-Jetsnack-android/app/src/main/java/com/example/jetsnack/ui/components/Gradient.kt",
+          "at": "2026-09-17T04:25:28.607000+00:00"
+        },
+        {
+          "id": "card:n-3af536d5ad140a28",
+          "kind": "file",
+          "key": "C:/Users/hongy/projects/demo-Jetsnack-android/app/src/main/java/com/example/jetsnack/ui/components/GradientTintedIconButton.kt",
+          "at": "2026-09-17T04:25:33.429000+00:00"
+        },
+        {
+          "id": "card:n-191505dbce2325e5",
+          "kind": "agent",
+          "key": "c25e76ab-ae01-4697-83f6-bc9751dbaa87:a7fb652b222432f97",
+          "at": "2026-09-17T04:49:03.063000+00:00"
+        },
+        {
+          "id": "card:n-781570d3d44470a9",
+          "kind": "file",
+          "key": "C:/Users/hongy/projects/transfer-app-jetnack915/spec/baseline/features/F002-design-system.md",
+          "at": "2026-09-17T10:05:28.357000+00:00"
+        },
+        {
+          "id": "card:n-efc7af87b669d399",
+          "kind": "file",
+          "key": "C:/Users/hongy/projects/transfer-app-jetnack915/spec/baseline/features/F002-design-system.mapping.md",
+          "at": "2026-09-17T10:05:46.370000+00:00"
+        },
+        {
+          "id": "card:n-3d719ee3451991b6",
+          "kind": "file",
+          "key": "C:/Users/hongy/projects/demo-Jetsnack-android/app/src/main/java/com/example/jetsnack/ui/components/GradientTintedIconButton.kt",
+          "at": "2026-09-17T10:06:07.236000+00:00"
+        },
+        {
+          "id": "card:n-f71444bf609b8592",
+          "kind": "file",
+          "key": "C:/Users/hongy/projects/transfer-app-jetnack915/entry/src/main/ets/components/cart/GradientTintedIconButtonComponent.ets",
+          "at": "2026-09-17T10:06:45.188000+00:00"
+        },
+        {
+          "id": "card:n-2668c3676c9aeb6d",
+          "kind": "agent",
+          "key": "c25e76ab-ae01-4697-83f6-bc9751dbaa87:aa6556475b75bfe0c",
+          "at": "2026-09-17T10:27:08.845000+00:00"
+        },
+        {
+          "id": "card:n-1427d38035c0af20",
+          "kind": "agent",
+          "key": "c25e76ab-ae01-4697-83f6-bc9751dbaa87:a2819b36090b54dd5",
+          "at": "2026-09-17T15:56:33.146000+00:00"
+        },
+        {
+          "id": "card:n-fdc56bb880591c86",
+          "kind": "file",
+          "key": "C:/Users/hongy/projects/transfer-app-jetnack915/entry/src/main/ets/components/common/JetsnackGradientTintedIconButtonComponent.ets",
+          "at": "2026-09-18T03:35:57.255000+00:00"
+        }
+      ],
+      "edges": [
+        {
+          "from": "card:n-250356d380b9df02",
+          "to": "card:n-191505dbce2325e5",
+          "relation": "read",
+          "at": "2026-09-17T04:25:28.607000+00:00",
+          "source": "model_review",
+          "strength": "candidate",
+          "evidence": [
+            "0b14e74f1cba2dcd:93:f3a5af221a4c9a7d",
+            "0b14e74f1cba2dcd:94:496c738237f3519f"
+          ],
+          "quote_verified": true
+        },
+        {
+          "from": "card:n-3af536d5ad140a28",
+          "to": "card:n-191505dbce2325e5",
+          "relation": "read",
+          "at": "2026-09-17T04:25:33.429000+00:00",
+          "source": "model_review",
+          "strength": "candidate",
+          "evidence": [
+            "0b14e74f1cba2dcd:96:cee8c24662658a35",
+            "0b14e74f1cba2dcd:97:f0159b4a1c223490"
+          ],
+          "quote_verified": true
+        },
+        {
+          "from": "card:n-191505dbce2325e5",
+          "to": "card:n-781570d3d44470a9",
+          "relation": "write",
+          "at": "2026-09-17T04:49:03.063000+00:00",
+          "source": "model_edge",
+          "strength": "confirmed",
+          "evidence": [
+            "0b14e74f1cba2dcd:237:2103f87dba14d44e",
+            "0b14e74f1cba2dcd:238:cd21c9176a84e742"
+          ]
+        },
+        {
+          "from": "card:n-191505dbce2325e5",
+          "to": "card:n-efc7af87b669d399",
+          "relation": "write",
+          "at": "2026-09-17T04:41:24.315000+00:00",
+          "source": "model_edge",
+          "strength": "confirmed",
+          "evidence": [
+            "0b14e74f1cba2dcd:233:22c3c4d6848cf063",
+            "0b14e74f1cba2dcd:234:b262a5d2ea0ec938"
+          ]
+        },
+        {
+          "from": "card:n-781570d3d44470a9",
+          "to": "card:n-2668c3676c9aeb6d",
+          "relation": "read",
+          "at": "2026-09-17T10:05:23.524000+00:00",
+          "source": "model_edge",
+          "strength": "confirmed",
+          "evidence": [
+            "8c47f1243facf921:54:73a68799a515105a",
+            "8c47f1243facf921:55:fc500386ea1257ab"
+          ]
+        },
+        {
+          "from": "card:n-781570d3d44470a9",
+          "to": "card:n-2668c3676c9aeb6d",
+          "relation": "read",
+          "at": "2026-09-17T10:05:28.357000+00:00",
+          "source": "model_edge",
+          "strength": "confirmed",
+          "evidence": [
+            "8c47f1243facf921:57:a66d8fe235270f13",
+            "8c47f1243facf921:58:65892b5ee68a4248"
+          ]
+        },
+        {
+          "from": "card:n-efc7af87b669d399",
+          "to": "card:n-2668c3676c9aeb6d",
+          "relation": "read",
+          "at": "2026-09-17T10:05:46.370000+00:00",
+          "source": "model_edge",
+          "strength": "confirmed",
+          "evidence": [
+            "8c47f1243facf921:64:1776b00477da7f55",
+            "8c47f1243facf921:65:3219ab485cbd72c9"
+          ]
+        },
+        {
+          "from": "card:n-3d719ee3451991b6",
+          "to": "card:n-2668c3676c9aeb6d",
+          "relation": "read",
+          "at": "2026-09-17T10:06:07.236000+00:00",
+          "source": "model_review",
+          "strength": "candidate",
+          "evidence": [
+            "8c47f1243facf921:72:56f4d7ebbf9b09a3",
+            "8c47f1243facf921:73:73bdbe8aa2c038b2"
+          ],
+          "quote_verified": true
+        },
+        {
+          "from": "card:n-f71444bf609b8592",
+          "to": "card:n-2668c3676c9aeb6d",
+          "relation": "read",
+          "at": "2026-09-17T10:06:45.188000+00:00",
+          "source": "model_review",
+          "strength": "candidate",
+          "evidence": [
+            "8c47f1243facf921:94:6195d8286b562ed9",
+            "8c47f1243facf921:95:54213d5477fd2f43"
+          ],
+          "quote_verified": true
+        },
+        {
+          "from": "card:n-2668c3676c9aeb6d",
+          "to": "card:n-fdc56bb880591c86",
+          "relation": "write",
+          "at": "2026-09-17T10:27:08.845000+00:00",
+          "source": "model_edge",
+          "strength": "confirmed",
+          "evidence": [
+            "8c47f1243facf921:247:b275f605097da579",
+            "8c47f1243facf921:248:a7eb94457bc32088"
+          ]
+        },
+        {
+          "from": "card:n-1427d38035c0af20",
+          "to": "card:n-fdc56bb880591c86",
+          "relation": "write",
+          "at": "2026-09-17T15:56:33.146000+00:00",
+          "source": "model_review",
+          "strength": "candidate",
+          "evidence": [
+            "eb494bf5088de4a6:100:03bd39fa8f8a4f21",
+            "eb494bf5088de4a6:101:b222930df2b1cb60"
+          ],
+          "quote_verified": true
+        }
+      ]
+    }
+  ],
+  "validation": {
+    "schema": "passed",
+    "graph_check": "performed",
+    "causal_correctness": "not_certified",
+    "unresolved_targets": [],
+    "graph_checks": [
+      {
+        "graph": 1,
+        "draft_sha256": "d311f4f4403505948b48dbae343938d0e141e0e5927794fda9aed79811258997",
+        "receipt": {
+          "schema": "inquiry-graph/1",
+          "report_id": "7fd4eab31e094aea",
+          "mechanical_status": "valid",
+          "path_status": "complete",
+          "semantic_verified": false,
+          "submission_format": "coordinates/1",
+          "issues": [],
+          "missing_evidence_links": [],
+          "delivery": {
+            "status": "ready_for_review",
+            "semantic_verified": false,
+            "coverage_verified": false
+          },
+          "path_diagnostics": [
+            "历史关系路径已接通；内容传播和原因仍是模型主张。"
+          ]
+        }
+      }
+    ]
+  },
+  "revision": "b2cd27b13b55dc1007d5bd4cfcc7bc3eb62178557df5bf1e801f6b2960507c36"
+}

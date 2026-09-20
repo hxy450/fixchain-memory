@@ -35,5 +35,5 @@ ArkUI 单节点 .blendMode(…, OFFSCREEN) 的混合目标是该节点自身的�
 
 经验是有适用范围的历史建议。核查来源时同时看结论与 unknown；来源卡未随阅读包复制。
 
-- [case-0e3ff99e6b2aa8afcfff](../../../../store/cases/case-0e3ff99e6b2aa8afcfff/08bee2db10230570995be1ac03f4f0a07ebf80600f0c6bf1ce80029468144a01.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
-  卡片版本：`08bee2db10230570995be1ac03f4f0a07ebf80600f0c6bf1ce80029468144a01`
+- [case-0e3ff99e6b2aa8afcfff](../../../../store/cases/case-0e3ff99e6b2aa8afcfff/b2cd27b13b55dc1007d5bd4cfcc7bc3eb62178557df5bf1e801f6b2960507c36.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
+  卡片版本：`b2cd27b13b55dc1007d5bd4cfcc7bc3eb62178557df5bf1e801f6b2960507c36`
