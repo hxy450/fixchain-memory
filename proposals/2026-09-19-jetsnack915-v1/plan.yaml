@@ -1,0 +1,689 @@
+base_revision: f950cd34c18da00b23a5bd17778ab10a457fb1f57a7247ef670c6a2b932a3106
+upsert:
+- title: Compose 依赖画布已有内容的 blendMode 叠色，不能映射成 ArkUI 独立兄弟节点的离屏混合
+  topic:
+  - ui
+  - render
+  - blend
+  when: 规格提取阶段，为 Compose drawWithContent/drawRect(brush, blendMode) 这类依赖画布上已画内容的绘制修饰符确定 ArkUI 渲染映射、并决定是否定为 HARD 决策时
+  description: 源码用 Modifier.drawWithContent { drawContent(); drawRect(Brush.linearGradient(colors), blendMode = Plus/Darken) } 给图标着色，效果依赖同一画布上已画好的底盘与字形（白底加法饱和仍白，只有深色字形像素变成渐变色）；目标侧渐变层、图标、底盘是 Stack 中并列的兄弟节点，准备用 .blendMode(mode, BlendApplyType.OFFSCREEN)。
+  unless:
+  - 源端 blendMode 的结果不依赖画布已有内容（如只对自身 alpha 起作用的 SRC_IN/DST_IN）
+  why: ArkUI 单节点 .blendMode(…, OFFSCREEN) 的混合目标是该节点自身的透明离屏层，不含兄弟节点已画内容：PLUS 于透明底等于源本身，结果是一块淡色方块盖住白盘与圆环。F002 spec 作者读到了 Gradient.kt 的公式与源码注释「should use a layer + srcIn」，仍把独立兄弟节点的 PLUS/DARKEN 定为 HARD、把 SRC_IN 蒙版法降为「真机偏色则退回」，而生成期禁编译、无真机，回退不可能触发。
+  how:
+  - 先判断混合结果是否依赖画布上已画好的兄弟内容（白底 + PLUS 饱和为白、深底 + DARKEN 取 min 都依赖底色）；是则把参与混合的节点（字形与渐变，必要时含底盘）放进同一个 .blendMode(SRC_OVER, OFFSCREEN) 离屏组，组内用只依赖源/目标 alpha 的 SRC_IN/DST_IN 取形。
+  - SDK 文档只给「与其下方画布已有内容混合」这类未定义范围的措辞、skill 参考 grep 为空时，不定 HARD：标为待真机核验项并写明核验方法；若已想到不依赖画布状态的等价方案（SRC_IN 蒙版），把它设为主方案，依赖画布状态的方案设为回退。
+  - 源码原作者的实现提示（如 `// This should use a layer + srcIn`）是目标结构的直接线索，映射决策要引用并给出采纳或不采纳的理由。
+  check:
+  - 实现落地后对一枚带渐变着色的图标截图：字形以外的像素应与底盘一致，不得出现覆盖圆环的半透明色块。
+  - spec 里每条 blendMode 映射都能回答「混合目标包含哪些已画内容」；答不出来的不得标 HARD。
+  evidence:
+  - case: case-0e3ff99e6b2aa8afcfff
+    claim: diagnosis
+    revision: 08bee2db10230570995be1ac03f4f0a07ebf80600f0c6bf1ce80029468144a01
+  - case: case-0e3ff99e6b2aa8afcfff
+    claim: recommendation:1
+    revision: 08bee2db10230570995be1ac03f4f0a07ebf80600f0c6bf1ce80029468144a01
+  - case: case-0e3ff99e6b2aa8afcfff
+    claim: recommendation:2
+    revision: 08bee2db10230570995be1ac03f4f0a07ebf80600f0c6bf1ce80029468144a01
+  - case: case-0e3ff99e6b2aa8afcfff
+    claim: recommendation:3
+    revision: 08bee2db10230570995be1ac03f4f0a07ebf80600f0c6bf1ce80029468144a01
+  status: active
+- title: TextStyle.lineHeight 与 ArkUI .lineHeight 同名不等价：Compose 单行文本盒不随 lineHeight 撑高
+  topic:
+  - ui
+  - text
+  - line-height
+  when: 规格提取阶段，为排版令牌（TextStyle → 统一 AttributeModifier）写 Source→ArkTS 映射契约并定难度时
+  description: 源是 Compose Material3 Typography，各 TextStyle 都带 lineHeight.sp；目标打算用一个 AttributeModifier 给全部 Text 套样式，页面里大量单行文本（Summary 行、卡片标题）与少量多行段落共用同一令牌。
+  unless:
+  - 目标只对多行段落施加 lineHeight、单行文本另有令牌
+  why: Compose 默认 LineHeightStyle 下单行文本盒 = 字体 ascent+descent（Android dump 实测 bodyLarge 16sp 单行 ≈19dp），lineHeight 只作用于行间；ArkUI .lineHeight 把每一行含单行都撑到整行高（28vp）。F002 作者只 grep 到 text.d.ts 存在同名 lineHeight(number) 签名，就写成「sp→fp 1:1、难度低」的契约，Base-6 主题 worker 据此无条件 .lineHeight，Cart Summary 区 157vp vs 131dp、Total 行被 Checkout 栏遮住。
+  how:
+  - 契约里写明两端语义差与目标写法：单行取字体自然高，行距只作用行间（lineSpacing onlyBetweenLines，或仅多行段落用 lineHeight），并标为行为等价难点而非「低」。
+  - 契约附检查口径：任选一个单行 Text，比较 Android dump 文本盒高与目标端值。
+  check:
+  - Android dump 的单行 Text bounds 高 ≈ fontSize × 字体 hhea 比（Karla ≈1.169、Montserrat ≈1.219），目标端同一 Text 的 dump 高应在 ±1vp 内，不应等于 lineHeight。
+  evidence:
+  - case: case-4056358e68946ac061c6
+    claim: diagnosis
+    revision: 980c776952de91263454455e666febd0d02220b342fff42af8732f8bb40c165d
+  - case: case-4056358e68946ac061c6
+    claim: recommendation:1
+    revision: 980c776952de91263454455e666febd0d02220b342fff42af8732f8bb40c165d
+  status: active
+- title: 主题 modifier 与容器定高不得把 lineHeight 当单行文本盒高
+  topic:
+  - ui
+  - text
+  - line-height
+  when: 界面实现阶段，落地统一文本 AttributeModifier，或为包裹单行 Text 的容器（ArkUI 横向 List 等需显式交叉轴尺寸）推导固定高度时
+  description: 目标工程有统一排版令牌（fontSize/lineHeight 数值来自 Type.kt），页面里有需要显式高度的行容器，容器内文本多为单行。
+  unless: []
+  why: 无条件 .lineHeight 会把单行撑到整行高；Feed 转换器又按「titleMedium lineHeight 24」把行高写成字面常量 176（Android 实测文本盒 ≈19.8dp），后来主题改法时该常量成为跨文件的隐含依赖。
+  how:
+  - 统一 modifier 落地前，用任一单行 Text 的实测高（Android dump 或 ttf hhea 比 × fontSize）核对 modifier 输出；自检不能只比对令牌数值与 Kotlin 相等。
+  - 为容器推导固定高度时，文本盒高取字体自然高或引用排版令牌的派生函数（如 Typography.titleMedium.naturalHeight()），不写含 lineHeight 的字面常量；注释写明文本高度来源，便于主题改法时被 grep 到并随之重推。
+  check:
+  - grep 工程内含 lineHeight 数值的字面高度常量，每一处都能指到派生函数或注释来源；单行 Text dump 高 ≠ lineHeight。
+  evidence:
+  - case: case-4056358e68946ac061c6
+    claim: diagnosis
+    revision: 980c776952de91263454455e666febd0d02220b342fff42af8732f8bb40c165d
+  - case: case-4056358e68946ac061c6
+    claim: recommendation:2
+    revision: 980c776952de91263454455e666febd0d02220b342fff42af8732f8bb40c165d
+  - case: case-4056358e68946ac061c6
+    claim: recommendation:3
+    revision: 980c776952de91263454455e666febd0d02220b342fff42af8732f8bb40c165d
+  status: active
+- title: Material 交互组件的 .size(x<48) 是修饰符字面，实绘按 minimumInteractiveComponentSize 为 48
+  topic:
+  - ui
+  - layout
+  - material-defaults
+  when: 规格提取阶段，为页面 spec 转换决策表与功能 spec 视觉验收判据确定 Material IconButton/Button 等交互组件的目标尺寸与位置时
+  description: 源为 Jetpack Compose，页面含 Material3 IconButton（或同类交互组件），源码在其外层显式写 .size(x) 且 x < 48dp 并带 background(CircleShape)；目标端要用固定 width/height 的 Button 复刻。
+  unless:
+  - 源码显式关闭了最小触控尺寸（LocalMinimumInteractiveComponentSize / minimumInteractiveComponentEnforcement=false）
+  why: M3 IconButton 在调用方 .size(36) 之内套 minimumInteractiveComponentSize，背景圆实绘 48dp、圆心不变；spec 把 36 写成转换决策与 AC 判据，converter/slice 忠实实现，直到修复期真机 dump 才量出 48。
+  how:
+  - 转换决策表区分「修饰符字面」与「实绘尺寸」：源码 .size(x) 且 x<48 时按 48 记实绘尺寸，用圆心而非左上角描述位置；或把该行列为 low_confidence 待真机 dump 复核。
+  check:
+  - grep 源码 IconButton( 出现处与 .size( 的数值，逐个与 48 比对；真机/模拟器 dump 的背景节点 bounds 应为 48dp。
+  evidence:
+  - case: case-6eec56e15cefd5c659cb
+    claim: diagnosis
+    revision: f8f8a7033af1e730dc2c95dbe7c81b1f51fa0a89de63da4d5f391cb31626d4cc
+  - case: case-6eec56e15cefd5c659cb
+    claim: recommendation:1
+    revision: f8f8a7033af1e730dc2c95dbe7c81b1f51fa0a89de63da4d5f391cb31626d4cc
+  status: active
+- title: 实现者收到 <48 的 Material IconButton 尺寸时按 48 圆心不变实现并上报差异
+  topic:
+  - ui
+  - layout
+  - material-defaults
+  when: 界面实现阶段，按 spec 给出的固定尺寸落地 Material 交互组件（IconButton/Button）时
+  description: spec 或派工词给出 <48 的尺寸，源组件类型是 Material3 IconButton 且未关闭最小触控尺寸。
+  unless: []
+  why: spec 的 36 来自源码字面；同批另一 converter 在同样无 dump 条件下已写出 ICON_BUTTON_SIZE=48 并注明 API，说明该事实在实现阶段可得。
+  how:
+  - 先按 48 实现、margin 各减 (48−x)/2 保持圆心，再在信封 low_confidence_uncertain_regions 报出与 spec 的差异。
+  check:
+  - dump 背景节点 bounds 48×48，图标中心与源码 .size(x) 圆心一致。
+  evidence:
+  - case: case-6eec56e15cefd5c659cb
+    claim: recommendation:3
+    revision: f8f8a7033af1e730dc2c95dbe7c81b1f51fa0a89de63da4d5f391cb31626d4cc
+  status: active
+- title: 无真机 dump 的合成快照：源码字面的尺寸与可见性结论必须标 confidence 并交 verify 用真机量值
+  topic:
+  - process
+  - spec-confidence
+  when: 规格提取阶段，在 ui-snapshot 由 Compose 源码合成、bounds 为空、无真机 UIAutomator dump 的条件下写视觉判据、决策台账或「近乎不可见/parity 保留」类结论时
+  description: 基线 meta.json 自述 view_xml_synthesized / bounds 为空 / 无真机 dump；功能 spec 里有「判:visual」且带具体 dp 的验收条目，或 D0/决策台账里记了「近乎不可见、忠实复刻」的元素。
+  unless:
+  - 已有真机 dump 或截图分析产出的实测值
+  why: 合成快照只有声明树没有度量：Up 圆钮 36 vs 实绘 48、Reset 文案「渲染但看不见」vs 实际不渲染，都是把源码字面当实测写进 AC 与决策台账，让实现者原样复刻并让验收把它当已知缺陷。
+  how:
+  - 凡「判:visual」且带具体 dp 的 AC 带 confidence=medium 标记，并要求 verify 阶段以真机 dump/截图量值取代源码字面。
+  - 「颜色近乎不可见」「parity 保留」类结论降级为待真机核对项写入 spec，不写进 D0/决策台账当已知缺陷。
+  check:
+  - spec 中所有含 dp 的 visual AC 都带 confidence 字段；决策台账里没有以合成快照为唯一依据的「忠实复刻某缺陷」条目。
+  evidence:
+  - case: case-6eec56e15cefd5c659cb
+    claim: recommendation:2
+    revision: f8f8a7033af1e730dc2c95dbe7c81b1f51fa0a89de63da4d5f391cb31626d4cc
+  - case: case-72a54efb333474d03d1a
+    claim: recommendation:2
+    revision: 94bccd83bcb9e1df1557f29dfae3ee6909aa7675f2c947d4aea0fa86828ac880
+  status: active
+- title: maxLines + textOverflow(Ellipsis) 不是 Compose TextOverflow.Ellipsis 的等价物：末行省略粒度不同
+  topic:
+  - ui
+  - text
+  - ellipsis
+  when: 规格提取阶段，为源码中带 maxLines(N) + TextOverflow.Ellipsis（或 android:ellipsize）的多行正文填写 ArkUI 转换决策及理由时
+  description: 'Android/Compose 多行正文以 maxLines + Ellipsis 折叠；目标 ArkUI Text 用 .maxLines() + .textOverflow({ overflow: Ellipsis })，默认 wordBreak 为 BREAK_WORD；项目口径为完整复刻 Android 可观察行为（D0），视觉核验把平台差异默认计为迁移 bug。'
+  unless:
+  - 项目允许平台差异（非 D0 完整复刻口径）
+  why: Compose/StaticLayout 末行按字符贪心填满再接「…」；ArkUI 默认按词换行后末行放不下整词就整词丢弃、再接带前导空格的「 ...」并留白。spec 写前未读任何映射参考就把两者标为「等价」；映射参考本身只记 API 对应（ellipsize → textOverflow），pitfalls 只说省略号须显式设置，都没有粒度差异记录。
+  how:
+  - 转换决策不写「等价」：写明 ArkUI 末行按词丢弃再补「 ...」与 Android 按字符填满再接「…」的差异；D0 口径下登记为平台差异项（PD）或直接给出实现方案。
+  - 映射参考只给 API 对应时，检查它是否覆盖渲染语义；缺口写进 spec 的差异 AC，而不是留给视觉核验补票。
+  check:
+  - 双端截图对比折叠段落末行：字符截断位置与省略号前是否有空格。
+  evidence:
+  - case: case-b57f1b660260b8843ce3
+    claim: diagnosis
+    revision: e3123fe0ca30a069842ecf2ce3d9530c4110071886e0fa7c9492dded08044631
+  - case: case-b57f1b660260b8843ce3
+    claim: recommendation:1
+    revision: e3123fe0ca30a069842ecf2ce3d9530c4110071886e0fa7c9492dded08044631
+  - case: case-b57f1b660260b8843ce3
+    claim: recommendation:2
+    revision: e3123fe0ca30a069842ecf2ce3d9530c4110071886e0fa7c9492dded08044631
+  status: active
+- title: 字符级末行截断的 ArkUI 实现：onSizeChange 回读宽度 → measureTextSize 二分最长前缀
+  topic:
+  - ui
+  - text
+  - ellipsis
+  when: 界面实现阶段，在完整复刻口径下为 maxLines + Ellipsis 的多行正文复刻 Android 字符级末行省略时
+  description: 折叠态段落需与 Android 一致地按字符截断末行；目标 Text 的换行宽度只有运行期才知道。
+  unless:
+  - ellipsisMode(END) / wordBreak(BREAK_ALL) 经试验已能达到字符级末行且不破坏前几行按词换行（本来源未试验）
+  why: 属性（BREAK_ALL / ellipsisMode）被判为改不了粒度且会破坏前四行按词换行，这是判定者推断、未经试验；修复者直接用 measureTextSize 方案并通过 round-1 复验（第 5 行「…pulvinar tem…」字符截断无前导空格）。
+  how:
+  - onSizeChange 回读换行宽 → @Monitor 用 measureTextSize（同 Typography 参数、lineHeight、BREAK_WORD、`${w}vp`）二分最长「前缀+…」≤N 行，存入 @Local，只替换折叠态文本；展开态与首帧保留原资源和 ArkUI 省略兜底。
+  check:
+  - 折叠态末行与 Android 截图逐字一致；首帧（onSizeChange 前）不崩、不闪空。
+  evidence:
+  - case: case-b57f1b660260b8843ce3
+    claim: recommendation:3
+    revision: e3123fe0ca30a069842ecf2ce3d9530c4110071886e0fa7c9492dded08044631
+  status: candidate
+- title: Scaffold 无 topBar 时 innerPadding.top 就是状态栏 inset：子页无 statusBarsPadding 不能推出「不做顶部避让」
+  topic:
+  - ui
+  - layout
+  - safe-area
+  when: 规格提取阶段，为壳页（Scaffold / Tab 宿主）及其子页、页内浮层写「谁避让状态栏」的沉浸式与安全区契约时
+  description: Android 子页自身没有 statusBarsPadding，但作为 Material3 Scaffold 的 content 经 modifier.padding(innerPadding).consumeWindowInsets(innerPadding) 嵌入（无 topBar、contentWindowInsets 默认 systemBars）；目标端父容器不为 Tab 内容区加顶部避让，而是把状态栏高度以 @Param statusBarHeight 下发。
+  unless:
+  - Scaffold 有 topBar 或覆写了 contentWindowInsets，此时 innerPadding.top 不再等于状态栏高
+  why: spec 作者读到了 `padding(padding).consumeWindowInsets(padding)`，却写成「只消费底栏高度，顶部状态栏由各 Tab 页自行处理」，随后 Profile 页被指示「不做顶部占位」、FilterScreen 浮层「跳过安全区契约」，同一误读经 F001-AC44 固化；F003 worker 纠正后只回改了 page_0003，同区域其他 spec 与裁决未回改。
+  how:
+  - 按 modifier 传递链（Scaffold content(padding) → addHomeGraph(modifier.padding(padding)) → Page(modifier)）逐边写出 innerPadding 的实际来源：无 topBar 时 top = 状态栏 inset，有 bottomBar 时 bottom = 底栏高；再判定目标端该页顶部由谁避让。
+  - 同一内容区内的所有层（列表、顶栏、浮层/对话框）共用一个避让口径；收到某页的 inset 纠正时 grep 引用同一区域的其它 page/feature spec 一并改，并把「宿主 padding 还是子页自理」落成一条可引用的决策。
+  - 为每个子页写明应消费 statusBarHeight 的数值来源（innerPadding top）或为 0 的依据（父级已加避让）。
+  check:
+  - Android 内容块在 [状态栏底, 底栏顶] 内居中/对齐，目标端也必须在同一区间内；浮层遮罩起点 y 等于状态栏高，不压灰状态栏。
+  evidence:
+  - case: case-b4d0b2f21cf92275a46b
+    claim: diagnosis
+    revision: 9ebaa4197c13036cfe4c5a7ab04d10266ab5c120fd0429c98ee6f9415e9e2184
+  - case: case-b4d0b2f21cf92275a46b
+    claim: recommendation:1
+    revision: 9ebaa4197c13036cfe4c5a7ab04d10266ab5c120fd0429c98ee6f9415e9e2184
+  - case: case-b4d0b2f21cf92275a46b
+    claim: recommendation:2
+    revision: 9ebaa4197c13036cfe4c5a7ab04d10266ab5c120fd0429c98ee6f9415e9e2184
+  - case: case-049d48a5d4b79983dde3
+    claim: diagnosis
+    revision: 03f1b058dbcb5149df2c8ad8d5cfcb27ff741f3cd3461e45e1f13f562864d130
+  - case: case-049d48a5d4b79983dde3
+    claim: recommendation:1
+    revision: 03f1b058dbcb5149df2c8ad8d5cfcb27ff741f3cd3461e45e1f13f562864d130
+  - case: case-049d48a5d4b79983dde3
+    claim: recommendation:2
+    revision: 03f1b058dbcb5149df2c8ad8d5cfcb27ff741f3cd3461e45e1f13f562864d130
+  status: active
+- title: 下发 statusBarHeight 参数时禁止写「本页不使用」；浮层与同 Stack 兄弟层拿同一 inset
+  topic:
+  - ui
+  - layout
+  - safe-area
+  when: 派工与界面实现阶段，向子页或浮层下发 statusBarHeight 参数、或把 needs_immersive_safearea=false 的浮层挂进宿主页自窗口顶起的 Stack 时
+  description: 宿主页按沉浸式取真实 statusBarHeight 下发；子页 @Param 已接线；浮层（scrim + 居中卡片，fillMaxSize）与列表、顶栏同挂一个 Stack。
+  unless:
+  - 目标父容器已替子页加了顶部避让并有源码位置可引用
+  why: 派工把「接受 @Param statusBarHeight（本页不使用）」写进指令，converter 照办写出 `.padding(24)` 与未消费的参数——参数已接线却无人消费；浮层 slot 契约与派工词只给 onDismiss，三层里只有浮层没拿到偏移。
+  how:
+  - 若认为无需消费，必须给出 Android 侧父容器已消费该 inset 的源码位置；否则实现者收到「接线但不用」的参数时先核目标父容器，没有替它避让就必须消费。
+  - 浮层若挂在自窗口顶起的 Stack，slot 契约与派工词都带 statusBarHeight，@Param 透传、根节点 padding top，与兄弟层同口径。
+  check:
+  - grep 每个 @Param statusBarHeight 的消费点；对照 Android 截图/dump 核遮罩起点 y 与内容块居中区间。
+  evidence:
+  - case: case-b4d0b2f21cf92275a46b
+    claim: recommendation:3
+    revision: 9ebaa4197c13036cfe4c5a7ab04d10266ab5c120fd0429c98ee6f9415e9e2184
+  - case: case-049d48a5d4b79983dde3
+    claim: recommendation:3
+    revision: 03f1b058dbcb5149df2c8ad8d5cfcb27ff741f3cd3461e45e1f13f562864d130
+  status: active
+- title: Compose Layout/MeasureScope 的整数几何公式运行在 px 域：spec 必须标注运算单位
+  topic:
+  - ui
+  - layout
+  - units
+  when: 规格提取阶段，把源码自定义 Layout / MeasureScope 里的整数除法或 .toInt() 截断翻译成 ArkTS 目标公式并标注运算单位时
+  description: 源码在 constraints.maxWidth、placeable 宽高（Int px）上做 Kotlin 整数除法或 .toInt() 来分配槽宽/放置子项；目标侧宽度来自 onAreaChange（vp 浮点）或 measureText（px）。
+  unless:
+  - 源码公式作用于 Dp 值而非 constraints/placeable（如 56.dp、16.dp 常量）
+  why: F001 spec 把 `constraints.maxWidth / (itemCount + 1)` 写成「W = barWidth（vp，整数）」「W mod 5 vp 空白，Android 原样」；实际 constraints 是 px，onAreaChange 的 vp 宽是浮点（377.14），Android 余量是 W_px mod 5 px（1320 上为 0）。vp 域 floor(377.14/5)=75 让四槽只铺 1313/1320px、图标左偏 1.4–2.3vp。
+  how:
+  - 先写明该运算发生在 px（constraints、placeable 都是 Int px），再决定目标公式的运算域；不要用「vp，整数」描述 onAreaChange 回调值。
+  - unit 用例至少放一个非整数 vp 宽（如 377.14）与对应 px 宽（1320）的对照行；「Android 原样留 W mod n 空白」这类等价性声明按 px 与 vp 各算一遍再写。
+  check:
+  - 按 spec 公式手算 W_px/(n+1) 与 W_vp/(n+1)：两者对应的 Row 总宽是否都等于容器 px 宽。
+  evidence:
+  - case: case-0ff695bbe2304e899b77
+    claim: diagnosis
+    revision: d09e7f05d59d04549d82e8746a0de8d433534c1e9100e3f82d843c77249ee7b0
+  - case: case-0ff695bbe2304e899b77
+    claim: recommendation:1
+    revision: d09e7f05d59d04549d82e8746a0de8d433534c1e9100e3f82d843c77249ee7b0
+  - case: case-0ff695bbe2304e899b77
+    claim: recommendation:2
+    revision: d09e7f05d59d04549d82e8746a0de8d433534c1e9100e3f82d843c77249ee7b0
+  status: active
+- title: 落地源码整除公式的纯函数：参数名带 px/vp，调用处做 vp2px→公式→px2vp 往返
+  topic:
+  - ui
+  - layout
+  - units
+  when: 界面实现阶段，用 onAreaChange / measureText 的返回值喂源码整数几何公式并写成纯函数时
+  description: 公式含 floor/trunc/Int 除法；输入来自 onAreaChange（vp 浮点）或 measureText（px）。
+  unless: []
+  why: converter 与 slice worker 都按 spec 在 vp 域取整（「All lengths are vp」），placeTextAndIcon 的 iconX 还在 vp 域 trunc(7.71)=7 再丢 0.71vp；修复把全部几何搬到 px 域后 Row 0..1320px、槽 528/264/264/264、图标中心 660/924/1188px 与 Android 一致。
+  how:
+  - 把 px/vp 写进参数名（barWidthPx）；onAreaChange 的 vp 宽先 vp2px，公式在 px 域 floor/trunc，写入 .width/.translate/.position 前 px2vp。
+  check:
+  - dumpLayout 里 Row 总宽应等于容器 px 宽（1320 不是 1313）；每个槽位/图标中心的 px 与 Android dump 逐项相等。
+  evidence:
+  - case: case-0ff695bbe2304e899b77
+    claim: recommendation:3
+    revision: d09e7f05d59d04549d82e8746a0de8d433534c1e9100e3f82d843c77249ee7b0
+  status: active
+- title: ArkUI ShadowOptions 的 radius/offset 单位是 px：dp 高程配方必须显式 vp2px，且全工程只走一条共享映射
+  topic:
+  - ui
+  - render
+  - shadow
+  when: 规格提取阶段为阴影/模糊/偏移这类数值型渲染属性写配方时；界面实现阶段把源侧 dp 高程落到 ArkUI .shadow() 时
+  description: '源侧用 Compose Modifier.shadow(elevation: Dp) 或 Material 容器高程；目标用 .shadow(ShadowOptions | ShadowStyle)，工程已定义共享 elevation→shadow 映射函数。'
+  unless: []
+  why: spec worker grep SDK ShadowOptions 时只保留字段签名行、把紧邻的「Blur radius … the unit is px」doc 行过滤掉，写出 `shadowFor(e)={radius:2e, offsetY:e}` 的 dp 数直接进 px 字段：e=2 的 chip 只有 ≈1px 晕（Android 底≈3.5dp/侧≈3dp）。分类卡另用预置 ShadowStyle.OUTER_DEFAULT_XS（对称浅晕、上缘有晕）替代 shadow(3.dp)；Snackbar 按 skill 映射表写字面 `{radius:6, offsetY:3}`，同为 dp 当 px。
+  how:
+  - 配方里每个 dp/vp 来源的数进入 px 字段前显式 `uiContext.vp2px(...)`，把单位和换算写进公式本身。
+  - 源侧 dp 高程一律映射为按 dp 校准的 ShadowOptions，不用预置 ShadowStyle 替代；写后 `grep -n "\.shadow("` 全工程核只剩共享映射函数一条通路。
+  - 标注「视觉比对后再调」的配方在生成期先按源侧实测（三档以上高程）反推常量，不留到验证阶段。
+  check:
+  - 按 e=1/2/3 各截一张 Android 与目标端图，量底/侧/顶晕延伸（dp）与最深灰阶；`.shadow(` 全工程出现处均为共享函数调用。
+  evidence:
+  - case: case-75329cae60986f74dc43
+    claim: diagnosis
+    revision: d5524cf137d18a758b217157eec484d6896c05cab1517209af89d0e620e6eb07
+  - case: case-75329cae60986f74dc43
+    claim: recommendation:1
+    revision: d5524cf137d18a758b217157eec484d6896c05cab1517209af89d0e620e6eb07
+  - case: case-75329cae60986f74dc43
+    claim: recommendation:2
+    revision: d5524cf137d18a758b217157eec484d6896c05cab1517209af89d0e620e6eb07
+  - case: case-75329cae60986f74dc43
+    claim: recommendation:4
+    revision: d5524cf137d18a758b217157eec484d6896c05cab1517209af89d0e620e6eb07
+  status: active
+- title: 核 SDK d.ts 时读字段的 doc 行与语义段，不只 grep 签名
+  topic:
+  - process
+  - sdk-reading
+  when: 规格提取或界面实现阶段，用 grep/sed 在 SDK d.ts 里核对某个 ArkUI 属性、接口字段或方法是否可用、单位/语义是什么时
+  description: 'grep 命令只保留签名行（`radius: number | Resource;`、`lineHeight(value: …)`、`blendMode(…)`、`BorderOptions`），紧邻的 `/** … unit is px */` 或语义描述被过滤掉；随后据此写契约或定 HARD。'
+  unless: []
+  why: 四张卡的偏差起点都伴随「只核签名」：ShadowOptions 的 px 单位行被过滤（dp 当 px）；text.d.ts 只核到 lineHeight 签名存在（单行撑高）；blendMode 只读到一句未定义范围的文档（离屏混合目标误判）；BorderOptions 只核 color/width 类型（描边计入测量）。同名 API 存在不等于行为等价。
+  how:
+  - grep 命中签名后用 sed -n 打出其前后 10–20 行 doc，把单位、作用范围、默认行为抄进契约理由；写 `.blendMode(…, OFFSCREEN)` 这类语义型属性前读 common.d.ts 的语义段。
+  - 契约理由里禁止只写「依据 d.ts 存在同名方法」；必须能回答单位是什么、对单行/无定尺容器/兄弟节点各自行为如何。
+  check:
+  - 回看 spec/映射文档里每条「依据 xxx.d.ts」的理由，能否指到 doc 行而不只是签名行。
+  evidence:
+  - case: case-75329cae60986f74dc43
+    claim: recommendation:1
+    revision: d5524cf137d18a758b217157eec484d6896c05cab1517209af89d0e620e6eb07
+  - case: case-4056358e68946ac061c6
+    claim: recommendation:1
+    revision: 980c776952de91263454455e666febd0d02220b342fff42af8732f8bb40c165d
+  - case: case-0e3ff99e6b2aa8afcfff
+    claim: recommendation:4
+    revision: 08bee2db10230570995be1ac03f4f0a07ebf80600f0c6bf1ce80029468144a01
+  - case: case-77c4d0c99ad4a6486b79
+    claim: recommendation:2
+    revision: 27e777a50597a4025558e4e2acc40fb81182444305b104b7c319f379abb5735f
+  status: active
+- title: 从 Compose 源码合成结构时先做 Row/Column 度量推演：fillMaxWidth 无 weight 子项之后的兄弟不会被绘制
+  topic:
+  - ui
+  - layout
+  - compose-measure
+  when: 规格提取阶段，在没有真机 dump、只能从纯 Compose 源码合成页面结构与分页 spec 时，判定某个声明的子组件是否真的会被绘制
+  description: 某个 Row/Column 里有一个不带 weight 的 fillMaxWidth()/fillMaxHeight() 子项，其后还跟着兄弟组件（IconButton/Text 等）；spec 或派工准备用「近乎不可见、parity 保留」描述该兄弟。
+  unless:
+  - 兄弟组件带 weight 或 Row 用了 IntrinsicSize/自定义度量使其仍分到宽度
+  why: Compose Row 先度量不带 weight 的 fillMaxWidth 文本，尾部 IconButton 只剩 0 宽约束、内容被裁掉，Android 两态都不绘制 Reset；主会话按声明树逐字转写，只推了颜色（uiBackground 落在 uiFloated 上「近乎不可见」）没推布局度量，把「不渲染」误记成「渲染但看不见」，并在 F004 AC 与 D-005 固化为设计灰区。
+  how:
+  - 对每个 Row/Column 做一次度量推演：不带 weight 的 fillMaxWidth()/fillMaxHeight() 子项吃满剩余主轴空间，其后兄弟以 0 约束度量；这类兄弟在 clickable_elements / 页面结构里标「源码有、实绘无」，不得给转换决策。
+  check:
+  - Android 基线 dump 中该兄弟是否只剩一个空的 enabled=false 节点、无文本；基线截图对应像素是否为纯底色。
+  evidence:
+  - case: case-72a54efb333474d03d1a
+    claim: diagnosis
+    revision: 94bccd83bcb9e1df1557f29dfae3ee6909aa7675f2c947d4aea0fa86828ac880
+  - case: case-72a54efb333474d03d1a
+    claim: recommendation:1
+    revision: 94bccd83bcb9e1df1557f29dfae3ee6909aa7675f2c947d4aea0fa86828ac880
+  status: active
+- title: 「近乎不可见、parity 保留」的元素先分辨成因：布局裁剪用 Visibility.Hidden 保槽位不绘制
+  topic:
+  - ui
+  - layout
+  - compose-measure
+  when: 界面实现或视觉修复阶段，收到 spec/派工里标为「近乎不可见、parity 保留」的元素时
+  description: 元素在 Android 侧不可见的原因未说明；目标端已按颜色/opacity 渲染它并占 48vp 槽位。
+  unless:
+  - Android 侧该元素在 enabled 态确实渲染（本来源只核了默认态，enabled 态由修复者推演）
+  why: '颜色不可见与布局裁剪不可见的正确复刻不同：前者保留绘制，后者不应绘制；FilterScreen 的 Reset 属后者，修复以 Visibility.Hidden 保 48vp 槽位与 no-op 点击，round-4 dump 无 Reset 节点、槽位纯 #F6F6F6 与 Android 一致。修复有意偏离工单建议的条件显示，两态推演未经 Android enabled 态基线核验。'
+  how:
+  - 先分辨不可见的成因是颜色还是布局裁剪；是布局裁剪就 Visibility.Hidden 保槽位不绘制，并在注释里写明 Android 度量推演。
+  - 修复方案偏离工单建议时，把推演依据（源码行 + 基线 dump 证据）写进工单 §6。
+  check:
+  - 目标端 dump 无该文本节点但父槽位尺寸保留；Android 侧 enabled 态基线补核后再决定是否需条件显示。
+  evidence:
+  - case: case-72a54efb333474d03d1a
+    claim: recommendation:3
+    revision: 94bccd83bcb9e1df1557f29dfae3ee6909aa7675f2c947d4aea0fa86828ac880
+  - case: case-72a54efb333474d03d1a
+    claim: recommendation:4
+    revision: 94bccd83bcb9e1df1557f29dfae3ee6909aa7675f2c947d4aea0fa86828ac880
+  status: candidate
+- title: Compose 纯绘制描边落到 ArkUI 时，无显式宽高的容器不得直接 .border()：描边会计入测量
+  topic:
+  - ui
+  - render
+  - border
+  when: 规格映射与界面实现阶段，把 Compose Modifier.border 等 draw-only 修饰符落到尺寸由内容决定的 ArkUI 容器（Stack/Column）上时
+  description: 源 border 由 Modifier.border(BorderStroke, shape) 在调用方已定尺寸的盒内侧绘制、不改测量尺寸；目标容器自身不设 width/height，尺寸由 @BuilderParam 内容决定。
+  unless:
+  - 目标容器自身已有显式 width/height（此时 .border 在盒内绘制不改尺寸）
+  why: ArkUI .border 在无定尺容器上计入容器测量：高亮卡 Stack 172×250 内含 Column 170×249，Android 170×250，第 2 张卡左沿偏 2.3vp。映射作者知道 Compose border 是内侧描边（mapping :228）却把 §5 伪代码写成无宽高 `Stack(){content}.border(...)`；工程 pitfalls P-20 反而推荐「描边画在由内容定大小的容器上」。
+  how:
+  - 映射/规格：先写明目标容器尺寸由谁决定；容器无显式宽高时改为 overlay 子层（onSizeChange 定尺 + position({x:0,y:0}) + hitTestBehavior None）或把尺寸提升到容器本身，并在 AC 里加可量测判据（描边不得改变盒尺寸）。
+  - 实现：写 .border() 前检查该节点是否有显式 width/height；没有就把「内容盒 = 描边盒」的预期写进注释，自检对一次 dumpLayout bounds。
+  - 维护材料：pitfalls P-20 应补注无定尺容器的 .border 计入测量，需 overlay 或显式尺寸。
+  check:
+  - dumpLayout：带描边容器的 bounds 与其内容子项 bounds 逐边相等；与 Android 同一卡片宽高逐边比较。
+  evidence:
+  - case: case-77c4d0c99ad4a6486b79
+    claim: diagnosis
+    revision: 27e777a50597a4025558e4e2acc40fb81182444305b104b7c319f379abb5735f
+  - case: case-77c4d0c99ad4a6486b79
+    claim: recommendation:1
+    revision: 27e777a50597a4025558e4e2acc40fb81182444305b104b7c319f379abb5735f
+  - case: case-77c4d0c99ad4a6486b79
+    claim: recommendation:2
+    revision: 27e777a50597a4025558e4e2acc40fb81182444305b104b7c319f379abb5735f
+  - case: case-77c4d0c99ad4a6486b79
+    claim: recommendation:3
+    revision: 27e777a50597a4025558e4e2acc40fb81182444305b104b7c319f379abb5735f
+  status: active
+- title: 由 Material 库组件内部布局提供的留白要分侧写出，不把单侧 token 扩成对称 padding
+  topic:
+  - ui
+  - layout
+  - material-defaults
+  when: 界面实现阶段，为源侧由 Material 组件内部布局（而非源码显式 modifier）决定的留白确定 ArkUI padding 时；规格提取阶段写入同一组件的 M3 默认值时
+  description: 源是 Compose Material3 TopAppBar / IconButton 等库组件，标题槽内是 Row { Text(weight 1) + IconButton }，源码本身没有 padding 修饰符；库的内部留白（TopAppBarTitleInset、导航/动作槽宽度）需要实现者自行补出；spec 只写了容器高度等部分 M3 默认值。
+  unless: []
+  why: 'converter 在 spec、源码、合成 view.xml 都没有横向留白的情况下自行补 M3 内部留白，注释写明「TopAppBarTitleInset = 16dp」（起始侧 token）却应用成 `.padding({ left: 16, right: 16 })`，末端多 16vp，箭头离右缘 28vp（Android 12dp）。'
+  how:
+  - 按该库的布局规则分侧写出：哪一侧有 inset、由什么槽位撑开；不要把单侧 token 扩成对称 padding。
+  - 补库内部留白后用 Android dump/截图核一次两端元素与屏缘的距离；没有 dump 至少在注释里写清该值来自哪条库规则、作用于哪一侧。
+  - 规格提取若已写入 M3 默认值（如容器高 64dp），把同一组件的标题 inset / 槽位规则一并写出。
+  check:
+  - Android dump 里尾部 IconButton 右缘与屏缘距离（如 1080−1048=32px=12dp）与目标端一致。
+  evidence:
+  - case: case-2280cf8a2bf7682ff26b
+    claim: diagnosis
+    revision: fb66b756db6239a68a90d290915c7f952fb80cf460b3c14484bb91ab77ace622
+  - case: case-2280cf8a2bf7682ff26b
+    claim: recommendation:1
+    revision: fb66b756db6239a68a90d290915c7f952fb80cf460b3c14484bb91ab77ace622
+  - case: case-2280cf8a2bf7682ff26b
+    claim: recommendation:2
+    revision: fb66b756db6239a68a90d290915c7f952fb80cf460b3c14484bb91ab77ace622
+  - case: case-2280cf8a2bf7682ff26b
+    claim: recommendation:3
+    revision: fb66b756db6239a68a90d290915c7f952fb80cf460b3c14484bb91ab77ace622
+  status: active
+- title: 给 @BuilderParam 槽传内容时箭头函数体只写 this.<@Builder>()；多层嵌套共享组件逐层抽 @Builder
+  topic:
+  - ui
+  - component
+  - builder-param
+  when: 界面收敛/实现阶段，把带 @BuilderParam 内容槽的共享容器组件层层嵌套、为每一层槽位写内容时
+  description: '目标工程有自带 @BuilderParam content 槽的自定义容器组件（Surface / Card / GradientBorder 等），页面组件要把另一个自定义组件作为槽内容嵌套两层以上；输入里已有这些组件的 @BuilderParam 声明和既有调用范例（content: () => { this.<@Builder>() }）。'
+  unless: []
+  why: 普通箭头函数体内直接实例化自定义组件不会被编译成 UI-DSL，运行期 this.content() 把 struct 当类调用 → 冷启 jscrash `class constructor cannot called without 'new'`；hvigor 编译、structural-closure 骨架审计、FV 全量编译都不报。W2a 同轮七处写对，唯独两层嵌套处把最内层抽成 @Builder、中间层 GradientBorderComponent({...}) 直接写进 Surface content 的箭头函数体。
+  how:
+  - 槽内容里只要出现自定义组件实例化（含第二、第三层嵌套），先抽成本组件的 @Builder 方法再传；每一层 content 都要有自己的 @Builder 承载。
+  - '写完后用正则扫描 `<param>: () => {` 闭包体内是否出现 `大写组件名({`，命中即改；把该扫描加进 group-closer / FV 静态门，或至少冷启一次目标页。'
+  - 维护材料：v2-codegen-patterns.md §@BuilderParam 只写了「默认值必须是 @Builder 方法」和尾随闭包坑，应补「箭头函数体内不得直接实例化自定义组件」反例。
+  check:
+  - 闭包扫描 0 命中；冷启含该组件的页面无 jscrash（编译通过不能作为证据）。
+  evidence:
+  - case: case-09b88fde1629ba4bf4b7
+    claim: diagnosis
+    revision: 5f927be9fd8c083704128f6a58cd4077bd69fb003cb2acef711f6561fad79d70
+  - case: case-09b88fde1629ba4bf4b7
+    claim: recommendation:1
+    revision: 5f927be9fd8c083704128f6a58cd4077bd69fb003cb2acef711f6561fad79d70
+  - case: case-09b88fde1629ba4bf4b7
+    claim: recommendation:2
+    revision: 5f927be9fd8c083704128f6a58cd4077bd69fb003cb2acef711f6561fad79d70
+  - case: case-09b88fde1629ba4bf4b7
+    claim: recommendation:3
+    revision: 5f927be9fd8c083704128f6a58cd4077bd69fb003cb2acef711f6561fad79d70
+  - case: case-09b88fde1629ba4bf4b7
+    claim: recommendation:4
+    revision: 5f927be9fd8c083704128f6a58cd4077bd69fb003cb2acef711f6561fad79d70
+  status: active
+- title: 翻译「离开组合即销毁」的 remember 状态时，逐项列出目标框架会替用户恢复的 UI 状态（焦点、IME 等）
+  topic:
+  - ui
+  - input
+  - focus
+  when: 规格提取阶段，把源端 remember（非 rememberSaveable）随组合销毁的状态语义翻译成目标端复位方案时
+  description: 源页面靠 remember 在离开组合时丢弃全部状态，其中 focused 等由框架事件驱动的字段直接决定显示分支；目标端该页面常驻在 Navigation 的 NavBar（Stack/Tabs 保活）中，经 pushPath 进入子页后再系统返回。
+  unless: []
+  why: F005 spec 的 AC67 要求本身正确（返回后 focused=false），但复位机制只给 resetState=new SearchState，并把 TextInput.onFocus/onBlur 无条件映射到 focused；平台差异分析只覆盖 Tabs/NavDestination 保活，漏掉 ArkUI Navigation 在 NavDestination pop 后把窗口焦点交还 NavBar 上次获焦节点——生成期全部材料零处提及该行为，属平台知识材料缺口。
+  how:
+  - 除数据字段外逐项列出目标框架会替用户恢复的 UI 状态（焦点、IME、滚动位置、选区），对每项写明 ArkUI 侧的复位或判别手段。
+  - 由框架事件驱动的业务字段（如 focused）把「返回后为 false」写成可机械核对的验收步骤（push→Back 往返后 dump TextInput.focused），不只留 判:ui。
+  check:
+  - 一次 push→系统返回后的 dump：TextInput focused=false、无键盘；spec 里每个框架恢复项都有对应复位手段。
+  evidence:
+  - case: case-c6aa20bd8974dabefc7b
+    claim: diagnosis
+    revision: fc740a36590fa4c9a52edf158f69ec7319f08de2ed7f9fd69f6265b8ec20cd72
+  - case: case-c6aa20bd8974dabefc7b
+    claim: recommendation:1
+    revision: fc740a36590fa4c9a52edf158f69ec7319f08de2ed7f9fd69f6265b8ec20cd72
+  status: active
+- title: 常驻 NavBar 页面的 TextInput.onFocus 不能 1:1 当作用户聚焦：先判别焦点来源再写业务状态
+  topic:
+  - ui
+  - input
+  - focus
+  when: 界面实现阶段，把 TextInput 的焦点回调接到页面业务状态、且页面处于 Navigation NavBar / 常驻 Stack 会被 pushPath 覆盖时
+  description: 页面用 focused 之类业务字段决定显示分支（Suggestions vs Categories）；从子页系统返回后 ArkUI 会把焦点交还该 TextInput。
+  unless: []
+  why: SearchBarComponent 的 onFocus 无条件上抛 true，把框架恢复的焦点写进刚重建的 SearchState，返回后显示 Suggestions 而非 Categories；既有 clearFocus 在 push 起点执行清不掉 NavBar 焦点记忆（修复者假设，未对照实验）。修复以 touch-down 先行判别 + enableKeyboardOnFocus(false) 通过真机与 round-2/3 复验。
+  how:
+  - 先判别焦点来源：TextInput 加 onTouch(Down) 置标记与 enableKeyboardOnFocus(false)，无 touch-down 先行的 onFocus 视为框架恢复 → stopEditing + clearFocus 且不写业务 focused；否则照常。
+  - 写前用一次 push→Back 往返的 dump 核对 TextInput.focused。
+  check:
+  - Back 后 Categories/未聚焦/空 query；用户点击输入框仍进 Suggestions 并拉起键盘；Tab 切走再回复位不受影响。
+  evidence:
+  - case: case-c6aa20bd8974dabefc7b
+    claim: recommendation:2
+    revision: fc740a36590fa4c9a52edf158f69ec7319f08de2ed7f9fd69f6265b8ec20cd72
+  status: active
+- title: 结构收敛不等于行为核验：风险标记的 AC 与 forward-ref 占位不得凭收敛结果清除或写进 impl_claims
+  topic:
+  - process
+  - convergence
+  when: 收敛/收尾阶段，closer 或主会话把 worker 回执里点名的风险 AC 写进 impl_claims、或解除 forward-ref-uncertain 占位标记时
+  description: worker/closer 已把某 AC 标为风险且只能 ui 判定（如 AC67 被 converter、Slice 5、closer 三次标记），或共享件带 forward-ref-uncertain 占位（P-S6-002 iconTintLayer）；生成期禁编译/无真机。
+  unless:
+  - 已有截图/dump 或等价单测证据
+  why: closer 凭 HomePage isActiveTab 派生宣称 AC67 已处置并把 impl_claims 抄 plan-coverage，生成期无任何往返验证；P-S6-002 以「共享件已由 G1 定型」为由删 marker——两处风险都在 verify 阶段成为工单。
+  how:
+  - 只能 ui 判定且被点名为风险的 AC 不进 impl_claims；列入 verify 阶段必测往返，或在 closer 收尾前做一次真机/模拟器往返核对。
+  - forward-ref-uncertain 占位解除须附核验证据（截图/dump 或等价单测），不能因「共享件已由另一切片定型」而删 marker。
+  check:
+  - impl_claims 中每条 visual/behavior AC 能指到证据文件；attempts/marker 变更记录带证据路径。
+  evidence:
+  - case: case-c6aa20bd8974dabefc7b
+    claim: recommendation:3
+    revision: fc740a36590fa4c9a52edf158f69ec7319f08de2ed7f9fd69f6265b8ec20cd72
+  - case: case-0e3ff99e6b2aa8afcfff
+    claim: recommendation:5
+    revision: 08bee2db10230570995be1ac03f4f0a07ebf80600f0c6bf1ce80029468144a01
+  status: active
+- title: 收敛 worker 的派工清单逐条列出 mapping 中的全部共享原语，worker 逐项对账后再整文件重写
+  topic:
+  - process
+  - convergence
+  when: 收敛阶段，派发 W2 类 worker 把页面私有实现替换为共享基座原语（阴影/排版/颜色映射函数）并允许其整文件重写时
+  description: mapping 文档已有共享原语节（如 §5 shadowFor），页面内联写法与之不一致；派工清单只点名部分对接点。
+  unless: []
+  why: G1 W2b 已读到 §5「e=3 自绘 Categories 卡」与 shadowFor 导出，整文件重写仍保留 OUTER_DEFAULT_XS，因为派工清单未点名 §5；Snackbar 不在 F002 对接点清单，字面 shadow 一直保留到修复期。
+  how:
+  - 派工清单逐条列出 mapping 中的全部共享原语与其对接点；worker 收到后对读到的 mapping 节逐项对账，替换完成前不整文件重写。
+  check:
+  - 全工程 grep 每个共享原语对应的原生属性（如 `.shadow(`），出现处均为共享函数调用。
+  evidence:
+  - case: case-75329cae60986f74dc43
+    claim: recommendation:3
+    revision: d5524cf137d18a758b217157eec484d6896c05cab1517209af89d0e620e6eb07
+  status: active
+- title: 亚阈关页不得放过：上轮 §6 的可量化预测必核，同根已修单并入同轮，几何差看 dump px 总宽
+  topic:
+  - process
+  - verify
+  when: 视觉判读阶段，按页面相似度阈值（≥0.95）决定关页、以及决定哪些残差立单时
+  description: judge notes 已测到与上轮修复 §6 预测不符的数值（25.4vp≠28）、或判「同根于已修单」、或 dump 显示 Row 总宽铺不满容器（1313 vs 1320），但页分仍 ≥0.95。
+  unless:
+  - 项目明确接受亚阈残差且不进入 100% 口径的下一轮
+  why: round-1/2 judge 量到 Details 行距 25.4≠28 并指到具体公式，却按「页分 ≥0.95 关页」只记 residual，round-0 §6「Details 仍 28」的预测无人核销；FilterScreen 同根 Profile 已修单被两轮记录未并入；底栏 1313/1320px 在 ≥0.95 口径下 similarity 1.0——三者都拖到 100% 口径的 round-3 才立单。
+  how:
+  - 把上一轮 §6「预期效果」里的可量化预测列为本轮必核项；测出与预测不符且能指到具体公式时，即使页分 ≥0.95 也单独立单或标为修复引入的回归。
+  - notes 判「同根于已修单」的残差并入该单同轮修复，不等下一轮口径收紧。
+  - 布局几何差异看 dump bounds 的 px 总宽是否铺满容器，不只看相似度分数。
+  check:
+  - 每轮 _summary 里上轮 §6 预测项逐条有核销结论；residual_low_not_ticketed 列表中无「同根已修」或「预测不符」项。
+  evidence:
+  - case: case-04c6d6166ebb2bcc3dfa
+    claim: recommendation:4
+    revision: 08cc614b7fd6dff41319ea673aceed9490eb8275b4fefb40e2711fb1fa952fdd
+  - case: case-049d48a5d4b79983dde3
+    claim: recommendation:4
+    revision: 03f1b058dbcb5149df2c8ad8d5cfcb27ff741f3cd3461e45e1f13f562864d130
+  - case: case-0ff695bbe2304e899b77
+    claim: recommendation:4
+    revision: d09e7f05d59d04549d82e8746a0de8d433534c1e9100e3f82d843c77249ee7b0
+  status: active
+- title: 改主题层文本度量公式时把「已核」和「假设」分开，先在同轮 dump 里找多行回归基线
+  topic:
+  - process
+  - repair
+  when: 视觉对齐修复阶段，把 Compose TextStyle 的 lineHeight 语义改写成 ArkUI Text 属性（lineHeight / lineSpacing）并确定折算公式、且不允许当场重编实测时
+  description: 源样式带 lineHeight；目标用同一主题令牌同时服务单行与多行段落；单行盒高已有 Android dump 与字体度量支撑，多行行距如何由 fontSize / 自然行盒 / lineSpacing 合成 SDK d.ts 无说明、当前 dump 无 lineSpacing 样本。
+  unless: []
+  why: round-0 fixer 把 .lineHeight 换成 lineSpacing(lineHeight − naturalHeight, onlyBetweenLines) 并在文件头写成既定事实，§6 假设「多行 = natural + spacing」却未回看 SnackDetail dump 里已正确的 5 行 140vp 基线；实测 ArkUI 多行行距 = fontSize + lineSpacing（16 + 9.3 ≈ 25.4vp），单行修好、多行变小，属修复中新生偏差。该合成规则只由 round-3 三页 dump（Karla/Montserrat 16fp）反推，无官方文档佐证。
+  how:
+  - 单行自然高有 Android dump + ttf 度量支撑可以直接写；多行合成规则若 SDK 未写、dump 无样本，在代码注释和 §6 明确标为未验证假设并给出下轮必测数值（如 5 行块 ≈131vp、行距 28vp）。
+  - 替换一条已有正确表现的渲染路径前，先在同轮 dump 里找出它的多行样本记为回归基线；改完至少用 measureTextSize 或下轮 dump 同时核单行盒与多行块高，两者只对一个不算修完。
+  - 不允许重编实测时优先选不改变已正确行为的方案（只对单行关 lineHeight、或运行期 MeasureUtils 实测后再算 spacing），不把两个未知量都靠猜。
+  check:
+  - 修复 §6 里每条数值预测在下一轮 dump 有核销；单行 dump 高 = 自然高且多行块高 = N × lineHeight 同时成立。
+  evidence:
+  - case: case-04c6d6166ebb2bcc3dfa
+    claim: diagnosis
+    revision: 08cc614b7fd6dff41319ea673aceed9490eb8275b4fefb40e2711fb1fa952fdd
+  - case: case-04c6d6166ebb2bcc3dfa
+    claim: recommendation:1
+    revision: 08cc614b7fd6dff41319ea673aceed9490eb8275b4fefb40e2711fb1fa952fdd
+  - case: case-04c6d6166ebb2bcc3dfa
+    claim: recommendation:2
+    revision: 08cc614b7fd6dff41319ea673aceed9490eb8275b4fefb40e2711fb1fa952fdd
+  - case: case-04c6d6166ebb2bcc3dfa
+    claim: recommendation:3
+    revision: 08cc614b7fd6dff41319ea673aceed9490eb8275b4fefb40e2711fb1fa952fdd
+  status: active
+- title: 用 SRC_IN 取形替代 Compose Plus/Darken 叠色时，必须把逐通道算式折进色标并用不透明遮罩
+  topic:
+  - ui
+  - render
+  - blend
+  when: 视觉修复阶段，把 Compose 的 BlendMode（Plus / Darken）着色层改写成 ArkUI 离屏 SRC_IN 遮罩时
+  description: 源用 drawWithContent { drawContent(); drawRect(brush, blendMode = Plus / Darken) } 给已按 LocalContentColor 着色的 Icon 叠渐变；目标用 Image.fillColor 做遮罩 + Column.linearGradient().blendMode(SRC_IN, OFFSCREEN) 取形。
+  unless:
+  - 源 blendMode 本身只取形（SRC_IN/DST_IN），无需预混
+  why: 'SRC_IN 只复刻形状，丢掉 Plus 的字形底色加数（#212121 → Ocean3 应得 #A7FFFF / Shadow3 #BCA7FF）；带 α0.87 的 fillColor 让渐变再与白底按 13% 混合，是修复中新引入且恰好部分抵消前者，使 round-1/2 只记到亚阈色差。round-3 预混 + Color.Black 遮罩后 SnackDetail 达标，Cart 仍余 G 通道 ≈10–12 级偏差，是遗留还是预混引入未核。'
+  how:
+  - 先写出源的逐通道算式：Plus = min(255, glyph + stop)、Darken = min(glyph, stop)、SRC_IN = stop × glyphAlpha；用 SRC_IN 取形时把 f 折进色标（预混）。
+  - '把字形底色当显式输入：LocalContentColor（如 textSecondary #de000000）先 compositeOver 背景（→ #212121）再进入算式；遮罩 fillColor 设为不透明，带 alpha 的 tint 不能直接充当 SRC_IN 遮罩。'
+  - 自检分别核浅色/深色主题的 blend 分支（Darken 与 SRC_IN 恰等价，Plus 不等价），不把「两主题殊途同归」写成结论。
+  check:
+  - '字形中心行像素均值与源算式核算目标（如 #86F7FA + #212121 = #A7FFFF）在容差内；同图圆环像素对照排除 JPEG 噪声。'
+  evidence:
+  - case: case-e74100d3adae9ecce3bf
+    claim: diagnosis
+    revision: 70ff765a1416356d71141825ecf46dfe19258d8c6e5fbd2f763929fd65e714d5
+  - case: case-e74100d3adae9ecce3bf
+    claim: recommendation:1
+    revision: 70ff765a1416356d71141825ecf46dfe19258d8c6e5fbd2f763929fd65e714d5
+  - case: case-e74100d3adae9ecce3bf
+    claim: recommendation:2
+    revision: 70ff765a1416356d71141825ecf46dfe19258d8c6e5fbd2f763929fd65e714d5
+  - case: case-e74100d3adae9ecce3bf
+    claim: recommendation:4
+    revision: 70ff765a1416356d71141825ecf46dfe19258d8c6e5fbd2f763929fd65e714d5
+  status: candidate
+- title: judge 为色差立单时用像素均值与源算式给期望值，不用形容词
+  topic:
+  - process
+  - verify
+  when: 视觉判读阶段，为字形/线条颜色差异立单并写期望值与修法建议时
+  description: 有 Android 基线 PNG 与目标截图（JPEG），差异是着色/混合导致的色相或亮度偏差。
+  unless: []
+  why: 'round-0 Cart judge 有基线 PNG 却只目测，把期望写成「蓝→紫渐变、饱和清晰」并建议 SRC_IN，fixer 据此只取形不预混；round-3/4 judge 改用同图圆环像素排除 JPEG、笔画中心均值（#A2C3F7 vs #B1E0FF）并写出算式，才把问题定量。同一组件 round-4 两位 judge 容差不同（SnackDetail 判 fixed、Cart 判仍开）。'
+  how:
+  - 同图取圆环等已知一致像素对照排除 JPEG 噪声，给出字形中心行均值与容差；用源算式核算目标值后再建议混合方式。
+  check:
+  - 工单期望值是十六进制均值 + 容差 + 算式，而非形容词；同组件多页 judge 使用同一测量方法。
+  evidence:
+  - case: case-e74100d3adae9ecce3bf
+    claim: recommendation:3
+    revision: 70ff765a1416356d71141825ecf46dfe19258d8c6e5fbd2f763929fd65e714d5
+  status: active
+retire: []
+topic_descriptions:
+  ui: 界面迁移：渲染、文本、布局、组件、输入
+  ui/render: 绘制层映射：混合模式、阴影、描边
+  ui/render/blend: Compose blendMode 叠色到 ArkUI 离屏混合的映射与预混
+  ui/render/shadow: elevation→ShadowOptions 配方与单位
+  ui/render/border: draw-only 描边与容器测量
+  ui/text: 文本排版：行高、省略
+  ui/text/line-height: TextStyle.lineHeight 与 ArkUI lineHeight/lineSpacing 语义
+  ui/text/ellipsis: maxLines + Ellipsis 末行省略粒度
+  ui/layout: 布局：安全区、单位域、Material 默认值、Compose 度量
+  ui/layout/safe-area: Scaffold innerPadding 与状态栏避让契约
+  ui/layout/units: px/vp 运算域与整数几何公式
+  ui/layout/material-defaults: Material 库组件隐含尺寸与内部留白
+  ui/layout/compose-measure: 从 Compose 源码推演实际渲染（度量副作用）
+  ui/component: 自定义组件写法
+  ui/component/builder-param: '@BuilderParam 槽内容承载'
+  ui/input: 输入与焦点
+  ui/input/focus: Navigation 返回后的焦点恢复与 TextInput 业务状态
+  process: 流程纪律：规格置信、SDK 阅读、收敛、验收、修复
+  process/spec-confidence: 无真机 dump 时的置信标记
+  process/sdk-reading: 核 SDK d.ts 的方法
+  process/convergence: 收敛/收尾阶段的对账与风险处置
+  process/verify: 视觉判读阶段的关页与立单口径
+  process/repair: 修复阶段的假设标注与回归基线
