@@ -1,12 +1,11 @@
 # ui/layout
 
-布局：安全区、单位域、Material 默认值、Compose 度量
+尺寸、测量、坐标、安全区与几何分配相关经验。
 
 [上一级](../index.md)
 
 ## 子主题
 
-- [compose-measure](compose-measure/index.md) — 从 Compose 源码推演实际渲染（度量副作用）
-- [material-defaults](material-defaults/index.md) — Material 库组件隐含尺寸与内部留白
-- [safe-area](safe-area/index.md) — Scaffold innerPadding 与状态栏避让契约
-- [units](units/index.md) — px/vp 运算域与整数几何公式
+- [geometry](geometry/index.md) — 迁移整数测量公式、单位换算和取整次序时进入。
+- [measurement](measurement/index.md) — 从声明式源码推断实际测量、裁剪和可见性时进入。
+- [safe-area](safe-area/index.md) — 确定系统栏边界在父子容器与浮层之间由谁消费时进入。

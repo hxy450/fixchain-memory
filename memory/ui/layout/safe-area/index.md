@@ -1,16 +1,12 @@
 # ui/layout/safe-area
 
-Scaffold innerPadding 与状态栏避让契约
+确定系统栏边界在父子容器与浮层之间由谁消费时进入。
 
 [上一级](../index.md)
 
 ## 本级经验
 
-- [Scaffold 无 topBar 时 innerPadding.top 就是状态栏 inset：子页无 statusBarsPadding 不能推出「不做顶部避让」](lesson-6803500d0f48b0809ff1.lesson.md)
-  - 时机：规格提取阶段，为壳页（Scaffold / Tab 宿主）及其子页、页内浮层写「谁避让状态栏」的沉浸式与安全区契约时
-  - 情境：Android 子页自身没有 statusBarsPadding，但作为 Material3 Scaffold 的 content 经 modifier.padding(innerPadding).consumeWindowInsets(innerPadding) 嵌入（无 topBar、contentWindowInsets 默认 systemBars）；目标端父容器不为 Tab 内容区加顶部避让，而是把状态栏高度以 @Param statusBarHeight 下发。
-  - 例外：Scaffold 有 topBar 或覆写了 contentWindowInsets，此时 innerPadding.top 不再等于状态栏高
-- [下发 statusBarHeight 参数时禁止写「本页不使用」；浮层与同 Stack 兄弟层拿同一 inset](lesson-90838f5b7e407e7c2e44.lesson.md)
-  - 时机：派工与界面实现阶段，向子页或浮层下发 statusBarHeight 参数、或把 needs_immersive_safearea=false 的浮层挂进宿主页自窗口顶起的 Stack 时
-  - 情境：宿主页按沉浸式取真实 statusBarHeight 下发；子页 @Param 已接线；浮层（scrim + 居中卡片，fillMaxSize）与列表、顶栏同挂一个 Stack。
-  - 例外：目标父容器已替子页加了顶部避让并有源码位置可引用
+- [安全区应沿父子布局链只承接一次，并覆盖同一内容区的所有层](lesson-890a47b0b1371b419052.lesson.md)
+  - 时机：规格提取、组件派工或界面实现阶段，确定嵌套页面、Tab 内容和页内浮层由哪一层消费系统安全区时
+  - 情境：源界面通过 Scaffold、导航宿主或容器 padding 传递系统 inset，目标界面可能改为宿主避让或向子页传值；列表、顶栏、遮罩和对话框又可能作为同一 Stack 的兄弟层存在。
+  - 例外：目标父容器已经消费了准确的 inset，且证据确认所有子层坐标都从该内容区起算
