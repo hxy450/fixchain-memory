@@ -1,0 +1,861 @@
+{
+  "schema": "migloop-case/2",
+  "id": "case-613cce143fdc193142d7",
+  "created_at": "2026-09-27T18:07:22.098149+00:00",
+  "job": "issue-613cce143fdc193142d7",
+  "identity_basis": "server migration ID",
+  "migration_key": "9264617d-5373-4aca-8c7d-94c70606545c",
+  "draft": {
+    "title": "网络装配根以空baseUrl/签名材料构造HttpClient且未实现AES响应解码，登录请求发包前即被拦截",
+    "when": "基础设施实现与装配阶段，实现网络运行配置来源、响应解密并在装配根注入HttpClient时；以及编排者处理网络巡检BLOCKER时",
+    "description": "Android通过BuildConfig/gradle注入API_HOST、请求签名材料和release AES_KEY，并在Gson解析前做Base64+AES/CBC解密；目标端决策要求密钥不进源码、构建期从本地私有配置注入，网络层对空配置fail-closed；另有决策记录“未提供测试环境base_url/测试账号”。",
+    "summary": "写前输入已正确且足够：api-inventory common.md 记录 BaseURL 来自 BuildConfig.API_HOST（debug/release 分别取测试/生产地址），\n签名规则追加私有 secret 后 MD5，release 响应在解析前按 AES/CBC/PKCS5Padding（key=IV，Base64 输入）解密；\nchain-auth L0/L2 标明 BaseUrl、MD5、AES-CBC 均已捕获，“HMOS 由 Base network 接线”；\n决策 D-013 要求签名/加密材料经构建 profile 或 gitignored 本地私有配置注入、由 Base Network 集中读取配置并保持 MD5/AES 语义；\nD-009 要求网络、鉴权、签名与解密只在 Base Network 实现一份；D-005 虽写“未提供测试 base_url/测试账号”，\n但作用域限定为登录联调时点，明确不得外延为把请求失败当成功。\nBase-3 网络实现者（base_network_events）读到上述全部内容及 Android App.kt 的 beforeResponse→aesDecrypt、gradle 的 API_HOST/AES_KEY，\n却只把 baseUrl/signSecret/responseDecoder 设计成 NetworkRuntimeConfig 构造参数（decoder 默认 null），未实现 AES 解码器，也未实现任何配置读取；\nHttpClient 在 baseUrl 或 signSecret 为空时直接返回 network configuration unavailable，decoder 为 null 时原样透传，\n回执称“签名密钥与响应解码器通过 NetworkRuntimeConfig 注入”（agent-01a08b71…jsonl:L137-L140、L185）。\n三次 closer 未写出装配根后，execute_four_pages 接管 Base-6.5，读到 HttpClient 空配置守卫、NetworkRuntimeConfig 签名与账本 D-013/D-005/D-009，\n于 13:27 创建 AppAssembly.ets：new NetworkRuntimeConfig('', '9.9.9', '004', '100001', '158', 'HarmonyOS', '')，不传 decoder\n（agent-01a08b18…jsonl:L2108-L2111），随后在 base-contracts.md 写下“D-005/D-013 约束：仓库未保存测试 Base URL 或签名材料；配置缺失时网络返回明确失败”（L2141-L2142），\n即把“测试环境未提供”和“密钥不进源码”解释成“装配空配置”，未消费任何构建期配置源。\n生成期网络巡检 NG01-01 已把此项判为 BLOCKER（空 baseUrl/signSecret 使所有自有后端请求本地失败；D-013 要求私有配置注入；不要把密钥不写源码外延为永久拒绝服务）。\n编排者读到报告后派发 patrol_repair_network_g1 因 agent thread limit reached 失败（L3345-L3354），上下文随即压缩；\n14:33 又完整重读账本 D-013/D-005，14:38 同一补丁修了同报告的 NG01-02/03（installCapabilities 返回 ready 并水合会话），\n却未改 networkConfig（L3481-L3490、L3602-L3605）。之后的装配根写入也未触及该行，生成结束时空配置与无解码器保留。\n09-14 真机登录报“网络配置不可用”，修复改为构建期从环境变量或 gitignored local.properties 生成 NetworkPrivateConfig，\nAppAssembly 以 NETWORK_BASE_URL、NETWORK_SIGN_SECRET 与 createAesCbcResponseDecoder(NETWORK_RESPONSE_AES_KEY) 构造配置\n（agent-01a08e4c…jsonl:L884-L897 读回）；首版解码器把服务端明文 JSON 当密文属修复中新生问题，已改为合法 JSON 透传（epoch-1 main L1774），不在此归因。\n",
+    "recommendations": [
+      "网络基础设施实现阶段：决策要求“构建期从私有配置注入、由网络层集中读取”时，同一任务内交付配置来源（构建插件/生成模块+忽略规则+缺键即构建失败）和源端等价的响应解码器；不要只留可注入参数并把接线推给装配者。",
+      "迁移release响应解密时，按源端 beforeResponse/解密工具的算法、key/IV、编码与debug/release分支实现解码器，并用合成向量测试；decoder 为 null 时不能在release默认透传密文。",
+      "装配根注入网络配置前，先查配置来源：源端 gradle/BuildConfig 已有地址与材料、决策要求私有注入时，接入构建期生成的配置；不得以空字符串构造客户端，缺失应让构建或启动显式失败并登记阻断。",
+      "区分“无测试环境/测试账号”（影响联调与设备级 PASS）与“生产配置来源存在”（仍须接线）；带作用域限定的决策不能外延为允许请求永久失败。",
+      "编排者处理巡检BLOCKER时，派发失败（如线程上限）要重试或就地修复，并在关闭前逐项核对该报告的每个BLOCKER是否都已落地，而不是只修同批次中顺手的项。"
+    ],
+    "unknown": [
+      "execute_four_pages 发给 base_network_events 的派工内容为加密/空载荷（agent-01a08b71…jsonl:L35），无法确认派工是否要求把配置与解码器留给装配根。",
+      "编排者推理内容加密；其对 D-005/D-013 的解释只见于它写的 base-contracts.md（agent-01a08b18…jsonl:L2141-L2142）。",
+      "修复写入由截断后的 five_page_flow_closure 完成，材料无写入调用；最终状态依据独立审查代理 09-14 05:06 的读回与构建/测试回执。"
+    ],
+    "graphs": [
+      {
+        "target": {
+          "key": "D:/temp_ctools/app_shared_bike_riding_records_harmony/entry/src/main/ets/AppAssembly.ets",
+          "since": "2026-09-10T19:10:12.041Z",
+          "at": "2026-09-15T09:23:49.093Z"
+        },
+        "nodes": [
+          {
+            "key": "D:/temp_ctools/app_shared_bike_riding_records_harmony/spec/decision-ledger.md",
+            "at": "2026-09-10T13:11:45.754Z",
+            "reason": "正常输入：Base-3 网络实现者首轮 Get-Content 读取账本全文，回执含 D-013“签名/加密材料通过构建 profile 或 gitignored 本地私有配置注入…MD5/AES 字节协议保持 Android 语义，由 Base Network 集中读取配置”与 D-009“网络、鉴权、签名与解密只在 Base Network 实现一份”（agent-01a08b71-d783-7923-a857-d11ba1d1790c.jsonl:L40-L43）。"
+          },
+          {
+            "key": "D:/temp_ctools/app_shared_bike_riding_records_harmony/spec/baseline/api-inventory/common.md",
+            "at": "2026-09-10T13:13:16.187Z",
+            "reason": "正常输入：同一实现者读取 common.md，回执给出 BaseURL 来自 BuildConfig.API_HOST（debug/release 分地址）及 release 在解析前执行 AES/CBC/PKCS5Padding、key 与 IV 同为 AES_KEY、Base64 输入；同批还读到 Android App.beforeResponse→aesDecrypt（同转录 L82-L85）。"
+          },
+          {
+            "key": "agent-01a08b71-d783-7923-a857-d11ba1d1790c.jsonl",
+            "at": "2026-09-10T13:16:40.868Z",
+            "reason": "base_network_events：收到上述要求后 apply_patch 新增 NetworkTypes/HttpClient，NetworkRuntimeConfig 只接收 baseUrl/signSecret/responseDecoder 参数（decoder 默认 null），无 AES 解码器、无任何配置读取；HttpClient 对空 baseUrl/signSecret 返回 network configuration unavailable，decoder 为 null 时透传（同转录 L137-L140）；回执称密钥与解码器“通过 NetworkRuntimeConfig 注入”（L185）。",
+            "problem": true
+          },
+          {
+            "key": "D:/temp_ctools/app_shared_bike_riding_records_harmony/entry/src/main/ets/network/HttpClient.ets",
+            "at": "2026-09-10T13:22:38.738Z",
+            "reason": "交付桥梁：装配者 Get-Content 读回 HttpClient.ets，回执含空 baseUrl/signSecret 即返回 network configuration unavailable 的守卫与 decoder 为 null 时透传（agent-01a08b18-4da1-7061-8f7b-c8e82bea46c5.jsonl:L2006-L2009）。"
+          },
+          {
+            "key": "D:/temp_ctools/app_shared_bike_riding_records_harmony/entry/src/main/ets/network/NetworkTypes.ets",
+            "at": "2026-09-10T13:26:09.956Z",
+            "reason": "交付桥梁：装配者读回 NetworkTypes.ets，回执为 NetworkRuntimeConfig(baseUrl, version, channel, appClient, projectId, model, signSecret, responseDecoder=null) 的构造签名（同转录 L2087-L2090）。"
+          },
+          {
+            "key": "D:/temp_ctools/app_shared_bike_riding_records_harmony/spec/decision-ledger.md",
+            "at": "2026-09-10T13:26:18.821Z",
+            "reason": "正常输入：装配前 rg 检索账本与 api-inventory，回执含 D-013 索引“鉴权材料不写入 ArkTS 源码，构建时从本地私有配置注入”、D-005 作用域限定“不得外延为…把请求失败当成功”、D-009 正文，以及 chain-auth L0/L2 BaseUrl 与 AES-CBC 已捕获（同转录 L2094-L2097）。"
+          },
+          {
+            "key": "agent-01a08b18-4da1-7061-8f7b-c8e82bea46c5.jsonl",
+            "at": "2026-09-10T13:27:23.240Z",
+            "reason": "execute_four_pages 接管 Base-6.5：Add File AppAssembly.ets，以 NetworkRuntimeConfig('', '9.9.9', '004', '100001', '158', 'HarmonyOS', '') 构造唯一 HttpClient，未接构建期配置、未传 decoder（同转录 L2108-L2111）；随后 base-contracts.md 写明其依据为“D-005/D-013…配置缺失时网络返回明确失败”（L2141-L2142）。",
+            "problem": true
+          },
+          {
+            "key": "D:/temp_ctools/app_shared_bike_riding_records_harmony/spec/fix/round-1/patrol/network-group-01.md",
+            "at": "2026-09-10T14:28:09.886Z",
+            "reason": "关键纠正：编排者读取网络巡检报告，NG01-01 BLOCKER 指出 AppAssembly 空 baseUrl/signSecret 使所有自有后端请求本地失败，D-013 要求私有配置注入，修复方向为在装配根接入实际运行配置（同转录 L3345-L3348）。"
+          },
+          {
+            "key": "D:/temp_ctools/app_shared_bike_riding_records_harmony/spec/decision-ledger.md",
+            "at": "2026-09-10T14:33:57.898Z",
+            "reason": "正常输入：编排者再次读取账本全文（Get-Content -Raw 管道 Select-String），回执含 D-013 全文与 D-005 作用域限定（同转录 L3481、L3489-L3490）。"
+          },
+          {
+            "key": "agent-01a08b18-4da1-7061-8f7b-c8e82bea46c5.jsonl",
+            "at": "2026-09-10T14:38:58.810Z",
+            "reason": "纠正未落实：派发 patrol_repair_network_g1 因 agent thread limit reached 失败后未重试（L3352-L3354）；本次 apply_patch 更新 AppAssembly.ets，修了同报告 NG01-02/03（installCapabilities 返回 ready 并 hydrate 会话），networkConfig 空值与缺 decoder 原样保留（L3602-L3605）。",
+            "problem": true
+          }
+        ],
+        "edges": [
+          {
+            "from": 1,
+            "to": 3,
+            "force": true,
+            "reason": "base_network_events首轮exec用Get-Content -Raw读取base-plan、feature-base与spec/decision-ledger.md，CommandExecution完成且回执含D-013全文与D-009；在其写网络层之前。",
+            "evidence": [
+              {
+                "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b71-d783-7923-a857-d11ba1d1790c.jsonl",
+                "line": 40
+              },
+              {
+                "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b71-d783-7923-a857-d11ba1d1790c.jsonl",
+                "line": 42
+              },
+              {
+                "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b71-d783-7923-a857-d11ba1d1790c.jsonl",
+                "line": 43
+              }
+            ]
+          },
+          {
+            "from": 2,
+            "to": 3,
+            "force": true,
+            "reason": "同一实现者exec读取Android网络源码后以Get-Content读取api-inventory.json与common.md，CommandExecution完成，回执含BaseURL来源与release AES/CBC解密规则。",
+            "evidence": [
+              {
+                "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b71-d783-7923-a857-d11ba1d1790c.jsonl",
+                "line": 82
+              },
+              {
+                "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b71-d783-7923-a857-d11ba1d1790c.jsonl",
+                "line": 84
+              },
+              {
+                "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b71-d783-7923-a857-d11ba1d1790c.jsonl",
+                "line": 85
+              }
+            ]
+          },
+          {
+            "from": 3,
+            "to": 4,
+            "force": true,
+            "reason": "该实现者exec调用apply_patch Add File新增network/HttpClient.ets（含空配置守卫与decoder为null透传），FileChange完成、回执{}。",
+            "evidence": [
+              {
+                "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b71-d783-7923-a857-d11ba1d1790c.jsonl",
+                "line": 137
+              },
+              {
+                "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b71-d783-7923-a857-d11ba1d1790c.jsonl",
+                "line": 138
+              },
+              {
+                "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b71-d783-7923-a857-d11ba1d1790c.jsonl",
+                "line": 140
+              }
+            ]
+          },
+          {
+            "from": 3,
+            "to": 5,
+            "force": true,
+            "reason": "同一apply_patch新增network/NetworkTypes.ets，定义NetworkRuntimeConfig且responseDecoder默认null，FileChange完成、回执{}。",
+            "evidence": [
+              {
+                "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b71-d783-7923-a857-d11ba1d1790c.jsonl",
+                "line": 137
+              },
+              {
+                "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b71-d783-7923-a857-d11ba1d1790c.jsonl",
+                "line": 138
+              },
+              {
+                "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b71-d783-7923-a857-d11ba1d1790c.jsonl",
+                "line": 140
+              }
+            ]
+          },
+          {
+            "from": 4,
+            "to": 7,
+            "force": true,
+            "reason": "execute_four_pages在写装配根前exec用Get-Content -Raw读取HttpClient.ets，CommandExecution完成且回执含空baseUrl/signSecret即返回network configuration unavailable的守卫。",
+            "evidence": [
+              {
+                "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b18-4da1-7061-8f7b-c8e82bea46c5.jsonl",
+                "line": 2006
+              },
+              {
+                "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b18-4da1-7061-8f7b-c8e82bea46c5.jsonl",
+                "line": 2008
+              },
+              {
+                "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b18-4da1-7061-8f7b-c8e82bea46c5.jsonl",
+                "line": 2009
+              }
+            ]
+          },
+          {
+            "from": 5,
+            "to": 7,
+            "force": true,
+            "reason": "execute_four_pages写装配根前exec读取NetworkTypes.ets与network/index.ets，回执含NetworkRuntimeConfig构造签名与decoder默认null。",
+            "evidence": [
+              {
+                "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b18-4da1-7061-8f7b-c8e82bea46c5.jsonl",
+                "line": 2087
+              },
+              {
+                "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b18-4da1-7061-8f7b-c8e82bea46c5.jsonl",
+                "line": 2089
+              },
+              {
+                "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b18-4da1-7061-8f7b-c8e82bea46c5.jsonl",
+                "line": 2090
+              }
+            ]
+          },
+          {
+            "from": 6,
+            "to": 7,
+            "force": true,
+            "reason": "execute_four_pages写装配根前exec以rg检索spec/decision-ledger.md与api-inventory；rg因api-usage.md缺失返回非零，但回执已输出账本D-013/D-005/D-009与chain-auth匹配段。",
+            "evidence": [
+              {
+                "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b18-4da1-7061-8f7b-c8e82bea46c5.jsonl",
+                "line": 2094
+              },
+              {
+                "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b18-4da1-7061-8f7b-c8e82bea46c5.jsonl",
+                "line": 2096
+              },
+              {
+                "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b18-4da1-7061-8f7b-c8e82bea46c5.jsonl",
+                "line": 2097
+              }
+            ]
+          },
+          {
+            "from": 7,
+            "to": "target",
+            "force": true,
+            "reason": "execute_four_pages exec调用apply_patch Add File创建AppAssembly.ets（空baseUrl/signSecret、无decoder），FileChange完成、回执{}。",
+            "evidence": [
+              {
+                "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b18-4da1-7061-8f7b-c8e82bea46c5.jsonl",
+                "line": 2108
+              },
+              {
+                "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b18-4da1-7061-8f7b-c8e82bea46c5.jsonl",
+                "line": 2109
+              },
+              {
+                "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b18-4da1-7061-8f7b-c8e82bea46c5.jsonl",
+                "line": 2111
+              }
+            ]
+          },
+          {
+            "from": 8,
+            "to": 10,
+            "force": true,
+            "reason": "编排者exec用Get-Content -Raw读取network-group-01.md，CommandExecution完成且回执含NG01-01 BLOCKER与修复方向；在14:38装配根写入之前。",
+            "evidence": [
+              {
+                "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b18-4da1-7061-8f7b-c8e82bea46c5.jsonl",
+                "line": 3345
+              },
+              {
+                "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b18-4da1-7061-8f7b-c8e82bea46c5.jsonl",
+                "line": 3347
+              },
+              {
+                "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b18-4da1-7061-8f7b-c8e82bea46c5.jsonl",
+                "line": 3348
+              }
+            ]
+          },
+          {
+            "from": 9,
+            "to": 10,
+            "force": true,
+            "reason": "编排者exec并行读取多文件，其中Get-Content -Raw spec/decision-ledger.md管道Select-String的CommandExecution完成，回执输出账本全文含D-013与D-005。",
+            "evidence": [
+              {
+                "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b18-4da1-7061-8f7b-c8e82bea46c5.jsonl",
+                "line": 3481
+              },
+              {
+                "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b18-4da1-7061-8f7b-c8e82bea46c5.jsonl",
+                "line": 3489
+              },
+              {
+                "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b18-4da1-7061-8f7b-c8e82bea46c5.jsonl",
+                "line": 3490
+              }
+            ]
+          },
+          {
+            "from": 10,
+            "to": "target",
+            "force": true,
+            "reason": "编排者exec调用apply_patch同时更新AppAssembly.ets等文件（修NG01-02/03，未改networkConfig），FileChange完成、回执{}。",
+            "evidence": [
+              {
+                "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b18-4da1-7061-8f7b-c8e82bea46c5.jsonl",
+                "line": 3602
+              },
+              {
+                "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b18-4da1-7061-8f7b-c8e82bea46c5.jsonl",
+                "line": 3603
+              },
+              {
+                "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b18-4da1-7061-8f7b-c8e82bea46c5.jsonl",
+                "line": 3605
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "unresolved_targets": []
+  },
+  "claims": {
+    "diagnosis": {
+      "text": "写前输入已正确且足够：api-inventory common.md 记录 BaseURL 来自 BuildConfig.API_HOST（debug/release 分别取测试/生产地址），\n签名规则追加私有 secret 后 MD5，release 响应在解析前按 AES/CBC/PKCS5Padding（key=IV，Base64 输入）解密；\nchain-auth L0/L2 标明 BaseUrl、MD5、AES-CBC 均已捕获，“HMOS 由 Base network 接线”；\n决策 D-013 要求签名/加密材料经构建 profile 或 gitignored 本地私有配置注入、由 Base Network 集中读取配置并保持 MD5/AES 语义；\nD-009 要求网络、鉴权、签名与解密只在 Base Network 实现一份；D-005 虽写“未提供测试 base_url/测试账号”，\n但作用域限定为登录联调时点，明确不得外延为把请求失败当成功。\nBase-3 网络实现者（base_network_events）读到上述全部内容及 Android App.kt 的 beforeResponse→aesDecrypt、gradle 的 API_HOST/AES_KEY，\n却只把 baseUrl/signSecret/responseDecoder 设计成 NetworkRuntimeConfig 构造参数（decoder 默认 null），未实现 AES 解码器，也未实现任何配置读取；\nHttpClient 在 baseUrl 或 signSecret 为空时直接返回 network configuration unavailable，decoder 为 null 时原样透传，\n回执称“签名密钥与响应解码器通过 NetworkRuntimeConfig 注入”（agent-01a08b71…jsonl:L137-L140、L185）。\n三次 closer 未写出装配根后，execute_four_pages 接管 Base-6.5，读到 HttpClient 空配置守卫、NetworkRuntimeConfig 签名与账本 D-013/D-005/D-009，\n于 13:27 创建 AppAssembly.ets：new NetworkRuntimeConfig('', '9.9.9', '004', '100001', '158', 'HarmonyOS', '')，不传 decoder\n（agent-01a08b18…jsonl:L2108-L2111），随后在 base-contracts.md 写下“D-005/D-013 约束：仓库未保存测试 Base URL 或签名材料；配置缺失时网络返回明确失败”（L2141-L2142），\n即把“测试环境未提供”和“密钥不进源码”解释成“装配空配置”，未消费任何构建期配置源。\n生成期网络巡检 NG01-01 已把此项判为 BLOCKER（空 baseUrl/signSecret 使所有自有后端请求本地失败；D-013 要求私有配置注入；不要把密钥不写源码外延为永久拒绝服务）。\n编排者读到报告后派发 patrol_repair_network_g1 因 agent thread limit reached 失败（L3345-L3354），上下文随即压缩；\n14:33 又完整重读账本 D-013/D-005，14:38 同一补丁修了同报告的 NG01-02/03（installCapabilities 返回 ready 并水合会话），\n却未改 networkConfig（L3481-L3490、L3602-L3605）。之后的装配根写入也未触及该行，生成结束时空配置与无解码器保留。\n09-14 真机登录报“网络配置不可用”，修复改为构建期从环境变量或 gitignored local.properties 生成 NetworkPrivateConfig，\nAppAssembly 以 NETWORK_BASE_URL、NETWORK_SIGN_SECRET 与 createAesCbcResponseDecoder(NETWORK_RESPONSE_AES_KEY) 构造配置\n（agent-01a08e4c…jsonl:L884-L897 读回）；首版解码器把服务端明文 JSON 当密文属修复中新生问题，已改为合法 JSON 透传（epoch-1 main L1774），不在此归因。\n",
+      "kind": "diagnosis",
+      "status": "model_claim"
+    },
+    "recommendation:1": {
+      "text": "网络基础设施实现阶段：决策要求“构建期从私有配置注入、由网络层集中读取”时，同一任务内交付配置来源（构建插件/生成模块+忽略规则+缺键即构建失败）和源端等价的响应解码器；不要只留可注入参数并把接线推给装配者。",
+      "kind": "recommendation",
+      "status": "model_claim"
+    },
+    "recommendation:2": {
+      "text": "迁移release响应解密时，按源端 beforeResponse/解密工具的算法、key/IV、编码与debug/release分支实现解码器，并用合成向量测试；decoder 为 null 时不能在release默认透传密文。",
+      "kind": "recommendation",
+      "status": "model_claim"
+    },
+    "recommendation:3": {
+      "text": "装配根注入网络配置前，先查配置来源：源端 gradle/BuildConfig 已有地址与材料、决策要求私有注入时，接入构建期生成的配置；不得以空字符串构造客户端，缺失应让构建或启动显式失败并登记阻断。",
+      "kind": "recommendation",
+      "status": "model_claim"
+    },
+    "recommendation:4": {
+      "text": "区分“无测试环境/测试账号”（影响联调与设备级 PASS）与“生产配置来源存在”（仍须接线）；带作用域限定的决策不能外延为允许请求永久失败。",
+      "kind": "recommendation",
+      "status": "model_claim"
+    },
+    "recommendation:5": {
+      "text": "编排者处理巡检BLOCKER时，派发失败（如线程上限）要重试或就地修复，并在关闭前逐项核对该报告的每个BLOCKER是否都已落地，而不是只修同批次中顺手的项。",
+      "kind": "recommendation",
+      "status": "model_claim"
+    }
+  },
+  "targets": [
+    "D:/temp_ctools/app_shared_bike_riding_records_harmony/entry/src/main/ets/AppAssembly.ets"
+  ],
+  "changes": [
+    {
+      "files": [
+        "D:/temp_ctools/app_shared_bike_riding_records_harmony/entry/src/main/ets/AppAssembly.ets"
+      ],
+      "change": "HttpClient 注入的 baseUrl/签名/AES 材料改由构建期私有配置提供，新增响应解码（明文 JSON 透传，否则 AES/CBC 解密）与 NetworkCryptoTest。写入调用不在材料内（执行者为截断后的 five_page_flow_closure），以根代理报告、ROUND3-4 构建与测试为据。",
+      "evidence": [
+        "epoch-1/sessions/main-01a08aae-81e8-7463-8b71-a670847d7eef.jsonl:L1369、L1422、L1452、L1566、L1629、L1665、L1774、L1812",
+        "epoch-0/sessions/agent-01a09ded-7f70-79a2-bc72-2e342fe1b7a5.jsonl:L366、L408、L957"
+      ]
+    }
+  ],
+  "participants": [
+    {
+      "agent": "epoch-1/sessions/main-01a08aae-81e8-7463-8b71-a670847d7eef.jsonl",
+      "role": "发现/协调/复核",
+      "action": "真机联调发现配置缺失与解码误判并复测。",
+      "evidence": [
+        "epoch-1/sessions/main-01a08aae-81e8-7463-8b71-a670847d7eef.jsonl:L1369-L1812"
+      ]
+    },
+    {
+      "agent": "epoch-0/sessions/agent-01a09e18-abba-7f43-a145-424e57748a4e.jsonl",
+      "role": "分析",
+      "action": "f006_network_private_config_analysis 只读定位 AppAssembly→HttpClient 的空配置拦截。",
+      "evidence": [
+        "epoch-0/sessions/agent-01a09e18-abba-7f43-a145-424e57748a4e.jsonl:L400"
+      ]
+    },
+    {
+      "agent": "epoch-0/sessions/agent-01a08e4c-4654-7f10-acc1-315f50719b99.jsonl",
+      "role": "分析",
+      "action": "独立审查代理只读诊断 baseUrl/signSecret 为空及 AES 缺口。",
+      "evidence": [
+        "epoch-0/sessions/agent-01a08e4c-4654-7f10-acc1-315f50719b99.jsonl:L822"
+      ]
+    }
+  ],
+  "scope": {
+    "project_roots": [
+      "D:/temp_ctools/app_shared_bike_riding_records_harmony"
+    ],
+    "source_roots": [
+      "D:/app-shared-bike-riding-records-android"
+    ],
+    "materials": [
+      "C:\\Users\\hongy\\projects\\_migloop-multiapp-memory-20260927\\runs\\5e144759212b8f66\\materials"
+    ],
+    "generation_end": "2026-09-10T19:10:12.041Z",
+    "observation_end": "2026-09-15T09:23:49.093Z",
+    "boundary_evidence": [
+      "所有转录引用均相对材料池 materials/runs/21d966e9-289e-4f40-b128-0b4957c12261/；Codex 格式，一个根线程 01a08aae 分 epoch-0/epoch-1 两段，子代理全部位于 epoch-0/sessions/agent-*.jsonl。",
+      "生成结束：epoch-0/sessions/main-01a08aae-81e8-7463-8b71-a670847d7eef.jsonl:L6512-L6515，根代理在 a2h-verify PASS 后给出最终交付并 task_complete（2026-09-10T19:10:12.041Z）；此前的 visual-verify/a2h-verify 修复轮属于生成期收敛，只作追溯背景。",
+      "修复开始：epoch-0/sessions/main-01a08aae-81e8-7463-8b71-a670847d7eef.jsonl:L6519 与 epoch-1/sessions/main-01a08aae-81e8-7463-8b71-a670847d7eef.jsonl:L8（2026-09-11T01:08-01:10Z），用户指出只做了 5 个页面、二级跳转未闭环。",
+      "观察截止：材料中最后一条记录 epoch-0/sessions/agent-01a0a45c-9cb9-7650-b324-6a9e3d77b7db.jsonl 末行（replace_compliance_links，2026-09-15T09:23:49.093Z）；server dashboard last_activity=2026-09-15T09:31:11Z 晚于材料，差额无转录。",
+      "根线程 epoch-1 转录在 2026-09-15T01:19:10.890Z（L6296 用户请求后）截断；此后根线程的用户请求从 agent-01a0a45c-9cb9-7650-b324-6a9e3d77b7db.jsonl:L3 的 compacted replacement_history（items 34-42）及 L9/L13/L15/L25/L26/L30 继承消息恢复。"
+    ]
+  },
+  "environment": {
+    "schema": "migloop-case-environment/1",
+    "through": "2026-09-15T09:23:49.093Z",
+    "facts": [],
+    "sources": {},
+    "unknown": [
+      "android.compile_sdk",
+      "android.target_sdk",
+      "android.min_sdk",
+      "libraries.compose_bom",
+      "libraries.material3",
+      "toolchain.kotlin",
+      "toolchain.agp",
+      "toolchain.gradle",
+      "harmonyos.target_sdk",
+      "harmonyos.compatible_sdk",
+      "harmonyos.compile_sdk",
+      "device.android_api",
+      "device.harmonyos_version",
+      "device.density",
+      "device.font_scale",
+      "project.revision"
+    ],
+    "unscoped_observations": 0,
+    "boundary": "Recorded configuration/tool outputs, not a continuous environment state, resolved dependency proof, or lesson compatibility range. Missing values stay unknown; no current project files are read.",
+    "snapshot_id": "f43f7fcbf518ddd477a595fed7ad27a362fbb30255b1910fe0aa4294be8e9532"
+  },
+  "packager": {
+    "name": "migloop-memory-skills",
+    "version": "0.8.3",
+    "bundle_sha256": "4bddfa4e92b7dccd8546606cce6f167963b9f6bf03d8329085d22bf4e94eea92"
+  },
+  "validation_sha256": "72557672569feb1a00d45bab35d9495dcefc458d13cf8e554b4cf13b811fd618",
+  "provenance": {
+    "schema": "migloop-case-provenance/1",
+    "materials": "C:\\Users\\hongy\\projects\\_migloop-multiapp-memory-20260927\\runs\\5e144759212b8f66\\materials",
+    "db_root_session_id": null,
+    "source_set_id": "sources-51973a3274ea587edce3",
+    "collector": {
+      "name": "migloop-memory-skills",
+      "version": "0.8.3",
+      "bundle_sha256": "14a940665d63179822994c2b9e982f971b3c750199265458ca6baa6bd4688ef8",
+      "implementation_sha256": "48e6f84dd59cbfdcac7c372a18ac76a098a52d3dbe972093dc2db671f63c943f"
+    },
+    "observed": {
+      "session_ids": [
+        "01a08aae-81e8-7463-8b71-a670847d7eef",
+        "01a08add-e4c9-7a50-8343-9a285cff4ebe",
+        "01a08ae0-e0e4-7500-9085-a6f9052793d0",
+        "01a08ae1-0eba-7341-86e0-bc661cf5dcbd",
+        "01a08afb-e3da-79b1-9224-734b4c097f69",
+        "01a08b01-4bab-7593-9925-664153af6ff4",
+        "01a08b01-7d75-7643-b293-c6c960b32f76",
+        "01a08b01-ecff-7002-b274-2fb9d9258a49",
+        "01a08b18-4da1-7061-8f7b-c8e82bea46c5",
+        "01a08b1a-3044-7091-8f64-668e78cb54d1",
+        "01a08b1a-698a-7dd0-940d-f12cdfb703f4",
+        "01a08b2c-8d0a-77a3-bbd7-793f0014ad1b",
+        "01a08b32-35ef-7a83-b612-728a4f68c018",
+        "01a08b32-950b-7653-8aeb-a1b92099c16a",
+        "01a08b32-fa46-7641-a5b0-e326706fe92d",
+        "01a08b33-552f-7f33-8d2e-e988fe8572d8",
+        "01a08b42-90eb-7bf2-a173-e3bfe9d0c746",
+        "01a08b47-4769-7502-a956-685813f2b9b3",
+        "01a08b4e-6ba4-7b91-9409-2c30b0de32b0",
+        "01a08b54-1168-7473-9a1b-b5f2bc1e305b",
+        "01a08b54-6d3a-7f61-8114-a9159b77f341",
+        "01a08b5c-50c3-7721-b0ce-c236bddf2937",
+        "01a08b64-535a-7592-b7c6-ae45eb06fcab",
+        "01a08b68-5202-7d03-b3e8-f412bd1e152f",
+        "01a08b6e-3fe1-7e33-97a8-6ec32b102345",
+        "01a08b71-abb6-7980-bc4b-76e8d17417b5",
+        "01a08b71-d783-7923-a857-d11ba1d1790c",
+        "01a08b71-ffad-7780-b0a3-bbfc1db49b37",
+        "01a08b72-21d7-7c11-b674-9e9722129e2f",
+        "01a08b79-17c0-7c13-9fb4-0eb11dc4da18",
+        "01a08b7b-c827-7bd0-87ad-5b350659c3d0",
+        "01a08b7e-576a-7cd0-b251-e743e465b114",
+        "01a08b81-e340-74f1-829b-36e521f55a09",
+        "01a08b86-cd9e-7600-8d8b-7c8fd55b3dea",
+        "01a08b89-80d7-7382-ab7f-499ba481cdc9",
+        "01a08b89-cb26-7fe1-b3cb-2b74ede87d38",
+        "01a08b8f-0b80-7c61-a937-17a11502b022",
+        "01a08b8f-4a5a-78e1-8353-bd8dbc151372",
+        "01a08b97-1dbd-7033-acd7-84fdf8e7b1b9",
+        "01a08b9e-3f3c-70b2-ae5c-4e1287055e3c",
+        "01a08ba2-fbe0-71f1-8b62-ebd63393ebd2",
+        "01a08baa-426d-7651-9ed2-4309791e342b",
+        "01a08bb0-1f18-7722-9812-704ca3769d95",
+        "01a08bb0-4fe7-75d3-a8b3-458abc27eff3",
+        "01a08bb4-22ff-78c3-8f46-899084176807",
+        "01a08bb7-3fa4-7573-9ec5-971cd9a268fb",
+        "01a08bb7-ea24-7f61-813c-8ebae8b5c33a",
+        "01a08bc2-5274-7272-9350-7aebabf84d70",
+        "01a08bc3-3474-7a60-be77-2580b38b7040",
+        "01a08bc3-6dd2-7cc3-bff8-fa1df8911c5c",
+        "01a08c0d-791a-76d0-a04d-e01134867b5d",
+        "01a08c13-f2b8-7b32-aa2b-947a2afdad1f",
+        "01a08c1b-ccd7-74c0-87f4-399183cef5a8",
+        "01a08c2a-7fe3-77a2-a7fe-244458141b9c",
+        "01a08c33-d123-71c3-b426-c7a9f93b3a40",
+        "01a08c38-301e-72b0-b7c2-cf3bf5fb16a2",
+        "01a08c43-d145-7261-92b4-38dedfaf5896",
+        "01a08c46-fff9-7b12-867a-02ed654ab63b",
+        "01a08c54-7a4d-7823-a590-3e5200b07289",
+        "01a08c5f-574c-77d2-a300-ffdf34e53d3b",
+        "01a08c67-d9ad-7443-9293-b3e8e501031a",
+        "01a08c6f-ecae-7fe1-b399-294a6b2ba7bc",
+        "01a08c73-01a9-73d0-8b3c-f58f3861e4af",
+        "01a08c78-2546-7a33-9749-c9fccaf4770f",
+        "01a08c7a-7415-7e31-8c3d-26770da07f91",
+        "01a08c7b-4824-7b41-8fa6-5eec0db6b814",
+        "01a08c7e-3a69-7432-8e0a-0fc773539c35",
+        "01a08c84-b16e-7ec3-b2e1-a2a666b14ffd",
+        "01a08c85-5657-7390-8655-295c1b635833",
+        "01a08c90-4de5-72c0-93df-44db7e362eea",
+        "01a08c91-29fa-71a0-a703-cf20335d6d46",
+        "01a08c94-65bd-74d0-aff9-efd678dca502",
+        "01a08c9c-554f-7dc3-b32c-400c92116eba",
+        "01a08ca4-23e9-76b2-86ae-9459f03eef60",
+        "01a08caa-a0d7-7b10-ab8b-ad7c694608da",
+        "01a08e02-6317-7211-922c-93b570f99c02",
+        "01a08e05-d3eb-75c3-90bd-19a6a330371e",
+        "01a08e05-f691-7151-8912-07f4bf550ee5",
+        "01a08e1c-c535-7b51-9193-abd468962185",
+        "01a08e1c-db3c-76b0-b076-28fea15cc97d",
+        "01a08e25-b29f-71d0-b834-4b43d47c4696",
+        "01a08e25-d1d1-7e40-81ae-77b4e7f2f3a7",
+        "01a08e38-ed52-7000-ae9e-f8a3287cbbf2",
+        "01a08e4c-4654-7f10-acc1-315f50719b99",
+        "01a08e4c-bebd-7193-beae-682e7c3cf010",
+        "01a09dd9-6f27-7902-beae-adb0a6ad6ed8",
+        "01a09ddb-bb51-7793-a5e0-d17ef45e0275",
+        "01a09ddd-2ec3-7fe3-87f1-d6feea6ce53b",
+        "01a09dea-299b-7042-9131-2e2f4d3bd39e",
+        "01a09ded-7f70-79a2-bc72-2e342fe1b7a5",
+        "01a09e13-2218-7080-acf2-398f4863e613",
+        "01a09e18-abba-7f43-a145-424e57748a4e",
+        "01a09ee3-2519-71f0-a73b-3aff151d0723",
+        "01a09ef1-58b5-7120-8e0d-4d2409e15d3a",
+        "01a09efc-9687-7b53-aa52-01618fd1f3d7",
+        "01a09f06-31ba-7d51-abea-66209789cfb1",
+        "01a0a2a6-67d9-76a1-843a-0d3b09101bdc",
+        "01a0a2a6-8c8d-7101-85c3-75c7b922f07d",
+        "01a0a2ca-d723-7242-baf4-3933faa3fca7",
+        "01a0a2d3-e1ae-7690-9949-b75adff0bf1b",
+        "01a0a3b0-4f18-7ad3-8142-970401f65744",
+        "01a0a3b7-b5e1-7162-a3a7-359e9514df53",
+        "01a0a43e-09b2-7342-a245-36d6772c79eb",
+        "01a0a450-2218-7111-b900-193beb9667e3",
+        "01a0a45c-9cb9-7650-b324-6a9e3d77b7db"
+      ],
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "gpt-5.6-sol",
+        "gpt-5.6-terra",
+        "gpt-6-astra"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.153.4"
+      ],
+      "projects": [
+        "D:\\temp_ctools\\app_shared_bike_riding_records_harmony"
+      ]
+    },
+    "migration": {
+      "project": "骑行记录",
+      "server_session_id": "9264617d-5373-4aca-8c7d-94c70606545c",
+      "source_uris": [
+        "server export sha256=d8b1574c1fbffd2a962732d87e971480632092535ff888264395e26c7067810f"
+      ]
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ]
+    },
+    "unknown": [
+      "historical_migration_tool_versions",
+      "analysis_models"
+    ],
+    "sources": {
+      "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b18-4da1-7061-8f7b-c8e82bea46c5.jsonl": "406a81630f8b62618c2380f2e682d633c933e069005ada0b8c07584046136b0c",
+      "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b71-d783-7923-a857-d11ba1d1790c.jsonl": "7f9751fd6912350c104e5d0c861eb35b4a52533357f61c379989f7dd7fc36eb6",
+      "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08e4c-4654-7f10-acc1-315f50719b99.jsonl": "b3bd319e32524e70795a6d707db9b2a93f198465d7e55d659088c5f84d6f2dbc",
+      "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a09ded-7f70-79a2-bc72-2e342fe1b7a5.jsonl": "7e6db11c09abb3d98d31353196d839eb7777ccf07c464c2b90b61381e280921b",
+      "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a09e18-abba-7f43-a145-424e57748a4e.jsonl": "ef5c33b4062d9ee1f5a42f899c3034c5208b7ac6f822706d7f50d03fe238c938",
+      "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/main-01a08aae-81e8-7463-8b71-a670847d7eef.jsonl": "7b6583b3972ebb2f6e7253853fef862ed10320d044bfa5a93ee1a66fde9ff987",
+      "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-1/sessions/main-01a08aae-81e8-7463-8b71-a670847d7eef.jsonl": "56744eda379f8b6f3caf0e5af6e3e0e214a276c881a30b9e29e20e316a46a51b"
+    }
+  },
+  "graph_evidence": [
+    {
+      "graph": 1,
+      "nodes": [
+        {
+          "id": "card:n-5e60c0a1e07d23d4",
+          "kind": "file",
+          "key": "D:/temp_ctools/app_shared_bike_riding_records_harmony/spec/decision-ledger.md",
+          "at": "2026-09-10T13:11:45.754000+00:00"
+        },
+        {
+          "id": "card:n-a89a9b0df79223d2",
+          "kind": "file",
+          "key": "D:/temp_ctools/app_shared_bike_riding_records_harmony/spec/baseline/api-inventory/common.md",
+          "at": "2026-09-10T13:13:16.187000+00:00"
+        },
+        {
+          "id": "card:n-4033d3607c169e34",
+          "kind": "agent",
+          "key": "01a08b71-d783-7923-a857-d11ba1d1790c",
+          "at": "2026-09-10T13:16:40.868000+00:00"
+        },
+        {
+          "id": "card:n-0efc820b193c142e",
+          "kind": "file",
+          "key": "D:/temp_ctools/app_shared_bike_riding_records_harmony/entry/src/main/ets/network/HttpClient.ets",
+          "at": "2026-09-10T13:22:38.738000+00:00"
+        },
+        {
+          "id": "card:n-ff00d171994c9456",
+          "kind": "file",
+          "key": "D:/temp_ctools/app_shared_bike_riding_records_harmony/entry/src/main/ets/network/NetworkTypes.ets",
+          "at": "2026-09-10T13:26:09.956000+00:00"
+        },
+        {
+          "id": "card:n-6700dac306235c8f",
+          "kind": "file",
+          "key": "D:/temp_ctools/app_shared_bike_riding_records_harmony/spec/decision-ledger.md",
+          "at": "2026-09-10T13:26:18.821000+00:00"
+        },
+        {
+          "id": "card:n-8adfa0aba9040af2",
+          "kind": "agent",
+          "key": "01a08b18-4da1-7061-8f7b-c8e82bea46c5",
+          "at": "2026-09-10T13:27:23.240000+00:00"
+        },
+        {
+          "id": "card:n-f1dcf888f02b081d",
+          "kind": "file",
+          "key": "D:/temp_ctools/app_shared_bike_riding_records_harmony/spec/fix/round-1/patrol/network-group-01.md",
+          "at": "2026-09-10T14:28:09.886000+00:00"
+        },
+        {
+          "id": "card:n-d171edd329dc82ae",
+          "kind": "file",
+          "key": "D:/temp_ctools/app_shared_bike_riding_records_harmony/spec/decision-ledger.md",
+          "at": "2026-09-10T14:33:57.898000+00:00"
+        },
+        {
+          "id": "card:n-eeab35bc7eca64c0",
+          "kind": "agent",
+          "key": "01a08b18-4da1-7061-8f7b-c8e82bea46c5",
+          "at": "2026-09-10T14:38:58.810000+00:00"
+        },
+        {
+          "id": "card:n-6615db24e476bca8",
+          "kind": "file",
+          "key": "D:/temp_ctools/app_shared_bike_riding_records_harmony/entry/src/main/ets/AppAssembly.ets",
+          "at": "2026-09-15T09:23:49.093000+00:00"
+        }
+      ],
+      "edges": [
+        {
+          "from": "card:n-5e60c0a1e07d23d4",
+          "to": "card:n-4033d3607c169e34",
+          "relation": "read",
+          "at": "2026-09-10T13:11:45.754000+00:00",
+          "source": "model_review",
+          "strength": "candidate",
+          "evidence": [
+            "47092fdf412957bf:40:6642166ecf5ad2b7",
+            "47092fdf412957bf:42:7c5a77ab556002dd",
+            "47092fdf412957bf:43:1db32159ea742937"
+          ],
+          "quote_verified": true
+        },
+        {
+          "from": "card:n-a89a9b0df79223d2",
+          "to": "card:n-4033d3607c169e34",
+          "relation": "read",
+          "at": "2026-09-10T13:13:16.187000+00:00",
+          "source": "model_review",
+          "strength": "candidate",
+          "evidence": [
+            "47092fdf412957bf:82:1f1058a963cb0f8c",
+            "47092fdf412957bf:84:f055cf6af65f9c9f",
+            "47092fdf412957bf:85:521c27317e9a3083"
+          ],
+          "quote_verified": true
+        },
+        {
+          "from": "card:n-4033d3607c169e34",
+          "to": "card:n-0efc820b193c142e",
+          "relation": "write",
+          "at": "2026-09-10T13:16:40.868000+00:00",
+          "source": "model_review",
+          "strength": "candidate",
+          "evidence": [
+            "47092fdf412957bf:137:630f4ba5c1f68e15",
+            "47092fdf412957bf:138:4d39f1e177d8a0c2",
+            "47092fdf412957bf:140:2ca9ff56eba2f946"
+          ],
+          "quote_verified": true
+        },
+        {
+          "from": "card:n-4033d3607c169e34",
+          "to": "card:n-ff00d171994c9456",
+          "relation": "write",
+          "at": "2026-09-10T13:16:40.868000+00:00",
+          "source": "model_review",
+          "strength": "candidate",
+          "evidence": [
+            "47092fdf412957bf:137:630f4ba5c1f68e15",
+            "47092fdf412957bf:138:4d39f1e177d8a0c2",
+            "47092fdf412957bf:140:2ca9ff56eba2f946"
+          ],
+          "quote_verified": true
+        },
+        {
+          "from": "card:n-0efc820b193c142e",
+          "to": "card:n-8adfa0aba9040af2",
+          "relation": "read",
+          "at": "2026-09-10T13:22:38.738000+00:00",
+          "source": "model_review",
+          "strength": "candidate",
+          "evidence": [
+            "d32ca72639901ff2:2006:3bc36fe42ed1d2cf",
+            "d32ca72639901ff2:2008:f55c8de96ebb4a6c",
+            "d32ca72639901ff2:2009:d35daa0b9f9c79ab"
+          ],
+          "quote_verified": true
+        },
+        {
+          "from": "card:n-ff00d171994c9456",
+          "to": "card:n-8adfa0aba9040af2",
+          "relation": "read",
+          "at": "2026-09-10T13:26:09.956000+00:00",
+          "source": "model_review",
+          "strength": "candidate",
+          "evidence": [
+            "d32ca72639901ff2:2087:b51627dc1aa54d59",
+            "d32ca72639901ff2:2089:4ec2ec65b6ee432b",
+            "d32ca72639901ff2:2090:c0b6efbda07ae41b"
+          ],
+          "quote_verified": true
+        },
+        {
+          "from": "card:n-6700dac306235c8f",
+          "to": "card:n-8adfa0aba9040af2",
+          "relation": "read",
+          "at": "2026-09-10T13:26:18.821000+00:00",
+          "source": "model_review",
+          "strength": "candidate",
+          "evidence": [
+            "d32ca72639901ff2:2094:d0d4ff19cef887b2",
+            "d32ca72639901ff2:2096:07d96f2c1456bf2d",
+            "d32ca72639901ff2:2097:0ca92b7f70f0e8e4"
+          ],
+          "quote_verified": true
+        },
+        {
+          "from": "card:n-8adfa0aba9040af2",
+          "to": "card:n-6615db24e476bca8",
+          "relation": "write",
+          "at": "2026-09-10T13:27:23.240000+00:00",
+          "source": "model_review",
+          "strength": "candidate",
+          "evidence": [
+            "d32ca72639901ff2:2108:d8712bada8c57324",
+            "d32ca72639901ff2:2109:06db82c5b9de8c8c",
+            "d32ca72639901ff2:2111:90f5aa0ac35b2aab"
+          ],
+          "quote_verified": true
+        },
+        {
+          "from": "card:n-f1dcf888f02b081d",
+          "to": "card:n-eeab35bc7eca64c0",
+          "relation": "read",
+          "at": "2026-09-10T14:28:09.886000+00:00",
+          "source": "model_review",
+          "strength": "candidate",
+          "evidence": [
+            "d32ca72639901ff2:3345:b6282898dfa124b6",
+            "d32ca72639901ff2:3347:abdbe01b9a6ed93a",
+            "d32ca72639901ff2:3348:29d06e7d52ec6225"
+          ],
+          "quote_verified": true
+        },
+        {
+          "from": "card:n-d171edd329dc82ae",
+          "to": "card:n-eeab35bc7eca64c0",
+          "relation": "read",
+          "at": "2026-09-10T14:33:57.898000+00:00",
+          "source": "model_review",
+          "strength": "candidate",
+          "evidence": [
+            "d32ca72639901ff2:3481:8b858afc0fa303de",
+            "d32ca72639901ff2:3489:3673f23b91858ed7",
+            "d32ca72639901ff2:3490:70d515cbd6ce2906"
+          ],
+          "quote_verified": true
+        },
+        {
+          "from": "card:n-eeab35bc7eca64c0",
+          "to": "card:n-6615db24e476bca8",
+          "relation": "write",
+          "at": "2026-09-10T14:38:58.810000+00:00",
+          "source": "model_review",
+          "strength": "candidate",
+          "evidence": [
+            "d32ca72639901ff2:3602:61bbb39ec115cfee",
+            "d32ca72639901ff2:3603:cb2969acdd745cdc",
+            "d32ca72639901ff2:3605:7365aef4afae28d8"
+          ],
+          "quote_verified": true
+        }
+      ]
+    }
+  ],
+  "validation": {
+    "status": "valid",
+    "schema": "passed",
+    "graph_check": "performed",
+    "kernel_sha256": "b5d894750c6e0deeffaeee173f6bd3bb11f2afe7a7a3af592288a6448e5dd41e",
+    "causal_correctness": "not_certified",
+    "unresolved_targets": [],
+    "graph_checks": [
+      {
+        "graph": 1,
+        "draft_sha256": "22f524384d2ee1e2b60aa700d6d1b15e815abbac4e4f2e55705ec35dca2440ed",
+        "receipt": {
+          "schema": "inquiry-graph/1",
+          "report_id": "8ee51c236d9141b7",
+          "mechanical_status": "valid",
+          "path_status": "complete",
+          "semantic_verified": false,
+          "submission_format": "coordinates/1",
+          "issues": [],
+          "path_feedback": [],
+          "delivery": {
+            "status": "ready_for_review",
+            "semantic_verified": false,
+            "coverage_verified": false
+          }
+        }
+      }
+    ]
+  },
+  "revision": "73967481015ee738c8266d14ff83c9bd01364f8e91f023932408e1c0d95d41fc"
+}
