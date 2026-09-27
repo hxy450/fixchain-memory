@@ -1,0 +1,534 @@
+{
+  "schema": "migloop-case/2",
+  "id": "case-8f54242f5eefd1e7e647",
+  "created_at": "2026-09-27T15:56:38.375291+00:00",
+  "job": "issue-8f54242f5eefd1e7e647",
+  "identity_basis": "server migration ID",
+  "migration_key": "34f1eb1d-61e3-4b07-b51c-a3ef5890fad8",
+  "draft": {
+    "title": "同一次登录成功被拆成事件出栈与回调导航两个出口",
+    "when": "规格提取阶段，将源页面对同一登录成功结果的多条响应（事件订阅关闭本页、成功回调启动主页）翻译成目标导航契约时",
+    "description": "源Activity对同一次登录成功同时有两条导航响应：EventBus LoginSuccessEvent订阅中finish()，以及ViewModel成功回调中startActivity(主页, FLAG_ACTIVITY_NEW_TASK)；登录成功管理器在回调页面前先发布全局事件；目标端由单一NavPathStack管理页面栈，Navigation根内容是启动页。",
+    "summary": "F006功能规格作者写前实际读到SmsLoginActivity.kt的两条成功响应：loginSuccess.observe启动MainActivity（FLAG_ACTIVITY_NEW_TASK），\nonEventMainThread(LoginSuccessEvent type==0)执行finish()；同时读到UserInfoManager.loginSuccess在同一次登录成功中post LoginSuccessEvent(0)。\n它自己写的流程图也标明AuthSessionStore.loginSuccess会发EVT_LOGIN_SUCCESS。输入足以看出两条响应由同一次成功触发。\n规格却将它们拆成两条独立的route验收：AC16要求smsLogin成功后navPathStack.clear()+pushPathByName('MainPage')、返回栈只剩MainPage；\nAC17要求EVT_LOGIN_SUCCESS(type==0)后本页pop。两者如何合并、谁先执行均未定义。\nAndroid中finish()只结束当前Activity，不会抵消启动主页；目标端两者都操作同一NavPathStack，效果会叠加。\n上游分页spec page_0015已按通道分列这两行导航，但该作者未读UserInfoManager；本卡把可核偏差定在拿到完整输入的F006规格。\n实现者读到该规格后照写：aboutToAppear订阅EVT_LOGIN_SUCCESS并pop，onLoginSuccessNav执行clear()+push MainPage。\n它自己写的AuthService.smsLogin在返回前调用loginSuccess发出该事件，微信分支注释也写明“由订阅pop收口”，短信分支却仍保留两个出口。\n至generation_end，这两段只由该实现者引入，verify期没有改动这段导航。\n真机hilog显示登录后栈从2变为0、MainPage被移除且没有新建节点，露出栈底SplashPage（main-ee33673a L1151-L1156、L1192-L1198）。\n首轮修复只把回调改成pop()，事件订阅的pop仍在，结果连续两次出栈，症状不变；这是同一偏差的延续，不是新问题。\n最终Codex补丁删除事件订阅导航，短信和微信成功统一调用onLoginSuccessNav：先popToName('MainPage')，找不到时replacePathByName('MainPage')\n（main-01a0c1d8 L107-L110、L128-L131）。\n",
+    "recommendations": [
+      "规格提取时，先列出源页面对同一业务结果的全部响应（EventBus订阅、LiveData回调、结果回传），标明它们是否由同一次成功触发，再给目标页定义唯一导航出口；不要把finish()和startActivity各写成独立的出栈/入栈验收。",
+      "将多个Android导航调用映射到单一NavPathStack时，写出合并后“操作前栈→操作后栈”的净效果，例如[MainPage, SmsLoginPage]→[MainPage]，并写清主页不在栈中时的替换兜底；Navigation根内容是启动页时，不要用clear()表达回主页。",
+      "实现阶段接线成功导航前，检查同一路径上是否还有全局事件订阅会操作导航栈（查本页EVT_*_SUCCESS订阅及服务层emit）；若有，只保留一个出口，并把与规格的冲突回写规格。"
+    ],
+    "unknown": [
+      "未核AndroidManifest中MainActivity的launchMode，因此不判定“NEW_TASK等于清栈”这一映射本身是否正确；本卡只归因同一次登录成功被拆成两个导航出口。"
+    ],
+    "graphs": [
+      {
+        "target": {
+          "key": "D:/tusi/app_rings_harmony/entry/src/main/ets/pages/SmsLoginPage.ets",
+          "since": "2026-09-20T10:51:00Z",
+          "at": "2026-09-23T02:54:21Z"
+        },
+        "nodes": [
+          {
+            "key": "D:/tusi/app-rings-android/app/src/main/java/com/ringtone/dudu/ui/login/activity/SmsLoginActivity.kt",
+            "at": "2026-09-17T04:25:41.657Z",
+            "reason": "正常输入：规格作者Read回执返回L156-L160 loginSuccess.observe→startActivity(MainActivity)并设FLAG_ACTIVITY_NEW_TASK，以及L174-L179 onEventMainThread(LoginSuccessEvent) type==0→finish()；源码显示同一页面对登录成功有两条响应（agent-a9f5b1644bf56e45c.jsonl:L140-L141）。"
+          },
+          {
+            "key": "D:/tusi/app-rings-android/app/src/main/java/com/ringtone/dudu/manager/UserInfoManager.kt",
+            "at": "2026-09-17T04:24:47.776Z",
+            "reason": "正常输入：Read回执L55-L66显示loginSuccess落盘后post LoginSuccessEvent(0)；短信登录ViewModel成功后正是调用它，足以判断上述两条响应由同一次登录成功触发（agent-a9f5b1644bf56e45c.jsonl:L95-L96）。"
+          },
+          {
+            "key": "agent-a9f5b1644bf56e45c.jsonl",
+            "at": "2026-09-17T04:35:40.277Z",
+            "reason": "已读上述源码，Write F006时自己的流程图写了loginSuccess→post LoginSuccessEvent(0)→EVT_LOGIN_SUCCESS，短信链写loginSuccess→清栈进MainPage；却把两条响应拆成独立route验收：AC16为clear()+pushPathByName('MainPage')、返回栈只剩MainPage，AC17为EVT_LOGIN_SUCCESS(type==0)后本页pop，未定义单一出口或执行次序（同转录L191-L192）。",
+            "problem": true
+          },
+          {
+            "key": "D:/tusi/app_rings_harmony/spec/baseline/features/F006-login-account.md",
+            "at": "2026-09-17T14:04:57.031Z",
+            "reason": "交付桥梁：实现者Read回执仍包含AC16、AC17及映射表中NEW_TASK→navPathStack.clear()+pushPathByName('MainPage')（agent-a5c13b0da281522c2.jsonl:L49-L50）。"
+          },
+          {
+            "key": "agent-a5c13b0da281522c2.jsonl",
+            "at": "2026-09-17T14:25:41.610Z",
+            "reason": "按AC17在aboutToAppear写EVT_LOGIN_SUCCESS订阅，回调中设loginSuccess=true并navPathStack.pop()（L456-L457）；按AC16在smsLogin成功回调写onLoginSuccessNav：clear()+pushPathByName('MainPage')（L467-L468）。它写的AuthService.smsLogin先调用AuthSessionStore.loginSuccess发出该事件（L409、L412），微信分支注释也写明由订阅pop收口，短信分支却保留两个出口。本链确认规格偏差传到目标。"
+          }
+        ],
+        "edges": [
+          {
+            "from": 1,
+            "to": 3
+          },
+          {
+            "from": 2,
+            "to": 3
+          },
+          {
+            "from": 3,
+            "to": 4
+          },
+          {
+            "from": 4,
+            "to": 5
+          },
+          {
+            "from": 5,
+            "to": "target"
+          }
+        ]
+      }
+    ],
+    "unresolved_targets": [
+      {
+        "key": "D:/tusi/app_rings_harmony/entry/src/main/ets/pages/MainPage.ets",
+        "reason": "onPageShown补发EVT_LOGIN_CHANGED，是首轮修复把导航改为回到栈内已有MainPage时加的配套刷新（main-ee33673a L1205-L1210、L1223-L1224）；生成期设计是clear后新建MainPage，材料中未见独立的“返回主页后我的页登录态不刷新”症状，所以不作为生成偏差归因。"
+      }
+    ]
+  },
+  "claims": {
+    "diagnosis": {
+      "text": "F006功能规格作者写前实际读到SmsLoginActivity.kt的两条成功响应：loginSuccess.observe启动MainActivity（FLAG_ACTIVITY_NEW_TASK），\nonEventMainThread(LoginSuccessEvent type==0)执行finish()；同时读到UserInfoManager.loginSuccess在同一次登录成功中post LoginSuccessEvent(0)。\n它自己写的流程图也标明AuthSessionStore.loginSuccess会发EVT_LOGIN_SUCCESS。输入足以看出两条响应由同一次成功触发。\n规格却将它们拆成两条独立的route验收：AC16要求smsLogin成功后navPathStack.clear()+pushPathByName('MainPage')、返回栈只剩MainPage；\nAC17要求EVT_LOGIN_SUCCESS(type==0)后本页pop。两者如何合并、谁先执行均未定义。\nAndroid中finish()只结束当前Activity，不会抵消启动主页；目标端两者都操作同一NavPathStack，效果会叠加。\n上游分页spec page_0015已按通道分列这两行导航，但该作者未读UserInfoManager；本卡把可核偏差定在拿到完整输入的F006规格。\n实现者读到该规格后照写：aboutToAppear订阅EVT_LOGIN_SUCCESS并pop，onLoginSuccessNav执行clear()+push MainPage。\n它自己写的AuthService.smsLogin在返回前调用loginSuccess发出该事件，微信分支注释也写明“由订阅pop收口”，短信分支却仍保留两个出口。\n至generation_end，这两段只由该实现者引入，verify期没有改动这段导航。\n真机hilog显示登录后栈从2变为0、MainPage被移除且没有新建节点，露出栈底SplashPage（main-ee33673a L1151-L1156、L1192-L1198）。\n首轮修复只把回调改成pop()，事件订阅的pop仍在，结果连续两次出栈，症状不变；这是同一偏差的延续，不是新问题。\n最终Codex补丁删除事件订阅导航，短信和微信成功统一调用onLoginSuccessNav：先popToName('MainPage')，找不到时replacePathByName('MainPage')\n（main-01a0c1d8 L107-L110、L128-L131）。\n",
+      "kind": "diagnosis",
+      "status": "model_claim"
+    },
+    "recommendation:1": {
+      "text": "规格提取时，先列出源页面对同一业务结果的全部响应（EventBus订阅、LiveData回调、结果回传），标明它们是否由同一次成功触发，再给目标页定义唯一导航出口；不要把finish()和startActivity各写成独立的出栈/入栈验收。",
+      "kind": "recommendation",
+      "status": "model_claim"
+    },
+    "recommendation:2": {
+      "text": "将多个Android导航调用映射到单一NavPathStack时，写出合并后“操作前栈→操作后栈”的净效果，例如[MainPage, SmsLoginPage]→[MainPage]，并写清主页不在栈中时的替换兜底；Navigation根内容是启动页时，不要用clear()表达回主页。",
+      "kind": "recommendation",
+      "status": "model_claim"
+    },
+    "recommendation:3": {
+      "text": "实现阶段接线成功导航前，检查同一路径上是否还有全局事件订阅会操作导航栈（查本页EVT_*_SUCCESS订阅及服务层emit）；若有，只保留一个出口，并把与规格的冲突回写规格。",
+      "kind": "recommendation",
+      "status": "model_claim"
+    }
+  },
+  "targets": [
+    "D:/tusi/app_rings_harmony/entry/src/main/ets/pages/MainPage.ets",
+    "D:/tusi/app_rings_harmony/entry/src/main/ets/pages/SmsLoginPage.ets"
+  ],
+  "changes": [
+    {
+      "files": [
+        "D:/tusi/app_rings_harmony/entry/src/main/ets/pages/SmsLoginPage.ets"
+      ],
+      "change": "首轮（EE）：onLoginSuccessNav 由 clear()+push 改 pop() 并删除 SmsLoginNoParam；最终保留 Codex 补丁：移除 aboutToAppear 中 EVT_LOGIN_SUCCESS→pop 订阅，登录成功单一导航出口（popToName MainPage，缺失时 replacePathByName），新增 SmsLoginNavParam 并改写微信链注释。",
+      "evidence": [
+        "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/main-ee33673a-d631-4304-8fb4-3129c89c7c33.jsonl:L1211-L1213",
+        "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/main-ee33673a-d631-4304-8fb4-3129c89c7c33.jsonl:L1234-L1235",
+        "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/main-01a0c1d8-8664-7dc0-b1a8-c48add55b0a0.jsonl:L107-L110",
+        "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/main-01a0c1d8-8664-7dc0-b1a8-c48add55b0a0.jsonl:L128-L131"
+      ]
+    },
+    {
+      "files": [
+        "D:/tusi/app_rings_harmony/entry/src/main/ets/pages/MainPage.ets"
+      ],
+      "change": "onPageShown 补发 EVT_LOGIN_CHANGED 以刷新我的页登录态（首轮修复加入，次轮未改动，观察截止时保留）。",
+      "evidence": [
+        "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/main-ee33673a-d631-4304-8fb4-3129c89c7c33.jsonl:L1223-L1224"
+      ]
+    }
+  ],
+  "participants": [
+    {
+      "agent": "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/main-ee33673a-d631-4304-8fb4-3129c89c7c33.jsonl",
+      "role": "发现(用户报告)/首轮修复(未闭环)",
+      "action": "真机复现与 hilog 取证，改 pop() 与 onPageShown 事件，多次装机后仍复现并挂起",
+      "evidence": [
+        "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/main-ee33673a-d631-4304-8fb4-3129c89c7c33.jsonl:L1067",
+        "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/main-ee33673a-d631-4304-8fb4-3129c89c7c33.jsonl:L1156",
+        "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/main-ee33673a-d631-4304-8fb4-3129c89c7c33.jsonl:L1211-L1213",
+        "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/main-ee33673a-d631-4304-8fb4-3129c89c7c33.jsonl:L1223-L1224",
+        "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/main-ee33673a-d631-4304-8fb4-3129c89c7c33.jsonl:L1511"
+      ]
+    },
+    {
+      "agent": "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/main-01a0c1d8-8664-7dc0-b1a8-c48add55b0a0.jsonl",
+      "role": "修复/编译复核",
+      "action": "沿登录成功导航链排查到重复出栈，apply_patch 修改 SmsLoginPage 并全量 HAP 编译",
+      "evidence": [
+        "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/main-01a0c1d8-8664-7dc0-b1a8-c48add55b0a0.jsonl:L9",
+        "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/main-01a0c1d8-8664-7dc0-b1a8-c48add55b0a0.jsonl:L80",
+        "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/main-01a0c1d8-8664-7dc0-b1a8-c48add55b0a0.jsonl:L85",
+        "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/main-01a0c1d8-8664-7dc0-b1a8-c48add55b0a0.jsonl:L107-L110",
+        "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/main-01a0c1d8-8664-7dc0-b1a8-c48add55b0a0.jsonl:L128-L131",
+        "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/main-01a0c1d8-8664-7dc0-b1a8-c48add55b0a0.jsonl:L137-L140",
+        "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/main-01a0c1d8-8664-7dc0-b1a8-c48add55b0a0.jsonl:L152"
+      ]
+    }
+  ],
+  "scope": {
+    "project_roots": [
+      "D:/tusi/app_rings_harmony"
+    ],
+    "source_roots": [
+      "D:/tusi/app-rings-android"
+    ],
+    "materials": [
+      "C:\\Users\\hongy\\projects\\_migloop-multiapp-memory-20260927\\runs\\44c1d7622349cc17\\materials"
+    ],
+    "generation_end": "2026-09-20T10:51:00Z",
+    "observation_end": "2026-09-23T02:54:21Z",
+    "boundary_evidence": [
+      "export-manifest.json facts stage-marks: a2h-verify 2026-09-20T10:51:00Z，a2h-retrospect 2026-09-20T10:52:33Z 与 2026-09-23T02:54:21Z（dashboard completed_stages 至 a2h-retrospect）",
+      "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/main-7bcbff75-9586-4d4e-8fa0-8e1600913ad9.jsonl:L4597-L4602（verify 期重建+5 项修复完成后 mark-stage a2h-verify，10:51:24 宣布 a2h-verify 完成；此前 verify 期修复属生成阶段收敛）",
+      "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/main-7bcbff75-9586-4d4e-8fa0-8e1600913ad9.jsonl:L4603-L4623（首次 a2h-retrospect，仅写 docs/retrospect-report-2026-09-20.md）",
+      "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/main-65cc0d15-8819-4a72-b888-90412fccff78.jsonl:L164-L172（第二次 a2h-retrospect mark-stage，2026-09-23T02:54:20Z 执行）",
+      "最后一次应用修改：runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/main-87179513-f6e2-4fbc-9703-b4c8cec1c767.jsonl:L453-L454（2026-09-23T02:42:00Z Mine15Component.ets）；之后 runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/main-b228311f-ed48-41a4-aea7-c8e6fa9b14fd.jsonl 只做日报与文档检索，无应用写入",
+      "首个生成后应用修改：runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/main-ee33673a-d631-4304-8fb4-3129c89c7c33.jsonl:L376-L378（2026-09-21T01:21:55Z）；2026-09-20T10:51Z 至此之间仅文档/完备度表产物（runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/main-01a0be79-43bf-7c90-96d8-5e3a2821dbb0.jsonl、runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/main-01a0be8e-e845-7051-920e-e0a55025926f.jsonl）"
+    ]
+  },
+  "environment": {
+    "schema": "migloop-case-environment/1",
+    "through": "2026-09-23T02:54:21Z",
+    "facts": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "D:\\tusi\\app_rings_harmony",
+        "at": "2026-09-17T06:35:46.709Z",
+        "ref": "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/agent-ac567ed4068ed6644.jsonl:L149",
+        "request_ref": "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/agent-ac567ed4068ed6644.jsonl:L148",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "5.0.0(12)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "D:\\tusi\\app_rings_harmony",
+        "at": "2026-09-17T06:35:46.709Z",
+        "ref": "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/agent-ac567ed4068ed6644.jsonl:L149",
+        "request_ref": "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/agent-ac567ed4068ed6644.jsonl:L148",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "D:\\tusi\\app_rings_harmony\\entry\\build\\default\\outputs\\default",
+        "at": "2026-09-22T02:47:00.902Z",
+        "ref": "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/agent-a52e02c077767c03c.jsonl:L15",
+        "request_ref": "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/agent-a52e02c077767c03c.jsonl:L14",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "5.0.0(12)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "D:\\tusi\\app_rings_harmony\\entry\\build\\default\\outputs\\default",
+        "at": "2026-09-22T02:47:00.902Z",
+        "ref": "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/agent-a52e02c077767c03c.jsonl:L15",
+        "request_ref": "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/agent-a52e02c077767c03c.jsonl:L14",
+        "phase": "repair"
+      }
+    ],
+    "sources": {
+      "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/agent-ac567ed4068ed6644.jsonl": "56f188352877a3f554eae25207d24b5dc10972deced0c81ff268f53531aa5013",
+      "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/agent-a52e02c077767c03c.jsonl": "4dd9c29b5b08fc07b84d24efa1da0103c90a38823aad8e46954835390bdb676c"
+    },
+    "unknown": [
+      "android.compile_sdk",
+      "android.target_sdk",
+      "android.min_sdk",
+      "libraries.compose_bom",
+      "libraries.material3",
+      "toolchain.kotlin",
+      "toolchain.agp",
+      "toolchain.gradle",
+      "harmonyos.compile_sdk",
+      "device.android_api",
+      "device.harmonyos_version",
+      "device.density",
+      "device.font_scale",
+      "project.revision"
+    ],
+    "unscoped_observations": 0,
+    "boundary": "Recorded configuration/tool outputs, not a continuous environment state, resolved dependency proof, or lesson compatibility range. Missing values stay unknown; no current project files are read.",
+    "snapshot_id": "c7b8b13ad4a9f745e94675bee8c3bc08bb424a9827c5a90f7b3075c014a147f2"
+  },
+  "packager": {
+    "name": "migloop-memory-skills",
+    "version": "0.8.3",
+    "bundle_sha256": "4bddfa4e92b7dccd8546606cce6f167963b9f6bf03d8329085d22bf4e94eea92"
+  },
+  "validation_sha256": "82b7dd6dea7b4c4b10cfa0cd17ef5591e174bce2de51418fb82b6d1bbaeb8b7a",
+  "provenance": {
+    "schema": "migloop-case-provenance/1",
+    "materials": "C:\\Users\\hongy\\projects\\_migloop-multiapp-memory-20260927\\runs\\44c1d7622349cc17\\materials",
+    "db_root_session_id": null,
+    "source_set_id": "sources-8decedd1032cf015dca8",
+    "collector": {
+      "name": "migloop-memory-skills",
+      "version": "0.8.3",
+      "bundle_sha256": "14a940665d63179822994c2b9e982f971b3c750199265458ca6baa6bd4688ef8",
+      "implementation_sha256": "48e6f84dd59cbfdcac7c372a18ac76a098a52d3dbe972093dc2db671f63c943f"
+    },
+    "observed": {
+      "session_ids": [
+        "01a0be79-43bf-7c90-96d8-5e3a2821dbb0",
+        "01a0be8e-e845-7051-920e-e0a55025926f",
+        "01a0c1d8-8664-7dc0-b1a8-c48add55b0a0",
+        "14493534-d76c-4708-b197-6d67665bf32e",
+        "27b53afc-8949-404c-b3b6-c5748dbf1539",
+        "3f1d4888-2eac-4ebf-a779-93554fb533b7",
+        "5a5b6f69-54bc-4aa7-ba2a-29e5fc9bc4ee",
+        "6199877f-86f6-4d19-9183-578fec27efa1",
+        "65cc0d15-8819-4a72-b888-90412fccff78",
+        "674660cb-ee03-42c4-9a36-f4c0348bfb1a",
+        "79350f0b-63c4-4d6c-a8e6-33fd3ccd76c0",
+        "7bcbff75-9586-4d4e-8fa0-8e1600913ad9",
+        "7e6e56d7-2af8-4e87-8002-7c576089489c",
+        "87179513-f6e2-4fbc-9703-b4c8cec1c767",
+        "8b80f312-35da-43b0-9541-b906b470b8ef",
+        "b228311f-ed48-41a4-aea7-c8e6fa9b14fd",
+        "c434fed7-9a9c-423f-92fc-089e2792d86a",
+        "da4d5344-7911-4015-883d-a20540bccbb3",
+        "dc02d0da-a9eb-4bd5-a8ea-7fdc91cee7db",
+        "ee33673a-d631-4304-8fb4-3129c89c7c33"
+      ],
+      "platforms": [
+        "claude-code",
+        "codex"
+      ],
+      "models": [
+        "glm-5.3",
+        "glm-5.3-flash",
+        "gpt-5.6-sol"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.155.0-alpha.9.2",
+        "2.1.274",
+        "2.1.275",
+        "2.1.276",
+        "2.1.278",
+        "2.1.280"
+      ],
+      "projects": [
+        "D:\\tusi\\app_rings_harmony",
+        "D:\\tusi\\app_rings_harmony\\entry\\build\\default\\outputs\\default",
+        "D:\\tusi\\app_rings_harmony\\entry\\src\\main\\ets",
+        "D:\\tusi\\app_rings_harmony\\entry\\src\\main\\ets\\pages",
+        "D:\\tusi\\app_rings_harmony\\entry\\src\\main\\ets\\pages\\ringandcrbt"
+      ]
+    },
+    "migration": {
+      "project": "免费来电多多",
+      "server_session_id": "34f1eb1d-61e3-4b07-b51c-a3ef5890fad8",
+      "source_uris": [
+        "server export sha256=8e46be8dccf2db7071cd3073bf6740f971967d9df12f25d305efab8c5c8b5cf1"
+      ]
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ]
+    },
+    "unknown": [
+      "historical_migration_tool_versions",
+      "analysis_models"
+    ],
+    "sources": {
+      "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/agent-a5c13b0da281522c2.jsonl": "83cddff4c84faca68ff9ec5bae7d5cf966b6ab18ee6b0d6400d78c421debf2f5",
+      "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/agent-a9f5b1644bf56e45c.jsonl": "14f17c5780d7825983f72f48d4d0738e6660f3218f8d99dbdb049f108be02052",
+      "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/main-01a0c1d8-8664-7dc0-b1a8-c48add55b0a0.jsonl": "3a2b47be3a87e34b760c0bc3d012d1215c024497fb06a023de8c60f591f7c336",
+      "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/main-ee33673a-d631-4304-8fb4-3129c89c7c33.jsonl": "38b10ba0851a3125c3cdb2d3768bce10f4759f8bcf45a2977d9e3b6258521df1"
+    }
+  },
+  "graph_evidence": [
+    {
+      "graph": 1,
+      "nodes": [
+        {
+          "id": "card:n-9823796a34c11b14",
+          "kind": "file",
+          "key": "D:/tusi/app-rings-android/app/src/main/java/com/ringtone/dudu/ui/login/activity/SmsLoginActivity.kt",
+          "at": "2026-09-17T04:25:41.657000+00:00"
+        },
+        {
+          "id": "card:n-00ec3593995430cc",
+          "kind": "file",
+          "key": "D:/tusi/app-rings-android/app/src/main/java/com/ringtone/dudu/manager/UserInfoManager.kt",
+          "at": "2026-09-17T04:24:47.776000+00:00"
+        },
+        {
+          "id": "card:n-1f0cd2165acfc3e1",
+          "kind": "agent",
+          "key": "7bcbff75-9586-4d4e-8fa0-8e1600913ad9:a9f5b1644bf56e45c",
+          "at": "2026-09-17T04:35:40.277000+00:00"
+        },
+        {
+          "id": "card:n-e83e1f0d8ea88292",
+          "kind": "file",
+          "key": "D:/tusi/app_rings_harmony/spec/baseline/features/F006-login-account.md",
+          "at": "2026-09-17T14:04:57.031000+00:00"
+        },
+        {
+          "id": "card:n-87cd6c8a574aec1f",
+          "kind": "agent",
+          "key": "7bcbff75-9586-4d4e-8fa0-8e1600913ad9:a5c13b0da281522c2",
+          "at": "2026-09-17T14:25:41.610000+00:00"
+        },
+        {
+          "id": "card:n-8ee6c6d0e8b2371b",
+          "kind": "file",
+          "key": "D:/tusi/app_rings_harmony/entry/src/main/ets/pages/SmsLoginPage.ets",
+          "at": "2026-09-23T02:54:21+00:00"
+        }
+      ],
+      "edges": [
+        {
+          "from": "card:n-9823796a34c11b14",
+          "to": "card:n-1f0cd2165acfc3e1",
+          "relation": "read",
+          "at": "2026-09-17T04:25:41.657000+00:00",
+          "source": "model_edge",
+          "strength": "confirmed",
+          "evidence": [
+            "c7b20d2c4a66e00f:140:9e23c769f1850bdc",
+            "c7b20d2c4a66e00f:141:e4094b81ae600b19"
+          ]
+        },
+        {
+          "from": "card:n-00ec3593995430cc",
+          "to": "card:n-1f0cd2165acfc3e1",
+          "relation": "read",
+          "at": "2026-09-17T04:24:47.776000+00:00",
+          "source": "model_edge",
+          "strength": "confirmed",
+          "evidence": [
+            "c7b20d2c4a66e00f:95:ea1b4d7ff6f9b004",
+            "c7b20d2c4a66e00f:96:295f08e2d650feff"
+          ]
+        },
+        {
+          "from": "card:n-1f0cd2165acfc3e1",
+          "to": "card:n-e83e1f0d8ea88292",
+          "relation": "write",
+          "at": "2026-09-17T04:35:40.277000+00:00",
+          "source": "model_edge",
+          "strength": "confirmed",
+          "evidence": [
+            "c7b20d2c4a66e00f:191:811a59a93b90bc48",
+            "c7b20d2c4a66e00f:192:aeca618be24e31bb"
+          ]
+        },
+        {
+          "from": "card:n-e83e1f0d8ea88292",
+          "to": "card:n-87cd6c8a574aec1f",
+          "relation": "read",
+          "at": "2026-09-17T14:04:57.031000+00:00",
+          "source": "model_edge",
+          "strength": "confirmed",
+          "evidence": [
+            "41115b39083f4edf:49:a823efe2a8b16f44",
+            "41115b39083f4edf:50:a25921b11604037f"
+          ]
+        },
+        {
+          "from": "card:n-87cd6c8a574aec1f",
+          "to": "card:n-8ee6c6d0e8b2371b",
+          "relation": "write",
+          "at": "2026-09-17T14:24:59.167000+00:00",
+          "source": "model_edge",
+          "strength": "confirmed",
+          "evidence": [
+            "41115b39083f4edf:453:04ab2d840fbde4e8",
+            "41115b39083f4edf:454:690b324611e233d9"
+          ]
+        },
+        {
+          "from": "card:n-87cd6c8a574aec1f",
+          "to": "card:n-8ee6c6d0e8b2371b",
+          "relation": "write",
+          "at": "2026-09-17T14:25:12.535000+00:00",
+          "source": "model_edge",
+          "strength": "confirmed",
+          "evidence": [
+            "41115b39083f4edf:456:a8a1ed71d2b38e3a",
+            "41115b39083f4edf:457:801ac44659b8aaac"
+          ]
+        },
+        {
+          "from": "card:n-87cd6c8a574aec1f",
+          "to": "card:n-8ee6c6d0e8b2371b",
+          "relation": "write",
+          "at": "2026-09-17T14:25:18.569000+00:00",
+          "source": "model_edge",
+          "strength": "confirmed",
+          "evidence": [
+            "41115b39083f4edf:460:9c07cbbf38cfa2e3",
+            "41115b39083f4edf:461:3783f116e543dae3"
+          ]
+        },
+        {
+          "from": "card:n-87cd6c8a574aec1f",
+          "to": "card:n-8ee6c6d0e8b2371b",
+          "relation": "write",
+          "at": "2026-09-17T14:25:22.269000+00:00",
+          "source": "model_edge",
+          "strength": "confirmed",
+          "evidence": [
+            "41115b39083f4edf:463:695759eb9482caf6",
+            "41115b39083f4edf:464:145936b4523e26e8"
+          ]
+        },
+        {
+          "from": "card:n-87cd6c8a574aec1f",
+          "to": "card:n-8ee6c6d0e8b2371b",
+          "relation": "write",
+          "at": "2026-09-17T14:25:41.610000+00:00",
+          "source": "model_edge",
+          "strength": "confirmed",
+          "evidence": [
+            "41115b39083f4edf:467:ef47c8536f4ef7c1",
+            "41115b39083f4edf:468:e87719fcfeb71b9d"
+          ]
+        }
+      ]
+    }
+  ],
+  "validation": {
+    "status": "valid",
+    "schema": "passed",
+    "graph_check": "performed",
+    "kernel_sha256": "b5d894750c6e0deeffaeee173f6bd3bb11f2afe7a7a3af592288a6448e5dd41e",
+    "causal_correctness": "not_certified",
+    "unresolved_targets": [
+      "D:/tusi/app_rings_harmony/entry/src/main/ets/pages/MainPage.ets"
+    ],
+    "graph_checks": [
+      {
+        "graph": 1,
+        "draft_sha256": "fc97299f15a6129c612dbb0c83be7f417b55727d104fe6d3d9233cbea8709a8f",
+        "receipt": {
+          "schema": "inquiry-graph/1",
+          "report_id": "5bf7483df7e3455d",
+          "mechanical_status": "valid",
+          "path_status": "complete",
+          "semantic_verified": false,
+          "submission_format": "coordinates/1",
+          "issues": [],
+          "path_feedback": [],
+          "delivery": {
+            "status": "ready_for_review",
+            "semantic_verified": false,
+            "coverage_verified": false
+          }
+        }
+      }
+    ]
+  },
+  "revision": "326d429db663d588aa965c6a271fc4aaa227d9f5fdbb2b0df52aa2baa92a38bc"
+}

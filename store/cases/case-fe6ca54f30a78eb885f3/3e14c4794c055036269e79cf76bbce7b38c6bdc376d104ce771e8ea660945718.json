@@ -1,0 +1,402 @@
+{
+  "schema": "migloop-case/2",
+  "id": "case-fe6ca54f30a78eb885f3",
+  "created_at": "2026-09-27T16:09:19.628690+00:00",
+  "job": "issue-fe6ca54f30a78eb885f3",
+  "identity_basis": "server migration ID",
+  "migration_key": "34f1eb1d-61e3-4b07-b51c-a3ef5890fad8",
+  "draft": {
+    "title": "把延后执行的setCurrentItem初始定位写成onReady内立即调用的SwiperController.changeIndex",
+    "when": "界面实现阶段，将源端分页容器的初始页定位和首播触发转写为ArkUI Swiper时",
+    "description": "源端在装载数据后用view.post等延后回调执行ViewPager2.setCurrentItem(index, false)，并依赖onPageSelected启动当前页播放；目标页在NavDestination.onReady读取路由参数，Swiper位于按列表非空条件渲染的分支中，可用.index状态绑定或SwiperController命令定位。",
+    "summary": "生成者写前实际读到CallPreviewFragment.kt：initViewPager先setList(datas)，随后\nvp2.post { if (videoIndex == 0) startPlay(0) else setCurrentItem(videoIndex, false) }，\n非0位次再经onPageSelected延迟200ms startPlay；页面spec也把KEY_INDEX列为初始播放位次、\nonPageSelected→startPlay对应Swiper onChange。这些输入已足以说明初始定位要在分页容器装好数据、\n完成布局后执行，并由选页回调启动播放。\n生成者在写前推理中比较过Swiper .index绑定，随后以“忠实于setCurrentItem”为由改用\nswiperController.changeIndex（agent-a6f5fd93527438831.jsonl:L129）。Write写出的\nCallPreviewPage把Swiper放在videoList非空的else分支中，却在onReady同一回调里先赋值videoList，\n再立即调用changeIndex(videoIndex, false)；代码注释保留了vp2.post，post的延后语义没有落实，\n声明的@Local startIndex也未绑定到Swiper（同转录L163-L164）。自检只核了changeIndex签名，\n并认为onReady中Swiper尚未渲染时调用startPlay(0)没有问题（L172）。偏差位于从已正确读取的\n源端定位时序到ArkUI定位方式的实现选择。\n09-18接线者改写了onReady的其他部分，但该changeIndex分支原样保留\n（agent-ad545c2d8d2622586.jsonl:L743）。返修时用户报告点击任一项都播放第一条\n（main-7e6e56d7 L2165）。修复者确认列表侧传参正确，changeIndex在Swiper挂载前被静默丢弃；\n修复中Swiper补.index(this.startIndex)，onReady写入startIndex，删除changeIndex分支，\n首播改为统一的200ms延迟startPlay(videoIndex)，并与onChange共用playDelayId去重\n（L2187-L2190、L2231）。\n",
+    "recommendations": [
+      "实现分页容器的初始定位时，路由参数先写入响应式状态，再用Swiper.index(state)等声明式绑定承接；不要在onReady或aboutToAppear中立即调用SwiperController.changeIndex，尤其当Swiper要等列表赋值后才由if/else创建时。",
+      "转写view.post、doOnLayout等延后回调时，先写明回调执行时哪个组件必须已经挂载；若目标容器依赖同一回调中刚赋值的数据才会创建，该容器的controller此时尚未生效。",
+      "源端首播依赖setCurrentItem触发onPageSelected时，目标端对初始项显式调度相同延迟的播放，并与onChange路径共用去重句柄，不依赖命令式定位去间接触发onChange。",
+      "自检controller调用时，除签名外还要核对调用时机；用非0项做一次入口验证（例如从列表第2、4项进入），确认标题和播放项与点击项一致。"
+    ],
+    "unknown": [
+      "材料中未见官方文档说明changeIndex在Swiper挂载前被丢弃；该机制依据修复者的真机实证和dumpLayout复核（main-7e6e56d7 L2231）。本卡归因的是生成者未落实已读到的延后定位语义，并放弃了已考虑过的.index绑定。"
+    ],
+    "graphs": [
+      {
+        "target": {
+          "key": "D:/tusi/app_rings_harmony/entry/src/main/ets/pages/CallPreviewPage.ets",
+          "since": "2026-09-20T10:51:00Z",
+          "at": "2026-09-23T02:54:21Z"
+        },
+        "nodes": [
+          {
+            "key": "D:/tusi/app-rings-android/app/src/main/java/com/ringtone/dudu/ui/callvideo/CallPreviewFragment.kt",
+            "at": "2026-09-17T08:54:19.065Z",
+            "reason": "正常输入：生成者读取的回执中，initViewPager先setList(datas)，initView再用vp2.post延后执行非0位次的setCurrentItem(videoIndex, false)；onPageSelected中postDelayed(200)调用startPlay。足以确定初始定位的执行时机和首播链（agent-a6f5fd93527438831.jsonl:L44-L45，源码L114-L127、L287-L331）。"
+          },
+          {
+            "key": "D:/tusi/app_rings_harmony/spec/baseline/ui/page_0045_CallPreviewActivity.md",
+            "at": "2026-09-17T08:54:06.371Z",
+            "reason": "正常输入：页面spec写明ViewPager2 vp2对应Swiper(vertical)、onPageSelected延迟200ms startPlay对应Swiper onChange，并把路由参数KEY_INDEX列为初始播放位次；spec没有指定错误的定位API（同转录L29-L30）。"
+          },
+          {
+            "key": "agent-a6f5fd93527438831.jsonl",
+            "at": "2026-09-17T09:07:49.440Z",
+            "reason": "偏差输出：写前推理放弃了Swiper .index绑定，改用changeIndex（L129）。Write把Swiper放在videoList非空的else分支中，同时在onReady中赋值videoList后立即调用swiperController.changeIndex(obj.videoIndex, false)；注释写着vp2.post，但没有实现延后，@Local startIndex也未绑定Swiper（L163-L164）。自检只核了签名（L172）。",
+            "problem": true
+          }
+        ],
+        "edges": [
+          {
+            "from": 1,
+            "to": 3
+          },
+          {
+            "from": 2,
+            "to": 3
+          },
+          {
+            "from": 3,
+            "to": "target"
+          }
+        ]
+      }
+    ],
+    "unresolved_targets": []
+  },
+  "claims": {
+    "diagnosis": {
+      "text": "生成者写前实际读到CallPreviewFragment.kt：initViewPager先setList(datas)，随后\nvp2.post { if (videoIndex == 0) startPlay(0) else setCurrentItem(videoIndex, false) }，\n非0位次再经onPageSelected延迟200ms startPlay；页面spec也把KEY_INDEX列为初始播放位次、\nonPageSelected→startPlay对应Swiper onChange。这些输入已足以说明初始定位要在分页容器装好数据、\n完成布局后执行，并由选页回调启动播放。\n生成者在写前推理中比较过Swiper .index绑定，随后以“忠实于setCurrentItem”为由改用\nswiperController.changeIndex（agent-a6f5fd93527438831.jsonl:L129）。Write写出的\nCallPreviewPage把Swiper放在videoList非空的else分支中，却在onReady同一回调里先赋值videoList，\n再立即调用changeIndex(videoIndex, false)；代码注释保留了vp2.post，post的延后语义没有落实，\n声明的@Local startIndex也未绑定到Swiper（同转录L163-L164）。自检只核了changeIndex签名，\n并认为onReady中Swiper尚未渲染时调用startPlay(0)没有问题（L172）。偏差位于从已正确读取的\n源端定位时序到ArkUI定位方式的实现选择。\n09-18接线者改写了onReady的其他部分，但该changeIndex分支原样保留\n（agent-ad545c2d8d2622586.jsonl:L743）。返修时用户报告点击任一项都播放第一条\n（main-7e6e56d7 L2165）。修复者确认列表侧传参正确，changeIndex在Swiper挂载前被静默丢弃；\n修复中Swiper补.index(this.startIndex)，onReady写入startIndex，删除changeIndex分支，\n首播改为统一的200ms延迟startPlay(videoIndex)，并与onChange共用playDelayId去重\n（L2187-L2190、L2231）。\n",
+      "kind": "diagnosis",
+      "status": "model_claim"
+    },
+    "recommendation:1": {
+      "text": "实现分页容器的初始定位时，路由参数先写入响应式状态，再用Swiper.index(state)等声明式绑定承接；不要在onReady或aboutToAppear中立即调用SwiperController.changeIndex，尤其当Swiper要等列表赋值后才由if/else创建时。",
+      "kind": "recommendation",
+      "status": "model_claim"
+    },
+    "recommendation:2": {
+      "text": "转写view.post、doOnLayout等延后回调时，先写明回调执行时哪个组件必须已经挂载；若目标容器依赖同一回调中刚赋值的数据才会创建，该容器的controller此时尚未生效。",
+      "kind": "recommendation",
+      "status": "model_claim"
+    },
+    "recommendation:3": {
+      "text": "源端首播依赖setCurrentItem触发onPageSelected时，目标端对初始项显式调度相同延迟的播放，并与onChange路径共用去重句柄，不依赖命令式定位去间接触发onChange。",
+      "kind": "recommendation",
+      "status": "model_claim"
+    },
+    "recommendation:4": {
+      "text": "自检controller调用时，除签名外还要核对调用时机；用非0项做一次入口验证（例如从列表第2、4项进入），确认标题和播放项与点击项一致。",
+      "kind": "recommendation",
+      "status": "model_claim"
+    }
+  },
+  "targets": [
+    "D:/tusi/app_rings_harmony/entry/src/main/ets/pages/CallPreviewPage.ets"
+  ],
+  "changes": [
+    {
+      "files": [
+        "D:/tusi/app_rings_harmony/entry/src/main/ets/pages/CallPreviewPage.ets"
+      ],
+      "change": "Swiper 补 .index(this.startIndex) 响应式绑定，onReady 写入 startIndex；删除失效 changeIndex 分支，startPlay 统一 200ms 延迟并与 onChange 去重。",
+      "evidence": [
+        "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/main-7e6e56d7-2af8-4e87-8002-7c576089489c.jsonl:L2187-L2188",
+        "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/main-7e6e56d7-2af8-4e87-8002-7c576089489c.jsonl:L2189-L2190"
+      ]
+    }
+  ],
+  "participants": [
+    {
+      "agent": "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/main-7e6e56d7-2af8-4e87-8002-7c576089489c.jsonl",
+      "role": "发现(用户报告)/修复/复核",
+      "action": "定位初始定位调用时机后修改并用 dumpLayout 复核三项",
+      "evidence": [
+        "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/main-7e6e56d7-2af8-4e87-8002-7c576089489c.jsonl:L2165",
+        "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/main-7e6e56d7-2af8-4e87-8002-7c576089489c.jsonl:L2187-L2190",
+        "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/main-7e6e56d7-2af8-4e87-8002-7c576089489c.jsonl:L2231"
+      ]
+    }
+  ],
+  "scope": {
+    "project_roots": [
+      "D:/tusi/app_rings_harmony"
+    ],
+    "source_roots": [
+      "D:/tusi/app-rings-android"
+    ],
+    "materials": [
+      "C:\\Users\\hongy\\projects\\_migloop-multiapp-memory-20260927\\runs\\44c1d7622349cc17\\materials"
+    ],
+    "generation_end": "2026-09-20T10:51:00Z",
+    "observation_end": "2026-09-23T02:54:21Z",
+    "boundary_evidence": [
+      "export-manifest.json facts stage-marks: a2h-verify 2026-09-20T10:51:00Z，a2h-retrospect 2026-09-20T10:52:33Z 与 2026-09-23T02:54:21Z（dashboard completed_stages 至 a2h-retrospect）",
+      "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/main-7bcbff75-9586-4d4e-8fa0-8e1600913ad9.jsonl:L4597-L4602（verify 期重建+5 项修复完成后 mark-stage a2h-verify，10:51:24 宣布 a2h-verify 完成；此前 verify 期修复属生成阶段收敛）",
+      "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/main-7bcbff75-9586-4d4e-8fa0-8e1600913ad9.jsonl:L4603-L4623（首次 a2h-retrospect，仅写 docs/retrospect-report-2026-09-20.md）",
+      "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/main-65cc0d15-8819-4a72-b888-90412fccff78.jsonl:L164-L172（第二次 a2h-retrospect mark-stage，2026-09-23T02:54:20Z 执行）",
+      "最后一次应用修改：runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/main-87179513-f6e2-4fbc-9703-b4c8cec1c767.jsonl:L453-L454（2026-09-23T02:42:00Z Mine15Component.ets）；之后 runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/main-b228311f-ed48-41a4-aea7-c8e6fa9b14fd.jsonl 只做日报与文档检索，无应用写入",
+      "首个生成后应用修改：runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/main-ee33673a-d631-4304-8fb4-3129c89c7c33.jsonl:L376-L378（2026-09-21T01:21:55Z）；2026-09-20T10:51Z 至此之间仅文档/完备度表产物（runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/main-01a0be79-43bf-7c90-96d8-5e3a2821dbb0.jsonl、runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/main-01a0be8e-e845-7051-920e-e0a55025926f.jsonl）"
+    ]
+  },
+  "environment": {
+    "schema": "migloop-case-environment/1",
+    "through": "2026-09-23T02:54:21Z",
+    "facts": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "D:\\tusi\\app_rings_harmony",
+        "at": "2026-09-17T06:35:46.709Z",
+        "ref": "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/agent-ac567ed4068ed6644.jsonl:L149",
+        "request_ref": "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/agent-ac567ed4068ed6644.jsonl:L148",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "5.0.0(12)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "D:\\tusi\\app_rings_harmony",
+        "at": "2026-09-17T06:35:46.709Z",
+        "ref": "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/agent-ac567ed4068ed6644.jsonl:L149",
+        "request_ref": "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/agent-ac567ed4068ed6644.jsonl:L148",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "D:\\tusi\\app_rings_harmony\\entry\\build\\default\\outputs\\default",
+        "at": "2026-09-22T02:47:00.902Z",
+        "ref": "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/agent-a52e02c077767c03c.jsonl:L15",
+        "request_ref": "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/agent-a52e02c077767c03c.jsonl:L14",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "5.0.0(12)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "D:\\tusi\\app_rings_harmony\\entry\\build\\default\\outputs\\default",
+        "at": "2026-09-22T02:47:00.902Z",
+        "ref": "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/agent-a52e02c077767c03c.jsonl:L15",
+        "request_ref": "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/agent-a52e02c077767c03c.jsonl:L14",
+        "phase": "repair"
+      }
+    ],
+    "sources": {
+      "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/agent-ac567ed4068ed6644.jsonl": "56f188352877a3f554eae25207d24b5dc10972deced0c81ff268f53531aa5013",
+      "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/agent-a52e02c077767c03c.jsonl": "4dd9c29b5b08fc07b84d24efa1da0103c90a38823aad8e46954835390bdb676c"
+    },
+    "unknown": [
+      "android.compile_sdk",
+      "android.target_sdk",
+      "android.min_sdk",
+      "libraries.compose_bom",
+      "libraries.material3",
+      "toolchain.kotlin",
+      "toolchain.agp",
+      "toolchain.gradle",
+      "harmonyos.compile_sdk",
+      "device.android_api",
+      "device.harmonyos_version",
+      "device.density",
+      "device.font_scale",
+      "project.revision"
+    ],
+    "unscoped_observations": 0,
+    "boundary": "Recorded configuration/tool outputs, not a continuous environment state, resolved dependency proof, or lesson compatibility range. Missing values stay unknown; no current project files are read.",
+    "snapshot_id": "c7b8b13ad4a9f745e94675bee8c3bc08bb424a9827c5a90f7b3075c014a147f2"
+  },
+  "packager": {
+    "name": "migloop-memory-skills",
+    "version": "0.8.3",
+    "bundle_sha256": "4bddfa4e92b7dccd8546606cce6f167963b9f6bf03d8329085d22bf4e94eea92"
+  },
+  "validation_sha256": "df711e4f7297e71d58e328e58740355c55fb8a88ab0e9d182004ad9df195dddc",
+  "provenance": {
+    "schema": "migloop-case-provenance/1",
+    "materials": "C:\\Users\\hongy\\projects\\_migloop-multiapp-memory-20260927\\runs\\44c1d7622349cc17\\materials",
+    "db_root_session_id": null,
+    "source_set_id": "sources-8decedd1032cf015dca8",
+    "collector": {
+      "name": "migloop-memory-skills",
+      "version": "0.8.3",
+      "bundle_sha256": "14a940665d63179822994c2b9e982f971b3c750199265458ca6baa6bd4688ef8",
+      "implementation_sha256": "48e6f84dd59cbfdcac7c372a18ac76a098a52d3dbe972093dc2db671f63c943f"
+    },
+    "observed": {
+      "session_ids": [
+        "01a0be79-43bf-7c90-96d8-5e3a2821dbb0",
+        "01a0be8e-e845-7051-920e-e0a55025926f",
+        "01a0c1d8-8664-7dc0-b1a8-c48add55b0a0",
+        "14493534-d76c-4708-b197-6d67665bf32e",
+        "27b53afc-8949-404c-b3b6-c5748dbf1539",
+        "3f1d4888-2eac-4ebf-a779-93554fb533b7",
+        "5a5b6f69-54bc-4aa7-ba2a-29e5fc9bc4ee",
+        "6199877f-86f6-4d19-9183-578fec27efa1",
+        "65cc0d15-8819-4a72-b888-90412fccff78",
+        "674660cb-ee03-42c4-9a36-f4c0348bfb1a",
+        "79350f0b-63c4-4d6c-a8e6-33fd3ccd76c0",
+        "7bcbff75-9586-4d4e-8fa0-8e1600913ad9",
+        "7e6e56d7-2af8-4e87-8002-7c576089489c",
+        "87179513-f6e2-4fbc-9703-b4c8cec1c767",
+        "8b80f312-35da-43b0-9541-b906b470b8ef",
+        "b228311f-ed48-41a4-aea7-c8e6fa9b14fd",
+        "c434fed7-9a9c-423f-92fc-089e2792d86a",
+        "da4d5344-7911-4015-883d-a20540bccbb3",
+        "dc02d0da-a9eb-4bd5-a8ea-7fdc91cee7db",
+        "ee33673a-d631-4304-8fb4-3129c89c7c33"
+      ],
+      "platforms": [
+        "claude-code",
+        "codex"
+      ],
+      "models": [
+        "glm-5.3",
+        "glm-5.3-flash",
+        "gpt-5.6-sol"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.155.0-alpha.9.2",
+        "2.1.274",
+        "2.1.275",
+        "2.1.276",
+        "2.1.278",
+        "2.1.280"
+      ],
+      "projects": [
+        "D:\\tusi\\app_rings_harmony",
+        "D:\\tusi\\app_rings_harmony\\entry\\build\\default\\outputs\\default",
+        "D:\\tusi\\app_rings_harmony\\entry\\src\\main\\ets",
+        "D:\\tusi\\app_rings_harmony\\entry\\src\\main\\ets\\pages",
+        "D:\\tusi\\app_rings_harmony\\entry\\src\\main\\ets\\pages\\ringandcrbt"
+      ]
+    },
+    "migration": {
+      "project": "免费来电多多",
+      "server_session_id": "34f1eb1d-61e3-4b07-b51c-a3ef5890fad8",
+      "source_uris": [
+        "server export sha256=8e46be8dccf2db7071cd3073bf6740f971967d9df12f25d305efab8c5c8b5cf1"
+      ]
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ]
+    },
+    "unknown": [
+      "historical_migration_tool_versions",
+      "analysis_models"
+    ],
+    "sources": {
+      "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/agent-a6f5fd93527438831.jsonl": "c7321fd592b3728bbd2ab2c9c1263a1658a6946cc73988f58f73dd2243b6e456",
+      "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/agent-ad545c2d8d2622586.jsonl": "b20ad036dd715d2c441b62f660bf2c4725d51490ff6d004a23ee4eddebc88fc3",
+      "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/main-7e6e56d7-2af8-4e87-8002-7c576089489c.jsonl": "65cae6bc42d1a07a8c39a545f63dd24dbda6ecfca5062691cc6480e0992dcdaa"
+    }
+  },
+  "graph_evidence": [
+    {
+      "graph": 1,
+      "nodes": [
+        {
+          "id": "card:n-2c832fb099da09e6",
+          "kind": "file",
+          "key": "D:/tusi/app-rings-android/app/src/main/java/com/ringtone/dudu/ui/callvideo/CallPreviewFragment.kt",
+          "at": "2026-09-17T08:54:19.065000+00:00"
+        },
+        {
+          "id": "card:n-981339816e058f8b",
+          "kind": "file",
+          "key": "D:/tusi/app_rings_harmony/spec/baseline/ui/page_0045_CallPreviewActivity.md",
+          "at": "2026-09-17T08:54:06.371000+00:00"
+        },
+        {
+          "id": "card:n-02e7709bdd27728c",
+          "kind": "agent",
+          "key": "7bcbff75-9586-4d4e-8fa0-8e1600913ad9:a6f5fd93527438831",
+          "at": "2026-09-17T09:07:49.440000+00:00"
+        },
+        {
+          "id": "card:n-340ff31eee4addbb",
+          "kind": "file",
+          "key": "D:/tusi/app_rings_harmony/entry/src/main/ets/pages/CallPreviewPage.ets",
+          "at": "2026-09-23T02:54:21+00:00"
+        }
+      ],
+      "edges": [
+        {
+          "from": "card:n-2c832fb099da09e6",
+          "to": "card:n-02e7709bdd27728c",
+          "relation": "read",
+          "at": "2026-09-17T08:54:19.065000+00:00",
+          "source": "model_edge",
+          "strength": "confirmed",
+          "evidence": [
+            "7aaeabfd786020e1:44:d26fc557fc7c494c",
+            "7aaeabfd786020e1:45:8de94f3ec9d1f4ff"
+          ]
+        },
+        {
+          "from": "card:n-981339816e058f8b",
+          "to": "card:n-02e7709bdd27728c",
+          "relation": "read",
+          "at": "2026-09-17T08:54:06.371000+00:00",
+          "source": "model_edge",
+          "strength": "confirmed",
+          "evidence": [
+            "7aaeabfd786020e1:29:b5a7ab3937428190",
+            "7aaeabfd786020e1:30:55bd315d4dbebd58"
+          ]
+        },
+        {
+          "from": "card:n-02e7709bdd27728c",
+          "to": "card:n-340ff31eee4addbb",
+          "relation": "write",
+          "at": "2026-09-17T09:07:49.440000+00:00",
+          "source": "model_edge",
+          "strength": "confirmed",
+          "evidence": [
+            "7aaeabfd786020e1:163:f62a03b03c1e5a1d",
+            "7aaeabfd786020e1:164:b9524d524f5e9cc2"
+          ]
+        }
+      ]
+    }
+  ],
+  "validation": {
+    "status": "valid",
+    "schema": "passed",
+    "graph_check": "performed",
+    "kernel_sha256": "b5d894750c6e0deeffaeee173f6bd3bb11f2afe7a7a3af592288a6448e5dd41e",
+    "causal_correctness": "not_certified",
+    "unresolved_targets": [],
+    "graph_checks": [
+      {
+        "graph": 1,
+        "draft_sha256": "7babaa80f72224259b01184f2a2da7450853ffd0f6e7b8122340aa35c55b3af9",
+        "receipt": {
+          "schema": "inquiry-graph/1",
+          "report_id": "c75ae3d3229d4b54",
+          "mechanical_status": "valid",
+          "path_status": "complete",
+          "semantic_verified": false,
+          "submission_format": "coordinates/1",
+          "issues": [],
+          "path_feedback": [],
+          "delivery": {
+            "status": "ready_for_review",
+            "semantic_verified": false,
+            "coverage_verified": false
+          }
+        }
+      }
+    ]
+  },
+  "revision": "3e14c4794c055036269e79cf76bbce7b38c6bdc376d104ce771e8ea660945718"
+}
