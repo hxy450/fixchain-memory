@@ -1,0 +1,1025 @@
+{
+  "schema": "migloop-case/2",
+  "id": "case-e92bb15630afd5b03216",
+  "created_at": "2026-09-27T13:08:16.619157+00:00",
+  "job": "issue-e92bb15630afd5b03216",
+  "identity_basis": "server migration ID",
+  "migration_key": "c48c34f6-1f91-421f-aa50-0064cb39d8cd",
+  "draft": {
+    "title": "修复轮重写后台计时时，通知正文与渠道、持久化恢复、前台专属状态退出清理被写窄",
+    "when": "修复轮实现阶段（ECAT 生成者 worker），重写平台计时服务与详情页后台交接时，决定通知正文字段、通知槽映射、持久化恢复算法，以及常亮与紧凑模式在各退出路径上的复位",
+    "description": "源应用由后台 Worker 跨步骤推进计时，通知正文为“当前/目标重量 + 步骤时长”，并建具名高重要度通知渠道；回到前台时取 Worker 已推进到的步骤。目标端改用应用内计时加长时任务，用应用内紧凑模式代替系统 PiP，用窗口常亮代替 WakeLock，需要自己写恢复与退出清理。",
+    "summary": "这是修复中新生的问题：生成期的 PlatformTimerService 只是桩（另案归因），ECAT 第一轮判官要求真实现后，\n两个 worker 按派工（main-01a0b99c…jsonl:L30、L32）各自重写服务与详情页，新代码带出以下偏差。\n\n服务侧（agent-01a0b99f-55cc）：写前实际读到 NotificationUtils.kt（同转录 L42-L43），其中\nTIMER_CHANNEL_ID=\"cofi_timer_notification\" 以 IMPORTANCE_HIGH 建渠道，createContentText 把“当前/目标重量”\n和 step.time×timeMultiplier 的 \" (m:ss)\" 拼成正文；派工要求按 D-005 真实现通知/动作抽象并先读源码。输入正确且足够。\nL296-L297 新建整个服务时，createProgressBody 只套 timer_progress_weight，无重量时退回步骤名；\n自己定义的快照字段 currentStepDurationMs 没被消费；addSlot 与请求都用通用 SERVICE_INFORMATION。\n推理里它认定“addSlot 只收类型、渠道名无法自定义，Fine”，并打算只在无重量时显示时长（L266）；\n收尾时注意到 currentStepDurationMs 未用仍放过（L577），汇报（L578）也未声明这两处替代。\n12:47 的 L510 只把 addSlot 收进 ensureNotificationSlot，ECAT 生成者 13:05 只补 expandedTitle（main-01a0b99c…jsonl:L353），\n两处偏差保留到第二轮判官。修复（agent-01a0b9e0…jsonl:L234）在正文后追加 m:ss 时长；\n系统槽仍用 SERVICE_INFORMATION，但登记 cofi_timer_notification 逻辑槽契约（名称取资源、LEVEL_HIGH、声明不支持具名槽），槽被禁用时显式降级。\n\n页面侧（agent-01a0b99f-572e）：写前实际读到 cofi-share Timer.kt 的 ON_RESUME（同转录 L76-L77）：\n回到前台时按 Worker 进度里的 stepID 直接设 currentStep，恢复位置就是后台跨步骤推进到的那一步；\n还读到 F006 规格（L159、L163）：keep-screen-on 契约写明“Active timer keeps UI awake; stop clears flag”，\nAC09 要求 Stop 清常亮并阻止自动 PiP，AC05 要求前台恢复取最新进度。派工要求紧凑回退和后台交接用真实生命周期状态。输入正确且足够。\n输出偏离有三处。其一，L500 推理决定后台交接期间 stopTimerTicker 不清常亮，L516 落成 isBackgroundTimerActive 时提前 return；\nL521 的 onStop 与 completeBackgroundTimerIfNeeded 只停服务，不清常亮也不复位 isPiPMode。\n其二，L526 的 handleApplicationForeground 只停后台任务、重启前台 ticker，不复位 isPiPMode；\n它在 L367 已推理“回前台应退出紧凑、恢复完整界面”，L706 读完 MainActivity 后也知道 Android 退出 PiP 时回调会置 false，\n仍判定紧凑停到用户点击为止可以接受。\n其三，L545 的 restorePersistedTimerState 把全部停机时长加到当前步，满一步只 advanceToNextStep 一次，余量丢弃；\n而同一 agent 一分钟前在 L521 写的 advanceTimerByDelta 已按有序步骤循环扣减。\n服务侧 releaseBackgroundTask 同样没有清常亮，属于同一资源缺口，修复在两侧都补了 setKeepScreenOn(false)。\n两轮之间 ECAT 生成者对页面只做编译修复（main-01a0b99c…jsonl:L348、L358），三处片段原样保留到第二轮判官。\n修复（agent-01a0b9e0…jsonl:L239）新增 replayPersistedElapsed 逐步扣减停机时长、遇手动步骤停下、越过末步进入完成态；\n回前台、后台完成和通知 Stop 都置 isPiPMode=false，后台交接前后都 setKeepScreenOn(false)。\n",
+    "recommendations": [
+      "移植通知时，按源端 createContentText/createChannel 逐字段核对：正文要同时有重量和 step.time×timeMultiplier 的 m:ss 时长。目标 SDK 不支持具名渠道时，把“源渠道 id、名称、重要度 → 目标槽类型与级别”写成显式映射常量，并在交付汇报中声明这项替代。",
+      "服务接口里自己定义的快照字段要在渲染处实际消费。收尾自检发现字段未用时，要么接到输出，要么删除并说明原因，不带着未用字段交付。",
+      "用应用内计时替代后台 Worker 时，所有恢复入口（后台 tick、持久化恢复）共用同一个按有序步骤扣减经过时间的函数：遇手动步骤停下，越过末步进入完成态。不要为持久化恢复另写一个只加到当前步的分支。",
+      "给前台专属状态（keep-screen-on、紧凑/PiP 模式）列出进入点和全部退出点：回前台、后台交接、后台完成、通知 Stop、页面销毁，每个退出点都显式复位。对照规格中的 stop clears flag 与 F006-AC09 核对。",
+      "最小检查：grep 每处 setKeepScreenOn(true) 和 isPiPMode = true，确认每条退出路径都有对应的 false；再用跨两个步骤的停机时长手算一次恢复结果。"
+    ],
+    "graphs": [
+      {
+        "target": {
+          "key": "/private/tmp/testCofi-codex/entry/src/main/ets/services/platform/PlatformTimerService.ets",
+          "since": "2026-09-19T10:26:37.280Z",
+          "at": "2026-09-19T13:59:12.701Z"
+        },
+        "nodes": [
+          {
+            "key": "/Users/fengyi/Workspace/others/Cofi/cofi-share/src/main/java/com/omelan/cofi/share/timer/notification/NotificationUtils.kt",
+            "at": "2026-09-19T12:25:05.176Z",
+            "reason": "正常输入：55cc 用 sed 读 NotificationUtils.kt 1-130 行，回执包含 TIMER_CHANNEL_ID=\"cofi_timer_notification\"、IMPORTANCE_HIGH 渠道，以及 createContentText 把重量文本与 step.time×timeMultiplier 的 \" (m:ss)\" 拼成正文；足以确定通知正文字段和渠道要求（agent-01a0b99f-55cc-72d2-a3b7-4eda7f7cdcbc.jsonl:L42-L43）。"
+          },
+          {
+            "key": "main-01a0b99c-840a-7343-90f4-1e256f32367b.jsonl",
+            "at": "2026-09-19T12:23:42.539Z",
+            "reason": "派工：ECAT 生成者派 55cc 独占 PlatformTimerService，要求按 D-005 真实现能力检测、通知与动作面、后台交接和降级，且先读 Timer.kt 等源码、不许伪造（main-01a0b99c-840a-7343-90f4-1e256f32367b.jsonl:L30、L36）。派工没点名正文字段，但指明以源码为准。"
+          },
+          {
+            "key": "agent-01a0b99f-55cc-72d2-a3b7-4eda7f7cdcbc.jsonl",
+            "at": "2026-09-19T12:38:20.962Z",
+            "reason": "读到上述源码后，apply_patch 新建服务：createProgressBody 只输出当前/目标重量、无重量时退回步骤名，未输出步骤时长（快照里的 currentStepDurationMs 未被使用）；addSlot 和请求都用通用 SERVICE_INFORMATION，没有记录对具名高重要度渠道的替代（同转录 L296-L297；推理 L266、L577）。",
+            "problem": true
+          }
+        ],
+        "edges": [
+          {
+            "from": 1,
+            "to": 3,
+            "force": true,
+            "reason": "55cc 自己的 exec_command 执行 sed -n '1,130p' NotificationUtils.kt，回执返回 TIMER_CHANNEL_ID=cofi_timer_notification、IMPORTANCE_HIGH 建渠道和 createContentText 的重量加 m:ss 时长拼接；这是它写服务前对源文件的真实读取，shell 读取未被自动解析。",
+            "evidence": [
+              {
+                "source": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/agent-01a0b99f-55cc-72d2-a3b7-4eda7f7cdcbc.jsonl",
+                "line": 42
+              },
+              {
+                "source": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/agent-01a0b99f-55cc-72d2-a3b7-4eda7f7cdcbc.jsonl",
+                "line": 43
+              }
+            ]
+          },
+          {
+            "from": 2,
+            "to": 3
+          },
+          {
+            "from": 3,
+            "to": "target"
+          }
+        ]
+      },
+      {
+        "target": {
+          "key": "/private/tmp/testCofi-codex/entry/src/main/ets/pages/RecipeDetailsPage.ets",
+          "since": "2026-09-19T10:26:37.280Z",
+          "at": "2026-09-19T13:59:12.701Z"
+        },
+        "nodes": [
+          {
+            "key": "/Users/fengyi/Workspace/others/Cofi/cofi-share/src/main/java/com/omelan/cofi/share/timer/Timer.kt",
+            "at": "2026-09-19T12:25:28.597Z",
+            "reason": "正常输入：572e 用 nl|sed 读 Timer.kt 166-350 行，回执中的 ON_RESUME 按 Worker 进度里的 stepID 直接设 currentStep、按进度恢复动画，说明恢复位置就是后台跨步骤推进到的那一步（agent-01a0b99f-572e-7323-b456-048006bc823d.jsonl:L76-L77）。"
+          },
+          {
+            "key": "/private/tmp/testCofi-codex/spec/baseline/features/F006-platform-timer.md",
+            "at": "2026-09-19T12:28:04.275Z",
+            "reason": "正常输入：572e cat F006 规格，回执包含 keep-screen-on 契约“Active timer keeps UI awake; stop clears flag”、AC09（Stop 清常亮并阻止自动 PiP）、AC05（前台恢复取最新进度）和 PD-C11-F006-01 紧凑回退；足以约束退出清理与恢复（同转录 L159、L163）。"
+          },
+          {
+            "key": "main-01a0b99c-840a-7343-90f4-1e256f32367b.jsonl",
+            "at": "2026-09-19T12:23:42.719Z",
+            "reason": "派工：ECAT 生成者派 572e 独占 RecipeDetailsPage，要求按 D-003 实现紧凑回退和后台转换路径，状态取自真实能力与生命周期，计时进度须反映真实状态，并先读 Timer.kt、RecipeDetails.kt（main-01a0b99c-840a-7343-90f4-1e256f32367b.jsonl:L32、L38）。"
+          },
+          {
+            "key": "agent-01a0b99f-572e-7323-b456-048006bc823d.jsonl",
+            "at": "2026-09-19T12:45:46.992Z",
+            "reason": "读到上述输入后：L516 让 stopTimerTicker 在后台交接期间跳过清常亮；L521 的 onStop 与后台完成只停服务，不清常亮也不复位 isPiPMode；L526 的回前台处理不复位 isPiPMode；L545 的 restorePersistedTimerState 把全部停机时长加到当前步、最多前进一步。同一 agent 在 L521 已写出跨步骤循环扣减，恢复路径没有复用（推理 L367、L500、L706）。",
+            "problem": true
+          }
+        ],
+        "edges": [
+          {
+            "from": 1,
+            "to": 4,
+            "force": true,
+            "reason": "572e 自己的 exec_command 执行 nl -ba cofi-share Timer.kt | sed -n '166,350p'，回执包含 ON_RESUME 按 Worker 进度 stepID 恢复 currentStep 的源码；这是它写恢复逻辑前的真实读取，shell 读取未被自动解析。",
+            "evidence": [
+              {
+                "source": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/agent-01a0b99f-572e-7323-b456-048006bc823d.jsonl",
+                "line": 76
+              },
+              {
+                "source": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/agent-01a0b99f-572e-7323-b456-048006bc823d.jsonl",
+                "line": 77
+              }
+            ]
+          },
+          {
+            "from": 2,
+            "to": 4,
+            "force": true,
+            "reason": "572e 自己的 exec_command 执行 cat spec/baseline/features/F006-platform-timer.md（call_e8c4d6d3），L163 为同一调用的回执，含 keep-screen-on 契约、AC05 与 AC09；这是它写页面前的真实读取，shell 读取未被自动解析。",
+            "evidence": [
+              {
+                "source": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/agent-01a0b99f-572e-7323-b456-048006bc823d.jsonl",
+                "line": 159
+              },
+              {
+                "source": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/agent-01a0b99f-572e-7323-b456-048006bc823d.jsonl",
+                "line": 163
+              }
+            ]
+          },
+          {
+            "from": 3,
+            "to": 4
+          },
+          {
+            "from": 4,
+            "to": "target"
+          }
+        ]
+      }
+    ],
+    "unresolved_targets": []
+  },
+  "claims": {
+    "diagnosis": {
+      "text": "这是修复中新生的问题：生成期的 PlatformTimerService 只是桩（另案归因），ECAT 第一轮判官要求真实现后，\n两个 worker 按派工（main-01a0b99c…jsonl:L30、L32）各自重写服务与详情页，新代码带出以下偏差。\n\n服务侧（agent-01a0b99f-55cc）：写前实际读到 NotificationUtils.kt（同转录 L42-L43），其中\nTIMER_CHANNEL_ID=\"cofi_timer_notification\" 以 IMPORTANCE_HIGH 建渠道，createContentText 把“当前/目标重量”\n和 step.time×timeMultiplier 的 \" (m:ss)\" 拼成正文；派工要求按 D-005 真实现通知/动作抽象并先读源码。输入正确且足够。\nL296-L297 新建整个服务时，createProgressBody 只套 timer_progress_weight，无重量时退回步骤名；\n自己定义的快照字段 currentStepDurationMs 没被消费；addSlot 与请求都用通用 SERVICE_INFORMATION。\n推理里它认定“addSlot 只收类型、渠道名无法自定义，Fine”，并打算只在无重量时显示时长（L266）；\n收尾时注意到 currentStepDurationMs 未用仍放过（L577），汇报（L578）也未声明这两处替代。\n12:47 的 L510 只把 addSlot 收进 ensureNotificationSlot，ECAT 生成者 13:05 只补 expandedTitle（main-01a0b99c…jsonl:L353），\n两处偏差保留到第二轮判官。修复（agent-01a0b9e0…jsonl:L234）在正文后追加 m:ss 时长；\n系统槽仍用 SERVICE_INFORMATION，但登记 cofi_timer_notification 逻辑槽契约（名称取资源、LEVEL_HIGH、声明不支持具名槽），槽被禁用时显式降级。\n\n页面侧（agent-01a0b99f-572e）：写前实际读到 cofi-share Timer.kt 的 ON_RESUME（同转录 L76-L77）：\n回到前台时按 Worker 进度里的 stepID 直接设 currentStep，恢复位置就是后台跨步骤推进到的那一步；\n还读到 F006 规格（L159、L163）：keep-screen-on 契约写明“Active timer keeps UI awake; stop clears flag”，\nAC09 要求 Stop 清常亮并阻止自动 PiP，AC05 要求前台恢复取最新进度。派工要求紧凑回退和后台交接用真实生命周期状态。输入正确且足够。\n输出偏离有三处。其一，L500 推理决定后台交接期间 stopTimerTicker 不清常亮，L516 落成 isBackgroundTimerActive 时提前 return；\nL521 的 onStop 与 completeBackgroundTimerIfNeeded 只停服务，不清常亮也不复位 isPiPMode。\n其二，L526 的 handleApplicationForeground 只停后台任务、重启前台 ticker，不复位 isPiPMode；\n它在 L367 已推理“回前台应退出紧凑、恢复完整界面”，L706 读完 MainActivity 后也知道 Android 退出 PiP 时回调会置 false，\n仍判定紧凑停到用户点击为止可以接受。\n其三，L545 的 restorePersistedTimerState 把全部停机时长加到当前步，满一步只 advanceToNextStep 一次，余量丢弃；\n而同一 agent 一分钟前在 L521 写的 advanceTimerByDelta 已按有序步骤循环扣减。\n服务侧 releaseBackgroundTask 同样没有清常亮，属于同一资源缺口，修复在两侧都补了 setKeepScreenOn(false)。\n两轮之间 ECAT 生成者对页面只做编译修复（main-01a0b99c…jsonl:L348、L358），三处片段原样保留到第二轮判官。\n修复（agent-01a0b9e0…jsonl:L239）新增 replayPersistedElapsed 逐步扣减停机时长、遇手动步骤停下、越过末步进入完成态；\n回前台、后台完成和通知 Stop 都置 isPiPMode=false，后台交接前后都 setKeepScreenOn(false)。\n",
+      "kind": "diagnosis",
+      "status": "model_claim"
+    },
+    "recommendation:1": {
+      "text": "移植通知时，按源端 createContentText/createChannel 逐字段核对：正文要同时有重量和 step.time×timeMultiplier 的 m:ss 时长。目标 SDK 不支持具名渠道时，把“源渠道 id、名称、重要度 → 目标槽类型与级别”写成显式映射常量，并在交付汇报中声明这项替代。",
+      "kind": "recommendation",
+      "status": "model_claim"
+    },
+    "recommendation:2": {
+      "text": "服务接口里自己定义的快照字段要在渲染处实际消费。收尾自检发现字段未用时，要么接到输出，要么删除并说明原因，不带着未用字段交付。",
+      "kind": "recommendation",
+      "status": "model_claim"
+    },
+    "recommendation:3": {
+      "text": "用应用内计时替代后台 Worker 时，所有恢复入口（后台 tick、持久化恢复）共用同一个按有序步骤扣减经过时间的函数：遇手动步骤停下，越过末步进入完成态。不要为持久化恢复另写一个只加到当前步的分支。",
+      "kind": "recommendation",
+      "status": "model_claim"
+    },
+    "recommendation:4": {
+      "text": "给前台专属状态（keep-screen-on、紧凑/PiP 模式）列出进入点和全部退出点：回前台、后台交接、后台完成、通知 Stop、页面销毁，每个退出点都显式复位。对照规格中的 stop clears flag 与 F006-AC09 核对。",
+      "kind": "recommendation",
+      "status": "model_claim"
+    },
+    "recommendation:5": {
+      "text": "最小检查：grep 每处 setKeepScreenOn(true) 和 isPiPMode = true，确认每条退出路径都有对应的 false；再用跨两个步骤的停机时长手算一次恢复结果。",
+      "kind": "recommendation",
+      "status": "model_claim"
+    }
+  },
+  "targets": [
+    "/private/tmp/testCofi-codex/entry/src/main/ets/pages/RecipeDetailsPage.ets",
+    "/private/tmp/testCofi-codex/entry/src/main/ets/services/platform/PlatformTimerService.ets"
+  ],
+  "changes": [
+    {
+      "files": [
+        "/private/tmp/testCofi-codex/entry/src/main/ets/pages/RecipeDetailsPage.ets",
+        "/private/tmp/testCofi-codex/entry/src/main/ets/services/platform/PlatformTimerService.ets"
+      ],
+      "change": "restorePersistedTimerState 按有序步骤逐步扣减停机时长、遇手动步骤停下、越过末步进入完成态；所有退出路径复位 isPiPMode 并 setKeepScreenOn(false)；通知正文加步骤时长 m:ss，槽改具名 cofi_timer_notification 契约。",
+      "evidence": [
+        "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/agent-01a0b9e0-fd9b-7c11-9545-865aed507e15.jsonl:L234",
+        "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/agent-01a0b9e0-fd9b-7c11-9545-865aed507e15.jsonl:L239",
+        "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/agent-01a0b9e0-fd9b-7c11-9545-865aed507e15.jsonl:L244",
+        "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/agent-01a0b9e0-fd9b-7c11-9545-865aed507e15.jsonl:L268",
+        "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/agent-01a0b9e0-fd9b-7c11-9545-865aed507e15.jsonl:L272",
+        "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/agent-01a0b9e0-fd9b-7c11-9545-865aed507e15.jsonl:L277",
+        "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/agent-01a0b9e0-fd9b-7c11-9545-865aed507e15.jsonl:L310",
+        "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/agent-01a0b9e0-fd9b-7c11-9545-865aed507e15.jsonl:L330"
+      ]
+    }
+  ],
+  "participants": [
+    {
+      "agent": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/main-01a0b9db-1f61-71c3-9931-b2709ab3e71e.jsonl",
+      "role": "发现（ECAT 第二轮判别器）",
+      "action": "工作清单第 3、4 项",
+      "evidence": [
+        "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/main-01a0b99c-840a-7343-90f4-1e256f32367b.jsonl:L588"
+      ]
+    },
+    {
+      "agent": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/agent-01a0b9e0-fd9b-7c11-9545-865aed507e15.jsonl",
+      "role": "修复（ECAT 第二轮 worker）",
+      "action": "恢复算法、退出路径、通知契约",
+      "evidence": [
+        "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/main-01a0b99c-840a-7343-90f4-1e256f32367b.jsonl:L628",
+        "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/agent-01a0b9e0-fd9b-7c11-9545-865aed507e15.jsonl:L330"
+      ]
+    }
+  ],
+  "scope": {
+    "project_roots": [
+      "/private/tmp/testCofi-codex"
+    ],
+    "source_roots": [
+      "/Users/fengyi/Workspace/others/Cofi"
+    ],
+    "materials": [
+      "C:/Users/hongy/projects/_migloop-multiapp-memory-20260927/runs/04-cofi/materials"
+    ],
+    "generation_end": "2026-09-19T10:26:37.280Z",
+    "observation_end": "2026-09-19T13:59:12.701Z",
+    "boundary_evidence": [
+      "生成结束取 FV-2 终态全量编译的派发：runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl:L2134（hvigorw assembleHap，日志写到 autofix-log/round-9/fv2-real-full-build.log），回执 L2135 BUILD 成功。此前 09:34–10:21 主会话自己接手 Batch 3 收尾与 Stage 2/3，最后一次应用写入是 L2053（10:21:29）；10:15–10:26 结构闭包循环 round 0–9 的自动修复也在此之前，算生成收敛。口径与 01/02/03 轮一致。",
+      "a2h-execute 阶段标记 10:29:15Z、verify 11:16:23Z、build 11:18:59Z（manifest stage-marks）。",
+      "观察截止取材料中最后一条带时间戳的记录：runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/main-01a0b9f6-b3f6-7263-b367-5f0fcf57018c.jsonl 末行 13:59:12.701Z（ECAT 第二次 run 的判官，只读）。最后一次应用写入是 ECAT 生成者 runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/main-01a0b99c-840a-7343-90f4-1e256f32367b.jsonl:L722（13:53:17）。",
+      "无人工调试消息：主会话收到的外部消息只有首条 /a2h-run 指令（L8）、三次限流续跑提示（L934/L945/L956）和 hmigbot 注入的验证闭包阻塞项（L2804，由审阅会话 main-01a0b964 产生）。ECAT refine 由 hmigbot 在 12:02:45 自动起跑（stage-marks a2h-init→ecat-refine），两轮生成者会话 main-01a0b99c 的任务正文来自判别器。"
+    ]
+  },
+  "environment": {
+    "schema": "migloop-case-environment/1",
+    "through": "2026-09-19T13:59:12.701Z",
+    "facts": [
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0-alpha17",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": null,
+        "at": "2026-09-19T06:34:53.774Z",
+        "ref": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl:L71",
+        "request_ref": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl:L70",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.0.1(21)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-09-19T06:37:07.791Z",
+        "ref": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl:L128",
+        "request_ref": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl:L127",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.0.1(21)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-09-19T06:37:07.791Z",
+        "ref": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl:L128",
+        "request_ref": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl:L127",
+        "phase": "generation"
+      },
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0-alpha17",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": null,
+        "at": "2026-09-19T08:12:43.229Z",
+        "ref": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/agent-01a0b8b4-dac7-7520-b644-8055f38660ad.jsonl:L167",
+        "request_ref": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/agent-01a0b8b4-dac7-7520-b644-8055f38660ad.jsonl:L166",
+        "phase": "generation"
+      }
+    ],
+    "sources": {
+      "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl": "dded20072b271c2f1f9db62253a828f7f8e0a4703d8cd860e15e24347e658a6e",
+      "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/agent-01a0b8b4-dac7-7520-b644-8055f38660ad.jsonl": "add73e52a2038d517d9397ab842e942dc4c1947a0c1c71803b89ca9b25b341b5"
+    },
+    "unknown": [
+      "android.compile_sdk",
+      "android.target_sdk",
+      "android.min_sdk",
+      "libraries.compose_bom",
+      "toolchain.kotlin",
+      "toolchain.agp",
+      "toolchain.gradle",
+      "harmonyos.compile_sdk",
+      "device.android_api",
+      "device.harmonyos_version",
+      "device.density",
+      "device.font_scale",
+      "project.revision"
+    ],
+    "unscoped_observations": 0,
+    "boundary": "Recorded configuration/tool outputs, not a continuous environment state, resolved dependency proof, or lesson compatibility range. Missing values stay unknown; no current project files are read.",
+    "snapshot_id": "1fdcef26983a560cac1a3d6ae5704777d10f5b076aa2a992a9990432275fd8fb"
+  },
+  "packager": {
+    "name": "migloop-memory-skills",
+    "version": "0.8.3",
+    "bundle_sha256": "4bddfa4e92b7dccd8546606cce6f167963b9f6bf03d8329085d22bf4e94eea92"
+  },
+  "validation_sha256": "6a77204a7026bbcb5eb24ecb6df1933e029a68e0bf834f39fd90dfaa4a29e4e5",
+  "provenance": {
+    "schema": "migloop-case-provenance/1",
+    "materials": "C:\\Users\\hongy\\projects\\_migloop-multiapp-memory-20260927\\runs\\04-cofi\\materials",
+    "db_root_session_id": null,
+    "source_set_id": "sources-abe23f8631388b5ebff0",
+    "collector": {
+      "name": "migloop-memory-skills",
+      "version": "0.8.3",
+      "bundle_sha256": "14a940665d63179822994c2b9e982f971b3c750199265458ca6baa6bd4688ef8",
+      "implementation_sha256": "48e6f84dd59cbfdcac7c372a18ac76a098a52d3dbe972093dc2db671f63c943f"
+    },
+    "observed": {
+      "session_ids": [
+        "01a0b85d-596f-7b91-9c44-fd9f6a1b0dec",
+        "01a0b860-428a-7c83-90bb-eb724c400016",
+        "01a0b860-62ec-7ee2-b459-01630373e99d",
+        "01a0b860-83d4-7793-81f4-837ff5fe6568",
+        "01a0b876-96a1-7550-afdf-4e6243cc94b0",
+        "01a0b890-8292-75e2-ad9a-3a9f0784937f",
+        "01a0b890-9d54-7db2-983c-301fdd2b9be8",
+        "01a0b891-4b5c-7630-8b86-853bc289ce4c",
+        "01a0b89f-8d55-7483-8026-e89c5525b1bc",
+        "01a0b89f-a389-7630-a3a1-7cacd22aeb39",
+        "01a0b8b0-00f2-79d0-bcc7-b6e2853dd90f",
+        "01a0b8b4-c374-78f1-a531-28c2a3f21f76",
+        "01a0b8b4-dac7-7520-b644-8055f38660ad",
+        "01a0b8b4-fd8f-7330-8cb3-9bc3620685e3",
+        "01a0b8b5-141e-79a3-8f0a-15e3a7823a08",
+        "01a0b8b5-280c-7e81-8d9f-325efc1bb750",
+        "01a0b8b5-3d0c-71d0-be25-2beb1f225452",
+        "01a0b8bd-b8b9-7e60-b62c-162e5abfaabd",
+        "01a0b8cb-890d-7ec2-8172-37a67698e61a",
+        "01a0b8d0-4575-7162-89ea-25d165c535d8",
+        "01a0b8d0-597c-7b93-8aa2-c95ff2a1bb15",
+        "01a0b8d0-6e31-70b2-88f1-3af9e09ceac1",
+        "01a0b8d0-8f91-7193-bb58-7019f424765d",
+        "01a0b8d0-a5fe-7bd1-b26d-7dfcd6f705a2",
+        "01a0b8d0-bd99-7d80-9580-f44d793ae8b0",
+        "01a0b8d4-9102-7c82-9981-9d5779aea483",
+        "01a0b8e8-2897-7fd0-989e-cf1d68ab6595",
+        "01a0b8ed-ad0e-7903-9733-6854abffcabc",
+        "01a0b8ed-c0fc-7181-b448-144194ce83bf",
+        "01a0b8ed-d4c3-70c2-9512-a9d9bc42d932",
+        "01a0b8ed-ee64-7e60-9b39-0b749dd17642",
+        "01a0b8ee-06e8-7913-a8f0-7d405dcc6289",
+        "01a0b8ee-46f5-70c1-a029-401e13dfec07",
+        "01a0b8f9-4961-7d53-8041-ce56f66d8b3d",
+        "01a0b8fb-6b91-7fe0-aeb9-6466541969da",
+        "01a0b964-eb62-7961-9aed-34cc0e8aee98",
+        "01a0b98b-6c98-7400-9112-c5be608a3c6d",
+        "01a0b98c-918c-7300-a55a-8f2963f55058",
+        "01a0b98c-918c-7491-acfa-f0f06d9188f1",
+        "01a0b98c-918c-77c1-b7d2-b72e03fef2eb",
+        "01a0b98c-918c-7d31-b2e4-86824e18c5a9",
+        "01a0b98c-918c-7d90-bfc9-b53ea9c2a784",
+        "01a0b98c-918c-7de2-9260-bcfb738dd971",
+        "01a0b98c-918c-7f93-805b-28433234ab4f",
+        "01a0b99a-14db-7a52-8e9a-e46ebc5919a1",
+        "01a0b99c-840a-7343-90f4-1e256f32367b",
+        "01a0b99f-55cc-72d2-a3b7-4eda7f7cdcbc",
+        "01a0b99f-56d2-7530-9526-320d34a564ee",
+        "01a0b99f-572e-7323-b456-048006bc823d",
+        "01a0b99f-5789-7fb2-97d5-8f7016a63542",
+        "01a0b99f-57f0-7c73-9127-00383a5cf5c3",
+        "01a0b99f-5862-77e1-8c9c-4454786950c7",
+        "01a0b9cc-bd1d-7761-9230-db7d8188a444",
+        "01a0b9cc-bd1d-7762-a5d7-8eece3f725cd",
+        "01a0b9cc-bd1d-78f0-8b67-b8c3d821b1e2",
+        "01a0b9cc-bd1e-78d0-853e-ce0ff2c0a2fa",
+        "01a0b9cc-bd1f-76c2-a17f-54bd16dde8f5",
+        "01a0b9cc-bd1f-7d51-b295-78734d5a3e18",
+        "01a0b9cc-bd20-72f1-aae4-20c54e8c961f",
+        "01a0b9db-1f61-71c3-9931-b2709ab3e71e",
+        "01a0b9e0-fd9b-7c11-9545-865aed507e15",
+        "01a0b9e0-ff02-7c60-814a-20fff2cb9de1",
+        "01a0b9e0-ff66-78c0-a14a-e01332f562a6",
+        "01a0b9e0-ffc5-78f0-b967-b7ee0a72fba1",
+        "01a0b9e1-001c-7d00-92f7-40a301ac18ff",
+        "01a0b9f4-065d-7011-bfa3-168f92db909b",
+        "01a0b9f4-065d-70a2-bea3-62dc2cb239b7",
+        "01a0b9f4-065d-7252-8dfe-6280fc0f0c23",
+        "01a0b9f4-065d-7281-92aa-dc70e15a1e12",
+        "01a0b9f4-065d-74a0-bf7f-6cd510bfc73e",
+        "01a0b9f4-065d-7c42-9e98-ca45d563e90f",
+        "01a0b9f4-065d-7d92-a08e-9ecf887bf373",
+        "01a0b9f6-0f84-7233-aa5c-bdc3938c92da",
+        "01a0b9f6-0f84-7243-ba6a-17e717eea8e0",
+        "01a0b9f6-0f84-73d2-ba2d-39f121c466b9",
+        "01a0b9f6-0f84-7b03-9ad7-cb9ccca1549d",
+        "01a0b9f6-0f84-7bc2-8d75-159536804755",
+        "01a0b9f6-0f84-7be1-8768-997884abba2e",
+        "01a0b9f6-0f84-7d63-90f7-2d83eb58a8ac",
+        "01a0b9f6-b3f5-7022-8a43-069a0190e86e",
+        "01a0b9f6-b3f5-70d0-b65b-2805ba176b94",
+        "01a0b9f6-b3f5-7190-99c3-eab523d840f8",
+        "01a0b9f6-b3f5-7552-b814-e7c6be668842",
+        "01a0b9f6-b3f5-7553-8802-461b10b9432e",
+        "01a0b9f6-b3f5-7663-abaf-2b0eb1a1a020",
+        "01a0b9f6-b3f6-7263-b367-5f0fcf57018c"
+      ],
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "glm-5.3"
+      ],
+      "providers": [
+        "hmigbot"
+      ],
+      "client_versions": [
+        "0.147.0"
+      ],
+      "projects": [
+        "/private/tmp/testCofi-codex"
+      ]
+    },
+    "migration": {
+      "project": "Cofi",
+      "run_id": "f0b2ddbc-bfec-44b6-a375-5866de1977b8",
+      "server_session_id": "c48c34f6-1f91-421f-aa50-0064cb39d8cd",
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "glm-5.3"
+      ],
+      "tool_versions": {
+        "orchestrator": "hmigbot-plus",
+        "runtime_version": "v1.4.8",
+        "runtime_commit": "09ac508",
+        "client_version": "hmigbot-plus-1.6.0",
+        "pack_version": "hmigbot-plus-1.6.0",
+        "codex_cli_version": "0.147.0"
+      },
+      "stage_boundaries": [
+        {
+          "stage": "a2h-init",
+          "mark_stage_done_at": "2026-09-19T06:31:52Z"
+        },
+        {
+          "stage": "a2h-spec",
+          "mark_stage_done_at": "2026-09-19T07:27:12Z"
+        },
+        {
+          "stage": "a2h-plan",
+          "mark_stage_done_at": "2026-09-19T07:44:01Z"
+        },
+        {
+          "stage": "a2h-execute",
+          "mark_stage_done_at": "2026-09-19T10:29:15Z"
+        },
+        {
+          "stage": "a2h-verify",
+          "mark_stage_done_at": "2026-09-19T11:16:23Z"
+        },
+        {
+          "stage": "a2h-retrospect",
+          "mark_stage_done_at": "2026-09-19T11:18:12Z"
+        },
+        {
+          "stage": "a2h-build",
+          "mark_stage_done_at": "2026-09-19T11:18:59Z"
+        },
+        {
+          "stage": "a2h-verify",
+          "mark_stage_done_at": "2026-09-19T12:01:00Z"
+        },
+        {
+          "stage": "a2h-build",
+          "mark_stage_done_at": "2026-09-19T12:01:00Z"
+        },
+        {
+          "stage": "a2h-init",
+          "mark_stage_done_at": "2026-09-19T12:02:45.629321+00:00"
+        },
+        {
+          "stage": "ecat-refine",
+          "mark_stage_done_at": "2026-09-19T12:03:06Z"
+        },
+        {
+          "stage": "a2h-build",
+          "mark_stage_done_at": "2026-09-19T13:08:56Z"
+        },
+        {
+          "stage": "a2h-build",
+          "mark_stage_done_at": "2026-09-19T13:53:40Z"
+        },
+        {
+          "stage": "a2h-init",
+          "mark_stage_done_at": "2026-09-19T13:55:55.642172+00:00"
+        },
+        {
+          "stage": "ecat-refine",
+          "mark_stage_done_at": "2026-09-19T13:56:06Z"
+        }
+      ],
+      "source_uris": [
+        "server export a2h-export-Cofi-16dbb30a9ab92e29.tar.gz sha256=fa8c691e1c426e8b22502d1e0c97aa671f61a95b09ac5f575ee11e23d6e276e8 format=a2h-export/4"
+      ]
+    },
+    "analysis": {
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "platforms": [
+        "claude-code"
+      ]
+    },
+    "unknown": [],
+    "sources": {
+      "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/agent-01a0b99f-55cc-72d2-a3b7-4eda7f7cdcbc.jsonl": "8b7176a2ad34a71c00f5bbda0cd5737b83c47bcfd307f84e5f503e54b2369761",
+      "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/agent-01a0b99f-572e-7323-b456-048006bc823d.jsonl": "70b296249fb756ca0c0b08d883cdf13f94ad6f0b61be660f7e47c7ad0bd1024f",
+      "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/agent-01a0b9e0-fd9b-7c11-9545-865aed507e15.jsonl": "977dfbde3379285cad409190ab35960420ca0165d3ef110fb496ce08d42e710a",
+      "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/main-01a0b99c-840a-7343-90f4-1e256f32367b.jsonl": "3639639d730413dcac7e07dc1ac55cee63a84d646320acb73da90010fac6371e",
+      "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/main-01a0b9db-1f61-71c3-9931-b2709ab3e71e.jsonl": "4da4ba70d2527a49a7abda85d39f6a50595b6a7688fe2b8bc2fc476618726869"
+    }
+  },
+  "graph_evidence": [
+    {
+      "graph": 1,
+      "nodes": [
+        {
+          "id": "card:n-d47bcb5b7b6e4b33",
+          "kind": "file",
+          "key": "/Users/fengyi/Workspace/others/Cofi/cofi-share/src/main/java/com/omelan/cofi/share/timer/notification/NotificationUtils.kt",
+          "at": "2026-09-19T12:25:05.176000+00:00"
+        },
+        {
+          "id": "card:n-2afda055cbe9cefd",
+          "kind": "agent",
+          "key": "01a0b99c-840a-7343-90f4-1e256f32367b",
+          "at": "2026-09-19T12:23:42.539000+00:00"
+        },
+        {
+          "id": "card:n-61b8e56be0b3165e",
+          "kind": "agent",
+          "key": "01a0b99f-55cc-72d2-a3b7-4eda7f7cdcbc",
+          "at": "2026-09-19T12:38:20.962000+00:00"
+        },
+        {
+          "id": "card:n-3d82c69374a5fd87",
+          "kind": "file",
+          "key": "/private/tmp/testCofi-codex/entry/src/main/ets/services/platform/PlatformTimerService.ets",
+          "at": "2026-09-19T13:59:12.701000+00:00"
+        }
+      ],
+      "edges": [
+        {
+          "from": "card:n-d47bcb5b7b6e4b33",
+          "to": "card:n-61b8e56be0b3165e",
+          "relation": "read",
+          "at": "2026-09-19T12:25:05.176000+00:00",
+          "source": "model_review",
+          "strength": "candidate",
+          "evidence": [
+            "0e8e2ce00a15e5f6:42:e2923b4a37b795f6",
+            "0e8e2ce00a15e5f6:43:819c7d7084604c8e"
+          ],
+          "quote_verified": true
+        },
+        {
+          "from": "card:n-2afda055cbe9cefd",
+          "to": "card:n-61b8e56be0b3165e",
+          "relation": "dispatch",
+          "at": "2026-09-19T12:23:42.242000+00:00",
+          "source": "model_edge",
+          "strength": "confirmed",
+          "evidence": [
+            "5856b7087d0f206b:30:7e1b9116e8046cbd",
+            "5856b7087d0f206b:36:fae0004c94bf1b19"
+          ]
+        },
+        {
+          "from": "card:n-61b8e56be0b3165e",
+          "to": "card:n-3d82c69374a5fd87",
+          "relation": "write",
+          "at": "2026-09-19T12:38:20.962000+00:00",
+          "source": "model_edge",
+          "strength": "confirmed",
+          "evidence": [
+            "0e8e2ce00a15e5f6:297:4fbf979cf99adc87"
+          ]
+        }
+      ]
+    },
+    {
+      "graph": 2,
+      "nodes": [
+        {
+          "id": "card:n-97896fa72765d83b",
+          "kind": "file",
+          "key": "/Users/fengyi/Workspace/others/Cofi/cofi-share/src/main/java/com/omelan/cofi/share/timer/Timer.kt",
+          "at": "2026-09-19T12:25:28.597000+00:00"
+        },
+        {
+          "id": "card:n-ed852e38bf766655",
+          "kind": "file",
+          "key": "/private/tmp/testCofi-codex/spec/baseline/features/F006-platform-timer.md",
+          "at": "2026-09-19T12:28:04.275000+00:00"
+        },
+        {
+          "id": "card:n-a649e01aded45f41",
+          "kind": "agent",
+          "key": "01a0b99c-840a-7343-90f4-1e256f32367b",
+          "at": "2026-09-19T12:23:42.719000+00:00"
+        },
+        {
+          "id": "card:n-89de946db87b0750",
+          "kind": "agent",
+          "key": "01a0b99f-572e-7323-b456-048006bc823d",
+          "at": "2026-09-19T12:45:46.992000+00:00"
+        },
+        {
+          "id": "card:n-e464794e4b4875a4",
+          "kind": "file",
+          "key": "/private/tmp/testCofi-codex/entry/src/main/ets/pages/RecipeDetailsPage.ets",
+          "at": "2026-09-19T13:59:12.701000+00:00"
+        }
+      ],
+      "edges": [
+        {
+          "from": "card:n-97896fa72765d83b",
+          "to": "card:n-89de946db87b0750",
+          "relation": "read",
+          "at": "2026-09-19T12:25:28.597000+00:00",
+          "source": "model_review",
+          "strength": "candidate",
+          "evidence": [
+            "857e29c96bd36481:76:a532de18ba29c05a",
+            "857e29c96bd36481:77:08f41a0f254e3427"
+          ],
+          "quote_verified": true
+        },
+        {
+          "from": "card:n-ed852e38bf766655",
+          "to": "card:n-89de946db87b0750",
+          "relation": "read",
+          "at": "2026-09-19T12:28:04.275000+00:00",
+          "source": "model_review",
+          "strength": "candidate",
+          "evidence": [
+            "857e29c96bd36481:159:b9e0080fb81ef073",
+            "857e29c96bd36481:163:63672bffd6ec66f7"
+          ],
+          "quote_verified": true
+        },
+        {
+          "from": "card:n-a649e01aded45f41",
+          "to": "card:n-89de946db87b0750",
+          "relation": "dispatch",
+          "at": "2026-09-19T12:23:42.269000+00:00",
+          "source": "model_edge",
+          "strength": "confirmed",
+          "evidence": [
+            "5856b7087d0f206b:32:3366721a52c65fa8",
+            "5856b7087d0f206b:38:26b66c10cae821cd"
+          ]
+        },
+        {
+          "from": "card:n-89de946db87b0750",
+          "to": "card:n-e464794e4b4875a4",
+          "relation": "write",
+          "at": "2026-09-19T12:38:28.364000+00:00",
+          "source": "model_edge",
+          "strength": "confirmed",
+          "evidence": [
+            "857e29c96bd36481:389:481d66e43f33096d"
+          ]
+        },
+        {
+          "from": "card:n-89de946db87b0750",
+          "to": "card:n-e464794e4b4875a4",
+          "relation": "write",
+          "at": "2026-09-19T12:38:39.721000+00:00",
+          "source": "model_edge",
+          "strength": "confirmed",
+          "evidence": [
+            "857e29c96bd36481:394:1ef89cbaa961b93b"
+          ]
+        },
+        {
+          "from": "card:n-89de946db87b0750",
+          "to": "card:n-e464794e4b4875a4",
+          "relation": "write",
+          "at": "2026-09-19T12:38:59.758000+00:00",
+          "source": "model_edge",
+          "strength": "confirmed",
+          "evidence": [
+            "857e29c96bd36481:399:ebeb026832580a15"
+          ]
+        },
+        {
+          "from": "card:n-89de946db87b0750",
+          "to": "card:n-e464794e4b4875a4",
+          "relation": "write",
+          "at": "2026-09-19T12:39:08.866000+00:00",
+          "source": "model_edge",
+          "strength": "confirmed",
+          "evidence": [
+            "857e29c96bd36481:404:0a92b1d69cca4f08"
+          ]
+        },
+        {
+          "from": "card:n-89de946db87b0750",
+          "to": "card:n-e464794e4b4875a4",
+          "relation": "write",
+          "at": "2026-09-19T12:39:17.970000+00:00",
+          "source": "model_edge",
+          "strength": "confirmed",
+          "evidence": [
+            "857e29c96bd36481:409:d365b91bbecd1b03"
+          ]
+        },
+        {
+          "from": "card:n-89de946db87b0750",
+          "to": "card:n-e464794e4b4875a4",
+          "relation": "write",
+          "at": "2026-09-19T12:39:39.334000+00:00",
+          "source": "model_edge",
+          "strength": "confirmed",
+          "evidence": [
+            "857e29c96bd36481:421:28fadf6f6c3c4f32"
+          ]
+        },
+        {
+          "from": "card:n-89de946db87b0750",
+          "to": "card:n-e464794e4b4875a4",
+          "relation": "write",
+          "at": "2026-09-19T12:40:00.061000+00:00",
+          "source": "model_edge",
+          "strength": "confirmed",
+          "evidence": [
+            "857e29c96bd36481:426:f71055f0467f6882"
+          ]
+        },
+        {
+          "from": "card:n-89de946db87b0750",
+          "to": "card:n-e464794e4b4875a4",
+          "relation": "write",
+          "at": "2026-09-19T12:40:10.890000+00:00",
+          "source": "model_edge",
+          "strength": "confirmed",
+          "evidence": [
+            "857e29c96bd36481:431:527b8b6f5e0969bb"
+          ]
+        },
+        {
+          "from": "card:n-89de946db87b0750",
+          "to": "card:n-e464794e4b4875a4",
+          "relation": "write",
+          "at": "2026-09-19T12:40:17.560000+00:00",
+          "source": "model_edge",
+          "strength": "confirmed",
+          "evidence": [
+            "857e29c96bd36481:435:8abd2c0b2db18382"
+          ]
+        },
+        {
+          "from": "card:n-89de946db87b0750",
+          "to": "card:n-e464794e4b4875a4",
+          "relation": "write",
+          "at": "2026-09-19T12:40:38.147000+00:00",
+          "source": "model_edge",
+          "strength": "confirmed",
+          "evidence": [
+            "857e29c96bd36481:440:18b314aa29a49e23"
+          ]
+        },
+        {
+          "from": "card:n-89de946db87b0750",
+          "to": "card:n-e464794e4b4875a4",
+          "relation": "write",
+          "at": "2026-09-19T12:40:59.541000+00:00",
+          "source": "model_edge",
+          "strength": "confirmed",
+          "evidence": [
+            "857e29c96bd36481:445:215c7c48b762e98a"
+          ]
+        },
+        {
+          "from": "card:n-89de946db87b0750",
+          "to": "card:n-e464794e4b4875a4",
+          "relation": "write",
+          "at": "2026-09-19T12:41:31.536000+00:00",
+          "source": "model_edge",
+          "strength": "confirmed",
+          "evidence": [
+            "857e29c96bd36481:457:c58d72bd4481eb4c"
+          ]
+        },
+        {
+          "from": "card:n-89de946db87b0750",
+          "to": "card:n-e464794e4b4875a4",
+          "relation": "write",
+          "at": "2026-09-19T12:42:16.100000+00:00",
+          "source": "model_edge",
+          "strength": "confirmed",
+          "evidence": [
+            "857e29c96bd36481:474:5807ba868bec6e13"
+          ]
+        },
+        {
+          "from": "card:n-89de946db87b0750",
+          "to": "card:n-e464794e4b4875a4",
+          "relation": "write",
+          "at": "2026-09-19T12:42:21.766000+00:00",
+          "source": "model_edge",
+          "strength": "confirmed",
+          "evidence": [
+            "857e29c96bd36481:479:6fe579032b0cb5dd"
+          ]
+        },
+        {
+          "from": "card:n-89de946db87b0750",
+          "to": "card:n-e464794e4b4875a4",
+          "relation": "write",
+          "at": "2026-09-19T12:42:28.485000+00:00",
+          "source": "model_edge",
+          "strength": "confirmed",
+          "evidence": [
+            "857e29c96bd36481:484:ff89a9a5d74c963f"
+          ]
+        },
+        {
+          "from": "card:n-89de946db87b0750",
+          "to": "card:n-e464794e4b4875a4",
+          "relation": "write",
+          "at": "2026-09-19T12:42:35.527000+00:00",
+          "source": "model_edge",
+          "strength": "confirmed",
+          "evidence": [
+            "857e29c96bd36481:488:a7cfd3f694033b29"
+          ]
+        },
+        {
+          "from": "card:n-89de946db87b0750",
+          "to": "card:n-e464794e4b4875a4",
+          "relation": "write",
+          "at": "2026-09-19T12:42:41.638000+00:00",
+          "source": "model_edge",
+          "strength": "confirmed",
+          "evidence": [
+            "857e29c96bd36481:493:8b3b880d0d3a7a49"
+          ]
+        },
+        {
+          "from": "card:n-89de946db87b0750",
+          "to": "card:n-e464794e4b4875a4",
+          "relation": "write",
+          "at": "2026-09-19T12:43:41.482000+00:00",
+          "source": "model_edge",
+          "strength": "confirmed",
+          "evidence": [
+            "857e29c96bd36481:502:69f1d7141f1fe545"
+          ]
+        },
+        {
+          "from": "card:n-89de946db87b0750",
+          "to": "card:n-e464794e4b4875a4",
+          "relation": "write",
+          "at": "2026-09-19T12:44:00.761000+00:00",
+          "source": "model_edge",
+          "strength": "confirmed",
+          "evidence": [
+            "857e29c96bd36481:507:a5685bd0f0203867"
+          ]
+        },
+        {
+          "from": "card:n-89de946db87b0750",
+          "to": "card:n-e464794e4b4875a4",
+          "relation": "write",
+          "at": "2026-09-19T12:44:08.962000+00:00",
+          "source": "model_edge",
+          "strength": "confirmed",
+          "evidence": [
+            "857e29c96bd36481:512:2fc8d3f78aa56b14"
+          ]
+        },
+        {
+          "from": "card:n-89de946db87b0750",
+          "to": "card:n-e464794e4b4875a4",
+          "relation": "write",
+          "at": "2026-09-19T12:44:15.687000+00:00",
+          "source": "model_edge",
+          "strength": "confirmed",
+          "evidence": [
+            "857e29c96bd36481:517:f5cbe2968f0f4246"
+          ]
+        },
+        {
+          "from": "card:n-89de946db87b0750",
+          "to": "card:n-e464794e4b4875a4",
+          "relation": "write",
+          "at": "2026-09-19T12:44:35.956000+00:00",
+          "source": "model_edge",
+          "strength": "confirmed",
+          "evidence": [
+            "857e29c96bd36481:522:a19773fc60a35a78"
+          ]
+        },
+        {
+          "from": "card:n-89de946db87b0750",
+          "to": "card:n-e464794e4b4875a4",
+          "relation": "write",
+          "at": "2026-09-19T12:44:50.677000+00:00",
+          "source": "model_edge",
+          "strength": "confirmed",
+          "evidence": [
+            "857e29c96bd36481:527:37db0cfaef44e7de"
+          ]
+        },
+        {
+          "from": "card:n-89de946db87b0750",
+          "to": "card:n-e464794e4b4875a4",
+          "relation": "write",
+          "at": "2026-09-19T12:45:03.442000+00:00",
+          "source": "model_edge",
+          "strength": "confirmed",
+          "evidence": [
+            "857e29c96bd36481:532:735390bb3950aeee"
+          ]
+        },
+        {
+          "from": "card:n-89de946db87b0750",
+          "to": "card:n-e464794e4b4875a4",
+          "relation": "write",
+          "at": "2026-09-19T12:45:15.492000+00:00",
+          "source": "model_edge",
+          "strength": "confirmed",
+          "evidence": [
+            "857e29c96bd36481:537:1d4d99dbc4c5dfd4"
+          ]
+        },
+        {
+          "from": "card:n-89de946db87b0750",
+          "to": "card:n-e464794e4b4875a4",
+          "relation": "write",
+          "at": "2026-09-19T12:45:24.990000+00:00",
+          "source": "model_edge",
+          "strength": "confirmed",
+          "evidence": [
+            "857e29c96bd36481:541:c40678268351ee65"
+          ]
+        },
+        {
+          "from": "card:n-89de946db87b0750",
+          "to": "card:n-e464794e4b4875a4",
+          "relation": "write",
+          "at": "2026-09-19T12:45:46.992000+00:00",
+          "source": "model_edge",
+          "strength": "confirmed",
+          "evidence": [
+            "857e29c96bd36481:546:0cd94c6c3a16e3d7"
+          ]
+        }
+      ]
+    }
+  ],
+  "validation": {
+    "status": "valid",
+    "schema": "passed",
+    "graph_check": "performed",
+    "kernel_sha256": "b5d894750c6e0deeffaeee173f6bd3bb11f2afe7a7a3af592288a6448e5dd41e",
+    "causal_correctness": "not_certified",
+    "unresolved_targets": [],
+    "graph_checks": [
+      {
+        "graph": 1,
+        "draft_sha256": "a7e94dcf1fa29521cca3112538053809f47d27a9faa21f8dccafc6a19392a76a",
+        "receipt": {
+          "schema": "inquiry-graph/1",
+          "report_id": "23c6ae1d22b0484c",
+          "mechanical_status": "valid",
+          "path_status": "complete",
+          "semantic_verified": false,
+          "submission_format": "coordinates/1",
+          "issues": [],
+          "path_feedback": [],
+          "delivery": {
+            "status": "ready_for_review",
+            "semantic_verified": false,
+            "coverage_verified": false
+          }
+        }
+      },
+      {
+        "graph": 2,
+        "draft_sha256": "ace1c28477f62374dcdd783d597b6a741524a3af716c98e5ffb31af6350ed20c",
+        "receipt": {
+          "schema": "inquiry-graph/1",
+          "report_id": "5ca5dd513a694e50",
+          "mechanical_status": "valid",
+          "path_status": "complete",
+          "semantic_verified": false,
+          "submission_format": "coordinates/1",
+          "issues": [],
+          "path_feedback": [],
+          "delivery": {
+            "status": "ready_for_review",
+            "semantic_verified": false,
+            "coverage_verified": false
+          }
+        }
+      }
+    ]
+  },
+  "revision": "35af48b5ba035c5b0a013f22aa96e74f8f156be000fe8cf630a6955219f940ce"
+}

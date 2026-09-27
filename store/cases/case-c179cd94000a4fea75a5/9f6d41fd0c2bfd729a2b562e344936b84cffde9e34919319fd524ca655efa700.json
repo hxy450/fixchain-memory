@@ -1,0 +1,1131 @@
+{
+  "schema": "migloop-case/2",
+  "id": "case-c179cd94000a4fea75a5",
+  "created_at": "2026-09-27T14:49:01.347593+00:00",
+  "job": "issue-c179cd94000a4fea75a5",
+  "identity_basis": "server migration ID",
+  "migration_key": "1bbfa3ec-f51e-48a1-92a3-4387249b468e",
+  "draft": {
+    "title": "把源端 64 位 Long id 映射成 ArkTS number，并用裸 JSON.parse 解析响应，导致大 id 丢精度",
+    "when": "数据模型与网络层实现阶段，把源端 Kotlin Long 字段和接口参数映射成 ArkTS 类型，并决定响应 JSON 的解析与序列化方式时；规格提取阶段写服务层 ArkTS 目标签名时也适用",
+    "description": "源端 bean 或接口用 Kotlin Long（Flutter 侧 Dart int）承载服务器生成的用户 id、hash、userId，后端按 JSON 数字返回；目标端 ArkTS 的 number 是双精度，JSON.parse 遇到超过 2^53 的整数会直接舍入。",
+    "summary": "Base 层实现者（agent-a4e097889cc3283dd）收到的派工写明“数据模型字段从 cross-module-contracts §三 + Android 源码 bean 类提取（读源码确认字段名/类型）”\n（main-76ad9618 L2030，worker L1）。它写前用 Read 读到 UserBean.kt 的 `val id: Long`、`val thirdUniHash: Long?`（L37-L38），\nTranslateHistoryEntity.kt 的 `var userId: Long? = 0L`（L39-L40），kapt stub 里 UserLoginDTO、ConvertCardResult 的 `long userId`（L54），\nraw_apis.json 里 refreshToken 的 `@Query(\"userId\") userId: Long`（L72）。feature-base 和 cross-module-contracts 只列字段名、不给类型（L24、L26），\n项目 skill 没有 64 位整数的映射规则；arkts-data-layer 的 v2-network-service.md 模板直接写 `JSON.parse(responseBody) as ApiResponse<T>`（L91），\n这是没有大整数提醒的通用写法，本卡记为输入缺口。源端类型本身正确、清楚，派工也要求按源码确认类型。\n输出却把这些 Long 一律写成 number：UserBean.ets 的 `id: number = 0`、`thirdUniHash: number | null`、`u.id = (json['id'] as number) ?? 0`\n以及 UserLoginDTO.userId（L102），TranslateHistoryEntity.userId（L111），ConvertCardResult.userId（L115），\nCommApiService.refreshToken(userId: number)（L140）、MineApiService.getUserInfoById(userId: number)；\nHttpClient 统一用 `const base: BaseResponse<T> = JSON.parse(body) as BaseResponse<T>` 解析全部响应（L129）。\n整个会话没有讨论 Long 的取值范围。偏差出在“源端 64 位整数 → 目标类型与解析方式”这一步：\n即使模型字段改成别的类型，裸 JSON.parse 也已经在解析时把 19 位 id 舍入了。\n规格侧另有一处独立的同类偏差：规格作者（agent-acedbf297f82d4d3f）读到 MineViewModel.kt 的 `reqVerifyCode(userId: Long, qrCode: String)`（L93-L94）\n和 CommApiService.kt 的 `userId: Long`（L54-L55），却在“服务层（ArkTS 目标接口）”里写 `getWalletInfo(userId: number)`、`verifyQrCode(userId: number, …)`（F007，L100），\n`getOssToken(userId: number)`（F009，L118），`refreshToken(refreshToken: string, userId: number)`（F002，L73）。\n规格模板的示例签名 `play(feedItemId: number)`（L27-L28）也把 id 写成 number。\n切片实现者（agent-a51cc4b728ac8391b）写前读了 F007（L43-L44）和 Base 层 models（L50-L51，UserBean.id 已是 number），\n按规格写出 PayService.getWalletInfo/verifyQrCode(userId: number)（L127），并在 UserAuthService 里用 `JSON.stringify(user)` 存、`JSON.parse(json)` 取用户（L76）。\n它的派工要求读 Android 源码，但它没有读；本卡只把它记为传递者，不另判独立失职。\n这些片段在生成期都没有被改动。修复期用户在 main-5e4fa5da L1681 报告 id 6970321983963689496 解析成 6970321983963690000；\n主会话先改 string，被用户以“后端与 Flutter 都是 int”叫停（L1805），改用 bigint（L1874、L1877）：\nHttpClient 新增 parseBody（JSON.parse 前把 16 位以上整数加引号，reviver 转 BigInt）和请求用的 bigintReplacer（L1892-L1895、L1968-L1970），\nUserBean.id/thirdUniHash、各模型 userId 和各层 userId 参数改 bigint（L1903-L2023）。\n用户随后发现 saveUser 存下的仍是 6970321983963690000（L2051），主会话给 UserAuthService 加了配对的 stringifyUser/parseUser（L2063-L2076）。\n持久化这一处在生成期是按 number 模型写的，id 改成 bigint 后才暴露，属于同一根因在持久化路径上的连带缺口。\n修复的适用边界（主会话自述见 L2030、L2087）：正则 `\\d{16,}` 会把响应里所有 16 位以上整数都转成 bigint，\nreviver 还会把所有 16 位以上的纯数字字符串转成 bigint，包括后端本来就按字符串返回的字段；\n请求序列化时 bigint 以 JSON 字符串发出，主会话说“后端收到的还是数字”，这与 JSON 行为不符，材料中也没有核验后端是否接受。\nTranslateHistoryDao、MineService、LtMethodBridge 的持久化 JSON 仍未处理 bigint。\n",
+    "recommendations": [
+      "数据模型实现者：逐个列出源端 bean 和接口里的 Long 字段，写出对应的 ArkTS 类型；服务器生成的 id、hash、userId（本例 UserBean.id、thirdUniHash、各 userId）默认用 bigint，只有确认取值不超过 2^53 时（如 13 位毫秒时间戳、时长）才用 number，并把理由写进注释。",
+      "网络层实现者：响应里只要有 64 位整数字段，就不能用裸 JSON.parse，要换成保精度的解析（预处理加引号后用 reviver 转 BigInt，或改用支持 bigint 的解析器），请求体也要配 bigint 的 replacer；最小检查：解析 `{\"id\":6970321983963689496}` 后 `id.toString()` 必须原样返回 19 位值。",
+      "持久化实现者：模型里有 bigint 字段时，每一条 JSON.stringify/JSON.parse 往返路径（本例 saveUser/restoreUser，以及 DAO、偏好里存的 JSON）都要用成对的 replacer/reviver，存完读回来比较 id 是否一致。",
+      "规格提取者：写“服务层（ArkTS 目标接口）”签名时，源端参数是 Long 的 userId/id 要保留 64 位语义（写 bigint 或注明“64 位，禁用 number”），不要照模板示例 feedItemId: number 写。",
+      "套用“正则预处理 + reviver”这类全局方案前，先把转换范围限定到已知的 64 位字段名，并确认后端接受字符串形式的数字；不能确认时就按字段处理，避免误伤 16 位以上的字符串或其他整数字段。"
+    ],
+    "unknown": [
+      "生成期材料里没有出现真实 id 的取值；本卡按源端声明为 Long、派工又要求按源码确认类型来归因，没有核到生成者当时知道 id 有 19 位。"
+    ],
+    "graphs": [
+      {
+        "target": {
+          "key": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/models/UserBean.ets",
+          "since": "2026-09-22T09:58:32.418Z",
+          "at": "2026-09-24T02:03:48.614Z"
+        },
+        "nodes": [
+          {
+            "key": "main-76ad9618-e80a-4565-b49c-3c6541e5ed67.jsonl",
+            "at": "2026-09-22T03:13:37.711Z",
+            "reason": "派工：主会话用 Agent 派出 Base-1~5 实现者，写明“数据模型字段从 cross-module-contracts §三 + Android 源码 bean 类提取（读源码确认字段名/类型）”，并给出源码根。这条要求把源端类型定为模型字段类型的依据（main-76ad9618-e80a-4565-b49c-3c6541e5ed67.jsonl:L2030；agent-a4e097889cc3283dd.jsonl:L1）。"
+          },
+          {
+            "key": "/Users/timekettle/Desktop/GitProject/polypal-app-android/library-comm/src/main/java/com/timekettle/upup/comm/model/UserBean.kt",
+            "at": "2026-09-22T03:14:09.747Z",
+            "reason": "正常输入：Read 回执给出 `val id: Long,  //用户ID` 和 `val thirdUniHash: Long?`，明确是 64 位整数；这足以说明 id 不能不加判断地用双精度 number 承载（agent-a4e097889cc3283dd.jsonl:L37-L38）。"
+          },
+          {
+            "key": "agent-a4e097889cc3283dd.jsonl",
+            "at": "2026-09-22T03:18:48.258Z",
+            "reason": "读到上述 Long 声明后，Write UserBean.ets 写成 `id: number = 0`、`thirdUniHash: number | null`、`u.id = (json['id'] as number) ?? 0`，UserLoginDTO.userId 也是 number；会话里没有讨论取值范围。源端 64 位整数在这里被映射成 53 位安全整数的类型（同转录 L102-L103）。",
+            "problem": true
+          }
+        ],
+        "edges": [
+          {
+            "from": 1,
+            "to": 3
+          },
+          {
+            "from": 2,
+            "to": 3
+          },
+          {
+            "from": 3,
+            "to": "target"
+          }
+        ]
+      },
+      {
+        "target": {
+          "key": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/network/HttpClient.ets",
+          "since": "2026-09-22T09:58:32.418Z",
+          "at": "2026-09-24T02:03:48.614Z"
+        },
+        "nodes": [
+          {
+            "key": "/Users/timekettle/Desktop/GitProject/polypal-app-android/library-comm/src/main/java/com/timekettle/upup/comm/model/UserBean.kt",
+            "at": "2026-09-22T03:14:09.747Z",
+            "reason": "正常输入：Read 回执给出响应模型 UserBean 的 `id: Long`、`thirdUniHash: Long?`，说明登录等响应里有 64 位整数字段（agent-a4e097889cc3283dd.jsonl:L37-L38）。"
+          },
+          {
+            "key": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/.claude/skills/arkts-data-layer/references/v2-network-service.md",
+            "at": "2026-09-22T03:17:55.746Z",
+            "reason": "输入缺口：数据层 skill 的网络模板直接写 `JSON.parse(responseBody) as ApiResponse<T>`，对普通字段适用，但没有提示超过 2^53 的整数会在解析时舍入（agent-a4e097889cc3283dd.jsonl:L90-L91）。"
+          },
+          {
+            "key": "agent-a4e097889cc3283dd.jsonl",
+            "at": "2026-09-22T03:22:23.932Z",
+            "reason": "已知响应模型里有 Long 字段，Write HttpClient.ets 时仍照模板用 `const base: BaseResponse<T> = JSON.parse(body) as BaseResponse<T>` 解析全部响应，请求体用 `JSON.stringify(data)`，没有保精度处理；19 位 id 在这一步就被舍入（同转录 L129-L130）。",
+            "problem": true
+          }
+        ],
+        "edges": [
+          {
+            "from": 1,
+            "to": 3
+          },
+          {
+            "from": 2,
+            "to": 3
+          },
+          {
+            "from": 3,
+            "to": "target"
+          }
+        ]
+      },
+      {
+        "target": {
+          "key": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/models/TranslateHistoryEntity.ets",
+          "since": "2026-09-22T09:58:32.418Z",
+          "at": "2026-09-24T02:03:48.614Z"
+        },
+        "nodes": [
+          {
+            "key": "/Users/timekettle/Desktop/GitProject/polypal-app-android/library-comm/src/main/java/com/timekettle/upup/comm/bean/TranslateHistoryEntity.kt",
+            "at": "2026-09-22T03:14:10.282Z",
+            "reason": "正常输入：Read 回执给出 `var userId: Long? = 0L,  // 多用户不共享历史翻译数据`，这个 userId 就是 UserBean.id（agent-a4e097889cc3283dd.jsonl:L39-L40）。"
+          },
+          {
+            "key": "agent-a4e097889cc3283dd.jsonl",
+            "at": "2026-09-22T03:19:58.242Z",
+            "reason": "同一实现者 Write TranslateHistoryEntity.ets 时写成 `userId: number = 0`，和 UserBean.id 一样把 64 位 Long 映射成 number（同转录 L111-L112）。",
+            "problem": true
+          }
+        ],
+        "edges": [
+          {
+            "from": 1,
+            "to": 2
+          },
+          {
+            "from": 2,
+            "to": "target"
+          }
+        ]
+      },
+      {
+        "target": {
+          "key": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/services/PayService.ets",
+          "since": "2026-09-22T09:58:32.418Z",
+          "at": "2026-09-24T02:03:48.614Z"
+        },
+        "nodes": [
+          {
+            "key": "/Users/timekettle/Desktop/GitProject/polypal-app-android/module-mine/src/main/java/com/timekettle/module_mine/ui/vm/MineViewModel.kt",
+            "at": "2026-09-22T02:22:48.991Z",
+            "reason": "正常输入：规格作者用 Bash cat+grep 读到 `fun reqQrScanning(userId: Long, qrCode: String)`、`fun reqVerifyCode(userId: Long, qrCode: String)`，以及 `val userId = LoginServiceImplWrap.getUserInfo()?.id`，说明兑换接口的 userId 就是 64 位的用户 id（agent-acedbf297f82d4d3f.jsonl:L93-L94）。"
+          },
+          {
+            "key": "agent-acedbf297f82d4d3f.jsonl",
+            "at": "2026-09-22T02:23:40.087Z",
+            "reason": "读到上述源码后，Write F007 的“服务层（ArkTS 目标接口）”写成 `getWalletInfo(userId: number)`、`verifyQrCode(userId: number, qrCode: string)`，把源端 Long 参数翻成 number；规格在这里开始偏离（同转录 L100-L101）。",
+            "problem": true
+          },
+          {
+            "key": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/spec/baseline/features/F007.md",
+            "at": "2026-09-22T03:35:26.144Z",
+            "reason": "交付桥梁：切片实现者用 Bash cat 读到的 F007 回执仍是 `getWalletInfo(userId: number)`、`verifyQrCode(userId: number, …)`（agent-a51cc4b728ac8391b.jsonl:L43-L44）。"
+          },
+          {
+            "key": "agent-a51cc4b728ac8391b.jsonl",
+            "at": "2026-09-22T03:41:02.834Z",
+            "reason": "读到上述规格后，Write PayService.ets 写出 `async getWalletInfo(userId: number)`、`async verifyQrCode(userId: number, qrCode: string)`，把规格的 number 签名带进目标文件（同转录 L127-L128）。本链只确认传递。"
+          }
+        ],
+        "edges": [
+          {
+            "from": 1,
+            "to": 2,
+            "force": true,
+            "reason": "规格作者在 polypal-app-android 下用 Bash 执行 cat module-mine/src/main/java/com/timekettle/module_mine/ui/vm/MineViewModel.kt | grep，回执返回 reqQrScanning/reqVerifyCode(userId: Long, qrCode: String)；发生在 L100 写 F007 之前，支持它写规格前已经读到源端的 Long 参数。",
+            "evidence": [
+              {
+                "source": "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/agent-acedbf297f82d4d3f.jsonl",
+                "line": 93
+              },
+              {
+                "source": "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/agent-acedbf297f82d4d3f.jsonl",
+                "line": 94
+              }
+            ]
+          },
+          {
+            "from": 2,
+            "to": 3
+          },
+          {
+            "from": 3,
+            "to": 4,
+            "force": true,
+            "reason": "切片实现者用 Bash cat F007.md 和 F008.md，回执包含 F007 服务层的 getWalletInfo(userId: number)、verifyQrCode(userId: number, qrCode: string)；发生在 L127 写 PayService 之前。",
+            "evidence": [
+              {
+                "source": "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/agent-a51cc4b728ac8391b.jsonl",
+                "line": 43
+              },
+              {
+                "source": "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/agent-a51cc4b728ac8391b.jsonl",
+                "line": 44
+              }
+            ]
+          },
+          {
+            "from": 4,
+            "to": "target"
+          }
+        ]
+      },
+      {
+        "target": {
+          "key": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/services/UserAuthService.ets",
+          "since": "2026-09-22T09:58:32.418Z",
+          "at": "2026-09-24T02:03:48.614Z"
+        },
+        "nodes": [
+          {
+            "key": "/Users/timekettle/Desktop/GitProject/polypal-app-android/library-comm/src/main/java/com/timekettle/upup/comm/model/UserBean.kt",
+            "at": "2026-09-22T03:14:09.747Z",
+            "reason": "正常输入：Read 回执给出 `val id: Long`、`val thirdUniHash: Long?`（agent-a4e097889cc3283dd.jsonl:L37-L38）。"
+          },
+          {
+            "key": "agent-a4e097889cc3283dd.jsonl",
+            "at": "2026-09-22T03:18:48.258Z",
+            "reason": "Write UserBean.ets 时把 id、thirdUniHash 写成 number，fromJson 按 number 取值（同转录 L102-L103）。",
+            "problem": true
+          },
+          {
+            "key": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/models/UserBean.ets",
+            "at": "2026-09-22T03:35:46.394Z",
+            "reason": "交付桥梁：切片实现者用 Bash for 循环 cat Base 层 models，回执里 UserBean 仍是 `id: number = 0`，UserLoginDTO 是 `userId: number = 0`（agent-a51cc4b728ac8391b.jsonl:L50-L51）。"
+          },
+          {
+            "key": "agent-a51cc4b728ac8391b.jsonl",
+            "at": "2026-09-22T03:37:46.753Z",
+            "reason": "按 number 型 UserBean，Write UserAuthService.ets 时 saveUser 用 `JSON.stringify(user)`、restoreUser 用 `UserBean.fromJson(JSON.parse(json) …)`，持久化往返没有 64 位处理；修复把 id 改成 bigint 后，这里存下的 id 仍被舍入（同转录 L76-L77；main-5e4fa5da L2051）。本链只确认传递。"
+          }
+        ],
+        "edges": [
+          {
+            "from": 1,
+            "to": 2
+          },
+          {
+            "from": 2,
+            "to": 3
+          },
+          {
+            "from": 3,
+            "to": 4,
+            "force": true,
+            "reason": "切片实现者在 entry/src/main/ets 下用 Bash for 循环 cat models/UserBean.ets 等 Base 层模型，回执包含 `id: number = 0` 和 UserLoginDTO 的 `userId: number = 0`；发生在 L76 写 UserAuthService 之前。",
+            "evidence": [
+              {
+                "source": "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/agent-a51cc4b728ac8391b.jsonl",
+                "line": 50
+              },
+              {
+                "source": "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/agent-a51cc4b728ac8391b.jsonl",
+                "line": 51
+              }
+            ]
+          },
+          {
+            "from": 4,
+            "to": "target"
+          }
+        ]
+      }
+    ],
+    "unresolved_targets": [
+      {
+        "key": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/models/VipAndFishModels.ets",
+        "reason": "已确认修改（L2003 ConvertCardResult.userId 改 bigint）；生成写者是 agent-a4e097889cc3283dd（L115 写 `userId: number`），写前 kapt stub 回执里有 `private final long userId`（L54）。成因同 UserBean 图，但这次读取走 Bash for 循环，没有单独入图核验。"
+      },
+      {
+        "key": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/network/CommApiService.ets",
+        "reason": "已确认修改（L1929 refreshToken 的 userId 改 bigint）；生成写者 agent-a4e097889cc3283dd 在 L140 写 `refreshToken(refreshToken: string, userId: number)`，写前 raw_apis.json 回执里有 `userId: Long`（L72，python 脚本读取）。成因同 UserBean 图，没有单独入图。"
+      },
+      {
+        "key": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/network/MineApiService.ets",
+        "reason": "已确认修改（L1931 getUserInfoById 的 userId 改 bigint）；生成写者是 agent-a4e097889cc3283dd（03:24:30 Write `getUserInfoById(userId: number)`），没有逐一核对写前读到的源端签名回执。"
+      },
+      {
+        "key": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/models/PayModels.ets",
+        "reason": "已确认修改（L2005-L2007 WalletInfo/PayOrder 的 userId 改 bigint）；生成写者 agent-a51cc4b728ac8391b 在 03:40:47 写入，和 PayService 同属 F007 切片，但没有逐字段核对 WalletInfo/PayOrder 的类型来自规格还是 UserBean。"
+      },
+      {
+        "key": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/repos/LoginRepository.ets",
+        "reason": "已确认修改（L1925-L1927 LoginResult.userId 改 bigint）；生成写者 agent-a51cc4b728ac8391b（03:38:01）写 `userId: number`、`(data['userId'] as number)`，推定沿用 number 型 Base 模型，没有单独入图。"
+      },
+      {
+        "key": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/repos/MineRepository.ets",
+        "reason": "已确认修改（L1933 reqUserInfo 的 userId 改 bigint）；生成写者 agent-a51cc4b728ac8391b（03:40:05）按 MineApiService.getUserInfoById(userId: number) 写签名，属于下游连带，没有单独入图。"
+      },
+      {
+        "key": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/services/FeedbackService.ets",
+        "reason": "已确认修改（L1953-L1955 FeedbackParams/ReportParams.userId、getOssToken 改 bigint）；生成写者 agent-a51cc4b728ac8391b（03:42:30）与 F009 规格的 `getOssToken(userId: number)`（agent-acedbf297f82d4d3f L118）一致，但没有核到规格作者写 F009 前读过哪个源端 Long 签名。"
+      },
+      {
+        "key": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/viewmodels/FeedbackViewModel.ets",
+        "reason": "已确认修改（L1937 currentUserId() 改 bigint）；生成写者 agent-a51cc4b728ac8391b（03:42:39）从 number 型 UserBean.id 取值，属于下游连带，没有单独入图。"
+      },
+      {
+        "key": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/viewmodels/MinePayViewModel.ets",
+        "reason": "已确认修改（L1939 currentUserId() 改 bigint）；生成写者 agent-a51cc4b728ac8391b（03:41:17）从 number 型 UserBean.id 取值并传给 PayService，属于下游连带，没有单独入图。"
+      },
+      {
+        "key": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/viewmodels/MainViewModel.ets",
+        "reason": "已确认修改（L1935 `user.id : 0` 改 `0n`）；该行由修复期主会话在 09-23 05:11 为启动刷新 token 新增（main-5e4fa5da L1234），随 UserBean.id 改 bigint 一起调整，不在本卡的生成期归因范围内。"
+      }
+    ]
+  },
+  "claims": {
+    "diagnosis": {
+      "text": "Base 层实现者（agent-a4e097889cc3283dd）收到的派工写明“数据模型字段从 cross-module-contracts §三 + Android 源码 bean 类提取（读源码确认字段名/类型）”\n（main-76ad9618 L2030，worker L1）。它写前用 Read 读到 UserBean.kt 的 `val id: Long`、`val thirdUniHash: Long?`（L37-L38），\nTranslateHistoryEntity.kt 的 `var userId: Long? = 0L`（L39-L40），kapt stub 里 UserLoginDTO、ConvertCardResult 的 `long userId`（L54），\nraw_apis.json 里 refreshToken 的 `@Query(\"userId\") userId: Long`（L72）。feature-base 和 cross-module-contracts 只列字段名、不给类型（L24、L26），\n项目 skill 没有 64 位整数的映射规则；arkts-data-layer 的 v2-network-service.md 模板直接写 `JSON.parse(responseBody) as ApiResponse<T>`（L91），\n这是没有大整数提醒的通用写法，本卡记为输入缺口。源端类型本身正确、清楚，派工也要求按源码确认类型。\n输出却把这些 Long 一律写成 number：UserBean.ets 的 `id: number = 0`、`thirdUniHash: number | null`、`u.id = (json['id'] as number) ?? 0`\n以及 UserLoginDTO.userId（L102），TranslateHistoryEntity.userId（L111），ConvertCardResult.userId（L115），\nCommApiService.refreshToken(userId: number)（L140）、MineApiService.getUserInfoById(userId: number)；\nHttpClient 统一用 `const base: BaseResponse<T> = JSON.parse(body) as BaseResponse<T>` 解析全部响应（L129）。\n整个会话没有讨论 Long 的取值范围。偏差出在“源端 64 位整数 → 目标类型与解析方式”这一步：\n即使模型字段改成别的类型，裸 JSON.parse 也已经在解析时把 19 位 id 舍入了。\n规格侧另有一处独立的同类偏差：规格作者（agent-acedbf297f82d4d3f）读到 MineViewModel.kt 的 `reqVerifyCode(userId: Long, qrCode: String)`（L93-L94）\n和 CommApiService.kt 的 `userId: Long`（L54-L55），却在“服务层（ArkTS 目标接口）”里写 `getWalletInfo(userId: number)`、`verifyQrCode(userId: number, …)`（F007，L100），\n`getOssToken(userId: number)`（F009，L118），`refreshToken(refreshToken: string, userId: number)`（F002，L73）。\n规格模板的示例签名 `play(feedItemId: number)`（L27-L28）也把 id 写成 number。\n切片实现者（agent-a51cc4b728ac8391b）写前读了 F007（L43-L44）和 Base 层 models（L50-L51，UserBean.id 已是 number），\n按规格写出 PayService.getWalletInfo/verifyQrCode(userId: number)（L127），并在 UserAuthService 里用 `JSON.stringify(user)` 存、`JSON.parse(json)` 取用户（L76）。\n它的派工要求读 Android 源码，但它没有读；本卡只把它记为传递者，不另判独立失职。\n这些片段在生成期都没有被改动。修复期用户在 main-5e4fa5da L1681 报告 id 6970321983963689496 解析成 6970321983963690000；\n主会话先改 string，被用户以“后端与 Flutter 都是 int”叫停（L1805），改用 bigint（L1874、L1877）：\nHttpClient 新增 parseBody（JSON.parse 前把 16 位以上整数加引号，reviver 转 BigInt）和请求用的 bigintReplacer（L1892-L1895、L1968-L1970），\nUserBean.id/thirdUniHash、各模型 userId 和各层 userId 参数改 bigint（L1903-L2023）。\n用户随后发现 saveUser 存下的仍是 6970321983963690000（L2051），主会话给 UserAuthService 加了配对的 stringifyUser/parseUser（L2063-L2076）。\n持久化这一处在生成期是按 number 模型写的，id 改成 bigint 后才暴露，属于同一根因在持久化路径上的连带缺口。\n修复的适用边界（主会话自述见 L2030、L2087）：正则 `\\d{16,}` 会把响应里所有 16 位以上整数都转成 bigint，\nreviver 还会把所有 16 位以上的纯数字字符串转成 bigint，包括后端本来就按字符串返回的字段；\n请求序列化时 bigint 以 JSON 字符串发出，主会话说“后端收到的还是数字”，这与 JSON 行为不符，材料中也没有核验后端是否接受。\nTranslateHistoryDao、MineService、LtMethodBridge 的持久化 JSON 仍未处理 bigint。\n",
+      "kind": "diagnosis",
+      "status": "model_claim"
+    },
+    "recommendation:1": {
+      "text": "数据模型实现者：逐个列出源端 bean 和接口里的 Long 字段，写出对应的 ArkTS 类型；服务器生成的 id、hash、userId（本例 UserBean.id、thirdUniHash、各 userId）默认用 bigint，只有确认取值不超过 2^53 时（如 13 位毫秒时间戳、时长）才用 number，并把理由写进注释。",
+      "kind": "recommendation",
+      "status": "model_claim"
+    },
+    "recommendation:2": {
+      "text": "网络层实现者：响应里只要有 64 位整数字段，就不能用裸 JSON.parse，要换成保精度的解析（预处理加引号后用 reviver 转 BigInt，或改用支持 bigint 的解析器），请求体也要配 bigint 的 replacer；最小检查：解析 `{\"id\":6970321983963689496}` 后 `id.toString()` 必须原样返回 19 位值。",
+      "kind": "recommendation",
+      "status": "model_claim"
+    },
+    "recommendation:3": {
+      "text": "持久化实现者：模型里有 bigint 字段时，每一条 JSON.stringify/JSON.parse 往返路径（本例 saveUser/restoreUser，以及 DAO、偏好里存的 JSON）都要用成对的 replacer/reviver，存完读回来比较 id 是否一致。",
+      "kind": "recommendation",
+      "status": "model_claim"
+    },
+    "recommendation:4": {
+      "text": "规格提取者：写“服务层（ArkTS 目标接口）”签名时，源端参数是 Long 的 userId/id 要保留 64 位语义（写 bigint 或注明“64 位，禁用 number”），不要照模板示例 feedItemId: number 写。",
+      "kind": "recommendation",
+      "status": "model_claim"
+    },
+    "recommendation:5": {
+      "text": "套用“正则预处理 + reviver”这类全局方案前，先把转换范围限定到已知的 64 位字段名，并确认后端接受字符串形式的数字；不能确认时就按字段处理，避免误伤 16 位以上的字符串或其他整数字段。",
+      "kind": "recommendation",
+      "status": "model_claim"
+    }
+  },
+  "targets": [
+    "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/models/PayModels.ets",
+    "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/models/TranslateHistoryEntity.ets",
+    "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/models/UserBean.ets",
+    "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/models/VipAndFishModels.ets",
+    "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/network/CommApiService.ets",
+    "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/network/HttpClient.ets",
+    "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/network/MineApiService.ets",
+    "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/repos/LoginRepository.ets",
+    "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/repos/MineRepository.ets",
+    "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/services/FeedbackService.ets",
+    "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/services/PayService.ets",
+    "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/services/UserAuthService.ets",
+    "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/viewmodels/FeedbackViewModel.ets",
+    "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/viewmodels/MainViewModel.ets",
+    "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/viewmodels/MinePayViewModel.ets"
+  ],
+  "changes": [
+    {
+      "files": [
+        "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/network/HttpClient.ets",
+        "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/models/UserBean.ets",
+        "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/network/CommApiService.ets",
+        "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/network/MineApiService.ets",
+        "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/repos/MineRepository.ets",
+        "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/viewmodels/MainViewModel.ets",
+        "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/viewmodels/FeedbackViewModel.ets",
+        "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/viewmodels/MinePayViewModel.ets"
+      ],
+      "change": "中间稿：JSON.parse reviver 把大整数转字符串、UserBean.id 与相关参数改 string（10:05–10:15），用户叫停后于 10:17–10:18 撤回。未保留，只作追溯背景。",
+      "evidence": [
+        "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-5e4fa5da-bfc0-449a-9b19-9236c7d2a918.jsonl:L1703",
+        "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-5e4fa5da-bfc0-449a-9b19-9236c7d2a918.jsonl:L1715",
+        "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-5e4fa5da-bfc0-449a-9b19-9236c7d2a918.jsonl:L1768",
+        "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-5e4fa5da-bfc0-449a-9b19-9236c7d2a918.jsonl:L1809",
+        "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-5e4fa5da-bfc0-449a-9b19-9236c7d2a918.jsonl:L1823",
+        "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-5e4fa5da-bfc0-449a-9b19-9236c7d2a918.jsonl:L1841",
+        "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-5e4fa5da-bfc0-449a-9b19-9236c7d2a918.jsonl:L1843"
+      ]
+    },
+    {
+      "files": [
+        "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/network/HttpClient.ets"
+      ],
+      "change": "parseBody：JSON.parse 前把 16 位以上整数加引号，reviver 转 BigInt；bigintReplacer：请求序列化时 bigint→字符串。",
+      "evidence": [
+        "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-5e4fa5da-bfc0-449a-9b19-9236c7d2a918.jsonl:L1892",
+        "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-5e4fa5da-bfc0-449a-9b19-9236c7d2a918.jsonl:L1895",
+        "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-5e4fa5da-bfc0-449a-9b19-9236c7d2a918.jsonl:L1968",
+        "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-5e4fa5da-bfc0-449a-9b19-9236c7d2a918.jsonl:L1970",
+        "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-5e4fa5da-bfc0-449a-9b19-9236c7d2a918.jsonl:L1971"
+      ]
+    },
+    {
+      "files": [
+        "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/models/UserBean.ets",
+        "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/models/VipAndFishModels.ets",
+        "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/models/PayModels.ets",
+        "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/models/TranslateHistoryEntity.ets"
+      ],
+      "change": "UserBean.id、thirdUniHash 及各模型 userId 改 bigint（默认 0n）。",
+      "evidence": [
+        "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-5e4fa5da-bfc0-449a-9b19-9236c7d2a918.jsonl:L1903",
+        "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-5e4fa5da-bfc0-449a-9b19-9236c7d2a918.jsonl:L1909",
+        "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-5e4fa5da-bfc0-449a-9b19-9236c7d2a918.jsonl:L1947",
+        "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-5e4fa5da-bfc0-449a-9b19-9236c7d2a918.jsonl:L2003",
+        "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-5e4fa5da-bfc0-449a-9b19-9236c7d2a918.jsonl:L2005",
+        "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-5e4fa5da-bfc0-449a-9b19-9236c7d2a918.jsonl:L2007",
+        "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-5e4fa5da-bfc0-449a-9b19-9236c7d2a918.jsonl:L2009",
+        "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-5e4fa5da-bfc0-449a-9b19-9236c7d2a918.jsonl:L2010"
+      ]
+    },
+    {
+      "files": [
+        "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/repos/LoginRepository.ets",
+        "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/network/CommApiService.ets",
+        "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/network/MineApiService.ets",
+        "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/repos/MineRepository.ets",
+        "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/viewmodels/MainViewModel.ets",
+        "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/viewmodels/FeedbackViewModel.ets",
+        "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/viewmodels/MinePayViewModel.ets",
+        "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/services/FeedbackService.ets",
+        "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/services/PayService.ets"
+      ],
+      "change": "userId 参数与 currentUserId() 改 bigint，调用处随之调整。",
+      "evidence": [
+        "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-5e4fa5da-bfc0-449a-9b19-9236c7d2a918.jsonl:L1925",
+        "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-5e4fa5da-bfc0-449a-9b19-9236c7d2a918.jsonl:L1929",
+        "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-5e4fa5da-bfc0-449a-9b19-9236c7d2a918.jsonl:L1931",
+        "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-5e4fa5da-bfc0-449a-9b19-9236c7d2a918.jsonl:L1933",
+        "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-5e4fa5da-bfc0-449a-9b19-9236c7d2a918.jsonl:L1935",
+        "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-5e4fa5da-bfc0-449a-9b19-9236c7d2a918.jsonl:L1937",
+        "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-5e4fa5da-bfc0-449a-9b19-9236c7d2a918.jsonl:L1939",
+        "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-5e4fa5da-bfc0-449a-9b19-9236c7d2a918.jsonl:L1953",
+        "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-5e4fa5da-bfc0-449a-9b19-9236c7d2a918.jsonl:L2011",
+        "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-5e4fa5da-bfc0-449a-9b19-9236c7d2a918.jsonl:L2023"
+      ]
+    },
+    {
+      "files": [
+        "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/services/UserAuthService.ets"
+      ],
+      "change": "saveUser 改用 bigint→字符串的 stringifyUser，restoreUser 改用 16 位以上纯数字字符串→BigInt 的 parseUser。保留到截止。",
+      "evidence": [
+        "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-5e4fa5da-bfc0-449a-9b19-9236c7d2a918.jsonl:L2063",
+        "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-5e4fa5da-bfc0-449a-9b19-9236c7d2a918.jsonl:L2065",
+        "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-5e4fa5da-bfc0-449a-9b19-9236c7d2a918.jsonl:L2076",
+        "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-5e4fa5da-bfc0-449a-9b19-9236c7d2a918.jsonl:L2077"
+      ]
+    }
+  ],
+  "participants": [
+    {
+      "agent": "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-5e4fa5da-bfc0-449a-9b19-9236c7d2a918.jsonl",
+      "role": "发现（用户两次报告、否决 string 方案并选定 bigint）",
+      "action": "用户给出精确 id 对比，叫停改字段类型，确认 bigint，再报告持久化丢精度",
+      "evidence": [
+        "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-5e4fa5da-bfc0-449a-9b19-9236c7d2a918.jsonl:L1681",
+        "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-5e4fa5da-bfc0-449a-9b19-9236c7d2a918.jsonl:L1805",
+        "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-5e4fa5da-bfc0-449a-9b19-9236c7d2a918.jsonl:L1877",
+        "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-5e4fa5da-bfc0-449a-9b19-9236c7d2a918.jsonl:L2051"
+      ]
+    },
+    {
+      "agent": "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-5e4fa5da-bfc0-449a-9b19-9236c7d2a918.jsonl",
+      "role": "修复（主会话，含一次被否决的中间稿）",
+      "action": "临时文件实测 JSON.parse 精度与 BigInt，落地 bigint 解析/序列化与持久化",
+      "evidence": [
+        "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-5e4fa5da-bfc0-449a-9b19-9236c7d2a918.jsonl:L1702",
+        "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-5e4fa5da-bfc0-449a-9b19-9236c7d2a918.jsonl:L1863",
+        "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-5e4fa5da-bfc0-449a-9b19-9236c7d2a918.jsonl:L1874",
+        "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-5e4fa5da-bfc0-449a-9b19-9236c7d2a918.jsonl:L2030",
+        "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-5e4fa5da-bfc0-449a-9b19-9236c7d2a918.jsonl:L2087"
+      ]
+    }
+  ],
+  "scope": {
+    "project_roots": [
+      "/Users/timekettle/Desktop/GitProject/polypal-app-ohos",
+      "/Users/timekettle/Desktop/GitProject/polypal-app-flutter-ohos"
+    ],
+    "source_roots": [
+      "/Users/timekettle/Desktop/GitProject/polypal-app-android",
+      "/Users/timekettle/Desktop/GitProject/polypal-app-flutter"
+    ],
+    "materials": [
+      "C:/Users/hongy/projects/_migloop-multiapp-memory-20260927/runs/05-polypal/materials"
+    ],
+    "generation_end": "2026-09-22T09:58:32.418Z",
+    "observation_end": "2026-09-24T02:03:48.614Z",
+    "boundary_evidence": [
+      "生成结束取启动链路迁移最后一次应用写入之后的第一道编译门派发：runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-c83bb2f9-ebd8-4f27-aa1d-d1191a60c9f3.jsonl:L725（hvigorw assembleHap，09:58:32.418Z）。此前最后一次应用写入是同转录 L721（09:58:03 Write BoardingPage.ets）；L736/L739 只改进度存档与记忆文件。",
+      "生成期构成：主会话 main-76ad9618（09-21 08:30 起，用户逐步推进阶段 4 native；09-22 01:57–05:39 派 a2h-android-analyzer 与 13 个 a2h-migration-worker 走 spec→plan→execute，之后接 SDK 与插件）；主会话 main-c83bb2f9 09:07–09:25 做 forward-ref 接线，09:31 用户要求“仔细阅读安卓源工程的启动业务顺序，然后迁移过来”，09:51–09:58 写 Splash/Boarding/MainTab/MainViewModel 启动链路。这些都算生成，其中用户在生成期的纠正（如 main-76ad9618 L2456 首页是 native 嵌 Flutter）算生成收敛。",
+      "修复期起点：用户首次实机反馈在 main-c83bb2f9 L751（10:04:12“点击跳过没有触发游客登录”），之后是用户贴日志、主会话逐项修（至 11:14）；09-23 02:25–03:07 /a2h-run 续跑阶段 5 verify 与阶段 6 复盘（main-5e4fa5da，stage-marks a2h-verify 02:48:26Z、a2h-retrospect 03:07:10Z），verify 修了应用身份；03:13–10:53 用户继续报告问题，主会话逐项修复。用户调试的修改按修复纳入，不要求 verify 标签。",
+      "观察截止取材料中最后一条带时间戳的记录：runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-5e4fa5da-bfc0-449a-9b19-9236c7d2a918.jsonl:L2222（09-24 02:03:48.614Z，写决策日志）。最后一次应用写入是同转录 L2076（09-23 10:52:28 UserAuthService.ets）。"
+    ]
+  },
+  "environment": {
+    "schema": "migloop-case-environment/1",
+    "through": "2026-09-24T02:03:48.614Z",
+    "facts": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.0.2(22)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos",
+        "at": "2026-09-21T08:31:36.253Z",
+        "ref": "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-76ad9618-e80a-4565-b49c-3c6541e5ed67.jsonl:L50",
+        "request_ref": "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-76ad9618-e80a-4565-b49c-3c6541e5ed67.jsonl:L49",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.0.2(22)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos",
+        "at": "2026-09-21T08:31:36.253Z",
+        "ref": "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-76ad9618-e80a-4565-b49c-3c6541e5ed67.jsonl:L50",
+        "request_ref": "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-76ad9618-e80a-4565-b49c-3c6541e5ed67.jsonl:L49",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "5.0.0(12)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos",
+        "at": "2026-09-23T03:56:50.168Z",
+        "ref": "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-5e4fa5da-bfc0-449a-9b19-9236c7d2a918.jsonl:L783",
+        "request_ref": "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-5e4fa5da-bfc0-449a-9b19-9236c7d2a918.jsonl:L782",
+        "phase": "repair"
+      }
+    ],
+    "sources": {
+      "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-76ad9618-e80a-4565-b49c-3c6541e5ed67.jsonl": "0f3666f4146c1da4d92931946dee2f775776e7993d1e791a7239e7d667de393d",
+      "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-5e4fa5da-bfc0-449a-9b19-9236c7d2a918.jsonl": "7d5f6f2ee4d4eacd28505731a4541f324d10fa1aebb9f71a06e27a4f6158b155"
+    },
+    "unknown": [
+      "android.compile_sdk",
+      "android.target_sdk",
+      "android.min_sdk",
+      "libraries.compose_bom",
+      "libraries.material3",
+      "toolchain.kotlin",
+      "toolchain.agp",
+      "toolchain.gradle",
+      "harmonyos.compile_sdk",
+      "device.android_api",
+      "device.harmonyos_version",
+      "device.density",
+      "device.font_scale",
+      "project.revision"
+    ],
+    "unscoped_observations": 0,
+    "boundary": "Recorded configuration/tool outputs, not a continuous environment state, resolved dependency proof, or lesson compatibility range. Missing values stay unknown; no current project files are read.",
+    "snapshot_id": "12968e3cf2fc662893ca2dfa65f98f5e17b543b49679aed725e35e841635b9dd"
+  },
+  "packager": {
+    "name": "migloop-memory-skills",
+    "version": "0.8.3",
+    "bundle_sha256": "4bddfa4e92b7dccd8546606cce6f167963b9f6bf03d8329085d22bf4e94eea92"
+  },
+  "validation_sha256": "b4a93a5725f77ca80ef02cbf598bb68248d9de846410e958a26c5f2179a6e3cd",
+  "provenance": {
+    "schema": "migloop-case-provenance/1",
+    "materials": "C:\\Users\\hongy\\projects\\_migloop-multiapp-memory-20260927\\runs\\05-polypal\\materials",
+    "db_root_session_id": null,
+    "source_set_id": "sources-d15131bd8a3abae2b38e",
+    "collector": {
+      "name": "migloop-memory-skills",
+      "version": "0.8.3",
+      "bundle_sha256": "14a940665d63179822994c2b9e982f971b3c750199265458ca6baa6bd4688ef8",
+      "implementation_sha256": "48e6f84dd59cbfdcac7c372a18ac76a098a52d3dbe972093dc2db671f63c943f"
+    },
+    "observed": {
+      "session_ids": [
+        "15fb7702-6261-446b-90db-fd21c74d6ae5",
+        "5e4fa5da-bfc0-449a-9b19-9236c7d2a918",
+        "76ad9618-e80a-4565-b49c-3c6541e5ed67",
+        "c83bb2f9-ebd8-4f27-aa1d-d1191a60c9f3",
+        "fd773e2c-49e6-48bb-923d-839e23dae47a"
+      ],
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "deepseek-v4-pro"
+      ],
+      "providers": [],
+      "client_versions": [
+        "2.1.175"
+      ],
+      "projects": [
+        "/Users/timekettle/Desktop/GitProject/polypal-app-ohos",
+        "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/network",
+        "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/har"
+      ]
+    },
+    "migration": {
+      "project": "polypal-app-ohos",
+      "run_id": "e016be61-7059-4c89-a0b4-8d85197a01d9",
+      "server_session_id": "1bbfa3ec-f51e-48a1-92a3-4387249b468e",
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "deepseek-v4-pro"
+      ],
+      "tool_versions": {
+        "orchestrator": "migbot-cc",
+        "runtime_version": "v1.4.8",
+        "runtime_commit": "09ac508",
+        "client_version": "hmigbot-lite-1.6.0",
+        "pack_version": "hmigbot-lite-1.6.0",
+        "claude_code_version": "2.1.175"
+      },
+      "stage_boundaries": [
+        {
+          "stage": "a2h-init",
+          "mark_stage_done_at": "2026-09-21T02:55:36Z"
+        },
+        {
+          "stage": "a2h-verify",
+          "mark_stage_done_at": "2026-09-23T02:48:26Z"
+        },
+        {
+          "stage": "a2h-retrospect",
+          "mark_stage_done_at": "2026-09-23T03:07:10Z"
+        }
+      ],
+      "source_uris": [
+        "server export a2h-export-polypal-app-ohos-f55d79315b9b33aa.tar.gz sha256=216db78e4b68206959d58c4890d50f399a7731240197f79fe5d2ae745421dbe0 format=a2h-export/4"
+      ]
+    },
+    "analysis": {
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "platforms": [
+        "claude-code"
+      ]
+    },
+    "unknown": [
+      "providers"
+    ],
+    "sources": {
+      "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/agent-a4e097889cc3283dd.jsonl": "5575de4f80b672ef3fb3aa6f127b9f7f091e494736f0f265eba6a8058c66325f",
+      "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/agent-a51cc4b728ac8391b.jsonl": "9bbe9924ffa707f445ce1d6ef1dec075fb76fc4bdf987f5e3a81dd219ed1829a",
+      "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/agent-acedbf297f82d4d3f.jsonl": "305d62088b72f217cf356dc8a392ca2ea6486c5b2f67683e17475a47d2c7d8d8",
+      "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-5e4fa5da-bfc0-449a-9b19-9236c7d2a918.jsonl": "7d5f6f2ee4d4eacd28505731a4541f324d10fa1aebb9f71a06e27a4f6158b155",
+      "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-76ad9618-e80a-4565-b49c-3c6541e5ed67.jsonl": "0f3666f4146c1da4d92931946dee2f775776e7993d1e791a7239e7d667de393d"
+    }
+  },
+  "graph_evidence": [
+    {
+      "graph": 1,
+      "nodes": [
+        {
+          "id": "card:n-3130c130bf9ad05b",
+          "kind": "agent",
+          "key": "76ad9618-e80a-4565-b49c-3c6541e5ed67:main",
+          "at": "2026-09-22T03:13:37.711000+00:00"
+        },
+        {
+          "id": "card:n-5e0623f299747fa4",
+          "kind": "file",
+          "key": "/Users/timekettle/Desktop/GitProject/polypal-app-android/library-comm/src/main/java/com/timekettle/upup/comm/model/UserBean.kt",
+          "at": "2026-09-22T03:14:09.747000+00:00"
+        },
+        {
+          "id": "card:n-c23ff73c43fc0142",
+          "kind": "agent",
+          "key": "76ad9618-e80a-4565-b49c-3c6541e5ed67:a4e097889cc3283dd",
+          "at": "2026-09-22T03:18:48.258000+00:00"
+        },
+        {
+          "id": "card:n-cefc70c57c431656",
+          "kind": "file",
+          "key": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/models/UserBean.ets",
+          "at": "2026-09-24T02:03:48.614000+00:00"
+        }
+      ],
+      "edges": [
+        {
+          "from": "card:n-3130c130bf9ad05b",
+          "to": "card:n-c23ff73c43fc0142",
+          "relation": "dispatch",
+          "at": "2026-09-22T03:13:37.704000+00:00",
+          "source": "model_edge",
+          "strength": "confirmed",
+          "evidence": [
+            "6cb348006993c63c:2030:d4d5958866ef20e5",
+            "6cb348006993c63c:2031:ab266e6887057cc3"
+          ]
+        },
+        {
+          "from": "card:n-5e0623f299747fa4",
+          "to": "card:n-c23ff73c43fc0142",
+          "relation": "read",
+          "at": "2026-09-22T03:14:09.747000+00:00",
+          "source": "model_edge",
+          "strength": "confirmed",
+          "evidence": [
+            "916b4fee11d3b596:37:5c91b906ae95e92d",
+            "916b4fee11d3b596:38:07d6d9e9e7f3463f"
+          ]
+        },
+        {
+          "from": "card:n-c23ff73c43fc0142",
+          "to": "card:n-cefc70c57c431656",
+          "relation": "write",
+          "at": "2026-09-22T03:18:48.258000+00:00",
+          "source": "model_edge",
+          "strength": "confirmed",
+          "evidence": [
+            "916b4fee11d3b596:102:ed59f73529204127",
+            "916b4fee11d3b596:103:48be34890c623202"
+          ]
+        }
+      ]
+    },
+    {
+      "graph": 2,
+      "nodes": [
+        {
+          "id": "card:n-5e0623f299747fa4",
+          "kind": "file",
+          "key": "/Users/timekettle/Desktop/GitProject/polypal-app-android/library-comm/src/main/java/com/timekettle/upup/comm/model/UserBean.kt",
+          "at": "2026-09-22T03:14:09.747000+00:00"
+        },
+        {
+          "id": "card:n-e6fb5ea9db8660da",
+          "kind": "file",
+          "key": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/.claude/skills/arkts-data-layer/references/v2-network-service.md",
+          "at": "2026-09-22T03:17:55.746000+00:00"
+        },
+        {
+          "id": "card:n-736ae875539aeadf",
+          "kind": "agent",
+          "key": "76ad9618-e80a-4565-b49c-3c6541e5ed67:a4e097889cc3283dd",
+          "at": "2026-09-22T03:22:23.932000+00:00"
+        },
+        {
+          "id": "card:n-bfa405183f6b875a",
+          "kind": "file",
+          "key": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/network/HttpClient.ets",
+          "at": "2026-09-24T02:03:48.614000+00:00"
+        }
+      ],
+      "edges": [
+        {
+          "from": "card:n-5e0623f299747fa4",
+          "to": "card:n-736ae875539aeadf",
+          "relation": "read",
+          "at": "2026-09-22T03:14:09.747000+00:00",
+          "source": "model_edge",
+          "strength": "confirmed",
+          "evidence": [
+            "916b4fee11d3b596:37:5c91b906ae95e92d",
+            "916b4fee11d3b596:38:07d6d9e9e7f3463f"
+          ]
+        },
+        {
+          "from": "card:n-e6fb5ea9db8660da",
+          "to": "card:n-736ae875539aeadf",
+          "relation": "read",
+          "at": "2026-09-22T03:17:55.746000+00:00",
+          "source": "model_edge",
+          "strength": "confirmed",
+          "evidence": [
+            "916b4fee11d3b596:90:06e888183fc5daa3",
+            "916b4fee11d3b596:91:ce7e158ca6eaa09e"
+          ]
+        },
+        {
+          "from": "card:n-736ae875539aeadf",
+          "to": "card:n-bfa405183f6b875a",
+          "relation": "write",
+          "at": "2026-09-22T03:22:23.932000+00:00",
+          "source": "model_edge",
+          "strength": "confirmed",
+          "evidence": [
+            "916b4fee11d3b596:129:ecc2d4b6e9c450b9",
+            "916b4fee11d3b596:130:623bc5e3e4b5e2d1"
+          ]
+        }
+      ]
+    },
+    {
+      "graph": 3,
+      "nodes": [
+        {
+          "id": "card:n-6ca2330edea2b163",
+          "kind": "file",
+          "key": "/Users/timekettle/Desktop/GitProject/polypal-app-android/library-comm/src/main/java/com/timekettle/upup/comm/bean/TranslateHistoryEntity.kt",
+          "at": "2026-09-22T03:14:10.282000+00:00"
+        },
+        {
+          "id": "card:n-c7ccdd823b9fa1f9",
+          "kind": "agent",
+          "key": "76ad9618-e80a-4565-b49c-3c6541e5ed67:a4e097889cc3283dd",
+          "at": "2026-09-22T03:19:58.242000+00:00"
+        },
+        {
+          "id": "card:n-2c90d84fd6f50d33",
+          "kind": "file",
+          "key": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/models/TranslateHistoryEntity.ets",
+          "at": "2026-09-24T02:03:48.614000+00:00"
+        }
+      ],
+      "edges": [
+        {
+          "from": "card:n-6ca2330edea2b163",
+          "to": "card:n-c7ccdd823b9fa1f9",
+          "relation": "read",
+          "at": "2026-09-22T03:14:10.282000+00:00",
+          "source": "model_edge",
+          "strength": "confirmed",
+          "evidence": [
+            "916b4fee11d3b596:39:e4be8a3969dd6928",
+            "916b4fee11d3b596:40:03124b5f4006d90a"
+          ]
+        },
+        {
+          "from": "card:n-c7ccdd823b9fa1f9",
+          "to": "card:n-2c90d84fd6f50d33",
+          "relation": "write",
+          "at": "2026-09-22T03:19:58.242000+00:00",
+          "source": "model_edge",
+          "strength": "confirmed",
+          "evidence": [
+            "916b4fee11d3b596:111:110a6c60af34ccce",
+            "916b4fee11d3b596:112:c9d705fb02ce7a47"
+          ]
+        }
+      ]
+    },
+    {
+      "graph": 4,
+      "nodes": [
+        {
+          "id": "card:n-aef24b9d2b1f6cc2",
+          "kind": "file",
+          "key": "/Users/timekettle/Desktop/GitProject/polypal-app-android/module-mine/src/main/java/com/timekettle/module_mine/ui/vm/MineViewModel.kt",
+          "at": "2026-09-22T02:22:48.991000+00:00",
+          "existence_basis": "model_review"
+        },
+        {
+          "id": "card:n-cd8889ca96d76bcc",
+          "kind": "agent",
+          "key": "76ad9618-e80a-4565-b49c-3c6541e5ed67:acedbf297f82d4d3f",
+          "at": "2026-09-22T02:23:40.087000+00:00"
+        },
+        {
+          "id": "card:n-8dcaa0302eaf7bbb",
+          "kind": "file",
+          "key": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/spec/baseline/features/F007.md",
+          "at": "2026-09-22T03:35:26.144000+00:00"
+        },
+        {
+          "id": "card:n-133d47f90b1b2053",
+          "kind": "agent",
+          "key": "76ad9618-e80a-4565-b49c-3c6541e5ed67:a51cc4b728ac8391b",
+          "at": "2026-09-22T03:41:02.834000+00:00"
+        },
+        {
+          "id": "card:n-3aeafe1f1e039c81",
+          "kind": "file",
+          "key": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/services/PayService.ets",
+          "at": "2026-09-24T02:03:48.614000+00:00"
+        }
+      ],
+      "edges": [
+        {
+          "from": "card:n-aef24b9d2b1f6cc2",
+          "to": "card:n-cd8889ca96d76bcc",
+          "relation": "read",
+          "at": "2026-09-22T02:22:48.991000+00:00",
+          "source": "model_review",
+          "strength": "candidate",
+          "evidence": [
+            "037f972bcb209fe2:93:d7e95fa4eb43fd58",
+            "037f972bcb209fe2:94:a0a89de0b0c2a896"
+          ],
+          "quote_verified": true
+        },
+        {
+          "from": "card:n-cd8889ca96d76bcc",
+          "to": "card:n-8dcaa0302eaf7bbb",
+          "relation": "write",
+          "at": "2026-09-22T02:23:40.087000+00:00",
+          "source": "model_edge",
+          "strength": "confirmed",
+          "evidence": [
+            "037f972bcb209fe2:100:424a3ece5fe21b4a",
+            "037f972bcb209fe2:101:b5ab4a4ac3f960f5"
+          ]
+        },
+        {
+          "from": "card:n-8dcaa0302eaf7bbb",
+          "to": "card:n-133d47f90b1b2053",
+          "relation": "read",
+          "at": "2026-09-22T03:35:26.144000+00:00",
+          "source": "model_review",
+          "strength": "candidate",
+          "evidence": [
+            "5ee32ace359de077:43:8ed72e8f99fd2f25",
+            "5ee32ace359de077:44:6e44ba26554ff9fa"
+          ],
+          "quote_verified": true
+        },
+        {
+          "from": "card:n-133d47f90b1b2053",
+          "to": "card:n-3aeafe1f1e039c81",
+          "relation": "write",
+          "at": "2026-09-22T03:41:02.834000+00:00",
+          "source": "model_edge",
+          "strength": "confirmed",
+          "evidence": [
+            "5ee32ace359de077:127:870db5e62193adfe",
+            "5ee32ace359de077:128:51ab443ac11db264"
+          ]
+        }
+      ]
+    },
+    {
+      "graph": 5,
+      "nodes": [
+        {
+          "id": "card:n-5e0623f299747fa4",
+          "kind": "file",
+          "key": "/Users/timekettle/Desktop/GitProject/polypal-app-android/library-comm/src/main/java/com/timekettle/upup/comm/model/UserBean.kt",
+          "at": "2026-09-22T03:14:09.747000+00:00"
+        },
+        {
+          "id": "card:n-c23ff73c43fc0142",
+          "kind": "agent",
+          "key": "76ad9618-e80a-4565-b49c-3c6541e5ed67:a4e097889cc3283dd",
+          "at": "2026-09-22T03:18:48.258000+00:00"
+        },
+        {
+          "id": "card:n-c9f9b079d3c4c515",
+          "kind": "file",
+          "key": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/models/UserBean.ets",
+          "at": "2026-09-22T03:35:46.394000+00:00"
+        },
+        {
+          "id": "card:n-8306aeeba0d41fce",
+          "kind": "agent",
+          "key": "76ad9618-e80a-4565-b49c-3c6541e5ed67:a51cc4b728ac8391b",
+          "at": "2026-09-22T03:37:46.753000+00:00"
+        },
+        {
+          "id": "card:n-99cebba02d8ec87a",
+          "kind": "file",
+          "key": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/services/UserAuthService.ets",
+          "at": "2026-09-24T02:03:48.614000+00:00"
+        }
+      ],
+      "edges": [
+        {
+          "from": "card:n-5e0623f299747fa4",
+          "to": "card:n-c23ff73c43fc0142",
+          "relation": "read",
+          "at": "2026-09-22T03:14:09.747000+00:00",
+          "source": "model_edge",
+          "strength": "confirmed",
+          "evidence": [
+            "916b4fee11d3b596:37:5c91b906ae95e92d",
+            "916b4fee11d3b596:38:07d6d9e9e7f3463f"
+          ]
+        },
+        {
+          "from": "card:n-c23ff73c43fc0142",
+          "to": "card:n-c9f9b079d3c4c515",
+          "relation": "write",
+          "at": "2026-09-22T03:18:48.258000+00:00",
+          "source": "model_edge",
+          "strength": "confirmed",
+          "evidence": [
+            "916b4fee11d3b596:102:ed59f73529204127",
+            "916b4fee11d3b596:103:48be34890c623202"
+          ]
+        },
+        {
+          "from": "card:n-c9f9b079d3c4c515",
+          "to": "card:n-8306aeeba0d41fce",
+          "relation": "read",
+          "at": "2026-09-22T03:35:46.394000+00:00",
+          "source": "model_review",
+          "strength": "candidate",
+          "evidence": [
+            "5ee32ace359de077:50:3484737d3fa48ab6",
+            "5ee32ace359de077:51:c0f9b0ebd266a732"
+          ],
+          "quote_verified": true
+        },
+        {
+          "from": "card:n-8306aeeba0d41fce",
+          "to": "card:n-99cebba02d8ec87a",
+          "relation": "write",
+          "at": "2026-09-22T03:37:46.753000+00:00",
+          "source": "model_edge",
+          "strength": "confirmed",
+          "evidence": [
+            "5ee32ace359de077:76:2598a68b9561c7f9",
+            "5ee32ace359de077:77:65b3f64e01eb4335"
+          ]
+        }
+      ]
+    }
+  ],
+  "validation": {
+    "status": "valid",
+    "schema": "passed",
+    "graph_check": "performed",
+    "kernel_sha256": "b5d894750c6e0deeffaeee173f6bd3bb11f2afe7a7a3af592288a6448e5dd41e",
+    "causal_correctness": "not_certified",
+    "unresolved_targets": [
+      "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/models/PayModels.ets",
+      "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/models/VipAndFishModels.ets",
+      "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/network/CommApiService.ets",
+      "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/network/MineApiService.ets",
+      "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/repos/LoginRepository.ets",
+      "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/repos/MineRepository.ets",
+      "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/services/FeedbackService.ets",
+      "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/viewmodels/FeedbackViewModel.ets",
+      "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/viewmodels/MainViewModel.ets",
+      "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/viewmodels/MinePayViewModel.ets"
+    ],
+    "graph_checks": [
+      {
+        "graph": 1,
+        "draft_sha256": "0fbe9460d10208a7e8159d909765d1f5fb4516dd872ae71bbb349541ee3d5893",
+        "receipt": {
+          "schema": "inquiry-graph/1",
+          "report_id": "e2eb559fd4f242ef",
+          "mechanical_status": "valid",
+          "path_status": "complete",
+          "semantic_verified": false,
+          "submission_format": "coordinates/1",
+          "issues": [],
+          "path_feedback": [],
+          "delivery": {
+            "status": "ready_for_review",
+            "semantic_verified": false,
+            "coverage_verified": false
+          }
+        }
+      },
+      {
+        "graph": 2,
+        "draft_sha256": "7d738c1ad3cbf34690016b59dcbadba53744a177a757b694e13024bb1699f0b1",
+        "receipt": {
+          "schema": "inquiry-graph/1",
+          "report_id": "0488ea76b47c49cd",
+          "mechanical_status": "valid",
+          "path_status": "complete",
+          "semantic_verified": false,
+          "submission_format": "coordinates/1",
+          "issues": [],
+          "path_feedback": [],
+          "delivery": {
+            "status": "ready_for_review",
+            "semantic_verified": false,
+            "coverage_verified": false
+          }
+        }
+      },
+      {
+        "graph": 3,
+        "draft_sha256": "bae3e04abddda597ad598b5733635051f4c4ddc22b84b67c1a6e5796049d6110",
+        "receipt": {
+          "schema": "inquiry-graph/1",
+          "report_id": "b22f21648a0f4671",
+          "mechanical_status": "valid",
+          "path_status": "complete",
+          "semantic_verified": false,
+          "submission_format": "coordinates/1",
+          "issues": [],
+          "path_feedback": [],
+          "delivery": {
+            "status": "ready_for_review",
+            "semantic_verified": false,
+            "coverage_verified": false
+          }
+        }
+      },
+      {
+        "graph": 4,
+        "draft_sha256": "0b4ac9b4d15ff360d8ed75709e20fdcb0a545fd419719824f362091f54772511",
+        "receipt": {
+          "schema": "inquiry-graph/1",
+          "report_id": "e49120d4955d4f15",
+          "mechanical_status": "valid",
+          "path_status": "complete",
+          "semantic_verified": false,
+          "submission_format": "coordinates/1",
+          "issues": [],
+          "path_feedback": [],
+          "delivery": {
+            "status": "ready_for_review",
+            "semantic_verified": false,
+            "coverage_verified": false
+          }
+        }
+      },
+      {
+        "graph": 5,
+        "draft_sha256": "62b471a5dc71db8832df62bc212175ddd0c55a00d9641c61eb7b0625dc7746c7",
+        "receipt": {
+          "schema": "inquiry-graph/1",
+          "report_id": "ace81f9f22b94607",
+          "mechanical_status": "valid",
+          "path_status": "complete",
+          "semantic_verified": false,
+          "submission_format": "coordinates/1",
+          "issues": [],
+          "path_feedback": [],
+          "delivery": {
+            "status": "ready_for_review",
+            "semantic_verified": false,
+            "coverage_verified": false
+          }
+        }
+      }
+    ]
+  },
+  "revision": "9f6d41fd0c2bfd729a2b562e344936b84cffde9e34919319fd524ca655efa700"
+}

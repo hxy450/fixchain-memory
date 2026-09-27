@@ -1,0 +1,29 @@
+# 新增错误日志沿用工程的 hilog 约定，不写 console.*
+
+ID：`lesson-11e9d15d947b30d2ce7e` · 版本：1
+
+[本主题](index.md)
+
+## 何时使用
+
+功能实现阶段，在服务层或 ViewModel 的 catch 分支里为新增的错误处理选择日志写法时
+
+## 适用情境
+
+源端对失败静默处理或没有日志（如 Kotlin runCatching 吞掉异常），目标 ArkTS 在 catch 中新增错误日志；工程里已有 hilog 写法（TAG、DOMAIN 常量），而生成期规则只约束 build() 内的 console.log 或占位写法。
+
+## 原因
+
+源端没有可映射的日志，生成规则与迁移期静态检查也没有 console.* → hilog 的要求，写码者就按通用 TypeScript 习惯写 console.error，直到 ECAT static_lint 才被检出。来源中写码 agent 批量读 skill 时输出被截断，含 hilog 导入映射的 skill 也没有进入上下文。
+
+## 做法
+
+1. 写日志前 rg 工程现有写法（如 import { hilog } from '@kit.PerformanceAnalysisKit' 与 TAG、DOMAIN 常量），照它写 hilog.error(DOMAIN, TAG, '<说明>: %{public}s', String(error))，TAG 取当前类名。
+2. 每个切片写完，rg -n 'console\.' 本次改动的 .ets 文件，已登记占位之外的命中都改成 hilog。
+
+## 来源（按需复核）
+
+经验是有适用范围的历史建议。核查来源时同时看结论与 unknown；来源卡未随阅读包复制。
+
+- case-2b82a569104ca26f84ae · 结论：diagnosis, recommendation:1, recommendation:2
+  卡片版本：`f82493b8484a1ab46ff999f08910cf6605e5b47eb473750db25d079f0c1bbbbb`
