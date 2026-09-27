@@ -1,5 +1,5 @@
 # 当前经验入口
 
-[打开分层 memory](runs/ea2a2e045514950d/memory/index.md)
+[打开分层 memory](runs/f6f89fad6b0f16f2/memory/index.md)
 
-发布版本：`faedea8b2fdab367b64dfa5099a31da03b7d5905eeacd2652a5d80ce7fab7174`
+发布版本：`738957e22fbfb31e88dbbe0703f0be4d51ced46428c5f6e181e817028e7b0dd0`

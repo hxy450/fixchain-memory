@@ -1,0 +1,864 @@
+{
+  "schema": "migloop-case/2",
+  "id": "case-853ca988d9a2683b1c8d",
+  "created_at": "2026-09-27T22:15:11.035315+00:00",
+  "job": "issue-853ca988d9a2683b1c8d",
+  "identity_basis": "server migration ID",
+  "migration_key": "dc1176d6-edc1-4b76-a9d4-31bd94c63ea0",
+  "draft": {
+    "title": "把 Gson 反序列化的 Bean 与响应壳翻成严格 typeof 解码，丢失标量宽松转换与解密原文回退",
+    "when": "数据层/网络层实现阶段，把 Android Retrofit+Gson 的 Bean、BaseResponse 与响应解密管线翻译成 ArkTS 显式 JSON 解码器和响应中间件时",
+    "description": "源工程用 Gson（@SerializedName Bean、TypeAdapter）把解密后的 JSON 填进 Int/String 字段，AESUtil.decrypt 失败时返回原文；目标改为手写 decoder/中间件逐字段 typeof 校验，且真实响应样例尚未采集（golden 为 needs_capture）。",
+    "summary": "生成期 Stage2 Phase0 两个并行 worker 分别写模型层和网络层。Base-1（019ff65f，models/**）写前读到\nfeature-base 的共享模型表（BaseResponse 的 code/msg/time 为 number/string/string）、“Gson BaseResponse<T> → 显式 JSON decoder，\n保留名称、可空性和泛型边界”“decoder 必须显式校验字段”，以及 Android Bean 源码：LoginInfoBean `var id = \"\"`、\n`todayPoint: String?`，WeatherHomeBean.RealTimeBean `@SerializedName(\"aqi\") var aqi = 0`，均由 Gson 填充。\n规格与源码都没有给出与声明类型不符的真实响应样例，但源端解析器是 Gson，它会把 JSON 数字写进 String 字段、把数字字符串写进 Int 字段。\n本次输出却把 JsonDecoder.string/nullableString 写成“非 string 即 throw DecodeError”、number/nullableNumber 写成“非 number 即 throw”，\nLoginInfoBean.decode 以 JsonDecoder.string 读取 id、todayPoint。偏差位于“Gson 反序列化语义 → 显式 decoder 实现”这一环；\n规格只写了字段类型和“显式校验”，没有写出 Gson 的标量容忍，这一缺口使实现者按声明类型做了硬校验。\nBase-3（019ff696，network/**）写前读到 AESUtil.decrypt 在 catch 中 return content、ResponseBodyConverter 解密后直接交给 Gson，\n却让 ResponseMiddleware 在解密异常时直接 throw DECRYPTION，并以 typeof code !== 'number'、time !== 'number' 严格拒绝响应壳；\n它对响应壳只读到 feature-base §3 与 common.md 中的字段名 code/msg/time/data，未查 §1.1 或 BaseResponse.kt，就在 NetworkTypes 另写了一份\nBaseResponse 并把 time 定为 number，而 Android 为 `val time: String`，同时由 Base-1 写的 CoreModels.BaseResponse 用的是 string。\n这些片段保留到返修：真实服务端返回 code 为字符串、time 为数字，LoginInfoBean.id 为数字，天气 aqi 为数字字符串，\nHTTP 200 被判为解析失败（main-019ffb4e…jsonl:L936-L940、L1230-L1233、L1587）。\n修复依次为：解密失败回退按原文解析、time 改为 string（L697）；code/time 按 number 或数字字符串宽松转换（L943）；\nLoginInfoBean.id/todayPoint 兼容数字（L1235-L1239、L1283-L1287，补丁回执失败但读回已含 rawId/rawTodayPoint，写入者不在本卡认定）；\nJsonDecoder.string/nullableString 接受有限数字与布尔并转字符串、number/nullableNumber 接受数字字符串（L1590）。\n",
+    "recommendations": [
+      "实现显式 decoder 前，先写出源反序列化库的标量容忍规则：Gson 会把 JSON 数字填入 String 字段、把数字字符串填入 Int/int 字段；目标 string/number 读取应接受这些等价形态并转换，而不是 typeof 不符就抛错。",
+      "规格提取阶段把 “Gson → 显式 decoder” 写进契约时，除字段名、可空性和声明类型外，还要写明需保留的宽松转换（数字↔字符串、布尔转字符串）；真实响应尚未采集时，按源解析器的接受范围设计兼容，而不是按声明类型收紧。",
+      "翻译响应解密/解析管线时，逐个对照源工具的异常分支：AESUtil.decrypt 在 catch 中返回原文，目标解密失败应回退按原文解析，只有解析也失败才返回错误。",
+      "定义 BaseResponse 等共享类型时，从共享模型规格表或 Android Bean 取字段类型，并复用已有定义；只读到字段名时先查类型来源，不自行选择 number/string。",
+      "最小回归：{code:'200', msg:'ok', time:1723456789, data:{}} 应解析为 code=200、time='1723456789'；{id:123, aqi:'42'} 应得到 id='123'、aqi=42；明文 JSON 响应在解密失败后仍能解析。"
+    ],
+    "unknown": [
+      "根编排派给 Base-1/Base-3 的任务正文是 encrypted_content，无法核对派工是否额外给出类型或 Gson 兼容要求；输入范围依据 worker 自述及 feature-plan 的 Base-1/Base-3 条目（Base-3 input 为 feature-base §3）判断。"
+    ],
+    "graphs": [
+      {
+        "target": {
+          "key": "D:/HnaccurateWeather_HarmonyOS/entry/src/main/ets/models/JsonDecoder.ets",
+          "since": "2026-08-13T13:29:02.643Z",
+          "at": "2026-08-21T09:35:59.738Z"
+        },
+        "nodes": [
+          {
+            "key": "D:/HnaccurateWeather_HarmonyOS/spec/baseline/feature-base.md",
+            "at": "2026-08-13T03:03:35.718Z",
+            "reason": "规格输入：Base-1 写前 Get-Content 全文（中文经控制台乱码，代码标识可读）。§1.1 给出 BaseResponse 的 code/msg/time 为 number/string/string；映射表把 Gson BaseResponse<T> 换成显式 JSON decoder，只要求保留名称、可空性和泛型边界；共享 DTO 段要求 decoder 显式校验字段。未写 Gson 的标量转换，这是规格缺口，但源端是 Gson 这一事实已给出（agent-019ff65f…jsonl:L1790-L1791）。"
+          },
+          {
+            "key": "E:/Androidproject/app_hnaccurateweather_live_android/base/src/main/java/com/cstools/base/data/bean/WeatherHomeBean.kt",
+            "at": "2026-08-13T03:05:18.789Z",
+            "reason": "正常输入：逐个读取 bean 目录的回执中含 WeatherHomeBean.RealTimeBean `@SerializedName(\"aqi\") var aqi = 0`，即 aqi 为 Int 并由 Gson 填充；Gson 对该字段同样接受数字字符串（同转录 L1829-L1830）。"
+          },
+          {
+            "key": "019ff65f-00a7-7f12-be1b-6b65a996c848",
+            "at": "2026-08-13T03:07:14.490Z",
+            "reason": "读到上述规格与 Gson Bean 后，apply_patch 新建 JsonDecoder：string/nullableString 遇非 string 即 throw DecodeError(key,'string')，number/nullableNumber 遇非 number 即 throw 'finite number'；把 Gson 可接受的数字↔字符串转换写成硬失败（同转录 L1851-L1852）。该片段保留到 L1590 修复。",
+            "problem": true
+          }
+        ],
+        "edges": [
+          {
+            "from": 1,
+            "to": 3,
+            "force": true,
+            "reason": "Base-1 在写 JsonDecoder 前用 exec 对 spec/baseline/feature-base.md 执行 Get-Content，回执返回共享模型类型表、Gson→显式 decoder 映射及“decoder 必须显式校验字段”。",
+            "evidence": [
+              {
+                "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff65f-00a7-7f12-be1b-6b65a996c848.jsonl",
+                "line": 1790
+              },
+              {
+                "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff65f-00a7-7f12-be1b-6b65a996c848.jsonl",
+                "line": 1791
+              }
+            ]
+          },
+          {
+            "from": 2,
+            "to": 3,
+            "force": true,
+            "reason": "Base-1 在写 JsonDecoder 前 exec 遍历 base/data/bean 目录 Skip 25 的文件并 Get-Content，回执含 WeatherHomeBean.kt 的 RealTimeBean aqi = 0（Gson @SerializedName）。",
+            "evidence": [
+              {
+                "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff65f-00a7-7f12-be1b-6b65a996c848.jsonl",
+                "line": 1829
+              },
+              {
+                "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff65f-00a7-7f12-be1b-6b65a996c848.jsonl",
+                "line": 1830
+              }
+            ]
+          },
+          {
+            "from": 3,
+            "to": "target"
+          }
+        ]
+      },
+      {
+        "target": {
+          "key": "D:/HnaccurateWeather_HarmonyOS/entry/src/main/ets/models/AccountModels.ets",
+          "since": "2026-08-13T13:29:02.643Z",
+          "at": "2026-08-21T09:35:59.738Z"
+        },
+        "nodes": [
+          {
+            "key": "E:/Androidproject/app_hnaccurateweather_live_android/base/src/main/java/com/cstools/base/data/bean/LoginInfoBean.kt",
+            "at": "2026-08-13T03:05:09.492Z",
+            "reason": "正常输入：Base-1 逐个读取 bean 目录的回执中含 LoginInfoBean `var id = \"\"`、`var todayPoint: String? = null`，由 Gson 反序列化；服务端数字 id 在 Android 会被转成字符串（agent-019ff65f…jsonl:L1825-L1826）。"
+          },
+          {
+            "key": "019ff65f-00a7-7f12-be1b-6b65a996c848",
+            "at": "2026-08-13T03:07:58.948Z",
+            "reason": "apply_patch 新建 AccountModels：LoginInfoBean.decode 以 JsonDecoder.string(j,'id')、nullableString(j,'todayPoint') 读取，沿用自己 03:07:14 写下的严格 decoder，数字 id 会被判为 'id: expected string'（同转录 L1856-L1857；返修时日志见 main-019ffb4e…jsonl:L1230）。",
+            "problem": true
+          }
+        ],
+        "edges": [
+          {
+            "from": 1,
+            "to": 2,
+            "force": true,
+            "reason": "Base-1 在写 AccountModels 前 exec 遍历 base/data/bean 目录前 25 个文件并 Get-Content，回执含 LoginInfoBean.kt 的 var id = \"\" 与 todayPoint: String?。",
+            "evidence": [
+              {
+                "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff65f-00a7-7f12-be1b-6b65a996c848.jsonl",
+                "line": 1825
+              },
+              {
+                "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff65f-00a7-7f12-be1b-6b65a996c848.jsonl",
+                "line": 1826
+              }
+            ]
+          },
+          {
+            "from": 2,
+            "to": "target"
+          }
+        ]
+      },
+      {
+        "target": {
+          "key": "D:/HnaccurateWeather_HarmonyOS/entry/src/main/ets/network/ResponseMiddleware.ets",
+          "since": "2026-08-13T13:29:02.643Z",
+          "at": "2026-08-21T09:35:59.738Z"
+        },
+        "summary": "Base-3 写前实际读到 AESUtil.decrypt 的 catch 分支返回原文、ResponseBodyConverter 在解密后直接交给 Gson TypeAdapter，\n足以确定“解密失败仍按原文解析”；feature-base §3.2 概括为“传输/解密/解析异常是 DataResult.error”，同节注明算法真值由 App.beforeResponse 与 Android AES 工具校验，源码行为优先于这句概括。\n输出却在解密 catch 中直接 throw DECRYPTION，并用 typeof 严格要求 code 为 number、time 为 number。\n返修先改为原文回退与 time string（main-019ffb4e…jsonl:L697），后改为 code/time 宽松标量转换（L943）。\n",
+        "nodes": [
+          {
+            "key": "E:/Androidproject/app_hnaccurateweather_live_android/base/src/main/java/com/cstools/base/util/AESUtil.java",
+            "at": "2026-08-13T03:06:56.178Z",
+            "reason": "正常输入：Base-3 exec 读取 AESUtil，decrypt 在 catch(Exception e) 中 printStackTrace 后 return content，即解密失败返回原文（agent-019ff696…jsonl:L2651-L2652）。"
+          },
+          {
+            "key": "E:/Androidproject/app_hnaccurateweather_live_android/base/src/main/java/com/cstools/base/data/net/ResponseBodyConverter.kt",
+            "at": "2026-08-13T03:07:03.420Z",
+            "reason": "正常输入：convert 中 json = AESUtil.decrypt(json, Constants.AES_KEY) 后直接 gson adapter.read，没有独立的解密失败分支；壳字段由 Gson TypeAdapter 解析（同转录 L2654-L2655）。"
+          },
+          {
+            "key": "D:/HnaccurateWeather_HarmonyOS/spec/baseline/feature-base.md",
+            "at": "2026-08-13T03:06:35.171Z",
+            "reason": "规格输入：§3.2 写“响应体先整包 AES-CBC 解密，再 JSON 反序列化为 BaseResponse<T>”“传输/解密/解析异常是 DataResult.error”，并注明算法真值由 App.beforeResponse 与 Android AES 工具校验；§3 未列壳字段类型，也未写 Gson 标量转换（同转录 L2644-L2645）。"
+          },
+          {
+            "key": "019ff696-5618-78d2-a059-a02982380b3d",
+            "at": "2026-08-13T03:08:34.988Z",
+            "reason": "读到上述输入后，apply_patch 新建 ResponseMiddleware：解密 catch 直接 throw NetworkError(DECRYPTION)，未按 AESUtil 回退原文；typeof parsed.code !== 'number' || parsed.time !== 'number' 即判 Invalid BaseResponse envelope，把 Gson 对 code/time 的标量转换写成硬校验（同转录 L2664-L2665）。",
+            "problem": true
+          }
+        ],
+        "edges": [
+          {
+            "from": 1,
+            "to": 4,
+            "force": true,
+            "reason": "Base-3 写 ResponseMiddleware 前 exec 以 Join-Path $root 'base/src/main/java/com/cstools/base/util/AESUtil.java' Get-Content -Raw，回执含 decrypt 的 catch 分支 return content。",
+            "evidence": [
+              {
+                "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff696-5618-78d2-a059-a02982380b3d.jsonl",
+                "line": 2651
+              },
+              {
+                "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff696-5618-78d2-a059-a02982380b3d.jsonl",
+                "line": 2652
+              }
+            ]
+          },
+          {
+            "from": 2,
+            "to": 4,
+            "force": true,
+            "reason": "Base-3 写 ResponseMiddleware 前 exec 查找 ResponseBodyConverter.* 并 Get-Content -Raw，回执返回 base/data/net/ResponseBodyConverter.kt：AESUtil.decrypt 后直接 gson adapter.read。",
+            "evidence": [
+              {
+                "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff696-5618-78d2-a059-a02982380b3d.jsonl",
+                "line": 2654
+              },
+              {
+                "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff696-5618-78d2-a059-a02982380b3d.jsonl",
+                "line": 2655
+              }
+            ]
+          },
+          {
+            "from": 3,
+            "to": 4,
+            "force": true,
+            "reason": "Base-3 写 ResponseMiddleware 前 exec 对 spec/baseline/feature-base.md 执行 Select-String（^## 3 等，Context 0,80），回执返回 §3.1–§3.4 响应管线与错误映射。",
+            "evidence": [
+              {
+                "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff696-5618-78d2-a059-a02982380b3d.jsonl",
+                "line": 2644
+              },
+              {
+                "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff696-5618-78d2-a059-a02982380b3d.jsonl",
+                "line": 2645
+              }
+            ]
+          },
+          {
+            "from": 4,
+            "to": "target"
+          }
+        ]
+      },
+      {
+        "target": {
+          "key": "D:/HnaccurateWeather_HarmonyOS/entry/src/main/ets/network/NetworkTypes.ets",
+          "since": "2026-08-13T13:29:02.643Z",
+          "at": "2026-08-21T09:35:59.738Z"
+        },
+        "summary": "Base-3 写 NetworkTypes 前只读到 feature-base §3 与 common.md 中 BaseResponse<T> 的字段名 code/msg/time/data；\n同文件 §1.1 已写 time 为 string，Android BaseResponse.kt 为 `val time: String`，但它没有查这两处。\n输出在 network 层另定义 BaseResponse 并写 time: number = 0，与 Base-1 同期写入的 CoreModels.BaseResponse（time: string）形成两份不一致的定义。该声明保留到返修，L697 改为 time: string；运行时 time 实为数字，最终由中间件 L943 做宽松转换。\n",
+        "recommendations": [
+          "网络层需要响应壳类型时，先引用共享模型层已有的 BaseResponse 或规格 §1.1 的类型表；只拿到字段名时查 Android Bean，不自行选择 number/string。"
+        ],
+        "nodes": [
+          {
+            "key": "D:/HnaccurateWeather_HarmonyOS/spec/baseline/feature-base.md",
+            "at": "2026-08-13T03:06:35.171Z",
+            "reason": "实际收到的输入：Select-String 返回 §3 窗口，只写响应解密后反序列化为 BaseResponse<T>，未含 §1.1 类型表（time 为 string）；写前也未读 Android BaseResponse.kt。输入只给了字段名，不足以决定 time 类型（agent-019ff696…jsonl:L2644-L2645）。"
+          },
+          {
+            "key": "019ff696-5618-78d2-a059-a02982380b3d",
+            "at": "2026-08-13T03:07:44.556Z",
+            "reason": "apply_patch 新建 NetworkTypes，BaseResponse<T> 写 time: number = 0。该类型没有输入依据，与 Android `val time: String` 及规格 §1.1 不一致，并与 models/CoreModels 中 time: string 的共享定义重复（同转录 L2660-L2661）。",
+            "problem": true
+          }
+        ],
+        "edges": [
+          {
+            "from": 1,
+            "to": 2,
+            "force": true,
+            "reason": "Base-3 写 NetworkTypes 前 exec 对 spec/baseline/feature-base.md 执行 Select-String（^## 3 等），回执只含 §3 起的窗口，BaseResponse<T> 只有字段名。",
+            "evidence": [
+              {
+                "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff696-5618-78d2-a059-a02982380b3d.jsonl",
+                "line": 2644
+              },
+              {
+                "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff696-5618-78d2-a059-a02982380b3d.jsonl",
+                "line": 2645
+              }
+            ]
+          },
+          {
+            "from": 2,
+            "to": "target"
+          }
+        ]
+      }
+    ],
+    "unresolved_targets": []
+  },
+  "claims": {
+    "diagnosis": {
+      "text": "生成期 Stage2 Phase0 两个并行 worker 分别写模型层和网络层。Base-1（019ff65f，models/**）写前读到\nfeature-base 的共享模型表（BaseResponse 的 code/msg/time 为 number/string/string）、“Gson BaseResponse<T> → 显式 JSON decoder，\n保留名称、可空性和泛型边界”“decoder 必须显式校验字段”，以及 Android Bean 源码：LoginInfoBean `var id = \"\"`、\n`todayPoint: String?`，WeatherHomeBean.RealTimeBean `@SerializedName(\"aqi\") var aqi = 0`，均由 Gson 填充。\n规格与源码都没有给出与声明类型不符的真实响应样例，但源端解析器是 Gson，它会把 JSON 数字写进 String 字段、把数字字符串写进 Int 字段。\n本次输出却把 JsonDecoder.string/nullableString 写成“非 string 即 throw DecodeError”、number/nullableNumber 写成“非 number 即 throw”，\nLoginInfoBean.decode 以 JsonDecoder.string 读取 id、todayPoint。偏差位于“Gson 反序列化语义 → 显式 decoder 实现”这一环；\n规格只写了字段类型和“显式校验”，没有写出 Gson 的标量容忍，这一缺口使实现者按声明类型做了硬校验。\nBase-3（019ff696，network/**）写前读到 AESUtil.decrypt 在 catch 中 return content、ResponseBodyConverter 解密后直接交给 Gson，\n却让 ResponseMiddleware 在解密异常时直接 throw DECRYPTION，并以 typeof code !== 'number'、time !== 'number' 严格拒绝响应壳；\n它对响应壳只读到 feature-base §3 与 common.md 中的字段名 code/msg/time/data，未查 §1.1 或 BaseResponse.kt，就在 NetworkTypes 另写了一份\nBaseResponse 并把 time 定为 number，而 Android 为 `val time: String`，同时由 Base-1 写的 CoreModels.BaseResponse 用的是 string。\n这些片段保留到返修：真实服务端返回 code 为字符串、time 为数字，LoginInfoBean.id 为数字，天气 aqi 为数字字符串，\nHTTP 200 被判为解析失败（main-019ffb4e…jsonl:L936-L940、L1230-L1233、L1587）。\n修复依次为：解密失败回退按原文解析、time 改为 string（L697）；code/time 按 number 或数字字符串宽松转换（L943）；\nLoginInfoBean.id/todayPoint 兼容数字（L1235-L1239、L1283-L1287，补丁回执失败但读回已含 rawId/rawTodayPoint，写入者不在本卡认定）；\nJsonDecoder.string/nullableString 接受有限数字与布尔并转字符串、number/nullableNumber 接受数字字符串（L1590）。\n",
+      "kind": "diagnosis",
+      "status": "model_claim"
+    },
+    "recommendation:1": {
+      "text": "实现显式 decoder 前，先写出源反序列化库的标量容忍规则：Gson 会把 JSON 数字填入 String 字段、把数字字符串填入 Int/int 字段；目标 string/number 读取应接受这些等价形态并转换，而不是 typeof 不符就抛错。",
+      "kind": "recommendation",
+      "status": "model_claim"
+    },
+    "recommendation:2": {
+      "text": "规格提取阶段把 “Gson → 显式 decoder” 写进契约时，除字段名、可空性和声明类型外，还要写明需保留的宽松转换（数字↔字符串、布尔转字符串）；真实响应尚未采集时，按源解析器的接受范围设计兼容，而不是按声明类型收紧。",
+      "kind": "recommendation",
+      "status": "model_claim"
+    },
+    "recommendation:3": {
+      "text": "翻译响应解密/解析管线时，逐个对照源工具的异常分支：AESUtil.decrypt 在 catch 中返回原文，目标解密失败应回退按原文解析，只有解析也失败才返回错误。",
+      "kind": "recommendation",
+      "status": "model_claim"
+    },
+    "recommendation:4": {
+      "text": "定义 BaseResponse 等共享类型时，从共享模型规格表或 Android Bean 取字段类型，并复用已有定义；只读到字段名时先查类型来源，不自行选择 number/string。",
+      "kind": "recommendation",
+      "status": "model_claim"
+    },
+    "recommendation:5": {
+      "text": "最小回归：{code:'200', msg:'ok', time:1723456789, data:{}} 应解析为 code=200、time='1723456789'；{id:123, aqi:'42'} 应得到 id='123'、aqi=42；明文 JSON 响应在解密失败后仍能解析。",
+      "kind": "recommendation",
+      "status": "model_claim"
+    }
+  },
+  "targets": [
+    "D:/HnaccurateWeather_HarmonyOS/entry/src/main/ets/models/AccountModels.ets",
+    "D:/HnaccurateWeather_HarmonyOS/entry/src/main/ets/models/JsonDecoder.ets",
+    "D:/HnaccurateWeather_HarmonyOS/entry/src/main/ets/network/NetworkTypes.ets",
+    "D:/HnaccurateWeather_HarmonyOS/entry/src/main/ets/network/ResponseMiddleware.ets"
+  ],
+  "changes": [
+    {
+      "files": [
+        "D:\\HnaccurateWeather_HarmonyOS\\entry\\src\\main\\ets\\network\\ResponseMiddleware.ets",
+        "D:\\HnaccurateWeather_HarmonyOS\\entry\\src\\main\\ets\\network\\NetworkTypes.ets"
+      ],
+      "change": "解密失败按明文解析；time 类型改为 string；随后 code/time 均按标量宽松转换（number 或数字字符串）。",
+      "evidence": [
+        "main-019ffb4e-a828-7f12-a8dd-1b8a884da577.jsonl:L697、L943（中间 L919 的 WeatherResponseProbe 诊断在 L943 移除）"
+      ]
+    },
+    {
+      "files": [
+        "D:\\HnaccurateWeather_HarmonyOS\\entry\\src\\main\\ets\\models\\AccountModels.ets"
+      ],
+      "change": "LoginInfoBean.decode 对 id、todayPoint 兼容数字（转字符串）。两次 apply_patch 回执均为 verification failed，但紧随其后的读取显示改动已在文件中，最终保留 Number.isFinite 版本；具体写入调用未留下 patch_apply_end（见 pending）。",
+      "evidence": [
+        "main-019ffb4e-a828-7f12-a8dd-1b8a884da577.jsonl:L1235/L1236（id 补丁，回执失败）、L1238/L1239（读回已含 rawId 兼容）",
+        "main-019ffb4e-a828-7f12-a8dd-1b8a884da577.jsonl:L1283/L1284（todayPoint 补丁，回执失败）、L1286/L1287（读回已含 rawTodayPoint）",
+        "main-01a0181c-ce27-7330-9414-5c524a607634.jsonl:L144（08-19 副本仍含 rawTodayPoint）"
+      ]
+    },
+    {
+      "files": [
+        "D:\\HnaccurateWeather_HarmonyOS\\entry\\src\\main\\ets\\models\\JsonDecoder.ets"
+      ],
+      "change": "JsonDecoder.string/nullableString 接受有限数字与布尔并转为字符串（Gson 标量语义），解决 aqi 等字段。",
+      "evidence": [
+        "main-019ffb4e-a828-7f12-a8dd-1b8a884da577.jsonl:L1590"
+      ]
+    }
+  ],
+  "participants": [
+    {
+      "agent": "main-019ffb4e-a828-7f12-a8dd-1b8a884da577.jsonl",
+      "role": "发现/修复",
+      "action": "用临时脱敏探针定位解码失败字段，按 Android Gson 行为放宽，并补 F001 回归测试。",
+      "evidence": [
+        "main-019ffb4e-a828-7f12-a8dd-1b8a884da577.jsonl:L940、L1233、L1587"
+      ]
+    }
+  ],
+  "scope": {
+    "project_roots": [
+      "D:\\HnaccurateWeather_HarmonyOS",
+      "C:\\Users\\zm\\Desktop\\HnaccurateWeather_HarmonyOS"
+    ],
+    "source_roots": [
+      "E:\\Androidproject\\app_hnaccurateweather_live_android",
+      "C:\\Users\\zm\\Desktop\\app_hnaccurateweather_live_android\\app_hnaccurateweather_live_android"
+    ],
+    "materials": [
+      "C:\\Users\\hongy\\projects\\_migloop-multiapp-memory-20260927\\runs\\f6f89fad6b0f16f2\\materials"
+    ],
+    "generation_end": "2026-08-13T13:29:02.643Z",
+    "observation_end": "2026-08-21T09:35:59.738Z",
+    "boundary_evidence": [
+      "所有 JSONL 引用均相对材料池 runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/。宿主为 Codex（exec 工具内调用 apply_patch/exec_command），实际写入以 event_msg.patch_apply_end 的 changes/success 为准。",
+      "生成期根编排会话 019fee60-9467-7512-93b3-9f7a1babf102 不在材料池；其子代理（a2h-spec/a2h-execute/a2h-verify/a2h-build，agent-019ff522… 至 agent-019ffac8…）齐全，最后一条生成期子代理记录为 agent-019ffac7-f176-7633-b47c-c99c85ad0d93.jsonl:L528 2026-08-13T11:16:37Z。",
+      "生成结束取首个修复会话 main-019ffb4e-a828-7f12-a8dd-1b8a884da577.jsonl:L1 2026-08-13T13:29:02.643Z（session_meta 创建于 13:27:43.914Z，L10 用户报告天气模块未实现）；11:16–13:29 之间根编排的操作无材料。",
+      "观察截止取材料最后一条记录 main-019ffb4e-a828-7f12-a8dd-1b8a884da577.jsonl:L2174 2026-08-21T09:35:59.738Z；最后一次应用写入为 main-01a018ff-d820-74a1-9e27-bf546dacc2af.jsonl:L204 2026-08-20T02:36:30Z。",
+      "08-13 修复在 D:\\HnaccurateWeather_HarmonyOS（Windows 用户 80480）进行；08-19/20 修复在 C:\\Users\\zm\\Desktop\\HnaccurateWeather_HarmonyOS（用户 zm）进行。后者是前者的副本：08-19 会话读到 08-13 修复新增的 TaskCenterAuthRefresh.ets、CityCenterPresentation.ets、local.network-params.json5（如 main-01a0181c-ce27-7330-9414-5c524a607634.jsonl:L144 读回 08-13 写入的 rawTodayPoint 兼容代码），08-19 L592 才首次 git init。生成期写入只以 D:\\ 路径登记，因此 08-19 问题同时列出 C:\\ 实际修改路径和 D:\\ 同一相对路径作为生成期片段历史的对照目标。08-15 至 08-19 间复制与可能的其他修改无材料。"
+    ]
+  },
+  "environment": {
+    "schema": "migloop-case-environment/1",
+    "through": "2026-08-21T09:35:59.738Z",
+    "facts": [],
+    "sources": {},
+    "unknown": [
+      "android.compile_sdk",
+      "android.target_sdk",
+      "android.min_sdk",
+      "libraries.compose_bom",
+      "libraries.material3",
+      "toolchain.kotlin",
+      "toolchain.agp",
+      "toolchain.gradle",
+      "harmonyos.target_sdk",
+      "harmonyos.compatible_sdk",
+      "harmonyos.compile_sdk",
+      "device.android_api",
+      "device.harmonyos_version",
+      "device.density",
+      "device.font_scale",
+      "project.revision"
+    ],
+    "unscoped_observations": 0,
+    "boundary": "Recorded configuration/tool outputs, not a continuous environment state, resolved dependency proof, or lesson compatibility range. Missing values stay unknown; no current project files are read.",
+    "snapshot_id": "f3cb464dd43cd59a7e40a91d0552cc48a687430ee14d2fb91b89b66f786bc341"
+  },
+  "packager": {
+    "name": "migloop-memory-skills",
+    "version": "0.8.3",
+    "bundle_sha256": "4bddfa4e92b7dccd8546606cce6f167963b9f6bf03d8329085d22bf4e94eea92"
+  },
+  "validation_sha256": "034a834341044764a96e86cc6e33e4168910b27ccfe6b0f37282a934b1666e27",
+  "provenance": {
+    "schema": "migloop-case-provenance/1",
+    "materials": "C:\\Users\\hongy\\projects\\_migloop-multiapp-memory-20260927\\runs\\f6f89fad6b0f16f2\\materials",
+    "db_root_session_id": null,
+    "source_set_id": "sources-c7d168a1d2603d15ed6b",
+    "collector": {
+      "name": "migloop-memory-skills",
+      "version": "0.8.3",
+      "bundle_sha256": "14a940665d63179822994c2b9e982f971b3c750199265458ca6baa6bd4688ef8",
+      "implementation_sha256": "48e6f84dd59cbfdcac7c372a18ac76a098a52d3dbe972093dc2db671f63c943f"
+    },
+    "observed": {
+      "session_ids": [
+        "019ff522-9578-7720-8089-7a96a122f7d4",
+        "019ff522-ae1d-7c80-a5c8-b0eab9821364",
+        "019ff534-2edf-7e11-845b-69b1fc02b5e8",
+        "019ff537-b6a0-7143-a7b5-d5d98b43ce2f",
+        "019ff537-e68f-7d80-b3a4-00c0ed06e7c1",
+        "019ff538-02ce-7f00-8c0b-08b70177e99e",
+        "019ff538-30ca-7951-9023-e8c18a47e6ed",
+        "019ff538-c770-7413-9fd6-d4906bc95fd5",
+        "019ff53a-7340-7473-8479-1cc0f1b53119",
+        "019ff54a-28bf-76a3-8d91-e5a2f046fdde",
+        "019ff54a-463d-7981-b620-14fbfc8c8e33",
+        "019ff54e-034f-7b13-b861-61d474f0697b",
+        "019ff624-5313-7a33-aabd-cf1413b95108",
+        "019ff63b-7e1c-7d10-8da9-97047e7b0c91",
+        "019ff63b-bb21-7893-92fb-a17237a854a0",
+        "019ff63b-fce7-79e3-baf4-c523529f4353",
+        "019ff63c-2781-7133-806d-caa5045ec057",
+        "019ff63c-64e5-7fd3-a1df-4f4e255e05be",
+        "019ff64b-8b6b-7591-ad17-d629dbc915e0",
+        "019ff65f-00a7-7f12-be1b-6b65a996c848",
+        "019ff66a-0dbb-7741-a052-e7378a6b6e7d",
+        "019ff66a-4a4c-72b2-993d-f111d5914348",
+        "019ff678-480b-7082-b6dc-169c49f34989",
+        "019ff681-18f2-7cb2-be69-11f950563116",
+        "019ff689-c5d0-75f0-9aa4-281aa12941d3",
+        "019ff696-5618-78d2-a059-a02982380b3d",
+        "019ff696-a22b-7d22-97cb-81031ffbd132",
+        "019ff9d9-aa8e-7b00-b0a8-e8fd85c2a8c2",
+        "019ffa16-8a9f-7010-bb60-9ab48e2c4660",
+        "019ffa16-9ee6-7a73-8202-306dcd7aaa8e",
+        "019ffa21-bc98-7831-9e05-ea2281a3d126",
+        "019ffa21-dca0-7ec1-9c6a-055d28790766",
+        "019ffa2d-854e-7253-aebc-48d492f93ac4",
+        "019ffa31-9dda-71f2-8792-1f53028c2aea",
+        "019ffa31-ba56-72a1-9281-03e5cd605624",
+        "019ffa31-cf41-7512-bee9-5e5077ac6e11",
+        "019ffa31-f8da-7873-a732-2c8ff30ca6bd",
+        "019ffa32-0e07-7ca0-84a2-c790c1d9b6e5",
+        "019ffa7e-a93c-75c1-a59b-b9a54106c8b5",
+        "019ffa7e-cc56-70f0-b1fd-7e763260e652",
+        "019ffa7e-f31e-75e1-a411-64679ab9be28",
+        "019ffa7f-1188-7e43-95dd-e2eb5913d0ed",
+        "019ffa88-f958-78e3-8dee-0fc6fdfc70cd",
+        "019ffa8c-1237-7f52-a40d-c348cd32e0b8",
+        "019ffac7-f176-7633-b47c-c99c85ad0d93",
+        "019ffac8-30f3-7991-ac82-4c64136cd772",
+        "019ffac8-5f62-75d3-bffb-ccd10c03b796",
+        "019ffac8-8dd8-7563-b024-46d1daab54d4",
+        "019ffac8-caf7-7753-8fcc-5fc2439b023e",
+        "019ffb4e-a828-7f12-a8dd-1b8a884da577",
+        "019ffb50-155c-7a42-82ff-d7a066c0b674",
+        "019ffb51-6041-7a81-9ee9-6ae714e3aeed",
+        "019ffb51-a127-7740-9a55-080f7ceb3cc7",
+        "019ffb52-4131-72a0-b7c5-f95424517be0",
+        "019ffb54-89b7-7e72-bbf2-527d7428af85",
+        "019ffb57-b531-7501-8e0d-f1a4e54df053",
+        "019ffb76-c1b8-7a61-8b3f-ff928a32a771",
+        "019ffb82-6dd3-70f1-a8da-dc6137f3f9db",
+        "019ffb99-5605-7ee0-b037-df110ddfd98a",
+        "01a017a5-4a50-7d10-a5b1-c17afa242f0c",
+        "01a017d6-f932-75b2-a1da-78054c71a81d",
+        "01a01812-f3db-7dd1-a77b-de977656644e",
+        "01a01818-5ed1-7e53-a046-760b99bfae91",
+        "01a01819-2ab2-78a2-90cb-8a81657f6ad0",
+        "01a0181b-bf9f-7f20-af9c-a6d2e4af1a88",
+        "01a0181c-ce27-7330-9414-5c524a607634",
+        "01a018a7-e731-74a3-8612-5879fa04be63",
+        "01a018ff-d820-74a1-9e27-bf546dacc2af"
+      ],
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "gpt-5.6-sol"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.147.0-alpha.6.5",
+        "0.147.0-alpha.6.6",
+        "0.148.0-alpha.15"
+      ],
+      "projects": [
+        "C:\\Users\\zm\\Desktop\\HnaccurateWeather_HarmonyOS",
+        "D:\\HnaccurateWeather_HarmonyOS"
+      ]
+    },
+    "migration": {
+      "project": "app_hnaccurateweather_live_android",
+      "server_session_id": "dc1176d6-edc1-4b76-a9d4-31bd94c63ea0",
+      "source_uris": [
+        "server export sha256=6d6f5ecf0e7565fc1e7bc5c77e9137f985e61c78b893dfe214727a91cdbc8500"
+      ]
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ]
+    },
+    "unknown": [
+      "historical_migration_tool_versions",
+      "analysis_models"
+    ],
+    "sources": {
+      "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff65f-00a7-7f12-be1b-6b65a996c848.jsonl": "4f3836e4e22ebe4c658dfd45194e577ac2351bc7fb9940e50e79df558c76cbb1",
+      "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff696-5618-78d2-a059-a02982380b3d.jsonl": "2fd09c5c745cd38ab764fbed2630074f6c2effdd4005161075d5316358df0705",
+      "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/main-019ffb4e-a828-7f12-a8dd-1b8a884da577.jsonl": "b1a1202a6ad7d130d746cba32866654b7241ec2911c579cdc6d36e8b6050c3b1",
+      "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/main-01a0181c-ce27-7330-9414-5c524a607634.jsonl": "22e0b0549665ae3261fe1c2d163ae216a4a75d0866fedc12dfbc10c9559b0fa3"
+    }
+  },
+  "graph_evidence": [
+    {
+      "graph": 1,
+      "nodes": [
+        {
+          "id": "card:n-699b952e609f0bd3",
+          "kind": "file",
+          "key": "D:/HnaccurateWeather_HarmonyOS/spec/baseline/feature-base.md",
+          "at": "2026-08-13T03:03:35.718000+00:00"
+        },
+        {
+          "id": "card:n-4ef783879fb0d402",
+          "kind": "file",
+          "key": "E:/Androidproject/app_hnaccurateweather_live_android/base/src/main/java/com/cstools/base/data/bean/WeatherHomeBean.kt",
+          "at": "2026-08-13T03:05:18.789000+00:00"
+        },
+        {
+          "id": "card:n-2006c3afe3e8d99e",
+          "kind": "agent",
+          "key": "019ff65f-00a7-7f12-be1b-6b65a996c848",
+          "at": "2026-08-13T03:07:14.490000+00:00"
+        },
+        {
+          "id": "card:n-d4299cb0c6aacd35",
+          "kind": "file",
+          "key": "D:/HnaccurateWeather_HarmonyOS/entry/src/main/ets/models/JsonDecoder.ets",
+          "at": "2026-08-21T09:35:59.738000+00:00"
+        }
+      ],
+      "edges": [
+        {
+          "from": "card:n-699b952e609f0bd3",
+          "to": "card:n-2006c3afe3e8d99e",
+          "relation": "read",
+          "at": "2026-08-13T03:03:35.718000+00:00",
+          "source": "model_review",
+          "strength": "candidate",
+          "evidence": [
+            "76479a0d2cf4f715:1790:1d90351c44bbdc46",
+            "76479a0d2cf4f715:1791:446718edf31bb4d4"
+          ],
+          "quote_verified": true
+        },
+        {
+          "from": "card:n-4ef783879fb0d402",
+          "to": "card:n-2006c3afe3e8d99e",
+          "relation": "read",
+          "at": "2026-08-13T03:05:18.789000+00:00",
+          "source": "model_review",
+          "strength": "candidate",
+          "evidence": [
+            "76479a0d2cf4f715:1829:6b5b780e200d7630",
+            "76479a0d2cf4f715:1830:518f708ae6315ff3"
+          ],
+          "quote_verified": true
+        },
+        {
+          "from": "card:n-2006c3afe3e8d99e",
+          "to": "card:n-d4299cb0c6aacd35",
+          "relation": "write",
+          "at": "2026-08-13T03:07:14.490000+00:00",
+          "source": "model_edge",
+          "strength": "confirmed",
+          "evidence": [
+            "76479a0d2cf4f715:1852:46e9e445b53c6a04"
+          ]
+        }
+      ]
+    },
+    {
+      "graph": 2,
+      "nodes": [
+        {
+          "id": "card:n-818378562c9848b4",
+          "kind": "file",
+          "key": "E:/Androidproject/app_hnaccurateweather_live_android/base/src/main/java/com/cstools/base/data/bean/LoginInfoBean.kt",
+          "at": "2026-08-13T03:05:09.492000+00:00"
+        },
+        {
+          "id": "card:n-da1da4ced1ae3be5",
+          "kind": "agent",
+          "key": "019ff65f-00a7-7f12-be1b-6b65a996c848",
+          "at": "2026-08-13T03:07:58.948000+00:00"
+        },
+        {
+          "id": "card:n-9cf4c6ec3fef9da3",
+          "kind": "file",
+          "key": "D:/HnaccurateWeather_HarmonyOS/entry/src/main/ets/models/AccountModels.ets",
+          "at": "2026-08-21T09:35:59.738000+00:00"
+        }
+      ],
+      "edges": [
+        {
+          "from": "card:n-818378562c9848b4",
+          "to": "card:n-da1da4ced1ae3be5",
+          "relation": "read",
+          "at": "2026-08-13T03:05:09.492000+00:00",
+          "source": "model_review",
+          "strength": "candidate",
+          "evidence": [
+            "76479a0d2cf4f715:1825:d8c4089ebacd6736",
+            "76479a0d2cf4f715:1826:55e9770482931560"
+          ],
+          "quote_verified": true
+        },
+        {
+          "from": "card:n-da1da4ced1ae3be5",
+          "to": "card:n-9cf4c6ec3fef9da3",
+          "relation": "write",
+          "at": "2026-08-13T03:07:58.948000+00:00",
+          "source": "model_edge",
+          "strength": "confirmed",
+          "evidence": [
+            "76479a0d2cf4f715:1857:05f1c1ccd6d82753"
+          ]
+        }
+      ]
+    },
+    {
+      "graph": 3,
+      "nodes": [
+        {
+          "id": "card:n-29b8919d03da5f2d",
+          "kind": "file",
+          "key": "E:/Androidproject/app_hnaccurateweather_live_android/base/src/main/java/com/cstools/base/util/AESUtil.java",
+          "at": "2026-08-13T03:06:56.178000+00:00"
+        },
+        {
+          "id": "card:n-f541ded08468a098",
+          "kind": "file",
+          "key": "E:/Androidproject/app_hnaccurateweather_live_android/base/src/main/java/com/cstools/base/data/net/ResponseBodyConverter.kt",
+          "at": "2026-08-13T03:07:03.420000+00:00"
+        },
+        {
+          "id": "card:n-a82aa06ea9b95826",
+          "kind": "file",
+          "key": "D:/HnaccurateWeather_HarmonyOS/spec/baseline/feature-base.md",
+          "at": "2026-08-13T03:06:35.171000+00:00"
+        },
+        {
+          "id": "card:n-303907ee19a24577",
+          "kind": "agent",
+          "key": "019ff696-5618-78d2-a059-a02982380b3d",
+          "at": "2026-08-13T03:08:34.988000+00:00"
+        },
+        {
+          "id": "card:n-2f853fdefa91b4d3",
+          "kind": "file",
+          "key": "D:/HnaccurateWeather_HarmonyOS/entry/src/main/ets/network/ResponseMiddleware.ets",
+          "at": "2026-08-21T09:35:59.738000+00:00"
+        }
+      ],
+      "edges": [
+        {
+          "from": "card:n-29b8919d03da5f2d",
+          "to": "card:n-303907ee19a24577",
+          "relation": "read",
+          "at": "2026-08-13T03:06:56.178000+00:00",
+          "source": "model_review",
+          "strength": "candidate",
+          "evidence": [
+            "db4c0d2e75c930a4:2651:f3353993e6057f16",
+            "db4c0d2e75c930a4:2652:931f344c62e6e735"
+          ],
+          "quote_verified": true
+        },
+        {
+          "from": "card:n-f541ded08468a098",
+          "to": "card:n-303907ee19a24577",
+          "relation": "read",
+          "at": "2026-08-13T03:07:03.420000+00:00",
+          "source": "model_review",
+          "strength": "candidate",
+          "evidence": [
+            "db4c0d2e75c930a4:2654:79cc07fba6e09a08",
+            "db4c0d2e75c930a4:2655:afc0b31f59d1f053"
+          ],
+          "quote_verified": true
+        },
+        {
+          "from": "card:n-a82aa06ea9b95826",
+          "to": "card:n-303907ee19a24577",
+          "relation": "read",
+          "at": "2026-08-13T03:06:35.171000+00:00",
+          "source": "model_review",
+          "strength": "candidate",
+          "evidence": [
+            "db4c0d2e75c930a4:2644:38f188e9aa5bea3f",
+            "db4c0d2e75c930a4:2645:58900dd2a6a1f8b0"
+          ],
+          "quote_verified": true
+        },
+        {
+          "from": "card:n-303907ee19a24577",
+          "to": "card:n-2f853fdefa91b4d3",
+          "relation": "write",
+          "at": "2026-08-13T03:08:34.988000+00:00",
+          "source": "model_edge",
+          "strength": "confirmed",
+          "evidence": [
+            "db4c0d2e75c930a4:2665:8e13c29f9657c967"
+          ]
+        }
+      ]
+    },
+    {
+      "graph": 4,
+      "nodes": [
+        {
+          "id": "card:n-a82aa06ea9b95826",
+          "kind": "file",
+          "key": "D:/HnaccurateWeather_HarmonyOS/spec/baseline/feature-base.md",
+          "at": "2026-08-13T03:06:35.171000+00:00"
+        },
+        {
+          "id": "card:n-13f82ac168ebd22a",
+          "kind": "agent",
+          "key": "019ff696-5618-78d2-a059-a02982380b3d",
+          "at": "2026-08-13T03:07:44.556000+00:00"
+        },
+        {
+          "id": "card:n-67c2d1341db3a04c",
+          "kind": "file",
+          "key": "D:/HnaccurateWeather_HarmonyOS/entry/src/main/ets/network/NetworkTypes.ets",
+          "at": "2026-08-21T09:35:59.738000+00:00"
+        }
+      ],
+      "edges": [
+        {
+          "from": "card:n-a82aa06ea9b95826",
+          "to": "card:n-13f82ac168ebd22a",
+          "relation": "read",
+          "at": "2026-08-13T03:06:35.171000+00:00",
+          "source": "model_review",
+          "strength": "candidate",
+          "evidence": [
+            "db4c0d2e75c930a4:2644:38f188e9aa5bea3f",
+            "db4c0d2e75c930a4:2645:58900dd2a6a1f8b0"
+          ],
+          "quote_verified": true
+        },
+        {
+          "from": "card:n-13f82ac168ebd22a",
+          "to": "card:n-67c2d1341db3a04c",
+          "relation": "write",
+          "at": "2026-08-13T03:07:44.556000+00:00",
+          "source": "model_edge",
+          "strength": "confirmed",
+          "evidence": [
+            "db4c0d2e75c930a4:2661:0af42b24c4247831"
+          ]
+        }
+      ]
+    }
+  ],
+  "validation": {
+    "status": "valid",
+    "schema": "passed",
+    "graph_check": "performed",
+    "kernel_sha256": "b5d894750c6e0deeffaeee173f6bd3bb11f2afe7a7a3af592288a6448e5dd41e",
+    "causal_correctness": "not_certified",
+    "unresolved_targets": [],
+    "graph_checks": [
+      {
+        "graph": 1,
+        "draft_sha256": "3c34f449aaf68e87ace4d860ad50b94fc72729b3d2b34badcc756d5df22439de",
+        "receipt": {
+          "schema": "inquiry-graph/1",
+          "report_id": "381f9e4fa0114872",
+          "mechanical_status": "valid",
+          "path_status": "complete",
+          "semantic_verified": false,
+          "submission_format": "coordinates/1",
+          "issues": [],
+          "path_feedback": [],
+          "delivery": {
+            "status": "ready_for_review",
+            "semantic_verified": false,
+            "coverage_verified": false
+          }
+        }
+      },
+      {
+        "graph": 2,
+        "draft_sha256": "87cf2a631d410913b850592c8738ef2a143c4a2c054d30bb723425fd8dcb3440",
+        "receipt": {
+          "schema": "inquiry-graph/1",
+          "report_id": "9c945c0d94974e50",
+          "mechanical_status": "valid",
+          "path_status": "complete",
+          "semantic_verified": false,
+          "submission_format": "coordinates/1",
+          "issues": [],
+          "path_feedback": [],
+          "delivery": {
+            "status": "ready_for_review",
+            "semantic_verified": false,
+            "coverage_verified": false
+          }
+        }
+      },
+      {
+        "graph": 3,
+        "draft_sha256": "60773ee50681d4073e81ebf21292a9b1551fdad63d34383bcf19fc04d435541a",
+        "receipt": {
+          "schema": "inquiry-graph/1",
+          "report_id": "c8b6d59531414399",
+          "mechanical_status": "valid",
+          "path_status": "complete",
+          "semantic_verified": false,
+          "submission_format": "coordinates/1",
+          "issues": [],
+          "path_feedback": [],
+          "delivery": {
+            "status": "ready_for_review",
+            "semantic_verified": false,
+            "coverage_verified": false
+          }
+        }
+      },
+      {
+        "graph": 4,
+        "draft_sha256": "6c1a89b673331057a0f00eab51fd86a66f99f958bc42064b8578ff870bcc59f4",
+        "receipt": {
+          "schema": "inquiry-graph/1",
+          "report_id": "50282f353c614ae5",
+          "mechanical_status": "valid",
+          "path_status": "complete",
+          "semantic_verified": false,
+          "submission_format": "coordinates/1",
+          "issues": [],
+          "path_feedback": [],
+          "delivery": {
+            "status": "ready_for_review",
+            "semantic_verified": false,
+            "coverage_verified": false
+          }
+        }
+      }
+    ]
+  },
+  "revision": "bdd87c7f5a351594fdf08ee333cadf73c21beb381c1121e2bc09fe9056955e2f"
+}

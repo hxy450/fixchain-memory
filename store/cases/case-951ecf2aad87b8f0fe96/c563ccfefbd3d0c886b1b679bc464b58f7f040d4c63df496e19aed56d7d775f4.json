@@ -1,0 +1,466 @@
+{
+  "schema": "migloop-case/2",
+  "id": "case-951ecf2aad87b8f0fe96",
+  "created_at": "2026-09-27T22:10:58.436640+00:00",
+  "job": "issue-951ecf2aad87b8f0fe96",
+  "identity_basis": "server migration ID",
+  "migration_key": "dc1176d6-edc1-4b76-a9d4-31bd94c63ea0",
+  "draft": {
+    "title": "AES逐值加密未复刻Android空串直接返回分支",
+    "when": "网络层实现阶段，将Android请求参数加密工具移植为ArkTS加密封装、确定每个业务值如何进入Cipher时",
+    "description": "Android请求拦截对每个业务参数调用AES工具（aesEncrypt/AESUtil.encrypt），该工具对空字符串直接返回空串、不调用Cipher；目标端用cryptoFramework的AES-CBC/PKCS7逐值加密，业务参数可能为空（如缺省城市没有经纬度）。",
+    "summary": "Base-3网络层写者（agent-019ff696，接到“只写network/**”任务）写前实际收到：ledger D-010要求保留逐值AES-CBC、\npadding/编码等Android字节契约（agent-019ff696-5618-78d2-a059-a02982380b3d.jsonl:L2636-L2637）；\nExtension_AES.kt的aesEncrypt首行以content.isEmpty()直接返回\"\"（L2640-L2641）；App.beforeRequest对每个业务值\n调用aesEncrypt(value.toString(), key)，AESUtil.encrypt同样以TextUtils.isEmpty(content)返回\"\"（L2651-L2652）。\n这些输入已正确、足够说明空值不进入Cipher、请求体原样发送空串。\n本次03:07:44的apply_patch却把AndroidCompatibleCrypto.encryptValue写成无条件createCipher→doFinal(utf8(value))，\n同一补丁中的RequestMiddleware还用String(value ?? '')把空值/缺值统一送进encryptValue（L2660-L2661）。\n偏差位于Android加密工具到ArkTS加密封装这一环；03:37同一写者对该文件的后续补丁只改bytesToBlob和IvParamsSpec，\n未补空值分支（L2915-L2916），生成期单测用假加密器也未覆盖空值。\n修复期缺省城市没有经纬度，天气请求在prepare阶段encrypt:lon抛出byteLength of undefined，请求未发出\n（main-019ffb4e-a828-7f12-a8dd-1b8a884da577.jsonl:L1469、L1484、L1495）；最终在encryptValue开头加入\nif (value.length === 0) return ''并补空值单测（同转录L1503-L1504）。\n同job的WeatherHttpClient改为expectDataType: STRING（L1080），依据是L1073“响应未定义导致byteLength”的推断。\n但修复前doRegisterTourist的响应已按字符串取回并解密（L936 decrypted=true length=736）；改为STRING后，天气请求仍在\nstage=prepare报同一错误，并定位到encrypt:lon（L1469、L1484）。因此该项只是对齐Android value.string()的防御性改动，\n已观测故障不能归因于它，本卡不为其画偏差链。\n",
+    "recommendations": [
+      "网络层实现阶段移植加解密工具时，逐分支列出源工具的前置返回（空串、密钥长度、异常回退），并在目标封装中逐一保留；空值不进入Cipher，输出与源端一致（本例为''）。",
+      "为请求组装补充空值/缺省值用例：业务参数为''或缺省时，用真实加密封装断言结果与Android相同，不只用假加密器验证字段顺序。",
+      "目标端做null/undefined归一化（如String(value ?? '')）后，核对该值在源端经过value.toString()后实际进入加密工具的哪个分支。"
+    ],
+    "graphs": [
+      {
+        "target": {
+          "key": "D:/HnaccurateWeather_HarmonyOS/entry/src/main/ets/network/NetworkCrypto.ets",
+          "since": "2026-08-13T13:29:02.643Z",
+          "at": "2026-08-21T09:35:59.738Z"
+        },
+        "nodes": [
+          {
+            "key": "D:/HnaccurateWeather_HarmonyOS/spec/decision-ledger.md",
+            "at": "2026-08-13T03:06:15.824Z",
+            "reason": "正常输入：写者Select-String返回D-010“AES/MD5/headers保持Android字节契约”及正文“保留参数排序、逐值AES-CBC、padding/编码、MD5输入和header/body字段语义”，要求按源端字节行为复刻（agent-019ff696-5618-78d2-a059-a02982380b3d.jsonl:L2636-L2637）。"
+          },
+          {
+            "key": "E:/Androidproject/app_hnaccurateweather_live_android/app/src/main/java/com/cstools/weather/util/Extension_AES.kt",
+            "at": "2026-08-13T03:06:25.823Z",
+            "reason": "正常输入：Get-Content回执给出aesEncrypt首行if (content.isEmpty() || password.isEmpty()) return \"\"，即空业务值不调用Cipher、直接得空串（agent-019ff696-5618-78d2-a059-a02982380b3d.jsonl:L2640-L2641）。"
+          },
+          {
+            "key": "E:/Androidproject/app_hnaccurateweather_live_android/base/src/main/java/com/cstools/base/util/AESUtil.java",
+            "at": "2026-08-13T03:06:56.178Z",
+            "reason": "正常输入：同一次读取同时返回App.beforeRequest逐值调用aesEncrypt(value.toString(), key)，以及AESUtil.encrypt首行if (TextUtils.isEmpty(content)) return \"\"；两处源实现都说明空值应直接返回空串（agent-019ff696-5618-78d2-a059-a02982380b3d.jsonl:L2651-L2652）。"
+          },
+          {
+            "key": "agent-019ff696-5618-78d2-a059-a02982380b3d.jsonl",
+            "at": "2026-08-13T03:07:44.556Z",
+            "reason": "已收到上述契约和源码，apply_patch新建NetworkCrypto.ets时，encryptValue却无空值分支，直接createCipher→doFinal(utf8(value))；同一补丁的RequestMiddleware用String(value ?? '')把空值送进该函数。空值应直接返回空串的要求未落实到输出（同转录L2660-L2661）；03:37的后续补丁（L2915-L2916）也未补上。",
+            "problem": true
+          }
+        ],
+        "edges": [
+          {
+            "from": 1,
+            "to": 4,
+            "force": true,
+            "reason": "写者exec_command以Select-String读取spec/decision-ledger.md，回执返回D-010索引行及正文“保留参数排序、逐值AES-CBC、padding/编码……”，支持写前已收到保持Android字节契约的要求。",
+            "evidence": [
+              {
+                "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff696-5618-78d2-a059-a02982380b3d.jsonl",
+                "line": 2636
+              },
+              {
+                "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff696-5618-78d2-a059-a02982380b3d.jsonl",
+                "line": 2637
+              }
+            ]
+          },
+          {
+            "from": 2,
+            "to": 4,
+            "force": true,
+            "reason": "写者exec_command以$root拼接app/src/main/java/com/cstools/weather/util/Extension_AES.kt并Get-Content -Raw，回执含aesEncrypt的content.isEmpty()直接返回空串分支；路径经变量拼接未被索引解析。",
+            "evidence": [
+              {
+                "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff696-5618-78d2-a059-a02982380b3d.jsonl",
+                "line": 2640
+              },
+              {
+                "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff696-5618-78d2-a059-a02982380b3d.jsonl",
+                "line": 2641
+              }
+            ]
+          },
+          {
+            "from": 3,
+            "to": 4,
+            "force": true,
+            "reason": "写者exec_command以$root拼接base/src/main/java/com/cstools/base/util/AESUtil.java并Get-Content -Raw（同一次还读取App.kt的beforeRequest），回执含AESUtil.encrypt的TextUtils.isEmpty(content)返回空串分支。",
+            "evidence": [
+              {
+                "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff696-5618-78d2-a059-a02982380b3d.jsonl",
+                "line": 2651
+              },
+              {
+                "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff696-5618-78d2-a059-a02982380b3d.jsonl",
+                "line": 2652
+              }
+            ]
+          },
+          {
+            "from": 4,
+            "to": "target"
+          }
+        ]
+      }
+    ],
+    "unresolved_targets": [
+      {
+        "key": "D:/HnaccurateWeather_HarmonyOS/entry/src/main/ets/network/WeatherHttpClient.ets",
+        "reason": "已确认修改：main-019ffb4e L1080加入expectDataType: http.HttpDataType.STRING；生成来源是同一写者03:08:34的apply_patch（agent-019ff696 L2664-L2665），写前已读到ResponseBodyConverter的value.string()（L2654-L2655）。但L1073所称“响应返回undefined导致byteLength”与材料矛盾：修复前doRegisterTourist已取回字符串并解密（main L936），byteLength错误在STRING修复后仍出现于stage=prepare/encrypt:lon（L1469、L1484），应归因于NetworkCrypto空值分支。该改动属于防御性对齐，没有已观测故障可归因，未画偏差链。"
+      }
+    ]
+  },
+  "claims": {
+    "diagnosis": {
+      "text": "Base-3网络层写者（agent-019ff696，接到“只写network/**”任务）写前实际收到：ledger D-010要求保留逐值AES-CBC、\npadding/编码等Android字节契约（agent-019ff696-5618-78d2-a059-a02982380b3d.jsonl:L2636-L2637）；\nExtension_AES.kt的aesEncrypt首行以content.isEmpty()直接返回\"\"（L2640-L2641）；App.beforeRequest对每个业务值\n调用aesEncrypt(value.toString(), key)，AESUtil.encrypt同样以TextUtils.isEmpty(content)返回\"\"（L2651-L2652）。\n这些输入已正确、足够说明空值不进入Cipher、请求体原样发送空串。\n本次03:07:44的apply_patch却把AndroidCompatibleCrypto.encryptValue写成无条件createCipher→doFinal(utf8(value))，\n同一补丁中的RequestMiddleware还用String(value ?? '')把空值/缺值统一送进encryptValue（L2660-L2661）。\n偏差位于Android加密工具到ArkTS加密封装这一环；03:37同一写者对该文件的后续补丁只改bytesToBlob和IvParamsSpec，\n未补空值分支（L2915-L2916），生成期单测用假加密器也未覆盖空值。\n修复期缺省城市没有经纬度，天气请求在prepare阶段encrypt:lon抛出byteLength of undefined，请求未发出\n（main-019ffb4e-a828-7f12-a8dd-1b8a884da577.jsonl:L1469、L1484、L1495）；最终在encryptValue开头加入\nif (value.length === 0) return ''并补空值单测（同转录L1503-L1504）。\n同job的WeatherHttpClient改为expectDataType: STRING（L1080），依据是L1073“响应未定义导致byteLength”的推断。\n但修复前doRegisterTourist的响应已按字符串取回并解密（L936 decrypted=true length=736）；改为STRING后，天气请求仍在\nstage=prepare报同一错误，并定位到encrypt:lon（L1469、L1484）。因此该项只是对齐Android value.string()的防御性改动，\n已观测故障不能归因于它，本卡不为其画偏差链。\n",
+      "kind": "diagnosis",
+      "status": "model_claim"
+    },
+    "recommendation:1": {
+      "text": "网络层实现阶段移植加解密工具时，逐分支列出源工具的前置返回（空串、密钥长度、异常回退），并在目标封装中逐一保留；空值不进入Cipher，输出与源端一致（本例为''）。",
+      "kind": "recommendation",
+      "status": "model_claim"
+    },
+    "recommendation:2": {
+      "text": "为请求组装补充空值/缺省值用例：业务参数为''或缺省时，用真实加密封装断言结果与Android相同，不只用假加密器验证字段顺序。",
+      "kind": "recommendation",
+      "status": "model_claim"
+    },
+    "recommendation:3": {
+      "text": "目标端做null/undefined归一化（如String(value ?? '')）后，核对该值在源端经过value.toString()后实际进入加密工具的哪个分支。",
+      "kind": "recommendation",
+      "status": "model_claim"
+    }
+  },
+  "targets": [
+    "D:/HnaccurateWeather_HarmonyOS/entry/src/main/ets/network/NetworkCrypto.ets",
+    "D:/HnaccurateWeather_HarmonyOS/entry/src/main/ets/network/WeatherHttpClient.ets"
+  ],
+  "changes": [
+    {
+      "files": [
+        "D:\\HnaccurateWeather_HarmonyOS\\entry\\src\\main\\ets\\network\\WeatherHttpClient.ets"
+      ],
+      "change": "http request 选项增加 expectDataType: http.HttpDataType.STRING；其余多轮 WeatherNetworkProbe 诊断均在 L1606 前移除。",
+      "evidence": [
+        "main-019ffb4e-a828-7f12-a8dd-1b8a884da577.jsonl:L1080（expectDataType）",
+        "main-019ffb4e-a828-7f12-a8dd-1b8a884da577.jsonl:L899、L911、L954、L1193、L1202、L1213、L1350、L1371、L1443、L1465、L1606（探针加入/移除）"
+      ]
+    },
+    {
+      "files": [
+        "D:\\HnaccurateWeather_HarmonyOS\\entry\\src\\main\\ets\\network\\NetworkCrypto.ets"
+      ],
+      "change": "encrypt 对空字符串直接返回 ''，不调用 Cipher。",
+      "evidence": [
+        "main-019ffb4e-a828-7f12-a8dd-1b8a884da577.jsonl:L1504"
+      ]
+    }
+  ],
+  "participants": [
+    {
+      "agent": "main-019ffb4e-a828-7f12-a8dd-1b8a884da577.jsonl",
+      "role": "发现/修复",
+      "action": "真机日志分段定位 request 组装与响应读取失败点后修复。",
+      "evidence": [
+        "main-019ffb4e-a828-7f12-a8dd-1b8a884da577.jsonl:L1073、L1495"
+      ]
+    }
+  ],
+  "scope": {
+    "project_roots": [
+      "D:\\HnaccurateWeather_HarmonyOS",
+      "C:\\Users\\zm\\Desktop\\HnaccurateWeather_HarmonyOS"
+    ],
+    "source_roots": [
+      "E:\\Androidproject\\app_hnaccurateweather_live_android",
+      "C:\\Users\\zm\\Desktop\\app_hnaccurateweather_live_android\\app_hnaccurateweather_live_android"
+    ],
+    "materials": [
+      "C:\\Users\\hongy\\projects\\_migloop-multiapp-memory-20260927\\runs\\f6f89fad6b0f16f2\\materials"
+    ],
+    "generation_end": "2026-08-13T13:29:02.643Z",
+    "observation_end": "2026-08-21T09:35:59.738Z",
+    "boundary_evidence": [
+      "所有 JSONL 引用均相对材料池 runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/。宿主为 Codex（exec 工具内调用 apply_patch/exec_command），实际写入以 event_msg.patch_apply_end 的 changes/success 为准。",
+      "生成期根编排会话 019fee60-9467-7512-93b3-9f7a1babf102 不在材料池；其子代理（a2h-spec/a2h-execute/a2h-verify/a2h-build，agent-019ff522… 至 agent-019ffac8…）齐全，最后一条生成期子代理记录为 agent-019ffac7-f176-7633-b47c-c99c85ad0d93.jsonl:L528 2026-08-13T11:16:37Z。",
+      "生成结束取首个修复会话 main-019ffb4e-a828-7f12-a8dd-1b8a884da577.jsonl:L1 2026-08-13T13:29:02.643Z（session_meta 创建于 13:27:43.914Z，L10 用户报告天气模块未实现）；11:16–13:29 之间根编排的操作无材料。",
+      "观察截止取材料最后一条记录 main-019ffb4e-a828-7f12-a8dd-1b8a884da577.jsonl:L2174 2026-08-21T09:35:59.738Z；最后一次应用写入为 main-01a018ff-d820-74a1-9e27-bf546dacc2af.jsonl:L204 2026-08-20T02:36:30Z。",
+      "08-13 修复在 D:\\HnaccurateWeather_HarmonyOS（Windows 用户 80480）进行；08-19/20 修复在 C:\\Users\\zm\\Desktop\\HnaccurateWeather_HarmonyOS（用户 zm）进行。后者是前者的副本：08-19 会话读到 08-13 修复新增的 TaskCenterAuthRefresh.ets、CityCenterPresentation.ets、local.network-params.json5（如 main-01a0181c-ce27-7330-9414-5c524a607634.jsonl:L144 读回 08-13 写入的 rawTodayPoint 兼容代码），08-19 L592 才首次 git init。生成期写入只以 D:\\ 路径登记，因此 08-19 问题同时列出 C:\\ 实际修改路径和 D:\\ 同一相对路径作为生成期片段历史的对照目标。08-15 至 08-19 间复制与可能的其他修改无材料。"
+    ]
+  },
+  "environment": {
+    "schema": "migloop-case-environment/1",
+    "through": "2026-08-21T09:35:59.738Z",
+    "facts": [],
+    "sources": {},
+    "unknown": [
+      "android.compile_sdk",
+      "android.target_sdk",
+      "android.min_sdk",
+      "libraries.compose_bom",
+      "libraries.material3",
+      "toolchain.kotlin",
+      "toolchain.agp",
+      "toolchain.gradle",
+      "harmonyos.target_sdk",
+      "harmonyos.compatible_sdk",
+      "harmonyos.compile_sdk",
+      "device.android_api",
+      "device.harmonyos_version",
+      "device.density",
+      "device.font_scale",
+      "project.revision"
+    ],
+    "unscoped_observations": 0,
+    "boundary": "Recorded configuration/tool outputs, not a continuous environment state, resolved dependency proof, or lesson compatibility range. Missing values stay unknown; no current project files are read.",
+    "snapshot_id": "f3cb464dd43cd59a7e40a91d0552cc48a687430ee14d2fb91b89b66f786bc341"
+  },
+  "packager": {
+    "name": "migloop-memory-skills",
+    "version": "0.8.3",
+    "bundle_sha256": "4bddfa4e92b7dccd8546606cce6f167963b9f6bf03d8329085d22bf4e94eea92"
+  },
+  "validation_sha256": "b2e695769526e0cb3a62f32e9cccb9385319a08de77116bf8ee6b99c20f4581b",
+  "provenance": {
+    "schema": "migloop-case-provenance/1",
+    "materials": "C:\\Users\\hongy\\projects\\_migloop-multiapp-memory-20260927\\runs\\f6f89fad6b0f16f2\\materials",
+    "db_root_session_id": null,
+    "source_set_id": "sources-c7d168a1d2603d15ed6b",
+    "collector": {
+      "name": "migloop-memory-skills",
+      "version": "0.8.3",
+      "bundle_sha256": "14a940665d63179822994c2b9e982f971b3c750199265458ca6baa6bd4688ef8",
+      "implementation_sha256": "48e6f84dd59cbfdcac7c372a18ac76a098a52d3dbe972093dc2db671f63c943f"
+    },
+    "observed": {
+      "session_ids": [
+        "019ff522-9578-7720-8089-7a96a122f7d4",
+        "019ff522-ae1d-7c80-a5c8-b0eab9821364",
+        "019ff534-2edf-7e11-845b-69b1fc02b5e8",
+        "019ff537-b6a0-7143-a7b5-d5d98b43ce2f",
+        "019ff537-e68f-7d80-b3a4-00c0ed06e7c1",
+        "019ff538-02ce-7f00-8c0b-08b70177e99e",
+        "019ff538-30ca-7951-9023-e8c18a47e6ed",
+        "019ff538-c770-7413-9fd6-d4906bc95fd5",
+        "019ff53a-7340-7473-8479-1cc0f1b53119",
+        "019ff54a-28bf-76a3-8d91-e5a2f046fdde",
+        "019ff54a-463d-7981-b620-14fbfc8c8e33",
+        "019ff54e-034f-7b13-b861-61d474f0697b",
+        "019ff624-5313-7a33-aabd-cf1413b95108",
+        "019ff63b-7e1c-7d10-8da9-97047e7b0c91",
+        "019ff63b-bb21-7893-92fb-a17237a854a0",
+        "019ff63b-fce7-79e3-baf4-c523529f4353",
+        "019ff63c-2781-7133-806d-caa5045ec057",
+        "019ff63c-64e5-7fd3-a1df-4f4e255e05be",
+        "019ff64b-8b6b-7591-ad17-d629dbc915e0",
+        "019ff65f-00a7-7f12-be1b-6b65a996c848",
+        "019ff66a-0dbb-7741-a052-e7378a6b6e7d",
+        "019ff66a-4a4c-72b2-993d-f111d5914348",
+        "019ff678-480b-7082-b6dc-169c49f34989",
+        "019ff681-18f2-7cb2-be69-11f950563116",
+        "019ff689-c5d0-75f0-9aa4-281aa12941d3",
+        "019ff696-5618-78d2-a059-a02982380b3d",
+        "019ff696-a22b-7d22-97cb-81031ffbd132",
+        "019ff9d9-aa8e-7b00-b0a8-e8fd85c2a8c2",
+        "019ffa16-8a9f-7010-bb60-9ab48e2c4660",
+        "019ffa16-9ee6-7a73-8202-306dcd7aaa8e",
+        "019ffa21-bc98-7831-9e05-ea2281a3d126",
+        "019ffa21-dca0-7ec1-9c6a-055d28790766",
+        "019ffa2d-854e-7253-aebc-48d492f93ac4",
+        "019ffa31-9dda-71f2-8792-1f53028c2aea",
+        "019ffa31-ba56-72a1-9281-03e5cd605624",
+        "019ffa31-cf41-7512-bee9-5e5077ac6e11",
+        "019ffa31-f8da-7873-a732-2c8ff30ca6bd",
+        "019ffa32-0e07-7ca0-84a2-c790c1d9b6e5",
+        "019ffa7e-a93c-75c1-a59b-b9a54106c8b5",
+        "019ffa7e-cc56-70f0-b1fd-7e763260e652",
+        "019ffa7e-f31e-75e1-a411-64679ab9be28",
+        "019ffa7f-1188-7e43-95dd-e2eb5913d0ed",
+        "019ffa88-f958-78e3-8dee-0fc6fdfc70cd",
+        "019ffa8c-1237-7f52-a40d-c348cd32e0b8",
+        "019ffac7-f176-7633-b47c-c99c85ad0d93",
+        "019ffac8-30f3-7991-ac82-4c64136cd772",
+        "019ffac8-5f62-75d3-bffb-ccd10c03b796",
+        "019ffac8-8dd8-7563-b024-46d1daab54d4",
+        "019ffac8-caf7-7753-8fcc-5fc2439b023e",
+        "019ffb4e-a828-7f12-a8dd-1b8a884da577",
+        "019ffb50-155c-7a42-82ff-d7a066c0b674",
+        "019ffb51-6041-7a81-9ee9-6ae714e3aeed",
+        "019ffb51-a127-7740-9a55-080f7ceb3cc7",
+        "019ffb52-4131-72a0-b7c5-f95424517be0",
+        "019ffb54-89b7-7e72-bbf2-527d7428af85",
+        "019ffb57-b531-7501-8e0d-f1a4e54df053",
+        "019ffb76-c1b8-7a61-8b3f-ff928a32a771",
+        "019ffb82-6dd3-70f1-a8da-dc6137f3f9db",
+        "019ffb99-5605-7ee0-b037-df110ddfd98a",
+        "01a017a5-4a50-7d10-a5b1-c17afa242f0c",
+        "01a017d6-f932-75b2-a1da-78054c71a81d",
+        "01a01812-f3db-7dd1-a77b-de977656644e",
+        "01a01818-5ed1-7e53-a046-760b99bfae91",
+        "01a01819-2ab2-78a2-90cb-8a81657f6ad0",
+        "01a0181b-bf9f-7f20-af9c-a6d2e4af1a88",
+        "01a0181c-ce27-7330-9414-5c524a607634",
+        "01a018a7-e731-74a3-8612-5879fa04be63",
+        "01a018ff-d820-74a1-9e27-bf546dacc2af"
+      ],
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "gpt-5.6-sol"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.147.0-alpha.6.5",
+        "0.147.0-alpha.6.6",
+        "0.148.0-alpha.15"
+      ],
+      "projects": [
+        "C:\\Users\\zm\\Desktop\\HnaccurateWeather_HarmonyOS",
+        "D:\\HnaccurateWeather_HarmonyOS"
+      ]
+    },
+    "migration": {
+      "project": "app_hnaccurateweather_live_android",
+      "server_session_id": "dc1176d6-edc1-4b76-a9d4-31bd94c63ea0",
+      "source_uris": [
+        "server export sha256=6d6f5ecf0e7565fc1e7bc5c77e9137f985e61c78b893dfe214727a91cdbc8500"
+      ]
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ]
+    },
+    "unknown": [
+      "historical_migration_tool_versions",
+      "analysis_models"
+    ],
+    "sources": {
+      "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff696-5618-78d2-a059-a02982380b3d.jsonl": "2fd09c5c745cd38ab764fbed2630074f6c2effdd4005161075d5316358df0705",
+      "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/main-019ffb4e-a828-7f12-a8dd-1b8a884da577.jsonl": "b1a1202a6ad7d130d746cba32866654b7241ec2911c579cdc6d36e8b6050c3b1"
+    }
+  },
+  "graph_evidence": [
+    {
+      "graph": 1,
+      "nodes": [
+        {
+          "id": "card:n-3978fde02a36a874",
+          "kind": "file",
+          "key": "D:/HnaccurateWeather_HarmonyOS/spec/decision-ledger.md",
+          "at": "2026-08-13T03:06:15.824000+00:00"
+        },
+        {
+          "id": "card:n-f2aafe05a50ec3ea",
+          "kind": "file",
+          "key": "E:/Androidproject/app_hnaccurateweather_live_android/app/src/main/java/com/cstools/weather/util/Extension_AES.kt",
+          "at": "2026-08-13T03:06:25.823000+00:00"
+        },
+        {
+          "id": "card:n-29b8919d03da5f2d",
+          "kind": "file",
+          "key": "E:/Androidproject/app_hnaccurateweather_live_android/base/src/main/java/com/cstools/base/util/AESUtil.java",
+          "at": "2026-08-13T03:06:56.178000+00:00"
+        },
+        {
+          "id": "card:n-13f82ac168ebd22a",
+          "kind": "agent",
+          "key": "019ff696-5618-78d2-a059-a02982380b3d",
+          "at": "2026-08-13T03:07:44.556000+00:00"
+        },
+        {
+          "id": "card:n-3a0f35addeda4455",
+          "kind": "file",
+          "key": "D:/HnaccurateWeather_HarmonyOS/entry/src/main/ets/network/NetworkCrypto.ets",
+          "at": "2026-08-21T09:35:59.738000+00:00"
+        }
+      ],
+      "edges": [
+        {
+          "from": "card:n-3978fde02a36a874",
+          "to": "card:n-13f82ac168ebd22a",
+          "relation": "read",
+          "at": "2026-08-13T03:06:15.824000+00:00",
+          "source": "model_review",
+          "strength": "candidate",
+          "evidence": [
+            "db4c0d2e75c930a4:2636:2757b310bc770438",
+            "db4c0d2e75c930a4:2637:c4fd9dc6d75597cc"
+          ],
+          "quote_verified": true
+        },
+        {
+          "from": "card:n-f2aafe05a50ec3ea",
+          "to": "card:n-13f82ac168ebd22a",
+          "relation": "read",
+          "at": "2026-08-13T03:06:25.823000+00:00",
+          "source": "model_review",
+          "strength": "candidate",
+          "evidence": [
+            "db4c0d2e75c930a4:2640:567523fbb24152e7",
+            "db4c0d2e75c930a4:2641:c40cad770da3e0f0"
+          ],
+          "quote_verified": true
+        },
+        {
+          "from": "card:n-29b8919d03da5f2d",
+          "to": "card:n-13f82ac168ebd22a",
+          "relation": "read",
+          "at": "2026-08-13T03:06:56.178000+00:00",
+          "source": "model_review",
+          "strength": "candidate",
+          "evidence": [
+            "db4c0d2e75c930a4:2651:f3353993e6057f16",
+            "db4c0d2e75c930a4:2652:931f344c62e6e735"
+          ],
+          "quote_verified": true
+        },
+        {
+          "from": "card:n-13f82ac168ebd22a",
+          "to": "card:n-3a0f35addeda4455",
+          "relation": "write",
+          "at": "2026-08-13T03:07:44.556000+00:00",
+          "source": "model_edge",
+          "strength": "confirmed",
+          "evidence": [
+            "db4c0d2e75c930a4:2661:0af42b24c4247831"
+          ]
+        }
+      ]
+    }
+  ],
+  "validation": {
+    "status": "valid",
+    "schema": "passed",
+    "graph_check": "performed",
+    "kernel_sha256": "b5d894750c6e0deeffaeee173f6bd3bb11f2afe7a7a3af592288a6448e5dd41e",
+    "causal_correctness": "not_certified",
+    "unresolved_targets": [
+      "D:/HnaccurateWeather_HarmonyOS/entry/src/main/ets/network/WeatherHttpClient.ets"
+    ],
+    "graph_checks": [
+      {
+        "graph": 1,
+        "draft_sha256": "f7c30047882412ecd480ce49e14fcc8124c36988a78152687c808e33b67d86cb",
+        "receipt": {
+          "schema": "inquiry-graph/1",
+          "report_id": "514e76105cef4a5a",
+          "mechanical_status": "valid",
+          "path_status": "complete",
+          "semantic_verified": false,
+          "submission_format": "coordinates/1",
+          "issues": [],
+          "path_feedback": [],
+          "delivery": {
+            "status": "ready_for_review",
+            "semantic_verified": false,
+            "coverage_verified": false
+          }
+        }
+      }
+    ]
+  },
+  "revision": "c563ccfefbd3d0c886b1b679bc464b58f7f040d4c63df496e19aed56d7d775f4"
+}
