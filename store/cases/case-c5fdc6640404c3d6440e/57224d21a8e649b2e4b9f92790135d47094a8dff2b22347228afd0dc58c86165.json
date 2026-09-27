@@ -1,0 +1,598 @@
+{
+  "schema": "migloop-case/2",
+  "id": "case-c5fdc6640404c3d6440e",
+  "created_at": "2026-09-27T21:03:56.691545+00:00",
+  "job": "issue-c5fdc6640404c3d6440e",
+  "identity_basis": "server migration ID",
+  "migration_key": "3a9f41ad-48a4-4f1a-a085-fb6393b81f8a",
+  "draft": {
+    "title": "FlexGate 加密传输移植到 ArkTS 时，密钥生成器规格、GCM 空结果与 Buffer 视图按 Java/Node 习惯映射，真机加解密失败",
+    "when": "网络基础设施实现阶段，把 Android 端 RSA-OAEP + AES-GCM 网关加密传输改写为 ArkTS cryptoFramework 与 buffer 调用时（含为通过编译调整同步 API 与类型的收敛步骤）",
+    "description": "源端用 KeyFactory + X509EncodedKeySpec 解析网关下发的“BEGIN PUBLIC KEY”PEM，以 RSA/ECB/OAEPWithSHA-256AndMGF1Padding 包裹随机会话密钥，用 AES/GCM/NoPadding 加密可能为空的请求体并解密响应；目标端需用 createAsyKeyGenerator/convertPemKeySync、Cipher.updateSync/doFinalSync 和 @kit.ArkTS buffer 实现同一协议。",
+    "summary": "写前 S2 已读到反编译的 FlexGateCrypto：parsePublicKey 去掉“-----BEGIN PUBLIC KEY-----”后用 X509EncodedKeySpec，\nrsaEncrypt 为 RSA/ECB/OAEPWithSHA-256AndMGF1Padding（MGF1 SHA-256），对称部分为 AES/GCM/NoPadding（S2 L2961-L2963、L2973-L2975）；\n网关实际返回 2048 位 X.509 SPKI PEM（S2 L3363-L3365），Node 探针按同一协议已拿到 200 和 adExtraVos（S2 L2985-L2987、L3369-L3379）。\nS2 还打开了 OpenHarmony GCM 指南，其中写明 doFinal 输出可能为 null、访问前须判空，示例 GCM 解密的 doFinal 也返回 null（S2 L3356-L3359）。\n因此协议理解正确、足够，偏差都落在 ArkTS 加密/缓冲 API 映射：\n① 10:15 新建 FlexGateTransport 时，用 createAsyKeyGenerator('RSA1024|PKCS1') 去转换 X.509 PEM（S2 L3415）；\n10:17 收敛时只把位数改成 2048，'|PKCS1' 后缀保留（S2 L3459）。\n② 首稿对 update/doFinal 结果本有 `?.data ??` 空值兜底；10:17 为通过编译改用同步 API 时（编译错误只涉及 Promise 与 DataBlob 类型，S2 L3447-L3449），\n依据 d.ts 中 updateSync/doFinalSync 返回 DataBlob 的签名（S2 L3453-L3455）把加密、解密两处兜底全部删去，直接取 `.data`（S2 L3459）。\n③ 10:29 把 `new Uint8Array(buffer.from(...).buffer)` 改成 Node 式 `new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength)`（S2 L3759），\n编译报 ArkTS Buffer 没有 byteLength（S2 L3765-L3767）后，用 shell 把 byteLength 机械替换为 length 并构建通过（S2 L3771-L3773），\n仍保留基于 .buffer/.byteOffset 的视图。\n10:17-10:34 的这些改动属于同轮为通过 ArkTS 编译的收敛，但 ②③ 改变了运行时行为，BUILD SUCCESSFUL 并不说明真机加解密可用。\n用户报告“还是显示该连接暂未配置”后，逐阶段透传的真机日志依次为 encrypt-body 读取 null 的 data、parse-rsa-key “create c generator fail”、\ndecrypt-response 读取 null（S2 L4104、L4128、L4144、L4172）；修复为加解密结果补空值兜底、生成器改为 'RSA2048'（S2 L4132、L4160、L4176），\n设备随后加载 31 条品牌链接（S2 L4368）。次日同一视图写法在真机 encrypt-body/decrypt-response 抛出\nRangeError: The newByteLength is out of range（S1 L7402），S1 改为按 length 显式拷贝的 copyBuffer（S1 L7418、L7453、L7459）后恢复。\nNearbyConfigBootstrap 的修改是失败日志与失败后允许重新请求（S2 L4286、L4414；S1 L7296），属传输失败暴露后的补充，本卡未单独归因。\n",
+    "recommendations": [
+      "移植加密协议时，逐项把 Java 的密钥格式、填充和摘要映射为 cryptoFramework 规格串：createAsyKeyGenerator 只写算法与按实际公钥得出的位数（本例 'RSA2048'），“BEGIN PUBLIC KEY”的 X.509 PEM 直接交给 convertPemKeySync，不在生成器上附加 PKCS1 等编码后缀。",
+      "对 Cipher.update/updateSync 与 doFinal/doFinalSync 的结果一律判空后再取 data（GCM 空明文加密、GCM 解密 final 都可能返回 null），即使 d.ts 签名是非空 DataBlob；为通过编译改写成同步 API 时保留原有空值兜底。",
+      "ArkTS 的 buffer.Buffer 不套用 Node 的 .buffer/byteOffset 视图写法；需要独立 Uint8Array 时按 length 分配并用 copy 拷贝。编译报 Buffer 属性不存在时先查 ArkTS buffer 语义，不做字段名机械替换。",
+      "加密传输编译通过后，在真机上用空请求体的 GET 与实际网关各做一次完整往返（AES 加密、RSA 包裹、响应解密），失败时透传所在阶段与原始异常；Node 探针只证明协议，不证明 ArkTS 实现。"
+    ],
+    "unknown": [
+      "写前材料中未见列出 createAsyKeyGenerator 合法 algName 的文档；'|PKCS1' 被拒的依据是真机“create c generator fail”及改为 'RSA2048' 后通过，被拒的精确原因未另验证。",
+      "RangeError 的精确机制（ArkTS Buffer 的 .buffer 与 byteOffset 所指内存）材料未验证；同一视图写法在 9-04 12:34 曾成功加载，次日失败，说明与运行时缓冲状态有关，本卡只归因使用了未经核实的 Node 视图习惯。"
+    ],
+    "graphs": [
+      {
+        "target": {
+          "key": "D:/anhuizhongyi/huoche/harmony_train-ticket_vest28/entry/src/main/ets/network/FlexGateTransport.ets",
+          "since": null,
+          "at": "2026-09-05T12:45:25.464Z"
+        },
+        "nodes": [
+          {
+            "key": "C:/temp/ahzy_aar_inspect_1/crypto.txt",
+            "at": "2026-09-04T09:39:46.703Z",
+            "reason": "正常输入：S2 用 javap 导出 FlexGateCrypto 后 rg 该文件，回执给出 parsePublicKey 去掉“-----BEGIN PUBLIC KEY-----”并 getInstance(\"RSA\") + X509EncodedKeySpec、rsaEncrypt 为 RSA/ECB/OAEPWithSHA-256AndMGF1Padding、AES/GCM/NoPadding（main-01a06b1c…jsonl:L2961-L2963；L2973-L2975 再读到 OAEPParameterSpec SHA-256/MGF1）。足以确定公钥是 X.509 SPKI、无 PKCS1 编码要求。"
+          },
+          {
+            "key": "D:/HmA/DevEco Studio/sdk/default/openharmony/ets/api/@ohos.security.cryptoFramework.d.ts",
+            "at": "2026-09-04T10:14:06.021Z",
+            "reason": "正常输入：S2 读取 AsyKeyGenerator 段，convertPemKeySync(pubKey, priKey) 只说明接收 PEM 字符串；PKCS8/PKCS1 字样出现在私钥编码 getEncodedPem 说明中，并无给生成器附加 PKCS1 的依据（main-01a06b1c…jsonl:L3395-L3397）。"
+          },
+          {
+            "key": "main-01a06b1c-4512-7a61-988f-86413715d804.jsonl",
+            "at": "2026-09-04T10:15:05.444Z",
+            "reason": "已收到上述 X.509/OAEP 输入，且 L3363-L3365 实际取回 2048 位“BEGIN PUBLIC KEY”PEM，apply_patch 新建目标时却写 createAsyKeyGenerator('RSA1024|PKCS1') + convertPemKeySync，并用 'AES256|GCM|PKCS7'（同转录 L3415-L3417）。协议理解正确而 ArkTS 规格串映射偏离；PKCS7/OAEP 名称在 L3560 收敛时已改，'|PKCS1' 保留到 12:27 修复（L4144、L4160）。",
+            "problem": true
+          },
+          {
+            "key": "D:/HmA/DevEco Studio/sdk/default/openharmony/ets/api/@ohos.security.cryptoFramework.d.ts",
+            "at": "2026-09-04T10:16:53.958Z",
+            "reason": "收敛时的上下文：rg 回执显示 updateSync(data: DataBlob): DataBlob、doFinalSync(data: DataBlob | null): DataBlob（main-01a06b1c…jsonl:L3453-L3455）。该签名未标可空，但 S2 在 L3356-L3359 已打开的 GCM 指南明确要求对 doFinal 结果判空，示例解密 doFinal 返回 null。"
+          },
+          {
+            "key": "main-01a06b1c-4512-7a61-988f-86413715d804.jsonl",
+            "at": "2026-09-04T10:17:06.958Z",
+            "reason": "为修复 Promise/DataBlob 类型编译错误（L3447-L3449）改用同步 API 时，把首稿 encrypted?.data ?? 空数组、plain?.data ?? 空数组等兜底改成直接取 encrypted.data、finalTag.data、plain.data、final.data，同时只把生成器位数改为 'RSA2048|PKCS1'（同转录 L3459-L3461）。编译错误并不要求删除兜底；该片段保留到真机 encrypt-body/decrypt-response 读 null（L4128、L4172）后由 L4132、L4176 补回。",
+            "problem": true
+          },
+          {
+            "key": "D:/anhuizhongyi/huoche/harmony_train-ticket_vest28/build_out.log",
+            "at": "2026-09-04T10:29:53.083Z",
+            "reason": "收敛输入：S2 构建后读取该日志，回执为 Property 'byteLength' does not exist on type 'Buffer'（main-01a06b1c…jsonl:L3765-L3767），表明 ArkTS Buffer 与 L3759 套用的 Node Buffer 接口不同。"
+          },
+          {
+            "key": "main-01a06b1c-4512-7a61-988f-86413715d804.jsonl",
+            "at": "2026-09-04T10:30:09.706Z",
+            "reason": "L3759 已把 .buffer 转换改为 new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength)；收到上述编译错误后，用 PowerShell -replace + Set-Content 把三处 byteLength 替换为 length 并构建通过（同转录 L3771-L3773），未核对 ArkTS .buffer/byteOffset 语义。次日真机在 encrypt-body/decrypt-response 抛 newByteLength RangeError（main-01a06a30…jsonl:L7402），由 S1 改为 copyBuffer（L7418、L7453、L7459）。",
+            "problem": true
+          }
+        ],
+        "edges": [
+          {
+            "from": 1,
+            "to": 3,
+            "force": true,
+            "reason": "S2 在同一 exec 中 javap 导出 FlexGateCrypto 到 crypto.txt 后以 rg 读取该文件，回执返回 parsePublicKey 的 BEGIN PUBLIC KEY/X509EncodedKeySpec 与 OAEP、GCM 规格串；这是生成者写前对该文件的真实读取。",
+            "evidence": [
+              {
+                "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/main-01a06b1c-4512-7a61-988f-86413715d804.jsonl",
+                "line": 2961
+              },
+              {
+                "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/main-01a06b1c-4512-7a61-988f-86413715d804.jsonl",
+                "line": 2963
+              }
+            ]
+          },
+          {
+            "from": 2,
+            "to": 3,
+            "force": true,
+            "reason": "S2 用 Get-Content 按行段读取 cryptoFramework.d.ts，回执返回 AsyKeyGenerator 的 convertPemKey/convertPemKeySync 说明；写目标前已收到。",
+            "evidence": [
+              {
+                "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/main-01a06b1c-4512-7a61-988f-86413715d804.jsonl",
+                "line": 3395
+              },
+              {
+                "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/main-01a06b1c-4512-7a61-988f-86413715d804.jsonl",
+                "line": 3397
+              }
+            ]
+          },
+          {
+            "from": 3,
+            "to": "target",
+            "force": true,
+            "reason": "S2 的 exec 调用 tools.apply_patch 以 Add File 新建 FlexGateTransport.ets，回执完成；该首稿含 createAsyKeyGenerator('RSA1024|PKCS1')。",
+            "evidence": [
+              {
+                "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/main-01a06b1c-4512-7a61-988f-86413715d804.jsonl",
+                "line": 3415
+              },
+              {
+                "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/main-01a06b1c-4512-7a61-988f-86413715d804.jsonl",
+                "line": 3417
+              }
+            ]
+          },
+          {
+            "from": 4,
+            "to": 5,
+            "force": true,
+            "reason": "S2 用 rg 检索 cryptoFramework.d.ts 的 initSync/updateSync/doFinalSync/convertPemKeySync 签名，回执返回 updateSync(data: DataBlob): DataBlob 等；随后即改写目标。",
+            "evidence": [
+              {
+                "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/main-01a06b1c-4512-7a61-988f-86413715d804.jsonl",
+                "line": 3453
+              },
+              {
+                "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/main-01a06b1c-4512-7a61-988f-86413715d804.jsonl",
+                "line": 3455
+              }
+            ]
+          },
+          {
+            "from": 5,
+            "to": "target",
+            "force": true,
+            "reason": "S2 的 exec 调用 tools.apply_patch 以 Update File 修改 FlexGateTransport.ets，改用同步 API 并删去 update/doFinal 结果的空值兜底，回执完成。",
+            "evidence": [
+              {
+                "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/main-01a06b1c-4512-7a61-988f-86413715d804.jsonl",
+                "line": 3459
+              },
+              {
+                "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/main-01a06b1c-4512-7a61-988f-86413715d804.jsonl",
+                "line": 3461
+              }
+            ]
+          },
+          {
+            "from": 6,
+            "to": 7,
+            "force": true,
+            "reason": "S2 运行构建后 Get-Content build_out.log -Tail 15，回执返回 FlexGateTransport.ets 中 Property 'byteLength' does not exist on type 'Buffer' 的编译错误。",
+            "evidence": [
+              {
+                "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/main-01a06b1c-4512-7a61-988f-86413715d804.jsonl",
+                "line": 3765
+              },
+              {
+                "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/main-01a06b1c-4512-7a61-988f-86413715d804.jsonl",
+                "line": 3767
+              }
+            ]
+          },
+          {
+            "from": 7,
+            "to": "target",
+            "force": true,
+            "reason": "S2 用 PowerShell (Get-Content FlexGateTransport.ets) -replace byteLength→length | Set-Content 写回目标并构建通过，回执为 BUILD SUCCESSFUL；这是对目标的真实写入。",
+            "evidence": [
+              {
+                "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/main-01a06b1c-4512-7a61-988f-86413715d804.jsonl",
+                "line": 3771
+              },
+              {
+                "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/main-01a06b1c-4512-7a61-988f-86413715d804.jsonl",
+                "line": 3773
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "unresolved_targets": [
+      {
+        "key": "D:/anhuizhongyi/huoche/harmony_train-ticket_vest28/entry/src/main/ets/services/NearbyConfigBootstrap.ets",
+        "reason": "已确认修改为成功/失败日志与失败后重置 loading、forceReload 重新请求（S2 L4286、L4414；S1 L7296），属传输失败暴露后的可诊断性与重试补充；材料中未核到 Android 侧或规格对失败重试的写前要求，生成期（S2 L3423、L3808、L3864）的缓存设计未单独归因。"
+      }
+    ]
+  },
+  "claims": {
+    "diagnosis": {
+      "text": "写前 S2 已读到反编译的 FlexGateCrypto：parsePublicKey 去掉“-----BEGIN PUBLIC KEY-----”后用 X509EncodedKeySpec，\nrsaEncrypt 为 RSA/ECB/OAEPWithSHA-256AndMGF1Padding（MGF1 SHA-256），对称部分为 AES/GCM/NoPadding（S2 L2961-L2963、L2973-L2975）；\n网关实际返回 2048 位 X.509 SPKI PEM（S2 L3363-L3365），Node 探针按同一协议已拿到 200 和 adExtraVos（S2 L2985-L2987、L3369-L3379）。\nS2 还打开了 OpenHarmony GCM 指南，其中写明 doFinal 输出可能为 null、访问前须判空，示例 GCM 解密的 doFinal 也返回 null（S2 L3356-L3359）。\n因此协议理解正确、足够，偏差都落在 ArkTS 加密/缓冲 API 映射：\n① 10:15 新建 FlexGateTransport 时，用 createAsyKeyGenerator('RSA1024|PKCS1') 去转换 X.509 PEM（S2 L3415）；\n10:17 收敛时只把位数改成 2048，'|PKCS1' 后缀保留（S2 L3459）。\n② 首稿对 update/doFinal 结果本有 `?.data ??` 空值兜底；10:17 为通过编译改用同步 API 时（编译错误只涉及 Promise 与 DataBlob 类型，S2 L3447-L3449），\n依据 d.ts 中 updateSync/doFinalSync 返回 DataBlob 的签名（S2 L3453-L3455）把加密、解密两处兜底全部删去，直接取 `.data`（S2 L3459）。\n③ 10:29 把 `new Uint8Array(buffer.from(...).buffer)` 改成 Node 式 `new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength)`（S2 L3759），\n编译报 ArkTS Buffer 没有 byteLength（S2 L3765-L3767）后，用 shell 把 byteLength 机械替换为 length 并构建通过（S2 L3771-L3773），\n仍保留基于 .buffer/.byteOffset 的视图。\n10:17-10:34 的这些改动属于同轮为通过 ArkTS 编译的收敛，但 ②③ 改变了运行时行为，BUILD SUCCESSFUL 并不说明真机加解密可用。\n用户报告“还是显示该连接暂未配置”后，逐阶段透传的真机日志依次为 encrypt-body 读取 null 的 data、parse-rsa-key “create c generator fail”、\ndecrypt-response 读取 null（S2 L4104、L4128、L4144、L4172）；修复为加解密结果补空值兜底、生成器改为 'RSA2048'（S2 L4132、L4160、L4176），\n设备随后加载 31 条品牌链接（S2 L4368）。次日同一视图写法在真机 encrypt-body/decrypt-response 抛出\nRangeError: The newByteLength is out of range（S1 L7402），S1 改为按 length 显式拷贝的 copyBuffer（S1 L7418、L7453、L7459）后恢复。\nNearbyConfigBootstrap 的修改是失败日志与失败后允许重新请求（S2 L4286、L4414；S1 L7296），属传输失败暴露后的补充，本卡未单独归因。\n",
+      "kind": "diagnosis",
+      "status": "model_claim"
+    },
+    "recommendation:1": {
+      "text": "移植加密协议时，逐项把 Java 的密钥格式、填充和摘要映射为 cryptoFramework 规格串：createAsyKeyGenerator 只写算法与按实际公钥得出的位数（本例 'RSA2048'），“BEGIN PUBLIC KEY”的 X.509 PEM 直接交给 convertPemKeySync，不在生成器上附加 PKCS1 等编码后缀。",
+      "kind": "recommendation",
+      "status": "model_claim"
+    },
+    "recommendation:2": {
+      "text": "对 Cipher.update/updateSync 与 doFinal/doFinalSync 的结果一律判空后再取 data（GCM 空明文加密、GCM 解密 final 都可能返回 null），即使 d.ts 签名是非空 DataBlob；为通过编译改写成同步 API 时保留原有空值兜底。",
+      "kind": "recommendation",
+      "status": "model_claim"
+    },
+    "recommendation:3": {
+      "text": "ArkTS 的 buffer.Buffer 不套用 Node 的 .buffer/byteOffset 视图写法；需要独立 Uint8Array 时按 length 分配并用 copy 拷贝。编译报 Buffer 属性不存在时先查 ArkTS buffer 语义，不做字段名机械替换。",
+      "kind": "recommendation",
+      "status": "model_claim"
+    },
+    "recommendation:4": {
+      "text": "加密传输编译通过后，在真机上用空请求体的 GET 与实际网关各做一次完整往返（AES 加密、RSA 包裹、响应解密），失败时透传所在阶段与原始异常；Node 探针只证明协议，不证明 ArkTS 实现。",
+      "kind": "recommendation",
+      "status": "model_claim"
+    }
+  },
+  "targets": [
+    "D:/anhuizhongyi/huoche/harmony_train-ticket_vest28/entry/src/main/ets/network/FlexGateTransport.ets",
+    "D:/anhuizhongyi/huoche/harmony_train-ticket_vest28/entry/src/main/ets/services/NearbyConfigBootstrap.ets"
+  ],
+  "changes": [
+    {
+      "files": [
+        "D:/anhuizhongyi/huoche/harmony_train-ticket_vest28/entry/src/main/ets/network/FlexGateTransport.ets",
+        "D:/anhuizhongyi/huoche/harmony_train-ticket_vest28/entry/src/main/ets/services/NearbyConfigBootstrap.ets"
+      ],
+      "change": "RSA 公钥改按 X.509 解析，AES-GCM 空结果兼容，保留真实错误并支持重试；次日改用安全的 Buffer 拷贝避免 newByteLength 越界，配置失败可重新请求。",
+      "evidence": [
+        "main-01a06b1c-4512-7a61-988f-86413715d804.jsonl:L4115 / L4133 / L4161 / L4177 / L4287 / L4415",
+        "main-01a06a30-cfe0-7971-9329-2ce966ab0820.jsonl:L7297 / L7419 / L7454 / L7460"
+      ]
+    }
+  ],
+  "participants": [
+    {
+      "agent": "main-01a06b1c-4512-7a61-988f-86413715d804.jsonl",
+      "role": "生成（10:15 新建 FlexGateTransport/NearbyConfigBootstrap，修复中新生）与修复",
+      "action": "参照 Android 网关与反编译依赖实现加密传输，12:23-12:35 修正密钥与 GCM",
+      "evidence": [
+        "main-01a06b1c-4512-7a61-988f-86413715d804.jsonl:L3370-L3865",
+        "main-01a06b1c-4512-7a61-988f-86413715d804.jsonl:L4016-L4444"
+      ]
+    },
+    {
+      "agent": "main-01a06a30-cfe0-7971-9329-2ce966ab0820.jsonl",
+      "role": "修复（次日）",
+      "action": "修正 Buffer 拷贝",
+      "evidence": [
+        "main-01a06a30-cfe0-7971-9329-2ce966ab0820.jsonl:L6974-L7532"
+      ]
+    }
+  ],
+  "scope": {
+    "project_roots": [
+      "D:/anhuizhongyi/huoche/harmony_train-ticket_vest28"
+    ],
+    "source_roots": [
+      "D:/anhuizhongyi/huoche/android-train-ticket-vest7"
+    ],
+    "materials": [
+      "C:/Users/hongy/projects/_migloop-multiapp-memory-20260927/runs/ea2a2e045514950d/materials"
+    ],
+    "generation_end": null,
+    "observation_end": "2026-09-05T12:45:25.464Z",
+    "boundary_evidence": [
+      "材料池只有三个并行的 Codex 主会话（S1=main-01a06a30-cfe0-7971-9329-2ce966ab0820.jsonl，S2=main-01a06b1c-4512-7a61-988f-86413715d804.jsonl，S3=main-01a06b28-0c59-7042-9414-614a253fd770.jsonl）及 55 个子代理转录，同一工程 harmony_train-ticket_vest28。",
+      "基线生成不在材料内：S1:L14-L16 首个动作读取已存在的 spec/decision-ledger.md（D-001/D-002 已批准 F001–F004 MVP 范围），S1:L201 的 spec-index 写入声明 baseline 已存在、以增量 OPT 方式推进。",
+      "三个会话交替进行增量生成与修复：每个 a2h-spec 需求（OPT-001…OPT-008，及用户临时提出的新页面/新功能对齐）作为一个生成单元；其交付后用户报告的偏差（无反应、仍不一致、报错、缺失行为）及保留的修改作为修复。不存在单一生成截止时刻，故 generation_end 取 null；每个 issue 在 changes/participants 中标出对应生成单元与修复轮次。",
+      "observation_end 取材料最后一条记录（S1 最后记录 2026-09-05T12:45:25.464Z；服务端 last_activity 2026-09-05T12:48:18Z，导出切片 2026-09-05T12:46:26Z）。"
+    ]
+  },
+  "environment": {
+    "schema": "migloop-case-environment/1",
+    "through": "2026-09-05T12:45:25.464Z",
+    "facts": [],
+    "sources": {},
+    "unknown": [
+      "android.compile_sdk",
+      "android.target_sdk",
+      "android.min_sdk",
+      "libraries.compose_bom",
+      "libraries.material3",
+      "toolchain.kotlin",
+      "toolchain.agp",
+      "toolchain.gradle",
+      "harmonyos.target_sdk",
+      "harmonyos.compatible_sdk",
+      "harmonyos.compile_sdk",
+      "device.android_api",
+      "device.harmonyos_version",
+      "device.density",
+      "device.font_scale",
+      "project.revision"
+    ],
+    "unscoped_observations": 0,
+    "boundary": "Recorded configuration/tool outputs, not a continuous environment state, resolved dependency proof, or lesson compatibility range. Missing values stay unknown; no current project files are read.",
+    "snapshot_id": "37979567ad85e9e9285bc9c81e263a5648a6eac8aa299eaa92e4b40c0cace15d"
+  },
+  "packager": {
+    "name": "migloop-memory-skills",
+    "version": "0.8.3",
+    "bundle_sha256": "4bddfa4e92b7dccd8546606cce6f167963b9f6bf03d8329085d22bf4e94eea92"
+  },
+  "validation_sha256": "f07f0b2712e28aaef40ffaf4dacd9ae8fd3f5dcb3218e6274c8115a8aac18a2a",
+  "provenance": {
+    "schema": "migloop-case-provenance/1",
+    "materials": "C:\\Users\\hongy\\projects\\_migloop-multiapp-memory-20260927\\runs\\ea2a2e045514950d\\materials",
+    "db_root_session_id": null,
+    "source_set_id": "sources-8b0a7c0de0b3c4c2be88",
+    "collector": {
+      "name": "migloop-memory-skills",
+      "version": "0.8.3",
+      "bundle_sha256": "14a940665d63179822994c2b9e982f971b3c750199265458ca6baa6bd4688ef8",
+      "implementation_sha256": "48e6f84dd59cbfdcac7c372a18ac76a098a52d3dbe972093dc2db671f63c943f"
+    },
+    "observed": {
+      "session_ids": [
+        "01a06a30-cfe0-7971-9329-2ce966ab0820",
+        "01a06a3d-28ff-7a03-9397-43ff15076dd0",
+        "01a06a42-87cc-7f31-ae9c-fb6bb43f444d",
+        "01a06a46-9b67-75f1-a035-9d545822a566",
+        "01a06a56-7f7d-7941-a3b8-e52195d5aa0c",
+        "01a06a5d-23fe-7161-a041-fe62b6f92766",
+        "01a06a5d-b222-7750-942c-b5449ec3102e",
+        "01a06a5e-164e-7670-a5f1-1924dbe9614e",
+        "01a06a65-8c9e-7f32-898e-993f3e7e51b7",
+        "01a06a87-c493-7d13-a415-a7fcf517d0ec",
+        "01a06b1c-4512-7a61-988f-86413715d804",
+        "01a06b27-452c-7582-9af3-92e880e77f1e",
+        "01a06b28-0c59-7042-9414-614a253fd770",
+        "01a06b2f-6f44-78f3-959c-11a16651934c",
+        "01a06b33-380c-7402-84ed-d00af6f66c06",
+        "01a06b34-13d4-7bc3-ad00-d1f1074936b5",
+        "01a06b34-2c1c-78f0-ad04-ea72016653f7",
+        "01a06b38-546c-7023-ac73-4196f731d42a",
+        "01a06b38-cc3b-7303-af47-f80bb7aeba57",
+        "01a06b5b-672e-7272-a528-dbf534a9e287",
+        "01a06b63-4f25-75e0-b53f-4a72b52d96b7",
+        "01a06b6a-27e9-76e3-ac07-c5b935348113",
+        "01a06b6a-40e0-7c10-bae6-bf1eb553bb13",
+        "01a06b6a-fdbc-7a61-9f4b-3670bc637d53",
+        "01a06b71-121d-7543-9013-405a24f5c46f",
+        "01a06b77-6d98-7000-93db-e9706af4c5e5",
+        "01a06b8b-9ae5-76e0-ac18-88e6ab230fda",
+        "01a06b90-d529-7301-a0cf-89a5ca0e4053",
+        "01a06b93-33e1-7bd3-9a79-2d9f3972954c",
+        "01a06b93-4c27-7a72-9375-b3f725edf32d",
+        "01a06bad-41e4-71d1-a88f-32290768a054",
+        "01a06bcc-6b2c-7db1-b74b-7eab1aad062a",
+        "01a06bcf-1646-7521-af0d-4736b1fa2ff8",
+        "01a06bec-2d48-7492-b673-2963a0972d29",
+        "01a06bf3-5c13-7760-9c13-8dd390288a11",
+        "01a06f6f-7c4a-7af1-9870-ae2cbfacebe2",
+        "01a0715d-6858-7661-af89-cd1fe1a67795",
+        "01a0715e-13ce-75a2-9a15-1794e8ee0751",
+        "01a07161-90b9-7a32-ba04-46b1971ab417",
+        "01a07163-b74f-7552-949d-dc2a21ffeac4",
+        "01a07164-7b58-73f0-9aec-a7d4a410969f",
+        "01a0716a-0932-75e2-87eb-04dadccd6ed8",
+        "01a0716c-ddba-7e32-a400-824a53380955",
+        "01a07172-270c-79b1-8577-29a65b8bc6f9",
+        "01a07178-fb8c-7053-b310-d4b4eb1cd679",
+        "01a07179-a1da-7403-8573-42c6f51dba93",
+        "01a0717c-36b7-7152-966f-8ae0b3641cbe",
+        "01a0717c-66a2-74d3-bf6a-19a234c48c31",
+        "01a07183-9135-7b30-ac41-d90fc1688919",
+        "01a07186-f29f-7801-a03c-a4c2715e0cb6",
+        "01a07188-0d97-7510-826c-b68dc80e54b5",
+        "01a07188-e1e9-7e42-b350-030a1d940661",
+        "01a07189-4496-77d1-86eb-e91b3803253f",
+        "01a0718c-72f0-7d72-ac8e-74cb2788973c",
+        "01a0718c-e011-7fd0-a07c-a1460fb7a885",
+        "01a07191-8d75-77b2-a50b-7fe58b387bdf",
+        "01a07194-48fd-7241-8471-f8c69b34013e",
+        "01a07194-ff28-7593-b661-6df450e9256a"
+      ],
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "gpt-5.6-sol"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.152.1",
+        "0.153.0-alpha.5"
+      ],
+      "projects": [
+        "D:\\anhuizhongyi\\huoche\\harmony_train-ticket_vest28"
+      ]
+    },
+    "migration": {
+      "project": "android-train-ticket-vest7",
+      "server_session_id": "3a9f41ad-48a4-4f1a-a085-fb6393b81f8a",
+      "source_uris": [
+        "server export sha256=0b720d5f5b3458fd87706a52f77f2737837bced2d193ceb6a525c1a1654e668c"
+      ]
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ]
+    },
+    "unknown": [
+      "historical_migration_tool_versions",
+      "analysis_models"
+    ],
+    "sources": {
+      "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/main-01a06a30-cfe0-7971-9329-2ce966ab0820.jsonl": "5f23d4d1c88924dc19d816cc0bcb8cc2823432e2501d2379bce621da50f35553",
+      "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/main-01a06b1c-4512-7a61-988f-86413715d804.jsonl": "7f8dcbe1133726b803451181c37987b7cea22addc61bb18c3e6b47be6bfae7d0"
+    }
+  },
+  "graph_evidence": [
+    {
+      "graph": 1,
+      "nodes": [
+        {
+          "id": "card:n-b9a0863e237d58d7",
+          "kind": "file",
+          "key": "C:/temp/ahzy_aar_inspect_1/crypto.txt",
+          "at": "2026-09-04T09:39:46.703000+00:00"
+        },
+        {
+          "id": "card:n-ff26fc7fbe7bfb37",
+          "kind": "file",
+          "key": "D:/HmA/DevEco Studio/sdk/default/openharmony/ets/api/@ohos.security.cryptoFramework.d.ts",
+          "at": "2026-09-04T10:14:06.021000+00:00"
+        },
+        {
+          "id": "card:n-4412a9d93c3817dd",
+          "kind": "agent",
+          "key": "01a06b1c-4512-7a61-988f-86413715d804",
+          "at": "2026-09-04T10:15:05.444000+00:00"
+        },
+        {
+          "id": "card:n-0cf54dd8940c2050",
+          "kind": "file",
+          "key": "D:/HmA/DevEco Studio/sdk/default/openharmony/ets/api/@ohos.security.cryptoFramework.d.ts",
+          "at": "2026-09-04T10:16:53.958000+00:00"
+        },
+        {
+          "id": "card:n-ea22cec429f8b4b0",
+          "kind": "agent",
+          "key": "01a06b1c-4512-7a61-988f-86413715d804",
+          "at": "2026-09-04T10:17:06.958000+00:00"
+        },
+        {
+          "id": "card:n-9969d4011be8d35c",
+          "kind": "file",
+          "key": "D:/anhuizhongyi/huoche/harmony_train-ticket_vest28/build_out.log",
+          "at": "2026-09-04T10:29:53.083000+00:00"
+        },
+        {
+          "id": "card:n-4a9006b9c1824ad4",
+          "kind": "agent",
+          "key": "01a06b1c-4512-7a61-988f-86413715d804",
+          "at": "2026-09-04T10:30:09.706000+00:00"
+        },
+        {
+          "id": "card:n-34769f159aa00367",
+          "kind": "file",
+          "key": "D:/anhuizhongyi/huoche/harmony_train-ticket_vest28/entry/src/main/ets/network/FlexGateTransport.ets",
+          "at": "2026-09-05T12:45:25.464000+00:00"
+        }
+      ],
+      "edges": [
+        {
+          "from": "card:n-b9a0863e237d58d7",
+          "to": "card:n-4412a9d93c3817dd",
+          "relation": "read",
+          "at": "2026-09-04T09:39:46.703000+00:00",
+          "source": "model_review",
+          "strength": "candidate",
+          "evidence": [
+            "151f2b6b6a744c49:2961:69b64bfd6f9a31d2",
+            "151f2b6b6a744c49:2963:f67d232272ba328a"
+          ],
+          "quote_verified": true
+        },
+        {
+          "from": "card:n-ff26fc7fbe7bfb37",
+          "to": "card:n-4412a9d93c3817dd",
+          "relation": "read",
+          "at": "2026-09-04T10:14:06.021000+00:00",
+          "source": "model_review",
+          "strength": "candidate",
+          "evidence": [
+            "151f2b6b6a744c49:3395:71e20f348fcde201",
+            "151f2b6b6a744c49:3397:aaea86d2572508a4"
+          ],
+          "quote_verified": true
+        },
+        {
+          "from": "card:n-4412a9d93c3817dd",
+          "to": "card:n-34769f159aa00367",
+          "relation": "write",
+          "at": "2026-09-04T10:15:05.444000+00:00",
+          "source": "model_review",
+          "strength": "candidate",
+          "evidence": [
+            "151f2b6b6a744c49:3415:856bdfa9ec4e0bb0",
+            "151f2b6b6a744c49:3417:d0426bda25f38a07"
+          ],
+          "quote_verified": true
+        },
+        {
+          "from": "card:n-0cf54dd8940c2050",
+          "to": "card:n-ea22cec429f8b4b0",
+          "relation": "read",
+          "at": "2026-09-04T10:16:53.958000+00:00",
+          "source": "model_review",
+          "strength": "candidate",
+          "evidence": [
+            "151f2b6b6a744c49:3453:fc6e9fb485bbc354",
+            "151f2b6b6a744c49:3455:bbbf54b2fe940175"
+          ],
+          "quote_verified": true
+        },
+        {
+          "from": "card:n-ea22cec429f8b4b0",
+          "to": "card:n-34769f159aa00367",
+          "relation": "write",
+          "at": "2026-09-04T10:17:06.958000+00:00",
+          "source": "model_review",
+          "strength": "candidate",
+          "evidence": [
+            "151f2b6b6a744c49:3459:86c3f646c55a7cce",
+            "151f2b6b6a744c49:3461:7c63d4e500a4f65d"
+          ],
+          "quote_verified": true
+        },
+        {
+          "from": "card:n-9969d4011be8d35c",
+          "to": "card:n-4a9006b9c1824ad4",
+          "relation": "read",
+          "at": "2026-09-04T10:29:53.083000+00:00",
+          "source": "model_review",
+          "strength": "candidate",
+          "evidence": [
+            "151f2b6b6a744c49:3765:589061499dae45f3",
+            "151f2b6b6a744c49:3767:77fa33e8c002beea"
+          ],
+          "quote_verified": true
+        },
+        {
+          "from": "card:n-4a9006b9c1824ad4",
+          "to": "card:n-34769f159aa00367",
+          "relation": "write",
+          "at": "2026-09-04T10:30:09.706000+00:00",
+          "source": "model_review",
+          "strength": "candidate",
+          "evidence": [
+            "151f2b6b6a744c49:3771:9e633fba37013208",
+            "151f2b6b6a744c49:3773:07cb1ee71a70360e"
+          ],
+          "quote_verified": true
+        }
+      ]
+    }
+  ],
+  "validation": {
+    "status": "valid",
+    "schema": "passed",
+    "graph_check": "performed",
+    "kernel_sha256": "b5d894750c6e0deeffaeee173f6bd3bb11f2afe7a7a3af592288a6448e5dd41e",
+    "causal_correctness": "not_certified",
+    "unresolved_targets": [
+      "D:/anhuizhongyi/huoche/harmony_train-ticket_vest28/entry/src/main/ets/services/NearbyConfigBootstrap.ets"
+    ],
+    "graph_checks": [
+      {
+        "graph": 1,
+        "draft_sha256": "45c198217df066eb0b3a33280b3c3284c3b0f075483cc4d4cfd49514cb4d78ac",
+        "receipt": {
+          "schema": "inquiry-graph/1",
+          "report_id": "36a5df71891c4fe7",
+          "mechanical_status": "valid",
+          "path_status": "complete",
+          "semantic_verified": false,
+          "submission_format": "coordinates/1",
+          "issues": [],
+          "path_feedback": [],
+          "delivery": {
+            "status": "ready_for_review",
+            "semantic_verified": false,
+            "coverage_verified": false
+          }
+        }
+      }
+    ]
+  },
+  "revision": "57224d21a8e649b2e4b9f92790135d47094a8dff2b22347228afd0dc58c86165"
+}
