@@ -1,0 +1,121 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-8555b02fdd531952938b",
+  "created_at": "2026-09-27T14:34:42.076494+00:00",
+  "migration_key": "1bbfa3ec-f51e-48a1-92a3-4387249b468e",
+  "title": "网络初始化入口建好后，没接进 EntryAbility.onCreate",
+  "when": "网络基础设施落地与应用入口接线阶段：新建需显式调用的网络初始化入口，或随后改写 EntryAbility.onCreate、宣告网络层完成时",
+  "description": "源端 Retrofit 的 baseUrl 在 Hilt 模块提供实例时带上，Application.onCreate 里没有网络初始化调用；目标端改为 HttpClient 静态 baseUrl（默认空串）加 NetworkConfig.init()，基础设施任务只产出 network 等目录，EntryAbility 由编排会话维护。",
+  "summary": "写前实际收到：主会话 main-76ad9618 是 EntryAbility 的创建者和维护者。09-22 03:30 它收到 Base-1~5 worker 的回报，\n其中写明 NetworkConfig.ets 是“RouteUrl/BASE_URL 多环境 + 网络初始化入口”（L2039），说明网络层有一个需要调用的初始化入口；\n回报没有写调用点，还写了“Forward-Ref Hooks：无”。主会话没有核对调用点，03:34 派 Step 3b/3c 时写\n“slice-14-f002 网络基础设施：Base-3 已实现，无需重复”（L2070）；05:45–05:47 为悬浮窗上下文改写 onCreate（L2613、L2644、L2652），\n改完的 onCreate 只有 FloatWindowService.setContext 与 pushUIAbility，没有网络初始化。这段 onCreate 原样留到修复前，\n修复时 Edit 的 old_string 就是它（main-c83bb2f9-ebd8-4f27-aa1d-d1191a60c9f3.jsonl:L910）。\n图中偏差点位于集成环节：已知有初始化入口，在自己负责的应用入口里没有调用，并提前把网络层记为完成。\n\n回报为何含糊：Base worker（agent-a4e097889cc3283dd）写前读到 arkts-data-layer 的 v2-network-service.md，\n“初始化和拦截器配置（V2 项目，在 EntryAbility 中）”示范把 HttpUtil.init({baseUrl}) 放进 EntryAbility（L90-L91），\ngrep 回执也显示工程已有 entryability/EntryAbility.ets（L93-L94）。它写出 HttpClient.baseUrl 默认空串、只有 init() 才赋值（L129），\n又写出 NetworkConfig.init()，注释“应用启动时初始化网络层”“由 EntryAbility 初始化”（L155、L204），却没有改 EntryAbility，\n回报只写“网络初始化入口”（L220）。启动调用义务在这里形成，既没落实，也没作为待接线项交出去，这是本问题最早可核的偏差。\n它交给主会话的是 task-notification 消息，检查器不绑定子代理回报边，所以这一段只写在文字里。\n\n规划和源端：feature-base 网络层只写 Base URL 走 SpKey 多环境（main-76ad9618…:L1797），base-plan 的 Base-3 只产出 network/*.ets，\nF002 与 slice-14 都没提启动初始化。源 Android 的 baseUrl 由 DINetworkModule.provideLocalRetrofit 里的\nRetrofit.Builder().baseUrl(getBaseUrl()) 在注入时带上，App.onCreate 只初始化 Firebase（agent-aa90cdd08b780bd14.jsonl:L80-L82）；\n生成期没有 agent 读过 DINetworkModule，首次读取在修复期（main-c83bb2f9…:L1033-L1034）。\n另有两次机会没接上：Step 3b/3c worker 读到含“由 EntryAbility 初始化”的 NetworkConfig（agent-a51cc4b728ac8391b.jsonl:L52-L53），\n只在 LingCastService 的环境切换里调用 init(env)；启动链路迁移时 main-c83bb2f9 的 MainViewModel.restoreState 只调\nTokenManager.loadFromPrefs()，decideLaunchRoute 冷启动就可能发游客登录请求（L608-L619），写前没有读 NetworkConfig 或 HttpClient。\n\n结果与修复：用户点“跳过”后游客登录报 {type:NETWORK}（main-c83bb2f9…:L868），主会话查到 baseUrl 为空、init 只在 LingCastService 里调用，\n请求发到没有 https:// 和 host 的相对路径（L877-L893）。修复在 EntryAbility 引入 NetworkConfig，并在 onCreate 开头\nawait NetworkConfig.init()（L908-L911），保留到观察截止。\n",
+  "recommendations": [
+    "网络层实现阶段：把源端 DI 注入的 baseUrl 改成需显式调用的 init 时，在同一任务里把 await NetworkConfig.init() 写进 EntryAbility.onCreate，早于任何请求；派工范围不许改入口文件时，在回报里单列待接线项，写明文件、生命周期方法和调用语句，不写“无 forward-ref”。",
+    "给静态 HttpClient 加未初始化保护：baseUrl 为空时直接抛出或记录“网络层未初始化”的明确错误，避免相对路径进入 http.request 后被统一包成 NETWORK 错误。",
+    "集成阶段：收到含“初始化入口”的回报、改写 EntryAbility.onCreate 或宣告网络层完成前，先跑 grep -rn \"NetworkConfig.init\\|HttpClient.init\" entry/src/main/ets，确认命中 entryability/EntryAbility.ets 的 onCreate；只命中业务服务（如 LingCastService 的环境切换）时按未接线处理。",
+    "启动链路迁移阶段：写冷启动即发请求的流程（如闪屏静默游客登录）前，确认 EntryAbility.onCreate 已完成网络初始化，restoreState 只加载 token 不等于网络层就绪。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/entryability/EntryAbility.ets",
+        "since": "2026-09-22T09:58:32.418Z",
+        "at": "2026-09-24T02:03:48.614Z"
+      },
+      "nodes": [
+        {
+          "key": "main-76ad9618-e80a-4565-b49c-3c6541e5ed67.jsonl",
+          "at": "2026-09-22T05:47:47.168Z",
+          "reason": "EntryAbility 的维护者：03:30 收到回报称 NetworkConfig 是“网络初始化入口”（L2039），03:34 派工写“Base-3 已实现，无需重复”（L2070），05:45–05:47 改写 onCreate 只放 FloatWindowService.setContext 与 pushUIAbility，未调用 NetworkConfig.init（L2613、L2644、L2652）。该 onCreate 留到修复前（main-c83bb2f9…:L910 old_string）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "Base worker 到主会话的交接是 task-notification 用户消息（main-76ad9618-e80a-4565-b49c-3c6541e5ed67.jsonl:L2039），检查器只绑定读写和父到子派发，不绑定子代理回报；Base worker 这一形成点（agent-a4e097889cc3283dd.jsonl:L90-L91、L129、L155、L204、L220）因此只在总结中给出，未入图。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-8555b02fdd531952938b",
+  "metadata": {
+    "migration": {
+      "project": "polypal-app-ohos",
+      "server_session_id": "1bbfa3ec-f51e-48a1-92a3-4387249b468e",
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "deepseek-v4-pro"
+      ],
+      "tool_versions": {
+        "orchestrator": "migbot-cc",
+        "runtime_version": "v1.4.8",
+        "runtime_commit": "09ac508",
+        "client_version": "hmigbot-lite-1.6.0",
+        "pack_version": "hmigbot-lite-1.6.0",
+        "claude_code_version": "2.1.175"
+      }
+    },
+    "analysis": {
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "platforms": [
+        "claude-code"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "deepseek-v4-pro"
+      ],
+      "client_versions": [
+        "2.1.175"
+      ]
+    },
+    "source_set_id": "sources-d15131bd8a3abae2b38e",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.0.2(22)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos",
+        "at": "2026-09-21T08:31:36.253Z",
+        "ref": "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-76ad9618-e80a-4565-b49c-3c6541e5ed67.jsonl:L50",
+        "request_ref": "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-76ad9618-e80a-4565-b49c-3c6541e5ed67.jsonl:L49",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.0.2(22)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos",
+        "at": "2026-09-21T08:31:36.253Z",
+        "ref": "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-76ad9618-e80a-4565-b49c-3c6541e5ed67.jsonl:L50",
+        "request_ref": "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-76ad9618-e80a-4565-b49c-3c6541e5ed67.jsonl:L49",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "5.0.0(12)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos",
+        "at": "2026-09-23T03:56:50.168Z",
+        "ref": "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-5e4fa5da-bfc0-449a-9b19-9236c7d2a918.jsonl:L783",
+        "request_ref": "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-5e4fa5da-bfc0-449a-9b19-9236c7d2a918.jsonl:L782",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.8.3"
+  },
+  "revision": "2c653cb3c662f222539425f30a42c5c464378add268afd8085c556bada7a052d"
+}

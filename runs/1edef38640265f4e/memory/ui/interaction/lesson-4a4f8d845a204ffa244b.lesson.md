@@ -23,16 +23,11 @@ ArkUI 中没有 onClick 的容器同样参与命中测试（HitTestMode.Default 
 
 ## 可选检查
 
-仅在适用条件不确定、与当前输入冲突或需要验证关键假设时按需执行；优先复用已有证据和正常测试。
-不因读取本条经验而额外启动验证流程；项目原有必需测试照常执行。
-
 - 调整 Stack 对齐或上层几何后，对被覆盖区域的按钮逐点注入点击，检查 hilog 有无 Touch test result is empty。
 
 ## 来源（按需复核）
 
-经验是有适用范围的历史建议。核查来源时同时看结论与 unknown；来源卡未随阅读包复制。
-
 - case-37ef7d33ab4655385e6f · 结论：recommendation:3, recommendation:4
-  卡片版本：`106a87e7fc248e96b157db4fb2ca8f1012cb8c2f0d0cf23df9a7955d968b39b8`
+  卡片版本：`88751aad836b72f3c464d8020b00b1f0292a8c683547ef71fdc19979ac8ed972`
 - case-57a208ad2e9541272704 · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
-  卡片版本：`f398e9ff1bbc57d7807328b7981f9cf1d2251b6a53f711f13398a92b36341e4f`
+  卡片版本：`aeed6c0400b8e3633a7519cb161b7f7c5a7705890598067729231649087916b4`

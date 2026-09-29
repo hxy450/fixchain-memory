@@ -1,0 +1,382 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-c179cd94000a4fea75a5",
+  "created_at": "2026-09-27T14:49:01.347593+00:00",
+  "migration_key": "1bbfa3ec-f51e-48a1-92a3-4387249b468e",
+  "title": "把源端 64 位 Long id 映射成 ArkTS number，并用裸 JSON.parse 解析响应，导致大 id 丢精度",
+  "when": "数据模型与网络层实现阶段，把源端 Kotlin Long 字段和接口参数映射成 ArkTS 类型，并决定响应 JSON 的解析与序列化方式时；规格提取阶段写服务层 ArkTS 目标签名时也适用",
+  "description": "源端 bean 或接口用 Kotlin Long（Flutter 侧 Dart int）承载服务器生成的用户 id、hash、userId，后端按 JSON 数字返回；目标端 ArkTS 的 number 是双精度，JSON.parse 遇到超过 2^53 的整数会直接舍入。",
+  "summary": "Base 层实现者（agent-a4e097889cc3283dd）收到的派工写明“数据模型字段从 cross-module-contracts §三 + Android 源码 bean 类提取（读源码确认字段名/类型）”\n（main-76ad9618 L2030，worker L1）。它写前用 Read 读到 UserBean.kt 的 `val id: Long`、`val thirdUniHash: Long?`（L37-L38），\nTranslateHistoryEntity.kt 的 `var userId: Long? = 0L`（L39-L40），kapt stub 里 UserLoginDTO、ConvertCardResult 的 `long userId`（L54），\nraw_apis.json 里 refreshToken 的 `@Query(\"userId\") userId: Long`（L72）。feature-base 和 cross-module-contracts 只列字段名、不给类型（L24、L26），\n项目 skill 没有 64 位整数的映射规则；arkts-data-layer 的 v2-network-service.md 模板直接写 `JSON.parse(responseBody) as ApiResponse<T>`（L91），\n这是没有大整数提醒的通用写法，本卡记为输入缺口。源端类型本身正确、清楚，派工也要求按源码确认类型。\n输出却把这些 Long 一律写成 number：UserBean.ets 的 `id: number = 0`、`thirdUniHash: number | null`、`u.id = (json['id'] as number) ?? 0`\n以及 UserLoginDTO.userId（L102），TranslateHistoryEntity.userId（L111），ConvertCardResult.userId（L115），\nCommApiService.refreshToken(userId: number)（L140）、MineApiService.getUserInfoById(userId: number)；\nHttpClient 统一用 `const base: BaseResponse<T> = JSON.parse(body) as BaseResponse<T>` 解析全部响应（L129）。\n整个会话没有讨论 Long 的取值范围。偏差出在“源端 64 位整数 → 目标类型与解析方式”这一步：\n即使模型字段改成别的类型，裸 JSON.parse 也已经在解析时把 19 位 id 舍入了。\n规格侧另有一处独立的同类偏差：规格作者（agent-acedbf297f82d4d3f）读到 MineViewModel.kt 的 `reqVerifyCode(userId: Long, qrCode: String)`（L93-L94）\n和 CommApiService.kt 的 `userId: Long`（L54-L55），却在“服务层（ArkTS 目标接口）”里写 `getWalletInfo(userId: number)`、`verifyQrCode(userId: number, …)`（F007，L100），\n`getOssToken(userId: number)`（F009，L118），`refreshToken(refreshToken: string, userId: number)`（F002，L73）。\n规格模板的示例签名 `play(feedItemId: number)`（L27-L28）也把 id 写成 number。\n切片实现者（agent-a51cc4b728ac8391b）写前读了 F007（L43-L44）和 Base 层 models（L50-L51，UserBean.id 已是 number），\n按规格写出 PayService.getWalletInfo/verifyQrCode(userId: number)（L127），并在 UserAuthService 里用 `JSON.stringify(user)` 存、`JSON.parse(json)` 取用户（L76）。\n它的派工要求读 Android 源码，但它没有读；本卡只把它记为传递者，不另判独立失职。\n这些片段在生成期都没有被改动。修复期用户在 main-5e4fa5da L1681 报告 id 6970321983963689496 解析成 6970321983963690000；\n主会话先改 string，被用户以“后端与 Flutter 都是 int”叫停（L1805），改用 bigint（L1874、L1877）：\nHttpClient 新增 parseBody（JSON.parse 前把 16 位以上整数加引号，reviver 转 BigInt）和请求用的 bigintReplacer（L1892-L1895、L1968-L1970），\nUserBean.id/thirdUniHash、各模型 userId 和各层 userId 参数改 bigint（L1903-L2023）。\n用户随后发现 saveUser 存下的仍是 6970321983963690000（L2051），主会话给 UserAuthService 加了配对的 stringifyUser/parseUser（L2063-L2076）。\n持久化这一处在生成期是按 number 模型写的，id 改成 bigint 后才暴露，属于同一根因在持久化路径上的连带缺口。\n修复的适用边界（主会话自述见 L2030、L2087）：正则 `\\d{16,}` 会把响应里所有 16 位以上整数都转成 bigint，\nreviver 还会把所有 16 位以上的纯数字字符串转成 bigint，包括后端本来就按字符串返回的字段；\n请求序列化时 bigint 以 JSON 字符串发出，主会话说“后端收到的还是数字”，这与 JSON 行为不符，材料中也没有核验后端是否接受。\nTranslateHistoryDao、MineService、LtMethodBridge 的持久化 JSON 仍未处理 bigint。\n",
+  "recommendations": [
+    "数据模型实现者：逐个列出源端 bean 和接口里的 Long 字段，写出对应的 ArkTS 类型；服务器生成的 id、hash、userId（本例 UserBean.id、thirdUniHash、各 userId）默认用 bigint，只有确认取值不超过 2^53 时（如 13 位毫秒时间戳、时长）才用 number，并把理由写进注释。",
+    "网络层实现者：响应里只要有 64 位整数字段，就不能用裸 JSON.parse，要换成保精度的解析（预处理加引号后用 reviver 转 BigInt，或改用支持 bigint 的解析器），请求体也要配 bigint 的 replacer；最小检查：解析 `{\"id\":6970321983963689496}` 后 `id.toString()` 必须原样返回 19 位值。",
+    "持久化实现者：模型里有 bigint 字段时，每一条 JSON.stringify/JSON.parse 往返路径（本例 saveUser/restoreUser，以及 DAO、偏好里存的 JSON）都要用成对的 replacer/reviver，存完读回来比较 id 是否一致。",
+    "规格提取者：写“服务层（ArkTS 目标接口）”签名时，源端参数是 Long 的 userId/id 要保留 64 位语义（写 bigint 或注明“64 位，禁用 number”），不要照模板示例 feedItemId: number 写。",
+    "套用“正则预处理 + reviver”这类全局方案前，先把转换范围限定到已知的 64 位字段名，并确认后端接受字符串形式的数字；不能确认时就按字段处理，避免误伤 16 位以上的字符串或其他整数字段。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/models/UserBean.ets",
+        "since": "2026-09-22T09:58:32.418Z",
+        "at": "2026-09-24T02:03:48.614Z"
+      },
+      "nodes": [
+        {
+          "key": "main-76ad9618-e80a-4565-b49c-3c6541e5ed67.jsonl",
+          "at": "2026-09-22T03:13:37.711Z",
+          "reason": "派工：主会话用 Agent 派出 Base-1~5 实现者，写明“数据模型字段从 cross-module-contracts §三 + Android 源码 bean 类提取（读源码确认字段名/类型）”，并给出源码根。这条要求把源端类型定为模型字段类型的依据（main-76ad9618-e80a-4565-b49c-3c6541e5ed67.jsonl:L2030；agent-a4e097889cc3283dd.jsonl:L1）。"
+        },
+        {
+          "key": "/Users/timekettle/Desktop/GitProject/polypal-app-android/library-comm/src/main/java/com/timekettle/upup/comm/model/UserBean.kt",
+          "at": "2026-09-22T03:14:09.747Z",
+          "reason": "正常输入：Read 回执给出 `val id: Long,  //用户ID` 和 `val thirdUniHash: Long?`，明确是 64 位整数；这足以说明 id 不能不加判断地用双精度 number 承载（agent-a4e097889cc3283dd.jsonl:L37-L38）。"
+        },
+        {
+          "key": "agent-a4e097889cc3283dd.jsonl",
+          "at": "2026-09-22T03:18:48.258Z",
+          "reason": "读到上述 Long 声明后，Write UserBean.ets 写成 `id: number = 0`、`thirdUniHash: number | null`、`u.id = (json['id'] as number) ?? 0`，UserLoginDTO.userId 也是 number；会话里没有讨论取值范围。源端 64 位整数在这里被映射成 53 位安全整数的类型（同转录 L102-L103）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/network/HttpClient.ets",
+        "since": "2026-09-22T09:58:32.418Z",
+        "at": "2026-09-24T02:03:48.614Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/timekettle/Desktop/GitProject/polypal-app-android/library-comm/src/main/java/com/timekettle/upup/comm/model/UserBean.kt",
+          "at": "2026-09-22T03:14:09.747Z",
+          "reason": "正常输入：Read 回执给出响应模型 UserBean 的 `id: Long`、`thirdUniHash: Long?`，说明登录等响应里有 64 位整数字段（agent-a4e097889cc3283dd.jsonl:L37-L38）。"
+        },
+        {
+          "key": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/.claude/skills/arkts-data-layer/references/v2-network-service.md",
+          "at": "2026-09-22T03:17:55.746Z",
+          "reason": "输入缺口：数据层 skill 的网络模板直接写 `JSON.parse(responseBody) as ApiResponse<T>`，对普通字段适用，但没有提示超过 2^53 的整数会在解析时舍入（agent-a4e097889cc3283dd.jsonl:L90-L91）。"
+        },
+        {
+          "key": "agent-a4e097889cc3283dd.jsonl",
+          "at": "2026-09-22T03:22:23.932Z",
+          "reason": "已知响应模型里有 Long 字段，Write HttpClient.ets 时仍照模板用 `const base: BaseResponse<T> = JSON.parse(body) as BaseResponse<T>` 解析全部响应，请求体用 `JSON.stringify(data)`，没有保精度处理；19 位 id 在这一步就被舍入（同转录 L129-L130）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/models/TranslateHistoryEntity.ets",
+        "since": "2026-09-22T09:58:32.418Z",
+        "at": "2026-09-24T02:03:48.614Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/timekettle/Desktop/GitProject/polypal-app-android/library-comm/src/main/java/com/timekettle/upup/comm/bean/TranslateHistoryEntity.kt",
+          "at": "2026-09-22T03:14:10.282Z",
+          "reason": "正常输入：Read 回执给出 `var userId: Long? = 0L,  // 多用户不共享历史翻译数据`，这个 userId 就是 UserBean.id（agent-a4e097889cc3283dd.jsonl:L39-L40）。"
+        },
+        {
+          "key": "agent-a4e097889cc3283dd.jsonl",
+          "at": "2026-09-22T03:19:58.242Z",
+          "reason": "同一实现者 Write TranslateHistoryEntity.ets 时写成 `userId: number = 0`，和 UserBean.id 一样把 64 位 Long 映射成 number（同转录 L111-L112）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/services/PayService.ets",
+        "since": "2026-09-22T09:58:32.418Z",
+        "at": "2026-09-24T02:03:48.614Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/timekettle/Desktop/GitProject/polypal-app-android/module-mine/src/main/java/com/timekettle/module_mine/ui/vm/MineViewModel.kt",
+          "at": "2026-09-22T02:22:48.991Z",
+          "reason": "正常输入：规格作者用 Bash cat+grep 读到 `fun reqQrScanning(userId: Long, qrCode: String)`、`fun reqVerifyCode(userId: Long, qrCode: String)`，以及 `val userId = LoginServiceImplWrap.getUserInfo()?.id`，说明兑换接口的 userId 就是 64 位的用户 id（agent-acedbf297f82d4d3f.jsonl:L93-L94）。"
+        },
+        {
+          "key": "agent-acedbf297f82d4d3f.jsonl",
+          "at": "2026-09-22T02:23:40.087Z",
+          "reason": "读到上述源码后，Write F007 的“服务层（ArkTS 目标接口）”写成 `getWalletInfo(userId: number)`、`verifyQrCode(userId: number, qrCode: string)`，把源端 Long 参数翻成 number；规格在这里开始偏离（同转录 L100-L101）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/spec/baseline/features/F007.md",
+          "at": "2026-09-22T03:35:26.144Z",
+          "reason": "交付桥梁：切片实现者用 Bash cat 读到的 F007 回执仍是 `getWalletInfo(userId: number)`、`verifyQrCode(userId: number, …)`（agent-a51cc4b728ac8391b.jsonl:L43-L44）。"
+        },
+        {
+          "key": "agent-a51cc4b728ac8391b.jsonl",
+          "at": "2026-09-22T03:41:02.834Z",
+          "reason": "读到上述规格后，Write PayService.ets 写出 `async getWalletInfo(userId: number)`、`async verifyQrCode(userId: number, qrCode: string)`，把规格的 number 签名带进目标文件（同转录 L127-L128）。本链只确认传递。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "规格作者在 polypal-app-android 下用 Bash 执行 cat module-mine/src/main/java/com/timekettle/module_mine/ui/vm/MineViewModel.kt | grep，回执返回 reqQrScanning/reqVerifyCode(userId: Long, qrCode: String)；发生在 L100 写 F007 之前，支持它写规格前已经读到源端的 Long 参数。",
+          "evidence": [
+            {
+              "source": "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/agent-acedbf297f82d4d3f.jsonl",
+              "line": 93
+            },
+            {
+              "source": "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/agent-acedbf297f82d4d3f.jsonl",
+              "line": 94
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "切片实现者用 Bash cat F007.md 和 F008.md，回执包含 F007 服务层的 getWalletInfo(userId: number)、verifyQrCode(userId: number, qrCode: string)；发生在 L127 写 PayService 之前。",
+          "evidence": [
+            {
+              "source": "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/agent-a51cc4b728ac8391b.jsonl",
+              "line": 43
+            },
+            {
+              "source": "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/agent-a51cc4b728ac8391b.jsonl",
+              "line": 44
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/services/UserAuthService.ets",
+        "since": "2026-09-22T09:58:32.418Z",
+        "at": "2026-09-24T02:03:48.614Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/timekettle/Desktop/GitProject/polypal-app-android/library-comm/src/main/java/com/timekettle/upup/comm/model/UserBean.kt",
+          "at": "2026-09-22T03:14:09.747Z",
+          "reason": "正常输入：Read 回执给出 `val id: Long`、`val thirdUniHash: Long?`（agent-a4e097889cc3283dd.jsonl:L37-L38）。"
+        },
+        {
+          "key": "agent-a4e097889cc3283dd.jsonl",
+          "at": "2026-09-22T03:18:48.258Z",
+          "reason": "Write UserBean.ets 时把 id、thirdUniHash 写成 number，fromJson 按 number 取值（同转录 L102-L103）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/models/UserBean.ets",
+          "at": "2026-09-22T03:35:46.394Z",
+          "reason": "交付桥梁：切片实现者用 Bash for 循环 cat Base 层 models，回执里 UserBean 仍是 `id: number = 0`，UserLoginDTO 是 `userId: number = 0`（agent-a51cc4b728ac8391b.jsonl:L50-L51）。"
+        },
+        {
+          "key": "agent-a51cc4b728ac8391b.jsonl",
+          "at": "2026-09-22T03:37:46.753Z",
+          "reason": "按 number 型 UserBean，Write UserAuthService.ets 时 saveUser 用 `JSON.stringify(user)`、restoreUser 用 `UserBean.fromJson(JSON.parse(json) …)`，持久化往返没有 64 位处理；修复把 id 改成 bigint 后，这里存下的 id 仍被舍入（同转录 L76-L77；main-5e4fa5da L2051）。本链只确认传递。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "切片实现者在 entry/src/main/ets 下用 Bash for 循环 cat models/UserBean.ets 等 Base 层模型，回执包含 `id: number = 0` 和 UserLoginDTO 的 `userId: number = 0`；发生在 L76 写 UserAuthService 之前。",
+          "evidence": [
+            {
+              "source": "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/agent-a51cc4b728ac8391b.jsonl",
+              "line": 50
+            },
+            {
+              "source": "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/agent-a51cc4b728ac8391b.jsonl",
+              "line": 51
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "生成期材料里没有出现真实 id 的取值；本卡按源端声明为 Long、派工又要求按源码确认类型来归因，没有核到生成者当时知道 id 有 19 位。"
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/models/VipAndFishModels.ets",
+      "reason": "已确认修改（L2003 ConvertCardResult.userId 改 bigint）；生成写者是 agent-a4e097889cc3283dd（L115 写 `userId: number`），写前 kapt stub 回执里有 `private final long userId`（L54）。成因同 UserBean 图，但这次读取走 Bash for 循环，没有单独入图核验。"
+    },
+    {
+      "key": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/network/CommApiService.ets",
+      "reason": "已确认修改（L1929 refreshToken 的 userId 改 bigint）；生成写者 agent-a4e097889cc3283dd 在 L140 写 `refreshToken(refreshToken: string, userId: number)`，写前 raw_apis.json 回执里有 `userId: Long`（L72，python 脚本读取）。成因同 UserBean 图，没有单独入图。"
+    },
+    {
+      "key": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/network/MineApiService.ets",
+      "reason": "已确认修改（L1931 getUserInfoById 的 userId 改 bigint）；生成写者是 agent-a4e097889cc3283dd（03:24:30 Write `getUserInfoById(userId: number)`），没有逐一核对写前读到的源端签名回执。"
+    },
+    {
+      "key": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/models/PayModels.ets",
+      "reason": "已确认修改（L2005-L2007 WalletInfo/PayOrder 的 userId 改 bigint）；生成写者 agent-a51cc4b728ac8391b 在 03:40:47 写入，和 PayService 同属 F007 切片，但没有逐字段核对 WalletInfo/PayOrder 的类型来自规格还是 UserBean。"
+    },
+    {
+      "key": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/repos/LoginRepository.ets",
+      "reason": "已确认修改（L1925-L1927 LoginResult.userId 改 bigint）；生成写者 agent-a51cc4b728ac8391b（03:38:01）写 `userId: number`、`(data['userId'] as number)`，推定沿用 number 型 Base 模型，没有单独入图。"
+    },
+    {
+      "key": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/repos/MineRepository.ets",
+      "reason": "已确认修改（L1933 reqUserInfo 的 userId 改 bigint）；生成写者 agent-a51cc4b728ac8391b（03:40:05）按 MineApiService.getUserInfoById(userId: number) 写签名，属于下游连带，没有单独入图。"
+    },
+    {
+      "key": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/services/FeedbackService.ets",
+      "reason": "已确认修改（L1953-L1955 FeedbackParams/ReportParams.userId、getOssToken 改 bigint）；生成写者 agent-a51cc4b728ac8391b（03:42:30）与 F009 规格的 `getOssToken(userId: number)`（agent-acedbf297f82d4d3f L118）一致，但没有核到规格作者写 F009 前读过哪个源端 Long 签名。"
+    },
+    {
+      "key": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/viewmodels/FeedbackViewModel.ets",
+      "reason": "已确认修改（L1937 currentUserId() 改 bigint）；生成写者 agent-a51cc4b728ac8391b（03:42:39）从 number 型 UserBean.id 取值，属于下游连带，没有单独入图。"
+    },
+    {
+      "key": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/viewmodels/MinePayViewModel.ets",
+      "reason": "已确认修改（L1939 currentUserId() 改 bigint）；生成写者 agent-a51cc4b728ac8391b（03:41:17）从 number 型 UserBean.id 取值并传给 PayService，属于下游连带，没有单独入图。"
+    },
+    {
+      "key": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/viewmodels/MainViewModel.ets",
+      "reason": "已确认修改（L1935 `user.id : 0` 改 `0n`）；该行由修复期主会话在 09-23 05:11 为启动刷新 token 新增（main-5e4fa5da L1234），随 UserBean.id 改 bigint 一起调整，不在本卡的生成期归因范围内。"
+    }
+  ],
+  "job": "issue-c179cd94000a4fea75a5",
+  "metadata": {
+    "migration": {
+      "project": "polypal-app-ohos",
+      "server_session_id": "1bbfa3ec-f51e-48a1-92a3-4387249b468e",
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "deepseek-v4-pro"
+      ],
+      "tool_versions": {
+        "orchestrator": "migbot-cc",
+        "runtime_version": "v1.4.8",
+        "runtime_commit": "09ac508",
+        "client_version": "hmigbot-lite-1.6.0",
+        "pack_version": "hmigbot-lite-1.6.0",
+        "claude_code_version": "2.1.175"
+      }
+    },
+    "analysis": {
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "platforms": [
+        "claude-code"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "deepseek-v4-pro"
+      ],
+      "client_versions": [
+        "2.1.175"
+      ]
+    },
+    "source_set_id": "sources-d15131bd8a3abae2b38e",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.0.2(22)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos",
+        "at": "2026-09-21T08:31:36.253Z",
+        "ref": "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-76ad9618-e80a-4565-b49c-3c6541e5ed67.jsonl:L50",
+        "request_ref": "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-76ad9618-e80a-4565-b49c-3c6541e5ed67.jsonl:L49",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.0.2(22)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos",
+        "at": "2026-09-21T08:31:36.253Z",
+        "ref": "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-76ad9618-e80a-4565-b49c-3c6541e5ed67.jsonl:L50",
+        "request_ref": "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-76ad9618-e80a-4565-b49c-3c6541e5ed67.jsonl:L49",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "5.0.0(12)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos",
+        "at": "2026-09-23T03:56:50.168Z",
+        "ref": "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-5e4fa5da-bfc0-449a-9b19-9236c7d2a918.jsonl:L783",
+        "request_ref": "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-5e4fa5da-bfc0-449a-9b19-9236c7d2a918.jsonl:L782",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.8.3"
+  },
+  "revision": "b3db1d9145c4fcf637fa09427c869a60c02aa8a8f46686c94913ab844f445003"
+}

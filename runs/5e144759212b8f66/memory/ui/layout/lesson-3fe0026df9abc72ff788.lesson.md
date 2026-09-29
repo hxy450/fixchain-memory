@@ -25,16 +25,11 @@ ID：`lesson-3fe0026df9abc72ff788` · 版本：1
 
 ## 可选检查
 
-仅在适用条件不确定、与当前输入冲突或需要验证关键假设时按需执行；优先复用已有证据和正常测试。
-不因读取本条经验而额外启动验证流程；项目原有必需测试照常执行。
-
 - dumpLayout 核对比例子项不超出其容器、锚底子项到内容层底的距离等于源 margin。
 
 ## 来源（按需复核）
 
-经验是有适用范围的历史建议。核查来源时同时看结论与 unknown；来源卡未随阅读包复制。
-
 - case-50467dd451cd7c5be566 · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
-  卡片版本：`c7263beefdab638e65a3cbe59cf0902de2735eff28751fc6000faf29e8c8f1e9`
+  卡片版本：`6513ec7414cb84e14b75d1fc1e2031c2a499520a4c3975f65d67fc995ec9adc7`
 - case-c85d8667f78c2cc8f53a · 结论：recommendation:2, recommendation:3
-  卡片版本：`79c3cac8d22f9758074aa2d442825b0df09773593d0f4118f1b88d1f9b29b330`
+  卡片版本：`88c863065eec4c8bbb44bce32612ea2302aed620bf50c9df7bf06ad13309abb8`

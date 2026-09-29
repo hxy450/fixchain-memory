@@ -24,14 +24,9 @@ SmartRefreshLayout 自带“加载中不重入、刷新与加载互斥”的状�
 
 ## 可选检查
 
-仅在适用条件不确定、与当前输入冲突或需要验证关键假设时按需执行；优先复用已有证据和正常测试。
-不因读取本条经验而额外启动验证流程；项目原有必需测试照常执行。
-
 - 逐个查看含 onReachEnd 的处理函数，确认都有门闩与互斥，且复位点覆盖 Promise 的所有分支。
 
 ## 来源（按需复核）
 
-经验是有适用范围的历史建议。核查来源时同时看结论与 unknown；来源卡未随阅读包复制。
-
 - case-a77939503960ebd3437d · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3, recommendation:4, recommendation:5
-  卡片版本：`0e8da288462f1f4fb5f4252448c80d0fe152e8837a0a31bfc36609973553695b`
+  卡片版本：`8ebe5dbd0d8274d95b7d522ffe525f94ad52213d443933fb4ce7465232f4ffd5`

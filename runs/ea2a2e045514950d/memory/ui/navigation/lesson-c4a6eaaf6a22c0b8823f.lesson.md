@@ -24,9 +24,7 @@ main_pages 的每个登记项都被当成路由页，必须恰有一个 @Entry�
 
 ## 来源（按需复核）
 
-经验是有适用范围的历史建议。核查来源时同时看结论与 unknown；来源卡未随阅读包复制。
-
 - case-8138261443f6e670dc52 · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
-  卡片版本：`fec5acccee68bd62b95cdad49b75841f9f38010f3ec0ecc6015a96b2f07b84f2`
+  卡片版本：`dba7b86e9c15429bb3a7013f99ac2a046b4e188030402a4ffde7fbf4c3466dec`
 - case-f491afb8eb545306056b · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
-  卡片版本：`3e368cf0da926e4b4aea49bafbdf7552673cc66b146c972373ceac357c9b3b1b`
+  卡片版本：`e8496534a9ce8bf7fa0af371c884eb00f4c647f809954cbdb469c5efe9f0c3ad`

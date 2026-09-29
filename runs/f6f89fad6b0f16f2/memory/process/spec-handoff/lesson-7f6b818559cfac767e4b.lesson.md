@@ -27,7 +27,5 @@ Android 入口点击后打开固定 URL 的 WebView，或带本地资源参数�
 
 ## 来源（按需复核）
 
-经验是有适用范围的历史建议。核查来源时同时看结论与 unknown；来源卡未随阅读包复制。
-
 - case-4042c8947009b8610581 · 结论：diagnosis, recommendation:1, recommendation:2
-  卡片版本：`e1e8b47ff4d2de81bd0a99770f877cc2e3d8a38f2b6bcc10b8093fe7600a7378`
+  卡片版本：`35335967aa3193e0b2a20fe506d905c9ea96f9a77cfddc311c326d0107cd803e`

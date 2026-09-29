@@ -1,0 +1,219 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-c5fdc6640404c3d6440e",
+  "created_at": "2026-09-27T21:03:56.691545+00:00",
+  "migration_key": "3a9f41ad-48a4-4f1a-a085-fb6393b81f8a",
+  "title": "FlexGate 加密传输移植到 ArkTS 时，密钥生成器规格、GCM 空结果与 Buffer 视图按 Java/Node 习惯映射，真机加解密失败",
+  "when": "网络基础设施实现阶段，把 Android 端 RSA-OAEP + AES-GCM 网关加密传输改写为 ArkTS cryptoFramework 与 buffer 调用时（含为通过编译调整同步 API 与类型的收敛步骤）",
+  "description": "源端用 KeyFactory + X509EncodedKeySpec 解析网关下发的“BEGIN PUBLIC KEY”PEM，以 RSA/ECB/OAEPWithSHA-256AndMGF1Padding 包裹随机会话密钥，用 AES/GCM/NoPadding 加密可能为空的请求体并解密响应；目标端需用 createAsyKeyGenerator/convertPemKeySync、Cipher.updateSync/doFinalSync 和 @kit.ArkTS buffer 实现同一协议。",
+  "summary": "写前 S2 已读到反编译的 FlexGateCrypto：parsePublicKey 去掉“-----BEGIN PUBLIC KEY-----”后用 X509EncodedKeySpec，\nrsaEncrypt 为 RSA/ECB/OAEPWithSHA-256AndMGF1Padding（MGF1 SHA-256），对称部分为 AES/GCM/NoPadding（S2 L2961-L2963、L2973-L2975）；\n网关实际返回 2048 位 X.509 SPKI PEM（S2 L3363-L3365），Node 探针按同一协议已拿到 200 和 adExtraVos（S2 L2985-L2987、L3369-L3379）。\nS2 还打开了 OpenHarmony GCM 指南，其中写明 doFinal 输出可能为 null、访问前须判空，示例 GCM 解密的 doFinal 也返回 null（S2 L3356-L3359）。\n因此协议理解正确、足够，偏差都落在 ArkTS 加密/缓冲 API 映射：\n① 10:15 新建 FlexGateTransport 时，用 createAsyKeyGenerator('RSA1024|PKCS1') 去转换 X.509 PEM（S2 L3415）；\n10:17 收敛时只把位数改成 2048，'|PKCS1' 后缀保留（S2 L3459）。\n② 首稿对 update/doFinal 结果本有 `?.data ??` 空值兜底；10:17 为通过编译改用同步 API 时（编译错误只涉及 Promise 与 DataBlob 类型，S2 L3447-L3449），\n依据 d.ts 中 updateSync/doFinalSync 返回 DataBlob 的签名（S2 L3453-L3455）把加密、解密两处兜底全部删去，直接取 `.data`（S2 L3459）。\n③ 10:29 把 `new Uint8Array(buffer.from(...).buffer)` 改成 Node 式 `new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength)`（S2 L3759），\n编译报 ArkTS Buffer 没有 byteLength（S2 L3765-L3767）后，用 shell 把 byteLength 机械替换为 length 并构建通过（S2 L3771-L3773），\n仍保留基于 .buffer/.byteOffset 的视图。\n10:17-10:34 的这些改动属于同轮为通过 ArkTS 编译的收敛，但 ②③ 改变了运行时行为，BUILD SUCCESSFUL 并不说明真机加解密可用。\n用户报告“还是显示该连接暂未配置”后，逐阶段透传的真机日志依次为 encrypt-body 读取 null 的 data、parse-rsa-key “create c generator fail”、\ndecrypt-response 读取 null（S2 L4104、L4128、L4144、L4172）；修复为加解密结果补空值兜底、生成器改为 'RSA2048'（S2 L4132、L4160、L4176），\n设备随后加载 31 条品牌链接（S2 L4368）。次日同一视图写法在真机 encrypt-body/decrypt-response 抛出\nRangeError: The newByteLength is out of range（S1 L7402），S1 改为按 length 显式拷贝的 copyBuffer（S1 L7418、L7453、L7459）后恢复。\nNearbyConfigBootstrap 的修改是失败日志与失败后允许重新请求（S2 L4286、L4414；S1 L7296），属传输失败暴露后的补充，本卡未单独归因。\n",
+  "recommendations": [
+    "移植加密协议时，逐项把 Java 的密钥格式、填充和摘要映射为 cryptoFramework 规格串：createAsyKeyGenerator 只写算法与按实际公钥得出的位数（本例 'RSA2048'），“BEGIN PUBLIC KEY”的 X.509 PEM 直接交给 convertPemKeySync，不在生成器上附加 PKCS1 等编码后缀。",
+    "对 Cipher.update/updateSync 与 doFinal/doFinalSync 的结果一律判空后再取 data（GCM 空明文加密、GCM 解密 final 都可能返回 null），即使 d.ts 签名是非空 DataBlob；为通过编译改写成同步 API 时保留原有空值兜底。",
+    "ArkTS 的 buffer.Buffer 不套用 Node 的 .buffer/byteOffset 视图写法；需要独立 Uint8Array 时按 length 分配并用 copy 拷贝。编译报 Buffer 属性不存在时先查 ArkTS buffer 语义，不做字段名机械替换。",
+    "加密传输编译通过后，在真机上用空请求体的 GET 与实际网关各做一次完整往返（AES 加密、RSA 包裹、响应解密），失败时透传所在阶段与原始异常；Node 探针只证明协议，不证明 ArkTS 实现。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "D:/anhuizhongyi/huoche/harmony_train-ticket_vest28/entry/src/main/ets/network/FlexGateTransport.ets",
+        "since": null,
+        "at": "2026-09-05T12:45:25.464Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/temp/ahzy_aar_inspect_1/crypto.txt",
+          "at": "2026-09-04T09:39:46.703Z",
+          "reason": "正常输入：S2 用 javap 导出 FlexGateCrypto 后 rg 该文件，回执给出 parsePublicKey 去掉“-----BEGIN PUBLIC KEY-----”并 getInstance(\"RSA\") + X509EncodedKeySpec、rsaEncrypt 为 RSA/ECB/OAEPWithSHA-256AndMGF1Padding、AES/GCM/NoPadding（main-01a06b1c…jsonl:L2961-L2963；L2973-L2975 再读到 OAEPParameterSpec SHA-256/MGF1）。足以确定公钥是 X.509 SPKI、无 PKCS1 编码要求。"
+        },
+        {
+          "key": "D:/HmA/DevEco Studio/sdk/default/openharmony/ets/api/@ohos.security.cryptoFramework.d.ts",
+          "at": "2026-09-04T10:14:06.021Z",
+          "reason": "正常输入：S2 读取 AsyKeyGenerator 段，convertPemKeySync(pubKey, priKey) 只说明接收 PEM 字符串；PKCS8/PKCS1 字样出现在私钥编码 getEncodedPem 说明中，并无给生成器附加 PKCS1 的依据（main-01a06b1c…jsonl:L3395-L3397）。"
+        },
+        {
+          "key": "main-01a06b1c-4512-7a61-988f-86413715d804.jsonl",
+          "at": "2026-09-04T10:15:05.444Z",
+          "reason": "已收到上述 X.509/OAEP 输入，且 L3363-L3365 实际取回 2048 位“BEGIN PUBLIC KEY”PEM，apply_patch 新建目标时却写 createAsyKeyGenerator('RSA1024|PKCS1') + convertPemKeySync，并用 'AES256|GCM|PKCS7'（同转录 L3415-L3417）。协议理解正确而 ArkTS 规格串映射偏离；PKCS7/OAEP 名称在 L3560 收敛时已改，'|PKCS1' 保留到 12:27 修复（L4144、L4160）。",
+          "problem": true
+        },
+        {
+          "key": "D:/HmA/DevEco Studio/sdk/default/openharmony/ets/api/@ohos.security.cryptoFramework.d.ts",
+          "at": "2026-09-04T10:16:53.958Z",
+          "reason": "收敛时的上下文：rg 回执显示 updateSync(data: DataBlob): DataBlob、doFinalSync(data: DataBlob | null): DataBlob（main-01a06b1c…jsonl:L3453-L3455）。该签名未标可空，但 S2 在 L3356-L3359 已打开的 GCM 指南明确要求对 doFinal 结果判空，示例解密 doFinal 返回 null。"
+        },
+        {
+          "key": "main-01a06b1c-4512-7a61-988f-86413715d804.jsonl",
+          "at": "2026-09-04T10:17:06.958Z",
+          "reason": "为修复 Promise/DataBlob 类型编译错误（L3447-L3449）改用同步 API 时，把首稿 encrypted?.data ?? 空数组、plain?.data ?? 空数组等兜底改成直接取 encrypted.data、finalTag.data、plain.data、final.data，同时只把生成器位数改为 'RSA2048|PKCS1'（同转录 L3459-L3461）。编译错误并不要求删除兜底；该片段保留到真机 encrypt-body/decrypt-response 读 null（L4128、L4172）后由 L4132、L4176 补回。",
+          "problem": true
+        },
+        {
+          "key": "D:/anhuizhongyi/huoche/harmony_train-ticket_vest28/build_out.log",
+          "at": "2026-09-04T10:29:53.083Z",
+          "reason": "收敛输入：S2 构建后读取该日志，回执为 Property 'byteLength' does not exist on type 'Buffer'（main-01a06b1c…jsonl:L3765-L3767），表明 ArkTS Buffer 与 L3759 套用的 Node Buffer 接口不同。"
+        },
+        {
+          "key": "main-01a06b1c-4512-7a61-988f-86413715d804.jsonl",
+          "at": "2026-09-04T10:30:09.706Z",
+          "reason": "L3759 已把 .buffer 转换改为 new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength)；收到上述编译错误后，用 PowerShell -replace + Set-Content 把三处 byteLength 替换为 length 并构建通过（同转录 L3771-L3773），未核对 ArkTS .buffer/byteOffset 语义。次日真机在 encrypt-body/decrypt-response 抛 newByteLength RangeError（main-01a06a30…jsonl:L7402），由 S1 改为 copyBuffer（L7418、L7453、L7459）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "S2 在同一 exec 中 javap 导出 FlexGateCrypto 到 crypto.txt 后以 rg 读取该文件，回执返回 parsePublicKey 的 BEGIN PUBLIC KEY/X509EncodedKeySpec 与 OAEP、GCM 规格串；这是生成者写前对该文件的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/main-01a06b1c-4512-7a61-988f-86413715d804.jsonl",
+              "line": 2961
+            },
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/main-01a06b1c-4512-7a61-988f-86413715d804.jsonl",
+              "line": 2963
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "S2 用 Get-Content 按行段读取 cryptoFramework.d.ts，回执返回 AsyKeyGenerator 的 convertPemKey/convertPemKeySync 说明；写目标前已收到。",
+          "evidence": [
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/main-01a06b1c-4512-7a61-988f-86413715d804.jsonl",
+              "line": 3395
+            },
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/main-01a06b1c-4512-7a61-988f-86413715d804.jsonl",
+              "line": 3397
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target",
+          "force": true,
+          "reason": "S2 的 exec 调用 tools.apply_patch 以 Add File 新建 FlexGateTransport.ets，回执完成；该首稿含 createAsyKeyGenerator('RSA1024|PKCS1')。",
+          "evidence": [
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/main-01a06b1c-4512-7a61-988f-86413715d804.jsonl",
+              "line": 3415
+            },
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/main-01a06b1c-4512-7a61-988f-86413715d804.jsonl",
+              "line": 3417
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": 5,
+          "force": true,
+          "reason": "S2 用 rg 检索 cryptoFramework.d.ts 的 initSync/updateSync/doFinalSync/convertPemKeySync 签名，回执返回 updateSync(data: DataBlob): DataBlob 等；随后即改写目标。",
+          "evidence": [
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/main-01a06b1c-4512-7a61-988f-86413715d804.jsonl",
+              "line": 3453
+            },
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/main-01a06b1c-4512-7a61-988f-86413715d804.jsonl",
+              "line": 3455
+            }
+          ]
+        },
+        {
+          "from": 5,
+          "to": "target",
+          "force": true,
+          "reason": "S2 的 exec 调用 tools.apply_patch 以 Update File 修改 FlexGateTransport.ets，改用同步 API 并删去 update/doFinal 结果的空值兜底，回执完成。",
+          "evidence": [
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/main-01a06b1c-4512-7a61-988f-86413715d804.jsonl",
+              "line": 3459
+            },
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/main-01a06b1c-4512-7a61-988f-86413715d804.jsonl",
+              "line": 3461
+            }
+          ]
+        },
+        {
+          "from": 6,
+          "to": 7,
+          "force": true,
+          "reason": "S2 运行构建后 Get-Content build_out.log -Tail 15，回执返回 FlexGateTransport.ets 中 Property 'byteLength' does not exist on type 'Buffer' 的编译错误。",
+          "evidence": [
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/main-01a06b1c-4512-7a61-988f-86413715d804.jsonl",
+              "line": 3765
+            },
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/main-01a06b1c-4512-7a61-988f-86413715d804.jsonl",
+              "line": 3767
+            }
+          ]
+        },
+        {
+          "from": 7,
+          "to": "target",
+          "force": true,
+          "reason": "S2 用 PowerShell (Get-Content FlexGateTransport.ets) -replace byteLength→length | Set-Content 写回目标并构建通过，回执为 BUILD SUCCESSFUL；这是对目标的真实写入。",
+          "evidence": [
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/main-01a06b1c-4512-7a61-988f-86413715d804.jsonl",
+              "line": 3771
+            },
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/main-01a06b1c-4512-7a61-988f-86413715d804.jsonl",
+              "line": 3773
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "写前材料中未见列出 createAsyKeyGenerator 合法 algName 的文档；'|PKCS1' 被拒的依据是真机“create c generator fail”及改为 'RSA2048' 后通过，被拒的精确原因未另验证。",
+    "RangeError 的精确机制（ArkTS Buffer 的 .buffer 与 byteOffset 所指内存）材料未验证；同一视图写法在 9-04 12:34 曾成功加载，次日失败，说明与运行时缓冲状态有关，本卡只归因使用了未经核实的 Node 视图习惯。"
+  ],
+  "unresolved_targets": [
+    {
+      "key": "D:/anhuizhongyi/huoche/harmony_train-ticket_vest28/entry/src/main/ets/services/NearbyConfigBootstrap.ets",
+      "reason": "已确认修改为成功/失败日志与失败后重置 loading、forceReload 重新请求（S2 L4286、L4414；S1 L7296），属传输失败暴露后的可诊断性与重试补充；材料中未核到 Android 侧或规格对失败重试的写前要求，生成期（S2 L3423、L3808、L3864）的缓存设计未单独归因。"
+    }
+  ],
+  "job": "issue-c5fdc6640404c3d6440e",
+  "metadata": {
+    "migration": {
+      "project": "android-train-ticket-vest7",
+      "server_session_id": "3a9f41ad-48a4-4f1a-a085-fb6393b81f8a"
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "gpt-5.6-sol"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.152.1",
+        "0.153.0-alpha.5"
+      ]
+    },
+    "source_set_id": "sources-8b0a7c0de0b3c4c2be88",
+    "card_tool_version": "0.8.3"
+  },
+  "revision": "fa34fb63eb661b7f1ff380a8512d00ecfca144d836892754f0283244d6d1a808"
+}

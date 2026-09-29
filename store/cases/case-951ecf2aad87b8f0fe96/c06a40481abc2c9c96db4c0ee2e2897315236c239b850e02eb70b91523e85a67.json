@@ -1,0 +1,138 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-951ecf2aad87b8f0fe96",
+  "created_at": "2026-09-27T22:10:58.436640+00:00",
+  "migration_key": "dc1176d6-edc1-4b76-a9d4-31bd94c63ea0",
+  "title": "AES逐值加密未复刻Android空串直接返回分支",
+  "when": "网络层实现阶段，将Android请求参数加密工具移植为ArkTS加密封装、确定每个业务值如何进入Cipher时",
+  "description": "Android请求拦截对每个业务参数调用AES工具（aesEncrypt/AESUtil.encrypt），该工具对空字符串直接返回空串、不调用Cipher；目标端用cryptoFramework的AES-CBC/PKCS7逐值加密，业务参数可能为空（如缺省城市没有经纬度）。",
+  "summary": "Base-3网络层写者（agent-019ff696，接到“只写network/**”任务）写前实际收到：ledger D-010要求保留逐值AES-CBC、\npadding/编码等Android字节契约（agent-019ff696-5618-78d2-a059-a02982380b3d.jsonl:L2636-L2637）；\nExtension_AES.kt的aesEncrypt首行以content.isEmpty()直接返回\"\"（L2640-L2641）；App.beforeRequest对每个业务值\n调用aesEncrypt(value.toString(), key)，AESUtil.encrypt同样以TextUtils.isEmpty(content)返回\"\"（L2651-L2652）。\n这些输入已正确、足够说明空值不进入Cipher、请求体原样发送空串。\n本次03:07:44的apply_patch却把AndroidCompatibleCrypto.encryptValue写成无条件createCipher→doFinal(utf8(value))，\n同一补丁中的RequestMiddleware还用String(value ?? '')把空值/缺值统一送进encryptValue（L2660-L2661）。\n偏差位于Android加密工具到ArkTS加密封装这一环；03:37同一写者对该文件的后续补丁只改bytesToBlob和IvParamsSpec，\n未补空值分支（L2915-L2916），生成期单测用假加密器也未覆盖空值。\n修复期缺省城市没有经纬度，天气请求在prepare阶段encrypt:lon抛出byteLength of undefined，请求未发出\n（main-019ffb4e-a828-7f12-a8dd-1b8a884da577.jsonl:L1469、L1484、L1495）；最终在encryptValue开头加入\nif (value.length === 0) return ''并补空值单测（同转录L1503-L1504）。\n同job的WeatherHttpClient改为expectDataType: STRING（L1080），依据是L1073“响应未定义导致byteLength”的推断。\n但修复前doRegisterTourist的响应已按字符串取回并解密（L936 decrypted=true length=736）；改为STRING后，天气请求仍在\nstage=prepare报同一错误，并定位到encrypt:lon（L1469、L1484）。因此该项只是对齐Android value.string()的防御性改动，\n已观测故障不能归因于它，本卡不为其画偏差链。\n",
+  "recommendations": [
+    "网络层实现阶段移植加解密工具时，逐分支列出源工具的前置返回（空串、密钥长度、异常回退），并在目标封装中逐一保留；空值不进入Cipher，输出与源端一致（本例为''）。",
+    "为请求组装补充空值/缺省值用例：业务参数为''或缺省时，用真实加密封装断言结果与Android相同，不只用假加密器验证字段顺序。",
+    "目标端做null/undefined归一化（如String(value ?? '')）后，核对该值在源端经过value.toString()后实际进入加密工具的哪个分支。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "D:/HnaccurateWeather_HarmonyOS/entry/src/main/ets/network/NetworkCrypto.ets",
+        "since": "2026-08-13T13:29:02.643Z",
+        "at": "2026-08-21T09:35:59.738Z"
+      },
+      "nodes": [
+        {
+          "key": "D:/HnaccurateWeather_HarmonyOS/spec/decision-ledger.md",
+          "at": "2026-08-13T03:06:15.824Z",
+          "reason": "正常输入：写者Select-String返回D-010“AES/MD5/headers保持Android字节契约”及正文“保留参数排序、逐值AES-CBC、padding/编码、MD5输入和header/body字段语义”，要求按源端字节行为复刻（agent-019ff696-5618-78d2-a059-a02982380b3d.jsonl:L2636-L2637）。"
+        },
+        {
+          "key": "E:/Androidproject/app_hnaccurateweather_live_android/app/src/main/java/com/cstools/weather/util/Extension_AES.kt",
+          "at": "2026-08-13T03:06:25.823Z",
+          "reason": "正常输入：Get-Content回执给出aesEncrypt首行if (content.isEmpty() || password.isEmpty()) return \"\"，即空业务值不调用Cipher、直接得空串（agent-019ff696-5618-78d2-a059-a02982380b3d.jsonl:L2640-L2641）。"
+        },
+        {
+          "key": "E:/Androidproject/app_hnaccurateweather_live_android/base/src/main/java/com/cstools/base/util/AESUtil.java",
+          "at": "2026-08-13T03:06:56.178Z",
+          "reason": "正常输入：同一次读取同时返回App.beforeRequest逐值调用aesEncrypt(value.toString(), key)，以及AESUtil.encrypt首行if (TextUtils.isEmpty(content)) return \"\"；两处源实现都说明空值应直接返回空串（agent-019ff696-5618-78d2-a059-a02982380b3d.jsonl:L2651-L2652）。"
+        },
+        {
+          "key": "agent-019ff696-5618-78d2-a059-a02982380b3d.jsonl",
+          "at": "2026-08-13T03:07:44.556Z",
+          "reason": "已收到上述契约和源码，apply_patch新建NetworkCrypto.ets时，encryptValue却无空值分支，直接createCipher→doFinal(utf8(value))；同一补丁的RequestMiddleware用String(value ?? '')把空值送进该函数。空值应直接返回空串的要求未落实到输出（同转录L2660-L2661）；03:37的后续补丁（L2915-L2916）也未补上。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4,
+          "force": true,
+          "reason": "写者exec_command以Select-String读取spec/decision-ledger.md，回执返回D-010索引行及正文“保留参数排序、逐值AES-CBC、padding/编码……”，支持写前已收到保持Android字节契约的要求。",
+          "evidence": [
+            {
+              "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff696-5618-78d2-a059-a02982380b3d.jsonl",
+              "line": 2636
+            },
+            {
+              "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff696-5618-78d2-a059-a02982380b3d.jsonl",
+              "line": 2637
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 4,
+          "force": true,
+          "reason": "写者exec_command以$root拼接app/src/main/java/com/cstools/weather/util/Extension_AES.kt并Get-Content -Raw，回执含aesEncrypt的content.isEmpty()直接返回空串分支；路径经变量拼接未被索引解析。",
+          "evidence": [
+            {
+              "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff696-5618-78d2-a059-a02982380b3d.jsonl",
+              "line": 2640
+            },
+            {
+              "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff696-5618-78d2-a059-a02982380b3d.jsonl",
+              "line": 2641
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "写者exec_command以$root拼接base/src/main/java/com/cstools/base/util/AESUtil.java并Get-Content -Raw（同一次还读取App.kt的beforeRequest），回执含AESUtil.encrypt的TextUtils.isEmpty(content)返回空串分支。",
+          "evidence": [
+            {
+              "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff696-5618-78d2-a059-a02982380b3d.jsonl",
+              "line": 2651
+            },
+            {
+              "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff696-5618-78d2-a059-a02982380b3d.jsonl",
+              "line": 2652
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [
+    {
+      "key": "D:/HnaccurateWeather_HarmonyOS/entry/src/main/ets/network/WeatherHttpClient.ets",
+      "reason": "已确认修改：main-019ffb4e L1080加入expectDataType: http.HttpDataType.STRING；生成来源是同一写者03:08:34的apply_patch（agent-019ff696 L2664-L2665），写前已读到ResponseBodyConverter的value.string()（L2654-L2655）。但L1073所称“响应返回undefined导致byteLength”与材料矛盾：修复前doRegisterTourist已取回字符串并解密（main L936），byteLength错误在STRING修复后仍出现于stage=prepare/encrypt:lon（L1469、L1484），应归因于NetworkCrypto空值分支。该改动属于防御性对齐，没有已观测故障可归因，未画偏差链。"
+    }
+  ],
+  "job": "issue-951ecf2aad87b8f0fe96",
+  "metadata": {
+    "migration": {
+      "project": "app_hnaccurateweather_live_android",
+      "server_session_id": "dc1176d6-edc1-4b76-a9d4-31bd94c63ea0"
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "gpt-5.6-sol"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.147.0-alpha.6.5",
+        "0.147.0-alpha.6.6",
+        "0.148.0-alpha.15"
+      ]
+    },
+    "source_set_id": "sources-c7d168a1d2603d15ed6b",
+    "card_tool_version": "0.8.3"
+  },
+  "revision": "c06a40481abc2c9c96db4c0ee2e2897315236c239b850e02eb70b91523e85a67"
+}

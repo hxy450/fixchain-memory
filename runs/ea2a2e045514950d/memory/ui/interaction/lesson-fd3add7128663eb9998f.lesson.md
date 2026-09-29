@@ -23,14 +23,9 @@ ID：`lesson-fd3add7128663eb9998f` · 版本：1
 
 ## 可选检查
 
-仅在适用条件不确定、与当前输入冲突或需要验证关键假设时按需执行；优先复用已有证据和正常测试。
-不因读取本条经验而额外启动验证流程；项目原有必需测试照常执行。
-
 - 改完点搜索栏中间的提示区，确认外层节点 clickable=true，且只进入一次目标页。
 
 ## 来源（按需复核）
 
-经验是有适用范围的历史建议。核查来源时同时看结论与 unknown；来源卡未随阅读包复制。
-
 - case-adacd41d159c24498006 · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
-  卡片版本：`74e74cc569c9c74fa3bebafd61c9937ac36696d9a4ea53d849a4265f6d703325`
+  卡片版本：`1102bdfc7ea42c08b6a66e5c0ecca504e397f16ff0029bed9015a4e086dea00c`

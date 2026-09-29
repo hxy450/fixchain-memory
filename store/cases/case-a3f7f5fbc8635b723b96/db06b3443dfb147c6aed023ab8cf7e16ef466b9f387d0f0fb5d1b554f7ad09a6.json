@@ -1,0 +1,179 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-a3f7f5fbc8635b723b96",
+  "created_at": "2026-09-27T13:18:37.216431+00:00",
+  "migration_key": "c48c34f6-1f91-421f-aa50-0064cb39d8cd",
+  "title": "RDB 数据层落地时省掉了规格要求的库版本与迁移链（recipe_new 只是 Room 迁移临时表）",
+  "when": "数据层实现阶段，把 Room 数据库落成 relationalStore，并确定库名、schema 版本与升级路径时",
+  "description": "源端 Room @Database 声明 version，配 addMigrations/AutoMigration 与 fallbackToDestructiveMigration，迁移代码用 xxx_new 临时表重建后 RENAME；规格要求显式版本化迁移、保留源 schema 历史与字段可空性；目标用 relationalStore 执行建表 SQL。",
+  "summary": "先核题面：recipe_new 只出现在 AppDatabase.kt 的 MIGRATION_1_2 中，建表、拷数据、DROP recipe 后即 RENAME 为 recipe；\nRoom 导出的 schema 1–5 只有 Recipe、Step 两个实体（修复者读回执 agent-01a0b99f-57f0-7c73-9127-00383a5cf5c3.jsonl:L36-L37、L48-L49）。\nECAT 判别器 data_layer_parity 把源端数成 3 张表并给出 missing_tables=[recipe_new]（main-01a0b99a-14db-7a52-8e9a-e46ebc5919a1.jsonl:L7），\n判别器原样转成工作清单第 9 项。源端并没有一张叫 recipe_new 的持久表，\"缺表\"属判官检测口径。\n题面之下确有生成期偏差：生成期主会话 01a0b85d 自己接手 Base 数据层。写前 cat F001（main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl:L1385-L1386）\n实际收到两条映射：Room @Entity/@Dao 要求 \"Preserve table fields, nullability, ordering, and CRUD semantics\"；\nRoom fallback destructive migration 要求 \"explicit versioned migration + guarded fallback … retain source schema history\"。\n更早读 AppDatabase.kt（同转录 L115-L116，输出被截断）也看到了 addMigrations(*ALL_MIGRATIONS).fallbackToDestructiveMigration()。\n这些足以说明目标库需要版本号与显式升级路径。09:54 的 Add File（同转录 L1445-L1447）却写成 name 'cofi.db'、无任何版本元数据的\nCREATE TABLE IF NOT EXISTS，给 description/last_finished/icon/recipe_id 加了源 schema 没有的 DEFAULT，恢复导入逐条各开事务。\n偏差位于\"规格已给出的版本化迁移要求 → 建表代码\"这一环；这段初始化保留到 ECAT 返修前，修复者 12:25 读回仍是 cofi.db 与原建表语句\n（agent-01a0b99f-57f0-7c73-9127-00383a5cf5c3.jsonl:L59-L60）。\n库名一项来源不同：feature-base.md §数据库（spec 作者 agent-01a0b876 于 07:07 写入，agent-01a0b876-96a1-7550-afdf-4e6243cc94b0.jsonl:L162）\n明写 Database name cofi-database.db 与 \"schema versions and migration history must be preserved as RDB version metadata\"；\n主会话 07:27 那次 cat（main-01a0b85d…:L283-L284）输出截断在 ui-manifest 段，此后没有补读该段；AppDatabase.kt 中库名与 version=5 也落在截断区。\n写者只在 06:46 的 api-inventory 回执（L165-L166）里见过 store: cofi-database.db 这条源端事实。cross-module-contracts（主会话 L139 自写）\n只要求 \"equivalent local relational store while preserving table/field semantics\"，未提库名与版本。本卡图只画已送达写者的 F001 这条链。\n修复：ECAT 第一轮 worker 读 AppDatabase.kt 与 schemas 1–5 后，把库名改为 cofi-database.db、版本 5，建表按 Room schema 5 去掉 DEFAULT，\n新增 prepareSchema 在事务内按旧版本重放 1→5（migrateRecipeIcon 按 MIGRATION_1_2 重建 recipe_new，migrateStepToCurrentSchema 重建 step_new），\n恢复导入整体包进一个事务（agent-01a0b99f-57f0…:L218、L223、L281-L286，回执 L393）。第二轮 13:40 只改播种时机\n（agent-01a0b9e0-ffc5-78f0-b967-b7ee0a72fba1.jsonl:L93），版本与迁移骨架保留到观察截止。\n鸿蒙新装机没有 Android Room 库可迁入，重放分支只在遇到旧形态 RDB 时执行；这次修复的实际效果是补齐规格要求的版本元数据与 schema 形状，\n同时让 recipe_new 字面出现在迁移代码里，满足了判官的检测。\n",
+  "recommendations": [
+    "数据层实现：规格写了显式版本化迁移或保留源 schema 历史时，打开 RdbStore 后按源 @Database(version=…) 设置 store.version，并为旧版本写出显式升级分支；无版本的 CREATE TABLE IF NOT EXISTS 不能代替。",
+    "数据层实现：建表 SQL 以 Room 导出的最终 schema JSON（schemas/<Database>/<version>.json 的 createSql 与 notNull）为准，不添加源端没有的 DEFAULT；库名取 Room.databaseBuilder 的第三个参数。",
+    "读规格时：一次 cat 多个文件、回执出现 truncated 时，按标题单独补读 feature-base 的数据库段等本任务相关段落，再写数据层。",
+    "判官与修复分诊：只在 Migration.migrate 内创建、随后被 RENAME 的 xxx_new 表按迁移临时表处理，缺表对照以最终 schema 实体为准；应修的是版本与升级路径，不必为临时表建持久模型。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/private/tmp/testCofi-codex/entry/src/main/ets/database/RecipeDatabase.ets",
+        "since": "2026-09-19T10:26:37.280Z",
+        "at": "2026-09-19T13:59:12.701Z"
+      },
+      "nodes": [
+        {
+          "key": "/private/tmp/testCofi-codex/spec/baseline/features/F001-recipe-data.md",
+          "at": "2026-09-19T09:51:19.434Z",
+          "reason": "正常输入：写者 cat 回执给出实现映射表，Room @Entity/@Dao 需保留字段、可空性与 CRUD 语义，Room fallback destructive migration 需 explicit versioned migration + guarded fallback 并 retain source schema history；足以要求目标库带版本和显式升级路径（main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl:L1385-L1386）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/others/Cofi/cofi-share/src/main/java/com/omelan/cofi/share/model/AppDatabase.kt",
+          "at": "2026-09-19T06:36:41.457Z",
+          "reason": "正常输入：写者循环 cat 源模型文件，回执可见 AppDatabase.getInstance 链上的 addMigrations(*ALL_MIGRATIONS).fallbackToDestructiveMigration()，说明源库有迁移链；库名、version=5 与 MIGRATION_1_2 所在段被输出截断（同转录 L115-L116）。"
+        },
+        {
+          "key": "01a0b85d-596f-7b91-9c44-fd9f6a1b0dec",
+          "at": "2026-09-19T09:54:40.612Z",
+          "reason": "收到上述要求后，Add File 写出 name 'cofi.db'、无 version 的 CREATE TABLE IF NOT EXISTS，外加源 schema 没有的 DEFAULT 与索引，没有任何升级分支；版本化迁移要求未落实到建表代码（同转录 L1445-L1447）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "写者在 exec_command 中 cat spec/baseline/features/F001-recipe-data.md（与 F008、F007 同批），回执含实现映射表中的 Room @Entity/@Dao 与 versioned migration 两行；这是写前对该规格的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl",
+              "line": 1385
+            },
+            {
+              "source": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl",
+              "line": 1386
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "写者用 for 循环 cat cofi-share/model 下 Recipe/Step/Dependency/AppDatabase/SharedData.kt，回执（已截断）可见 AppDatabase.getInstance 的 addMigrations(*ALL_MIGRATIONS).fallbackToDestructiveMigration()；这是同一会话写前对源 AppDatabase.kt 的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl",
+              "line": 115
+            },
+            {
+              "source": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl",
+              "line": 116
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/private/tmp/testCofi-codex/entry/src/main/ets/models/RecipeModels.ets",
+      "reason": "已确认修复者对该文件的唯一改动是把 WearSnapshot.settings 的 Record<string, string | boolean> 换成 WearSettings 接口（agent-01a0b99f-57f0-7c73-9127-00383a5cf5c3.jsonl:L238-L240），对应 ECAT 派工新加的 No Record<K,V> 约束（main-01a0b99c-840a-7343-90f4-1e256f32367b.jsonl:L34），与 schema 列无关；Recipe/Step 模型未改，job 所写模型随列调整在原文中未见。生成期写入（main-01a0b85d…:L1417）写前未收到禁用 Record 的输入，按新要求处理，未作生成偏差归因。"
+    }
+  ],
+  "job": "issue-a3f7f5fbc8635b723b96",
+  "metadata": {
+    "migration": {
+      "project": "Cofi",
+      "server_session_id": "c48c34f6-1f91-421f-aa50-0064cb39d8cd",
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "glm-5.3"
+      ],
+      "tool_versions": {
+        "orchestrator": "hmigbot-plus",
+        "runtime_version": "v1.4.8",
+        "runtime_commit": "09ac508",
+        "client_version": "hmigbot-plus-1.6.0",
+        "pack_version": "hmigbot-plus-1.6.0",
+        "codex_cli_version": "0.147.0"
+      }
+    },
+    "analysis": {
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "platforms": [
+        "claude-code"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "glm-5.3"
+      ],
+      "providers": [
+        "hmigbot"
+      ],
+      "client_versions": [
+        "0.147.0"
+      ]
+    },
+    "source_set_id": "sources-abe23f8631388b5ebff0",
+    "environment": [
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0-alpha17",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": null,
+        "at": "2026-09-19T06:34:53.774Z",
+        "ref": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl:L71",
+        "request_ref": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl:L70",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.0.1(21)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-09-19T06:37:07.791Z",
+        "ref": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl:L128",
+        "request_ref": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl:L127",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.0.1(21)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-09-19T06:37:07.791Z",
+        "ref": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl:L128",
+        "request_ref": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl:L127",
+        "phase": "generation"
+      },
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0-alpha17",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": null,
+        "at": "2026-09-19T08:12:43.229Z",
+        "ref": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/agent-01a0b8b4-dac7-7520-b644-8055f38660ad.jsonl:L167",
+        "request_ref": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/agent-01a0b8b4-dac7-7520-b644-8055f38660ad.jsonl:L166",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.8.3"
+  },
+  "revision": "db06b3443dfb147c6aed023ab8cf7e16ef466b9f387d0f0fb5d1b554f7ad09a6"
+}

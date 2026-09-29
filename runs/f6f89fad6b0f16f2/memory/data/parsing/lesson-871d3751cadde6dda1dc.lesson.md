@@ -29,9 +29,7 @@ Gson 会把 JSON 数字填入 String 字段、把数字字符串填入 Int 字�
 
 ## 来源（按需复核）
 
-经验是有适用范围的历史建议。核查来源时同时看结论与 unknown；来源卡未随阅读包复制。
-
 - case-853ca988d9a2683b1c8d · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:4, recommendation:5
-  卡片版本：`bdd87c7f5a351594fdf08ee333cadf73c21beb381c1121e2bc09fe9056955e2f`
+  卡片版本：`6035ffa18f6456bf10a7a4ae96d19d5bf85f8972682e634ab54a911bb8e75a5d`
 - case-c9f068102d7b9057938e · 结论：diagnosis, recommendation:1, recommendation:2
-  卡片版本：`e8a368c96d0b621df1d5defddc5022cd7f61860ef3df07fcaa62704a8782728f`
+  卡片版本：`ce21c47bf733204190a9f7a3e7eb3a01616133a649575460f9427661c4a1d128`

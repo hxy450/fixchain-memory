@@ -29,13 +29,11 @@ ID：`lesson-a82d821385bf8fb3feb0` · 版本：1
 
 ## 来源（按需复核）
 
-经验是有适用范围的历史建议。核查来源时同时看结论与 unknown；来源卡未随阅读包复制。
-
 - case-4dad731ff5682f738fa4 · 结论：diagnosis, recommendation:1, recommendation:2
-  卡片版本：`d80a2b929096cf3393246e9c191843d581412f0c8a33587814add779223c942e`
+  卡片版本：`fa786bfa9ce3937ddbec68eaa6c6d223611cd01b9795c0211c5e5c1d6a2bbf61`
 - case-b59456e0156cf1b82ad6 · 结论：diagnosis
-  卡片版本：`d01c8b61133e9e9f2187409798ac839c79f18fc48e17f414f1f318b96bbb9490`
+  卡片版本：`c6dbd897d2e83b9afc23d4581db57d6342cd50ebb73bbb02bcfad6204e24993c`
 - case-cf6e5b0120e30d1395dd · 结论：diagnosis, recommendation:1, recommendation:2
-  卡片版本：`0c4652a4cd5a209beb7725f27f005d576303f6509b108dc3a2326436cc4e17fc`
+  卡片版本：`9157c4dc376851586173bc3d70e5d980367670d173e87b4c3f97f25268cddc10`
 - case-e7af91622703010ed47f · 结论：diagnosis, recommendation:1
-  卡片版本：`56e8702b77dca746fe04e608e574d004d892a5c0c1f1a0f6864a7a23a6d72ff1`
+  卡片版本：`2341076431157c17480df065b2a4ff7fdccb188ef7ac8069b722c87901d62b15`

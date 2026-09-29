@@ -23,7 +23,5 @@ ViewModel 实现阶段，编排页面初始化方法中异步存储/SDK 绑定�
 
 ## 来源（按需复核）
 
-经验是有适用范围的历史建议。核查来源时同时看结论与 unknown；来源卡未随阅读包复制。
-
 - case-7b90b1ebaae140988b90 · 结论：diagnosis, recommendation:1, recommendation:2
-  卡片版本：`fdbc31a5eabc36552997d3259cb03369bf24682fe466ef2fbc9abf88207fc57e`
+  卡片版本：`d48f86390c7dc35c82cbb2a117e310c8a25bd14364a27b147e6b2fa6fed8ba78`

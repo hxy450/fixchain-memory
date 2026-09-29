@@ -23,11 +23,9 @@ Windows PowerShell 5.1 的 Get-Content/Select-String 默认按系统 ANSI 代码
 
 ## 来源（按需复核）
 
-经验是有适用范围的历史建议。核查来源时同时看结论与 unknown；来源卡未随阅读包复制。
-
 - case-46ac36102451125de693 · 结论：diagnosis, recommendation:3
-  卡片版本：`a6c8db979bd0752f20fae73d52994a8dbee33b35ca5a2e883679aeca400ed09a`
+  卡片版本：`a0cb5480cef6a49622457138ad9cd8a7ee71744015b777d54e9f01f433c3d4ce`
 - case-8c249997059a2524ea7b · 结论：recommendation:3
-  卡片版本：`b68039d3741ec70ee43c59d40fbd4d1570b96692f9d2f6c03c39704123cc1427`
+  卡片版本：`419b77f02d456c484f3a903a61eb81b6cbf5319584c81500d9da4c46b109b9d2`
 - case-fa7bbda457517260efc4 · 结论：diagnosis, recommendation:5
-  卡片版本：`13060717bdfc19afb975d9cd93d6c841d9e637fde59c3eb5f8e6b8ab8e892577`
+  卡片版本：`e0982ecc31ac0b66f180ea74e3d7fc7415458b4f6c15814c92650d0401b8c13d`

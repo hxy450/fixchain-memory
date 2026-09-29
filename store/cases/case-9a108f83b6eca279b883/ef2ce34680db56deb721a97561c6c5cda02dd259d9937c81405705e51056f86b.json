@@ -1,0 +1,192 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-9a108f83b6eca279b883",
+  "created_at": "2026-09-27T21:33:03.667092+00:00",
+  "migration_key": "3a9f41ad-48a4-4f1a-a085-fb6393b81f8a",
+  "title": "启动加载页迁移：进度条 drawable 未解析，“和安卓一样可见的加载页”被降格为首帧状态",
+  "when": "启动页的规格/计划与界面实现阶段，确定 Splash 进度条样式和首次冷启动加载页可见时长时",
+  "description": "源端 SplashActivity 继承外部 SDK 的 AhzySplashActivity，布局以 progressDrawable=@drawable/splash_pb 定义进度条高度、轨道色和渐变；目标端初始化只读本地配置、几乎瞬时完成；用户要求“首次启动和安卓项目一样有页面加载”。",
+  "summary": "本问题有两处独立偏差，分两张图归因。\n1）进度条样式（SplashPage.ets）：OPT-008 worker Curie 写前读回 activity_splash.xml，进度条为\nprogressDrawable=\"@drawable/splash_pb\"、左右 42dp、距底 72dp、初值 10（agent-01a0715d-6858-7661-af89-cd1fe1a67795.jsonl:L21-L24）。\nCurie 11:41 的补丁落实了边距和初值，却把 Progress 写成 .height(4)，轨道沿用工程已有的 color_progress_bg（#EEEEEE），\n没有打开 splash_pb.xml（12dp 高、#FFB5D9FF 轨道、13dp 圆角、#000069FF→#FF0069FF 渐变）（同转录 L96-L99）；\n之后 L138、L207 只改状态回调和图标资源，未触及进度条。上游规格也没有带出该样式：S1 05:24 读过同一布局（main L9977-L9979），\n11:33 想列 Android drawable* 时因 -LiteralPath 不支持通配符报错（L9995-L9998），未重试就写出 OPT-008 spec（L10016），\n进度条只规定边距与初值。用户附 Android 截图后，修复者读取 splash_pb.xml（agent-01a07179-a1da-7403-8573-42c6f51dba93.jsonl:L106-L109），\n把高度改为 12、新增 splash_progress_bg=#FFB5D9FF 作轨道色（L118），前景仍用 main_color。\n背景 ic_splash_bg（蓝色渐变、宣传语与高铁图）自生成起就保留，修复未改动；图标由 ic_splash 改为 app_icon 是交付前 S1 督促的生成内修正，与源端 @mipmap/app_icon 一致。\n2）首次启动可见时长（AppInitializationViewModel.ets）：用户请求是“首次启动应用，和安卓项目一样，有页面加载”（main L9947）。\nS1 spec 背景写了要核对“首次冷启动时的可见时长……确保用户能看到与 Android 一致的加载过程”（L10016），验收标准却只要求首帧 progress=10；\nS1 计划（L10065）风险栏进一步写“初始化配置接口可能在本地缓存命中后极快完成；必须保证首帧状态逻辑正确，不通过人为延迟伪造用户可见行为”。\nCurie 继承的上下文明文含该用户请求（本转录 L6），并读回 InitializationConfigRepository（MemoryPreferenceBackend + InitializationGuard 的本地加载，L35-L38）\n与 VM（L28-L31）；写 VM 时只加 onStateChange 通知（L131、L145），repository.load 返回即 ready/onReady，没有最短可见时长。\nS1 交付时自述“加载页实际停留时间小于 250ms；保持真实初始化行为，未人为增加延迟”（main L10780），用户随即附 Android 截图要求“应用首次启用需要有这个加载页”（L10789）。\n修复者对首次 idle 且配置未就绪的真实初始化补足约 800ms 最短展示（agent-01a07183-9135-7b30-ac41-d90fc1688919.jsonl:L77），并改写计划中“不通过人为延迟”一条（L165）。\n可达性：用户随后要求去掉启动页（main L11196），remove_startup_splash_page 于 12:36 把 Index 的 homePageUrl 改为 MainPage、12:38 恢复 startWindowIcon=startIcon\n（agent-01a07191-8d75-77b2-a50b-7fe58b387bdf.jsonl:L55、L139），未删除 SplashPage/VM。两处修复在观察截止时仍在文件中，但冷启动已不再经过 SplashPage。\n",
+  "recommendations": [
+    "规格提取时，布局中的 progressDrawable、background 等 @drawable 引用要打开被引用文件，把高度、圆角、轨道色与进度渐变写进规格；列目录命令报错（如 -LiteralPath 带通配符）要改用 -Path/-Filter 重试，不在未见资源时成稿。",
+    "界面实现 Progress 时，高度和轨道/进度颜色取自源端 drawable 的数值（本例 12dp、#FFB5D9FF、13dp 圆角、蓝色渐变），不要自定高度或沿用工程里含义不同的已有颜色。",
+    "用户要求“和源端一样有加载页”时，把“能被看见”写成验收项：源端时长由外部 SDK 决定、目标端本地初始化极快时，在规格中写明首次冷启动的最短可见时长（仅首次，热启动不等待）或作为决策缺口交用户确认，不以“不伪造”为由只验证首帧状态。",
+    "真机验证启动页时，清数据冷启动并测量加载页实际停留时间；若低于可感知阈值（本例 <250ms），按未满足需求处理，而不是只在交付说明里备注。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "D:/anhuizhongyi/huoche/harmony_train-ticket_vest28/entry/src/main/ets/pages/SplashPage.ets",
+        "since": null,
+        "at": "2026-09-05T12:45:25.464Z"
+      },
+      "summary": "Curie 读回 activity_splash.xml，其中进度条引用 @drawable/splash_pb，却在写入时自定 .height(4) 并沿用 color_progress_bg（#EEEEEE），\n未解析 splash_pb 的 12dp 高度、#FFB5D9FF 轨道与渐变；S1 规格因 drawable 列目录报错未重试，同样只写了边距与初值。\n该片段保留到修复者读 splash_pb.xml 后改为 height(12) 与 splash_progress_bg（agent-01a07179-a1da-7403-8573-42c6f51dba93.jsonl:L118）。\n",
+      "nodes": [
+        {
+          "key": "D:/anhuizhongyi/huoche/android-train-ticket-vest7/app/src/main/res/layout/activity_splash.xml",
+          "at": "2026-09-05T11:39:34.242Z",
+          "reason": "正常输入：Curie 用 Get-Content -Raw 读回布局，回执含 MyProgressBar 的 layout_marginHorizontal=42dp、layout_marginBottom=72dp、progress=10 与 progressDrawable=@drawable/splash_pb（agent-01a0715d-6858-7661-af89-cd1fe1a67795.jsonl:L21-L24）；该引用指明进度条外观由 splash_pb 决定，打开它即可得到高度与颜色。"
+        },
+        {
+          "key": "agent-01a0715d-6858-7661-af89-cd1fe1a67795.jsonl",
+          "at": "2026-09-05T11:41:44.223Z",
+          "reason": "读到上述布局后，apply_patch 把 Progress 写成 width('calc(100% - 84vp)')、margin bottom 72，但 .height(4)、backgroundColor(color_progress_bg)（#EEEEEE）、color(main_color)；写前没有读取 splash_pb.xml（同转录 L96-L99）。高度 4 无源端依据，轨道色取自工程已有资源而非源端 #FFB5D9FF。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "Curie 的 exec 调用在同一脚本中 Get-Content -Raw 读取 activity_splash.xml，回执含进度条 42dp/72dp 边距、progress=10 与 progressDrawable=@drawable/splash_pb；这是其写 SplashPage 前的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/agent-01a0715d-6858-7661-af89-cd1fe1a67795.jsonl",
+              "line": 21
+            },
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/agent-01a0715d-6858-7661-af89-cd1fe1a67795.jsonl",
+              "line": 24
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": "target",
+          "force": true,
+          "reason": "Curie 的 exec 调用 tools.apply_patch，以 Update File 修改 SplashPage.ets，写入 Progress 的 .height(4) 与 backgroundColor(color_progress_bg)；回执 {} 表示补丁成功。",
+          "evidence": [
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/agent-01a0715d-6858-7661-af89-cd1fe1a67795.jsonl",
+              "line": 96
+            },
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/agent-01a0715d-6858-7661-af89-cd1fe1a67795.jsonl",
+              "line": 99
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "D:/anhuizhongyi/huoche/harmony_train-ticket_vest28/entry/src/main/ets/viewmodels/AppInitializationViewModel.ets",
+        "since": null,
+        "at": "2026-09-05T12:45:25.464Z"
+      },
+      "summary": "用户要求首次启动像安卓一样有可见加载页；S1 计划却把可见性降格为首帧 progress=10，并明确禁止人为延迟。\nCurie 已知初始化只读本地配置，写 VM 时仍让 load 返回即 ready，未设最短可见时长，交付实测停留 <250ms。\n修复者为首次真实初始化补足约 800ms（agent-01a07183-9135-7b30-ac41-d90fc1688919.jsonl:L77）。\n",
+      "nodes": [
+        {
+          "key": "D:/anhuizhongyi/huoche/android-train-ticket-vest7/app/src/main/java/com/njclx/yisanfare/module/splash/SplashActivity.kt",
+          "at": "2026-09-05T11:39:34.242Z",
+          "reason": "正常输入：Curie 读回 SplashActivity，继承外部 AhzySplashActivity，观察 oProgress 更新进度条，enterApp 后才启动 MainActivity（agent-01a0715d-6858-7661-af89-cd1fe1a67795.jsonl:L21-L24）；说明源端加载页是独立可见阶段，时长由 SDK 初始化驱动，而非目标端本地配置的读取速度。"
+        },
+        {
+          "key": "D:/anhuizhongyi/huoche/harmony_train-ticket_vest28/entry/src/main/ets/repositories/InitializationConfigRepository.ets",
+          "at": "2026-09-05T11:39:48.752Z",
+          "reason": "正常输入：读回的 load() 只经 InitializationGuard 从 MemoryPreferenceBackend 取配置并写入本地库（同转录 L35-L38），足以预见初始化几乎瞬时完成、加载页会一闪而过。"
+        },
+        {
+          "key": "agent-01a0715d-6858-7661-af89-cd1fe1a67795.jsonl",
+          "at": "2026-09-05T11:42:49.999Z",
+          "reason": "继承上下文明文含用户请求“首次启动应用，和安卓项目一样，有页面加载”（同转录 L6），又读回 VM（L28-L31）；两次 apply_patch 只新增 onStateChange/notifyState（L131-L134、L145-L148），loadConfig 在 repository.load 返回后立即置 100 并 notifyReady，没有最短可见时长。该取舍与 S1 计划风险栏“不通过人为延迟伪造用户可见行为”（main L10065）一致，计划为更上游的决策来源，但派工内容加密不可核；本节点绑定偏差落地的实际写入。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "Curie 的 exec 调用在同一脚本中 Get-Content -Raw 读取 SplashActivity.kt，回执含继承 AhzySplashActivity、oProgress.observe 与 enterApp→MainActivity.start；这是其写 VM 前的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/agent-01a0715d-6858-7661-af89-cd1fe1a67795.jsonl",
+              "line": 21
+            },
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/agent-01a0715d-6858-7661-af89-cd1fe1a67795.jsonl",
+              "line": 24
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "Curie 的 exec 调用 Get-Content -Raw 读取 InitializationConfigRepository.ets，回执显示 load() 经 InitializationGuard 从 MemoryPreferenceBackend 取配置；这是其写 VM 前的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/agent-01a0715d-6858-7661-af89-cd1fe1a67795.jsonl",
+              "line": 35
+            },
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/agent-01a0715d-6858-7661-af89-cd1fe1a67795.jsonl",
+              "line": 38
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target",
+          "force": true,
+          "reason": "Curie 两次 exec 调用 tools.apply_patch，以 Update File 修改 AppInitializationViewModel.ets，只新增 onStateChange/notifyState，未加最短可见时长；两次回执均为 {}。",
+          "evidence": [
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/agent-01a0715d-6858-7661-af89-cd1fe1a67795.jsonl",
+              "line": 131
+            },
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/agent-01a0715d-6858-7661-af89-cd1fe1a67795.jsonl",
+              "line": 134
+            },
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/agent-01a0715d-6858-7661-af89-cd1fe1a67795.jsonl",
+              "line": 145
+            },
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/agent-01a0715d-6858-7661-af89-cd1fe1a67795.jsonl",
+              "line": 148
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "S1 派发 Curie 的 spawn_agent 消息（main L10127）和 fork 压缩摘要是加密内容，无法核对计划中“不通过人为延迟”是否逐字交付给 Curie；图 2 只绑定 Curie 的真实读取与写入，计划决策作为上游原因记在总结中。",
+    "Android 首次启动的实际可见时长由外部 AhzySplashActivity（com.ahzy.common）决定，材料中没有其源码；800ms 是修复者按用户截图选定的值，不是源端常量。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-9a108f83b6eca279b883",
+  "metadata": {
+    "migration": {
+      "project": "android-train-ticket-vest7",
+      "server_session_id": "3a9f41ad-48a4-4f1a-a085-fb6393b81f8a"
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "gpt-5.6-sol"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.152.1",
+        "0.153.0-alpha.5"
+      ]
+    },
+    "source_set_id": "sources-8b0a7c0de0b3c4c2be88",
+    "card_tool_version": "0.8.3"
+  },
+  "revision": "ef2ce34680db56deb721a97561c6c5cda02dd259d9937c81405705e51056f86b"
+}

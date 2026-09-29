@@ -1,0 +1,171 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-2c1f292dab668274366a",
+  "created_at": "2026-09-27T14:22:36.345577+00:00",
+  "migration_key": "1bbfa3ec-f51e-48a1-92a3-4387249b468e",
+  "title": "Service 只收不透明请求体时，Repository 没读源码就把游客登录 body 写成空对象",
+  "when": "数据层实现阶段，编写 Repository 调用网络 Service、确定 POST 请求体字段时",
+  "description": "目标 Service 方法只接收不透明请求体（如 data: Object，对应源端 @Body RequestBody），规格 API 表没有列出这个端点或它的请求字段；源端由 ViewModel 调用某个 Repository 方法，在那里组装 body（如 device_id 取自设备 ID 工具）。",
+  "summary": "切片 worker（agent-a51cc4b728ac8391b）负责 Step 3b/3c 的 ViewModel 与 Repository。它从主会话收到的派工第 2 步写明：\n每个 ViewModel/Repository 都要读对应的 Android 源码（从 spec 的 android_source_anchors 或 feature-index 定位），\n并要求写出真实业务逻辑，不能是空壳（main-76ad9618 L2070，worker L1）。写前它读了 F001 规格（L35-L36）：\nanchors 列有 module-login 的 LoginViewModel.kt，但 API 表只有 9 个 LoginApiService 端点，没有游客登录端点，也没有请求字段，\n游客相关只写了 isTourist 标记。它也读了 Base 层的 CommNewApiService.ets（L52-L53）：touristLogin(data: Object) 原样 POST\n到 tourist/login，与源端 @Body params: RequestBody 一致，说明请求体由调用方组装。同一次回执还有 PreferenceKeys.DEVICE_ID 和 getDeviceId。\nworker 在 L66 判断“无需再读 Android 源码（anchors 已在 feature spec 里给出完整的目标接口签名和数据流）”，整个会话都没有读源工程。\n随后在 L78 Write LoginRepository.touristLogin，写成 const body: Record<string, Object> = {}。\n偏差出在实现环节：派工已经要求读源码，Service 签名也表明 body 字段要由 Repository 决定，worker 却在规格没有给字段时直接填了空对象。\n源端链路是 LoginViewModel.requestTouristLogin → commRepository.requestTouristLogin →\ncreateJsonRequestBody(\"device_id\" to DeviceIdHelper.getAndroidId())（修复期读取的源码见 main-5e4fa5da L1055-L1062、main-c83bb2f9 L1136；源码只读，内容与生成期相同）。\n生成期间没有人再改这个片段；修复前 main-c83bb2f9 L1157 读回的仍是 {}。用户实机日志显示 tourist/login 返回 400（main-c83bb2f9 L1125），\n主会话对照源码后把 body 改成 {'device_id': deviceId}，deviceId 取首启持久化的 UUID（L1159-L1162），改动保留到截止。\n规格侧也有缺口：F001 没有写出游客登录的跨模块端点和请求字段。本卡只把它记为输入缺口，\n因为派工另有明确的源码指引，所以偏差起点仍定在 worker。\n",
+  "recommendations": [
+    "Repository 实现者：遇到 Service 方法只收 data: Object 或 RequestBody，而规格没有列出字段时，按派工从 anchor 中的 ViewModel 追到源端实际调用的 Repository 方法，逐项照搬 body 字段名和取值来源；本例应追到 LoginViewModel.requestTouristLogin → CommRepository.requestTouristLogin，得到 device_id。",
+    "Repository 实现者：派工要求读源码时，要先给每个 POST 端点列出 body 字段的出处，再判断“规格已足够”；只要有字段来源为空的端点，就必须读源码，禁止默认写 {} 占位。",
+    "规格提取：feature spec 的 API 表也要列出本功能调用的跨模块端点（本例游客登录在 library-comm 的 CommNewApiService）；对 @Body RequestBody 这类不透明参数，要追到构造处，记下字段名和取值来源（如 device_id ← DeviceIdHelper.getAndroidId）。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/repos/LoginRepository.ets",
+        "since": "2026-09-22T09:58:32.418Z",
+        "at": "2026-09-24T02:03:48.614Z"
+      },
+      "nodes": [
+        {
+          "key": "main-76ad9618-e80a-4565-b49c-3c6541e5ed67.jsonl",
+          "at": "2026-09-22T03:34:25.731Z",
+          "reason": "派工：主会话用 Agent 派出 Step 3b/3c 切片 worker。第 2 步要求“读 Android 源码对应 ViewModel/Repository（从 spec 的 android_source_anchors 或 feature-index 定位）”，同时给出源码根，并要求“真实业务逻辑，非空壳”。这条指引正确、清楚，足以要求实现者从源端取请求体字段（main-76ad9618-e80a-4565-b49c-3c6541e5ed67.jsonl:L2070；agent-a51cc4b728ac8391b.jsonl:L1）。"
+        },
+        {
+          "key": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/spec/baseline/features/F001.md",
+          "at": "2026-09-22T03:35:13.315Z",
+          "reason": "实际收到的规格（输入缺口）：worker 用 cat 读到的 F001 在 anchors 中列有 LoginViewModel.kt，但 API 表只有 LoginApiService 的 9 个端点，没有游客登录端点和请求字段，游客相关只有 isTourist 标记。它没有给出 body，也没有说可以省略 body（agent-a51cc4b728ac8391b.jsonl:L35-L36）。"
+        },
+        {
+          "key": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/network/CommNewApiService.ets",
+          "at": "2026-09-22T03:36:20.007Z",
+          "reason": "正常输入：worker 用 cat 读到的 Base 层 Service 中，touristLogin(data: Object) 把调用方给的 data 原样 POST 到 livetranslator/app/user/auth/tourist/login，与源端 @Body RequestBody 同形，说明字段要由 Repository 决定。同一回执还有 PreferenceKeys.DEVICE_ID 和 Preferences.getDeviceId（agent-a51cc4b728ac8391b.jsonl:L52-L53）。"
+        },
+        {
+          "key": "agent-a51cc4b728ac8391b.jsonl",
+          "at": "2026-09-22T03:38:01.502Z",
+          "reason": "收到上述派工和输入后，L66 声明“无需再读 Android 源码”，整个会话没有读过 polypal-app-android。L78 Write LoginRepository 时把 touristLogin 写成 const body: Record<string, Object> = {}，直接传给 CommNewApiService.touristLogin。派工要求的源码核对没有做，缺失的 device_id 被空对象代替（同转录 L66、L78-L79）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4,
+          "force": true,
+          "reason": "worker 用 Bash 执行 cat F001.md，回执返回完整规格正文（anchors、API 表、游客态仅 isTourist 标记），发生在 L78 写目标之前；这支持它写前实际收到了这份缺少游客登录请求字段的规格。",
+          "evidence": [
+            {
+              "source": "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/agent-a51cc4b728ac8391b.jsonl",
+              "line": 35
+            },
+            {
+              "source": "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/agent-a51cc4b728ac8391b.jsonl",
+              "line": 36
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "worker 在 entry/src/main/ets 下用 Bash for 循环 cat network/CommNewApiService.ets 等文件，回执包含 touristLogin(data: Object) 原样 POST tourist/login 的定义，以及 PreferenceKeys.DEVICE_ID/getDeviceId；发生在 L78 写目标之前。",
+          "evidence": [
+            {
+              "source": "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/agent-a51cc4b728ac8391b.jsonl",
+              "line": 52
+            },
+            {
+              "source": "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/agent-a51cc4b728ac8391b.jsonl",
+              "line": 53
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "没有核查 F001 规格作者的派工是否要求追到 library-comm 的 CommRepository，因此不把规格缺口标成偏差起点。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-2c1f292dab668274366a",
+  "metadata": {
+    "migration": {
+      "project": "polypal-app-ohos",
+      "server_session_id": "1bbfa3ec-f51e-48a1-92a3-4387249b468e",
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "deepseek-v4-pro"
+      ],
+      "tool_versions": {
+        "orchestrator": "migbot-cc",
+        "runtime_version": "v1.4.8",
+        "runtime_commit": "09ac508",
+        "client_version": "hmigbot-lite-1.6.0",
+        "pack_version": "hmigbot-lite-1.6.0",
+        "claude_code_version": "2.1.175"
+      }
+    },
+    "analysis": {
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "platforms": [
+        "claude-code"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "deepseek-v4-pro"
+      ],
+      "client_versions": [
+        "2.1.175"
+      ]
+    },
+    "source_set_id": "sources-d15131bd8a3abae2b38e",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.0.2(22)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos",
+        "at": "2026-09-21T08:31:36.253Z",
+        "ref": "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-76ad9618-e80a-4565-b49c-3c6541e5ed67.jsonl:L50",
+        "request_ref": "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-76ad9618-e80a-4565-b49c-3c6541e5ed67.jsonl:L49",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.0.2(22)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos",
+        "at": "2026-09-21T08:31:36.253Z",
+        "ref": "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-76ad9618-e80a-4565-b49c-3c6541e5ed67.jsonl:L50",
+        "request_ref": "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-76ad9618-e80a-4565-b49c-3c6541e5ed67.jsonl:L49",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "5.0.0(12)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos",
+        "at": "2026-09-23T03:56:50.168Z",
+        "ref": "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-5e4fa5da-bfc0-449a-9b19-9236c7d2a918.jsonl:L783",
+        "request_ref": "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-5e4fa5da-bfc0-449a-9b19-9236c7d2a918.jsonl:L782",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.8.3"
+  },
+  "revision": "8c984c0d9f97cf54d6be55cd26b3b6970d0ee3325f5cddd2d1156632f23e3689"
+}

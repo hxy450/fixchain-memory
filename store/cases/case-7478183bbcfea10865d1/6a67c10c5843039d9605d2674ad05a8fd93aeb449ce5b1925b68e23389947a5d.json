@@ -1,0 +1,229 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-7478183bbcfea10865d1",
+  "created_at": "2026-09-27T14:40:48.692576+00:00",
+  "migration_key": "1bbfa3ec-f51e-48a1-92a3-4387249b468e",
+  "title": "token 失效判定码凭错误码枚举的举例推断成 1001，启动链迁移漏读主页初始化里的 refreshToken",
+  "when": "规格提取阶段，写网络层鉴权失效判定与 token 刷新策略时；启动链路迁移阶段，确定已登录冷启动要执行哪些初始化请求时",
+  "description": "源工程由 OkHttp 响应拦截器按响应体 reasonCode 分支踢登（错误码枚举里同时有 LoginExpired、TokenEmpty、TokenExpired、TokenInvalid、RemotingLoginExpired 等多个登录/token 相关成员），refreshToken 不在拦截器里，而是在已登录进入主页 Activity 的初始化请求中调用；目标侧改为自写 HttpClient 统一判定，并用启动 ViewModel 承载闪屏路由。",
+  "summary": "一、失效判定码（BaseResponse.ets / HttpClient.ets）。规格作者是主会话 main-76ad9618：\n02:15 写 feature-base.md 时，它关于错误码的输入只有参考文档 agent（aa90cdd）的结果通知\n\"ReasonCodeEnum 完整业务错误枚举（1001 登录过期、2065 时长不足等）\"（main L1668）。这句话只列了\n枚举成员，没有说哪些码触发踢登。主会话没读 TokenInterceptor/HandleErrorInterceptor，却把它写成\n\"对应 ReasonCodeEnum（1001 登录过期…）\"并加上\"TokenManager 统一 token 注入 + 401/1001 刷新\"（L1732）。\n02:30 它以 raw_apis 就绪为由补全网络层，自己的查询显示 api_related_constants 里业务状态码为 0 条\n（L1790-L1791），但仍保留上述两句，还加了一句\"业务状态码：见 raw_apis.json 的 api_related_constants\n（ReasonCodeEnum：1001 登录过期…）\"（L1797）。03:13 派 Base 工作者时又把\"401/1001 刷新\"写进派工词（L2030）。\nBase 工作者 a4e09788 读到 feature-base 的这几行（agent L23-L24），按规格指引去 raw_apis 找码值，只找到\nStateLayout 之类无关的 1001（L74-L79），随后判断\"具体值在源码里（feature-base 已明确：1001 登录过期…）\"，\n没有回源码读枚举或拦截器（L80）。它照规格写出 ReasonCodeEnum.TOKEN_EXPIRED=1001、\nREASON_TOKEN_EXPIRED=1001（L98），HttpClient 只在 HTTP 401 或 reasonCode===1001 时踢登（L129）。\n源工程的实际语义（修复期 main-5e4fa5da L1177、L1184、L1214 读到）是：HandleErrorInterceptor 对\nTokenEmpty 2012、TokenInvalid 2082、TokenExpired 2013 发 TOKEN_EXPIRED，对 RemotingLoginExpired 5006\n发 LOGIN_EXPIRED，都由 MainTabActivity 踢登；1001 是 Gateway 层的 LoginExpired，不在踢登分支里；\n拦截器也不做自动刷新。这两处片段保留到修复前（生成期 main-76ad9618 L2200/L2206 只改登出事件调用）。\n修复把枚举补成 2012/2013/2082/5006（L1220），HttpClient 改为命中 2012/2013/2082 踢登、5006 按\n异地登录踢登（L1227）。\n二、启动刷新 token（MainViewModel.ets）。源工程的刷新在 MainTabActivity.initRequestData：已登录时\nmViewModel.refreshToken(userId)，成功后从响应头更新 token。这一行为没有进入切片账本：feature-index\n未把 module-main 的 MainTabActivity/MainViewModel 归到任何功能，F005 只锚 module-home，F014 只锚\nSplash/MainManager/Boarding；slice-13 的 wires 只有 Splash/Boarding→BoardingViewModel。所以 a51cc4b\n创建 MainViewModel（03:43）时输入里没有这项要求，文件里也还没有启动分支。\n生成期 09:31 用户要求 main-c83bb2f9\"仔细阅读安卓源工程的启动业务顺序，然后迁移过来\"。它 find 到\nMainTabActivity.kt，并计划读 Splash/Boarding/MainManager/MainTabActivity 四个文件（L423-L424），实际只读了\n前三个（L425-L429）。SplashActivity 回执写明已登录分支 navigation 到 MainTabActivity（L426）。它随后给\nMainViewModel 写 decideLaunchRoute，已登录直接 return LaunchTarget.MAIN（L619），总结里称已\"读透\"启动顺序\n（L748）。也就是说它只迁了闪屏路由，没有打开已登录分支的目标页去看初始化请求。该分支保留到修复，\n修复新增 refreshToken()，并在 isLogin 分支先 await 刷新（main-5e4fa5da L1232、L1234）。\n另外，main-76ad9618 在 05:05 读过完整的 MainTabActivity（含 initRequestData 与 refreshToken，L2465），\n但只重写了 MainTabPage，并注明启动逻辑\"由 MainViewModel 承载\"，没有核对 MainViewModel 是否真的覆盖这些\n请求（L2479、L2489）。它没写过 MainViewModel，所以只在这里说明，不画进图。\n",
+  "recommendations": [
+    "规格提取阶段写鉴权失效与刷新策略前，先读响应拦截器（本例 HandleErrorInterceptor、TokenInterceptor）实际 switch 的 reasonCode 及其后续动作，写成'码→动作'表（本例 2012/2013/2082→TOKEN_EXPIRED 踢登，5006→异地登录踢登）。不要把错误码枚举里的举例成员（如 LoginExpired=1001）直接写成触发条件。",
+    "规格若写'见某数据源'（如 raw_apis.json 的 api_related_constants），先确认该源真的有这些值；查不到时写明'未核'并给出源码位置，不要保留推断值。刷新写'自动刷新'前，先确认源工程的刷新调用方在哪里。",
+    "实现阶段如果在规格指定的位置查不到具体码值，应回源码读枚举定义和使用它的拦截器后再写判定，不要把'规格已明确'当作已核。",
+    "迁移启动链路时，闪屏路由的每个目标页都要打开，看它的初始化入口（本例 MainTabActivity.initRequestData：refreshToken、reqGetConfig、reqNewVersion、saveUserLoginInfo、requestBenefitInfo 等）。列出已登录冷启动的请求清单，逐项落到对应 ViewModel 或标为未迁。",
+    "划分功能与切片时，检查宿主 Activity 的初始化请求有没有归属到某个 feature；可以用端点 callers 反查（raw_apis 中 refreshToken 的 callers 已列出 MainTabActivity.kt:181），避免行为落在所有切片之外。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/models/BaseResponse.ets",
+        "since": "2026-09-22T09:58:32.418Z",
+        "at": "2026-09-24T02:03:48.614Z"
+      },
+      "nodes": [
+        {
+          "key": "main-76ad9618-e80a-4565-b49c-3c6541e5ed67.jsonl",
+          "at": "2026-09-22T02:30:24.982Z",
+          "reason": "写前关于错误码的输入只有参考文档 agent aa90cdd 的结果通知'ReasonCodeEnum 完整业务错误枚举（1001 登录过期、2065 时长不足等）'（L1668 收到，aa90cdd L131）。这句话只列举成员，不说明哪些码触发踢登；该 agent 以 task-notification 回传，不是可绑定的读写边，所以只记在这里。规格作者没读拦截器源码，把枚举举例写成失效判定：feature-base 写入'对应 ReasonCodeEnum（1001 登录过期…）'和'TokenManager 统一 token 注入 + 401/1001 刷新'（L1732）。补全网络层时自己的查询显示 api_related_constants 业务码 0 条（L1790-L1791），仍保留这两句，并新增'业务状态码：见 raw_apis.json 的 api_related_constants（ReasonCodeEnum：1001 登录过期…）'（L1797）。偏差在此形成。",
+          "problem": true
+        },
+        {
+          "key": "main-76ad9618-e80a-4565-b49c-3c6541e5ed67.jsonl",
+          "at": "2026-09-22T03:13:37.711Z",
+          "reason": "派工桥梁：同一主会话派 Base-1~5 时，把'统一响应处理（BaseResponse + TokenManager + 401/1001 刷新）'写进派工词，并指定 feature-base 必读（L2030；agent-a4e097889cc3283dd.jsonl L1）。这是同一错误的转述，不另算起点。"
+        },
+        {
+          "key": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/spec/baseline/feature-base.md",
+          "at": "2026-09-22T03:13:43.481Z",
+          "reason": "交付桥梁：Base 工作者的 Read 回执包含第 35-36 行'ReasonCodeEnum（1001 登录过期、2065 时长不足等）'和'401/1001 刷新'，以及第 53 行指向 raw_apis 的业务状态码说明（agent-a4e097889cc3283dd.jsonl L23-L24）。"
+        },
+        {
+          "key": "agent-a4e097889cc3283dd.jsonl",
+          "at": "2026-09-22T03:18:29.240Z",
+          "reason": "实现者按规格到 raw_apis 查码值，没找到（L74-L79），随后判断'具体值在源码里（feature-base 已明确：1001 登录过期…）'，没有回源码核对（L80）。Write BaseResponse.ets 写出 REASON_TOKEN_EXPIRED=1001 与 ReasonCodeEnum.TOKEN_EXPIRED=1001，枚举里没有 2012/2013/2082/5006（L98-L99）。本链确认错误规格被传到目标。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/network/HttpClient.ets",
+        "since": "2026-09-22T09:58:32.418Z",
+        "at": "2026-09-24T02:03:48.614Z"
+      },
+      "nodes": [
+        {
+          "key": "main-76ad9618-e80a-4565-b49c-3c6541e5ed67.jsonl",
+          "at": "2026-09-22T02:30:24.982Z",
+          "reason": "写前只收到 aa90cdd 通知里的枚举举例'1001 登录过期、2065 时长不足等'（L1668），没有任何踢登码信息。规格作者没读 TokenInterceptor/HandleErrorInterceptor，就在 feature-base 写下'401/1001 刷新'，并把 1001 当作 token 失效码。它自己查到 raw_apis 业务码为 0 条后，仍把业务状态码指向该处（L1732、L1790-L1791、L1797）。",
+          "problem": true
+        },
+        {
+          "key": "main-76ad9618-e80a-4565-b49c-3c6541e5ed67.jsonl",
+          "at": "2026-09-22T03:13:37.711Z",
+          "reason": "派工桥梁：派 Base 工作者时要求'HttpClient 封装 + 统一响应处理（BaseResponse + TokenManager + 401/1001 刷新）'（L2030）。"
+        },
+        {
+          "key": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/spec/baseline/feature-base.md",
+          "at": "2026-09-22T03:13:43.481Z",
+          "reason": "交付桥梁：Base 工作者读到的 feature-base 网络层仍写着'TokenManager 统一 token 注入 + 401/1001 刷新'（agent-a4e097889cc3283dd.jsonl L23-L24）。"
+        },
+        {
+          "key": "agent-a4e097889cc3283dd.jsonl",
+          "at": "2026-09-22T03:22:23.932Z",
+          "reason": "实现者没有回源码核码值（L80），Write HttpClient.ets 写出 statusCode===401 踢登，以及 success=false 时只有 reasonCode===ReasonCodeEnum.TOKEN_EXPIRED(1001) 才踢登，注释为'401/1001 刷新踢登'（L124、L129-L130）。2012/2013/2082/5006 都会落到普通业务错误。本链确认规格被传到目标。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/viewmodels/MainViewModel.ets",
+        "since": "2026-09-22T09:58:32.418Z",
+        "at": "2026-09-24T02:03:48.614Z"
+      },
+      "summary": "源工程已登录冷启动的顺序是：SplashActivity 把 isLogin 分支导航到 MainTabActivity，\nMainTabActivity.initRequestData 再调 mViewModel.refreshToken(userId) 等初始化请求。\nmain-c83bb2f9 受命\"仔细阅读安卓源工程的启动业务顺序\"，读到 Splash 的已登录分支指向 MainTabActivity，\n也计划读 MainTabActivity.kt，但最后没读。它写的 decideLaunchRoute 在已登录时直接返回 MAIN，\n漏掉了启动刷新。这个分支保留到修复，修复在该分支先 await refreshToken()。\n刷新行为也不在切片账本和 MainViewModel 创建者（a51cc4b）的输入里。\n",
+      "nodes": [
+        {
+          "key": "/Users/timekettle/Desktop/GitProject/polypal-app-android/module-main/src/main/java/com/timekettle/module_main/ui/activity/SplashActivity.kt",
+          "at": "2026-09-22T09:32:20.733Z",
+          "reason": "正常输入：Read 回执给出启动路由 when，第一分支 LoginServiceImplWrap.isLogin() → TheRouter.build(RouteUrl.Main.MainTabActivity).navigation()（main-c83bb2f9 L425-L426）。这说明已登录冷启动会继续进入 MainTabActivity，启动顺序没有在 Splash 结束。同一时段的 find 回执已列出 MainTabActivity.kt 路径（L423），用户要求是'仔细阅读安卓源工程的启动业务顺序，然后迁移过来'（L417）。"
+        },
+        {
+          "key": "main-c83bb2f9-ebd8-4f27-aa1d-d1191a60c9f3.jsonl",
+          "at": "2026-09-22T09:51:55.173Z",
+          "reason": "它计划读 Splash/Boarding/MainManager/MainTabActivity 四个文件（L424），实际只读了前三个（L425-L429）。Edit MainViewModel 写 decideLaunchRoute：restoreState 后 isLogin 直接 return LaunchTarget.MAIN，没有执行 MainTabActivity.initRequestData 的 refreshToken 等请求（L619-L620）。总结称已'读透'启动顺序（L748）。偏差在于只迁了闪屏路由，没有打开已登录分支的目标页核对初始化请求。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "生成期没有 agent 读过 HandleErrorInterceptor。API 清单 agent ac10026 读过 TokenInterceptor.isTokenExpired（2082/2013/5006），但产物 raw_apis.json 只留下 logout_kick 标签，给主会话的通知也被截断，所以规格作者写前拿不到正确的判定码。本卡归因的是'没有依据就写出触发条件与刷新策略'，不是'明知 2012/2013 仍写 1001'。",
+    "MainViewModel 分支的代表链归到 main-c83bb2f9 没读已登录目标页。refreshToken 的具体代码不在它写前实际收到的内容里；更早的规格/切片缺口（没有功能认领 MainTabActivity 初始化请求）只在总结里说明，没有另立起点。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-7478183bbcfea10865d1",
+  "metadata": {
+    "migration": {
+      "project": "polypal-app-ohos",
+      "server_session_id": "1bbfa3ec-f51e-48a1-92a3-4387249b468e",
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "deepseek-v4-pro"
+      ],
+      "tool_versions": {
+        "orchestrator": "migbot-cc",
+        "runtime_version": "v1.4.8",
+        "runtime_commit": "09ac508",
+        "client_version": "hmigbot-lite-1.6.0",
+        "pack_version": "hmigbot-lite-1.6.0",
+        "claude_code_version": "2.1.175"
+      }
+    },
+    "analysis": {
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "platforms": [
+        "claude-code"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "deepseek-v4-pro"
+      ],
+      "client_versions": [
+        "2.1.175"
+      ]
+    },
+    "source_set_id": "sources-d15131bd8a3abae2b38e",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.0.2(22)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos",
+        "at": "2026-09-21T08:31:36.253Z",
+        "ref": "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-76ad9618-e80a-4565-b49c-3c6541e5ed67.jsonl:L50",
+        "request_ref": "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-76ad9618-e80a-4565-b49c-3c6541e5ed67.jsonl:L49",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.0.2(22)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos",
+        "at": "2026-09-21T08:31:36.253Z",
+        "ref": "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-76ad9618-e80a-4565-b49c-3c6541e5ed67.jsonl:L50",
+        "request_ref": "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-76ad9618-e80a-4565-b49c-3c6541e5ed67.jsonl:L49",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "5.0.0(12)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos",
+        "at": "2026-09-23T03:56:50.168Z",
+        "ref": "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-5e4fa5da-bfc0-449a-9b19-9236c7d2a918.jsonl:L783",
+        "request_ref": "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-5e4fa5da-bfc0-449a-9b19-9236c7d2a918.jsonl:L782",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.8.3"
+  },
+  "revision": "6a67c10c5843039d9605d2674ad05a8fd93aeb449ce5b1925b68e23389947a5d"
+}

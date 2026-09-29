@@ -24,7 +24,5 @@ ArkUI Video 播放本地文件需要 URI；裸沙箱路径传入不报错，只�
 
 ## 来源（按需复核）
 
-经验是有适用范围的历史建议。核查来源时同时看结论与 unknown；来源卡未随阅读包复制。
-
 - case-2515d9d83b3905d78424 · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
-  卡片版本：`0d5fbaf82868dc75a83a93649836eb7cd56d78d98bfef6beb81bc1c06c10b120`
+  卡片版本：`73c58f43ab5cd40a2b49e6de485368066f596fbc8e279df3a57bcc6d083cdd1a`

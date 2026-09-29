@@ -24,7 +24,5 @@ mkdirSync(dir, true) 的“递归”不等于“已存在即成功”，目录�
 
 ## 来源（按需复核）
 
-经验是有适用范围的历史建议。核查来源时同时看结论与 unknown；来源卡未随阅读包复制。
-
 - case-1a45c3a64c664128775e · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
-  卡片版本：`bb943ab3cf16f8afb5b163724bc31d451f64a78606e9fa6921856b745a02164e`
+  卡片版本：`295d3e5d0ad74eb03c0dfefd2f7da4bce19e84f15821b1e0b07bbb4edcfe475d`

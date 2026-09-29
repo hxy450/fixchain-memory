@@ -25,14 +25,9 @@ ID：`lesson-e9f03fcc7f1e781c4b24` · 版本：1
 
 ## 可选检查
 
-仅在适用条件不确定、与当前输入冲突或需要验证关键假设时按需执行；优先复用已有证据和正常测试。
-不因读取本条经验而额外启动验证流程；项目原有必需测试照常执行。
-
 - 开启提醒后切到其他 Tab、强停后冷启动，再触发连接、断开或电量事件，确认同一 ID 的通知仍在更新；关闭开关后通知撤销。
 
 ## 来源（按需复核）
 
-经验是有适用范围的历史建议。核查来源时同时看结论与 unknown；来源卡未随阅读包复制。
-
 - case-2bb1f7385338bea7e396 · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3, recommendation:4, recommendation:5
-  卡片版本：`4bb2b40980687d304c303562d46abd11109d19bbcde238573ad487527494c30b`
+  卡片版本：`9f4af4ce005700de9eddebf85c8c007eed2fc93e951190ea169b51bac19d3977`

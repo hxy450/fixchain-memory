@@ -1,0 +1,235 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-e92bb15630afd5b03216",
+  "created_at": "2026-09-27T13:08:16.619157+00:00",
+  "migration_key": "c48c34f6-1f91-421f-aa50-0064cb39d8cd",
+  "title": "修复轮重写后台计时时，通知正文与渠道、持久化恢复、前台专属状态退出清理被写窄",
+  "when": "修复轮实现阶段（ECAT 生成者 worker），重写平台计时服务与详情页后台交接时，决定通知正文字段、通知槽映射、持久化恢复算法，以及常亮与紧凑模式在各退出路径上的复位",
+  "description": "源应用由后台 Worker 跨步骤推进计时，通知正文为“当前/目标重量 + 步骤时长”，并建具名高重要度通知渠道；回到前台时取 Worker 已推进到的步骤。目标端改用应用内计时加长时任务，用应用内紧凑模式代替系统 PiP，用窗口常亮代替 WakeLock，需要自己写恢复与退出清理。",
+  "summary": "这是修复中新生的问题：生成期的 PlatformTimerService 只是桩（另案归因），ECAT 第一轮判官要求真实现后，\n两个 worker 按派工（main-01a0b99c…jsonl:L30、L32）各自重写服务与详情页，新代码带出以下偏差。\n\n服务侧（agent-01a0b99f-55cc）：写前实际读到 NotificationUtils.kt（同转录 L42-L43），其中\nTIMER_CHANNEL_ID=\"cofi_timer_notification\" 以 IMPORTANCE_HIGH 建渠道，createContentText 把“当前/目标重量”\n和 step.time×timeMultiplier 的 \" (m:ss)\" 拼成正文；派工要求按 D-005 真实现通知/动作抽象并先读源码。输入正确且足够。\nL296-L297 新建整个服务时，createProgressBody 只套 timer_progress_weight，无重量时退回步骤名；\n自己定义的快照字段 currentStepDurationMs 没被消费；addSlot 与请求都用通用 SERVICE_INFORMATION。\n推理里它认定“addSlot 只收类型、渠道名无法自定义，Fine”，并打算只在无重量时显示时长（L266）；\n收尾时注意到 currentStepDurationMs 未用仍放过（L577），汇报（L578）也未声明这两处替代。\n12:47 的 L510 只把 addSlot 收进 ensureNotificationSlot，ECAT 生成者 13:05 只补 expandedTitle（main-01a0b99c…jsonl:L353），\n两处偏差保留到第二轮判官。修复（agent-01a0b9e0…jsonl:L234）在正文后追加 m:ss 时长；\n系统槽仍用 SERVICE_INFORMATION，但登记 cofi_timer_notification 逻辑槽契约（名称取资源、LEVEL_HIGH、声明不支持具名槽），槽被禁用时显式降级。\n\n页面侧（agent-01a0b99f-572e）：写前实际读到 cofi-share Timer.kt 的 ON_RESUME（同转录 L76-L77）：\n回到前台时按 Worker 进度里的 stepID 直接设 currentStep，恢复位置就是后台跨步骤推进到的那一步；\n还读到 F006 规格（L159、L163）：keep-screen-on 契约写明“Active timer keeps UI awake; stop clears flag”，\nAC09 要求 Stop 清常亮并阻止自动 PiP，AC05 要求前台恢复取最新进度。派工要求紧凑回退和后台交接用真实生命周期状态。输入正确且足够。\n输出偏离有三处。其一，L500 推理决定后台交接期间 stopTimerTicker 不清常亮，L516 落成 isBackgroundTimerActive 时提前 return；\nL521 的 onStop 与 completeBackgroundTimerIfNeeded 只停服务，不清常亮也不复位 isPiPMode。\n其二，L526 的 handleApplicationForeground 只停后台任务、重启前台 ticker，不复位 isPiPMode；\n它在 L367 已推理“回前台应退出紧凑、恢复完整界面”，L706 读完 MainActivity 后也知道 Android 退出 PiP 时回调会置 false，\n仍判定紧凑停到用户点击为止可以接受。\n其三，L545 的 restorePersistedTimerState 把全部停机时长加到当前步，满一步只 advanceToNextStep 一次，余量丢弃；\n而同一 agent 一分钟前在 L521 写的 advanceTimerByDelta 已按有序步骤循环扣减。\n服务侧 releaseBackgroundTask 同样没有清常亮，属于同一资源缺口，修复在两侧都补了 setKeepScreenOn(false)。\n两轮之间 ECAT 生成者对页面只做编译修复（main-01a0b99c…jsonl:L348、L358），三处片段原样保留到第二轮判官。\n修复（agent-01a0b9e0…jsonl:L239）新增 replayPersistedElapsed 逐步扣减停机时长、遇手动步骤停下、越过末步进入完成态；\n回前台、后台完成和通知 Stop 都置 isPiPMode=false，后台交接前后都 setKeepScreenOn(false)。\n",
+  "recommendations": [
+    "移植通知时，按源端 createContentText/createChannel 逐字段核对：正文要同时有重量和 step.time×timeMultiplier 的 m:ss 时长。目标 SDK 不支持具名渠道时，把“源渠道 id、名称、重要度 → 目标槽类型与级别”写成显式映射常量，并在交付汇报中声明这项替代。",
+    "服务接口里自己定义的快照字段要在渲染处实际消费。收尾自检发现字段未用时，要么接到输出，要么删除并说明原因，不带着未用字段交付。",
+    "用应用内计时替代后台 Worker 时，所有恢复入口（后台 tick、持久化恢复）共用同一个按有序步骤扣减经过时间的函数：遇手动步骤停下，越过末步进入完成态。不要为持久化恢复另写一个只加到当前步的分支。",
+    "给前台专属状态（keep-screen-on、紧凑/PiP 模式）列出进入点和全部退出点：回前台、后台交接、后台完成、通知 Stop、页面销毁，每个退出点都显式复位。对照规格中的 stop clears flag 与 F006-AC09 核对。",
+    "最小检查：grep 每处 setKeepScreenOn(true) 和 isPiPMode = true，确认每条退出路径都有对应的 false；再用跨两个步骤的停机时长手算一次恢复结果。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/private/tmp/testCofi-codex/entry/src/main/ets/services/platform/PlatformTimerService.ets",
+        "since": "2026-09-19T10:26:37.280Z",
+        "at": "2026-09-19T13:59:12.701Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/others/Cofi/cofi-share/src/main/java/com/omelan/cofi/share/timer/notification/NotificationUtils.kt",
+          "at": "2026-09-19T12:25:05.176Z",
+          "reason": "正常输入：55cc 用 sed 读 NotificationUtils.kt 1-130 行，回执包含 TIMER_CHANNEL_ID=\"cofi_timer_notification\"、IMPORTANCE_HIGH 渠道，以及 createContentText 把重量文本与 step.time×timeMultiplier 的 \" (m:ss)\" 拼成正文；足以确定通知正文字段和渠道要求（agent-01a0b99f-55cc-72d2-a3b7-4eda7f7cdcbc.jsonl:L42-L43）。"
+        },
+        {
+          "key": "main-01a0b99c-840a-7343-90f4-1e256f32367b.jsonl",
+          "at": "2026-09-19T12:23:42.539Z",
+          "reason": "派工：ECAT 生成者派 55cc 独占 PlatformTimerService，要求按 D-005 真实现能力检测、通知与动作面、后台交接和降级，且先读 Timer.kt 等源码、不许伪造（main-01a0b99c-840a-7343-90f4-1e256f32367b.jsonl:L30、L36）。派工没点名正文字段，但指明以源码为准。"
+        },
+        {
+          "key": "agent-01a0b99f-55cc-72d2-a3b7-4eda7f7cdcbc.jsonl",
+          "at": "2026-09-19T12:38:20.962Z",
+          "reason": "读到上述源码后，apply_patch 新建服务：createProgressBody 只输出当前/目标重量、无重量时退回步骤名，未输出步骤时长（快照里的 currentStepDurationMs 未被使用）；addSlot 和请求都用通用 SERVICE_INFORMATION，没有记录对具名高重要度渠道的替代（同转录 L296-L297；推理 L266、L577）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "55cc 自己的 exec_command 执行 sed -n '1,130p' NotificationUtils.kt，回执返回 TIMER_CHANNEL_ID=cofi_timer_notification、IMPORTANCE_HIGH 建渠道和 createContentText 的重量加 m:ss 时长拼接；这是它写服务前对源文件的真实读取，shell 读取未被自动解析。",
+          "evidence": [
+            {
+              "source": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/agent-01a0b99f-55cc-72d2-a3b7-4eda7f7cdcbc.jsonl",
+              "line": 42
+            },
+            {
+              "source": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/agent-01a0b99f-55cc-72d2-a3b7-4eda7f7cdcbc.jsonl",
+              "line": 43
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/private/tmp/testCofi-codex/entry/src/main/ets/pages/RecipeDetailsPage.ets",
+        "since": "2026-09-19T10:26:37.280Z",
+        "at": "2026-09-19T13:59:12.701Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/others/Cofi/cofi-share/src/main/java/com/omelan/cofi/share/timer/Timer.kt",
+          "at": "2026-09-19T12:25:28.597Z",
+          "reason": "正常输入：572e 用 nl|sed 读 Timer.kt 166-350 行，回执中的 ON_RESUME 按 Worker 进度里的 stepID 直接设 currentStep、按进度恢复动画，说明恢复位置就是后台跨步骤推进到的那一步（agent-01a0b99f-572e-7323-b456-048006bc823d.jsonl:L76-L77）。"
+        },
+        {
+          "key": "/private/tmp/testCofi-codex/spec/baseline/features/F006-platform-timer.md",
+          "at": "2026-09-19T12:28:04.275Z",
+          "reason": "正常输入：572e cat F006 规格，回执包含 keep-screen-on 契约“Active timer keeps UI awake; stop clears flag”、AC09（Stop 清常亮并阻止自动 PiP）、AC05（前台恢复取最新进度）和 PD-C11-F006-01 紧凑回退；足以约束退出清理与恢复（同转录 L159、L163）。"
+        },
+        {
+          "key": "main-01a0b99c-840a-7343-90f4-1e256f32367b.jsonl",
+          "at": "2026-09-19T12:23:42.719Z",
+          "reason": "派工：ECAT 生成者派 572e 独占 RecipeDetailsPage，要求按 D-003 实现紧凑回退和后台转换路径，状态取自真实能力与生命周期，计时进度须反映真实状态，并先读 Timer.kt、RecipeDetails.kt（main-01a0b99c-840a-7343-90f4-1e256f32367b.jsonl:L32、L38）。"
+        },
+        {
+          "key": "agent-01a0b99f-572e-7323-b456-048006bc823d.jsonl",
+          "at": "2026-09-19T12:45:46.992Z",
+          "reason": "读到上述输入后：L516 让 stopTimerTicker 在后台交接期间跳过清常亮；L521 的 onStop 与后台完成只停服务，不清常亮也不复位 isPiPMode；L526 的回前台处理不复位 isPiPMode；L545 的 restorePersistedTimerState 把全部停机时长加到当前步、最多前进一步。同一 agent 在 L521 已写出跨步骤循环扣减，恢复路径没有复用（推理 L367、L500、L706）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4,
+          "force": true,
+          "reason": "572e 自己的 exec_command 执行 nl -ba cofi-share Timer.kt | sed -n '166,350p'，回执包含 ON_RESUME 按 Worker 进度 stepID 恢复 currentStep 的源码；这是它写恢复逻辑前的真实读取，shell 读取未被自动解析。",
+          "evidence": [
+            {
+              "source": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/agent-01a0b99f-572e-7323-b456-048006bc823d.jsonl",
+              "line": 76
+            },
+            {
+              "source": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/agent-01a0b99f-572e-7323-b456-048006bc823d.jsonl",
+              "line": 77
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 4,
+          "force": true,
+          "reason": "572e 自己的 exec_command 执行 cat spec/baseline/features/F006-platform-timer.md（call_e8c4d6d3），L163 为同一调用的回执，含 keep-screen-on 契约、AC05 与 AC09；这是它写页面前的真实读取，shell 读取未被自动解析。",
+          "evidence": [
+            {
+              "source": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/agent-01a0b99f-572e-7323-b456-048006bc823d.jsonl",
+              "line": 159
+            },
+            {
+              "source": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/agent-01a0b99f-572e-7323-b456-048006bc823d.jsonl",
+              "line": 163
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-e92bb15630afd5b03216",
+  "metadata": {
+    "migration": {
+      "project": "Cofi",
+      "server_session_id": "c48c34f6-1f91-421f-aa50-0064cb39d8cd",
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "glm-5.3"
+      ],
+      "tool_versions": {
+        "orchestrator": "hmigbot-plus",
+        "runtime_version": "v1.4.8",
+        "runtime_commit": "09ac508",
+        "client_version": "hmigbot-plus-1.6.0",
+        "pack_version": "hmigbot-plus-1.6.0",
+        "codex_cli_version": "0.147.0"
+      }
+    },
+    "analysis": {
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "platforms": [
+        "claude-code"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "glm-5.3"
+      ],
+      "providers": [
+        "hmigbot"
+      ],
+      "client_versions": [
+        "0.147.0"
+      ]
+    },
+    "source_set_id": "sources-abe23f8631388b5ebff0",
+    "environment": [
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0-alpha17",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": null,
+        "at": "2026-09-19T06:34:53.774Z",
+        "ref": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl:L71",
+        "request_ref": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl:L70",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.0.1(21)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-09-19T06:37:07.791Z",
+        "ref": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl:L128",
+        "request_ref": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl:L127",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.0.1(21)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-09-19T06:37:07.791Z",
+        "ref": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl:L128",
+        "request_ref": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl:L127",
+        "phase": "generation"
+      },
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0-alpha17",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": null,
+        "at": "2026-09-19T08:12:43.229Z",
+        "ref": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/agent-01a0b8b4-dac7-7520-b644-8055f38660ad.jsonl:L167",
+        "request_ref": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/agent-01a0b8b4-dac7-7520-b644-8055f38660ad.jsonl:L166",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.8.3"
+  },
+  "revision": "3c459a0f7e7078bb6d188d0b884628fc5b13cc3d830f20b2470474135d084b9c"
+}

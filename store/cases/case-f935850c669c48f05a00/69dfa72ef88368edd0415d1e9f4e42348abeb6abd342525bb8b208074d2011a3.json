@@ -1,0 +1,339 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-f935850c669c48f05a00",
+  "created_at": "2026-09-27T13:03:02.628289+00:00",
+  "migration_key": "c48c34f6-1f91-421f-aa50-0064cb39d8cd",
+  "title": "应用身份停在脚手架值、版本号被抄成页面字面量",
+  "when": "资源前置阶段落地 App 身份字段（决定 bundleName/vendor 是否替换脚手架值）时；以及接线阶段闭合页面版本号占位（关于页显示版本、更新提示比较版本码）时",
+  "description": "目标 AppScope/app.json5 仍是脚手架 com.example.* 包名与 example 厂商，而源 build.gradle 给出真实 applicationId；源页面用 BuildConfig.VERSION_NAME/VERSION_CODE 显示版本或比较更新提示，目标页面留有“由服务/ViewModel 提供版本”的前向占位，而版本值已写在 app.json5 的 versionName/versionCode 中。",
+  "summary": "本问题有两个互不相同的成因，分两支说明。\n一、应用身份（app.json5）：偏差在技能输入本身。主会话 07:44 读到 a2h-execute 的 stage-0-resources.md §3.0b，\n要求以 scope=dev-identity 调 arkts-app-identity，只写 app_name/versionName/versionCode/图标，\n“不碰 bundleName/vendor……属部署期 D-009，保留脚手架占位，部署期再以 scope=full 落地”\n（main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl:L448-L449），并把“do not alter bundleName/vendor”写进 Stage 0 派工（L452）。\nStage 0 worker 读到同一段规则与 arkts-app-identity SKILL.md 的 dev-identity 说明\n（agent-01a0b89f-8d55-7483-8026-e89c5525b1bc.jsonl:L13-L14、L49-L50），也读到 build.gradle 的\napplicationId \"com.omelan.cofi\"（L92-L93），07:55 只把 versionCode/versionName 改为 188/1.21.11，\nbundleName=com.example.testcoficodex、vendor=example 原样保留（L263-L265）。\n规则所引的 D-009 在项目台账中不存在：台账只有 D-000–D-008，D-008 只说离线手机 V1 不需要签名/密钥决策（同转录 L53-L54）；\nbuild-profile.json5 的 signingConfigs 为空，产物是未签名 HAP（main L127-L128、L470），技能给出的“签名一致性”理由在本工程没有落点。\na2h-execute 在 Stage 0 之后没有 scope=full 或人工定包名的步骤，而 a2h-verify CHECK-4 对 com.example.* 包名、vendor=example 直接判 FAIL\n（main L2186-L2187）。10:31 主会话在验证期自行把二者改为 com.omelan.cofi / rozpierog（L2201-L2204），保留到截止。\n二、版本字面量（AboutPage、RecipeListPage）：偏差在实现输出。页面转换者没有写死版本：About 转换者按页面规格\n“appVersion | package/build metadata”留下 FWD-REF P-S9-008，登记 trigger=AboutViewModel/AboutService.getVersion\n（agent-01a0b8ed-ee64-7e60-9b39-0b749dd17642.jsonl:L30、L81），列表页转换者按规格“showUpdateNotice | VERSION_CODE/update_notice_version comparison”\n留下 P-S2-003/P-S2-005 占位（agent-01a0b8b4-dac7-7520-b644-8055f38660ad.jsonl:L35、L67）。\n限流三次续跑后主会话自己接手 Step 3d 接线，写前已读到登记表这些行（main L1005-L1006）和 app.json5 中的\nversionCode 188 / versionName \"1.21.11\"（L529-L530）；10:03 推理写明“Need app version 188 from AppScope. Add const.”（L1635），\n随即在 RecipeListPage 加 const APP_VERSION_CODE: number = 188 并用于比较与持久化 update_notice_version（L1647-L1649），\n10:07 在 AboutPage aboutToAppear 写 this.appVersion = '1.21.11' 并删掉 P-S9-008 标记（L1727-L1729）。\n它知道版本来自构建元数据，却把值复制成第二份字面量。两处字面量经 ECAT 第一轮保留（其补丁只改 listener 写法），\nECAT 第二轮判别器列出“AboutPage hardcodes 1.21.11 and RecipeListPage hardcodes version code 188”\n（main-01a0b99c-840a-7343-90f4-1e256f32367b.jsonl:L587-L588），worker 13:43 删除两个字面量，改为\nbundleManager.getBundleInfoForSelfSync(GET_BUNDLE_INFO_DEFAULT) 的 versionName / versionCode\n（agent-01a0b9e0-ff66-78c0-a14a-e01332f562a6.jsonl:L182-L184）。\n",
+  "recommendations": [
+    "资源前置阶段按 dev-identity 保留 bundleName/vendor 之前，先在决策台账核对规则所引的部署期决策是否存在（本次 D-009 不存在），并看 build-profile.json5 的 signingConfigs 是否为空；两者都不成立、源 applicationId 可用时，按 applicationId 映射 bundleName 与 vendor，或把“包名/厂商待定、verify CHECK-4 会判 FAIL”写入迁移报告的决策缺口，不静默沿用脚手架值。",
+    "流水线维护：让 a2h-execute Stage 0 的 dev-identity 跳过规则与 a2h-verify CHECK-4 对齐，在进入验证前安排 scope=full 或人工确定包名、厂商的步骤，或让 CHECK-4 对已登记延后的字段给出 DEFERRED。",
+    "接线阶段闭合版本号占位时，从运行时应用包信息读取（bundleManager.getBundleInfoForSelfSync(bundleManager.BundleFlag.GET_BUNDLE_INFO_DEFAULT).versionName / versionCode），对应源端 BuildConfig.VERSION_NAME / VERSION_CODE；不要把 app.json5 的 versionName、versionCode 复制成页面常量。",
+    "闭合前向占位前对照登记表 trigger：trigger 要求服务或 ViewModel 提供值（如 AboutService.getVersion）时，写入常量不算闭合；删除标记后 grep 页面代码，确认没有与 app.json5 相同的版本字面量。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/private/tmp/testCofi-codex/AppScope/app.json5",
+        "since": "2026-09-19T10:26:37.280Z",
+        "at": "2026-09-19T13:59:12.701Z"
+      },
+      "summary": "偏差在技能输入：stage-0-resources.md §3.0b 与 arkts-app-identity 的 dev-identity 段都要求保留脚手架 bundleName/vendor，\n理由指向台账里并不存在的 D-009，流水线在 a2h-verify CHECK-4 之前也没有 scope=full 步骤。主会话照此派工，\nStage 0 worker 已读到 applicationId com.omelan.cofi，仍按规则只写 versionCode/versionName；CHECK-4 判 FAIL 后\n主会话 10:31 改为 com.omelan.cofi / rozpierog。两个传递节点按规则执行，不另推定其独立失职。\n",
+      "recommendations": [
+        "资源前置阶段按 dev-identity 保留 bundleName/vendor 之前，先在决策台账核对规则所引的部署期决策是否存在（本次 D-009 不存在），并看 build-profile.json5 的 signingConfigs 是否为空；两者都不成立、源 applicationId 可用时，按 applicationId 映射 bundleName 与 vendor，或把“包名/厂商待定、verify CHECK-4 会判 FAIL”写入迁移报告的决策缺口。",
+        "流水线维护：让 dev-identity 跳过规则与 a2h-verify CHECK-4 对齐，在验证前安排 scope=full 或人工定包名的步骤，或让 CHECK-4 对已登记延后的字段判 DEFERRED。"
+      ],
+      "nodes": [
+        {
+          "key": "/private/tmp/testCofi-codex/.agents/skills/a2h-execute/references/stage-0-resources.md",
+          "at": "2026-09-19T07:44:10.784Z",
+          "reason": "偏差输入：主会话 cat 回执 §3.0b 要求以 scope=dev-identity 落地身份，只写 app_name/versionName/versionCode/图标，“不碰 bundleName/vendor……属部署期 D-009，保留脚手架占位，部署期再以 scope=full 落地”（main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl:L448-L449）。项目台账没有 D-009，a2h-verify CHECK-4 却对 com.example.*/example 判 FAIL（L2186-L2187）；技能在转录外形成，上游缺口记在 unknown。",
+          "problem": true
+        },
+        {
+          "key": "main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl",
+          "at": "2026-09-19T07:44:19.396Z",
+          "reason": "派发者：读到上述规则后 spawn_agent 派 Stage 0 worker，派工正文写明 app identity dev fields (app_name/versionName/versionCode/icon; do not alter bundleName/vendor)（同转录 L452-L453）。忠实传递技能规则，不另推定其独立失职。"
+        },
+        {
+          "key": "/private/tmp/testCofi-codex/.agents/skills/arkts-app-identity/SKILL.md",
+          "at": "2026-09-19T07:45:18.023Z",
+          "reason": "偏差输入：Stage 0 worker cat 回执 Step 3 规定 bundleName/vendor“仅 scope=full”，scope=dev-identity 跳过二者并保留脚手架占位，只消除 app_name/versionName 默认值；同文又称 a2h-verify 身份项校验本 skill 产出（agent-01a0b89f-8d55-7483-8026-e89c5525b1bc.jsonl:L49-L50）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/others/Cofi/app/build.gradle",
+          "at": "2026-09-19T07:46:52.712Z",
+          "reason": "正常输入：Stage 0 worker grep 回执给出 applicationId \"com.omelan.cofi\"、versionCode 188、versionName \"1.21.11\"（agent-01a0b89f-8d55-7483-8026-e89c5525b1bc.jsonl:L92-L93），真实包名在写前可得，只是被 dev-identity 规则排除。"
+        },
+        {
+          "key": "agent-01a0b89f-8d55-7483-8026-e89c5525b1bc.jsonl",
+          "at": "2026-09-19T07:55:03.860Z",
+          "reason": "传递者：按派工与 dev-identity 规则，apply_patch 只把 app.json5 的 versionCode/versionName 改为 188/1.21.11，bundleName=com.example.testcoficodex、vendor=example 原样保留（同转录 L263-L265；进度消息 L336 写明 bundleName and vendor unchanged）。本节点按规则执行，不另推定其独立失职。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "主会话在工程根 exec_command 执行 cat .agents/skills/a2h-execute/references/stage-0-resources.md（后接其他参考文件），回执开头即该文件，含 §3.0b“不碰 bundleName/vendor……属部署期 D-009”；多文件 cat 未被索引解析，这是主会话派工前对该文件的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl",
+              "line": 448
+            },
+            {
+              "source": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl",
+              "line": 449
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 5
+        },
+        {
+          "from": 3,
+          "to": 5,
+          "force": true,
+          "reason": "Stage 0 worker 在工程根 exec_command 执行 cat .agents/skills/arkts-app-identity/SKILL.md，回执为该技能全文，含 scope=dev-identity 跳过 bundleName/vendor 的 Step 3 说明；这是写 app.json5 前对该文件的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/agent-01a0b89f-8d55-7483-8026-e89c5525b1bc.jsonl",
+              "line": 49
+            },
+            {
+              "source": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/agent-01a0b89f-8d55-7483-8026-e89c5525b1bc.jsonl",
+              "line": 50
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": 5,
+          "force": true,
+          "reason": "Stage 0 worker exec_command 执行 grep -nE 'version(Code|Name)|applicationId|namespace|resValue' /Users/fengyi/Workspace/others/Cofi/app/build.gradle …，回执首行即 app/build.gradle:28 applicationId \"com.omelan.cofi\"；这是写 app.json5 前对源构建文件的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/agent-01a0b89f-8d55-7483-8026-e89c5525b1bc.jsonl",
+              "line": 92
+            },
+            {
+              "source": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/agent-01a0b89f-8d55-7483-8026-e89c5525b1bc.jsonl",
+              "line": 93
+            }
+          ]
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/private/tmp/testCofi-codex/entry/src/main/ets/pages/settings/AboutPage.ets",
+        "since": "2026-09-19T10:26:37.280Z",
+        "at": "2026-09-19T13:59:12.701Z"
+      },
+      "nodes": [
+        {
+          "key": "/private/tmp/testCofi-codex/AppScope/app.json5",
+          "at": "2026-09-19T08:01:59.179Z",
+          "reason": "正常输入：主会话 cat 回执显示 versionName \"1.21.11\"、versionCode 188 已由 Stage 0 写入 app.json5（main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl:L529-L530），版本是应用构建元数据，运行时可从应用包信息读取。"
+        },
+        {
+          "key": "/private/tmp/testCofi-codex/spec/placeholder-registry.md",
+          "at": "2026-09-19T09:35:38.306Z",
+          "reason": "正常输入：主会话 sed 回执含 P-S9-008 | AboutPage.ets:34 | trigger=AboutViewModel/AboutService.getVersion 可绑定 AboutPage appVersion | pending | forward-ref（同转录 L1005-L1006），明确版本应由服务提供而非写死。"
+        },
+        {
+          "key": "main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl",
+          "at": "2026-09-19T10:07:16.812Z",
+          "reason": "偏差输出：接手 Slice 9 Step 3d 接线时，apply_patch 在 AboutPage.aboutToAppear 写 this.appVersion = '1.21.11' 并删除 P-S9-008 标记（同转录 L1726-L1729），把 app.json5 的 versionName 复制成页面字面量，未按 trigger 接版本服务或读应用包信息。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "主会话 exec_command 在工程根执行 grep/head 源 strings.xml 后 cat AppScope/app.json5，回执含该文件全文 versionCode 188、versionName \"1.21.11\"；多命令读取未被索引解析，这是写版本字面量前对该文件的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl",
+              "line": 529
+            },
+            {
+              "source": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl",
+              "line": 530
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "主会话 exec_command 在工程根执行 sed -n '1,120p' spec/placeholder-registry.md 并 grep 若干 P-ID，回执含 P-S2-003、P-S2-005 与 P-S9-008 各行；多命令读取未被索引解析，这是写版本字面量前对登记表的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl",
+              "line": 1005
+            },
+            {
+              "source": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl",
+              "line": 1006
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/private/tmp/testCofi-codex/entry/src/main/ets/pages/RecipeListPage.ets",
+        "since": "2026-09-19T10:26:37.280Z",
+        "at": "2026-09-19T13:59:12.701Z"
+      },
+      "nodes": [
+        {
+          "key": "/private/tmp/testCofi-codex/AppScope/app.json5",
+          "at": "2026-09-19T08:01:59.179Z",
+          "reason": "正常输入：主会话 cat 回执显示 versionCode 188 已在 app.json5（main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl:L529-L530）；主会话 10:03 推理自述 Need app version 188 from AppScope（L1635），说明它知道版本码的来源是构建元数据。"
+        },
+        {
+          "key": "/private/tmp/testCofi-codex/spec/placeholder-registry.md",
+          "at": "2026-09-19T09:35:38.306Z",
+          "reason": "正常输入：同一 sed 回执含 P-S2-003（RecipeListViewModel 实现运营卡状态）与 P-S2-005（更新卡外链/偏好持久化）占位，以及 P-S9-008 要求版本由 AboutService.getVersion 提供（同转录 L1005-L1006），计划期望版本由服务层供给。"
+        },
+        {
+          "key": "main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl",
+          "at": "2026-09-19T10:03:39.027Z",
+          "reason": "偏差输出：接手 Slice 2 Step 3d 接线时，apply_patch 新增 const APP_VERSION_CODE: number = 188，并用它判断 showUpdateNotice、写入 update_notice_version（同转录 L1635、L1647-L1649），把 app.json5 的 versionCode 复制成页面常量。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "主会话 exec_command 在工程根执行 grep/head 源 strings.xml 后 cat AppScope/app.json5，回执含该文件全文 versionCode 188、versionName \"1.21.11\"；多命令读取未被索引解析，这是写版本字面量前对该文件的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl",
+              "line": 529
+            },
+            {
+              "source": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl",
+              "line": 530
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "主会话 exec_command 在工程根执行 sed -n '1,120p' spec/placeholder-registry.md 并 grep 若干 P-ID，回执含 P-S2-003、P-S2-005 与 P-S9-008 各行；多命令读取未被索引解析，这是写版本字面量前对登记表的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl",
+              "line": 1005
+            },
+            {
+              "source": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl",
+              "line": 1006
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "stage-0-resources.md 与 arkts-app-identity 的 dev-identity 规则、a2h-verify CHECK-4 各自为何这样写、D-009 出自哪个项目，技能包在转录外形成，未核到。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-f935850c669c48f05a00",
+  "metadata": {
+    "migration": {
+      "project": "Cofi",
+      "server_session_id": "c48c34f6-1f91-421f-aa50-0064cb39d8cd",
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "glm-5.3"
+      ],
+      "tool_versions": {
+        "orchestrator": "hmigbot-plus",
+        "runtime_version": "v1.4.8",
+        "runtime_commit": "09ac508",
+        "client_version": "hmigbot-plus-1.6.0",
+        "pack_version": "hmigbot-plus-1.6.0",
+        "codex_cli_version": "0.147.0"
+      }
+    },
+    "analysis": {
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "platforms": [
+        "claude-code"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "glm-5.3"
+      ],
+      "providers": [
+        "hmigbot"
+      ],
+      "client_versions": [
+        "0.147.0"
+      ]
+    },
+    "source_set_id": "sources-abe23f8631388b5ebff0",
+    "environment": [
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0-alpha17",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": null,
+        "at": "2026-09-19T06:34:53.774Z",
+        "ref": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl:L71",
+        "request_ref": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl:L70",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.0.1(21)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-09-19T06:37:07.791Z",
+        "ref": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl:L128",
+        "request_ref": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl:L127",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.0.1(21)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-09-19T06:37:07.791Z",
+        "ref": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl:L128",
+        "request_ref": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl:L127",
+        "phase": "generation"
+      },
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0-alpha17",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": null,
+        "at": "2026-09-19T08:12:43.229Z",
+        "ref": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/agent-01a0b8b4-dac7-7520-b644-8055f38660ad.jsonl:L167",
+        "request_ref": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/agent-01a0b8b4-dac7-7520-b644-8055f38660ad.jsonl:L166",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.8.3"
+  },
+  "revision": "69dfa72ef88368edd0415d1e9f4e42348abeb6abd342525bb8b208074d2011a3"
+}

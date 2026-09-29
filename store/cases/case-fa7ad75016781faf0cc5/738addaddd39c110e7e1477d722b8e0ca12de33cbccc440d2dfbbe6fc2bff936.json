@@ -1,0 +1,227 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-fa7ad75016781faf0cc5",
+  "created_at": "2026-09-27T11:16:17.787115+00:00",
+  "migration_key": "ec916647-9285-40ea-9595-eaa9d20f4eed",
+  "title": "练习页把共享模型状态复制成 @Local 快照，组合库“使用”后返回不刷新",
+  "when": "功能接线与组收尾阶段，把页面显示状态接到 @ObservedV2 模型，并处理其他页面修改同一模型后返回原页面的显示时",
+  "description": "源端由同一个根状态持有者（如 Compose 根 Composable 的 selected、saveMessage）驱动多个屏幕；目标端拆成 Navigation 下的多个页面，共享同一个 @ObservedV2 + @Trace 模型（AppStorageV2.connect），子页修改共享模型后 pop 回到仍保留着的原页面。",
+  "summary": "slice_01（Stage 3 F001 接线 worker）写前实际读到：决策台账 D-003“PracticeModel 统一管理练习状态……并向 F002/F003 提供当前序列和候选音符”\n（agent-01a0da3e-7c14-79e3-845f-ca7761b240e1.jsonl:L56、L59）；状态管理 skill 中“组件用 @Local 持有 @ObservedV2 实例”\n“@ObservedV2 类的 @Trace 属性变化触发刷新”“AppStorageV2.connect 自动同步内存与所有引用”（同转录 L70、L73）；\nF001 规格对接点里“F003 使用 selectedNotes”（L35、L38）。这些输入足以让页面直接读取模型的 @Trace 字段。\nplan 的 slice-01 以 a2h-plan 模板记法写了“PracticePage.@Local selectedNotes ← PracticeModel.selectedNotes”，只说明来源，没有要求复制。\nslice_01 却在 PracticePage 里 new 了一个页面私有的 PracticeModel，并新增 updateFromModel()，把 selectedNotes、sequence、\nanswerVisible、questionNumber 等 7 个字段复制进页面 @Local，每个处理函数调用模型后再手动同步一次（L100、L103）。\n页面 build 继续读这些副本，模型在页面处理函数之外发生的变化不会进入界面。converter 更早写下的 @Local 字段是 UI 骨架阶段的占位状态\n（agent-01a0da1e-45c4-7870-8b9d-7ce0f064f80a.jsonl:L167、L170），当时还没有模型，副本结构由 slice_01 的这次接线引入。\n\n第二个偏差出现在末组收尾（base_closer_01，group 2）。它写前读到 slice-03 计划的“PresetLibraryPage.onUsePreset → PracticeModel.regenerateWithoutPlayback()”\n与“PracticePage.onApplyPreset”跨切片接线（agent-01a0da2c-1e48-7131-8d23-d4c20085289c.jsonl:L544、L551）；\nPresetLibraryPage 已经用 AppStorageV2.connect(PracticeModel,'practiceModel') 取共享实例，onUsePreset 里 applyPreset 后 pop，\nMainPage 以 Navigation(this.navPathStack) { PracticePage() } 挂载练习页（L565、L572）；Android 源码 onUse 直接改根状态 selected、\nsaveMessage 并切回练习屏（L588、L591）。它把 PracticePage 的模型改为同一个 AppStorageV2 共享实例，但保留了 @Local 副本，\n并把返回时的同步 onApplyPreset() 放在“第二次 aboutToAppear”分支里（L639、L642）。从组合库 pop 回来时练习页并不重建，这个分支不会执行。\n随后 group-02 巡检指出同一问题并建议在 onShown 中刷新，base_closer_01 于 20:48 加了 .onShown 调 onApplyPreset（L717、L724、L728、L731），\n仍保留副本。验证期设备实测：“使用”后返回，候选高亮与“组合库 (0)”计数都是旧值（main-01a0d9f4-a247-7fe0-9cc2-5e0f62e9f5db.jsonl:L5592、L5595），\n可见这条 onShown 刷新在练习页作为 Navigation 首页内容的挂载方式下没有生效（触发机制本身未单独验证）。\n最终修复删掉对副本的依赖：题号、组合库计数、PracticeCard/NoteSelector 参数、已选数量、保存按钮 enabled、onReplay/onNextQuestion 判定\n都改为直接读 this.model.* 与 this.libraryModel.presets.length，“正在使用”提示按 libraryModel.feedbackKind 渲染（L5661、L5664），\n复测返回后七个候选重新高亮并出现“正在使用”反馈（L5837）。\n",
+  "recommendations": [
+    "功能接线阶段：页面要显示的业务状态直接读模型实例的 @Trace 字段（如 this.model.selectedNotes），不要在页面另存 @Local 副本再用 updateFromModel 之类的方法手动同步；页面 @Local 只留弹窗开关、输入草稿等纯界面态。",
+    "功能接线阶段：规格或决策说明某个模型要被其他功能或页面读写（如“向 F003 提供候选音符”）时，页面从一开始就用 AppStorageV2.connect 取同一个共享实例，不在页面里 new 私有实例。",
+    "组收尾阶段：把模型改成跨页共享时，逐个检查持有它的页面是否还在渲染本地副本；有副本就改成直接绑定。需要在返回时做一次性动作（如消费“正在使用”反馈）时，先确认目标页是 NavPathStack 中的页面还是 Navigation 首页内容，再选在该挂载方式下确实会触发的回调，不依赖第二次 aboutToAppear。",
+    "最小检查：在设备上走一遍“子页修改共享模型 → 返回原页”的路径，dump 原页的高亮、计数与反馈文案，确认与模型一致。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/home/lsq/repo/harmonyapps/eartraining/entry/src/main/ets/pages/PracticePage.ets",
+        "since": "2026-09-25T20:58:11.566Z",
+        "at": "2026-09-26T07:40:33.959Z"
+      },
+      "nodes": [
+        {
+          "key": "/home/lsq/repo/harmonyapps/eartraining/spec/decision-ledger.md",
+          "at": "2026-09-25T20:26:02.075Z",
+          "reason": "正常输入：slice_01 用 sed 读取台账前 115 行，回执含 D-003“PracticeModel 统一管理练习状态……并向 F002/F003 提供当前序列和候选音符”，影响范围列出 F002/F003 的状态消费接口；说明练习状态以模型为唯一来源并会被其他功能使用（agent-01a0da3e-7c14-79e3-845f-ca7761b240e1.jsonl:L56、L59）。"
+        },
+        {
+          "key": "/home/lsq/repo/harmonyapps/eartraining/.agents/skills/arkts-state-manager/SKILL.md",
+          "at": "2026-09-25T20:26:17.594Z",
+          "reason": "正常输入：slice_01 用 rg 检索状态管理与数据层 skill，回执含“组件用 @Local 持有实例”“@ObservedV2 类的 @Trace 属性变化触发刷新”“AppStorageV2.connect……自动同步内存与所有引用”，足以指导页面直接绑定模型字段、跨页共享同一实例（同转录 L70、L73）。"
+        },
+        {
+          "key": "agent-01a0da3e-7c14-79e3-845f-ca7761b240e1.jsonl",
+          "at": "2026-09-25T20:27:45.068Z",
+          "reason": "偏差起点一：收到上述输入后，apply_patch 在 PracticePage 中写 @Local model = new PracticeModel(...) 页面私有实例，并新增 updateFromModel() 把 7 个模型字段复制进页面 @Local，各处理函数调用模型后手动同步；build 继续读副本（同转录 L100、L103）。",
+          "problem": true
+        },
+        {
+          "key": "/home/lsq/repo/harmonyapps/eartraining/spec/baseline/plans/slices/slice-03-f003.md",
+          "at": "2026-09-25T20:39:28.290Z",
+          "reason": "正常输入：base_closer_01 读取 slice-03 计划，回执含“PresetLibraryPage.onUsePreset → PracticeModel.regenerateWithoutPlayback()”“PracticePage.onApplyPreset”及 PracticePage 跨切片接线 handler: onApplyPreset，说明返回后同步练习页由本组收尾负责（agent-01a0da2c-1e48-7131-8d23-d4c20085289c.jsonl:L544、L551）。"
+        },
+        {
+          "key": "/home/lsq/repo/harmonyapps/eartraining/entry/src/main/ets/pages/PresetLibraryPage.ets",
+          "at": "2026-09-25T20:39:42.700Z",
+          "reason": "正常输入：同一 closer 读回组合库页，practiceModel 已由 AppStorageV2.connect(PracticeModel,'practiceModel') 取得，onUsePreset 调 applyPreset、设 feedbackKind='using' 后 pop；同次调用读到 MainPage 以 Navigation(this.navPathStack) { PracticePage() } 挂载练习页（同转录 L565、L572）。"
+        },
+        {
+          "key": "/home/lsq/repo/eartraining/app/src/main/java/com/example/eartrainer/MainActivity.kt",
+          "at": "2026-09-25T20:40:16.350Z",
+          "reason": "正常输入：closer 用 rg 读 Android onUse：selected = preset.notes、nextQuestion(play = false)、saveMessage、screen = AppScreen.Practice，两屏共用根状态，切回即显示新值（同转录 L588、L591）。"
+        },
+        {
+          "key": "agent-01a0da2c-1e48-7131-8d23-d4c20085289c.jsonl",
+          "at": "2026-09-25T20:41:28.237Z",
+          "reason": "偏差二：closer 把 PracticePage 的模型改为与组合库页相同的 AppStorageV2 共享实例，却保留 @Local 副本，并把返回同步 onApplyPreset() 放进 onFirstQuestion 的“第二次 aboutToAppear”分支；pop 回练习页时组件不重建，该分支不执行（同转录 L639、L642）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "slice_01 在一次 exec 中用 sed -n '1,115p' 读取 spec/decision-ledger.md，回执含 D-003 全文（PracticeModel 统一管理练习状态、向 F002/F003 提供序列与候选音符）；这是它写 PracticePage 之前对台账的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da3e-7c14-79e3-845f-ca7761b240e1.jsonl",
+              "line": 56
+            },
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da3e-7c14-79e3-845f-ca7761b240e1.jsonl",
+              "line": 59
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "slice_01 在一次 exec 中用 rg 检索 .agents/skills/arkts-state-manager/SKILL.md 与 arkts-data-layer/SKILL.md，回执返回“组件用 @Local 持有实例”“@Trace 属性变化触发刷新”“AppStorageV2.connect 自动同步内存与所有引用”等行；这是写 PracticePage 之前对状态管理 skill 的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da3e-7c14-79e3-845f-ca7761b240e1.jsonl",
+              "line": 70
+            },
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da3e-7c14-79e3-845f-ca7761b240e1.jsonl",
+              "line": 73
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target",
+          "force": true,
+          "reason": "slice_01 通过 exec 内的 tools.apply_patch 更新 /home/lsq/repo/harmonyapps/eartraining/entry/src/main/ets/pages/PracticePage.ets，补丁新增 @Local model = new PracticeModel(...) 与 updateFromModel()，回执 {} 表示补丁已应用。",
+          "evidence": [
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da3e-7c14-79e3-845f-ca7761b240e1.jsonl",
+              "line": 100
+            },
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da3e-7c14-79e3-845f-ca7761b240e1.jsonl",
+              "line": 103
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": 7,
+          "force": true,
+          "reason": "base_closer_01 在一次 exec 中 cat spec/baseline/plans/slices/slice-03-f003.md，回执含 PresetLibraryPage.onUsePreset 与 PracticePage.onApplyPreset 接线及 handler: onApplyPreset；这是它改 PracticePage 之前对计划的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da2c-1e48-7131-8d23-d4c20085289c.jsonl",
+              "line": 544
+            },
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da2c-1e48-7131-8d23-d4c20085289c.jsonl",
+              "line": 551
+            }
+          ]
+        },
+        {
+          "from": 5,
+          "to": 7,
+          "force": true,
+          "reason": "base_closer_01 在一次 exec 中 sed -n '1,105p' entry/src/main/ets/pages/PresetLibraryPage.ets（同批还读 MainPage.ets），回执显示 practiceModel 取自 AppStorageV2 'practiceModel'、onUsePreset 调 applyPreset 后 pop；这是改 PracticePage 之前的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da2c-1e48-7131-8d23-d4c20085289c.jsonl",
+              "line": 565
+            },
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da2c-1e48-7131-8d23-d4c20085289c.jsonl",
+              "line": 572
+            }
+          ]
+        },
+        {
+          "from": 6,
+          "to": 7,
+          "force": true,
+          "reason": "base_closer_01 用 rg 读取 Android MainActivity.kt 的 onUse 片段，回执显示 selected = preset.notes、nextQuestion(play = false)、saveMessage、screen = AppScreen.Practice；这是改 PracticePage 之前对源码的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da2c-1e48-7131-8d23-d4c20085289c.jsonl",
+              "line": 588
+            },
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da2c-1e48-7131-8d23-d4c20085289c.jsonl",
+              "line": 591
+            }
+          ]
+        },
+        {
+          "from": 7,
+          "to": "target",
+          "force": true,
+          "reason": "base_closer_01 通过 exec 内的 tools.apply_patch 更新 entry/src/main/ets/pages/PracticePage.ets（工作目录为 /home/lsq/repo/harmonyapps/eartraining），补丁把 model 改为 AppStorageV2 共享实例，并把 onApplyPreset() 放进第二次 aboutToAppear 分支，回执 {} 表示补丁已应用。",
+          "evidence": [
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da2c-1e48-7131-8d23-d4c20085289c.jsonl",
+              "line": 639
+            },
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da2c-1e48-7131-8d23-d4c20085289c.jsonl",
+              "line": 642
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-fa7ad75016781faf0cc5",
+  "metadata": {
+    "migration": {
+      "project": "听音练习",
+      "server_session_id": "ec916647-9285-40ea-9595-eaa9d20f4eed",
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "codex-auto-review",
+        "gpt-6-sol"
+      ],
+      "tool_versions": {
+        "orchestrator": "hmigbot-plus",
+        "runtime_version": "v1.5.2",
+        "runtime_commit": "c47f332",
+        "client_version": "hmigbot-plus-1.6.0",
+        "pack_version": "hmigbot-plus-1.6.0",
+        "codex_cli_version": "0.157.0"
+      }
+    },
+    "analysis": {
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "platforms": [
+        "claude-code"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "codex-auto-review",
+        "gpt-6-sol"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.157.0"
+      ]
+    },
+    "source_set_id": "sources-7dfa3baba9b514aa9b9d",
+    "card_tool_version": "0.8.3"
+  },
+  "revision": "738addaddd39c110e7e1477d722b8e0ca12de33cbccc440d2dfbbe6fc2bff936"
+}

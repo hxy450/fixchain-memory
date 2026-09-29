@@ -28,27 +28,25 @@ ID：`lesson-7a065e8fe384b8c462cc` · 版本：5
 
 ## 来源（按需复核）
 
-经验是有适用范围的历史建议。核查来源时同时看结论与 unknown；来源卡未随阅读包复制。
-
 - case-1d6dca36cb9c3cec5d87 · 结论：diagnosis, recommendation:2
-  卡片版本：`08888ba8a9ad80b04c2e7369d6567bf8c3feab3d15bbfbc7c9a6938ce9034a03`
+  卡片版本：`1e37801e16b9b0ef1a39188c29ab362ac81d454a0e8e3565f3947e635a917c8a`
 - case-356f707ace6e648548be · 结论：recommendation:4
-  卡片版本：`ad86cc997e535698cc4d06d8332392a464b559d56332c023a19e60579abb9d74`
+  卡片版本：`80175631660d6c541d95fb92655e5b3b6bdf2bdae15f40ec333ef64a4ab14688`
 - case-3db1068ed462e12cf813 · 结论：recommendation:4
-  卡片版本：`fffe8ce6efc43b36dfcb84bb48c7f436d338977f38a96d17790237538acfa1ae`
+  卡片版本：`de14a7ceed8f2040536b7acd797e712fcb0f61b8b362efe681dc9b37f8577ee6`
 - case-6448a485599bfc0740c6 · 结论：recommendation:3
-  卡片版本：`07c2087c4e570b554fcce7a860a969e894632d2e9f0a3769621a51a8dfbf80fb`
+  卡片版本：`ee79f91fda0232a915c1fd976889b9b074c5a5ebef6177e7b7704b4c30211b79`
 - case-8128c57ee5fb2e4f49d1 · 结论：diagnosis, recommendation:2
-  卡片版本：`6de3aa22b793ffe7a31b19199277fd447643d60d99712fb3470a1a89cfcceea1`
+  卡片版本：`d0184e877064d037eceb8bc968cb0949b5d0bffb239f02ec1d1a93bf7a391713`
 - case-8c249997059a2524ea7b · 结论：recommendation:3
-  卡片版本：`b68039d3741ec70ee43c59d40fbd4d1570b96692f9d2f6c03c39704123cc1427`
+  卡片版本：`419b77f02d456c484f3a903a61eb81b6cbf5319584c81500d9da4c46b109b9d2`
 - case-8fced432ea0fe7c8b86f · 结论：recommendation:2
-  卡片版本：`ce2a692a001bdeedf98887df45e9a0e075be9b45fceb35e29f41ff320a4b53b2`
+  卡片版本：`7c80d218c5bebdfbfe6ef708101a770f58ac823c5e831352a289d0d56b29854e`
 - case-97a40a9d2dce65dc9f9c · 结论：diagnosis, recommendation:3
-  卡片版本：`b7666df265bb36f82ab2fde7dee74bee86add67a24eaff660e4ed6165cf2bee1`
+  卡片版本：`6f204ffd524b55f7ea8cef5e4a2e75cc8330004f202fd635570857c43cef5a2a`
 - case-b2793695ef65617c820a · 结论：diagnosis, recommendation:4
-  卡片版本：`e03b926b0bd3de5879d188f63716c9b521fd11251b3fdc33e5ab67667d190669`
+  卡片版本：`9c30f15ba64082b90317b9cb20aa187c32cf5f93197443b2a9a78fe723ec3a47`
 - case-fa7bbda457517260efc4 · 结论：recommendation:2
-  卡片版本：`13060717bdfc19afb975d9cd93d6c841d9e637fde59c3eb5f8e6b8ab8e892577`
+  卡片版本：`e0982ecc31ac0b66f180ea74e3d7fc7415458b4f6c15814c92650d0401b8c13d`
 - case-ff24fb8ea8e66a1cadd5 · 结论：diagnosis
-  卡片版本：`c08a74d79e5aa81858222988574ef79676c4eabaf8f50b097e815f90feb8214f`
+  卡片版本：`208d5d0c3e79b8f76bcc10f7f727c6d6a58f93e3c42d2d4dfaf5d9928db13836`

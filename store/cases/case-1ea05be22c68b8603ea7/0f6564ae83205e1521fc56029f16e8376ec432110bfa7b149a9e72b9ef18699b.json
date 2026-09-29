@@ -1,0 +1,195 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-1ea05be22c68b8603ea7",
+  "created_at": "2026-09-27T17:59:55.942763+00:00",
+  "migration_key": "9264617d-5373-4aca-8c7d-94c70606545c",
+  "title": "把“昵称为空”当成未登录：身份文案丢失源端 getNickname 回退链",
+  "when": "页面状态接线阶段，把源端登录判定与用户名显示映射成目标页面的身份文案表达式时",
+  "description": "Android 端以 token（UserInfoManager.isLogin/hasToken）判定登录，已登录时显示 getNickname()：昵称为空则回退为“用户${getId()}”，只有未登录分支才显示“未登录”；目标 ArkUI 页面从 SessionState 读取 token 派生的 isLoggedIn 与原始 nickname，并复用“未登录”字符串资源（app.string.guest）作占位。",
+  "summary": "写前实际收到的源端语义是清楚的：execute_four_pages 在 14:34 一次读回 MineFragment.kt 与 UserInfoManager.kt\n（agent-01a08b18 L3494/L3500）：setUserInfo 在 isLogin() 为真时显示 getNickname() 并显示设置图标，\n只有未登录分支才写“未登录”；getNickname() 在已登录且昵称为空时返回“用户${getId()}”，isLogin() 即 hasToken()。\n目标侧 SessionState 已按 token.length > 0 计算 isLoggedIn，nickname 保留服务端原值（可为空）。\n偏差：同一代理在 13:58 接线 P-S1-001 时先写出 bindSessionState 的\nnickname.length > 0 ? nickname : $r('app.string.guest')（L2697-L2700），guest 资源值为“未登录”\n（stage0_resources agent-01a08b1a L260）；14:34 读到上述回退链后，14:36 新建 ProfileService/ProfileViewModel\n时 UserProfile 仍直接携带原始 nickname（L3534-L3535），14:38 为 MinePage 接入 bindProfile() 并继续调用该\nbindSessionState（L3602-L3605），没有落实“用户{id}”回退。已登录但昵称为空的账号因此显示“未登录”。\ngroup1_ui_patrol_retry 巡检时读到 Android setUserInfo 的 if/else（agent-01a08bc3-6dd2 L134/L141），\n15:04 改为直接观察 SessionState 时又把文案写成\nsessionState.isLoggedIn && sessionState.nickname.length > 0 ? nickname : $r('app.string.guest')（L357-L360），\n即把“昵称是否为空”并入决定是否显示“未登录”的条件。15:28 execute_four_pages 仅把 isLoggedIn 抽成 isLogin()\n（agent-01a08b18 L5029），该表达式原样保留到生成结束；F006 five_page_flow_closure 在 09-11 的 L465 只改合规路由、\n客服弹窗与 ProfileViewModel 失败分支，未触及此判定。\n修复：09-14 用户以 token 有效、昵称为空的测试账号复现“个人中心仍显示未登录”（epoch-1 main L2509、L2557），\n执行者在截断后的 five_page_flow_closure 中把判定统一为 session/token，并按“昵称 → 用户{userId} → 脱敏手机号 →\n已登录用户”显示（main L2709）；ROUND14 的 SessionIdentityTest 以 nickname 为空、userId=42 断言 displayName()\n为“用户42”（agent-01a09ded L868、L957）。09-15 读回的 MinePage 新增 identityLabel()，仅在 !isLogin() 时返回\nguest（agent-01a0a45c L66）。\n",
+  "recommendations": [
+    "接线身份文案前展开源端 getter 的完整分支（如 getNickname），把登录判定（token/session）与显示回退链（昵称 → 用户{id} → …）分开实现；“未登录”文案只允许出现在 !isLoggedIn 分支。",
+    "不要把未登录占位资源复用为已登录用户的空值兜底；为“token 有效、昵称为空、userId 存在”写一条显示用例，期望值取源端回退结果（如“用户{id}”）。",
+    "改写或内联已有显示表达式时，对照源端 if/else 逐分支核对条件：新增的字段判空不能改变登录/未登录分支的判定依据。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "D:/temp_ctools/app_shared_bike_riding_records_harmony/entry/src/main/ets/pages/MinePage.ets",
+        "since": "2026-09-10T19:10:12.041Z",
+        "at": "2026-09-15T09:23:49.093Z"
+      },
+      "nodes": [
+        {
+          "key": "D:/app-shared-bike-riding-records-android/app/src/main/java/com/shared/riding/manager/UserInfoManager.kt",
+          "at": "2026-09-10T14:34:09.649Z",
+          "reason": "正常输入：execute_four_pages 以 Get-Content -Raw 读取该文件，回执含 isLogin() = hasToken()，以及 getNickname() 在已登录且昵称为空时返回“用户${getId()}”；足以确定已登录用户不应显示“未登录”（agent-01a08b18 L3494/L3499/L3500）。"
+        },
+        {
+          "key": "D:/app-shared-bike-riding-records-android/app/src/main/java/com/shared/riding/ui/mine/fragment/MineFragment.kt",
+          "at": "2026-09-10T14:34:09.649Z",
+          "reason": "正常输入：同一批读取返回 setUserInfo：isLogin() 为真时 tvUsername 显示 getNickname() 且设置图标可见，否则显示“未登录”（agent-01a08b18 L3494/L3497/L3500）。"
+        },
+        {
+          "key": "agent-01a08b18-4da1-7061-8f7b-c8e82bea46c5.jsonl",
+          "at": "2026-09-10T14:38:58.810Z",
+          "reason": "偏差：13:58 已写出 bindSessionState 的 nickname.length > 0 ? nickname : $r('app.string.guest')（L2697-L2700）；14:34 读到上述回退链后，14:36 让 UserProfile 直接携带原始 nickname（L3534-L3535），14:38 的 MinePage 补丁接入 bindProfile() 并继续调用该兜底（L3602-L3605），已登录空昵称仍落到“未登录”。",
+          "problem": true
+        },
+        {
+          "key": "D:/app-shared-bike-riding-records-android/app/src/main/java/com/shared/riding/ui/mine/fragment/MineFragment.kt",
+          "at": "2026-09-10T14:43:54.387Z",
+          "reason": "正常输入：group1_ui_patrol_retry 带行号读取 MineFragment 第 121-190 行，回执中 setUserInfo 仅在 !isLogin() 分支写“未登录”，已登录分支显示 getNickname()（agent-01a08bc3-6dd2 L134/L141）。"
+        },
+        {
+          "key": "agent-01a08bc3-6dd2-7cc3-bff8-fa1df8911c5c.jsonl",
+          "at": "2026-09-10T15:04:35.715Z",
+          "reason": "偏差：删除页面本地副本、改为直接观察 SessionState 时，把用户名写成 sessionState.isLoggedIn && sessionState.nickname.length > 0 ? nickname : $r('app.string.guest')，让昵称判空决定是否显示“未登录”；该表达式保留到生成结束（同转录 L357-L360）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "exec 并行 Get-Content -Raw 读取 Android 的 MineFragment、MineFragmentViewModel、SettingPopupWindow 与 UserInfoManager；回执含 isLogin() = hasToken() 与 getNickname() 的“用户${getId()}”回退，是 execute_four_pages 写 MinePage 前对该文件的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b18-4da1-7061-8f7b-c8e82bea46c5.jsonl",
+              "line": 3494
+            },
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b18-4da1-7061-8f7b-c8e82bea46c5.jsonl",
+              "line": 3500
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "同一 exec 调用读取 MineFragment.kt，回执含 setUserInfo 的 isLogin()/getNickname()/“未登录”分支；读取早于 14:38 的 MinePage 补丁。",
+          "evidence": [
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b18-4da1-7061-8f7b-c8e82bea46c5.jsonl",
+              "line": 3494
+            },
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b18-4da1-7061-8f7b-c8e82bea46c5.jsonl",
+              "line": 3500
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target",
+          "force": true,
+          "reason": "apply_patch 的 Update File 修改 MinePage.ets：13:58 的补丁写入 bindSessionState 的 guest 兜底，14:38 的补丁接入 bindProfile() 并调用该兜底，两次 FileChange 回执均列出该文件。",
+          "evidence": [
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b18-4da1-7061-8f7b-c8e82bea46c5.jsonl",
+              "line": 2697
+            },
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b18-4da1-7061-8f7b-c8e82bea46c5.jsonl",
+              "line": 2698
+            },
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b18-4da1-7061-8f7b-c8e82bea46c5.jsonl",
+              "line": 2700
+            },
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b18-4da1-7061-8f7b-c8e82bea46c5.jsonl",
+              "line": 3602
+            },
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b18-4da1-7061-8f7b-c8e82bea46c5.jsonl",
+              "line": 3603
+            },
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b18-4da1-7061-8f7b-c8e82bea46c5.jsonl",
+              "line": 3605
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": 5,
+          "force": true,
+          "reason": "exec 用 Get-Content 带行号读取 MineFragment.kt 第 121-190 行（同批还读 BlueToothFragment 等），回执含 setUserInfo 的 if/else；这是该代理 15:04 改写 MinePage 前的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08bc3-6dd2-7cc3-bff8-fa1df8911c5c.jsonl",
+              "line": 134
+            },
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08bc3-6dd2-7cc3-bff8-fa1df8911c5c.jsonl",
+              "line": 141
+            }
+          ]
+        },
+        {
+          "from": 5,
+          "to": "target",
+          "force": true,
+          "reason": "apply_patch 的 Update File 修改 MinePage.ets，删除本地副本并写入 isLoggedIn && nickname.length > 0 的用户名表达式，FileChange 回执列出该文件。",
+          "evidence": [
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08bc3-6dd2-7cc3-bff8-fa1df8911c5c.jsonl",
+              "line": 357
+            },
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08bc3-6dd2-7cc3-bff8-fa1df8911c5c.jsonl",
+              "line": 358
+            },
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08bc3-6dd2-7cc3-bff8-fa1df8911c5c.jsonl",
+              "line": 360
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "修复写入由截断后的 five_page_flow_closure 执行，材料中没有对应 apply_patch；修复内容依据根代理报告、ROUND14 测试文件读回及 09-15 的 MinePage 读回。"
+  ],
+  "unresolved_targets": [
+    {
+      "key": "D:/temp_ctools/app_shared_bike_riding_records_harmony/entry/src/main/ets/viewmodels/ProfileViewModel.ets",
+      "reason": "job 列为已修改，但修复写入在截断后的 five_page_flow_closure 中，材料无调用或读回 diff；生成期 ProfileViewModel（agent-01a08b18 L3535 新建、agent-01a08bc3-3474 L449 更新）只持有 ProfileService.current() 返回的原始 nickname，未见登录判定或身份文案表达式；09-15 读回仅显示 import 与构造函数行（agent-01a0a45c L66），无法确认修复改动的片段及其生成来源。"
+    }
+  ],
+  "job": "issue-1ea05be22c68b8603ea7",
+  "metadata": {
+    "migration": {
+      "project": "骑行记录",
+      "server_session_id": "9264617d-5373-4aca-8c7d-94c70606545c"
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "gpt-5.6-sol",
+        "gpt-5.6-terra",
+        "gpt-6-astra"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.153.4"
+      ]
+    },
+    "source_set_id": "sources-51973a3274ea587edce3",
+    "card_tool_version": "0.8.3"
+  },
+  "revision": "0f6564ae83205e1521fc56029f16e8376ec432110bfa7b149a9e72b9ef18699b"
+}

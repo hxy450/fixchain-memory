@@ -24,7 +24,5 @@ Android 入口经 bottomDialog/Dialog 在当前 Activity 上 show 全宽底部�
 
 ## 来源（按需复核）
 
-经验是有适用范围的历史建议。核查来源时同时看结论与 unknown；来源卡未随阅读包复制。
-
 - case-504604963e18f4b6e2f3 · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
-  卡片版本：`32f461f84ba0b9bc7bc1484167ce124fabfae5256031800203602b48cee71f0d`
+  卡片版本：`fa17776eed4aeffa2887b5004a67bc23520b7986a41c18d1f57ebb670fbd1c92`

@@ -1,0 +1,194 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-ffdccd8c954d99b4c6d6",
+  "created_at": "2026-09-27T13:01:36.144573+00:00",
+  "migration_key": "c48c34f6-1f91-421f-aa50-0064cb39d8cd",
+  "title": "把 Kotlin 非空字段译成 JSON 值必须为字符串，许可证解析拒收整份内置数据",
+  "when": "界面实现阶段，把源端 JSON 解析函数翻译成 ArkTS 手写解析器、为每个字段决定必填与空值处理时",
+  "description": "源端用 Android org.json 的 getString 读取打包 JSON 资源中的字段，对应 Kotlin 数据类字段声明为非空 String；实际资源里该字段有 null 值。目标端手写解析器任一字段校验失败就让整页进入加载失败态。",
+  "summary": "许可页转换者 agent-01a0b8ee 写前读到了源端 JSONUtils.kt：parseJsonToDependencyList 对 project、description、version、url、year\n一律用 jsonObject.getString(...) 取值（agent-01a0b8ee-06e8-7913-a8f0-7d405dcc6289.jsonl:L41-L43）。Android org.json 的 getString\n遇到 JSON null 返回字符串 \"null\"，只有缺键才抛错；转换者在写前推理里也写明了这一点，并据此把 url、year 做成可空（同转录 L200）。\n它还读了 F009 规格，AC03 要求“解析每一条打包依赖、条数等于 JSON 数组长度”（L70-L72），并两次用 python 查看 rawfile：\n列出全部键名（含 description），统计 url 有 8 条 null、year 有 25 条 null，却没有统计 description 的空值（L83-L85、L240-L241）。\n09:23 的 apply_patch 写出 dependency.description = this.requireString(record, 'description', index)，requireString 对非 string 值\n（包括 JSON null）直接抛错（L264-L266）。它按 Dependency.kt 中 description: String 非空（L28-L30）把字段定成“值必须为字符串”，\n没有沿用 getString 对 null 的宽松语义。打包数据第 70 条 error-prone annotations 的 description 为 null\n（main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl:L3096-L3097），整份解析因此抛错，页面只显示 licenses_load_error。\n偏差位于“源端取值语义 → 目标解析器空值规则”这一环。主会话 10:07 的 Stage 3 接线（main L1732）只加了 AppServices、WindowModel\n和外链打开，loadDependencies 与 parseDependency 未动；该片段一直保留到验证闭包第 5 轮。\n验证闭包用 route 参数拉起 licenses 页，dumpLayout 只见加载失败（main L3003-L3006）。主会话先把 getHostContext() 换成\ngetContext(this)（L3031），重装后仍失败（L3063-L3064）；临时把错误文案改为 error.message 后，设备显示\nLicense entry 70 is missing the required field \"description\"（L3078、L3093）；随后把 description 改成\nnullableString(...) ?? ''（L3100），文案改回资源字符串（L3105），列表正常渲染（L3111）。ECAT 生成者 13:08 改写解析器类型时\n保留了这一可空处理（main-01a0b99c-840a-7343-90f4-1e256f32367b.jsonl:L432）。\n关于 getHostContext：转换者写前 grep 工程，回执显示已转换的 RatioBottomSheetComponent、RecipeAddPage、RecipeEditPage 都用\nthis.getUIContext().getHostContext() 取 resourceManager（agent-01a0b8ee L166-L168），它沿用了工程惯例，并查 SDK d.ts 确认\ngetRawFileContentSync 可用（L168、L173-L177）。换成 getContext(this) 后故障没有消失，真实报错指向 description，\n因此 getHostContext 未被证实是本故障原因，本卡不对它归因。\n",
+  "recommendations": [
+    "翻译源端 JSON 解析函数时，按源端取值 API 的实际语义定每个字段的空值规则：org.json 的 getString 对 JSON null 返回 \"null\" 字符串、缺键才抛错，Kotlin 字段声明为非空 String 不等于 JSON 值不会为 null；只把源端真正会失败的情况写成抛错。",
+    "写解析器前，对当前打包资源逐字段统计 null、缺键和非字符串的条数（不仅统计 UI 里有判空分支的字段），再核对“解析全部条目、条数等于数组长度”这类验收项在真实数据上成立。",
+    "单条记录的展示文本字段为空时降级为空串或占位，不让整份列表进入加载失败；catch 分支用日志记下具体异常信息，便于设备验证直接定位是哪一条哪一个字段。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/private/tmp/testCofi-codex/entry/src/main/ets/pages/settings/LicensesPage.ets",
+        "since": "2026-09-19T10:26:37.280Z",
+        "at": "2026-09-19T13:59:12.701Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/others/Cofi/cofi-share/src/main/java/com/omelan/cofi/share/utils/JSONUtils.kt",
+          "at": "2026-09-19T09:10:51.216Z",
+          "reason": "正常输入：转换者 cat 回执给出 parseJsonToDependencyList，description 与 url、year 一样用 jsonObject.getString 取值；org.json 对 JSON null 返回 \"null\" 字符串不抛错，足以说明源端能解析 description 为 null 的条目（agent-01a0b8ee-06e8-7913-a8f0-7d405dcc6289.jsonl:L41-L43；转换者在 L200 自述了这一语义）。"
+        },
+        {
+          "key": "/private/tmp/testCofi-codex/spec/baseline/features/F009-about-support.md",
+          "at": "2026-09-19T09:11:25.259Z",
+          "reason": "正常输入：cat 回执中 F009-AC03 要求许可列表解析每一条打包依赖、解析条数等于 JSON 数组长度；AC09 要求沿用 parseJsonToDependencyList 的字段名与取值（同转录 L70-L72）。"
+        },
+        {
+          "key": "/private/tmp/testCofi-codex/entry/src/main/resources/rawfile/open_source_licenses.json",
+          "at": "2026-09-19T09:20:36.793Z",
+          "reason": "实际收到的数据：python 读取回执列出全部键名（含 description），统计 url 8 条 null、year 25 条 null；转换者没有统计 description 的空值，而该文件第 70 条 description 为 null（同转录 L240-L241；main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl:L3096-L3097）。"
+        },
+        {
+          "key": "agent-01a0b8ee-06e8-7913-a8f0-7d405dcc6289.jsonl",
+          "at": "2026-09-19T09:23:07.505Z",
+          "reason": "读到上述源码与验收项后，apply_patch 把 url、year 写成 nullableString，却把 description 写成 requireString，对 JSON null 抛错并让整页进入 loadError；源端 getString 的宽松语义没有落到该字段（同转录 L200、L264-L266）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4,
+          "force": true,
+          "reason": "转换者 exec_command 先 cd 到 Android 源码根再 cat cofi-share/.../JSONUtils.kt，回执给出 parseJsonToDependencyList 全文，description 用 jsonObject.getString 取值；相对路径的 shell 读取没有被自动解析。",
+          "evidence": [
+            {
+              "source": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/agent-01a0b8ee-06e8-7913-a8f0-7d405dcc6289.jsonl",
+              "line": 41
+            },
+            {
+              "source": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/agent-01a0b8ee-06e8-7913-a8f0-7d405dcc6289.jsonl",
+              "line": 43
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 4,
+          "force": true,
+          "reason": "转换者 exec_command 在工程根执行 cat spec/baseline/features/F009-about-support.md，回执包含 F009-AC03（解析每一条打包依赖、条数等于数组长度）与 AC09；相对路径的 shell 读取没有被自动解析。",
+          "evidence": [
+            {
+              "source": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/agent-01a0b8ee-06e8-7913-a8f0-7d405dcc6289.jsonl",
+              "line": 70
+            },
+            {
+              "source": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/agent-01a0b8ee-06e8-7913-a8f0-7d405dcc6289.jsonl",
+              "line": 72
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "转换者 exec_command 在工程根用 python json.load 打开 entry/src/main/resources/rawfile/open_source_licenses.json，回执列出全部键名（含 description）及 url、year 的 null 计数；python 内的文件读取没有被自动解析。",
+          "evidence": [
+            {
+              "source": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/agent-01a0b8ee-06e8-7913-a8f0-7d405dcc6289.jsonl",
+              "line": 240
+            },
+            {
+              "source": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/agent-01a0b8ee-06e8-7913-a8f0-7d405dcc6289.jsonl",
+              "line": 241
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-ffdccd8c954d99b4c6d6",
+  "metadata": {
+    "migration": {
+      "project": "Cofi",
+      "server_session_id": "c48c34f6-1f91-421f-aa50-0064cb39d8cd",
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "glm-5.3"
+      ],
+      "tool_versions": {
+        "orchestrator": "hmigbot-plus",
+        "runtime_version": "v1.4.8",
+        "runtime_commit": "09ac508",
+        "client_version": "hmigbot-plus-1.6.0",
+        "pack_version": "hmigbot-plus-1.6.0",
+        "codex_cli_version": "0.147.0"
+      }
+    },
+    "analysis": {
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "platforms": [
+        "claude-code"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "glm-5.3"
+      ],
+      "providers": [
+        "hmigbot"
+      ],
+      "client_versions": [
+        "0.147.0"
+      ]
+    },
+    "source_set_id": "sources-abe23f8631388b5ebff0",
+    "environment": [
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0-alpha17",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": null,
+        "at": "2026-09-19T06:34:53.774Z",
+        "ref": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl:L71",
+        "request_ref": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl:L70",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.0.1(21)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-09-19T06:37:07.791Z",
+        "ref": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl:L128",
+        "request_ref": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl:L127",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.0.1(21)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-09-19T06:37:07.791Z",
+        "ref": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl:L128",
+        "request_ref": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl:L127",
+        "phase": "generation"
+      },
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0-alpha17",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": null,
+        "at": "2026-09-19T08:12:43.229Z",
+        "ref": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/agent-01a0b8b4-dac7-7520-b644-8055f38660ad.jsonl:L167",
+        "request_ref": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/agent-01a0b8b4-dac7-7520-b644-8055f38660ad.jsonl:L166",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.8.3"
+  },
+  "revision": "b1d2de1722687f4aaecb482f0792f34b6bdab1c4205973af8d592cbf10ae86e6"
+}

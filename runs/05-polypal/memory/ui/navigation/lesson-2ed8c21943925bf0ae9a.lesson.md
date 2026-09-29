@@ -28,7 +28,5 @@ onDispose 只在所在 Composable 离开组合时触发；外层 Composable 同�
 
 ## 来源（按需复核）
 
-经验是有适用范围的历史建议。核查来源时同时看结论与 unknown；来源卡未随阅读包复制。
-
 - case-f4de4c0baf567b736a95 · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
-  卡片版本：`5141c695e254fe8c5b6af05607dcf29375b911d36f35c85e5d1217f3fb97eaf0`
+  卡片版本：`4a91ed6ed85947112fda96591e5edd557cb0dd09e6db25063b92355193ac95c6`

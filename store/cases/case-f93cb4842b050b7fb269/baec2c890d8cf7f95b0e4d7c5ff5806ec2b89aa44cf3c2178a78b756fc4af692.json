@@ -1,0 +1,162 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-f93cb4842b050b7fb269",
+  "created_at": "2026-09-27T14:37:13.650756+00:00",
+  "migration_key": "1bbfa3ec-f51e-48a1-92a3-4387249b468e",
+  "title": "把应用级偏好存储的唯一初始化挂在 Flutter 插件 attach 上",
+  "when": "原生基础设施实现阶段，封装应用级键值持久化（token、用户信息等）并决定其初始化位置和上下文时",
+  "description": "原生宿主内嵌 Flutter 引擎的混合应用；源端用全局静态键值工具（如 SpUtils/MMKV）保存 token、用户信息，MethodChannel 回调只读写它；目标端偏好存储封装必须先传入上下文才能读写，初始化位置可选 UIAbility.onCreate、Flutter 插件 onAttachedToEngine 等。",
+  "summary": "生成期主会话 main-76ad9618 在补 LtMethodBridge 18 个方法前读到源 FlutterService.kt：initMethodChannel 的回调里直接调用\nSpUtils.getString(\"ACCESS_TOKEN\")、getString(\"LocalUser\")、getParcelable/putParcelable，通道只使用存储、不负责初始化；\nFlutterBoost 本身由 initFlutter(application) 以 Application 启动（L611-L612）。L678 它把 PreferenceUtil 定为 SpUtils 的对应物，\n并写明任务 4 的原生登录、用户信息页面也要用它；L491 自己写的 EntryAbility.onCreate 已持有 this.context，L666、L688 也考虑过在 EntryAbility 保存 UIAbilityContext（当时只为权限申请）。\n实际输出：L680 的 PreferenceUtil 必须先 init(context)，context 为空时 getString 返回默认值、putString 直接返回，都没有日志；init 每次覆盖 context 并清空缓存。\nL695 判定“preferences 用 binding.getApplicationContext()（applicationContext 够用）”，L697 把唯一一处 PreferenceUtil.init 放进 LtMethodBridge.onAttachedToEngine，\nL709 把 LtMethodBridge 注册放在 onWindowStageCreate 的 FlutterBoost.setup 回调里。应用级持久化因此只在 Flutter 引擎插件注册后可用，\nEntryAbility.onCreate 期间的读写会静默落空。偏差位于“确认它是应用级存储”到“选择初始化位置”这一环。\n这一前置条件没有进入后续规格：feature-base（main-76ad9618 L1732）只写 PreferenceUtil“已实现”和键对齐表。\n修复期 main-c83bb2f9 为网络层未初始化问题在 L908-L910 把 await NetworkConfig.init() 放进 onCreate，L876-L877 读到的 NetworkConfig.init 会调 TokenManager.loadFromPrefs；\n此时 PreferenceUtil 尚未 init，这次读取只能得到空串，之后 SplashPage 的 decideLaunchRoute→restoreState 会再读一次。\n用户在 main-5e4fa5da L1465 报告重启后 KEY_ACCESS_TOKEN 为空。修复者 L1514-L1516 核实插件 add 时同步调用 onAttachedToEngine、先于 loadContent，\n随后 L1531-L1534 在 onCreate 最前面加 PreferenceUtil.init(this.context)，L1537 把 init 改为首次调用生效、后续不覆盖。\nL1550 的理由“applicationContext 持久化不如 UIAbilityContext 可靠”在材料中没有平台依据，L1535 修复者自己也判断可能无效、需要真机验证，截止时没有复测。\n本卡只归因初始化位置与 Flutter 插件生命周期的绑定，不把它认定为 token 丢失的已证原因。\n",
+  "recommendations": [
+    "实现与源端全局键值工具对应的持久化封装时，在应用最早的生命周期（UIAbility.onCreate 或 AbilityStage.onCreate）用当时可得的上下文完成初始化；Flutter 插件、MethodChannel、页面只作为读写方，不作为唯一初始化点。",
+    "定下初始化位置后，列出所有启动期读写方（本例为 onCreate 的 NetworkConfig.init→TokenManager.loadFromPrefs、闪屏 restoreState、通道 getToken），逐个确认它们晚于初始化；以后在 onCreate 新增读写方时再核一次。",
+    "封装需要先 init 才能使用的存储时，把这一前置条件写进基础层规格和类注释；未初始化就读写时输出错误日志，不静默返回默认值。",
+    "修复阶段需要更换偏好存储的上下文（ApplicationContext 与 UIAbilityContext）时，先查官方文档确认两者的数据位置是否相同，并在真机上验证冷启动后能读回，再把“可靠性”写成修复理由。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/utils/PreferenceUtil.ets",
+        "since": "2026-09-22T09:58:32.418Z",
+        "at": "2026-09-24T02:03:48.614Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/timekettle/Desktop/GitProject/polypal-app-android/library-comm/src/main/java/com/timekettle/upup/comm/flutter_boost/FlutterService.kt",
+          "at": "2026-09-21T09:44:23.831Z",
+          "reason": "正常输入：Read 回执显示 initMethodChannel 的回调直接调用 SpUtils.getString(\"ACCESS_TOKEN\")、getString(\"LocalUser\")、getParcelable/putParcelable，文件内没有存储初始化，FlutterBoost 由 initFlutter(application) 以 Application 启动（main-76ad9618 L611-L612）。足以说明通道只是全局存储的读写方。"
+        },
+        {
+          "key": "main-76ad9618-e80a-4565-b49c-3c6541e5ed67.jsonl",
+          "at": "2026-09-21T09:51:46.849Z",
+          "reason": "读到上述源码，且 L678 已把 PreferenceUtil 定为供原生页面共用的 SpUtils 对应物；L680 Write 的 PreferenceUtil 要求先 init、未 init 时读写静默返回，init 每次覆盖；L695 判定用插件 applicationContext 即可，L697 把唯一的 PreferenceUtil.init 写进 LtMethodBridge.onAttachedToEngine，L709 把插件注册放进 FlutterBoost.setup 回调。应用级存储由此绑定到 Flutter 插件生命周期（同转录 L678-L710）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/entryability/EntryAbility.ets",
+        "since": "2026-09-22T09:58:32.418Z",
+        "at": "2026-09-24T02:03:48.614Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/timekettle/Desktop/GitProject/polypal-app-android/library-comm/src/main/java/com/timekettle/upup/comm/flutter_boost/FlutterService.kt",
+          "at": "2026-09-21T09:44:23.831Z",
+          "reason": "正常输入：同 PreferenceUtil 分支，源通道回调只读写 SpUtils，不初始化存储（main-76ad9618 L611-L612）。"
+        },
+        {
+          "key": "main-76ad9618-e80a-4565-b49c-3c6541e5ed67.jsonl",
+          "at": "2026-09-21T09:51:46.849Z",
+          "reason": "L491 Write 的 onCreate 只有日志和 pushUIAbility，已持有 this.context 却不初始化偏好存储；L706-L709 Edit 引入 LtMethodBridge 并在 FlutterBoost.setup 回调里注册，使 PreferenceUtil 的唯一初始化落在 onWindowStageCreate 之后的插件 attach。修复在 onCreate 首行补上 PreferenceUtil.init(this.context)（main-5e4fa5da L1531-L1534）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "源 Android 的 SpUtils/MMKV 在哪里初始化，材料中没有：analyzer 读到的 App.kt 只显示 App : BaseApp()（agent-aa90cdd08b780bd14 L80-L82），BaseApp 与 SpUtils 源码未被读取。",
+    "重启后 token 为空的实际机制未核实：插件 attach 先于闪屏页读写，onCreate 的空读取随后会被 restoreState 覆盖；材料中没有日志或复测能确认修复是否生效。",
+    "修复后 PreferenceUtil 改用 UIAbilityContext，与此前经 ApplicationContext 写入的数据是否在同一首选项文件，材料中没有核实（修复者在 main-5e4fa5da L1535 提出过这一顾虑）。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-f93cb4842b050b7fb269",
+  "metadata": {
+    "migration": {
+      "project": "polypal-app-ohos",
+      "server_session_id": "1bbfa3ec-f51e-48a1-92a3-4387249b468e",
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "deepseek-v4-pro"
+      ],
+      "tool_versions": {
+        "orchestrator": "migbot-cc",
+        "runtime_version": "v1.4.8",
+        "runtime_commit": "09ac508",
+        "client_version": "hmigbot-lite-1.6.0",
+        "pack_version": "hmigbot-lite-1.6.0",
+        "claude_code_version": "2.1.175"
+      }
+    },
+    "analysis": {
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "platforms": [
+        "claude-code"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "deepseek-v4-pro"
+      ],
+      "client_versions": [
+        "2.1.175"
+      ]
+    },
+    "source_set_id": "sources-d15131bd8a3abae2b38e",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.0.2(22)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos",
+        "at": "2026-09-21T08:31:36.253Z",
+        "ref": "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-76ad9618-e80a-4565-b49c-3c6541e5ed67.jsonl:L50",
+        "request_ref": "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-76ad9618-e80a-4565-b49c-3c6541e5ed67.jsonl:L49",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.0.2(22)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos",
+        "at": "2026-09-21T08:31:36.253Z",
+        "ref": "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-76ad9618-e80a-4565-b49c-3c6541e5ed67.jsonl:L50",
+        "request_ref": "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-76ad9618-e80a-4565-b49c-3c6541e5ed67.jsonl:L49",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "5.0.0(12)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos",
+        "at": "2026-09-23T03:56:50.168Z",
+        "ref": "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-5e4fa5da-bfc0-449a-9b19-9236c7d2a918.jsonl:L783",
+        "request_ref": "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-5e4fa5da-bfc0-449a-9b19-9236c7d2a918.jsonl:L782",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.8.3"
+  },
+  "revision": "baec2c890d8cf7f95b0e4d7c5ff5806ec2b89aa44cf3c2178a78b756fc4af692"
+}

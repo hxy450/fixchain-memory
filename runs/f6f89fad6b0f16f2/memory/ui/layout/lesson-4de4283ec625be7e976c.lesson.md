@@ -24,7 +24,5 @@ Android 页面以全屏 MapView/导航视图为底层，前景由 ViewModel 布�
 
 ## 来源（按需复核）
 
-经验是有适用范围的历史建议。核查来源时同时看结论与 unknown；来源卡未随阅读包复制。
-
 - case-ff24fb8ea8e66a1cadd5 · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
-  卡片版本：`c08a74d79e5aa81858222988574ef79676c4eabaf8f50b097e815f90feb8214f`
+  卡片版本：`208d5d0c3e79b8f76bcc10f7f727c6d6a58f93e3c42d2d4dfaf5d9928db13836`

@@ -1,0 +1,156 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-7da8b355891030ab0ada",
+  "created_at": "2026-09-27T11:11:29.308572+00:00",
+  "migration_key": "ec916647-9285-40ea-9595-eaa9d20f4eed",
+  "title": "catch 中把未定类型的异常变量原样 rethrow，违反 ArkTS 只能抛出 Error 的限制",
+  "when": "功能实现或巡检修复阶段，在异步流程的 try/catch 中决定把捕获到的异常继续向上抛出时",
+  "description": "ArkTS 严格模式工程；按规格或巡检要求需要区分“过期任务的异常按取消处理、当前任务的异常继续上报”，于是在 catch 分支里有条件地重新抛出 catch 变量，而该变量没有 Error 类型保证。",
+  "summary": "slice_02_f002（a2h-migration-worker）接到 Group 02 巡检修复任务后，写前实际读到 build-group-02.md 第 4 条：\n旧代播放的错误按取消处理，当前代保留错误上报，页面层处理播放 Promise（agent-01a0da45-d1e1-7952-b2b3-87b1810685a5.jsonl:L225、L231）。\n这条要求本身正确，只规定了语义，没有规定抛出写法。\n写清 ArkTS 抛出限制的材料是派工要求预加载的 skill（L11 前置 Skills 列出 $hmos-fix-build-errors、$arkts-data-layer）：\nhmos-fix-build-errors 错误表写明 arkts-limited-throw 应改为 `throw (err instanceof Error) ? err : new Error(String(err))`，\narkts-data-layer 常见错误表写明“ArkTS 只能 throw Error 及其子类”。\n该 worker 首轮 20:33:40 用一次 exec 并行 cat 19 份 SKILL.md（L32），执行事件的 stdout 含上述两条（L42、L52），\n但返回给模型的汇总输出被截断（original token count 73628，中段 63628 tokens 省略），\n模型可见部分只剩 android-ui-graph-builder、android-ui-graph-query 前段和 arkts-immersive-safearea 末段（L53）。\n此后它只单独重读了 arkts-media-playback（L101），没有重读这两份 skill，最终回报仍把 arkts-data-layer 列入 loaded_skills（L266）。\n20:47:03 的补丁在 play() 中新增 `} catch (error) { if (mine === this.generation) { throw error; } }`，\n把未定类型的 catch 变量原样抛出（L237-L240）。偏差位于 worker 实现巡检修复这一环：规则存在且被要求加载，\n但因该 worker 自己的批量读取被截断而没有进入上下文，它也没有察觉截断。\nworker 按约束不自行编译（L11）；Group 02 组编译（group2_build，agent-01a0da4d-72c3-7060-90a4-f9594e979b68.jsonl:L152-L162，20:42 PASS）\n早于该补丁，之后到 FV-2 之间没有编译，所以组编译没有拦住。\nFV-2 首编报 10605087 arkts-limited-throw（TonePlaybackService.ets:145:9，agent-01a0da5c-8517-7370-b3a2-17b34a223fd3.jsonl:L129-L132），\nhmos-builder 把该行改为 `throw error instanceof Error ? error : new Error(String(error));`（L143-L146），复编通过（L152-L164），\n截止时保留。本卡只归因这一处 rethrow 写法。\n",
+  "recommendations": [
+    "实现阶段在 catch 中重新抛出时，不直接 `throw error`；先收窄为 Error 再抛，例如 `throw error instanceof Error ? error : new Error(String(error))`，或抛出携带原因的新 Error。",
+    "加载派工指定的 skill 时逐份读取或分批控制输出量；工具返回出现 truncated output、tokens truncated 等截断提示时，列出未完整读到的 skill 并单独重读，读全后再写码，未读全的 skill 不写进 loaded_skills。",
+    "在编译门之后落地、且按约束不能自行编译的修复（如巡检修复），写完用 rg 查 `throw [A-Za-z_]+;` 这类直接抛出变量的语句，并对照 hmos-fix-build-errors 错误表里的 ArkTS 严格模式条目自查。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/home/lsq/repo/harmonyapps/eartraining/entry/src/main/ets/services/TonePlaybackService.ets",
+        "since": "2026-09-25T20:58:11.566Z",
+        "at": "2026-09-26T07:40:33.959Z"
+      },
+      "nodes": [
+        {
+          "key": "/home/lsq/repo/harmonyapps/eartraining/.agents/skills/hmos-fix-build-errors/SKILL.md",
+          "at": "2026-09-25T20:33:40.667Z",
+          "reason": "派工要求预加载的 skill，错误表写明 arkts-limited-throw 的修法 throw (err instanceof Error) ? err : new Error(String(err))，足以指导 catch 后的 rethrow 写法。worker 的 cat 执行事件 stdout 含该行（agent-01a0da45-d1e1-7952-b2b3-87b1810685a5.jsonl:L32、L52），但同一调用返回给模型的汇总输出中段截断，模型可见部分不含本 skill（L53）；这是交付缺口，发生在 worker 自己的读取方式上。"
+        },
+        {
+          "key": "/home/lsq/repo/harmonyapps/eartraining/spec/fix/round-1/patrol/build-group-02.md",
+          "at": "2026-09-25T20:46:39.398Z",
+          "reason": "修复任务输入：第 4 条要求把旧代写入异常视为取消、保留当前代错误上报、页面层处理播放 Promise。这是 catch 后按代条件 rethrow 的设计来源，内容正确，未规定抛出写法（agent-01a0da45-d1e1-7952-b2b3-87b1810685a5.jsonl:L225、L231）。"
+        },
+        {
+          "key": "agent-01a0da45-d1e1-7952-b2b3-87b1810685a5.jsonl",
+          "at": "2026-09-25T20:47:03.111Z",
+          "reason": "按巡检第 4 条实现时，补丁新增 catch (error) { if (mine === this.generation) { throw error; } }，把未定类型的 catch 变量原样抛出，违反 ArkTS 只能 throw Error 的限制（同转录 L237-L240）。该规则所在 skill 因本 worker 首轮批量读取被截断而未进入上下文，它未重读（L53、L101）。FV-2 在 TonePlaybackService.ets:145:9 报 arkts-limited-throw，正是这一行。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "worker 首轮在一次 exec 中执行 cat .agents/skills/hmos-fix-build-errors/SKILL.md（L32 请求），执行事件 L52 的 stdout 为该文件全文、含 arkts-limited-throw 修法行；同一调用返回给模型的 L53 中段截断，不含本文件内容。此边只证明读取调用真实发生，规则未进入模型上下文见节点说明。",
+          "evidence": [
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da45-d1e1-7952-b2b3-87b1810685a5.jsonl",
+              "line": 32
+            },
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da45-d1e1-7952-b2b3-87b1810685a5.jsonl",
+              "line": 52
+            },
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da45-d1e1-7952-b2b3-87b1810685a5.jsonl",
+              "line": 53
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "巡检修复轮 exec 并行 cat 巡检报告与目标文件（L225 请求），L228 事件为 cat spec/fix/round-1/patrol/build-group-02.md，L231 回执把报告全文返回给模型，含第 4 条旧代异常按取消、当前代保留错误上报的要求。",
+          "evidence": [
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da45-d1e1-7952-b2b3-87b1810685a5.jsonl",
+              "line": 225
+            },
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da45-d1e1-7952-b2b3-87b1810685a5.jsonl",
+              "line": 228
+            },
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da45-d1e1-7952-b2b3-87b1810685a5.jsonl",
+              "line": 231
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target",
+          "force": true,
+          "reason": "exec 内 tools.apply_patch 更新 entry/src/main/ets/services/TonePlaybackService.ets（L237 请求），L239 FileChange 事件记录该文件的 unified_diff，含新增 catch (error) { if (mine === this.generation) { throw error; } }，L240 回执完成。",
+          "evidence": [
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da45-d1e1-7952-b2b3-87b1810685a5.jsonl",
+              "line": 237
+            },
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da45-d1e1-7952-b2b3-87b1810685a5.jsonl",
+              "line": 239
+            },
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da45-d1e1-7952-b2b3-87b1810685a5.jsonl",
+              "line": 240
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "主会话给 slice_02 的首轮派工与 20:46:30 的巡检修复派工（main-01a0d9f4-a247-7fe0-9cc2-5e0f62e9f5db.jsonl:L2709、L2915）均为加密载荷，无法核对派工正文是否另行重申 ArkTS 抛出限制；已核事实是 worker 模型可见的输入中没有该规则。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-7da8b355891030ab0ada",
+  "metadata": {
+    "migration": {
+      "project": "听音练习",
+      "server_session_id": "ec916647-9285-40ea-9595-eaa9d20f4eed",
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "codex-auto-review",
+        "gpt-6-sol"
+      ],
+      "tool_versions": {
+        "orchestrator": "hmigbot-plus",
+        "runtime_version": "v1.5.2",
+        "runtime_commit": "c47f332",
+        "client_version": "hmigbot-plus-1.6.0",
+        "pack_version": "hmigbot-plus-1.6.0",
+        "codex_cli_version": "0.157.0"
+      }
+    },
+    "analysis": {
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "platforms": [
+        "claude-code"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "codex-auto-review",
+        "gpt-6-sol"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.157.0"
+      ]
+    },
+    "source_set_id": "sources-7dfa3baba9b514aa9b9d",
+    "card_tool_version": "0.8.3"
+  },
+  "revision": "e6be8a04ed9e23e71666c989b05f838c659d80abab9ce4eedab885e809c5a86d"
+}

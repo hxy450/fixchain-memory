@@ -24,7 +24,5 @@ Android Activity 在 onCreate/initView 开头按条件 startActivity 到另一�
 
 ## 来源（按需复核）
 
-经验是有适用范围的历史建议。核查来源时同时看结论与 unknown；来源卡未随阅读包复制。
-
 - case-327636c44f08419021a9 · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
-  卡片版本：`8ea2330fb187593e5cf20301ba4c323f2436c502ca45df67fdc36078aeb3097c`
+  卡片版本：`c67142ff0da9abe2dfa969ea7b93c8b2ce15330970d0a744e5eb2b6124e30b33`

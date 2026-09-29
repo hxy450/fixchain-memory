@@ -1,0 +1,159 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-7b90b1ebaae140988b90",
+  "created_at": "2026-09-27T19:21:17.376427+00:00",
+  "migration_key": "b732e9f2-3b17-42ec-a7e4-51abb6e40d05",
+  "title": "搜索页ViewModel把初始关键词放到异步初始化之后才赋值，覆盖用户输入",
+  "when": "ViewModel实现阶段，编排页面初始化方法中异步存储/SDK绑定与输入状态初值的先后顺序时",
+  "description": "源页面在初始化时同步写入关键词或输入框文本，搜索动作读取当时的实时输入；目标页面的输入框双向绑定ViewModel字段，初始化方法内含await存储/服务绑定，且由页面生命周期回调以不等待方式调用。",
+  "summary": "写前slice2 worker（agent-01a0632c，stage3_group2_slice2_f002）实际读到Android SearchLocationActivity.kt：\ninitActivityView先同步执行viewModel.keyWord.value = searchText与edSearch.setText(searchText)，\n再按需clickSearch；clickSearch以edSearch当前文本调用goSearch（L94/L110）。F002规格与slice-02计划（L44-L45）\n只给出PoiService.search签名和AC03“空关键词显示历史、非空调用POI搜索”，没有任何“先await再赋值”的要求；\nworker自己写的source-notes也记下“clickSearch直接读取输入框”（L290）。输入正确且足以确定初值应同步写入。\n本次输出（apply_patch L227，回执L229）却让aboutToAppear先await historyStore.bindContext，\n之后才写searchText/showClearButton；同一worker随后在页面onReady中以void调用aboutToAppear而不等待（L235），\nTextInput绑定viewModel.searchText，search()读取this.searchText。初始化尚未完成时用户已输入的文字，\n会被续体里较晚到达的初值（通常为空）覆盖，点击搜索时关键词可能为空。偏差位于把源端同步初值改写为\n“异步绑定完成后才赋值”的实现环节，不来自规格。\n生成期patrol_fix_feat_group_02（agent-01a06439 L107）在同一await链上又加了poiService.bindContext；\n生成后主会话（main-01a060e7 L9763）再在前面插入AMap初始化，均保留该顺序。用户报告“点击搜索没反应”后，\nagent-01a0669e L761把searchText/showClearButton移到所有await之前，main L11012用try包裹初始化，\nL11441在updateSearchText中清空message；该顺序在观察截止时保留。\n同一job的SearchLocationPage三态文本另作判断：Android布局activity_search_location.xml和Activity均无\n加载/空结果/失败视图，Android VM在rCode≠1000时静默返回（spec agent-01a0611a L137）；生成期页面只渲染\n历史和结果列表，与源端一致。slice2 VM虽已定义loading与search-empty/search-failed message而页面未消费，\n但写前输入没有要求显示这些状态，故按生成后新增的UX要求处理，不归因为生成偏差。\n",
+  "recommendations": [
+    "ViewModel实现阶段：源端初始化时同步写入的输入类状态（关键词、输入框文本、清除按钮可见性），在目标初始化方法的第一个await之前赋值；异步绑定存储或SDK只负责加载数据，不在续体中回写用户可编辑字段。",
+    "页面以不等待方式调用异步初始化、且输入框可立即编辑时，逐一检查初始化续体里对双向绑定字段的赋值；确需在续体赋值时，先确认字段仍是进入时的值，避免覆盖用户输入。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "D:/anhuizhongyi/panorama_map/harmony-panorama-map-vest1/entry/src/main/ets/viewmodels/SearchLocationViewModel.ets",
+        "since": "2026-09-03T02:06:01.239Z",
+        "at": "2026-09-06T09:34:12.089Z"
+      },
+      "nodes": [
+        {
+          "key": "D:/anhuizhongyi/android-panorama-map-vest7/app/src/main/java/com/njwry/nav/ui/activity/SearchLocationActivity.kt",
+          "at": "2026-09-02T17:34:30.518Z",
+          "reason": "正常输入：worker以Get-Content读取源Activity，回执显示initActivityView同步写keyWord与edSearch文本，clickSearch读取edSearch当前文本调用goSearch；足以说明初值应在任何异步工作前写入、搜索以实时输入为准（agent-01a0632c-3a58-7ed3-ac43-7cec3a6c85f6.jsonl:L94、L110）。"
+        },
+        {
+          "key": "D:/anhuizhongyi/panorama_map/harmony-panorama-map-vest1/spec/baseline/features/F002-map-location-search.md",
+          "at": "2026-09-02T17:33:18.248Z",
+          "reason": "正常输入：F002规格只给出PoiService.search签名和AC03空/非空关键词分流，未规定初始化顺序，也没有“先await再赋值”的要求；说明该顺序不是规格传下来的（同转录L29、L45）。"
+        },
+        {
+          "key": "agent-01a0632c-3a58-7ed3-ac43-7cec3a6c85f6.jsonl",
+          "at": "2026-09-02T17:39:36.682Z",
+          "reason": "已收到上述输入，apply_patch新建SearchLocationViewModel时把searchText/showClearButton写在await historyStore.bindContext之后；随后页面onReady以void调用aboutToAppear（L235），输入框绑定该字段，形成异步初值覆盖用户输入的竞态。源端同步初值要求在此未落实（同转录L227、L229）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "worker以exec_command执行Get-Content -Raw读取源SearchLocationActivity.kt，同一call_id回执返回initActivityView同步写keyWord/edSearch及clickSearch读取edSearch文本的源码；这是写VM之前的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/2039ebb1-08dc-4537-a87e-fffe5817c7e7/epoch-0/sessions/agent-01a0632c-3a58-7ed3-ac43-7cec3a6c85f6.jsonl",
+              "line": 94
+            },
+            {
+              "source": "runs/2039ebb1-08dc-4537-a87e-fffe5817c7e7/epoch-0/sessions/agent-01a0632c-3a58-7ed3-ac43-7cec3a6c85f6.jsonl",
+              "line": 110
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "worker以exec_command执行Get-Content -Raw读取F002规格，同一call_id回执返回服务层签名与AC03，未含初始化顺序要求；这是写VM之前的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/2039ebb1-08dc-4537-a87e-fffe5817c7e7/epoch-0/sessions/agent-01a0632c-3a58-7ed3-ac43-7cec3a6c85f6.jsonl",
+              "line": 29
+            },
+            {
+              "source": "runs/2039ebb1-08dc-4537-a87e-fffe5817c7e7/epoch-0/sessions/agent-01a0632c-3a58-7ed3-ac43-7cec3a6c85f6.jsonl",
+              "line": 45
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target",
+          "force": true,
+          "reason": "worker的apply_patch以Add File新建SearchLocationViewModel.ets，正文中aboutToAppear先await historyStore.bindContext再写searchText；回执列出该文件写入成功。",
+          "evidence": [
+            {
+              "source": "runs/2039ebb1-08dc-4537-a87e-fffe5817c7e7/epoch-0/sessions/agent-01a0632c-3a58-7ed3-ac43-7cec3a6c85f6.jsonl",
+              "line": 227
+            },
+            {
+              "source": "runs/2039ebb1-08dc-4537-a87e-fffe5817c7e7/epoch-0/sessions/agent-01a0632c-3a58-7ed3-ac43-7cec3a6c85f6.jsonl",
+              "line": 229
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "材料中没有单独复现该竞态的真机日志；诊断代理以“可能被初始空值覆盖”描述，修复与ArrayList下标修复同批装机，未能区分二者各自对“无反应”的贡献。本卡只归因初始化顺序这一已核偏差。"
+  ],
+  "unresolved_targets": [
+    {
+      "key": "D:/anhuizhongyi/panorama_map/harmony-panorama-map-vest1/entry/src/main/ets/pages/SearchLocationPage.ets",
+      "reason": "已确认main-01a060e7 L11441-L11443加入搜索中/暂无相关地点/搜索失败文本并保留到OPT-003。写前Android Activity、布局及F002规格均无加载/空/失败视图，生成期页面（stage1 converter agent-01a061b5 L123，slice2 worker L235/L298）只渲染历史与结果列表，与源端一致；VM已定义但页面未消费的loading/message状态没有输入要求其显示。判定为生成后新增UX要求，无可归因的生成偏差，因此不画图。"
+    }
+  ],
+  "job": "issue-7b90b1ebaae140988b90",
+  "metadata": {
+    "migration": {
+      "project": "android-panorama-map-vest7",
+      "server_session_id": "b732e9f2-3b17-42ec-a7e4-51abb6e40d05"
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "codex-auto-review",
+        "gpt-5.3-codex-spark",
+        "gpt-5.4-mini",
+        "gpt-5.6-sol",
+        "gpt-5.6-terra"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.151.0-alpha.7.2",
+        "0.152.1",
+        "0.153.4"
+      ]
+    },
+    "source_set_id": "sources-98613bd90677ff53c5e1",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-09-02T13:56:08.145Z",
+        "ref": "runs/2039ebb1-08dc-4537-a87e-fffe5817c7e7/epoch-0/sessions/agent-01a06265-0064-7221-9f99-de87d96a7fc1.jsonl:L59",
+        "request_ref": "runs/2039ebb1-08dc-4537-a87e-fffe5817c7e7/epoch-0/sessions/agent-01a06265-0064-7221-9f99-de87d96a7fc1.jsonl:L57",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-09-02T13:56:08.145Z",
+        "ref": "runs/2039ebb1-08dc-4537-a87e-fffe5817c7e7/epoch-0/sessions/agent-01a06265-0064-7221-9f99-de87d96a7fc1.jsonl:L59",
+        "request_ref": "runs/2039ebb1-08dc-4537-a87e-fffe5817c7e7/epoch-0/sessions/agent-01a06265-0064-7221-9f99-de87d96a7fc1.jsonl:L57",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.8.3"
+  },
+  "revision": "d48f86390c7dc35c82cbb2a117e310c8a25bd14364a27b147e6b2fa6fed8ba78"
+}

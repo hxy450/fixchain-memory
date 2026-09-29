@@ -23,7 +23,5 @@ onScrollIndex 只在首个可见行变化时触发，两态切换丢掉了连续
 
 ## 来源（按需复核）
 
-经验是有适用范围的历史建议。核查来源时同时看结论与 unknown；来源卡未随阅读包复制。
-
 - case-66f3c1649b7b5c4f38b5 · 结论：diagnosis, recommendation:1
-  卡片版本：`46ab2f3858ac27b0abcebd51b578308c618491cb4f80cff3668cffd0b17f7af5`
+  卡片版本：`686410a72e498ff1fb1d9233686e5ebc690a444c3056d62bc78d50dbcb257140`

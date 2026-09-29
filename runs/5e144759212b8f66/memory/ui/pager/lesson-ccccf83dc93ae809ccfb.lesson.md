@@ -24,14 +24,9 @@ ID：`lesson-ccccf83dc93ae809ccfb` · 版本：1
 
 ## 可选检查
 
-仅在适用条件不确定、与当前输入冲突或需要验证关键假设时按需执行；优先复用已有证据和正常测试。
-不因读取本条经验而额外启动验证流程；项目原有必需测试照常执行。
-
 - 从列表非首项进入，核对标题与播放项和点击项一致。
 
 ## 来源（按需复核）
 
-经验是有适用范围的历史建议。核查来源时同时看结论与 unknown；来源卡未随阅读包复制。
-
 - case-fe6ca54f30a78eb885f3 · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3, recommendation:4
-  卡片版本：`3e14c4794c055036269e79cf76bbce7b38c6bdc376d104ce771e8ea660945718`
+  卡片版本：`ba59b468491375b17434c208405d83cbda83bedc7be77666f96729a149878b24`

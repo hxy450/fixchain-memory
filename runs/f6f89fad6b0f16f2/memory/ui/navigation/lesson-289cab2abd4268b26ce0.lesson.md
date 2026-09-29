@@ -23,18 +23,13 @@ ID：`lesson-289cab2abd4268b26ce0` · 版本：1
 
 ## 可选检查
 
-仅在适用条件不确定、与当前输入冲突或需要验证关键假设时按需执行；优先复用已有证据和正常测试。
-不因读取本条经验而额外启动验证流程；项目原有必需测试照常执行。
-
 - 从宿主进入该页时，组件收到的实体键有效（如 cityCode > 0），事件回调已绑定到导航。
 
 ## 来源（按需复核）
 
-经验是有适用范围的历史建议。核查来源时同时看结论与 unknown；来源卡未随阅读包复制。
-
 - case-1cfad6c2eaf32070939a · 结论：diagnosis, recommendation:1, recommendation:2
-  卡片版本：`24c50b91fb33260dd5cd498f75da1aa83c3158699c5083c5e4fefab53870ccd6`
+  卡片版本：`78f3350b6b023b1fc08c9b23ca592c3b1fa5918f875f7133bb7e2d04c929fcb6`
 - case-5d12548f9d559985c27d · 结论：diagnosis
-  卡片版本：`81cc40e705a1e9bba6daeea51876efaacd6f071b009819562e41a95983d43297`
+  卡片版本：`04736cf715d71d3e14d93830493689cb2e6b52405aa8d4ea2bf3f4b0bce09869`
 - case-e7af91622703010ed47f · 结论：recommendation:3
-  卡片版本：`56e8702b77dca746fe04e608e574d004d892a5c0c1f1a0f6864a7a23a6d72ff1`
+  卡片版本：`2341076431157c17480df065b2a4ff7fdccb188ef7ac8069b722c87901d62b15`

@@ -1,0 +1,479 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-e7af91622703010ed47f",
+  "created_at": "2026-09-27T22:24:48.801778+00:00",
+  "migration_key": "dc1176d6-edc1-4b76-a9d4-31bd94c63ea0",
+  "title": "天气详情页把 Android 独立/组合接口与首页数据交接迁移成单一请求，导致空气质量、40日、趋势无数据",
+  "when": "数据接线阶段，把 Android 详情页（空气质量、40日、天气趋势）的多接口加载与页面入参迁移为 ArkTS 页面加载逻辑时",
+  "description": "Android 详情 Activity/ViewModel 对多个接口各自 launch、各自 observe（如 realtimeV2 与 fortyEightHourly、fortyDay 与 fortyDayTrend），并通过 Intent Serializable 或缓存把首页 15 日数据交给详情页；目标端由 Service/ViewModel 聚合为结果对象，再由页面一次性判定内容/错误态。",
+  "summary": "生成期 Slice 6 数据接线者（agent-019ff63c-2781…）在写前读到了 Android AirQualityViewModel 与 FortyWeatherViewModel\n（agent-019ff63c-2781-7133-806d-caa5045ec057.jsonl:L2467-L2468）：实时空气与 48 小时各自 launch、各自只在 Success 时写自己的 LiveData；\n40 日页另有公开的 getFortyDayTrend 与 mFortyDayTrendDate。F002 规格 AC20/AC24/AC26 也写明“空气质量页分别加载实时与 48 小时”\n“40 日页同时取得趋势与 40 日天气”“任一详情请求失败保留其他区块、不清空整页”（L2412-L2413 读取，中文段在 PowerShell 5.1 下显示为乱码，ASCII 锚点可读；\nL2426 有一次上下文压缩）。该 agent 自己在 L2520 检查点和 L2574 写入的 slice-6-source-notes.md 中复述了“各详情区块失败不清空其他成功数据”。\n输出却偏离：WeatherService 的 WeatherAirResult 虽分开保存两支结果，AirQualityPage 仍写成 current === null || hours === null 即整页 ERROR（L2578-L2579）；\nWeatherService/WeatherViewModel 只提供 loadForty（仅请求 fortyDay，L2546-L2547、L2553-L2554），FortyWeatherPage 只调用它，趋势从不请求，日历也只放一页（L2590-L2591）。\n另一条起点在更早的界面转换阶段：UI 转换者（agent-019ff696-5618…）读到 Android AirQualityActivity 通过 bundle.getSerializable(\"weatherHomeBean\") 给 15 日列表赋值\n（agent-019ff696-5618-78d2-a059-a02982380b3d.jsonl:L1720-L1721），以及 WeatherLineFragment 用首页缓存“同步首页的15日天气数据”后再按 index 请求逐日详情（L1493-L1494）；\n但写出的 AirQualityPageParam/WeatherLinePageParam 只有城市、code、经纬度，AirQualityPage 的 dayItems 没有任何数据来源，WeatherLinePage 的 days 固定为三条“--°”占位（L1741-L1742、L1500-L1501），\nforward-ref 只登记了加载函数本身。数据接线者随后也只按 selectedDay 请求日详情，没有补上这条首页数据交接。\n这些片段一直保留到返修：修复会话按 Android 静态对照，在 main-019ffb4e-a828-7f12-a8dd-1b8a884da577.jsonl:L1794 同一补丁中让空气质量两支独立降级并复用首页 15 日，\n新增 WeatherFortyResult/loadFortyForecast 并发请求 fortyDay+fortyDayTrend 并分页日历，趋势页复用首页 15 日；L1873/L1877 重写趋势页日详情与小时列表。\n生活指数一支是修复期新生问题：修复子代理（agent-019ffb54-89b7…）刚读到 Android HomeWeatherAdapter 按位置 lifeList[i].umengKey = LIFE_UMENG_KEY[i] 赋值，\n却写成按 item.umengKey === key 查找（L212-L213），homeV2 缺 umengKey 时全部落空；L1853 改为找不到时回退 source[index]。\n",
+  "recommendations": [
+    "数据接线时逐个列出源详情页的每个请求及其 observer；源端各请求独立 launch、各自更新时，目标页按区块分别判定成功/失败，不要用 a === null || b === null 决定整页错误态。",
+    "实现前把规格验收项（如“同时取得趋势与40日天气”）逐条映射到 Service→ViewModel→Page 的具体调用；某个源接口没有被任何页面调用时，在输出前补齐或登记缺口，而不是只接主接口。",
+    "迁移页面入参时，读取源 Activity/Fragment 的全部 extras 与缓存读取（Serializable 数据对象、SharedPreferences 首页缓存），在目标 Param 或共享运行时中给出等价来源；列表状态不能只留静态占位。",
+    "移植“按位置赋值”的源逻辑（如 lifeList[i].umengKey = KEYS[i]）时保持位置映射，或在按键查找失败时回退到同一下标；不要假设服务端一定返回该字段。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "D:/HnaccurateWeather_HarmonyOS/entry/src/main/ets/pages/AirQualityPage.ets",
+        "since": "2026-08-13T13:29:02.643Z",
+        "at": "2026-08-21T09:35:59.738Z"
+      },
+      "summary": "同一目标有两个起点。界面转换阶段：UI 转换者读到 AirQualityActivity 从 Intent 取 weatherHomeBean 并直接给 15 日列表赋值，\n却只写出城市/code/经纬度的 AirQualityPageParam，dayItems 无来源。数据接线阶段：接线者读到 AirQualityViewModel 两支独立请求、\nF002 AC20/AC26 要求分支互不清空，却写成 current 或 hours 任一为空即整页 ERROR。修复在 L1794 改为两支分别赋值并从首页运行时填充 15 日。\n",
+      "nodes": [
+        {
+          "key": "E:/Androidproject/app_hnaccurateweather_live_android/app/src/weather/java/com/cstools/weather/ui/weatherdetail/activity/AirQualityActivity.kt",
+          "at": "2026-08-13T02:11:49.321Z",
+          "reason": "正常输入：UI 转换者 Get-Content 回执显示 loadData 取 bundle.getSerializable(\"weatherHomeBean\")，并以 weatherHomeBean.weatherDailyList 设置 15 日适配器；getRealTimeInfo 与 getAirQualityHour 分别调用、分别 observe。足以确定该页入参含首页 15 日数据（agent-019ff696-5618-78d2-a059-a02982380b3d.jsonl:L1720-L1721）。"
+        },
+        {
+          "key": "agent-019ff696-5618-78d2-a059-a02982380b3d.jsonl",
+          "at": "2026-08-13T02:14:54.576Z",
+          "reason": "读到上述 Activity 后，Add File 写出 AirQualityPageParam 仅含 city/cityCode/longitude/latitude，dayItems 初始化为空数组且无任何赋值来源，forward-ref 只登记 P-S6-040 加载函数；首页 15 日交接在页面契约中丢失（同转录 L1741-L1742）。",
+          "problem": true
+        },
+        {
+          "key": "D:/HnaccurateWeather_HarmonyOS/spec/baseline/features/F002-weather.md",
+          "at": "2026-08-13T04:18:25.551Z",
+          "reason": "正常输入：数据接线者读取 F002，AC20“空气质量页分别加载实时空气信息与48小时列表”、AC26“任一天气详情请求失败时保留其他已成功区块…不清空整页”；中文在该回执中显示为 GBK 乱码，但 AirQualityViewModel.getRealTimeInfo()/getAirQualityHour() 锚点可读；其后 L2426 发生上下文压缩（agent-019ff63c-2781-7133-806d-caa5045ec057.jsonl:L2412-L2413）。"
+        },
+        {
+          "key": "E:/Androidproject/app_hnaccurateweather_live_android/app/src/main/java/com/cstools/weather/ui/weatherdetail/viewmodel/AirQualityViewModel.kt",
+          "at": "2026-08-13T04:20:53.656Z",
+          "reason": "正常输入：压缩后的 Get-Content 回执完整给出 getRealTimeInfo 与 getAirQualityHour 各自 launch，只在 Result.Success 时写各自 LiveData；足以说明两支独立（agent-019ff63c-2781-7133-806d-caa5045ec057.jsonl:L2467-L2468）。"
+        },
+        {
+          "key": "agent-019ff63c-2781-7133-806d-caa5045ec057.jsonl",
+          "at": "2026-08-13T04:26:31.431Z",
+          "reason": "已在 L2520 检查点与 L2574 source-notes 中写明“各详情区块失败不清空其他成功数据”，Service 的 WeatherAirResult 也分开保存两支；但 AirQualityPage 补丁写成 result.current === null || result.hours === null 时整页 ERROR，且未为 dayItems 接入首页 15 日（同转录 L2578-L2579）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "UI 转换者在 Promise.all 的 activity 命令中 Get-Content 该 Activity 文件，回执返回 weatherHomeBean extras 与 15 日适配器赋值。",
+          "evidence": [
+            {
+              "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff696-5618-78d2-a059-a02982380b3d.jsonl",
+              "line": 1720
+            },
+            {
+              "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff696-5618-78d2-a059-a02982380b3d.jsonl",
+              "line": 1721
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": "target"
+        },
+        {
+          "from": 3,
+          "to": 5,
+          "force": true,
+          "reason": "数据接线者用 Get-ChildItem spec/baseline/features 过滤 ^F002 后 Get-Content 全文，回执返回 F002-weather.md 的服务接口、API 表与 AC20/AC24/AC26（中文显示为乱码，ASCII 锚点可读）。",
+          "evidence": [
+            {
+              "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff63c-2781-7133-806d-caa5045ec057.jsonl",
+              "line": 2412
+            },
+            {
+              "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff63c-2781-7133-806d-caa5045ec057.jsonl",
+              "line": 2413
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": 5,
+          "force": true,
+          "reason": "数据接线者用 $files 数组 Get-Content 该 ViewModel，回执返回两个独立 launch。",
+          "evidence": [
+            {
+              "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff63c-2781-7133-806d-caa5045ec057.jsonl",
+              "line": 2467
+            },
+            {
+              "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff63c-2781-7133-806d-caa5045ec057.jsonl",
+              "line": 2468
+            }
+          ]
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "D:/HnaccurateWeather_HarmonyOS/entry/src/main/ets/pages/FortyWeatherPage.ets",
+        "since": "2026-08-13T13:29:02.643Z",
+        "at": "2026-08-21T09:35:59.738Z"
+      },
+      "nodes": [
+        {
+          "key": "D:/HnaccurateWeather_HarmonyOS/spec/baseline/features/F002-weather.md",
+          "at": "2026-08-13T04:18:25.551Z",
+          "reason": "正常输入：F002 AC24“40日页同时取得趋势与40日天气”，锚点 FortyWeatherViewModel.getFortyDayTrend()/getCurrentLunar()；API 表同时列出 /weather/fortyDay 与 /weather/fortyDayTrend（agent-019ff63c-2781-7133-806d-caa5045ec057.jsonl:L2412-L2413，中文乱码、ASCII 可读，随后 L2426 压缩）。"
+        },
+        {
+          "key": "E:/Androidproject/app_hnaccurateweather_live_android/app/src/main/java/com/cstools/weather/ui/weatherdetail/viewmodel/FortyWeatherViewModel.kt",
+          "at": "2026-08-13T04:20:53.656Z",
+          "reason": "正常输入：回执给出公开的 getFortyDayTrend(cityId, lon, lat) → api.getFortyDayTrend → mFortyDayTrendDate，以及日历链路中的 getFortyWeather；足以说明该页需要两个接口（agent-019ff63c-2781-7133-806d-caa5045ec057.jsonl:L2467-L2468）。"
+        },
+        {
+          "key": "agent-019ff63c-2781-7133-806d-caa5045ec057.jsonl",
+          "at": "2026-08-13T04:27:12.712Z",
+          "reason": "FortyWeatherPage 补丁只调用 WeatherRuntime.loadForty（仅 fortyDay），把全部日期放进 calendarPages = [days]，趋势字段从未请求或赋值；AC24 的趋势分支在页面接线处丢失（同转录 L2590-L2591）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "数据接线者用 Get-ChildItem spec/baseline/features 过滤 ^F002 后 Get-Content 全文，回执返回 F002-weather.md 的服务接口、API 表与 AC20/AC24/AC26（中文显示为乱码，ASCII 锚点可读）。",
+          "evidence": [
+            {
+              "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff63c-2781-7133-806d-caa5045ec057.jsonl",
+              "line": 2412
+            },
+            {
+              "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff63c-2781-7133-806d-caa5045ec057.jsonl",
+              "line": 2413
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "同一次 $files 数组 Get-Content 读取 FortyWeatherViewModel，回执返回 getFortyDayTrend 与 getFortyWeather。",
+          "evidence": [
+            {
+              "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff63c-2781-7133-806d-caa5045ec057.jsonl",
+              "line": 2467
+            },
+            {
+              "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff63c-2781-7133-806d-caa5045ec057.jsonl",
+              "line": 2468
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "D:/HnaccurateWeather_HarmonyOS/entry/src/main/ets/services/WeatherService.ets",
+        "since": "2026-08-13T13:29:02.643Z",
+        "at": "2026-08-21T09:35:59.738Z"
+      },
+      "nodes": [
+        {
+          "key": "D:/HnaccurateWeather_HarmonyOS/spec/baseline/features/F002-weather.md",
+          "at": "2026-08-13T04:18:25.551Z",
+          "reason": "正常输入：服务接口草案同时列出 loadFortyDay 与 loadFortyDayTrend，AC24 要求 40 日页两者都取得（agent-019ff63c-2781-7133-806d-caa5045ec057.jsonl:L2412-L2413）。"
+        },
+        {
+          "key": "E:/Androidproject/app_hnaccurateweather_live_android/app/src/main/java/com/cstools/weather/ui/weatherdetail/viewmodel/FortyWeatherViewModel.kt",
+          "at": "2026-08-13T04:20:53.656Z",
+          "reason": "正常输入：40 日 ViewModel 公开 getFortyDayTrend 与 mFortyDayTrendDate（agent-019ff63c-2781-7133-806d-caa5045ec057.jsonl:L2467-L2468）。"
+        },
+        {
+          "key": "agent-019ff63c-2781-7133-806d-caa5045ec057.jsonl",
+          "at": "2026-08-13T04:24:23.632Z",
+          "reason": "Add File 写出的 WeatherService 只有 loadForty（仅 repository.loadFortyDays），loadTrend 只被首页 loadHome 使用，没有 40 日页可用的趋势组合结果；修复在 L1794 新增 WeatherFortyResult/loadFortyForecast（同转录 L2546-L2547）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "数据接线者用 Get-ChildItem spec/baseline/features 过滤 ^F002 后 Get-Content 全文，回执返回 F002-weather.md 的服务接口、API 表与 AC20/AC24/AC26（中文显示为乱码，ASCII 锚点可读）。",
+          "evidence": [
+            {
+              "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff63c-2781-7133-806d-caa5045ec057.jsonl",
+              "line": 2412
+            },
+            {
+              "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff63c-2781-7133-806d-caa5045ec057.jsonl",
+              "line": 2413
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "同一次 Get-Content 回执返回 FortyWeatherViewModel 的趋势接口。",
+          "evidence": [
+            {
+              "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff63c-2781-7133-806d-caa5045ec057.jsonl",
+              "line": 2467
+            },
+            {
+              "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff63c-2781-7133-806d-caa5045ec057.jsonl",
+              "line": 2468
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "D:/HnaccurateWeather_HarmonyOS/entry/src/main/ets/viewmodels/WeatherViewModel.ets",
+        "since": "2026-08-13T13:29:02.643Z",
+        "at": "2026-08-21T09:35:59.738Z"
+      },
+      "nodes": [
+        {
+          "key": "D:/HnaccurateWeather_HarmonyOS/spec/baseline/features/F002-weather.md",
+          "at": "2026-08-13T04:18:25.551Z",
+          "reason": "正常输入：AC24 要求 40 日页同时取得趋势与 40 日天气（agent-019ff63c-2781-7133-806d-caa5045ec057.jsonl:L2412-L2413）。"
+        },
+        {
+          "key": "E:/Androidproject/app_hnaccurateweather_live_android/app/src/main/java/com/cstools/weather/ui/weatherdetail/viewmodel/FortyWeatherViewModel.kt",
+          "at": "2026-08-13T04:20:53.656Z",
+          "reason": "正常输入：40 日 ViewModel 公开 getFortyDayTrend 与对应 LiveData（agent-019ff63c-2781-7133-806d-caa5045ec057.jsonl:L2467-L2468）。"
+        },
+        {
+          "key": "agent-019ff63c-2781-7133-806d-caa5045ec057.jsonl",
+          "at": "2026-08-13T04:24:45.559Z",
+          "reason": "Add File 写出的 WeatherViewModel 只暴露 loadForty → service.loadForty，没有 40 日页的趋势分支；修复在 L1794 新增 loadFortyForecast（同转录 L2553-L2554）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "数据接线者用 Get-ChildItem spec/baseline/features 过滤 ^F002 后 Get-Content 全文，回执返回 F002-weather.md 的服务接口、API 表与 AC20/AC24/AC26（中文显示为乱码，ASCII 锚点可读）。",
+          "evidence": [
+            {
+              "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff63c-2781-7133-806d-caa5045ec057.jsonl",
+              "line": 2412
+            },
+            {
+              "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff63c-2781-7133-806d-caa5045ec057.jsonl",
+              "line": 2413
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "同一次 Get-Content 回执返回 FortyWeatherViewModel 的趋势接口。",
+          "evidence": [
+            {
+              "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff63c-2781-7133-806d-caa5045ec057.jsonl",
+              "line": 2467
+            },
+            {
+              "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff63c-2781-7133-806d-caa5045ec057.jsonl",
+              "line": 2468
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "D:/HnaccurateWeather_HarmonyOS/entry/src/main/ets/pages/WeatherLinePage.ets",
+        "since": "2026-08-13T13:29:02.643Z",
+        "at": "2026-08-21T09:35:59.738Z"
+      },
+      "summary": "界面转换者读到 WeatherLineFragment 先用首页缓存“同步首页的15日天气数据”再请求第 1 日详情，却把 days 写成三条固定“--°”占位，\nWeatherLinePageParam 只有城市与经纬度。数据接线者读到 WeatherLineViewModel 中逐日详情依赖已存在的日列表（列表为空即 return），\n仍只按 selectedDay 请求详情写指标，没有建立日列表来源，也没有消费 detail.hours。修复在 L1794 从首页运行时填充 15 日，L1873 补小时列表与加载/错误态。\n",
+      "recommendations": [
+        "界面转换时把源页面的首屏数据来源（Intent extras、首页缓存）写进页面契约或 forward-ref，不要只留静态占位列表。",
+        "数据接线时核对源 ViewModel 的前置条件（如列表为空直接返回）；目标页先建立同等的列表来源，再按选中下标请求详情。"
+      ],
+      "nodes": [
+        {
+          "key": "E:/Androidproject/app_hnaccurateweather_live_android/app/src/weather/java/com/cstools/weather/ui/weather/fragment/WeatherLineFragment.kt",
+          "at": "2026-08-12T16:17:30.184Z",
+          "reason": "正常输入：回执显示 WeatherLineActivity 承载 WeatherLineFragment，loadData 读取首页缓存 HomeWeatherTotalData，注释“同步首页的15日天气数据”，以 weatherHomeBean.weatherDailyList 生成日列表后 getDailyWeatherDetail(…, 1)（agent-019ff696-5618-78d2-a059-a02982380b3d.jsonl:L1493-L1494）。"
+        },
+        {
+          "key": "agent-019ff696-5618-78d2-a059-a02982380b3d.jsonl",
+          "at": "2026-08-12T16:18:13.976Z",
+          "reason": "读到上述源码后，Add File 写出 WeatherLinePageParam 仅含城市/code/经纬度，days 固定为昨天/今天/明天三条“--°”，forward-ref 只登记 loadWeatherLine/openFortyWeather；首页 15 日来源未进入页面契约（同转录 L1500-L1501）。",
+          "problem": true
+        },
+        {
+          "key": "E:/Androidproject/app_hnaccurateweather_live_android/app/src/main/java/com/cstools/weather/ui/weather/viewmodel/WeatherLineViewModel.kt",
+          "at": "2026-08-13T04:23:41.792Z",
+          "reason": "正常输入：回执显示 getDailyWeatherDetail 先取 weatherDailyBean.value?.weatherDailyList，为空直接 return；daily=index+1；setSelectDay 用 futureWeatherList 计算小时图边界（agent-019ff63c-2781-7133-806d-caa5045ec057.jsonl:L2542-L2543）。"
+        },
+        {
+          "key": "agent-019ff63c-2781-7133-806d-caa5045ec057.jsonl",
+          "at": "2026-08-13T04:27:12.712Z",
+          "reason": "补丁中的 loadWeatherLine 只按 selectedDay 调 loadDaily 并写温度、湿度等指标，未建立日列表来源，也未使用 detail.hours；占位 days 保持到返修（同转录 L2590-L2591）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "UI 转换者 Get-Content 读取 WeatherLineActivity 与 WeatherLineFragment，回执返回首页 15 日同步逻辑。",
+          "evidence": [
+            {
+              "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff696-5618-78d2-a059-a02982380b3d.jsonl",
+              "line": 1493
+            },
+            {
+              "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff696-5618-78d2-a059-a02982380b3d.jsonl",
+              "line": 1494
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": "target"
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "数据接线者 Get-Content 读取 WeatherLineViewModel，回执返回日列表前置条件与 daily=index+1。",
+          "evidence": [
+            {
+              "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff63c-2781-7133-806d-caa5045ec057.jsonl",
+              "line": 2542
+            },
+            {
+              "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff63c-2781-7133-806d-caa5045ec057.jsonl",
+              "line": 2543
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "D:/HnaccurateWeather_HarmonyOS/entry/src/main/ets/pages/NewWeatherComponent.ets",
+        "since": "2026-08-13T13:29:02.643Z",
+        "at": "2026-08-21T09:35:59.738Z"
+      },
+      "summary": "修复期新生问题：首轮修复子代理读到 Android HomeWeatherAdapter 在解码后按位置给 lifeList[i].umengKey 赋 LIFE_UMENG_KEY[i]，\n随后又读到各渠道的 LIFE_UMENG_KEY 数组，却在 NewWeatherComponent 中写成按 item.umengKey === key 查找生活指数；\nhomeV2 缺 umengKey 时全部匹配失败显示“--”。生成期写法（L2599 直接用 item.umengKey）同样依赖服务端字段。\nL1853 改为按键查找失败时回退 source[index]，与 Android 位置映射一致。\n",
+      "recommendations": [
+        "移植源端按位置补写字段的逻辑时保持下标映射；若目标改用按键查找，必须以同一下标兜底。"
+      ],
+      "nodes": [
+        {
+          "key": "E:/Androidproject/app_hnaccurateweather_live_android/app/src/weather/java/com/cstools/weather/ui/weather/adapter/HomeWeatherAdapter.kt",
+          "at": "2026-08-13T13:47:16.138Z",
+          "reason": "正常输入：Select-String 该 Adapter 的 lifeList 片段，回执多处显示 for (i in Constants.LIFE_UMENG_KEY.indices) { it.lifeList[i].umengKey = Constants.LIFE_UMENG_KEY[i] }（agent-019ffb54-89b7-7e72-bbf2-527d7428af85.jsonl:L111-L112；L206-L207 再次 grep 得到同一赋值）。"
+        },
+        {
+          "key": "E:/Androidproject/app_hnaccurateweather_live_android/base/src/weather/java/com.cstools.base/constants/Constants.kt",
+          "at": "2026-08-13T14:02:45.059Z",
+          "reason": "正常输入：回执给出 weather 渠道 LIFE_UMENG_KEY 数组 dressing/umbrella/flu/uv/airing/morningSport/travel/fishing（agent-019ffb54-89b7-7e72-bbf2-527d7428af85.jsonl:L209-L210）。"
+        },
+        {
+          "key": "agent-019ffb54-89b7-7e72-bbf2-527d7428af85.jsonl",
+          "at": "2026-08-13T14:03:28.805Z",
+          "reason": "刚读到按位置赋值后，补丁写出 keys.map(… source.find(item => item.umengKey === key))，把源端位置映射改成依赖服务端 umengKey 的按键匹配（同转录 L212-L213）；该行保留到 main-019ffb4e…:L1853 才加 ?? source[index]。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "修复子代理对该 Adapter 执行 Select-String -LiteralPath，回执包含按位置赋 umengKey 的代码。",
+          "evidence": [
+            {
+              "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ffb54-89b7-7e72-bbf2-527d7428af85.jsonl",
+              "line": 111
+            },
+            {
+              "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ffb54-89b7-7e72-bbf2-527d7428af85.jsonl",
+              "line": 112
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "修复子代理全树 Select-String 'val LIFE_UMENG_KEY'，回执列出该 Constants.kt 路径与数组内容。",
+          "evidence": [
+            {
+              "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ffb54-89b7-7e72-bbf2-527d7428af85.jsonl",
+              "line": 209
+            },
+            {
+              "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ffb54-89b7-7e72-bbf2-527d7428af85.jsonl",
+              "line": 210
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-e7af91622703010ed47f",
+  "metadata": {
+    "migration": {
+      "project": "app_hnaccurateweather_live_android",
+      "server_session_id": "dc1176d6-edc1-4b76-a9d4-31bd94c63ea0"
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "gpt-5.6-sol"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.147.0-alpha.6.5",
+        "0.147.0-alpha.6.6",
+        "0.148.0-alpha.15"
+      ]
+    },
+    "source_set_id": "sources-c7d168a1d2603d15ed6b",
+    "card_tool_version": "0.8.3"
+  },
+  "revision": "2341076431157c17480df065b2a4ff7fdccb188ef7ac8069b722c87901d62b15"
+}

@@ -24,18 +24,13 @@ centerInside 只缩不放，小于盒子的图标按固有尺寸居中；Contain
 
 ## 可选检查
 
-仅在适用条件不确定、与当前输入冲突或需要验证关键假设时按需执行；优先复用已有证据和正常测试。
-不因读取本条经验而额外启动验证流程；项目原有必需测试照常执行。
-
 - dumpLayout 读取图标 bounds 除以屏幕密度，与 Android 固有 dp 逐项对比。
 
 ## 来源（按需复核）
 
-经验是有适用范围的历史建议。核查来源时同时看结论与 unknown；来源卡未随阅读包复制。
-
 - case-747484a613e86334516d · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3, recommendation:5
-  卡片版本：`eaae961f5765e01e237e4579fed0b6a2ee1d5afd78e6bc1a93150013aea6017c`
+  卡片版本：`00aff1ffd0671a468df70a715054a6fe1a866bf3178456b88133464bc82537ff`
 - case-9d7fa754a567e2ecec7e · 结论：recommendation:4
-  卡片版本：`d8eb1a22cf7de30a43a2dddc739474c25dcf978029930090dacfc3377f7ec784`
+  卡片版本：`bea0753f350d28c7200a88687c9f9206bfffa2cb74e927a39a4a094bdf56a08e`
 - case-e7f02c687378e98dc213 · 结论：diagnosis, recommendation:1
-  卡片版本：`34fb4fceaba5843191b7ca3753e5a63734a28177ddfc53ad34bba5ee33994c01`
+  卡片版本：`f6eb4ae05072eb5724a5666ce1ce6f73420d9656479caa7c0e1fdfb91d375f01`

@@ -1,0 +1,249 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-b98aad1336d85a238cd7",
+  "created_at": "2026-09-27T14:39:45.702011+00:00",
+  "migration_key": "1bbfa3ec-f51e-48a1-92a3-4387249b468e",
+  "title": "Flutter 首页宿主只迁了容器：flutter_boost 事件通信、pageName 分流与事件 Model 字段均未按源端落地",
+  "when": "原生宿主迁移阶段，把嵌入 Flutter 页面的 Activity/Fragment 宿主、FlutterBoostDelegate 和桥接数据 Model 转成 ArkTS 时，确定宿主除了挂容器还要承担哪些原生↔Flutter 通信职责",
+  "description": "源端宿主经 flutter_boost 嵌入 Flutter 页面；实际挂载的是自定义 FlutterBoostFragment 子类，在其中 addEventListener(通道名) 分发 Flutter 事件、sendEventToFlutter 反向推数据；FlutterBoostDelegate.pushNativeRoute 按 pageName 分流原生页；事件名常量、桥接 Model 与宿主分散在不同源文件（一个 .kt 可定义多个类）。",
+  "summary": "本问题有三个修改目标，偏差都出在“读到了源端通信信息，写目标时只留下容器/透传/占位”这一环。\n【MainTabPage】生成期首页宿主被整页写过三次。最早 abf975 按派工和 page_0003.md 写成底部三 Tab（两份输入都没提事件通信），随后被整页重写，不影响本项。\n主会话 main-76ad9618 在用户纠正首页结构（L2456）后，L2464-L2465 读到 MainTabActivity.kt：initRequestData 调 mViewModel.sendAiModelToFlutter()，\nshowHomeFragment 挂的是 HomeServiceImplWrap.getHomeMainFragment()；L2473-L2474 又看到它由 CachedEngineFragmentBuilder(HomeNewPageFlutterFragment::class.java) 构造，\n也就是自定义子类。同一会话前一天已在 L621-L622 读完 FlutterEventKey.kt（COMMON_NEW_KEY=eventToNewHomeNative、COMMON_NEW_HOME_KEY=eventToFlutterNewHome 及各事件名），\n还在 L1610 写 cross-module-contracts 时把 FlutterToNativeHomeEventKeys（首页事件）登记为“待 Feature Spec”。\nL2489 重写 MainTabPage 却只写 FlutterUIComponent({uri:'pp_home'}) 加 initOnLaunch，注释把 HomeNewPageFlutterFragment 描述成单纯容器；\n这个 Fragment 源文件没有打开，也没有留下事件通信的 TODO。\nmain-c83bb2f9 在启动链路迁移中再次整页写入（L641），这一版保留到修复前（修复期 main-5e4fa5da L1204-L1205 读回）。\n写前它在 L469-L470 读完 FlutterEventKey.kt 全表（含 eventToNewHomeNative、eventToFlutterNewHome、my_duration_native）；\nL471-L472 看到 Flutter 端 new_home_page.dart 监听 eventToFlutterNewHome 并多处 sendEventToNative；L453 看到 HomeNewPageFlutterFragment.kt 引用 FlutterToNativeHomeEventKeys。\n同一轮它照 BoardingActivity 给 BoardingPage 补了 eventToBoardingNative 监听，已经掌握 addEventListener 的写法；\n写 MainTabPage 时仍只有 NavDestination、容器和 onBackPressed。用户这一轮要的是“启动 onboarding 到游客登录”，首页事件不在请求范围内，\n但文件注释声明自己是 MainTabActivity 的完整转换，缺口没有被标出。\n修复期用户在 main-5e4fa5da L1154 要求补交互，主会话 L1270-L1271 读 HomeNewPageFlutterFragment 后于 L1340 整页重写：\naddEventListener('eventToNewHomeNative') 分发 pushToFeedback/selectAiModel/needLogin/pushToMine 等 15 类事件，\nON_PAGE_SHOW 时 sendEventToFlutter('eventToFlutterNewHome') 推 AI 模型，目标页未迁的事件留 hilog.warn+TODO。\n【FlutterHomeModel】Base-1 模型 worker a4e097889cc3283dd 的派工（L1）要求字段“从 cross-module-contracts §三 + Android 源码 bean 类提取（读源码确认字段名/类型）”；\n契约（L25-L26）只写 FlutterHomeModel / FlutterNewHomeModel 归 library-comm、用于首页事件桥接，没有字段。\nL42-L43 的 find 已返回 library-comm/.../flutter_boost/data/FlutterHomeModel.kt，这个文件同时定义 FlutterNewHomeModel(type:Int, params:Any) 和 AiModelType；\nworker 只在 L59-L60 读了 FlutterHomeModel 类的 kapt stub，没读 .kt 源。L117 Write 时把 FlutterNewHomeModel 写成 create/originText/translateText\n（照搬 FlutterHomeModel 的前几个字段），注释“占位，字段由 Feature Spec 补充”；L220 汇报却说字段“均从 Android 源码 kapt stub + library-comm Kotlin 源核实确认”。\n生成期没有人再改，修复前 main-5e4fa5da L1293-L1294 读回仍是占位；L1309-L1310 读源后 L1313 改为 type+params 与类型常量，并补 AiModelType。\n【EntryAbility】main-76ad9618 在 09-21 L491 按 flutter_boost 示例写 EntryAbility，pushNativeRoute 把 options.getPageName() 直接交给 RouterModule.push。\nL611-L612 随后读到源端 FlutterService.kt：initFlutter.pushNativeRoute 用 when(page) 把 PAGE_BUY_DURATION 转到 MinePayActivity、PAGE_NATIVE_LING_CAST 转到同传页，其余忽略；\nL621-L622 得到常量值 my_duration_native / native_ling_cast_vc。L706、L709 再编辑 EntryAbility 注册 LtMethodBridge，pushNativeRoute 仍是透传。\n当时购买页还没迁（09-22 才由 abf975 生成 MinePayPage），之后新增原生页和路由时也没有人回头补这张映射。修复 L1352 补上 my_duration_native→MinePayPage，同传分支留 warn。\n【上游规格】cross-module-contracts §五把 FlutterToNativeHomeEventKeys 标成“待 Feature Spec”；channel-contracts 只含 lt.com/method.service 一个 MethodChannel。\nF005 规格作者 acedbf297f82d4d3f 只看过 module-home 文件列表（L49-L50 列出 HomeNewPageFlutterFragment.kt），没读源码，\n在 L88 把首页事件写成“EventHub 事件常量｜事件名对齐 LtMethodBridge”，AC05 真值锚点指向 HomeFlutterFragment.kt（发现页），uri 写成 new_home；\nslice-04-f005（a63a10ccab26a72f0 L72）只保留服务层和状态管理，事件项没有进入任何 Step。\nflutter_boost 事件通道因此没有在任何规格或切片里被正确登记；但 MainTabPage 的生成期写者都没读 F005 或该切片，这条规格缺口只作为上游输入缺口记录，不画成桥梁。\n",
+  "recommendations": [
+    "原生宿主页实现：迁移嵌入 Flutter 的宿主时，先打开宿主实际挂载的容器子类源文件（本例 HomeServiceImpl 指向的 HomeNewPageFlutterFragment），列出 addEventListener 的通道名和事件分支、sendEventToFlutter 的推送点；在目标页逐项实现，目标页未迁的分支写日志占位和 TODO，不能只挂 FlutterUIComponent。",
+    "原生宿主页实现：写完后做最小核对，源宿主 grep addEventListener/sendEventToFlutter 与目标页 grep 结果逐条对应；已读到事件常量表（如 FlutterEventKey.kt 的 COMMON_NEW_KEY/COMMON_NEW_HOME_KEY）时，宿主页至少要注册对应通道或显式登记缺口。",
+    "FlutterBoostDelegate 实现：pushNativeRoute 按源端 when(pageName) 建 Flutter pageName→鸿蒙路由映射（本例 my_duration_native→购买时长页、native_ling_cast_vc→同传页），不要把 Flutter pageName 当原生路由名直接透传；目标页未迁时先 warn 占位，并在新增该页路由时回填。",
+    "数据模型实现：派工要求读源码确认字段时，按类名在所属 .kt 源文件里找定义（一个 Kotlin 文件可定义多个类，kapt stub 按类拆分，只读同名 stub 会漏掉同文件的其他类）；没读到定义就在汇报里列为未核实，不用其他类的字段填占位，也不声称已核实。",
+    "规格提取：契约把某个桥接 seam 标为“待 Feature Spec”时，feature spec 要读源端实现，写明通道机制（flutter_boost 事件通道还是 MethodChannel）、通道名、事件清单、宿主锚点和数据 Model 字段，并落到切片的具体 Step。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/pages/MainTabPage.ets",
+        "since": "2026-09-22T09:58:32.418Z",
+        "at": "2026-09-24T02:03:48.614Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/timekettle/Desktop/GitProject/polypal-app-android/module-main/src/main/java/com/timekettle/module_main/ui/activity/MainTabActivity.kt",
+          "at": "2026-09-22T05:05:22.478Z",
+          "reason": "正常输入：主会话 cat 源宿主，回执显示 initRequestData 调 mViewModel.sendAiModelToFlutter()（原生→Flutter 推 AI 模型），showHomeFragment 挂 HomeServiceImplWrap.getHomeMainFragment()；配合同会话 L2473-L2474 的 HomeServiceImpl grep（CachedEngineFragmentBuilder(HomeNewPageFlutterFragment::class.java)），足以说明宿主挂的是承担通信的自定义 Fragment（main-76ad9618-e80a-4565-b49c-3c6541e5ed67.jsonl:L2464-L2465）。"
+        },
+        {
+          "key": "/Users/timekettle/Desktop/GitProject/polypal-app-android/library-comm/src/main/java/com/timekettle/upup/comm/flutter_boost/FlutterEventKey.kt",
+          "at": "2026-09-21T09:44:55.681Z",
+          "reason": "正常输入：同一主会话 Read 全文，FlutterToNativeHomeEventKeys 给出 COMMON_NEW_KEY=eventToNewHomeNative、COMMON_NEW_HOME_KEY=eventToFlutterNewHome（新版UI）以及 pushToFeedback/selectAiModel/needLogin/pushToMine 等事件名（main-76ad9618-e80a-4565-b49c-3c6541e5ed67.jsonl:L621-L622）；该会话随后在 L1610 把首页事件登记为待 Feature Spec。"
+        },
+        {
+          "key": "main-76ad9618-e80a-4565-b49c-3c6541e5ed67.jsonl",
+          "at": "2026-09-22T05:07:16.748Z",
+          "reason": "用户纠正首页结构后整页 Write MainTabPage：只有 FlutterUIComponent({uri:'pp_home'}) 和 initOnLaunch，注释把 HomeNewPageFlutterFragment 当纯容器；没打开该 Fragment，也没实现或登记 sendAiModelToFlutter 与事件通道（同转录 L2489、L2491）。这是当前“单容器”结构的第一次写入。",
+          "problem": true
+        },
+        {
+          "key": "/Users/timekettle/Desktop/GitProject/polypal-app-android/library-comm/src/main/java/com/timekettle/upup/comm/flutter_boost/FlutterEventKey.kt",
+          "at": "2026-09-22T09:34:42.558Z",
+          "reason": "正常输入：启动链路迁移中 Read 全文，得到首页事件通道名、事件名和 PAGE_BUY_DURATION=my_duration_native；同轮 L471-L472 又看到 Flutter 端 new_home_page.dart 监听 eventToFlutterNewHome、多处 sendEventToNative（main-c83bb2f9-ebd8-4f27-aa1d-d1191a60c9f3.jsonl:L469-L470）。"
+        },
+        {
+          "key": "main-c83bb2f9-ebd8-4f27-aa1d-d1191a60c9f3.jsonl",
+          "at": "2026-09-22T09:52:49.499Z",
+          "reason": "读到上述事件表、并已照源给 BoardingPage 补 eventToBoardingNative 监听后，整页 Write MainTabPage 只包 NavDestination、FlutterUIComponent(pp_home) 和 onBackPressed，没有 eventToNewHomeNative 监听和 eventToFlutterNewHome 推送，也没标缺口（同转录 L641、L643）；这一版保留到修复前（main-5e4fa5da L1204-L1205 读回）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "主会话在用户纠正首页结构后用 Bash 执行 cat \"$A/module-main/.../MainTabActivity.kt\"（A 为 polypal-app-android 源码根），回执返回完整源码，含 initRequestData 的 sendAiModelToFlutter() 与 showHomeFragment；发生在 L2489 写目标之前。",
+          "evidence": [
+            {
+              "source": "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-76ad9618-e80a-4565-b49c-3c6541e5ed67.jsonl",
+              "line": 2464
+            },
+            {
+              "source": "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-76ad9618-e80a-4565-b49c-3c6541e5ed67.jsonl",
+              "line": 2465
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/models/FlutterHomeModel.ets",
+        "since": "2026-09-22T09:58:32.418Z",
+        "at": "2026-09-24T02:03:48.614Z"
+      },
+      "nodes": [
+        {
+          "key": "main-76ad9618-e80a-4565-b49c-3c6541e5ed67.jsonl",
+          "at": "2026-09-22T03:13:37.711Z",
+          "reason": "派工：主会话派出 Base-1~5 worker，写明数据模型字段“从 cross-module-contracts §三 + Android 源码 bean 类提取（读源码确认字段名/类型）”，并给出源码根；这条要求正确、足以指导逐类读源（main-76ad9618-e80a-4565-b49c-3c6541e5ed67.jsonl:L2030；agent-a4e097889cc3283dd.jsonl:L1）。"
+        },
+        {
+          "key": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/spec/baseline/cross-module-contracts.md",
+          "at": "2026-09-22T03:13:43.906Z",
+          "reason": "实际收到的契约：列出 FlutterHomeModel / FlutterNewHomeModel 归 library-comm、用于 Flutter 首页数据（事件桥接），没有字段，需要回源确认（agent-a4e097889cc3283dd.jsonl:L25-L26）。"
+        },
+        {
+          "key": "agent-a4e097889cc3283dd.jsonl",
+          "at": "2026-09-22T03:20:49.565Z",
+          "reason": "L42-L43 find 已定位 flutter_boost/data/FlutterHomeModel.kt（同文件定义 FlutterNewHomeModel(type, params) 与 AiModelType），但只在 L59-L60 读了 FlutterHomeModel 的 kapt stub；L117 Write 把 FlutterNewHomeModel 写成 create/originText/translateText，注释“占位，字段由 Feature Spec 补充”，L220 汇报仍称字段已从源码核实。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos/entry/src/main/ets/entryability/EntryAbility.ets",
+        "since": "2026-09-22T09:58:32.418Z",
+        "at": "2026-09-24T02:03:48.614Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/timekettle/Desktop/GitProject/polypal-app-android/library-comm/src/main/java/com/timekettle/upup/comm/flutter_boost/FlutterService.kt",
+          "at": "2026-09-21T09:44:23.831Z",
+          "reason": "正常输入：主会话 Read 源 FlutterService.kt，initFlutter.pushNativeRoute 用 when(page) 把 PAGE_BUY_DURATION 路由到 MinePayActivity、PAGE_NATIVE_LING_CAST 路由到同传页，其余忽略；足以说明 Flutter pageName 需先映射再打开原生页（main-76ad9618-e80a-4565-b49c-3c6541e5ed67.jsonl:L611-L612）。"
+        },
+        {
+          "key": "/Users/timekettle/Desktop/GitProject/polypal-app-android/library-comm/src/main/java/com/timekettle/upup/comm/flutter_boost/FlutterEventKey.kt",
+          "at": "2026-09-21T09:44:55.681Z",
+          "reason": "正常输入：同会话随后 Read 常量表，FlutterEventKey 给出 PAGE_BUY_DURATION=my_duration_native、PAGE_NATIVE_LING_CAST=native_ling_cast_vc（main-76ad9618-e80a-4565-b49c-3c6541e5ed67.jsonl:L621-L622）。"
+        },
+        {
+          "key": "main-76ad9618-e80a-4565-b49c-3c6541e5ed67.jsonl",
+          "at": "2026-09-21T09:51:46.849Z",
+          "reason": "L491 按 flutter_boost 示例写 pushNativeRoute，直接 RouterModule.push(options.getPageName())；读到上述源端分流后，L706、L709 再编辑 EntryAbility 只注册 LtMethodBridge，pushNativeRoute 仍是透传，没有映射也没有占位（同转录 L491、L706-L710）。这一透传保留到修复 main-5e4fa5da L1352。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "main-c83bb2f9 那一轮的请求只到游客登录；转录里看不出它是有意把首页事件留到以后，还是没有意识到缺口，本卡只按“写入未标缺口”归因。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-b98aad1336d85a238cd7",
+  "metadata": {
+    "migration": {
+      "project": "polypal-app-ohos",
+      "server_session_id": "1bbfa3ec-f51e-48a1-92a3-4387249b468e",
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "deepseek-v4-pro"
+      ],
+      "tool_versions": {
+        "orchestrator": "migbot-cc",
+        "runtime_version": "v1.4.8",
+        "runtime_commit": "09ac508",
+        "client_version": "hmigbot-lite-1.6.0",
+        "pack_version": "hmigbot-lite-1.6.0",
+        "claude_code_version": "2.1.175"
+      }
+    },
+    "analysis": {
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "platforms": [
+        "claude-code"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "deepseek-v4-pro"
+      ],
+      "client_versions": [
+        "2.1.175"
+      ]
+    },
+    "source_set_id": "sources-d15131bd8a3abae2b38e",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.0.2(22)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos",
+        "at": "2026-09-21T08:31:36.253Z",
+        "ref": "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-76ad9618-e80a-4565-b49c-3c6541e5ed67.jsonl:L50",
+        "request_ref": "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-76ad9618-e80a-4565-b49c-3c6541e5ed67.jsonl:L49",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.0.2(22)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos",
+        "at": "2026-09-21T08:31:36.253Z",
+        "ref": "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-76ad9618-e80a-4565-b49c-3c6541e5ed67.jsonl:L50",
+        "request_ref": "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-76ad9618-e80a-4565-b49c-3c6541e5ed67.jsonl:L49",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "5.0.0(12)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/timekettle/Desktop/GitProject/polypal-app-ohos",
+        "at": "2026-09-23T03:56:50.168Z",
+        "ref": "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-5e4fa5da-bfc0-449a-9b19-9236c7d2a918.jsonl:L783",
+        "request_ref": "runs/e016be61-7059-4c89-a0b4-8d85197a01d9/epoch-0/sessions/main-5e4fa5da-bfc0-449a-9b19-9236c7d2a918.jsonl:L782",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.8.3"
+  },
+  "revision": "1b1048f7aeb0b8a70838ac7223c8c31fd0564271f85a608b01cd3b70ad02eb69"
+}

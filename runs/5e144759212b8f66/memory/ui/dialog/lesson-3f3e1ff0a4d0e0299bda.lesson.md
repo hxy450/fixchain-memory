@@ -24,7 +24,5 @@ CustomDialogController 的 builder 约定是 @CustomDialog 组件；把 @Compone
 
 ## 来源（按需复核）
 
-经验是有适用范围的历史建议。核查来源时同时看结论与 unknown；来源卡未随阅读包复制。
-
 - case-18113e210e1369d79e1d · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:4
-  卡片版本：`74f215ee70468d99d599856323715d9f955e3102e23b4e774dadfccd1dce2a6f`
+  卡片版本：`f118b24992c47615a323e9cd4cf8c08e8e3a7acd66b35477acf908f62cb6e81a`

@@ -1,0 +1,347 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-2bb1f7385338bea7e396",
+  "created_at": "2026-09-27T18:03:18.472675+00:00",
+  "migration_key": "9264617d-5373-4aca-8c7d-94c70606545c",
+  "title": "开关控制的常驻蓝牙通知被绑到页面级订阅，离开蓝牙页或冷启动后不再更新",
+  "when": "系统能力迁移阶段（规格提取与 ViewModel/服务实现），为“通知栏提醒”这类由开关控制、由蓝牙事件驱动的常驻通知确定订阅归属与生命周期时",
+  "description": "Android 在 BlueToothFragment.initView 注册一次 BlueToothUtil 监听且不注销，连接/断开/电量回调在 notificationHint 为真时以固定 ID 101、setOngoing 更新通知；二级 DeviceConnectActivity 的监听随页面注销且不发通知。ArkTS 侧主壳以 if/else 条件渲染 Tab，NavDestination 页面在 aboutToAppear/aboutToDisappear 激活/释放 ViewModel 订阅。",
+  "summary": "最终修复（ROUND45，agent-01a0a3b0…jsonl:L159-L324、L250）把通知链从页面 ViewModel 移到新建的 DeviceNotificationService：\n偏好开启后在 AppAssembly 安装时 restore 并常驻监听、前台 reconcile 复核系统许可，连接/断开/电量先回读蓝牙真值再更新固定 ID 101，\nrelease 不再撤销通知；同时删除 BluetoothViewModel 与 DeviceConnectViewModel 回调里的 notificationService.updateConnection。\n修复前（09-15 06:11 读取，L49、L56）BluetoothViewModel 仅在 BluetoothPage 挂载时 activateEvents，aboutToDisappear 即 remove 回调并\nstopObserving；Index 以 if(currentTab===1) 条件渲染蓝牙页（修复者 L217 读回），所以切走 Tab 或冷启动后连接/电量不再更新通知。\nF006 分支（本卡代表链）：f006_bluetooth_impl 写前读到 F006 规格 D-014/D-015“监听按页面/开关生命周期运行并释放”、\n“通知开关与系统许可共同控制连接/断开/电量通知”，difference-list B-BT-NOTIFY 指出“连接/断开通知链不完整”（agent-01a08e25-d1d1…jsonl:L48），\n又读到 Android BlueToothFragment 只注册不注销、通知仅在 Fragment 回调中更新，DeviceConnectActivity 在 onDestroy 注销且不发通知（L142），\nNotificationHelper 为 ID 101 的 ongoing 通知（L166），Index 条件渲染 Tab（L238）。它仍删除重建 BluetoothViewModel，\n把通知更新留在页面级 activateEvents/deactivate 回调中（L356-L364；电量回调按 connected=true 发布与 Android onBatteryCallback 一致，修复改为回读真值属修复时收敛，不作偏差归因），\n并新建 DeviceConnectViewModel 作为第二个页面级发布者，连接变化以 battery=-1 覆盖电量文本（L370-L373）。\n这些片段一直保留到 ROUND45 修复前（修复补丁 L179、L186 删除的正是这些调用）。\n生成期起点：slice02_vm_worker 写前收到 F003 规格 AC08“连接/断开/电量回调更新通知文案；关闭提醒立即取消常驻通知”→ DeviceNotificationService.update\n及 D-009 单一 DeviceNotificationService（agent-01a08b8f-4a5a…jsonl:L32），却把通知更新写进页面级 BluetoothViewModel 的回调并以 load/deactivate\n供“page activation and release”绑定（L73-L74、L80）；同一输入的 base_class 行“迁移为页面生命周期订阅/注销”与 D-014 细则也指向页面生命周期，\n属输入含混。之后巡检 UI01-08 按“页面激活订阅、离页解除”开方（agent-01a08bc3-6dd2…jsonl:L178），修复者据此接线（agent-01a08bc3-3474…jsonl:L441-L442），\n生成期同一模式由此成形；F006 在收到明确的开关语义后又重写了同一片段。\n另：09-15 08:08 用户再报“通知栏提醒点击没反应”，ROUND48 修复开关图标刷新、首次发布创建通知分类与失败回滚（agent-01a0a43e…jsonl:L9 继承答复），其写入不在材料内，本卡不归因。\n",
+  "recommendations": [
+    "规格提取阶段：同一源监听有多个消费者时按生命周期拆开写契约——页面列表/弹窗随页面，常驻通知随“通知开关+系统许可”（应用级，冷启动若偏好开启即恢复，关闭开关才撤销），并指定唯一发布服务。",
+    "实现阶段：把开关控制的常驻通知做成应用级单例服务（setEnabled/restore/reconcile/release），在能力装配处 restore、前台 reconcile；页面 ViewModel 只转发开关动作，aboutToDisappear 不释放通知所需的订阅。",
+    "写页面级订阅前先查目标壳层真实存活期：Tabs 是否 if/else 条件渲染、页面是否 NavDestination 出栈；源端只有 registerListener 没有注销时，不要机械补“离页注销”。",
+    "只在源端真正调用通知的回调里发布通知（本例仅 BlueToothFragment）；二级页（DeviceConnectActivity 对应页）不新增发布者，避免以 battery=-1 覆盖电量文本。",
+    "最小自检：开启提醒后切到其他 Tab、强停冷启，再制造连接/断开/电量事件，确认固定 ID 101 通知仍更新；关闭开关后通知撤销。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "D:/temp_ctools/app_shared_bike_riding_records_harmony/entry/src/main/ets/viewmodels/BluetoothViewModel.ets",
+        "since": "2026-09-10T19:10:12.041Z",
+        "at": "2026-09-15T09:23:49.093Z"
+      },
+      "nodes": [
+        {
+          "key": "D:/temp_ctools/app_shared_bike_riding_records_harmony/spec/baseline/features/F003-bluetooth.md",
+          "at": "2026-09-10T13:44:21.672Z",
+          "reason": "输入（含混）：slice02_vm_worker 读取 F003 规格、slice-02 计划与决策账本，回执含 AC08“连接/断开/电量回调更新通知文案；关闭提醒立即取消常驻通知”（标:DeviceNotificationService.update）、服务层 DeviceNotificationService 接口与 D-009 单一 DeviceNotificationService；同一回执 base_class 行写“迁移为页面生命周期订阅/注销”，计划集成点只写 BluetoothPage.onNotificationToggle → NotificationService.update()（agent-01a08b8f-4a5a-78e1-8353-bd8dbc151372.jsonl:L29、L32）。"
+        },
+        {
+          "key": "D:/app-shared-bike-riding-records-android/app/src/main/java/com/shared/riding/ui/bluetooth/BlueToothFragment.kt",
+          "at": "2026-09-10T13:44:38.730Z",
+          "reason": "正常输入：锚点读取回执给出 initView() 中 BlueToothUtil.registerListener(this) 且 Fragment 无注销，onDeviceConnected/onDeviceDisconnected/onBatteryCallback 在 notificationHint 为真时 updateNotificationTitle；同一回执 NotificationHelper 以 CUSTOM_NOTIFICATION_ID=101、setOngoing(true) 发布（同转录 L36、L39）。"
+        },
+        {
+          "key": "01a08b8f-4a5a-78e1-8353-bd8dbc151372",
+          "at": "2026-09-10T13:46:38.063Z",
+          "reason": "slice02_vm_worker：Add File BluetoothViewModel，把通知更新写成页面级 ViewModel 的 onDeviceConnectionChanged/onBatteryChanged 内 notificationService.updateConnection，并提供 load()/deactivate()；随后 source notes 写明供 closer 绑定“page activation and release”（L73-L74、L80）。AC08/D-009 已把通知链指向独立服务，此处首次把它归入页面生命周期；因同一输入也写页面生命周期订阅，只认定为含混输入下的实现选择。",
+          "problem": true
+        },
+        {
+          "key": "D:/temp_ctools/app_shared_bike_riding_records_harmony/spec/features/2026-09-11-F006-five-page-flow-closure.md",
+          "at": "2026-09-11T01:47:57.148Z",
+          "reason": "正常输入：f006_bluetooth_impl 读取 F006 规格、计划与 difference-list，回执含 D-014/D-015“监听按页面/开关生命周期运行并释放”、Bluetooth 可达链“通知开关与系统许可共同控制连接/断开/电量通知”，B-BT-NOTIFY“连接/断开通知链不完整”→“通知开关与系统许可共同生效；连接/断开/电量更新通知”（agent-01a08e25-d1d1-7e40-81ae-77b4e7f2f3a7.jsonl:L45、L48）。"
+        },
+        {
+          "key": "D:/app-shared-bike-riding-records-android/app/src/main/java/com/shared/riding/ui/bluetooth/BlueToothFragment.kt",
+          "at": "2026-09-11T01:49:56.099Z",
+          "reason": "正常输入：全文读取回执显示 initView 注册监听且无注销，通知只在 Fragment 的连接/断开/电量回调中按 notificationHint 更新；同一回执 DeviceConnectActivity 在 onDestroy unRegisterListener（同转录 L139、L142）。"
+        },
+        {
+          "key": "D:/app-shared-bike-riding-records-android/app/src/main/java/com/shared/riding/manager/NotificationHelper.kt",
+          "at": "2026-09-11T01:50:27.965Z",
+          "reason": "正常输入：NotificationHelper 全文回执给出 CUSTOM_NOTIFICATION_ID=101、setOngoing(true) 的常驻通知及 cancelCustomNotification 只在关闭开关时撤销（同转录 L163、L166）。"
+        },
+        {
+          "key": "01a08e25-d1d1-7e40-81ae-77b4e7f2f3a7",
+          "at": "2026-09-11T02:00:25.746Z",
+          "reason": "f006_bluetooth_impl：已读到上述开关语义并读回 Index 以 if(currentTab===1) 条件渲染蓝牙页（L235-L238），仍删除重建 BluetoothViewModel：通知更新只在 load→activateEvents 注册的回调里执行，deactivate 即 remove 回调并 stopObserving，开启开关时只按当下状态补发一次，冷启动不恢复（L356-L364）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "slice02_vm_worker 以 exec 执行 Get-Content -Raw 读取 F003-bluetooth.md、slice-02 计划并 rg 决策账本，CommandExecution 完成且回执含 AC08、DeviceNotificationService 与 base_class 页面生命周期行；在其写 BluetoothViewModel 之前。",
+          "evidence": [
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b8f-4a5a-78e1-8353-bd8dbc151372.jsonl",
+              "line": 29
+            },
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b8f-4a5a-78e1-8353-bd8dbc151372.jsonl",
+              "line": 31
+            },
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b8f-4a5a-78e1-8353-bd8dbc151372.jsonl",
+              "line": 32
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "同一代理 exec 逐个 Get-Content -Raw 读取五个 Android 锚点，CommandExecution 完成，回执含 BlueToothFragment 的 registerListener 与通知回调；在写 ViewModel 之前。",
+          "evidence": [
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b8f-4a5a-78e1-8353-bd8dbc151372.jsonl",
+              "line": 36
+            },
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b8f-4a5a-78e1-8353-bd8dbc151372.jsonl",
+              "line": 38
+            },
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b8f-4a5a-78e1-8353-bd8dbc151372.jsonl",
+              "line": 39
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target",
+          "force": true,
+          "reason": "同一代理 exec 调 apply_patch Add File BluetoothViewModel.ets，FileChange 完成、回执 {}；这是通知更新首次进入页面级 ViewModel 的写入。",
+          "evidence": [
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b8f-4a5a-78e1-8353-bd8dbc151372.jsonl",
+              "line": 73
+            },
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b8f-4a5a-78e1-8353-bd8dbc151372.jsonl",
+              "line": 74
+            },
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b8f-4a5a-78e1-8353-bd8dbc151372.jsonl",
+              "line": 76
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": 7,
+          "force": true,
+          "reason": "f006_bluetooth_impl 以 exec Get-Content 逐行读取 F006 规格、计划、difference-list 与 h-targets，CommandExecution 完成且回执含 D-014/D-015 与 B-BT-NOTIFY；早于其重建 BluetoothViewModel。",
+          "evidence": [
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08e25-d1d1-7e40-81ae-77b4e7f2f3a7.jsonl",
+              "line": 45
+            },
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08e25-d1d1-7e40-81ae-77b4e7f2f3a7.jsonl",
+              "line": 47
+            },
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08e25-d1d1-7e40-81ae-77b4e7f2f3a7.jsonl",
+              "line": 48
+            }
+          ]
+        },
+        {
+          "from": 5,
+          "to": 7,
+          "force": true,
+          "reason": "同一代理 exec 逐行读取 BlueToothFragment.kt 与 DeviceConnectActivity.kt 全文，CommandExecution 完成、回执含 initView 注册与通知回调。",
+          "evidence": [
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08e25-d1d1-7e40-81ae-77b4e7f2f3a7.jsonl",
+              "line": 139
+            },
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08e25-d1d1-7e40-81ae-77b4e7f2f3a7.jsonl",
+              "line": 141
+            },
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08e25-d1d1-7e40-81ae-77b4e7f2f3a7.jsonl",
+              "line": 142
+            }
+          ]
+        },
+        {
+          "from": 6,
+          "to": 7,
+          "force": true,
+          "reason": "同一代理 exec 逐行读取 NotificationHelper.kt 等文件，CommandExecution 完成、回执含 CUSTOM_NOTIFICATION_ID=101 与 setOngoing(true)。",
+          "evidence": [
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08e25-d1d1-7e40-81ae-77b4e7f2f3a7.jsonl",
+              "line": 163
+            },
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08e25-d1d1-7e40-81ae-77b4e7f2f3a7.jsonl",
+              "line": 165
+            },
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08e25-d1d1-7e40-81ae-77b4e7f2f3a7.jsonl",
+              "line": 166
+            }
+          ]
+        },
+        {
+          "from": 7,
+          "to": "target",
+          "force": true,
+          "reason": "同一代理先 Delete File 再 Add File 重建 BluetoothViewModel.ets，Add 的 FileChange 完成、回执 {}；页面级通知回调在此重写。",
+          "evidence": [
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08e25-d1d1-7e40-81ae-77b4e7f2f3a7.jsonl",
+              "line": 361
+            },
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08e25-d1d1-7e40-81ae-77b4e7f2f3a7.jsonl",
+              "line": 362
+            },
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08e25-d1d1-7e40-81ae-77b4e7f2f3a7.jsonl",
+              "line": 364
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "D:/temp_ctools/app_shared_bike_riding_records_harmony/entry/src/main/ets/viewmodels/DeviceConnectViewModel.ets",
+        "since": "2026-09-10T19:10:12.041Z",
+        "at": "2026-09-15T09:23:49.093Z"
+      },
+      "summary": "F006 实现者读到 Android DeviceConnectActivity 的监听随页面注销且不调用 NotificationHelper，通知只由 BlueToothFragment 更新；\n新建 DeviceConnectViewModel 时却在页面激活的连接/电量回调里再次发布通知，连接变化以 battery=-1 调 updateConnection，\n与 BluetoothViewModel 构成两个页面级发布者。ROUND45 删除这两处调用及 NotificationService 依赖（agent-01a0a3b0…jsonl:L186-L187）。\n",
+      "recommendations": [
+        "只在源端真正调用通知的回调里发布通知；二级设备页只刷新列表/弹窗，通知统一交给应用级通知服务。"
+      ],
+      "nodes": [
+        {
+          "key": "D:/temp_ctools/app_shared_bike_riding_records_harmony/spec/features/2026-09-11-F006-five-page-flow-closure.md",
+          "at": "2026-09-11T01:47:57.148Z",
+          "reason": "正常输入：F006 规格与 difference-list 要求通知开关与系统许可共同控制连接/断开/电量通知，B-BT-DEVICE 只要求设备页发现/配对/连接/断开与成功失败弹窗（agent-01a08e25-d1d1-7e40-81ae-77b4e7f2f3a7.jsonl:L45、L48）。"
+        },
+        {
+          "key": "D:/app-shared-bike-riding-records-android/app/src/main/java/com/shared/riding/ui/bluetooth/activity/DeviceConnectActivity.kt",
+          "at": "2026-09-11T01:49:56.099Z",
+          "reason": "正常输入：全文回执显示 DeviceConnectActivity 在创建时 registerListener、onDestroy unRegisterListener；onDeviceConnected/Disconnected 只 contactData 刷新列表，onBatteryCallback 只按 autoConnect 弹连接成功框，不调用 NotificationHelper（同转录 L139、L142）。"
+        },
+        {
+          "key": "01a08e25-d1d1-7e40-81ae-77b4e7f2f3a7",
+          "at": "2026-09-11T02:01:51.621Z",
+          "reason": "f006_bluetooth_impl：Add File DeviceConnectViewModel，在页面激活的 connection 回调中 updateConnection(connected||…, -1)、battery 回调中 updateConnection(true, level)，新增了源端没有的第二个页面级通知发布者（L370-L373）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "f006_bluetooth_impl 以 exec 读取 F006 规格与 difference-list，CommandExecution 完成、回执含通知与设备页验收要求；早于其新建 DeviceConnectViewModel。",
+          "evidence": [
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08e25-d1d1-7e40-81ae-77b4e7f2f3a7.jsonl",
+              "line": 45
+            },
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08e25-d1d1-7e40-81ae-77b4e7f2f3a7.jsonl",
+              "line": 47
+            },
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08e25-d1d1-7e40-81ae-77b4e7f2f3a7.jsonl",
+              "line": 48
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "同一代理 exec 逐行读取 DeviceConnectActivity.kt 全文，CommandExecution 完成、回执含 onDestroy unRegisterListener 与只刷新列表/弹窗的回调。",
+          "evidence": [
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08e25-d1d1-7e40-81ae-77b4e7f2f3a7.jsonl",
+              "line": 139
+            },
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08e25-d1d1-7e40-81ae-77b4e7f2f3a7.jsonl",
+              "line": 141
+            },
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08e25-d1d1-7e40-81ae-77b4e7f2f3a7.jsonl",
+              "line": 142
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target",
+          "force": true,
+          "reason": "同一代理 exec 调 apply_patch Add File DeviceConnectViewModel.ets，FileChange 完成、回执 {}。",
+          "evidence": [
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08e25-d1d1-7e40-81ae-77b4e7f2f3a7.jsonl",
+              "line": 370
+            },
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08e25-d1d1-7e40-81ae-77b4e7f2f3a7.jsonl",
+              "line": 371
+            },
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08e25-d1d1-7e40-81ae-77b4e7f2f3a7.jsonl",
+              "line": 373
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "f006_bluetooth_impl 与 slice02_vm_worker 的派工正文（agent-01a08e25-d1d1…jsonl:L20、agent-01a08b8f-4a5a…jsonl:L10）为加密内容，未核派工是否另有生命周期限制。",
+    "生成期页面生命周期映射的上游是 F003 规格 base_class 行与 D-014 细则（规格写入见 agent-01a08add…jsonl:L350-L351），本卡在 VM worker 处停止并标注输入含混，未继续追规格作者写前输入。"
+  ],
+  "unresolved_targets": [
+    {
+      "key": "D:/temp_ctools/app_shared_bike_riding_records_harmony/entry/src/main/ets/AppAssembly.ets",
+      "reason": "ROUND45 在装配根新增 DeviceNotificationService，installCapabilities 调 restore、refreshForegroundCapabilities 调 reconcile、releaseCapabilities 改调 deviceNotificationService.release()（agent-01a0a3b0…jsonl:L193-L194、L302-L303、L323-L324），随后 release 去掉撤销通知（L266-L267）。生成期 releaseCapabilities 中的 notificationService.cancel() 由 01a08bc3-3474 于 2026-09-10T15:06:06Z 写入（agent-01a08bc3-3474…jsonl:L457-L458），该代理写前未读取 Android 通知语义或 F003-AC08，派工内容加密，未核其输入；冷启不恢复与本卡页面绑定同源，但未单独画链。"
+    },
+    {
+      "key": "D:/temp_ctools/app_shared_bike_riding_records_harmony/entry/src/main/ets/services/NotificationService.ets",
+      "reason": "ROUND45 对该文件的修改包括发布不可用错误码返回 false、撤销时忽略 1600007、isAlertOnce（agent-01a0a3b0…jsonl:L159-L160），状态文案改为 Android 的“设备已连接/暂无匹配设备”资源（L372-L373），许可判断加查 SERVICE_INFORMATION slot 并在拒绝后跳应用设置（L505-L506），构建修复补接口实现（agent-01a0a3b7…jsonl:L143-L144）；ROUND48“首次发布创建通知分类”的写入不在材料内。生成期创建者（agent-01a08b8f-0b80…jsonl:L137-L138）已按 ID 101、isOngoing 发布；文案与 slot 等分项成因不同于本卡生命周期偏差，未逐项追写前输入。"
+    },
+    {
+      "key": "D:/temp_ctools/app_shared_bike_riding_records_harmony/entry/src/main/ets/pages/BluetoothPage.ets",
+      "reason": "ROUND45 只为开启失败补 toast 与文案（agent-01a0a3b0…jsonl:L273-L274）；ROUND48 的开关图标刷新/失败回滚写入不在材料内（仅 agent-01a0a43e…jsonl:L9 继承答复），未追其生成来源。"
+    }
+  ],
+  "job": "issue-2bb1f7385338bea7e396",
+  "metadata": {
+    "migration": {
+      "project": "骑行记录",
+      "server_session_id": "9264617d-5373-4aca-8c7d-94c70606545c"
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "gpt-5.6-sol",
+        "gpt-5.6-terra",
+        "gpt-6-astra"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.153.4"
+      ]
+    },
+    "source_set_id": "sources-51973a3274ea587edce3",
+    "card_tool_version": "0.8.3"
+  },
+  "revision": "9f4af4ce005700de9eddebf85c8c007eed2fc93e951190ea169b51bac19d3977"
+}

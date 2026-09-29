@@ -24,14 +24,9 @@ WebView 页面实现与修复阶段，决定宿主原生返回/标题栏在 H5 �
 
 ## 可选检查
 
-仅在适用条件不确定、与当前输入冲突或需要验证关键假设时按需执行；优先复用已有证据和正常测试。
-不因读取本条经验而额外启动验证流程；项目原有必需测试照常执行。
-
 - 需要确认时，在真机逐个状态核对：首页有返回和标题、每个子状态只有一层导航栏、从子状态返回后宿主栏恢复。
 
 ## 来源（按需复核）
 
-经验是有适用范围的历史建议。核查来源时同时看结论与 unknown；来源卡未随阅读包复制。
-
 - case-f04d62041916ea4f2191 · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3, recommendation:4
-  卡片版本：`052277bd8b8d1f0fcad585b7f27bc6ab4affff9a3a7a1fc201d71f734f06bae9`
+  卡片版本：`7fcd9e91dacc713ada293e22bdab8c763a4c3c5092e58b143d1bd76df6aad3f9`

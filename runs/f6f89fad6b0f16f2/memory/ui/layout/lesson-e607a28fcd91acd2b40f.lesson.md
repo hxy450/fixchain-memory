@@ -29,16 +29,11 @@ ID：`lesson-e607a28fcd91acd2b40f` · 版本：2
 
 ## 可选检查
 
-仅在适用条件不确定、与当前输入冲突或需要验证关键假设时按需执行；优先复用已有证据和正常测试。
-不因读取本条经验而额外启动验证流程；项目原有必需测试照常执行。
-
 - 对居中结果有疑问时，用布局 dump 比较被居中视图的中心与容器内容区中心，单视图居中时两者应重合；无需另起截图任务。
 
 ## 来源（按需复核）
 
-经验是有适用范围的历史建议。核查来源时同时看结论与 unknown；来源卡未随阅读包复制。
-
 - case-06c7df8f8d85e13580ac · 结论：diagnosis, recommendation:1
-  卡片版本：`474ab218d82647f1d745f4b4002a39895dde8b9d3f8e62839e9baa97727183f4`
+  卡片版本：`ee2c42254334d1940ef4ece41290ee22a4adb2ed083bfa5bb47d1f2a6f14cdab`
 - case-6448a485599bfc0740c6 · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
-  卡片版本：`07c2087c4e570b554fcce7a860a969e894632d2e9f0a3769621a51a8dfbf80fb`
+  卡片版本：`ee79f91fda0232a915c1fd976889b9b074c5a5ebef6177e7b7704b4c30211b79`

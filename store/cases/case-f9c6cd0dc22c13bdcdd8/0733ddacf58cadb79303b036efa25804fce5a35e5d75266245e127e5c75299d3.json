@@ -1,0 +1,372 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-f9c6cd0dc22c13bdcdd8",
+  "created_at": "2026-09-27T19:31:34.528016+00:00",
+  "migration_key": "b732e9f2-3b17-42ec-a7e4-51abb6e40d05",
+  "title": "定位按钮无响应：定位权限按全部授予判定，接入高德原生地图时未把定位结果接到相机、蓝点并做坐标转换",
+  "when": "定位与地图功能实现阶段：编写定位权限判定逻辑，以及用原生地图 SDK 替换占位地图时，决定定位结果如何驱动地图相机与当前位置显示",
+  "description": "HarmonyOS 迁移同时申请 ohos.permission.APPROXIMATELY_LOCATION 与 ohos.permission.LOCATION；页面通过高德鸿蒙 SDK（MapViewComponent/AMap）显示地图，定位来源是系统 geoLocationManager，而源端 Android 用 AMapLocationClient 定位后 moveCamera 并开启 MyLocation。",
+  "summary": "本问题有两个互不依赖的偏差来源，分别由不同阶段写入：\n（1）权限判定，生成期形成。Slice2 F002 实现者（agent-01a0632c）写前读到 F002 规格：AC05 只要求\n“同时声明粗略与精确权限、两者都处理”，AC01 要求授权后把地图中心更新为定位坐标；另读到 skill 参考\npermission-helper.md。该模板遍历 authResults，任一项不为 0 就 return false，权限表只列 LOCATION，\n没讲定位权限组可以只授予模糊位置。实现者照搬这个模板，对 [APPROXIMATELY_LOCATION, LOCATION]\n要求全部授予（agent-01a0632c L211-L229）。用户只授予模糊位置时，requestPermission 返回 false，\ncurrentLocation 随之抛出 location-permission-denied。该循环一直保留到返修，最后改为 authResults.some(=== 0)\n（agent-01a066de L176-L178）。偏差在于把通用的“全部必需权限”判定套到了定位权限组上，\n输入本身也缺定位权限组的授权语义，这一缺口记在 skill 边界。\n（2）相机、蓝点和坐标，生成后接入 SDK 时形成（属于新增要求阶段）。生成期的 MapPage 只有黑色占位，\nLocationMapProvider.center() 只缓存坐标，这是当时有意保留的降级接缝。用户要求按参考仓接入高德地图后，\nport_amap_navigation（agent-01a06666）写前读到四项内容：参考 AmapHarmonySdkBridge 的\nrecenter→moveCamera(newLatLngZoom(…,16))、getMapAsync 就绪后补做 pendingCenter/当前位置标记；\n完整的 MapCoordinateAdapter（WGS-84→GCJ-02）；当前 MapService/MapPage 的定位按钮只调用缓存型\nprovider.center；仓库核查回执中的“MapService 只是保存地图中心点”和“相机移动”\n（agent-01a06666 L40-L47）。这些输入足以说明原生地图接入后必须把定位结果交给 AMap。\n但它新增的 AmapMapBridge 只保留了初始化和生命周期，注释写明“deliberately keeps only the provider\nlifecycle”；同一补丁中 MapPage 只挂上 AmapMapSurface，定位路径仍是 activeProvider().center()\n（L101-L103）。随后它被主代理中断，第二阶段也只移植了 POI 和路线，中间对 MapPage 的写入都不涉及这条路径。\n于是原生地图出现后，定位按钮只更新缓存。返修给 AmapMapBridge 加了 center()、MyLocationStyle、\nsetMyLocationEnabled、moveCamera 和就绪前暂存中心；真机回归发现中心与蓝点偏移后，又加了\nCoordinateConverter(GPS) 转换（agent-01a066de L152-L154、L290-L291、L330-L331），\nMapService.center 同时驱动缓存与原生地图，MapPage 改为定位成功后才更新中心（L164-L171、L302-L303）。\n主代理派给 port 代理的消息已加密，第一阶段的范围只能从双方的说明中得知（“先把真实地图承载和生命周期接通”）。\n",
+  "recommendations": [
+    "实现定位权限时，把 APPROXIMATELY_LOCATION 与 LOCATION 当作一组判定：任一授予（至少模糊位置为 0）就继续定位，精确权限缺失时降级，不要套用通用 PermissionHelper 的“全部授予”循环。",
+    "用原生地图 SDK 替换占位地图时，先列出页面现有的地图状态出口（如 provider.center、定位按钮回调），逐一接到 AMap：定位成功后 moveCamera(newLatLngZoom) 并启用 MyLocationStyle/setMyLocationEnabled；getMapAsync 还未就绪时暂存中心，就绪后再应用。",
+    "定位来源是系统 geoLocationManager（WGS-84）而底图是高德（GCJ-02）时，进入相机前用 CoordinateConverter(CoordType.GPS) 或参考仓的 MapCoordinateAdapter 转换，并在真机上比对中心点与蓝点。",
+    "移植参考桥接并有意裁剪能力时，按用户可见入口（如定位按钮）逐项确认裁剪后仍有实际效果；页面仍依赖的 recenter、坐标适配要保留，或登记为未完成，不要只做初始化和生命周期就交付。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "D:/anhuizhongyi/panorama_map/harmony-panorama-map-vest1/entry/src/main/ets/services/LocationService.ets",
+        "since": "2026-09-03T02:06:01.239Z",
+        "at": "2026-09-06T09:34:12.089Z"
+      },
+      "summary": "生成期 Slice2 实现者读到的 F002 规格只要求两项定位权限都声明、都处理，没有规定必须全部授予；\n另一项输入 permission-helper.md 给出“任一拒绝即 false”的通用模板。实现者照搬模板，对\n[APPROXIMATELY_LOCATION, LOCATION] 要求全部授予（agent-01a0632c L227-L229），用户只授予模糊位置时\nrequestPermission 返回 false。这个 for 循环一直保留到返修（agent-01a06666 L63-L65 读回仍在），\n最后改为 authResults.some(=== 0)（agent-01a066de L176-L178）。\n",
+      "recommendations": [
+        "实现定位权限时，把 APPROXIMATELY_LOCATION 与 LOCATION 当作一组判定：任一授予就继续定位，精确权限缺失时降级，不要套用通用的“全部授予”循环。",
+        "规格或 skill 若要求“两项定位权限都处理”，应同时写清授权成功条件，并注明用户可只授予模糊位置。"
+      ],
+      "nodes": [
+        {
+          "key": "D:/anhuizhongyi/panorama_map/harmony-panorama-map-vest1/spec/baseline/features/F002-map-location-search.md",
+          "at": "2026-09-02T17:33:18.248Z",
+          "reason": "输入：F002 规格返回 AC05“定位请求同时声明粗略与精确权限，ACCESS_COARSE_LOCATION 与 ACCESS_FINE_LOCATION 均被处理”，AC01 要求授予定位权限后地图中心更新为定位坐标。规格要求两项都声明、都处理，但没有规定两项必须全部授予才算成功（agent-01a0632c L29→L45）。"
+        },
+        {
+          "key": "D:/anhuizhongyi/panorama_map/harmony-panorama-map-vest1/.agents/skills/arkts-system-capabilities/references/permission-helper.md",
+          "at": "2026-09-02T17:36:33.418Z",
+          "reason": "输入（外部 skill 边界）：通用 PermissionHelper 模板遍历 authResults，任一项不为 0 就 return false（“有权限被拒绝”）；常用权限表只列 ohos.permission.LOCATION，没有涉及 APPROXIMATELY_LOCATION，也没说用户可只授予模糊位置。该模板面向一组全部必需的权限，没有说明定位权限组的判定语义；本卡不再上溯 skill 的来源（agent-01a0632c L212→L215）。"
+        },
+        {
+          "key": "agent-01a0632c-3a58-7ed3-ac43-7cec3a6c85f6.jsonl",
+          "at": "2026-09-02T17:39:36.682Z",
+          "reason": "Slice2 F002 实现者读到上述规格和模板后说“直接照它的方式来”（L211），随后 apply_patch 新增 LocationService：LOCATION_PERMISSIONS=[APPROXIMATELY_LOCATION, LOCATION]，requestPermissionsFromUser 之后 for 循环中任一 grantStatus!==0 就 return false，currentLocation 在未授权时抛出 location-permission-denied。这样就把通用的“全部授予”判定套到了可只授予模糊位置的定位权限组上（L227-L229）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "agent-01a0632c 在 L29 用 exec_command Get-Content -Raw 读取 F002 规格，L45 回执返回 AC01/AC05 原文，时间早于它写 LocationService。",
+          "evidence": [
+            {
+              "source": "runs/2039ebb1-08dc-4537-a87e-fffe5817c7e7/epoch-0/sessions/agent-01a0632c-3a58-7ed3-ac43-7cec3a6c85f6.jsonl",
+              "line": 29
+            },
+            {
+              "source": "runs/2039ebb1-08dc-4537-a87e-fffe5817c7e7/epoch-0/sessions/agent-01a0632c-3a58-7ed3-ac43-7cec3a6c85f6.jsonl",
+              "line": 45
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "agent-01a0632c 在 L212 用 exec_command Get-Content -Raw 读取 permission-helper.md，L215 回执返回“任一 authResults 不为 0 即 false”的模板；随后它照此写权限判定。",
+          "evidence": [
+            {
+              "source": "runs/2039ebb1-08dc-4537-a87e-fffe5817c7e7/epoch-0/sessions/agent-01a0632c-3a58-7ed3-ac43-7cec3a6c85f6.jsonl",
+              "line": 212
+            },
+            {
+              "source": "runs/2039ebb1-08dc-4537-a87e-fffe5817c7e7/epoch-0/sessions/agent-01a0632c-3a58-7ed3-ac43-7cec3a6c85f6.jsonl",
+              "line": 215
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target",
+          "force": true,
+          "reason": "agent-01a0632c 在 L227 的 apply_patch 中 Add File LocationService.ets；L228 FileChange 记录 LocationService add，L229 回执 Success 列出 A ...LocationService.ets。",
+          "evidence": [
+            {
+              "source": "runs/2039ebb1-08dc-4537-a87e-fffe5817c7e7/epoch-0/sessions/agent-01a0632c-3a58-7ed3-ac43-7cec3a6c85f6.jsonl",
+              "line": 227
+            },
+            {
+              "source": "runs/2039ebb1-08dc-4537-a87e-fffe5817c7e7/epoch-0/sessions/agent-01a0632c-3a58-7ed3-ac43-7cec3a6c85f6.jsonl",
+              "line": 228
+            },
+            {
+              "source": "runs/2039ebb1-08dc-4537-a87e-fffe5817c7e7/epoch-0/sessions/agent-01a0632c-3a58-7ed3-ac43-7cec3a6c85f6.jsonl",
+              "line": 229
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "D:/anhuizhongyi/panorama_map/harmony-panorama-map-vest1/entry/src/main/ets/services/AmapMapBridge.ets",
+        "since": "2026-09-03T02:06:01.239Z",
+        "at": "2026-09-06T09:34:12.089Z"
+      },
+      "summary": "生成后按用户要求移植高德地图时，port 代理读到了参考桥接的 recenter/moveCamera/pendingCenter 与 MapCoordinateAdapter，\n也读到当前 MapService 的定位只缓存坐标，但新增的 AmapMapBridge 只包含初始化和生命周期，没有居中、蓝点和坐标转换。\n从 08:35 新增到 10:46 返修之间，没有其他写者改过这个文件。返修加入了 center()、MyLocationStyle、setMyLocationEnabled、\nmoveCamera(newLatLngZoom(…,16))、pendingCenters，以及 CoordinateConverter(GPS) 转换（agent-01a066de L152-L154、L290-L291、L330-L331）。\n",
+      "recommendations": [
+        "用原生地图 SDK 替换占位地图时，把定位结果接到 AMap：定位成功后 moveCamera(newLatLngZoom) 并启用 MyLocationStyle/setMyLocationEnabled；getMapAsync 还未就绪时暂存中心。",
+        "系统定位（WGS-84）喂给高德底图（GCJ-02）前，用 CoordinateConverter(CoordType.GPS) 或参考仓的 MapCoordinateAdapter 转换，并在真机上比对中心点与蓝点。",
+        "移植参考桥接时若只保留生命周期，要核对页面的定位入口是否还有实际效果；被裁掉但仍被依赖的 recenter、坐标适配要保留，或登记为未完成。"
+      ],
+      "nodes": [
+        {
+          "key": "C:/Users/41676/AppData/Local/Temp/harmony_MapDaoHang_vest_5_inspect/feature/navigation/src/main/ets/adapter/AmapHarmonySdkBridge.ets",
+          "at": "2026-09-03T08:33:46.561Z",
+          "reason": "正常输入：port_amap_navigation 读取参考仓桥接，返回内容包括：recenter() 设置 pendingCenter 后调用 moveCamera；getMapAsync 回调里补做 renderCurrentLocationMarker 和 pendingCenter；moveCamera 使用 newLatLngZoom(target,16)；文件还 import 了 MapCoordinateAdapter。输出中段有截断，但居中和待定中心逻辑都在可见部分（agent-01a06666 L40→L42）。"
+        },
+        {
+          "key": "C:/Users/41676/AppData/Local/Temp/harmony_MapDaoHang_vest_5_inspect/feature/navigation/src/main/ets/adapter/MapCoordinateAdapter.ets",
+          "at": "2026-09-03T08:33:46.561Z",
+          "reason": "正常输入：同一次读取完整返回了 MapCoordinateAdapter.toProviderPoint，包括境外判定和 WGS-84→GCJ-02 偏移算法。它在桥接中的调用位置落在截断段，未核到（L40→L42）。"
+        },
+        {
+          "key": "D:/anhuizhongyi/panorama_map/harmony-panorama-map-vest1/entry/src/main/ets/services/MapService.ets",
+          "at": "2026-09-03T08:33:46.561Z",
+          "reason": "正常输入：同一次读取返回当前 MapService，其中 LocationMapProvider.center() 只把坐标存入 currentCenter。L47 的 list_agents 回执里，仓库核查也写明“MapService 只是保存地图中心点，没有真实地图控件”，并指出参考桥接实现了“相机移动”（L42、L47）。"
+        },
+        {
+          "key": "agent-01a06666-993e-7ba2-ad06-933824e98a4e.jsonl",
+          "at": "2026-09-03T08:35:51.945Z",
+          "reason": "收到上述输入后，apply_patch 新增 AmapMapBridge：只保留隐私/Key 初始化、MapView 注册、getMapAsync 存 map 以及 resume/pause/release，注释说明“deliberately keeps only the provider lifecycle needed by this app's MapPage”。桥接里没有 center/recenter、moveCamera、MyLocationStyle/setMyLocationEnabled，也没有待定中心和坐标转换。随后该代理被中断，没有再补（L101-L103、L132-L133）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4,
+          "force": true,
+          "reason": "agent-01a06666 在 L40 的 exec 中以 $ref 目录 Get-Content -Raw 读取 AmapHarmonySdkBridge.ets，L42 回执 ---BRIDGE--- 段返回 recenter/moveCamera/pendingCenter 代码。",
+          "evidence": [
+            {
+              "source": "runs/2039ebb1-08dc-4537-a87e-fffe5817c7e7/epoch-0/sessions/agent-01a06666-993e-7ba2-ad06-933824e98a4e.jsonl",
+              "line": 40
+            },
+            {
+              "source": "runs/2039ebb1-08dc-4537-a87e-fffe5817c7e7/epoch-0/sessions/agent-01a06666-993e-7ba2-ad06-933824e98a4e.jsonl",
+              "line": 42
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 4,
+          "force": true,
+          "reason": "同一次 L40 调用以 $ref 目录读取 MapCoordinateAdapter.ets，L42 回执 ---COORD--- 段完整返回 WGS-84→GCJ-02 算法。",
+          "evidence": [
+            {
+              "source": "runs/2039ebb1-08dc-4537-a87e-fffe5817c7e7/epoch-0/sessions/agent-01a06666-993e-7ba2-ad06-933824e98a4e.jsonl",
+              "line": 40
+            },
+            {
+              "source": "runs/2039ebb1-08dc-4537-a87e-fffe5817c7e7/epoch-0/sessions/agent-01a06666-993e-7ba2-ad06-933824e98a4e.jsonl",
+              "line": 42
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "同一次 L40 调用 Get-Content -Raw entry/src/main/ets/services/MapService.ets，L42 回执 ---MAPSERVICE--- 段返回只缓存坐标的 LocationMapProvider。",
+          "evidence": [
+            {
+              "source": "runs/2039ebb1-08dc-4537-a87e-fffe5817c7e7/epoch-0/sessions/agent-01a06666-993e-7ba2-ad06-933824e98a4e.jsonl",
+              "line": 40
+            },
+            {
+              "source": "runs/2039ebb1-08dc-4537-a87e-fffe5817c7e7/epoch-0/sessions/agent-01a06666-993e-7ba2-ad06-933824e98a4e.jsonl",
+              "line": 42
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": "target",
+          "force": true,
+          "reason": "agent-01a06666 在 L101 的 exec 中调用 apply_patch，Add File entry/src/main/ets/services/AmapMapBridge.ets；L102 FileChange 记录 AmapMapBridge.ets add，L103 回执完成。",
+          "evidence": [
+            {
+              "source": "runs/2039ebb1-08dc-4537-a87e-fffe5817c7e7/epoch-0/sessions/agent-01a06666-993e-7ba2-ad06-933824e98a4e.jsonl",
+              "line": 101
+            },
+            {
+              "source": "runs/2039ebb1-08dc-4537-a87e-fffe5817c7e7/epoch-0/sessions/agent-01a06666-993e-7ba2-ad06-933824e98a4e.jsonl",
+              "line": 102
+            },
+            {
+              "source": "runs/2039ebb1-08dc-4537-a87e-fffe5817c7e7/epoch-0/sessions/agent-01a06666-993e-7ba2-ad06-933824e98a4e.jsonl",
+              "line": 103
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "D:/anhuizhongyi/panorama_map/harmony-panorama-map-vest1/entry/src/main/ets/pages/MapPage.ets",
+        "since": "2026-09-03T02:06:01.239Z",
+        "at": "2026-09-06T09:34:12.089Z"
+      },
+      "summary": "同一 port 代理在 MapPage 中加入了原生 AmapMapSurface，却保留 requestPermission/refreshLocation 中的\nactiveProvider().center(this.center)，也就是缓存型 LocationMapProvider，定位结果没有交给原生地图。\n之后 09:48、09:58、10:21 的写入只改了 onAppear/pauseNative、pathStack 和搜索跳转，没有碰这条路径。\n返修改为 mapService.center()，由它同时驱动缓存与 AmapMapBridge，并且只在 refresh 成功后更新中心\n（agent-01a066de L164-L171、L302-L303）。“失败不回填旧坐标”这一子项涉及 MapViewModel，本卡未单独追溯其生成来源。\n",
+      "recommendations": [
+        "页面接入原生地图后，逐一检查定位按钮等回调最终调用的是缓存 provider 还是原生 AMap；原生地图在场时，定位成功应驱动相机和蓝点，失败时不更新中心。"
+      ],
+      "nodes": [
+        {
+          "key": "D:/anhuizhongyi/panorama_map/harmony-panorama-map-vest1/entry/src/main/ets/pages/MapPage.ets",
+          "at": "2026-09-03T08:33:46.561Z",
+          "reason": "正常输入：同一次读取返回当前 MapPage。requestPermission 和 refreshLocation 在 viewModel.refresh 之后调用 activeProvider().center(this.center)，而 activeProvider() 返回 mapService.initialize() 给出的缓存型 provider，定位按钮只经这条路径更新地图（agent-01a06666 L40→L42）。"
+        },
+        {
+          "key": "D:/anhuizhongyi/panorama_map/harmony-panorama-map-vest1/entry/src/main/ets/services/MapService.ets",
+          "at": "2026-09-03T08:33:46.561Z",
+          "reason": "正常输入：同一次读取显示 LocationMapProvider.center() 只缓存坐标。L47 的仓库核查回执也指出 MapService 只保存中心点（L42、L47）。"
+        },
+        {
+          "key": "C:/Users/41676/AppData/Local/Temp/harmony_MapDaoHang_vest_5_inspect/feature/navigation/src/main/ets/adapter/AmapHarmonySdkBridge.ets",
+          "at": "2026-09-03T08:33:46.561Z",
+          "reason": "正常输入：参考桥接可见 recenter→moveCamera(newLatLngZoom(…,16))，并在地图就绪后补做 pendingCenter，说明页面的定位结果应交给原生地图（L40→L42）。"
+        },
+        {
+          "key": "agent-01a06666-993e-7ba2-ad06-933824e98a4e.jsonl",
+          "at": "2026-09-03T08:35:51.945Z",
+          "reason": "同一个 apply_patch 给 MapPage 加入 AmapMapSurface、mapReady、initializeNativeMap 和 releaseNative，但保留了 requestPermission/refreshLocation 中的 activeProvider().center(this.center)，没有把定位结果接到原生地图；原生地图显示后，定位按钮只更新缓存（L101-L103）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4,
+          "force": true,
+          "reason": "agent-01a06666 在 L40 的 exec 中 Get-Content -Raw entry/src/main/ets/pages/MapPage.ets，L42 回执 ---MAPPAGE--- 段返回 activeProvider().center(this.center) 的定位路径。",
+          "evidence": [
+            {
+              "source": "runs/2039ebb1-08dc-4537-a87e-fffe5817c7e7/epoch-0/sessions/agent-01a06666-993e-7ba2-ad06-933824e98a4e.jsonl",
+              "line": 40
+            },
+            {
+              "source": "runs/2039ebb1-08dc-4537-a87e-fffe5817c7e7/epoch-0/sessions/agent-01a06666-993e-7ba2-ad06-933824e98a4e.jsonl",
+              "line": 42
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 4,
+          "force": true,
+          "reason": "同一次 L40 调用 Get-Content -Raw MapService.ets，L42 回执 ---MAPSERVICE--- 段返回只缓存坐标的 LocationMapProvider。",
+          "evidence": [
+            {
+              "source": "runs/2039ebb1-08dc-4537-a87e-fffe5817c7e7/epoch-0/sessions/agent-01a06666-993e-7ba2-ad06-933824e98a4e.jsonl",
+              "line": 40
+            },
+            {
+              "source": "runs/2039ebb1-08dc-4537-a87e-fffe5817c7e7/epoch-0/sessions/agent-01a06666-993e-7ba2-ad06-933824e98a4e.jsonl",
+              "line": 42
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "同一次 L40 调用以 $ref 目录读取参考 AmapHarmonySdkBridge.ets，L42 回执返回 recenter→moveCamera 与 pendingCenter 逻辑。",
+          "evidence": [
+            {
+              "source": "runs/2039ebb1-08dc-4537-a87e-fffe5817c7e7/epoch-0/sessions/agent-01a06666-993e-7ba2-ad06-933824e98a4e.jsonl",
+              "line": 40
+            },
+            {
+              "source": "runs/2039ebb1-08dc-4537-a87e-fffe5817c7e7/epoch-0/sessions/agent-01a06666-993e-7ba2-ad06-933824e98a4e.jsonl",
+              "line": 42
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": "target",
+          "force": true,
+          "reason": "agent-01a06666 在 L101 的 apply_patch 中同时 Update MapPage.ets（加入 AmapMapSurface/initializeNativeMap）；L102 FileChange 记录 MapPage.ets update，L103 回执完成。",
+          "evidence": [
+            {
+              "source": "runs/2039ebb1-08dc-4537-a87e-fffe5817c7e7/epoch-0/sessions/agent-01a06666-993e-7ba2-ad06-933824e98a4e.jsonl",
+              "line": 101
+            },
+            {
+              "source": "runs/2039ebb1-08dc-4537-a87e-fffe5817c7e7/epoch-0/sessions/agent-01a06666-993e-7ba2-ad06-933824e98a4e.jsonl",
+              "line": 102
+            },
+            {
+              "source": "runs/2039ebb1-08dc-4537-a87e-fffe5817c7e7/epoch-0/sessions/agent-01a06666-993e-7ba2-ad06-933824e98a4e.jsonl",
+              "line": 103
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-f9c6cd0dc22c13bdcdd8",
+  "metadata": {
+    "migration": {
+      "project": "android-panorama-map-vest7",
+      "server_session_id": "b732e9f2-3b17-42ec-a7e4-51abb6e40d05"
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "codex-auto-review",
+        "gpt-5.3-codex-spark",
+        "gpt-5.4-mini",
+        "gpt-5.6-sol",
+        "gpt-5.6-terra"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.151.0-alpha.7.2",
+        "0.152.1",
+        "0.153.4"
+      ]
+    },
+    "source_set_id": "sources-98613bd90677ff53c5e1",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-09-02T13:56:08.145Z",
+        "ref": "runs/2039ebb1-08dc-4537-a87e-fffe5817c7e7/epoch-0/sessions/agent-01a06265-0064-7221-9f99-de87d96a7fc1.jsonl:L59",
+        "request_ref": "runs/2039ebb1-08dc-4537-a87e-fffe5817c7e7/epoch-0/sessions/agent-01a06265-0064-7221-9f99-de87d96a7fc1.jsonl:L57",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-09-02T13:56:08.145Z",
+        "ref": "runs/2039ebb1-08dc-4537-a87e-fffe5817c7e7/epoch-0/sessions/agent-01a06265-0064-7221-9f99-de87d96a7fc1.jsonl:L59",
+        "request_ref": "runs/2039ebb1-08dc-4537-a87e-fffe5817c7e7/epoch-0/sessions/agent-01a06265-0064-7221-9f99-de87d96a7fc1.jsonl:L57",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.8.3"
+  },
+  "revision": "0733ddacf58cadb79303b036efa25804fce5a35e5d75266245e127e5c75299d3"
+}

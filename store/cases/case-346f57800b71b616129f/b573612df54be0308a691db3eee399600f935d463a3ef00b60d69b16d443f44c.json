@@ -1,0 +1,299 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-346f57800b71b616129f",
+  "created_at": "2026-09-27T11:26:58.425973+00:00",
+  "migration_key": "ec916647-9285-40ea-9595-eaa9d20f4eed",
+  "title": "把同步读取的设置改成异步 initialize 后只写成功分支，加载门在失败时一直转圈",
+  "when": "功能实现阶段（ViewModel 与页面接线），把源端同步读取的设置改成异步加载，并为页面加“加载完成前不显示/不可交互”的门时",
+  "description": "Android 端在首帧前用 SharedPreferences 等同步接口读设置（缺键用默认值），界面没有加载态或失败态；ArkTS 目标端改为 async Preferences/Service 读取，ViewModel 暴露返回 Promise 的 initialize()，页面在 aboutToAppear 中调用它，并用“已加载”标志在 LoadingProgress 和正式内容之间切换。",
+  "summary": "Stage 3 的 slice_01_f001（a2h-migration-worker）写 PracticeModel 前实际读到了 Base 的 EarTrainingPreferences.ets：\nhas/getString/getNumber/readMaxInterval 全部 async，私有 store() 在未 install 时 `throw new Error('EarTrainingPreferences has not been installed')`，\n否则返回 preferences.getPreferences(...) 的 Promise（agent-01a0da3e-7c14-79e3-845f-ca7761b240e1.jsonl:L49-L52）。\n它也读到了 Android 行为：EarTrainingScreen 在 remember 初始化里用 prefs.getString/getInt 同步取值并带默认值，\n再由 LaunchedEffect(Unit) 延迟 350 ms 出第一题，页面没有加载态、也没有读取失败的分支（L56-L59）；\nF001 规格要求“页面初始化仅产生第一题一次”（AC15），服务接口仍写成同步的 load(): PracticeSettings，状态机只有“首次进入｜前置：已载入设置”一行，\n台账 C11 只规定了 F003 解码失败和 F002 音频异常的兜底（L35-L38、L42-L45）。也就是说，规格和源码都没有“设置读取失败”这一分支，\n这一失败路径来自目标端把同步读取改成异步；但它就在写码者眼前的 Base 代码里，足以要求 initialize 的调用链处理 reject。\n20:27:20 该 worker 新建 PracticeModel.initialize()：先 `this.initialized = true`，再 await settingsStore.load()、延时 350 ms、出题，\n没有 try/catch，失败时 initialized 不复位（L93-L96）；20:27:44 页面 onFirstQuestion 写成 `this.model.initialize().then(...)`，没有 catch（L100-L103）。\n它按 5-step3b-vm 要求写的 source-notes 里，presenter 摘要没有列“异常分支”，Spec Gap List 也没记“源端同步读取、目标端异步且可能失败”这一差异（L93）。\n20:34 巡检 build-group-01 第 2 条指出异步恢复期间可操作、随后被覆盖，建议“设置载入并同步页面状态前阻止交互，或载入完成后才呈现可交互内容”，\n没有提失败怎么办（L151-L154）。同一 worker（上下文未压缩，写前还读回了自己的 PracticeModel 1-115 行）在 20:35:15 让 settingsLoaded 只在 then 中置 true，\n20:35:28 把整页包进 `if (this.settingsLoaded) { Scroll… } else { LoadingProgress() }`（L160-L163、L174-L177）。\n从此 initialize() 一旦 reject，页面既不退出 LoadingProgress，也因 initialized 已为 true 而无法重新加载。偏差位于实现环节：\n已知加载链会抛错，却只写了成功出口。\n另一条交付缺口：派工前置 skill 清单（L7）含 arkts-component-builder 与 arkts-data-layer，前者检查清单写“aboutToAppear() 中使用 Service 真实调用 + try-catch 兜底”，\n后者写“async/await 正确使用，错误统一在 catch 中转换”；该 worker 在一次 exec 中 cat 18 份 SKILL.md，执行事件 stdout 含这两条（L30），\n但返回给模型的输出中段被截断（原 98099 tokens，只剩 android-ui-graph-builder、android-ui-graph-query 开头和 arkts-immersive-safearea 末尾，L31），\n之后只 rg 过 arkts-state-manager/arkts-data-layer 的类名片段（L70-L73），没有读到这两条，回报却把两者列入 loaded_skills（L138）。\nGroup 1 收口 base_closer_01 在 20:41:28 给 onFirstQuestion 加了 initialQuestionStarted 守卫和首题播放，保留 then 无 catch\n（agent-01a0da2c-1e48-7131-8d23-d4c20085289c.jsonl:L639-L642）；此后生成期与验证期的改动都没碰这段，迁移终态与 ECAT 副本 E 修前读回一致\n（agent-01a0dc69-f20d-7ff2-9ffb-1068f3900dcb.jsonl:L61、L66、L80）。\nECAT 第二轮 page_audit judge 静态判出“initialize() reject 时 LoadingProgress 无限显示”（main-01a0dc68-fe93-7761-9b4a-31b76161f4fd.jsonl:L9、L44）。\n修复在 E 上：PracticeModel.initialize() 用 try/catch 包住加载、延时、出题与保存，失败时复位 initialized=false 并抛 new Error('Practice initialization failed')；\nPracticePage 加 @Local settingsLoadFailed，catch 中复位 initialQuestionStarted 并置失败标志，失败态显示 practice_load_failed 文案和“重试”按钮（重走 onFirstQuestion）；\nstring.json 新增两条文案（agent-01a0dc69-f20d-7ff2-9ffb-1068f3900dcb.jsonl:L124-L127、L151-L154），截止时保留。\n",
+  "recommendations": [
+    "ViewModel 实现阶段：把源端同步读取（SharedPreferences.get* 带默认值）改成 async load 时，把 load 可能 reject 当成新增分支写进 initialize：try/catch 包住读取与后续出题，失败时复位“已初始化/进行中”标志并把错误交回调用方；不要在 await 之前置 initialized=true 却不在失败时复位。",
+    "页面实现阶段：用“已加载”标志切换 LoadingProgress 与正式内容时，aboutToAppear 里的 initialize() 同时写 then 与 catch，失败必须离开加载态——显示错误与重试入口（本例 practice_load_failed + 重试重走 onFirstQuestion），或按源端行为用默认设置继续，让页面可用。",
+    "源码理解阶段：写 source-notes 的 presenter 摘要时补齐“异常分支”；源端同步、目标端异步这类平台差异写进 Spec Gap List，至少覆盖加载期交互和加载失败两项。",
+    "巡检或评审建议“载入完成前阻止交互/不呈现内容”时，一并写明加载失败的出口，避免修复者只加成功分支。",
+    "加载派工指定的 skill 时逐份读或控制单次输出量；看到 truncated output 提示就重读被截掉的 skill，读全前不写进 loaded_skills。最小检查：rg 页面中 `initialize().then(`、`load().then(` 等调用，缺 `.catch` 的逐个补；对每个 `if (this.xxxLoaded) … else LoadingProgress()`，确认存在把页面带出加载态的失败分支，可临时让 store() 抛错验证。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/home/lsq/repo/harmonyapps/eartraining/entry/src/main/ets/pages/PracticePage.ets",
+        "since": "2026-09-25T20:58:11.566Z",
+        "at": "2026-09-26T07:40:33.959Z"
+      },
+      "nodes": [
+        {
+          "key": "/home/lsq/repo/harmonyapps/eartraining/entry/src/main/ets/preferences/EarTrainingPreferences.ets",
+          "at": "2026-09-25T20:25:55.240Z",
+          "reason": "正常输入：slice_01 用 cat 读取 Base 偏好封装，回执显示 getString/getNumber/readMaxInterval 均为 async，store() 未 install 时 throw new Error('EarTrainingPreferences has not been installed')，否则返回 preferences.getPreferences 的 Promise；足以说明设置加载链可能 reject（agent-01a0da3e-7c14-79e3-845f-ca7761b240e1.jsonl:L49-L52）。"
+        },
+        {
+          "key": "/home/lsq/repo/eartraining/app/src/main/java/com/example/eartrainer/MainActivity.kt",
+          "at": "2026-09-25T20:26:02.075Z",
+          "reason": "正常输入：sed 读取 70-190 行，回执给出 EarTrainingScreen 在 remember 中同步 prefs.getString/getInt 并带默认值，LaunchedEffect(Unit) 延迟 350 ms 出首题；源端首屏总是可用、没有加载态或读取失败分支（同转录 L56-L59）。"
+        },
+        {
+          "key": "/home/lsq/repo/harmonyapps/eartraining/spec/fix/round-1/patrol/build-group-01.md",
+          "at": "2026-09-25T20:34:55.204Z",
+          "reason": "修复任务输入：巡检第 2 条要求设置载入并同步页面状态前阻止交互，或载入完成后才呈现可交互内容；这是加载门的来源，内容本身正确，但没有提加载失败的出口（同转录 L151-L154）。"
+        },
+        {
+          "key": "01a0da3e-7c14-79e3-845f-ca7761b240e1",
+          "at": "2026-09-25T20:35:28.578Z",
+          "reason": "slice_01 已知加载链会抛错，20:27:44 把 onFirstQuestion 写成 initialize().then(...) 无 catch（L100-L103）；按巡检加门时 20:35:15 只在 then 里置 settingsLoaded=true（L160-L163），20:35:28 把整页包进 if (this.settingsLoaded) {…} else { LoadingProgress() }（L174-L177）。reject 时没有任何分支结束加载态，页面一直转圈。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4,
+          "force": true,
+          "reason": "slice_01 在 exec 中执行 rg MainActivity.kt 并 cat entry/src/main/ets/preferences/EarTrainingPreferences.ets 等文件（L49 请求），L51 执行事件与 L52 回执含该类全文：async getString/getNumber/readMaxInterval，store() 未 install 时 throw new Error；这是其写 PracticeModel 与页面前的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da3e-7c14-79e3-845f-ca7761b240e1.jsonl",
+              "line": 49
+            },
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da3e-7c14-79e3-845f-ca7761b240e1.jsonl",
+              "line": 51
+            },
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da3e-7c14-79e3-845f-ca7761b240e1.jsonl",
+              "line": 52
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 4,
+          "force": true,
+          "reason": "slice_01 在 exec 中 sed -n '70,190p' 读取 MainActivity.kt（L56 请求），L57 执行事件与 L59 回执含 EarTrainingScreen 的 remember 同步读偏好与 LaunchedEffect(Unit) delay(350) 首题；在其写码之前。",
+          "evidence": [
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da3e-7c14-79e3-845f-ca7761b240e1.jsonl",
+              "line": 56
+            },
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da3e-7c14-79e3-845f-ca7761b240e1.jsonl",
+              "line": 57
+            },
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da3e-7c14-79e3-845f-ca7761b240e1.jsonl",
+              "line": 59
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "第二轮任务中 slice_01 在 exec 里 cat spec/fix/round-1/patrol/build-group-01.md（L151 请求），L153 执行事件与 L154 回执含第 2 条“异步恢复期间允许操作”及其修复建议；随后才写加载门。",
+          "evidence": [
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da3e-7c14-79e3-845f-ca7761b240e1.jsonl",
+              "line": 151
+            },
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da3e-7c14-79e3-845f-ca7761b240e1.jsonl",
+              "line": 153
+            },
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da3e-7c14-79e3-845f-ca7761b240e1.jsonl",
+              "line": 154
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": "target",
+          "force": true,
+          "reason": "slice_01 在 exec 内三次 apply_patch 更新 PracticePage.ets：L100/L102 写入 initialize().then 无 catch；L160/L162 让 settingsLoaded 只在 then 中置 true；L174/L175/L177 加 if (this.settingsLoaded) … else LoadingProgress()。FileChange 事件均为 completed。",
+          "evidence": [
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da3e-7c14-79e3-845f-ca7761b240e1.jsonl",
+              "line": 100
+            },
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da3e-7c14-79e3-845f-ca7761b240e1.jsonl",
+              "line": 102
+            },
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da3e-7c14-79e3-845f-ca7761b240e1.jsonl",
+              "line": 160
+            },
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da3e-7c14-79e3-845f-ca7761b240e1.jsonl",
+              "line": 162
+            },
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da3e-7c14-79e3-845f-ca7761b240e1.jsonl",
+              "line": 174
+            },
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da3e-7c14-79e3-845f-ca7761b240e1.jsonl",
+              "line": 175
+            },
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da3e-7c14-79e3-845f-ca7761b240e1.jsonl",
+              "line": 177
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/home/lsq/repo/harmonyapps/eartraining/entry/src/main/ets/viewmodels/PracticeModel.ets",
+        "since": "2026-09-25T20:58:11.566Z",
+        "at": "2026-09-26T07:40:33.959Z"
+      },
+      "nodes": [
+        {
+          "key": "/home/lsq/repo/harmonyapps/eartraining/entry/src/main/ets/preferences/EarTrainingPreferences.ets",
+          "at": "2026-09-25T20:25:55.240Z",
+          "reason": "正常输入：同上，偏好封装全部 async，store() 在未 install 时显式抛错，getPreferences 返回 Promise；PracticeSettingsStore.load() 建在它之上，initialize 必须考虑 load reject（agent-01a0da3e-7c14-79e3-845f-ca7761b240e1.jsonl:L49-L52）。"
+        },
+        {
+          "key": "/home/lsq/repo/harmonyapps/eartraining/spec/baseline/features/F001-question.md",
+          "at": "2026-09-25T20:25:45.371Z",
+          "reason": "正常输入：F001-AC15 要求页面初始化仅产生第一题一次（标:PracticeModel.initialize），这是 initialized 守卫的来源；规格未描述设置读取失败，服务接口仍写同步 load(): PracticeSettings（同转录 L35-L38）。"
+        },
+        {
+          "key": "01a0da3e-7c14-79e3-845f-ca7761b240e1",
+          "at": "2026-09-25T20:27:20.762Z",
+          "reason": "apply_patch 新建 PracticeModel.ets：initialize() 先置 this.initialized = true，再 await settingsStore.load()、延时 350 ms、regenerateWithoutPlayback、saveSettings，没有 try/catch；load reject 时 Promise 直接拒绝且 initialized 不复位，之后再调用只会立即返回（同转录 L93-L96）。把“只初始化一次”写成了“失败后也不能再初始化”。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "同一次 exec（L49 请求）cat EarTrainingPreferences.ets，L51 执行事件与 L52 回执返回其 async 接口与 store() 抛错分支；早于 20:27:20 新建 PracticeModel。",
+          "evidence": [
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da3e-7c14-79e3-845f-ca7761b240e1.jsonl",
+              "line": 49
+            },
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da3e-7c14-79e3-845f-ca7761b240e1.jsonl",
+              "line": 51
+            },
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da3e-7c14-79e3-845f-ca7761b240e1.jsonl",
+              "line": 52
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "slice_01 在 exec 中 cat spec/baseline/features/F001-question.md 等（L35 请求），L37 执行事件与 L38 回执含 F001-AC15“页面初始化仅产生第一题一次”及同步 load(): PracticeSettings 接口；早于新建 PracticeModel。",
+          "evidence": [
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da3e-7c14-79e3-845f-ca7761b240e1.jsonl",
+              "line": 35
+            },
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da3e-7c14-79e3-845f-ca7761b240e1.jsonl",
+              "line": 37
+            },
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da3e-7c14-79e3-845f-ca7761b240e1.jsonl",
+              "line": 38
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target",
+          "force": true,
+          "reason": "slice_01 在 exec 内 apply_patch 以 Add File 新建 PracticeModel.ets（L93 请求），L95 FileChange 事件为 add/completed，内容含 initialize() 先置 initialized=true、再 await settingsStore.load() 且无 try/catch；L96 回执完成。",
+          "evidence": [
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da3e-7c14-79e3-845f-ca7761b240e1.jsonl",
+              "line": 93
+            },
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da3e-7c14-79e3-845f-ca7761b240e1.jsonl",
+              "line": 95
+            },
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da3e-7c14-79e3-845f-ca7761b240e1.jsonl",
+              "line": 96
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "slice_01 两次收到的派工正文（L16、L146）为加密载荷，无法核对派工是否另行要求处理设置读取失败；本卡按其实际可见的读取回执归因。"
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/home/lsq/Desktop/codex-test/plus-validation/eartraining-ecat/entry/src/main/ets/pages/PracticePage.ets",
+      "reason": "ECAT 修复已确认（agent-01a0dc69-f20d-7ff2-9ffb-1068f3900dcb.jsonl:L124-L127）。副本 E 在转录外由迁移输出复制，转录中没有 M→E 的复制记录；修前读回（L61、L66）与 M 终态的加载门片段一致，生成来源已在 M 的 PracticePage 图中归因，M→E 这一交接无法画出。"
+    },
+    {
+      "key": "/home/lsq/Desktop/codex-test/plus-validation/eartraining-ecat/entry/src/main/ets/viewmodels/PracticeModel.ets",
+      "reason": "ECAT 修复已确认（L124-L127、L151-L154）。修前读回（L80）的 initialize() 与 slice_01 在 M 上新建的版本一致，生成来源已在 M 的 PracticeModel 图中归因；副本 E 在转录外复制，缺 M→E 交接。"
+    },
+    {
+      "key": "/home/lsq/Desktop/codex-test/plus-validation/eartraining-ecat/entry/src/main/resources/base/element/string.json",
+      "reason": "修复为失败态新增 practice_load_failed 与 practice_retry 两条文案（L124-L127）；生成侧从未有失败态，因此没有对应的错误写入可追，缺口本身已由 PracticePage 图说明；副本 E 在转录外复制，缺 M→E 交接。"
+    }
+  ],
+  "job": "issue-346f57800b71b616129f",
+  "metadata": {
+    "migration": {
+      "project": "听音练习",
+      "server_session_id": "ec916647-9285-40ea-9595-eaa9d20f4eed",
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "codex-auto-review",
+        "gpt-6-sol"
+      ],
+      "tool_versions": {
+        "orchestrator": "hmigbot-plus",
+        "runtime_version": "v1.5.2",
+        "runtime_commit": "c47f332",
+        "client_version": "hmigbot-plus-1.6.0",
+        "pack_version": "hmigbot-plus-1.6.0",
+        "codex_cli_version": "0.157.0"
+      }
+    },
+    "analysis": {
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "platforms": [
+        "claude-code"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "codex-auto-review",
+        "gpt-6-sol"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.157.0"
+      ]
+    },
+    "source_set_id": "sources-7dfa3baba9b514aa9b9d",
+    "card_tool_version": "0.8.3"
+  },
+  "revision": "b573612df54be0308a691db3eee399600f935d463a3ef00b60d69b16d443f44c"
+}

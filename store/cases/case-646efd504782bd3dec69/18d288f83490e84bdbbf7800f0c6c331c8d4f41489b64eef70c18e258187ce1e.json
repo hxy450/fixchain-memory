@@ -1,0 +1,139 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-646efd504782bd3dec69",
+  "created_at": "2026-09-27T19:10:08.079377+00:00",
+  "migration_key": "b732e9f2-3b17-42ec-a7e4-51abb6e40d05",
+  "title": "把ViewPager2禁手势滑动写成Swiper.enabled(false)，导致整个页面子树不可点击",
+  "when": "界面实现阶段，将Android ViewPager/ViewPager2主壳（禁滑＋底部Tab切页）转换为ArkUI Swiper时，选择禁滑与切页的实现属性",
+  "description": "源端Activity用ViewPager2承载多个可交互Fragment，以isUserInputEnabled=false只禁止手势滑动，并由底部Tab点击修改selectTab后setCurrentItem切页；目标端用Swiper加自定义底栏实现同一主壳。",
+  "summary": "Stage 1 页面转换者（resume_stage1_page_0002_r2）写 MainPage.ets 前，实际读到了 MainActivity.kt：\ninitVp() 中 vpMain.isUserInputEnabled = false，ViewPager2 承载 MapFragment、SideFragment、MineFragment；\naddObserve() 中 selectTab.observe { vpMain.setCurrentItem(it, false) }，clickTab(index) 只改 selectTab\n（agent-01a0618e-e290-76b2-b054-c00a0cfa9865.jsonl:L148、L154）；同批还读到 activity_main.xml 中三个底部 Tab 的\nonClick=clickTab(n)（同转录L104、L110）。这些输入已足以说明：源端只关闭用户滑动手势，子页保持可交互，切页由代码驱动。\n但该转换者 apply_patch 新建 MainPage 时，给 Swiper 写了 .index(this.selectTab).indicator(false).loop(false).enabled(false)\n（同转录L169-L171）。它把“禁止手势滑动”写成了“禁用整个组件”。ArkUI 中 enabled(false) 会让 Swiper 及其全部子页不可交互，\n对应语义的属性应是 disableSwipe(true)。偏差出现在源端交互语义到目标属性的映射这一步。当时三个 tabPage 只是空 Stack，所以问题没有显现。\n之后 Stage 3 的写者（agent-01a06215 L67）把 MapPage 等真实页面放进 Swiper，其补丁只改了该行缩进，仍保留 .enabled(false)，\n该属性一直保留到生成结束。\n2026-09-03 真机反馈“目前页面无法点击”（main-01a060e7 L10599）。协调者确认 Swiper.enabled(false) 禁用了整个子树\n（L10744），将其改为 .disableSwipe(true)（agent-01a0669e L148）。复测 dump 仍显示 enabled=false，于是又显式补上\n.enabled(true)（main-01a060e7 L10829-L10832；agent-01a0669e L341、L409 去重）。之后 dump 显示 enabled=true（L10896），\n用户随后反馈的是另一问题“搜索闪退”。\n另一支是 Tab 切页：转换者把源端 observe→setCurrentItem 的命令式切页写成声明式 .index(this.selectTab)，没有控制器，也没有 onChange 回写。\n09-03 用户反馈“我的”点击无反应（main-01a0666a L1808）。协调者判断 Swiper 只改了索引状态（L1913），agent-01a066c1 随后加入\nSwiperController.changeIndex(index) 和 Swiper.onChange 同步 selectTab（L79-L93）。该修复只经过构建验证，观察截止前没有真机回归\n（main-01a0666a L2243）。因此本图只把 enabled(false) 归为已核偏差。\n",
+  "recommendations": [
+    "界面实现阶段转换ViewPager/ViewPager2禁滑时，先区分“只禁手势滑动”（isUserInputEnabled=false或拦截onTouch/onInterceptTouchEvent）和“禁用控件”（setEnabled(false)）：前者在Swiper上写.disableSwipe(true)，不要用.enabled(false)。",
+    "给承载可交互子页的容器（Swiper、Tabs、Stack等）设置enabled、hitTestBehavior等交互属性前，确认该属性会作用于整个子树；子页放入后，在真机UI dump中核对容器enabled=true，并实际点击子页控件。",
+    "源端点击Tab后用setCurrentItem显式切页时，目标端也要让点击处理实际驱动Swiper，并在页面变化时回写选中态。本案最终用SwiperController.changeIndex加onChange同步；装机后逐个点击底部Tab验证。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "D:/anhuizhongyi/panorama_map/harmony-panorama-map-vest1/entry/src/main/ets/pages/MainPage.ets",
+        "since": "2026-09-03T02:06:01.239Z",
+        "at": "2026-09-06T09:34:12.089Z"
+      },
+      "nodes": [
+        {
+          "key": "D:/anhuizhongyi/panorama_map/android-panorama-map-vest7/app/src/main/java/com/njwry/nav/ui/activity/MainActivity.kt",
+          "at": "2026-09-02T10:03:29.553Z",
+          "reason": "正常输入：转换者用Get-Content读取源Activity，回执中initVp()写vpMain.isUserInputEnabled = false（只关闭用户滑动），ViewPager2承载三个可交互Fragment；addObserve()用selectTab.observe调用setCurrentItem(it, false)显式切页。足以确定“禁滑但子页可点、点Tab由代码切页”的语义（agent-01a0618e-e290-76b2-b054-c00a0cfa9865.jsonl:L148、L154）。"
+        },
+        {
+          "key": "agent-01a0618e-e290-76b2-b054-c00a0cfa9865.jsonl",
+          "at": "2026-09-02T10:04:41.732Z",
+          "reason": "读到上述源码后，apply_patch新建MainPage.ets，给Swiper写了.index(this.selectTab)和.enabled(false)。它把isUserInputEnabled=false（禁手势）映射成禁用整个Swiper子树，而不是disableSwipe(true)；该行保留到生成结束，后续修复改为.disableSwipe(true).enabled(true)（同转录L169-L171）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "转换者用exec_command执行Get-Content -Raw读取MainActivity.kt，回执返回initVp()中的isUserInputEnabled = false，以及addObserve()中的setCurrentItem(it, false)，说明它写前已收到禁滑与切页的源端语义。",
+          "evidence": [
+            {
+              "source": "runs/2039ebb1-08dc-4537-a87e-fffe5817c7e7/epoch-0/sessions/agent-01a0618e-e290-76b2-b054-c00a0cfa9865.jsonl",
+              "line": 148
+            },
+            {
+              "source": "runs/2039ebb1-08dc-4537-a87e-fffe5817c7e7/epoch-0/sessions/agent-01a0618e-e290-76b2-b054-c00a0cfa9865.jsonl",
+              "line": 154
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": "target",
+          "force": true,
+          "reason": "同一转换者的apply_patch调用Add File entry/src/main/ets/pages/MainPage.ets，正文含Swiper的.index(this.selectTab)与.enabled(false)。FileChange回执对工程内pages/MainPage.ets记为add且status completed，输出为Success A entry/src/main/ets/pages/MainPage.ets。",
+          "evidence": [
+            {
+              "source": "runs/2039ebb1-08dc-4537-a87e-fffe5817c7e7/epoch-0/sessions/agent-01a0618e-e290-76b2-b054-c00a0cfa9865.jsonl",
+              "line": 169
+            },
+            {
+              "source": "runs/2039ebb1-08dc-4537-a87e-fffe5817c7e7/epoch-0/sessions/agent-01a0618e-e290-76b2-b054-c00a0cfa9865.jsonl",
+              "line": 170
+            },
+            {
+              "source": "runs/2039ebb1-08dc-4537-a87e-fffe5817c7e7/epoch-0/sessions/agent-01a0618e-e290-76b2-b054-c00a0cfa9865.jsonl",
+              "line": 171
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "Tab点击不切页一支，只有协调者的静态诊断，修复后仅构建通过，观察截止前没有真机回归；尚未证实只用index(this.selectTab)在该设备上一定不切页，所以不作为本卡已核偏差。",
+    "主代理派给转换者的任务正文是加密内容，无法核对派工是否另有禁滑指引；转换者自己读到的MainActivity.kt已足以说明所需语义。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-646efd504782bd3dec69",
+  "metadata": {
+    "migration": {
+      "project": "android-panorama-map-vest7",
+      "server_session_id": "b732e9f2-3b17-42ec-a7e4-51abb6e40d05"
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "codex-auto-review",
+        "gpt-5.3-codex-spark",
+        "gpt-5.4-mini",
+        "gpt-5.6-sol",
+        "gpt-5.6-terra"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.151.0-alpha.7.2",
+        "0.152.1",
+        "0.153.4"
+      ]
+    },
+    "source_set_id": "sources-98613bd90677ff53c5e1",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-09-02T13:56:08.145Z",
+        "ref": "runs/2039ebb1-08dc-4537-a87e-fffe5817c7e7/epoch-0/sessions/agent-01a06265-0064-7221-9f99-de87d96a7fc1.jsonl:L59",
+        "request_ref": "runs/2039ebb1-08dc-4537-a87e-fffe5817c7e7/epoch-0/sessions/agent-01a06265-0064-7221-9f99-de87d96a7fc1.jsonl:L57",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-09-02T13:56:08.145Z",
+        "ref": "runs/2039ebb1-08dc-4537-a87e-fffe5817c7e7/epoch-0/sessions/agent-01a06265-0064-7221-9f99-de87d96a7fc1.jsonl:L59",
+        "request_ref": "runs/2039ebb1-08dc-4537-a87e-fffe5817c7e7/epoch-0/sessions/agent-01a06265-0064-7221-9f99-de87d96a7fc1.jsonl:L57",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.8.3"
+  },
+  "revision": "18d288f83490e84bdbbf7800f0c6c331c8d4f41489b64eef70c18e258187ce1e"
+}

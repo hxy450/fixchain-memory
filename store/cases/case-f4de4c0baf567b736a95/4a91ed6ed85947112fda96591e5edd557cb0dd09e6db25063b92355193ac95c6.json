@@ -1,0 +1,241 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-f4de4c0baf567b736a95",
+  "created_at": "2026-09-27T11:25:40.056089+00:00",
+  "migration_key": "ec916647-9285-40ea-9595-eaa9d20f4eed",
+  "title": "单个 Composable 内切屏共享的播放清理被写成练习页自身的退出契约，规格未写明切到组合库时继续播放",
+  "when": "规格提取阶段，把源端一个 Composable 内多屏切换共享的资源清理（DisposableEffect/onDispose）映射成目标多页面的生命周期契约时",
+  "description": "Android 单 Activity 用状态变量在同一个 Composable 里切换练习屏与组合库屏，播放任务、播放器和 DisposableEffect 清理都挂在这个外层 Composable；目标端拆成 Navigation 下的 PracticePage 与 PresetLibraryPage 两个页面，共享播放服务需要重新确定由哪一层、在什么时机停止和释放。",
+  "summary": "写前实际收到：a2h-spec 主会话在 19:05 用 cat 读取 MainActivity.kt 全文（main-01a0d9f4-a247-7fe0-9cc2-5e0f62e9f5db.jsonl:L51-L57）。\nEarTrainingScreen 内先声明 DisposableEffect(Unit) { onDispose { playbackJob?.cancel(); player.stop() } }，\n随后才是 BackHandler(enabled = screen == AppScreen.Presets) 与 if (screen == AppScreen.Presets) PresetLibraryScreen(...) else 练习界面。\n清理挂在同时承载两屏的外层 Composable 上；切到组合库只改 screen，onDispose 不触发，播放任务与播放器继续存在。\n这段输入正确、清晰，足以确定“切屏不中断播放，清理只随整个屏幕树退出”。\n同一作者在 ui-manifest 把 EarTrainingScreen 映射为 PracticePage，把组合库拆成 NavPathStack 上的 PresetLibraryPage（同转录 L227）；\n19:21 写 F002-audio.md 时，范围写“涉及页面：PracticePage”，对接点写“页面销毁：取消播放任务并 stop()”，\nF002-AC11 判据写“页面退出后无持续音频，重入可重新播放”（同转录 L415-L418），随后的状态机也只列“页面销毁 → 取消 job、stop() 并释放”（L461）。\n规格没有写明切到组合库时播放继续，也没有指出清理归属是承载两页的外层生命周期。偏差位于源码到规格的生命周期归属映射。\n计划作者 plan_slices_c 读到这些规格（agent-01a0da0c-875e-7351-9a78-47a1a4548573.jsonl:L119-L125、L129-L139），\n在 slice-02 写入对接点“PracticePage.onDisappear → TonePlaybackService.stop()”，并把 onDisappear 登记为 Slice 2 Step 3d 的跨切片编辑（L206-L209）。\nconverter_page_0001 按占位写出 aboutToDisappear() { this.onDisappear(); }（agent-01a0da1e-45c4-7870-8b9d-7ce0f064f80a.jsonl:L195-L196）。\n组收尾 base_closer_01 读取 slice-02 与占位登记 P-S2-003（agent-01a0da2c-1e48-7131-8d23-d4c20085289c.jsonl:L544-L551），\n20:41 用 apply_patch 把 onDisappear 填成 this.pageVisible = false; this.playbackModel.dispose();（L639-L642），dispose 内部调用共享 TonePlaybackService.stop()。\n它补读的 MainActivity.kt 是 150-180 与 203-242 行（L595-L598），正好跳过 DisposableEffect 所在段，本链把它记为按计划传递，不另标偏差。\n该片段保留到生成结束与 M 终态（main-01a0d9f4-a247-7fe0-9cc2-5e0f62e9f5db.jsonl:L4288），ECAT 副本修前读回一致（agent-01a0dc20-1f4a-7510-883f-1e1ae0a595ec.jsonl:L35、L38）。\nECAT 第一轮 judge 静态对照判定打开组合库会经 aboutToDisappear 调 dispose 并停止音频（main-01a0dc1e-9f72-7651-850f-c90453a24e58.jsonl:L60）。\nfixer 增加 openingPresetLibrary 标志：打开组合库时 onDisappear 只 setPlayingListener(null)，其他离开仍 dispose，aboutToAppear 与 onShown 复位标志\n（agent-01a0dc20-1f4a-7510-883f-1e1ae0a595ec.jsonl:L72-L75、L118-L121）；另一 fixer 在 EntryAbility.onDestroy 停止共享播放服务\n（agent-01a0dc20-04e8-7ce3-8bfa-d3dd189cb3ce.jsonl:L137-L140），最终停止归到 Ability。两处截止时保留。\n转录内没有“播放中打开组合库”的设备复现。迁移期设备点击发现从组合库返回后练习页仍显示旧快照（main-01a0d9f4-a247-7fe0-9cc2-5e0f62e9f5db.jsonl:L5647），\n说明作为 Navigation 首页内容的 PracticePage 在推入/返回时没有重建，打开组合库时 aboutToDisappear 很可能并未触发。\n因此本卡归因的是规格与代码中“播放释放归属到练习页退出”这一契约偏差，是否确实打断了音频未经设备验证。\n",
+  "recommendations": [
+    "规格提取阶段：源端清理（DisposableEffect/onDispose）所在的 Composable 同时承载多个屏幕时，把清理归属写成承载这些屏幕的外层生命周期（目标端通常是 Ability 或 Navigation 宿主页），并在跨页对接点写明切到其他屏幕时播放继续；本例应写“打开组合库不停止播放，Ability 销毁时 stop()”。",
+    "规格提取阶段写“页面销毁/页面退出”类判据前，对照源码确认 onDispose 的真实触发条件（本例只有整个 EarTrainingScreen 离开组合时），逐个列出源码里会改 screen 状态的入口，确认它们在目标端对应的导航动作不会被写成释放条件。",
+    "计划与实现阶段：把共享服务的 stop/dispose 挂到页面回调前，先确认页面挂载方式（Navigation 首页内容还是 NavPathStack 页面）和推入子页时实际触发的回调；共享服务的最终释放放在拥有它的层级（如 EntryAbility.onDestroy），页面离开只解除自身监听。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/home/lsq/repo/harmonyapps/eartraining/entry/src/main/ets/pages/PracticePage.ets",
+        "since": "2026-09-25T20:58:11.566Z",
+        "at": "2026-09-26T07:40:33.959Z"
+      },
+      "nodes": [
+        {
+          "key": "/home/lsq/repo/eartraining/app/src/main/java/com/example/eartrainer/MainActivity.kt",
+          "at": "2026-09-25T19:05:19.839Z",
+          "reason": "正常输入：a2h-spec 主会话 cat 全文的回执含 EarTrainingScreen 内的 DisposableEffect(Unit) { onDispose { playbackJob?.cancel(); player.stop() } }，以及同一 Composable 里的 if (screen == AppScreen.Presets) PresetLibraryScreen(...)；足以说明切到组合库不触发清理（main-01a0d9f4-a247-7fe0-9cc2-5e0f62e9f5db.jsonl:L51、L53、L57）。"
+        },
+        {
+          "key": "01a0d9f4-a247-7fe0-9cc2-5e0f62e9f5db",
+          "at": "2026-09-25T19:21:33.626Z",
+          "reason": "a2h-spec 主会话读到上述源码后，apply_patch 新建 F002-audio.md：范围“涉及页面：PracticePage”，对接点“页面销毁：取消播放任务并 stop()”，AC11 判据“页面退出后无持续音频”；外层 Composable 的清理被收窄成练习页退出，切到组合库时播放继续这一行为没有写入（同转录 L415-L418）。",
+          "problem": true
+        },
+        {
+          "key": "/home/lsq/repo/harmonyapps/eartraining/spec/baseline/features/F002-audio.md",
+          "at": "2026-09-25T19:31:31.238Z",
+          "reason": "交付桥梁：plan_slices_c 先用 rg 取回含 F002-AC11“页面退出后无持续音频”的行，再 sed 读 1-68 行，回执含“涉及页面：PracticePage”与“页面销毁：取消播放任务并 stop()”（agent-01a0da0c-875e-7351-9a78-47a1a4548573.jsonl:L119-L125、L129-L139）。"
+        },
+        {
+          "key": "01a0da0c-875e-7351-9a78-47a1a4548573",
+          "at": "2026-09-25T19:32:50.073Z",
+          "reason": "计划作者按上述规格在 slice-02-f002.md 写入对接点“PracticePage.onDisappear → TonePlaybackService.stop()”，并把 handler onDisappear 列为 Slice 2 Step 3d 的跨切片编辑；本链确认它把规格契约传到计划，不另标偏差（同转录 L206-L209）。"
+        },
+        {
+          "key": "/home/lsq/repo/harmonyapps/eartraining/spec/baseline/plans/slices/slice-02-f002.md",
+          "at": "2026-09-25T20:39:28.290Z",
+          "reason": "交付桥梁：base_closer_01 末组收尾时 cat slice-02-f002.md，回执含“PracticePage.onDisappear → TonePlaybackService.stop()”与 onDisappear 的 cross_slice_edits；同一批 rg 取回占位登记 P-S2-003（PracticePage.ets#onDisappear）（agent-01a0da2c-1e48-7131-8d23-d4c20085289c.jsonl:L544、L547、L551）。"
+        },
+        {
+          "key": "01a0da2c-1e48-7131-8d23-d4c20085289c",
+          "at": "2026-09-25T20:41:28.237Z",
+          "reason": "base_closer_01 按计划解析 P-S2-003，apply_patch 把 PracticePage 的 onDisappear 占位填成 this.pageVisible = false; this.playbackModel.dispose();（aboutToDisappear 已由 converter 接到 onDisappear），将规格的练习页退出释放契约写入目标（同转录 L639-L642）。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "a2h-spec 主会话在同一 exec 中 cat MainActivity.kt，CommandExecution 完成且回执含 EarTrainingScreen 的 DisposableEffect/onDispose 与同一 Composable 内的 if (screen == AppScreen.Presets) 切屏分支；这是它写 F002 规格前对源码的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/main-01a0d9f4-a247-7fe0-9cc2-5e0f62e9f5db.jsonl",
+              "line": 51
+            },
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/main-01a0d9f4-a247-7fe0-9cc2-5e0f62e9f5db.jsonl",
+              "line": 53
+            },
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/main-01a0d9f4-a247-7fe0-9cc2-5e0f62e9f5db.jsonl",
+              "line": 57
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "a2h-spec 主会话 apply_patch 以 Add File 新建 F002-audio.md，FileChange 回执 status=completed，内容含“涉及页面：PracticePage”“页面销毁：取消播放任务并 stop()”与 AC11“页面退出后无持续音频”。",
+          "evidence": [
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/main-01a0d9f4-a247-7fe0-9cc2-5e0f62e9f5db.jsonl",
+              "line": 415
+            },
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/main-01a0d9f4-a247-7fe0-9cc2-5e0f62e9f5db.jsonl",
+              "line": 416
+            },
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/main-01a0d9f4-a247-7fe0-9cc2-5e0f62e9f5db.jsonl",
+              "line": 418
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "plan_slices_c 在写切片前先用 rg 取回 F002-audio.md 的标题/列表行（含 F002-AC11 页面退出判据），再用 sed -n '1,68p' 读取正文，回执含“涉及页面：PracticePage”与“页面销毁：取消播放任务并 stop()”。",
+          "evidence": [
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da0c-875e-7351-9a78-47a1a4548573.jsonl",
+              "line": 120
+            },
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da0c-875e-7351-9a78-47a1a4548573.jsonl",
+              "line": 125
+            },
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da0c-875e-7351-9a78-47a1a4548573.jsonl",
+              "line": 131
+            },
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da0c-875e-7351-9a78-47a1a4548573.jsonl",
+              "line": 139
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": 5,
+          "force": true,
+          "reason": "plan_slices_c 的 exec 调用 apply_patch 新建 slice-02-f002.md，FileChange 回执 status=completed，内容含“PracticePage.onDisappear → TonePlaybackService.stop()”与 handler onDisappear 的 cross_slice_edits。",
+          "evidence": [
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da0c-875e-7351-9a78-47a1a4548573.jsonl",
+              "line": 206
+            },
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da0c-875e-7351-9a78-47a1a4548573.jsonl",
+              "line": 208
+            },
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da0c-875e-7351-9a78-47a1a4548573.jsonl",
+              "line": 209
+            }
+          ]
+        },
+        {
+          "from": 5,
+          "to": 6,
+          "force": true,
+          "reason": "base_closer_01 接末组收尾任务后在同一 exec 中 cat slice-02-f002.md，CommandExecution 完成，回执含 onDisappear → stop() 对接点；这是其填写 PracticePage 占位前的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da2c-1e48-7131-8d23-d4c20085289c.jsonl",
+              "line": 544
+            },
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da2c-1e48-7131-8d23-d4c20085289c.jsonl",
+              "line": 547
+            },
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da2c-1e48-7131-8d23-d4c20085289c.jsonl",
+              "line": 551
+            }
+          ]
+        },
+        {
+          "from": 6,
+          "to": "target",
+          "force": true,
+          "reason": "base_closer_01 的 exec 调用 apply_patch 更新 PracticePage.ets，FileChange 回执 status=completed，diff 把 onDisappear 中的 FWD-REF P-S2-003 占位替换为 this.pageVisible = false; this.playbackModel.dispose();。",
+          "evidence": [
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da2c-1e48-7131-8d23-d4c20085289c.jsonl",
+              "line": 639
+            },
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da2c-1e48-7131-8d23-d4c20085289c.jsonl",
+              "line": 640
+            },
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da2c-1e48-7131-8d23-d4c20085289c.jsonl",
+              "line": 642
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/home/lsq/Desktop/codex-test/plus-validation/eartraining-ecat/entry/src/main/ets/pages/PracticePage.ets",
+      "reason": "已确认修改：ECAT 第一轮 fixer 于 05:12:18 与 05:13:11 加 openingPresetLibrary 标志并在 onShown 复位（agent-01a0dc20-1f4a-7510-883f-1e1ae0a595ec.jsonl:L72-L75、L118-L121），截止时保留。E 是转录外由 M 迁移终态复制的副本，转录内没有 cp/clone/commit 记录；fixer 修前读回的 aboutToDisappear → onDisappear → dispose 片段（同转录 L35、L38）与 M 终态（main-01a0d9f4-a247-7fe0-9cc2-5e0f62e9f5db.jsonl:L4288）一致，生成来源即上方 M 图。缺 M 到 E 复制这一步的可核交接，因此不单独画图。"
+    },
+    {
+      "key": "/home/lsq/Desktop/codex-test/plus-validation/eartraining-ecat/entry/src/main/ets/entryability/EntryAbility.ets",
+      "reason": "已确认修改：entry_crash_pages fixer 于 05:13:23 在 onDestroy 追加 (capabilityTable.svc_TonePlaybackService as TonePlaybackService).stop()（agent-01a0dc20-04e8-7ce3-8bfa-d3dd189cb3ce.jsonl:L137-L140），截止时保留，是练习页不再在打开组合库时释放后的配套。修前 E 的 onDestroy 只写日志（agent-01a0dc20-1f4a-7510-883f-1e1ae0a595ec.jsonl:L59 读回）；缺少 Ability 级停止与上方 M 图同源（规格把释放归属写成练习页退出），但 E 为转录外复制的副本，缺复制交接，不单独画图。"
+    }
+  ],
+  "job": "issue-f4de4c0baf567b736a95",
+  "metadata": {
+    "migration": {
+      "project": "听音练习",
+      "server_session_id": "ec916647-9285-40ea-9595-eaa9d20f4eed",
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "codex-auto-review",
+        "gpt-6-sol"
+      ],
+      "tool_versions": {
+        "orchestrator": "hmigbot-plus",
+        "runtime_version": "v1.5.2",
+        "runtime_commit": "c47f332",
+        "client_version": "hmigbot-plus-1.6.0",
+        "pack_version": "hmigbot-plus-1.6.0",
+        "codex_cli_version": "0.157.0"
+      }
+    },
+    "analysis": {
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "platforms": [
+        "claude-code"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "codex-auto-review",
+        "gpt-6-sol"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.157.0"
+      ]
+    },
+    "source_set_id": "sources-7dfa3baba9b514aa9b9d",
+    "card_tool_version": "0.8.3"
+  },
+  "revision": "4a91ed6ed85947112fda96591e5edd557cb0dd09e6db25063b92355193ac95c6"
+}

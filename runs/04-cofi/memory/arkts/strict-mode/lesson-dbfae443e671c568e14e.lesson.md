@@ -27,7 +27,5 @@ ArkTS 只允许 throw Error 及其子类，catch 变量类型未定，原样 `th
 
 ## 来源（按需复核）
 
-经验是有适用范围的历史建议。核查来源时同时看结论与 unknown；来源卡未随阅读包复制。
-
 - case-7da8b355891030ab0ada · 结论：diagnosis, recommendation:1, recommendation:3
-  卡片版本：`5ab4621b1bfc5721b69067d5da598904af19ba35435407bd81b063f3e9861c10`
+  卡片版本：`e6be8a04ed9e23e71666c989b05f838c659d80abab9ce4eedab885e809c5a86d`

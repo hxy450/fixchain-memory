@@ -23,7 +23,5 @@ ID：`lesson-6a95a3ae5f47a15892fc` · 版本：1
 
 ## 来源（按需复核）
 
-经验是有适用范围的历史建议。核查来源时同时看结论与 unknown；来源卡未随阅读包复制。
-
 - case-0d37e50dbb1a2e0a9bee · 结论：diagnosis, recommendation:2, recommendation:3
-  卡片版本：`7fbc848cfb90a15e798d2472d36faa73ad928f6ec3feffb5dd92bb38e0736491`
+  卡片版本：`dd0c06714b2aa06b01298a979372bf1f1269462a6ea360cb9816f57b9fe57ad1`

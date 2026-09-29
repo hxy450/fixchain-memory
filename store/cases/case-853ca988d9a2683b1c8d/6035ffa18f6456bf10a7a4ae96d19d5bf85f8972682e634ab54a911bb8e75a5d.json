@@ -1,0 +1,290 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-853ca988d9a2683b1c8d",
+  "created_at": "2026-09-27T22:15:11.035315+00:00",
+  "migration_key": "dc1176d6-edc1-4b76-a9d4-31bd94c63ea0",
+  "title": "把 Gson 反序列化的 Bean 与响应壳翻成严格 typeof 解码，丢失标量宽松转换与解密原文回退",
+  "when": "数据层/网络层实现阶段，把 Android Retrofit+Gson 的 Bean、BaseResponse 与响应解密管线翻译成 ArkTS 显式 JSON 解码器和响应中间件时",
+  "description": "源工程用 Gson（@SerializedName Bean、TypeAdapter）把解密后的 JSON 填进 Int/String 字段，AESUtil.decrypt 失败时返回原文；目标改为手写 decoder/中间件逐字段 typeof 校验，且真实响应样例尚未采集（golden 为 needs_capture）。",
+  "summary": "生成期 Stage2 Phase0 两个并行 worker 分别写模型层和网络层。Base-1（019ff65f，models/**）写前读到\nfeature-base 的共享模型表（BaseResponse 的 code/msg/time 为 number/string/string）、“Gson BaseResponse<T> → 显式 JSON decoder，\n保留名称、可空性和泛型边界”“decoder 必须显式校验字段”，以及 Android Bean 源码：LoginInfoBean `var id = \"\"`、\n`todayPoint: String?`，WeatherHomeBean.RealTimeBean `@SerializedName(\"aqi\") var aqi = 0`，均由 Gson 填充。\n规格与源码都没有给出与声明类型不符的真实响应样例，但源端解析器是 Gson，它会把 JSON 数字写进 String 字段、把数字字符串写进 Int 字段。\n本次输出却把 JsonDecoder.string/nullableString 写成“非 string 即 throw DecodeError”、number/nullableNumber 写成“非 number 即 throw”，\nLoginInfoBean.decode 以 JsonDecoder.string 读取 id、todayPoint。偏差位于“Gson 反序列化语义 → 显式 decoder 实现”这一环；\n规格只写了字段类型和“显式校验”，没有写出 Gson 的标量容忍，这一缺口使实现者按声明类型做了硬校验。\nBase-3（019ff696，network/**）写前读到 AESUtil.decrypt 在 catch 中 return content、ResponseBodyConverter 解密后直接交给 Gson，\n却让 ResponseMiddleware 在解密异常时直接 throw DECRYPTION，并以 typeof code !== 'number'、time !== 'number' 严格拒绝响应壳；\n它对响应壳只读到 feature-base §3 与 common.md 中的字段名 code/msg/time/data，未查 §1.1 或 BaseResponse.kt，就在 NetworkTypes 另写了一份\nBaseResponse 并把 time 定为 number，而 Android 为 `val time: String`，同时由 Base-1 写的 CoreModels.BaseResponse 用的是 string。\n这些片段保留到返修：真实服务端返回 code 为字符串、time 为数字，LoginInfoBean.id 为数字，天气 aqi 为数字字符串，\nHTTP 200 被判为解析失败（main-019ffb4e…jsonl:L936-L940、L1230-L1233、L1587）。\n修复依次为：解密失败回退按原文解析、time 改为 string（L697）；code/time 按 number 或数字字符串宽松转换（L943）；\nLoginInfoBean.id/todayPoint 兼容数字（L1235-L1239、L1283-L1287，补丁回执失败但读回已含 rawId/rawTodayPoint，写入者不在本卡认定）；\nJsonDecoder.string/nullableString 接受有限数字与布尔并转字符串、number/nullableNumber 接受数字字符串（L1590）。\n",
+  "recommendations": [
+    "实现显式 decoder 前，先写出源反序列化库的标量容忍规则：Gson 会把 JSON 数字填入 String 字段、把数字字符串填入 Int/int 字段；目标 string/number 读取应接受这些等价形态并转换，而不是 typeof 不符就抛错。",
+    "规格提取阶段把 “Gson → 显式 decoder” 写进契约时，除字段名、可空性和声明类型外，还要写明需保留的宽松转换（数字↔字符串、布尔转字符串）；真实响应尚未采集时，按源解析器的接受范围设计兼容，而不是按声明类型收紧。",
+    "翻译响应解密/解析管线时，逐个对照源工具的异常分支：AESUtil.decrypt 在 catch 中返回原文，目标解密失败应回退按原文解析，只有解析也失败才返回错误。",
+    "定义 BaseResponse 等共享类型时，从共享模型规格表或 Android Bean 取字段类型，并复用已有定义；只读到字段名时先查类型来源，不自行选择 number/string。",
+    "最小回归：{code:'200', msg:'ok', time:1723456789, data:{}} 应解析为 code=200、time='1723456789'；{id:123, aqi:'42'} 应得到 id='123'、aqi=42；明文 JSON 响应在解密失败后仍能解析。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "D:/HnaccurateWeather_HarmonyOS/entry/src/main/ets/models/JsonDecoder.ets",
+        "since": "2026-08-13T13:29:02.643Z",
+        "at": "2026-08-21T09:35:59.738Z"
+      },
+      "nodes": [
+        {
+          "key": "D:/HnaccurateWeather_HarmonyOS/spec/baseline/feature-base.md",
+          "at": "2026-08-13T03:03:35.718Z",
+          "reason": "规格输入：Base-1 写前 Get-Content 全文（中文经控制台乱码，代码标识可读）。§1.1 给出 BaseResponse 的 code/msg/time 为 number/string/string；映射表把 Gson BaseResponse<T> 换成显式 JSON decoder，只要求保留名称、可空性和泛型边界；共享 DTO 段要求 decoder 显式校验字段。未写 Gson 的标量转换，这是规格缺口，但源端是 Gson 这一事实已给出（agent-019ff65f…jsonl:L1790-L1791）。"
+        },
+        {
+          "key": "E:/Androidproject/app_hnaccurateweather_live_android/base/src/main/java/com/cstools/base/data/bean/WeatherHomeBean.kt",
+          "at": "2026-08-13T03:05:18.789Z",
+          "reason": "正常输入：逐个读取 bean 目录的回执中含 WeatherHomeBean.RealTimeBean `@SerializedName(\"aqi\") var aqi = 0`，即 aqi 为 Int 并由 Gson 填充；Gson 对该字段同样接受数字字符串（同转录 L1829-L1830）。"
+        },
+        {
+          "key": "019ff65f-00a7-7f12-be1b-6b65a996c848",
+          "at": "2026-08-13T03:07:14.490Z",
+          "reason": "读到上述规格与 Gson Bean 后，apply_patch 新建 JsonDecoder：string/nullableString 遇非 string 即 throw DecodeError(key,'string')，number/nullableNumber 遇非 number 即 throw 'finite number'；把 Gson 可接受的数字↔字符串转换写成硬失败（同转录 L1851-L1852）。该片段保留到 L1590 修复。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "Base-1 在写 JsonDecoder 前用 exec 对 spec/baseline/feature-base.md 执行 Get-Content，回执返回共享模型类型表、Gson→显式 decoder 映射及“decoder 必须显式校验字段”。",
+          "evidence": [
+            {
+              "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff65f-00a7-7f12-be1b-6b65a996c848.jsonl",
+              "line": 1790
+            },
+            {
+              "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff65f-00a7-7f12-be1b-6b65a996c848.jsonl",
+              "line": 1791
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "Base-1 在写 JsonDecoder 前 exec 遍历 base/data/bean 目录 Skip 25 的文件并 Get-Content，回执含 WeatherHomeBean.kt 的 RealTimeBean aqi = 0（Gson @SerializedName）。",
+          "evidence": [
+            {
+              "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff65f-00a7-7f12-be1b-6b65a996c848.jsonl",
+              "line": 1829
+            },
+            {
+              "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff65f-00a7-7f12-be1b-6b65a996c848.jsonl",
+              "line": 1830
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "D:/HnaccurateWeather_HarmonyOS/entry/src/main/ets/models/AccountModels.ets",
+        "since": "2026-08-13T13:29:02.643Z",
+        "at": "2026-08-21T09:35:59.738Z"
+      },
+      "nodes": [
+        {
+          "key": "E:/Androidproject/app_hnaccurateweather_live_android/base/src/main/java/com/cstools/base/data/bean/LoginInfoBean.kt",
+          "at": "2026-08-13T03:05:09.492Z",
+          "reason": "正常输入：Base-1 逐个读取 bean 目录的回执中含 LoginInfoBean `var id = \"\"`、`var todayPoint: String? = null`，由 Gson 反序列化；服务端数字 id 在 Android 会被转成字符串（agent-019ff65f…jsonl:L1825-L1826）。"
+        },
+        {
+          "key": "019ff65f-00a7-7f12-be1b-6b65a996c848",
+          "at": "2026-08-13T03:07:58.948Z",
+          "reason": "apply_patch 新建 AccountModels：LoginInfoBean.decode 以 JsonDecoder.string(j,'id')、nullableString(j,'todayPoint') 读取，沿用自己 03:07:14 写下的严格 decoder，数字 id 会被判为 'id: expected string'（同转录 L1856-L1857；返修时日志见 main-019ffb4e…jsonl:L1230）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "Base-1 在写 AccountModels 前 exec 遍历 base/data/bean 目录前 25 个文件并 Get-Content，回执含 LoginInfoBean.kt 的 var id = \"\" 与 todayPoint: String?。",
+          "evidence": [
+            {
+              "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff65f-00a7-7f12-be1b-6b65a996c848.jsonl",
+              "line": 1825
+            },
+            {
+              "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff65f-00a7-7f12-be1b-6b65a996c848.jsonl",
+              "line": 1826
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "D:/HnaccurateWeather_HarmonyOS/entry/src/main/ets/network/ResponseMiddleware.ets",
+        "since": "2026-08-13T13:29:02.643Z",
+        "at": "2026-08-21T09:35:59.738Z"
+      },
+      "summary": "Base-3 写前实际读到 AESUtil.decrypt 的 catch 分支返回原文、ResponseBodyConverter 在解密后直接交给 Gson TypeAdapter，\n足以确定“解密失败仍按原文解析”；feature-base §3.2 概括为“传输/解密/解析异常是 DataResult.error”，同节注明算法真值由 App.beforeResponse 与 Android AES 工具校验，源码行为优先于这句概括。\n输出却在解密 catch 中直接 throw DECRYPTION，并用 typeof 严格要求 code 为 number、time 为 number。\n返修先改为原文回退与 time string（main-019ffb4e…jsonl:L697），后改为 code/time 宽松标量转换（L943）。\n",
+      "nodes": [
+        {
+          "key": "E:/Androidproject/app_hnaccurateweather_live_android/base/src/main/java/com/cstools/base/util/AESUtil.java",
+          "at": "2026-08-13T03:06:56.178Z",
+          "reason": "正常输入：Base-3 exec 读取 AESUtil，decrypt 在 catch(Exception e) 中 printStackTrace 后 return content，即解密失败返回原文（agent-019ff696…jsonl:L2651-L2652）。"
+        },
+        {
+          "key": "E:/Androidproject/app_hnaccurateweather_live_android/base/src/main/java/com/cstools/base/data/net/ResponseBodyConverter.kt",
+          "at": "2026-08-13T03:07:03.420Z",
+          "reason": "正常输入：convert 中 json = AESUtil.decrypt(json, Constants.AES_KEY) 后直接 gson adapter.read，没有独立的解密失败分支；壳字段由 Gson TypeAdapter 解析（同转录 L2654-L2655）。"
+        },
+        {
+          "key": "D:/HnaccurateWeather_HarmonyOS/spec/baseline/feature-base.md",
+          "at": "2026-08-13T03:06:35.171Z",
+          "reason": "规格输入：§3.2 写“响应体先整包 AES-CBC 解密，再 JSON 反序列化为 BaseResponse<T>”“传输/解密/解析异常是 DataResult.error”，并注明算法真值由 App.beforeResponse 与 Android AES 工具校验；§3 未列壳字段类型，也未写 Gson 标量转换（同转录 L2644-L2645）。"
+        },
+        {
+          "key": "019ff696-5618-78d2-a059-a02982380b3d",
+          "at": "2026-08-13T03:08:34.988Z",
+          "reason": "读到上述输入后，apply_patch 新建 ResponseMiddleware：解密 catch 直接 throw NetworkError(DECRYPTION)，未按 AESUtil 回退原文；typeof parsed.code !== 'number' || parsed.time !== 'number' 即判 Invalid BaseResponse envelope，把 Gson 对 code/time 的标量转换写成硬校验（同转录 L2664-L2665）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4,
+          "force": true,
+          "reason": "Base-3 写 ResponseMiddleware 前 exec 以 Join-Path $root 'base/src/main/java/com/cstools/base/util/AESUtil.java' Get-Content -Raw，回执含 decrypt 的 catch 分支 return content。",
+          "evidence": [
+            {
+              "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff696-5618-78d2-a059-a02982380b3d.jsonl",
+              "line": 2651
+            },
+            {
+              "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff696-5618-78d2-a059-a02982380b3d.jsonl",
+              "line": 2652
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 4,
+          "force": true,
+          "reason": "Base-3 写 ResponseMiddleware 前 exec 查找 ResponseBodyConverter.* 并 Get-Content -Raw，回执返回 base/data/net/ResponseBodyConverter.kt：AESUtil.decrypt 后直接 gson adapter.read。",
+          "evidence": [
+            {
+              "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff696-5618-78d2-a059-a02982380b3d.jsonl",
+              "line": 2654
+            },
+            {
+              "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff696-5618-78d2-a059-a02982380b3d.jsonl",
+              "line": 2655
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "Base-3 写 ResponseMiddleware 前 exec 对 spec/baseline/feature-base.md 执行 Select-String（^## 3 等，Context 0,80），回执返回 §3.1–§3.4 响应管线与错误映射。",
+          "evidence": [
+            {
+              "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff696-5618-78d2-a059-a02982380b3d.jsonl",
+              "line": 2644
+            },
+            {
+              "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff696-5618-78d2-a059-a02982380b3d.jsonl",
+              "line": 2645
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "D:/HnaccurateWeather_HarmonyOS/entry/src/main/ets/network/NetworkTypes.ets",
+        "since": "2026-08-13T13:29:02.643Z",
+        "at": "2026-08-21T09:35:59.738Z"
+      },
+      "summary": "Base-3 写 NetworkTypes 前只读到 feature-base §3 与 common.md 中 BaseResponse<T> 的字段名 code/msg/time/data；\n同文件 §1.1 已写 time 为 string，Android BaseResponse.kt 为 `val time: String`，但它没有查这两处。\n输出在 network 层另定义 BaseResponse 并写 time: number = 0，与 Base-1 同期写入的 CoreModels.BaseResponse（time: string）形成两份不一致的定义。该声明保留到返修，L697 改为 time: string；运行时 time 实为数字，最终由中间件 L943 做宽松转换。\n",
+      "recommendations": [
+        "网络层需要响应壳类型时，先引用共享模型层已有的 BaseResponse 或规格 §1.1 的类型表；只拿到字段名时查 Android Bean，不自行选择 number/string。"
+      ],
+      "nodes": [
+        {
+          "key": "D:/HnaccurateWeather_HarmonyOS/spec/baseline/feature-base.md",
+          "at": "2026-08-13T03:06:35.171Z",
+          "reason": "实际收到的输入：Select-String 返回 §3 窗口，只写响应解密后反序列化为 BaseResponse<T>，未含 §1.1 类型表（time 为 string）；写前也未读 Android BaseResponse.kt。输入只给了字段名，不足以决定 time 类型（agent-019ff696…jsonl:L2644-L2645）。"
+        },
+        {
+          "key": "019ff696-5618-78d2-a059-a02982380b3d",
+          "at": "2026-08-13T03:07:44.556Z",
+          "reason": "apply_patch 新建 NetworkTypes，BaseResponse<T> 写 time: number = 0。该类型没有输入依据，与 Android `val time: String` 及规格 §1.1 不一致，并与 models/CoreModels 中 time: string 的共享定义重复（同转录 L2660-L2661）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "Base-3 写 NetworkTypes 前 exec 对 spec/baseline/feature-base.md 执行 Select-String（^## 3 等），回执只含 §3 起的窗口，BaseResponse<T> 只有字段名。",
+          "evidence": [
+            {
+              "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff696-5618-78d2-a059-a02982380b3d.jsonl",
+              "line": 2644
+            },
+            {
+              "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff696-5618-78d2-a059-a02982380b3d.jsonl",
+              "line": 2645
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "根编排派给 Base-1/Base-3 的任务正文是 encrypted_content，无法核对派工是否额外给出类型或 Gson 兼容要求；输入范围依据 worker 自述及 feature-plan 的 Base-1/Base-3 条目（Base-3 input 为 feature-base §3）判断。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-853ca988d9a2683b1c8d",
+  "metadata": {
+    "migration": {
+      "project": "app_hnaccurateweather_live_android",
+      "server_session_id": "dc1176d6-edc1-4b76-a9d4-31bd94c63ea0"
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "gpt-5.6-sol"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.147.0-alpha.6.5",
+        "0.147.0-alpha.6.6",
+        "0.148.0-alpha.15"
+      ]
+    },
+    "source_set_id": "sources-c7d168a1d2603d15ed6b",
+    "card_tool_version": "0.8.3"
+  },
+  "revision": "6035ffa18f6456bf10a7a4ae96d19d5bf85f8972682e634ab54a911bb8e75a5d"
+}

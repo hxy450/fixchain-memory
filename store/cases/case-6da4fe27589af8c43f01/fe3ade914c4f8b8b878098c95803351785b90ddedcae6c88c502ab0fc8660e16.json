@@ -1,0 +1,207 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-6da4fe27589af8c43f01",
+  "created_at": "2026-09-27T12:53:09.480197+00:00",
+  "migration_key": "c48c34f6-1f91-421f-aa50-0064cb39d8cd",
+  "title": "补全计时器桩时未读切片规格，按自拟状态机写偏概览/完成/跳步重量等行为",
+  "when": "功能实现阶段（计时切片），为页面上遗留的计时器 FWD-REF 桩实现开始、跳步、完成、完成后提示与底板暂停逻辑时",
+  "description": "源端计时器以当前步为空的概览态起步，Start 后才进入第 0 步；末步完成时清空当前步、进入满进度完成态；已完成重量按前序步骤与合并重量设置派生；支持对话框只在重复完成时出现；打开比例底板时暂停计时。目标页由 UI 转换留下指向计时切片的占位桩，需要后续实现者补全。",
+  "summary": "详情页转换者 agent-01a0b8b4 写前读了 F003 规格（AC01/AC05/AC09/AC11/AC15，agent-01a0b8b4-fd8f-7330-8cb3-9bc3620685e3.jsonl:L58-L63），\n以及 RecipeDetails.kt、app Timer.kt、TimerText.kt、share Timer.kt 1-220 行（同转录 L74-L82、L101-L102、L121-L126、L193-L194）。\n它把 currentStepIndex 初值写成 -1，startFab 在无当前步时走 startRecipe；计时逻辑按分工留成 FWD-REF P-S3-001/P-S3-002 桩，交给 Slice 3。\n这一版在初始态上与源码一致。\n限流续跑后，主会话 main-01a0b85d 自己接手 Stage 2/3。它读过 feature-plan.md 中“Slice 3 细则见 plans/slices/slice-03-F003.md”的指针\n（main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl:L382-L383），也读过占位登记表中 P-S3-001/P-S3-002 的“resolve_by Slice 3 Step 3d”（L1005-L1006）。\n但在 09:59 写计时逻辑前，它没有打开 slice-03-F003.md 或 F003，也没有重读源码；此前唯一一次读 share Timer.kt（06:36，L119-L120）\n的输出在中段被截断，正好缺了 rememberAlreadyDoneWeight 和 changeToNextStep。\n于是 L1543-L1544 这次 apply_patch 写出的是一套自拟状态机：\nloadRecipeData 在有步骤时直接设 currentStepIndex=0，跳过了 AC05 的概览→开始转换；\nadvanceToNextStep 先把 progress 置 0 再调 finishRecipe，完成后当前步停在末步，与 AC11 要求的 index=-1、isDone、progress=1 相反；\nfinishRecipe 在未问过支持时首完即弹窗，evaluateAutoGates 也在 lastFinished>0 时弹窗，而源码只在 hasDoneThisRecipeMoreThanOnce 时弹；\nswitchToStep 只清零进度，不按前序步骤重算 alreadyDoneWeight（AC15 / 源码 subList(0, index)）；\n比例底板也没有接 RecipeDetails.kt:259-263 的“可见且运行中即暂停”。\n这些片段一直保留到 ECAT 首轮 worker 读取时（agent-01a0b99f-572e-7323-b456-048006bc823d.jsonl:L117-L119）。\n该 worker 随后改成 -1 概览态、progress=1 完成态、重复完成才弹窗、底板可见即暂停、跳步重算重量（同转录 L380-L744，回执 L780）。\n第二条链：转换者读到了 AC01“缺失 recipeId 进入无效路由错误、不渲染假配方”，但 08:19:58 写 build 时把 startFab 放在 routeError 分支之外，\n判定只写了 recipeId<0；而它自己定义的 RecipeDetailsRouteParam 默认值是 0，不带 id 的参数对象会以 0 通过校验\n（agent-01a0b8b4-fd8f-7330-8cb3-9bc3620685e3.jsonl:L232、L267-L268）。\n两轮 worker 把 0/负数/非整数 id 都判为错误态，并在错误态不渲染 startFab（agent-01a0b9e0-fd9b-7c11-9545-865aed507e15.jsonl:L310、L330）。\n重量公式一项不算生成偏差。转换者在 08:19:00 写出 value×progress×timeMultiplier×weightMultiplier+alreadyDoneWeight（L242-L243），\n与源码一致：app Timer.kt:100-104、204-209 把 progress×timeMultiplier 传给 TimerValue，TimerText.kt:53-57 再乘 value 和 weightMultiplier；\nF003 也没有另给重量进度公式。最终去掉 timeMultiplier，是 ECAT 判官按“2 倍时间不应显示 2 倍重量”提出的新要求，本卡不画链。\n",
+  "recommendations": [
+    "计时切片实现（含编排者自己接手切片）在替换 FWD-REF 计时桩前，先打开占位登记表指向的切片计划 slice-03-F003.md 和 F003 验收项，再对照源码 share Timer.kt 的 changeToNextStep、rememberAlreadyDoneWeight 与 RecipeDetails.kt 的弹窗/底板代码；读取回执带 truncated 时，按行号分段重读被截掉的函数体。",
+    "按验收项逐条落状态机，并在输出前自查：初始 currentStepIndex=-1（概览态，Start 后才到 0）；末步完成后 index=-1、isDone=true、progress=1；跳步后 alreadyDoneWeight 按 steps[0..index) 与合并重量设置重算；支持对话框只在完成前 lastFinished≠0 时出现；比例底板可见且正在计时时暂停。",
+    "UI 转换阶段写无效路由错误态时，让开始按钮等配方操作入口受同一 routeError 条件控制；缺失 id 的哨兵值要在路由参数类默认值和有效性判定里保持一致（例如都视 ≤0 为无效）。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/private/tmp/testCofi-codex/entry/src/main/ets/pages/RecipeDetailsPage.ets",
+        "since": "2026-09-19T10:26:37.280Z",
+        "at": "2026-09-19T13:59:12.701Z"
+      },
+      "nodes": [
+        {
+          "key": "/private/tmp/testCofi-codex/spec/baseline/plans/feature-plan.md",
+          "at": "2026-09-19T07:41:50.574Z",
+          "reason": "交付指针：主会话 cat 回执中列出“Slice 3: Recipe Details and Foreground Timer (F003) / detail: plans/slices/slice-03-F003.md”。该切片与 F003 已写明 AC05/AC11/AC15，本条只证明主会话拿到了去哪读细则（main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl:L382-L383）。"
+        },
+        {
+          "key": "/private/tmp/testCofi-codex/spec/placeholder-registry.md",
+          "at": "2026-09-19T09:35:38.306Z",
+          "reason": "交付指针：主会话读回的登记表写着 P-S3-001（start/pause/resume/manual-advance）、P-S3-002（changeCurrentStep/progress reset/heavy-click haptic），resolve_by 都是 Slice 3 Step 3d；这些桩要按计时切片计划补全（同转录 L1005-L1006）。"
+        },
+        {
+          "key": "main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl",
+          "at": "2026-09-19T09:59:29.904Z",
+          "reason": "拿到上述指针后，没有打开 slice-03/F003，也没有补读被截断的 Timer.kt 函数体（L119-L120），就用 apply_patch 写出计时逻辑：loadRecipeData 设 currentStepIndex=0；完成时 progress 置 0、当前步停在末步；首完即弹支持对话框；switchToStep 不重算 alreadyDoneWeight；底板打开不暂停（同转录 L1543-L1544）。",
+          "problem": true
+        },
+        {
+          "key": "/private/tmp/testCofi-codex/spec/baseline/features/F003-recipe-details.md",
+          "at": "2026-09-19T08:09:03.648Z",
+          "reason": "正常输入：转换者 sed 读回 F003 验收项，其中 AC01 要求缺失 recipeId 进入无效路由错误、不渲染假配方（agent-01a0b8b4-fd8f-7330-8cb3-9bc3620685e3.jsonl:L62-L63）。"
+        },
+        {
+          "key": "agent-01a0b8b4-fd8f-7330-8cb3-9bc3620685e3.jsonl",
+          "at": "2026-09-19T08:19:58.700Z",
+          "reason": "已读到 AC01，这次 apply_patch 却把 startFab 放在 routeError 分支外，判定只写 recipeId<0；同文件的 RecipeDetailsRouteParam 默认值是 0（L232），错误态仍显示开始按钮，id 0 也会通过（同转录 L267-L268）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "主会话 exec_command 执行 cat spec/baseline/plans/feature-plan.md，回执给出 Slice 3 (F003) 条目和 detail: plans/slices/slice-03-F003.md 指针；这次 shell 读取没有被自动解析。",
+          "evidence": [
+            {
+              "source": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl",
+              "line": 382
+            },
+            {
+              "source": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl",
+              "line": 383
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "主会话 exec_command 执行 sed -n '1,120p' spec/placeholder-registry.md，回执列出 P-S3-001/P-S3-002 的触发条件和 resolve_by Slice 3 Step 3d；这次 shell 读取没有被自动解析。",
+          "evidence": [
+            {
+              "source": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl",
+              "line": 1005
+            },
+            {
+              "source": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl",
+              "line": 1006
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target"
+        },
+        {
+          "from": 4,
+          "to": 5,
+          "force": true,
+          "reason": "转换者 exec_command 执行 sed -n '1,75p' spec/baseline/features/F003-recipe-details.md，回执包含 F003-AC01（缺失 recipeId 进入无效路由错误、不渲染假配方）等验收项；这次 shell 读取没有被自动解析。",
+          "evidence": [
+            {
+              "source": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/agent-01a0b8b4-fd8f-7330-8cb3-9bc3620685e3.jsonl",
+              "line": 62
+            },
+            {
+              "source": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/agent-01a0b8b4-fd8f-7330-8cb3-9bc3620685e3.jsonl",
+              "line": 63
+            }
+          ]
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "主会话在限流续跑后为何自己实现 Stage 3、而没有派切片 worker 或读 slice-03：转录中没有明示，推理内容不可见。本卡只依据实际读写记录归因。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-6da4fe27589af8c43f01",
+  "metadata": {
+    "migration": {
+      "project": "Cofi",
+      "server_session_id": "c48c34f6-1f91-421f-aa50-0064cb39d8cd",
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "glm-5.3"
+      ],
+      "tool_versions": {
+        "orchestrator": "hmigbot-plus",
+        "runtime_version": "v1.4.8",
+        "runtime_commit": "09ac508",
+        "client_version": "hmigbot-plus-1.6.0",
+        "pack_version": "hmigbot-plus-1.6.0",
+        "codex_cli_version": "0.147.0"
+      }
+    },
+    "analysis": {
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "platforms": [
+        "claude-code"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "glm-5.3"
+      ],
+      "providers": [
+        "hmigbot"
+      ],
+      "client_versions": [
+        "0.147.0"
+      ]
+    },
+    "source_set_id": "sources-abe23f8631388b5ebff0",
+    "environment": [
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0-alpha17",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": null,
+        "at": "2026-09-19T06:34:53.774Z",
+        "ref": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl:L71",
+        "request_ref": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl:L70",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.0.1(21)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-09-19T06:37:07.791Z",
+        "ref": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl:L128",
+        "request_ref": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl:L127",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.0.1(21)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-09-19T06:37:07.791Z",
+        "ref": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl:L128",
+        "request_ref": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl:L127",
+        "phase": "generation"
+      },
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0-alpha17",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": null,
+        "at": "2026-09-19T08:12:43.229Z",
+        "ref": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/agent-01a0b8b4-dac7-7520-b644-8055f38660ad.jsonl:L167",
+        "request_ref": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/agent-01a0b8b4-dac7-7520-b644-8055f38660ad.jsonl:L166",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.8.3"
+  },
+  "revision": "fe3ade914c4f8b8b878098c95803351785b90ddedcae6c88c502ab0fc8660e16"
+}

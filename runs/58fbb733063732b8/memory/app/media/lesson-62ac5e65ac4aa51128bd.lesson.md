@@ -24,7 +24,5 @@ photoAccessHelper 的资源类型只有图片和视频（PhotoType 没有 AUDIO�
 
 ## 来源（按需复核）
 
-经验是有适用范围的历史建议。核查来源时同时看结论与 unknown；来源卡未随阅读包复制。
-
 - case-1607d055621c41c4c087 · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3, recommendation:4
-  卡片版本：`06f36cce15659218f1fdd4a73a3135061e84fc53f969c617d8a97bc9a1cf9942`
+  卡片版本：`202eca2eb1c58a4ade7f31cecdcf8e1a2c3415e73da050dd988b1dc29c4685fa`

@@ -1,0 +1,259 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-50230743abdc791d2a68",
+  "created_at": "2026-09-27T20:51:16.963989+00:00",
+  "migration_key": "3a9f41ad-48a4-4f1a-a085-fb6393b81f8a",
+  "title": "事件总线emit直接传空对象字面量，违反ArkTS显式类型要求导致编译失败",
+  "when": "功能实现阶段，新增或调用事件总线emit、确定事件载荷写法时；以及实现后编排收尾阶段，判断构建结果是否覆盖最新改动时",
+  "description": "ArkTS工程中存在泛型事件总线（emit<T extends Object>(name, payload: T)），已有事件都在EventHub中声明载荷接口并以类型化变量传入；新增事件或新增emit调用、且载荷可能为空或仅作信号时。",
+  "summary": "两次偏差机制相同：写前实际读到的EventHub与现有emit调用已经给出足够的类型化载荷范式，输出却直接写emit(name, {})。\n1) AddLedgerPage（OPT-004增量）：S2编排者在写前读取EventHub.ets，回执给出emit<T extends Object>(name, payload: T)、\nPassengerSelectionPayload接口，以及SelectPassengerPage中\"const payload: PassengerSelectionPayload = {...}; appEventHub.emit('PassengerUpdated', payload)\"\n（main-01a06b1c…jsonl:L598-L600）。17秒后它仍在AddLedgerPage写入appEventHub.emit('RefreshHomeLedgerEvent', {})（L604-L605），\n构成arkts-no-untyped-obj-literals。该写入发生在opt004_build报BUILD SUCCESSFUL之后（L580，06:54:23），\nS2虽派出opt004_build_final（L610），却在其尚无任何结果时即宣称“静态验收和最终构建已通过，ArkTS 0 errors”（L623-L624），\n该复核代理最终以interrupted收口、未重跑构建（agent-01a06b33…jsonl:L172-L174）。故偏差在实现输出，验证环节又把旧构建结果当成覆盖新改动的结果。\n用户07:00报“运行出现报错”（main-01a06a30…jsonl:L3088），S2自行复编也于07:04得到AddLedgerPage.ets:28:50同一错误（main-01a06b1c…jsonl:L822）；\n修复代理加入RefreshHomeLedgerPayload接口并改传类型化变量（agent-01a06b38…jsonl:L108-L109），最终保留。\n2) AddBillPage/EventHub（记一笔弹层）：S3在12:16压缩后重新读取EventHub.ets，回执中每个事件都有对应载荷接口\n（RefreshWeatherPayload、RefreshBillsEvent、RefreshHomeLedgerEvent等，main-01a06b28…jsonl:L7183-L7186）；\n随后rg回执显示LedgerService以\"const billsEvent: RefreshBillsEvent = {...}; appEventHub.emit('RefreshBillsEvent', billsEvent)\"发送，\nAddLedgerPage也已改为emit(..., payload)（L7190-L7193）。约3分钟后S3在同一次补丁中只把'CloseAddBillModal'加入EventName、未声明载荷接口，\n并在AddBillPage.closePage写appEventHub.emit('CloseAddBillModal', {})（L7222-L7224）。并行构建代理随即报AddBillPage.ets:49:61同类错误，\nopt008构建代理在EventHub新增CloseAddBillModalPayload并改为类型化变量（agent-01a07186…jsonl:L136-L137），\nS2其后为该接口补closed?: boolean并改传{ closed: true }（main-01a06b1c…jsonl:L7522-L7523、L7599-L7600）。\n两处输入均正确且足够，本卡停在实现输出，不上溯skill作者。同类emit('RefreshWeatherEvent', {})亦在OPT-005的CityPage/CityListPage出现并由S1补RefreshWeatherPayload（main-01a06a30…jsonl:L3850、L3894），属job pending范围，本卡未追其生成来源。\n",
+  "recommendations": [
+    "实现阶段新增或调用emit时，先看EventHub中该事件是否有载荷接口；没有就与EventName同一补丁声明接口（即使只作信号也给一个可选标记字段），调用处用\"const payload: XxxPayload = {...}\"再传入，不写emit(name, {})。",
+    "新增EventName成员后，用rg \"emit\\('[^']+', \\{\" 检查全工程emit是否仍有内联对象字面量，确认每个事件名都对应一个已导出的载荷类型。",
+    "编排/收尾阶段在构建通过后又修改源码时，必须重新执行构建并等待该次结果；只有构建开始时间晚于最后一次源码写入的BUILD SUCCESSFUL才能写入“最终构建通过”。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "D:/anhuizhongyi/huoche/harmony_train-ticket_vest28/entry/src/main/ets/pages/AddLedgerPage.ets",
+        "since": null,
+        "at": "2026-09-05T12:45:25.464Z"
+      },
+      "nodes": [
+        {
+          "key": "D:/anhuizhongyi/huoche/harmony_train-ticket_vest28/entry/src/main/ets/events/EventHub.ets",
+          "at": "2026-09-04T06:54:50.504Z",
+          "reason": "正常输入：S2执行Get-Content EventHub.ets并rg事件用法，回执给出emit<T extends Object>(name, payload: T)、导出的PassengerSelectionPayload接口，以及SelectPassengerPage先声明类型化payload再emit的现有写法；足以确定新事件载荷应使用显式接口（main-01a06b1c-4512-7a61-988f-86413715d804.jsonl:L598-L600）。"
+        },
+        {
+          "key": "main-01a06b1c-4512-7a61-988f-86413715d804.jsonl",
+          "at": "2026-09-04T06:55:07.682Z",
+          "reason": "读到上述范式17秒后，apply_patch在AddLedgerPage创建账本成功处写入appEventHub.emit('RefreshHomeLedgerEvent', {})，未声明载荷接口，即arkts-no-untyped-obj-literals偏差（同转录L604-L606）。该写入晚于opt004_build的成功回执（L580），随后L623即宣称最终构建通过而复核代理尚无结果；07:04自行复编报AddLedgerPage.ets:28:50（L822）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "S2的exec调用Get-Content entry/src/main/ets/events/EventHub.ets并rg事件用法，CommandExecution回执与输出返回emit泛型签名、PassengerSelectionPayload及SelectPassengerPage的类型化emit写法；这是S2写AddLedgerPage前的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/main-01a06b1c-4512-7a61-988f-86413715d804.jsonl",
+              "line": 598
+            },
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/main-01a06b1c-4512-7a61-988f-86413715d804.jsonl",
+              "line": 599
+            },
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/main-01a06b1c-4512-7a61-988f-86413715d804.jsonl",
+              "line": 600
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": "target",
+          "force": true,
+          "reason": "S2同一exec内apply_patch更新AddLedgerPage.ets，FileChange回执的diff新增appEventHub.emit('RefreshHomeLedgerEvent', {})且状态completed；这是S2对目标的真实写入。",
+          "evidence": [
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/main-01a06b1c-4512-7a61-988f-86413715d804.jsonl",
+              "line": 604
+            },
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/main-01a06b1c-4512-7a61-988f-86413715d804.jsonl",
+              "line": 605
+            },
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/main-01a06b1c-4512-7a61-988f-86413715d804.jsonl",
+              "line": 606
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "D:/anhuizhongyi/huoche/harmony_train-ticket_vest28/entry/src/main/ets/pages/AddBillPage.ets",
+        "since": null,
+        "at": "2026-09-05T12:45:25.464Z"
+      },
+      "nodes": [
+        {
+          "key": "D:/anhuizhongyi/huoche/harmony_train-ticket_vest28/entry/src/main/ets/events/EventHub.ets",
+          "at": "2026-09-05T12:20:22.788Z",
+          "reason": "正常输入：S3在压缩（L7145）后读取EventHub.ets，回执列出emit<T extends Object>签名及每个事件对应的载荷接口PassengerSelectionPayload、RefreshWeatherPayload、RefreshBillsEvent、RefreshHomeLedgerEvent（main-01a06b28-0c59-7042-9414-614a253fd770.jsonl:L7183-L7186）。"
+        },
+        {
+          "key": "D:/anhuizhongyi/huoche/harmony_train-ticket_vest28/entry/src/main/ets/services/LedgerService.ets",
+          "at": "2026-09-05T12:20:53.939Z",
+          "reason": "正常输入：S3对LedgerService.ets及全工程rg emit，回执显示const billsEvent: RefreshBillsEvent = {...}后emit、AddLedgerPage已改为emit('RefreshHomeLedgerEvent', payload)、CityPage/SelectPassengerPage也传类型化变量；现有调用无一内联对象字面量（同转录L7190-L7193）。"
+        },
+        {
+          "key": "main-01a06b28-0c59-7042-9414-614a253fd770.jsonl",
+          "at": "2026-09-05T12:24:00.908Z",
+          "reason": "收到上述输入约3分钟后，同一补丁在AddBillPage新增closePage并写appEventHub.emit('CloseAddBillModal', {})，未为新事件声明载荷类型，重复同类偏差（同转录L7222、L7224、L7226）；opt008构建代理随即据AddBillPage.ets:49的该行修复（agent-01a07186-f29f-7801-a03c-a4c2715e0cb6.jsonl:L110-L137）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "S3的exec调用Get-Content entry/src/main/ets/events/EventHub.ets，回执返回全部事件载荷接口与emit签名；发生在其写AddBillPage前约3.5分钟。",
+          "evidence": [
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/main-01a06b28-0c59-7042-9414-614a253fd770.jsonl",
+              "line": 7183
+            },
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/main-01a06b28-0c59-7042-9414-614a253fd770.jsonl",
+              "line": 7185
+            },
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/main-01a06b28-0c59-7042-9414-614a253fd770.jsonl",
+              "line": 7186
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "S3的exec对entry/src/main/ets/services/LedgerService.ets及全工程rg emit，回执返回LedgerService中先声明RefreshBillsEvent类型变量再emit等类型化写法；这是写AddBillPage前的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/main-01a06b28-0c59-7042-9414-614a253fd770.jsonl",
+              "line": 7190
+            },
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/main-01a06b28-0c59-7042-9414-614a253fd770.jsonl",
+              "line": 7192
+            },
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/main-01a06b28-0c59-7042-9414-614a253fd770.jsonl",
+              "line": 7193
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target",
+          "force": true,
+          "reason": "S3同一exec的apply_patch更新AddBillPage.ets，FileChange回执diff新增closePage中的appEventHub.emit('CloseAddBillModal', {})且completed；这是对目标的真实写入。",
+          "evidence": [
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/main-01a06b28-0c59-7042-9414-614a253fd770.jsonl",
+              "line": 7222
+            },
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/main-01a06b28-0c59-7042-9414-614a253fd770.jsonl",
+              "line": 7224
+            },
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/main-01a06b28-0c59-7042-9414-614a253fd770.jsonl",
+              "line": 7226
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "D:/anhuizhongyi/huoche/harmony_train-ticket_vest28/entry/src/main/ets/events/EventHub.ets",
+        "since": null,
+        "at": "2026-09-05T12:45:25.464Z"
+      },
+      "nodes": [
+        {
+          "key": "D:/anhuizhongyi/huoche/harmony_train-ticket_vest28/entry/src/main/ets/events/EventHub.ets",
+          "at": "2026-09-05T12:20:22.788Z",
+          "reason": "正常输入：写前读回的EventHub中，已有每个事件名都配有导出的载荷接口，形成“EventName成员＋对应Payload接口”的约定（main-01a06b28-0c59-7042-9414-614a253fd770.jsonl:L7183-L7186）。"
+        },
+        {
+          "key": "main-01a06b28-0c59-7042-9414-614a253fd770.jsonl",
+          "at": "2026-09-05T12:24:00.908Z",
+          "reason": "同一补丁只把'CloseAddBillModal'追加到EventName联合类型，未按既有约定补载荷接口，使AddBillPage只能传无类型{}（同转录L7222-L7223、L7226）；修复者随后在此文件补CloseAddBillModalPayload（agent-01a07186-f29f-7801-a03c-a4c2715e0cb6.jsonl:L136-L137），S2再补closed?: boolean（main-01a06b1c-4512-7a61-988f-86413715d804.jsonl:L7522-L7523）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "S3的exec调用Get-Content entry/src/main/ets/events/EventHub.ets，回执返回既有EventName与对应载荷接口；这是其随后修改EventHub前的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/main-01a06b28-0c59-7042-9414-614a253fd770.jsonl",
+              "line": 7183
+            },
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/main-01a06b28-0c59-7042-9414-614a253fd770.jsonl",
+              "line": 7185
+            },
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/main-01a06b28-0c59-7042-9414-614a253fd770.jsonl",
+              "line": 7186
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": "target",
+          "force": true,
+          "reason": "S3同一exec的apply_patch更新EventHub.ets，FileChange回执diff只把'CloseAddBillModal'加入EventName且completed；这是对目标的真实写入。",
+          "evidence": [
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/main-01a06b28-0c59-7042-9414-614a253fd770.jsonl",
+              "line": 7222
+            },
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/main-01a06b28-0c59-7042-9414-614a253fd770.jsonl",
+              "line": 7223
+            },
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/main-01a06b28-0c59-7042-9414-614a253fd770.jsonl",
+              "line": 7226
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-50230743abdc791d2a68",
+  "metadata": {
+    "migration": {
+      "project": "android-train-ticket-vest7",
+      "server_session_id": "3a9f41ad-48a4-4f1a-a085-fb6393b81f8a"
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "gpt-5.6-sol"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.152.1",
+        "0.153.0-alpha.5"
+      ]
+    },
+    "source_set_id": "sources-8b0a7c0de0b3c4c2be88",
+    "card_tool_version": "0.8.3"
+  },
+  "revision": "1b8c163c674042136fd685dcdaf2cde9eb4bd52db67270bec6369b162c24df3a"
+}

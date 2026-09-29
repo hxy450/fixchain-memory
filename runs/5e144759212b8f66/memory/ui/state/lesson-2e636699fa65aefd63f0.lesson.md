@@ -28,9 +28,7 @@ ForEach 键值不变时复用已有子组件、不再执行条目构建，子组
 
 ## 来源（按需复核）
 
-经验是有适用范围的历史建议。核查来源时同时看结论与 unknown；来源卡未随阅读包复制。
-
 - case-3045f4019d7d543e18ca · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
-  卡片版本：`164645926053e77c27ee6b1cc2240fcb8d377e55df9d339500e1ed4989111455`
+  卡片版本：`c70e115876997fe84358e56664eb1d94839a3eaa89da89d4b73b2c4e1a132451`
 - case-b0c0f14a07fefbd87d63 · 结论：diagnosis, recommendation:2, recommendation:3
-  卡片版本：`1a80fc062e61ff16fb2adf034e5ee3b79b06d59881ec98b101abb3cda5a867af`
+  卡片版本：`1cfeb018d4c1dbb61f66f7d19d73d53e6c5b6047e5ba376464aaa5e28cbcc9a4`

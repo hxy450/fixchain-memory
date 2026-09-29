@@ -1,0 +1,202 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-2b82a569104ca26f84ae",
+  "created_at": "2026-09-27T11:24:39.192992+00:00",
+  "migration_key": "ec916647-9285-40ea-9595-eaa9d20f4eed",
+  "title": "服务层与 ViewModel 新增错误日志时写成 console.error，未用 hilog",
+  "when": "功能实现阶段，在服务层或 ViewModel 的 catch 分支里为新增的错误处理选择日志输出方式时",
+  "description": "源端对失败静默处理或没有日志（如 Kotlin runCatching 吞掉 AudioTrack stop/release 异常），目标 ArkTS 在 catch 中新增错误日志；工程里已有 hilog 写法（EntryAbility 的 TAG 与 DOMAIN 0xFF00），而生成期规则只约束 build() 内 console.log 与 console.info('TODO') 假占位。",
+  "summary": "Stage 3 音频切片 slice_02_f002（agent-01a0da45-d1e1-7952-b2b3-87b1810685a5.jsonl）写前实际收到的明文输入里，没有一条规定日志 API。\nworker 开发者提示词只禁止 console.info('TODO…') 假占位（L11）；a2h-execute 派发公共规则、base-contracts、切片计划（L57-L66），\nF002 规格与决策台账（L70-L76）都不涉及日志。Android TonePlayer.kt 用 runCatching 吞掉 AudioTrack stop/release 失败，\n全文没有 Log 调用（L80-L88），所以这两处错误日志是目标侧新增，源端没有可映射的写法。\n该 agent 一次 cat 了 19 个 SKILL.md（L32），回执被截断（原 73628 tokens，L53 只保留前两个 skill 和最后一个 skill 的尾部），\narkts-knowledge-verifier 中 @ohos.hilog → @kit.PerformanceAnalysisKit 的导入映射、hmos-fix-build-errors 的 Logging 导入示例都没有进入上下文；\n即使完整交付，这些 skill 也只禁止 build() 内 console.log，arkts-component-builder 还把 console.info('TODO:…') 列为 L3 占位格式。\n工程脚手架 EntryAbility 从 19:57 起已用 hilog + TAG + DOMAIN 0xFF00（main-01a0d9f4-a247-7fe0-9cc2-5e0f62e9f5db.jsonl:L1641），该 agent 写前没有读它。\n在这样的输入下，它 20:36 给 stop() 的释放屏障加 catch，写 console.error(`AudioRenderer release failed: ${error.message}`)（L176-L179），这是本问题最初可核的偏差。\n20:46 它读到 group02 两份巡检（L225-L231）：网络巡检要求释放失败“记录”后复位屏障，ArkUI 巡检要求保留当前代播放的错误上报并处理页面层 Promise，\n两份都没有指定日志 API，网络巡检还提到 stop() 里“附加 catch 日志”而没有对写法提出意见。随后同一 agent 把这条日志先挪进 queueRelease、\n再挪进 releaseRendererSafely，写成 console.error(`AudioRenderer release failed: ${error}`)（L237-L247），\n并在 PlaybackModel.play 新增 try/catch，写 console.error(`Tone playback failed: ${error}`)（L237-L240）；L251-L254 的 rg 回执就是 TonePlaybackService.ets:52 与 PlaybackModel.ets:28 这两处。\n偏差位于“新增错误处理 → 选择日志 API”这一实现环节。上游缺口在迁移流水线的规则里：生成期规则没有 console.* → hilog 的要求，\na2h-verify CHECK-1 静态分析表只查 any、旧 @ohos 导入、SQL 拼接、as、eval 和 aboutToAppear 读路由参数（main-01a0d9f4-a247-7fe0-9cc2-5e0f62e9f5db.jsonl:L3253-L3255），\n所以迁移期 CHECK-1 判 PASS（同转录 L3365）。这条要求只出现在 ECAT 生成器提示词（“No console.* — use hilog from @kit.PerformanceAnalysisKit”）和 static_lint 规则里。\n生成结束后 build_fv2 只改了同文件 catch 中 throw 的包装（agent-01a0da5c-8517-7370-b3a2-17b34a223fd3.jsonl:L143），两处 console.error 保留到迁移终态，\n副本 E 的同名文件第 52、28 行仍是同样写法。ECAT 第一轮工单第 7、8 项点名这两行（main-01a0dc1f-a4f7-79c3-bb19-8d90dda4ca6e.jsonl:L10）后，\n两个 fixer 先 rg 出 EntryAbility 的 hilog 写法，照它加 import { hilog } from '@kit.PerformanceAnalysisKit'、TAG 与 DOMAIN=0xFF00，\n把两行改成 hilog.error(DOMAIN, TAG, '…: %{public}s', String(error))（agent-01a0dc20-30a2-7511-803a-4b316f27db46.jsonl:L39-L61；agent-01a0dc20-4cfa-7120-8416-4571267f16d5.jsonl:L40-L55）。\n",
+  "recommendations": [
+    "功能实现阶段：在服务层或 ViewModel 的 catch 里新增错误日志前，先 rg 工程现有日志写法（本例 EntryAbility 的 import { hilog } from '@kit.PerformanceAnalysisKit'、TAG、DOMAIN 0xFF00），沿用它写 hilog.error(DOMAIN, TAG, '<说明>: %{public}s', String(error))，TAG 取当前类名；不要写 console.error/console.log。",
+    "功能实现阶段写完一个切片后做最小检查：rg -n 'console\\.' 本切片改动的 .ets 文件，除已登记的占位外，每个命中都改成 hilog；源端用 runCatching 等静默吞错时，新增日志同样按这条处理。",
+    "流水线规则与验证阶段：在 worker 共用生成规则和 a2h-verify CHECK-1 静态分析表里补一条“生产 .ets 中的 console.* 改用 hilog”，让生成期自查和迁移期验证在 ECAT 之前拦下；本例 CHECK-1 只查 any、旧 @ohos 导入、SQL 拼接、as、eval、aboutToAppear 路由参数，因此判 PASS。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/home/lsq/repo/harmonyapps/eartraining/entry/src/main/ets/services/TonePlaybackService.ets",
+        "since": "2026-09-25T20:58:11.566Z",
+        "at": "2026-09-26T07:40:33.959Z"
+      },
+      "nodes": [
+        {
+          "key": "/home/lsq/repo/eartraining/app/src/main/java/com/example/eartrainer/TonePlayer.kt",
+          "at": "2026-09-25T20:33:56.650Z",
+          "reason": "实际输入：同一 exec 读取 TonePlayer.kt，回执显示 stop() 与 play() 的 finally 都用 runCatching 吞掉 AudioTrack stop/release 失败，全文没有 Log 调用；释放失败的日志因此是目标侧新增，源端没有可映射的日志写法，这份输入本身不规定日志 API（agent-01a0da45-d1e1-7952-b2b3-87b1810685a5.jsonl:L80-L88）。"
+        },
+        {
+          "key": "agent-01a0da45-d1e1-7952-b2b3-87b1810685a5.jsonl",
+          "at": "2026-09-25T20:36:24.780Z",
+          "reason": "slice_02_f002 写前收到的明文输入都没有日志 API 要求（worker 提示词 L11 只禁 console.info('TODO') 假占位；L53 的 skill 批量回执被截断，hilog 导入映射未交付；工程 EntryAbility 的 hilog 写法未读）。它 apply_patch 更新 TonePlaybackService.ets，在 stop() 的 releaseBarrier.catch 中写 console.error(`AudioRenderer release failed: ${error.message}`)，这是最初可核的偏差（同转录 L176-L179）；20:47 又把同一日志挪进 releaseRendererSafely，成为修复前第 52 行（L237-L247）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "slice_02_f002 的 exec 用 cat 读取 TonePlayer.kt（item_completed 为 CommandExecution），工具回执首段即 TonePlayer.kt 全文，含 runCatching 吞掉 stop/release 失败且无 Log 调用；这是其写 TonePlaybackService 之前对源码的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da45-d1e1-7952-b2b3-87b1810685a5.jsonl",
+              "line": 80
+            },
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da45-d1e1-7952-b2b3-87b1810685a5.jsonl",
+              "line": 81
+            },
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da45-d1e1-7952-b2b3-87b1810685a5.jsonl",
+              "line": 88
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": "target",
+          "force": true,
+          "reason": "同一 agent 的 exec 调用 apply_patch 更新 TonePlaybackService.ets，FileChange 回执列出该文件并 completed，diff 在 stop() 的 releaseBarrier.catch 中新增 console.error(`AudioRenderer release failed: ${error.message}`)。",
+          "evidence": [
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da45-d1e1-7952-b2b3-87b1810685a5.jsonl",
+              "line": 176
+            },
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da45-d1e1-7952-b2b3-87b1810685a5.jsonl",
+              "line": 178
+            },
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da45-d1e1-7952-b2b3-87b1810685a5.jsonl",
+              "line": 179
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/home/lsq/repo/harmonyapps/eartraining/entry/src/main/ets/viewmodels/PlaybackModel.ets",
+        "since": "2026-09-25T20:58:11.566Z",
+        "at": "2026-09-26T07:40:33.959Z"
+      },
+      "nodes": [
+        {
+          "key": "/home/lsq/repo/harmonyapps/eartraining/spec/fix/round-1/patrol/build-group-02.md",
+          "at": "2026-09-25T20:46:39.398Z",
+          "reason": "实际输入：第二轮任务里同一 exec 读取 group02 ArkUI 巡检，第 4 项要求“preserve error reporting for the current generation, and explicitly handle the page-level playback Promise”；它要求上报并处理播放错误，没有指定日志 API（agent-01a0da45-d1e1-7952-b2b3-87b1810685a5.jsonl:L225-L231）。"
+        },
+        {
+          "key": "agent-01a0da45-d1e1-7952-b2b3-87b1810685a5.jsonl",
+          "at": "2026-09-25T20:47:03.111Z",
+          "reason": "按上述巡检给 PlaybackModel.play 加 try/catch 时，apply_patch 写入 console.error(`Tone playback failed: ${error}`)，即修复前第 28 行；写前输入同样没有日志 API 要求，工程 EntryAbility 已有的 hilog 写法未被参照（同转录 L237-L240，L251-L254 的 rg 回执列出 PlaybackModel.ets:28）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "slice_02_f002 第二轮任务的 exec 用 cat 读取 spec/fix/round-1/patrol/build-group-02.md（cwd 为 M 工程根，item_completed 为 CommandExecution），工具回执含第 4 项“preserve error reporting for the current generation, and explicitly handle the page-level playback Promise”；这是其改 PlaybackModel 之前的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da45-d1e1-7952-b2b3-87b1810685a5.jsonl",
+              "line": 225
+            },
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da45-d1e1-7952-b2b3-87b1810685a5.jsonl",
+              "line": 228
+            },
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da45-d1e1-7952-b2b3-87b1810685a5.jsonl",
+              "line": 231
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": "target",
+          "force": true,
+          "reason": "同一 agent 的 exec 调用 apply_patch 同时更新 TonePlaybackService.ets 与 PlaybackModel.ets，FileChange 回执列出 PlaybackModel.ets 并 completed，diff 给 play() 加 try/catch 并写 console.error(`Tone playback failed: ${error}`)。",
+          "evidence": [
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da45-d1e1-7952-b2b3-87b1810685a5.jsonl",
+              "line": 237
+            },
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da45-d1e1-7952-b2b3-87b1810685a5.jsonl",
+              "line": 239
+            },
+            {
+              "source": "runs/5e3fe706-7f5c-4a26-a05c-3657d30d7dd2/epoch-0/sessions/agent-01a0da45-d1e1-7952-b2b3-87b1810685a5.jsonl",
+              "line": 240
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "slice_02_f002 的两次派工正文（main-01a0d9f4-a247-7fe0-9cc2-5e0f62e9f5db.jsonl:L2709、L2915）是加密载荷，无法核对其中是否提到日志 API；本卡按该 agent 写前可读到的明文输入判断缺口。"
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/home/lsq/Desktop/codex-test/plus-validation/eartraining-ecat/entry/src/main/ets/services/TonePlaybackService.ets",
+      "reason": "ECAT 修复已确认（agent-01a0dc20-30a2-7511-803a-4b316f27db46.jsonl:L51-L61，diff 删除第 52 行 console.error(`AudioRenderer release failed: ${error}`)）。副本 E 在转录外由迁移输出复制，材料里没有 M→E 的复制记录，无法把生成写入连到 E 路径；该行与 M 生成终态一致，生成归因见 M 同名文件的 graph。"
+    },
+    {
+      "key": "/home/lsq/Desktop/codex-test/plus-validation/eartraining-ecat/entry/src/main/ets/viewmodels/PlaybackModel.ets",
+      "reason": "ECAT 修复已确认（agent-01a0dc20-4cfa-7120-8416-4571267f16d5.jsonl:L45-L55，diff 删除第 28 行 console.error(`Tone playback failed: ${error}`)）。副本 E 在转录外由迁移输出复制，材料里没有 M→E 的复制记录，无法把生成写入连到 E 路径；该行与 M 生成终态一致，生成归因见 M 同名文件的 graph。"
+    }
+  ],
+  "job": "issue-2b82a569104ca26f84ae",
+  "metadata": {
+    "migration": {
+      "project": "听音练习",
+      "server_session_id": "ec916647-9285-40ea-9595-eaa9d20f4eed",
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "codex-auto-review",
+        "gpt-6-sol"
+      ],
+      "tool_versions": {
+        "orchestrator": "hmigbot-plus",
+        "runtime_version": "v1.5.2",
+        "runtime_commit": "c47f332",
+        "client_version": "hmigbot-plus-1.6.0",
+        "pack_version": "hmigbot-plus-1.6.0",
+        "codex_cli_version": "0.157.0"
+      }
+    },
+    "analysis": {
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "platforms": [
+        "claude-code"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "codex-auto-review",
+        "gpt-6-sol"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.157.0"
+      ]
+    },
+    "source_set_id": "sources-7dfa3baba9b514aa9b9d",
+    "card_tool_version": "0.8.3"
+  },
+  "revision": "f1850eb1032b509abdc74d54d07eb436c4dd08567fb70c7ba3e9ab984d43cf5d"
+}

@@ -23,7 +23,5 @@ Android 页面在静态背景 ImageView 之上叠加 LottieAnimationView，代�
 
 ## 来源（按需复核）
 
-经验是有适用范围的历史建议。核查来源时同时看结论与 unknown；来源卡未随阅读包复制。
-
 - case-0dd25455d592a77ed652 · 结论：diagnosis, recommendation:1
-  卡片版本：`d1c8533467731935fc2d445f40d437c48c58e9d263331d486eca5a5163b2c080`
+  卡片版本：`006b43007be7916a7a93e397f0b1d290666a55070cfba032c9a7e080356adb2b`
