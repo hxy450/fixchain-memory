@@ -1,0 +1,98 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-d166fd60d66832c204bc",
+  "created_at": "2026-09-29T16:20:01.686371+00:00",
+  "migration_key": "0e07f2d2-6280-4809-af70-213e306fcbd6",
+  "title": "选图兼容层把整张原图交给冻结业务的同步压缩，鸿蒙UI线程看门狗判定卡死",
+  "when": "插件替代/兼容层实现阶段，决定系统选图结果以何种分辨率与尺寸元数据交给冻结的Dart业务时",
+  "description": "Flutter应用迁移到OHOS且业务Dart冻结；选图插件改由系统图库选择器/文件缓存副本兼容实现并包装成AssetEntity；下游业务会用package:image等纯Dart库在UI isolate对所选原图同步解码、缩放、编码（本例长边压到1920后上传），用户可能选择千万像素级相机照片。",
+  "summary": "问题1（图库导入不可用）修复中，主会话在15:36写入wechat_assets_picker本地兼容层_pickAssetsWithOhosPhotoPicker：\n系统选择器返回的缓存副本按原分辨率直接包装成AssetEntity交给业务，并用ui.instantiateImageCodec整图解码只为取宽高\n（main-019fd645...jsonl:L3697-L3698）。写前它已读取本地flutter_image_compress_ohos插件，看到\nflutter_image_compress通道由原生ImageSource解码并缩放图片（L3667-L3668、L3671-L3672），同批补丁里也用\nDecodingOptions.desiredSize给photo_manager写了缩略图；grep回执列出了work_engine_logic等AssetEntity消费方（L3494-L3495），\n但它只打开base_mixin.dart入口（L3498-L3499），未打开会压缩上传原图的消费链，随后声明“现有业务回调、预览、压缩和编辑调用不需要改”（L3711），\n真机只走“格式转化”入口验证（L3739-L3772）。没有证据表明它写解码时已知原图可达12MP或下游在UI isolate同步处理。\n照片动漫化的冻结业务链为work_engine_logic → AliUploadUtils.compressImage：大于1920时imglib.decodeImage、copyResize(cubic)、encodePng\n均为同步纯Dart运算（L3871-L3872、L3885-L3886）。用户appfreeze日志中1.ui线程state=R、utime=545、帧全在libapp.so；\n两次3002×4003原生CreatePixelMap在其他线程各约125ms完成（00:11:53），约5秒后FlutterWatchdog报FlutterUiThread is not alive\n（L3841、L3845、L3849）。因此6秒阻塞主体是冻结压缩链的同步像素运算（与Android同一代码，OHOS引擎看门狗会杀进程），\n选图层的instantiateImageCodec是多余的一次原生整图解码、不是阻塞主体；两项在同一补丁中改动，复测不能再区分二者。\n修复在同一兼容层删除整图解码，改经flutter_image_compress的compressAndGetFile预缩放到1920边界内（新增fitWithinBounds），\n失败回退原缓存文件，使compressImage走≤1920的复制分支（L3919-L3920）；真机选同一张3002×4003图后无watchdog（L4081）。\n预缩放最终保留，宽高后来改为image_size_getter读文件头（L4825）。\n",
+  "recommendations": [
+    "兼容层把系统选图结果交给冻结业务前，沿AssetPicker.pickAssets调用方打开上传/AI处理等代表性消费链，确认是否在UI isolate对原图做同步像素运算以及业务自身的尺寸上限（本例compressImage长边1920）。",
+    "下游存在此类同步处理时，在兼容层用原生图片引擎（ImageSource或flutter_image_compress的compressAndGetFile）按业务上限等比缩到两边都不超界，失败回退原文件；不在Dart侧整图解码。",
+    "AssetEntity宽高从文件头读取（ImageSource.getImageInfo或读取头信息的库），不要用instantiateImageCodec整图解码只为取尺寸。",
+    "真机验证选图替换时，用千万像素级相机原图走会压缩/上传的入口，同时过滤hilog中的FlutterWatchdog与BUSSINESS_THREAD_BLOCK_3S/6S，不只验证轻量入口。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "E:/Androidproject/app-photo-shop-flutter/app-photo-shop-flutter/ohos/flutter_plugins/wechat_assets_picker/lib/src/widget/asset_picker.dart",
+        "since": "2026-08-06T15:11:16.002Z",
+        "at": "2026-08-21T09:54:24.209Z"
+      },
+      "nodes": [
+        {
+          "key": "E:/Androidproject/app-photo-shop-flutter/app-photo-shop-flutter/ohos/flutter_plugins/flutter_image_compress_ohos/ohos/src/main/ets/components/plugin/FlutterImageCompressOhosPlugin.ets",
+          "at": "2026-08-06T15:31:42.652Z",
+          "reason": "正常输入：写者Get-Content读回插件源码，flutter_image_compress通道的compressWithFile/compressAndGetFile由ImageSource按文件路径原生解码、缩放后打包，并同时返回SDK DecodingOptions定义；足以说明取尺寸或限尺寸可交给原生图片引擎，而不必在Dart侧整图解码（main-019fd645...jsonl:L3667-L3668，另见L3671-L3672）。"
+        },
+        {
+          "key": "019fd645-c192-7c82-a6ce-86e3aa20733a",
+          "at": "2026-08-06T15:36:22.156Z",
+          "reason": "问题1修复写入：apply_patch新增_pickAssetsWithOhosPhotoPicker，把缓存原图按原分辨率包装成AssetEntity交给冻结业务，并以ui.instantiateImageCodec整图解码取宽高；写前未打开grep已列出的压缩上传消费链，随后称业务压缩调用无需改动（L3697-L3698、L3494-L3495、L3711）。修复删除该解码并改为原生预缩放到1920边界（L3919-L3920）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "主会话在问题1修复中用shell Get-Content读取该插件源码前120行及SDK DecodingOptions定义，回执返回flutter_image_compress通道由ImageSource原生解码、缩放的实现；这支持选图层写者写前已收到原生图片引擎路径。",
+          "evidence": [
+            {
+              "source": "runs/471f7375-56db-46f8-bad3-3ce2c4054d2a/epoch-0/sessions/main-019fd645-c192-7c82-a6ce-86e3aa20733a.jsonl",
+              "line": 3667
+            },
+            {
+              "source": "runs/471f7375-56db-46f8-bad3-3ce2c4054d2a/epoch-0/sessions/main-019fd645-c192-7c82-a6ce-86e3aa20733a.jsonl",
+              "line": 3668
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "写前输入中没有skill或spec说明OHOS Flutter引擎会把UI线程连续阻塞约6秒上报为BUSSINESS_THREAD_BLOCK_6S；生成期agent-019fd700读过AliUploadUtils并写入spec/ref/flutter_photo_shop_spec.md，DFX只记长边1920与滤镜走isolate，未标注压缩在UI isolate同步运行（agent-019fd700...jsonl:L88-L89、L110-L111）。本例因此只归因写者未核下游消费链及多余整图解码，不声称其明知该平台约束。"
+  ],
+  "unresolved_targets": [
+    {
+      "key": "E:/Androidproject/app-photo-shop-flutter/app-photo-shop-flutter/ohos/flutter_plugins/flutter_image_compress_ohos/ohos/src/main/ets/components/plugin/FlutterImageCompressOhosPlugin.ets",
+      "reason": "已确认修复新增fitWithinBounds与calcFitWithinScale（L3919-L3920），是选图层预缩放所需的新能力；生成期L784-L785从pub缓存flutter_image_compress_ohos-0.0.3+1原样复制，calcScale保留上游minWidth/minHeight最小边语义，未发现该文件的生成偏差，故不单独画链。"
+    }
+  ],
+  "job": "issue-d166fd60d66832c204bc",
+  "metadata": {
+    "migration": {
+      "project": "app-photo-shop-flutter",
+      "server_session_id": "0e07f2d2-6280-4809-af70-213e306fcbd6"
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "gpt-5.6-sol"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.146.0-alpha.9.2"
+      ]
+    },
+    "source_set_id": "sources-3c7e82f1dff99235c15e",
+    "card_tool_version": "0.10.0"
+  },
+  "revision": "8a13c1a88691478b3e62951c85de57be40c3a2f7adf63b040ee34ccf671ca632"
+}

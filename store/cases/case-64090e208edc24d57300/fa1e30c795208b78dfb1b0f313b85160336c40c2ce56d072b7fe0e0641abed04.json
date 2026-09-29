@@ -1,0 +1,115 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-64090e208edc24d57300",
+  "created_at": "2026-09-29T16:10:30.708713+00:00",
+  "migration_key": "0e07f2d2-6280-4809-af70-213e306fcbd6",
+  "title": "选图兼容层做性能修复时把AssetEntity宽高写成0，破坏下游宽高比计算",
+  "when": "用户报告驱动的修复阶段，为消除卡顿改写共享插件兼容层（选图后构造AssetEntity），决定能否删除原有宽高元数据计算时",
+  "description": "Flutter应用迁移到OHOS时用本地兼容包替代wechat_assets_picker选图，返回的AssetEntity由共享选图入口分发给多个业务页面，部分页面用entity.width/height计算宽高比；当前修复要求去掉UI线程上的全尺寸解码。",
+  "summary": "写前实际收到：问题2（“照片动漫化”选大图后UI线程阻塞6秒被系统判卡死）的修复回合中，\n修复者在L3871-L3872读取当前本地兼容层asset_picker.dart第1-150行：它用ui.instantiateImageCodec\n解码所选图片，把真实宽高传入AssetEntity，类注释写明返回的AssetEntity\n“keeps the public API expected by existing callers”；同一调用读到base_mixin.dart中\nonChooseImage经AssetPicker.pickAssets选图，home_logic第100-170行显示格式转换、压缩、拼图等工具\n都复用该入口。上述输入已足以说明宽高是既有公开契约，且消费方不止动漫化流程。\n修复者在L3908用`.width|.height`搜索消费方，却把结果过滤到work_engine|generate_work（动漫化流程），\nL3912只查photo_manager_image_provider，均未命中宽高使用；随后L3919的apply_patch把解码换成原生预缩放，\n并把AssetEntity的width/height写成字面量0，注释称预缩放“also avoids decoding the original merely to read its size”。\n偏差位于性能修复对共享兼容层字段的影响面评估：把“读尺寸”判为无业务必要，未全量检查消费方，\n也未改用轻量方式保留尺寸。home_logic第79/213/227行把assets.first.width/height作为imageWidth/imageHeight\n传给美化、文字、涂鸦页（文字、涂鸦页以imageWidth / imageHeight计算比例），这几行不在写入回合的读取范围内；\n同一会话曾在生成期L2383的grep回执中出现过它们，但此后经历多次上下文压缩，写入回合未再读取。\n因此本项归为遗漏下游契约，而非明知取舍。\n0值一直保留到用户报告文字、涂鸦功能有误（L4745）；修复者定位为0/0得到NaN并触发BoxConstraints错误\n（L4788-L4789），在L4824-L4825于预缩放之后用image_size_getter读取文件头尺寸（needRotate时交换宽高），\n非法或异常时退为1×1，并在插件pubspec.yaml新增image_size_getter依赖；L4880、L4951真机验证文字、涂鸦恢复。\n",
+  "recommendations": [
+    "修复性能问题要删除兼容层里看似多余的计算（如为读尺寸而解码）前，先在整个lib中搜索该字段的全部消费方（如`.width`/`.height`、`imageWidth`、`assets.first.width`），不要只过滤到用户报告的那条流程。",
+    "兼容层返回的对象要保持原API字段语义：宽高等元数据不用0占位；改用轻量方式获取（读取文件头尺寸并按EXIF方向交换），失败时给非零兜底，防止下游除零得到NaN。",
+    "改动共享选图入口后，按调用方清单回归：至少打开一个依赖宽高的页面（此处文字、涂鸦、美化等）验证布局，而不只复测报告的动漫化流程。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "E:\\Androidproject\\app-photo-shop-flutter\\app-photo-shop-flutter\\ohos\\flutter_plugins\\wechat_assets_picker\\lib\\src\\widget\\asset_picker.dart",
+        "since": "2026-08-06T15:11:16.002Z",
+        "at": "2026-08-21T09:54:24.209Z"
+      },
+      "nodes": [
+        {
+          "key": "E:/Androidproject/app-photo-shop-flutter/app-photo-shop-flutter/ohos/flutter_plugins/wechat_assets_picker/lib/src/widget/asset_picker.dart",
+          "at": "2026-08-06T16:23:03.022Z",
+          "reason": "正常输入：修复者读取当前兼容层第1-150行，回执显示第98-117行用ui.instantiateImageCodec解码得到width/height并传入AssetEntity，第72-76行注释说明返回的AssetEntity保持既有调用方期望的公开API；足以说明宽高属于现有契约（main-019fd645...jsonl:L3871-L3872）。"
+        },
+        {
+          "key": "E:/Androidproject/app-photo-shop-flutter/app-photo-shop-flutter/lib/common/base_mixin.dart",
+          "at": "2026-08-06T16:23:03.022Z",
+          "reason": "正常输入：同一调用读取base_mixin第1-110行，onChooseImage第50行调用AssetPicker.pickAssets，是首页各工具共享的选图入口；同回执的home_logic第100-170行可见格式转换、压缩、拼图都走该入口，说明消费方不止动漫化流程（main-019fd645...jsonl:L3871-L3872）。"
+        },
+        {
+          "key": "019fd645-c192-7c82-a6ce-86e3aa20733a",
+          "at": "2026-08-06T16:26:36.895Z",
+          "reason": "收到上述输入后，L3908把`.width|.height`消费方搜索过滤到work_engine|generate_work，L3912只查image provider，均未命中；L3919 apply_patch把解码替换为原生预缩放，同时把AssetEntity的width/height写成0，注释称无需为读尺寸解码原图。既有宽高契约在此被移除，偏差起点在此停止上溯（main-019fd645...jsonl:L3908-L3921）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "L3871的exec在工程根目录并行执行shell_command，以相对路径Get-Content读取ohos/flutter_plugins/wechat_assets_picker/lib/src/widget/asset_picker.dart第1-150行；L3872回执RESULT 4返回width/height解码代码和保持既有公开API的注释，支持修复者写前已收到该契约。",
+          "evidence": [
+            {
+              "source": "runs/471f7375-56db-46f8-bad3-3ce2c4054d2a/epoch-0/sessions/main-019fd645-c192-7c82-a6ce-86e3aa20733a.jsonl",
+              "line": 3871
+            },
+            {
+              "source": "runs/471f7375-56db-46f8-bad3-3ce2c4054d2a/epoch-0/sessions/main-019fd645-c192-7c82-a6ce-86e3aa20733a.jsonl",
+              "line": 3872
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "同一L3871调用以相对路径Get-Content读取lib/common/base_mixin.dart第1-110行；L3872回执RESULT 3返回onChooseImage调用AssetPicker.pickAssets，支持修复者写前已知该选图入口被共享。",
+          "evidence": [
+            {
+              "source": "runs/471f7375-56db-46f8-bad3-3ce2c4054d2a/epoch-0/sessions/main-019fd645-c192-7c82-a6ce-86e3aa20733a.jsonl",
+              "line": 3871
+            },
+            {
+              "source": "runs/471f7375-56db-46f8-bad3-3ce2c4054d2a/epoch-0/sessions/main-019fd645-c192-7c82-a6ce-86e3aa20733a.jsonl",
+              "line": 3872
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [
+    {
+      "key": "E:\\Androidproject\\app-photo-shop-flutter\\app-photo-shop-flutter\\ohos\\flutter_plugins\\wechat_assets_picker\\pubspec.yaml",
+      "reason": "已确认L4824-L4825为修复新增image_size_getter: ^2.4.0依赖；这是asset_picker.dart改用文件头读取尺寸的配套改动。L3919写入width/height为0时未改动该文件，修复前其内容与本问题无独立偏差，故不单独画生成链，成因见asset_picker.dart图。"
+    }
+  ],
+  "job": "issue-64090e208edc24d57300",
+  "metadata": {
+    "migration": {
+      "project": "app-photo-shop-flutter",
+      "server_session_id": "0e07f2d2-6280-4809-af70-213e306fcbd6"
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "gpt-5.6-sol"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.146.0-alpha.9.2"
+      ]
+    },
+    "source_set_id": "sources-3c7e82f1dff99235c15e",
+    "card_tool_version": "0.10.0"
+  },
+  "revision": "fa1e30c795208b78dfb1b0f313b85160336c40c2ce56d072b7fe0e0641abed04"
+}
