@@ -1,0 +1,102 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-24118d7af444a7062829",
+  "created_at": "2026-09-29T15:12:19.604975+00:00",
+  "migration_key": "47cf4812-d94f-493f-8b61-d9904d36082d",
+  "title": "构建修复把页面@Builder以方法引用传给@BuilderParam，this被子组件重绑定导致无限递归",
+  "when": "构建修复阶段，为消除自定义组件尾随闭包/@BuilderParam编译错误而改写builder传参方式时",
+  "description": "ArkTS页面向声明了多个@BuilderParam的自定义组件（如Scaffold类容器）传入页面自身的@Builder内容，该builder内部通过this调用页面成员或其他builder，且可能与子组件@BuilderParam同名（如content）。",
+  "summary": "构建修复者（hmos-builder，build_fv2_postclosure_jetsnack_r1）写前实际收到：\n编译日志中的10905102错误“In the trailing lambda case, 'JetsnackScaffold' must have one and only one\nproperty decorated with '@BuilderParam'. At ProfilePage.ets:47:7”；LayoutComponents.ets中JetsnackScaffold\n声明了content/topBar/pageContent/bottomBar/snackbarHost五个@BuilderParam，build()内先调用this.content()；\n以及ProfilePage自身的@Builder content()（内部读取this.windowModel）。这些输入对“不能再用尾随闭包、\n需要显式传给某个@BuilderParam”这一约束是正确、清晰且足够的。\n本次输出却新增@Builder private scaffoldContent()（内部调用this.content()），并把调用改成\nJetsnackScaffold({ content: this.scaffoldContent })，即把页面builder的方法引用直接交给子组件。\nArkUI会以子组件为this调用该builder（编译产物为this.content.bind(this)()），scaffoldContent里的\nthis.content()因此指回JetsnackScaffold.content，也就是scaffoldContent自身，形成\nProfilePage.scaffoldContent -> LayoutComponents -> ProfilePage.scaffoldContent的无限递归。\n编译通过（BUILD SUCCESSFUL），该偏差只在运行时表现为RangeError: Stack overflow。\n偏差位于“编译约束 -> builder传参改写”这一环；该修复者读取的hmos-fix-build-errors参考\n（arkts-strict-patterns.md、known-patterns.md）没有10905102或@BuilderParam传方法引用this绑定的条目，\n改写方式由修复者自行选择。上游repair_pipeline_final_round5_iter1在07:12为接线孤儿组件给JetsnackScaffold\n增加@BuilderParam content并在ProfilePage使用尾随闭包，且按要求未编译，这造成了编译错误但不是崩溃本身。\n构建修复后协调者只复跑结构闭环、closer与join gate，07:34宣告收口，未在设备上打开Profile页；\n次日用户贴出崩溃栈（main L6527）。修复者arkts-ui-build先改回尾随闭包，再次触发同一10905102编译错误，\n最终改为JetsnackScaffold({ content: () => { this.scaffoldContent() } })，以箭头闭包保留ProfilePage的词法this，\n模拟器上进入个人资料页不再崩溃（agent-01a0b39d-26b7-73a3-8125-a6a66fcc2ee3.jsonl:L81、L83、L129、L131；\nmain-01a0aee3-dced-71e0-817f-a0abe28cc3c2.jsonl:L6748、L6786）。MainPage虽也有@Builder content()，\n但只在自身build中直接调用、未作为@BuilderParam传入，不构成同类触发（agent-01a0b39d…jsonl:L61）。\n",
+  "recommendations": [
+    "构建修复阶段处理10905102（多@BuilderParam组件不能用尾随闭包）时，改为显式命名参数并用箭头闭包包装：JetsnackScaffold({ content: () => { this.scaffoldContent() } })；不要写成content: this.scaffoldContent这样的方法引用。",
+    "把页面@Builder交给子组件@BuilderParam前，检查该builder内部的this.xxx：若引用页面状态或与子组件成员同名（本例content），方法引用会在子组件this下执行并可能自调用；必要时核对编译中间产物是否出现this.xxx.bind(this)()。",
+    "构建修复只以编译通过为验收时，对改动了builder/@BuilderParam接线的页面在收口前至少启动并进入一次该页面做冒烟，编译PASS不能排除builder递归等运行时崩溃。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/xiaoguokeng/Documents/code/hw/MyApplication/entry/src/main/ets/pages/ProfilePage.ets",
+        "since": "2026-09-18T07:34:44.921Z",
+        "at": "2026-09-20T06:26:40.439Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/xiaoguokeng/Documents/code/hw/MyApplication/build_out.log",
+          "at": "2026-09-18T07:20:56.321Z",
+          "reason": "正常输入：构建修复者首轮assembleHap后tail该日志，回执给出10905102“In the trailing lambda case, 'JetsnackScaffold' must have one and only one property decorated with '@BuilderParam'. At ProfilePage.ets:47:7”，明确约束是尾随闭包不可用、需显式指定@BuilderParam（agent-01a0b362-d25b-7933-9d12-8e628aac99db.jsonl:L124、L128；L134-L140再次rg确认）。"
+        },
+        {
+          "key": "/Users/xiaoguokeng/Documents/code/hw/MyApplication/entry/src/main/ets/components/common/LayoutComponents.ets",
+          "at": "2026-09-18T07:21:22.742Z",
+          "reason": "正常输入：sed回执给出JetsnackScaffold的五个可选@BuilderParam（content、topBar、pageContent、bottomBar、snackbarHost），build()中优先调用this.content()；同批rg显示ProfilePage:47是唯一JetsnackScaffold调用点。此前L140已返回ProfilePage自身@Builder content()读取this.windowModel。足以看出页面builder与子组件@BuilderParam同名（agent-01a0b362-d25b-7933-9d12-8e628aac99db.jsonl:L144-L149）。"
+        },
+        {
+          "key": "agent-01a0b362-d25b-7933-9d12-8e628aac99db.jsonl",
+          "at": "2026-09-18T07:22:26.780Z",
+          "reason": "已收到上述编译约束与组件签名，apply_patch却新增@Builder private scaffoldContent()（内部调用this.content()），并把尾随闭包改成JetsnackScaffold({ content: this.scaffoldContent })，以方法引用传入；子组件以自身this调用后this.content()指回scaffoldContent，形成递归。随后构建PASS即收尾，报告称“通过显式BuilderParam接入Scaffold内容”（同转录L183-L186、L191、L204、L224）。其读取的修复skill参考无@BuilderParam传参条目（L134-L140），本分支在此停止上溯。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "构建修复者在同一exec中以sed -n '1,220p'读取entry/src/main/ets/components/common/LayoutComponents.ets（工程根为MyApplication），CommandExecution回执解析为read，输出返回JetsnackScaffold的五个@BuilderParam及build()中的this.content()；这支持修复者写前已收到该组件签名。",
+          "evidence": [
+            {
+              "source": "runs/dc13c2b1-9bc1-49a0-b88c-9937beedc28d/epoch-0/sessions/agent-01a0b362-d25b-7933-9d12-8e628aac99db.jsonl",
+              "line": 144
+            },
+            {
+              "source": "runs/dc13c2b1-9bc1-49a0-b88c-9937beedc28d/epoch-0/sessions/agent-01a0b362-d25b-7933-9d12-8e628aac99db.jsonl",
+              "line": 147
+            },
+            {
+              "source": "runs/dc13c2b1-9bc1-49a0-b88c-9937beedc28d/epoch-0/sessions/agent-01a0b362-d25b-7933-9d12-8e628aac99db.jsonl",
+              "line": 149
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-24118d7af444a7062829",
+  "metadata": {
+    "migration": {
+      "project": "Jetsnack",
+      "server_session_id": "47cf4812-d94f-493f-8b61-d9904d36082d"
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "gpt-6-astra"
+      ],
+      "providers": [
+        "custom"
+      ],
+      "client_versions": [
+        "0.154.0-alpha.6.2"
+      ]
+    },
+    "source_set_id": "sources-addf00937281447d6288",
+    "card_tool_version": "0.10.0"
+  },
+  "revision": "669ee707220668081e583be3d334bc16fc6de973f6bf937f0ce051c1d0643264"
+}
