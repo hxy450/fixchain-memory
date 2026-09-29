@@ -1,0 +1,245 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-a3c9f45c1b4dd1fb77b8",
+  "created_at": "2026-09-29T15:56:49.432515+00:00",
+  "migration_key": "f9c0ac8a-b8da-4de5-b365-2ee95430d6ef",
+  "title": "转换时未按SDK声明核对接口成员名、所属类型、调用链与返回可空性",
+  "when": "页面/组件转换实现阶段（converter禁止编译），写入需实现的SDK接口、UIContext链式调用或状态存储API返回值时",
+  "description": "Android→ArkTS V2转换产物需实现ambient接口（LazyForEach的IDataSource）、经UIContext弹出菜单或解析字符串资源、或读写AppStorageV2.connect返回的对象；映射参考只给组件/接口名而无成员签名，且转换阶段不允许编译。",
+  "summary": "四个目标来自同批并行converter（main-7e8c79a4 Batch 1），派工均写明“禁止任何编译/构建”，输出只能靠写前核对SDK声明。\n四处偏差都在converter写出SDK调用这一环：输入给出了要做什么（实现IDataSource、长按链接菜单、把is_played字符串拼进无障碍文本、用AppStorageV2暂存启动意图），\n但未给成员签名；converter凭记忆或只看半截grep结果就写入，未按d.ts核对成员名、所属类型、中间一跳是否存在以及返回类型。\n1) QueuePage：映射参考只说RecyclerView.Adapter→LazyForEach + IDataSource；converter凭记忆把接口成员写成getTotalCount()，SDK要求totalCount()。\n2) ShownotesComponent：converter grep到@ohos.arkui.UIContext.d.ts中的openMenu/closeMenu行就当作UIContext方法，写出uiContext.openMenu/closeMenu；编译报UIContext上不存在。\n3) EpisodesListSkeleton：把Android activity.getString映射为getUIContext().getResourceManager()，UIContext无此成员；自检只核了末端getStringSync。\n4) EntryAbility：按pitfall P-06写AppStorageV2.connect后直接使用返回值；严格空检查报'intent' is possibly 'undefined'。\n这些偏差在生成结束时仍在各目标文件中；编译探针让孤立页面入图后才暴露（agent-a63fc4b92df631825.jsonl:L191-L214、L406、L424-L426）。\n修复者最终改为totalCount（L328-L329）、getPromptAction().openCustomDialog/closeCustomDialog并去掉title（L419-L422、L429-L430）、\ngetHostContext().resourceManager加undefined守卫（L395-L396）、connect返回值加undefined守卫（L149-L150）。\n",
+  "recommendations": [
+    "转换阶段不能编译时，写前为本文件新引入的每个SDK成员在d.ts中确认：成员名、所属class/interface、获取路径与返回类型；写后自检逐项复核，而不只核API版本号。",
+    "实现ambient接口（如IDataSource）时，先读SDK component/lazy_for_each.d.ts的接口体再写类，调用点统一使用接口成员名totalCount()。",
+    "grep命中声明行后，向上找最近的class/interface声明确认所属类型；@ohos.arkui.UIContext.d.ts包含PromptAction等多个类，不以文件名推定为UIContext方法。",
+    "链式调用逐跳核对：组件内解析字符串资源用getUIContext().getHostContext()（Context | undefined，先判空）再取resourceManager.getStringSync。",
+    "使用AppStorageV2.connect等声明返回T | undefined的API时，先判空再读写；defaultCreator只说明运行时初始化，不改变静态类型。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/fuxi-ailabs/AntennaPod-hmos-glm53/entry/src/main/ets/pages/QueuePage.ets",
+        "since": "2026-09-06T16:36:26.328Z",
+        "at": "2026-09-06T17:37:08.024Z"
+      },
+      "summary": "QueuePage converter写前收到的映射参考与页面spec只指定List + LazyForEach + IDataSource，未列接口成员。\nconverter在思考中凭记忆断言IDataSource需要getTotalCount()，未读SDK就写出QueueDataSource.getTotalCount()及5处调用；写后自检把isLast处的getTotalCount()判为fine（agent-acf4c7fa9d89d5e03.jsonl:L185），仍未核接口。\n同批EpisodesListSkeleton converter随后grep lazy_for_each.d.ts，回执为totalCount(): number（agent-af687d951ce6e7f22.jsonl:L186-L187），说明本机SDK可直接核对。\n修复者查SDK后把方法名与调用点一并改为totalCount（agent-a63fc4b92df631825.jsonl:L310-L311、L328-L329）。\n",
+      "recommendations": [
+        "实现IDataSource前读取SDK lazy_for_each.d.ts的接口体，按totalCount/getData/registerDataChangeListener/unregisterDataChangeListener逐一实现。"
+      ],
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/fuxi-ailabs/AntennaPod-hmos-glm53/.claude/skills/android-ui-graph-query/references/android-to-harmonyOS-ui-layout-mapping-reference.md",
+          "at": "2026-09-06T16:04:37.714Z",
+          "reason": "正常输入但不含签名：Read回执给出RecyclerView.Adapter→LazyForEach + IDataSource、DiffUtil→DataChangeListener的onDataAdd/onDataDelete/onDataChange，只说明要实现IDataSource，未列出其成员；页面spec同样只写List + LazyForEach（agent-acf4c7fa9d89d5e03.jsonl:L61-L62、L10-L11）。成员名需到SDK d.ts核对，这是外部skill参考的信息边界。"
+        },
+        {
+          "key": "agent-acf4c7fa9d89d5e03.jsonl",
+          "at": "2026-09-06T16:28:33.644Z",
+          "reason": "收到上述映射后，思考中断言“class implementing IDataSource must define getTotalCount()”并写出接口草图（同转录L119、L134、L137），未读SDK；Write把QueueDataSource写成getTotalCount()并在infoBar、锁定提示、移到底部、isLast、空态5处调用（L170-L171）。派工禁止编译（L1），写前没有编译反馈可依赖。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/fuxi-ailabs/AntennaPod-hmos-glm53/entry/src/main/ets/components/ShownotesComponent.ets",
+        "since": "2026-09-06T16:36:26.328Z",
+        "at": "2026-09-06T17:37:08.024Z"
+      },
+      "summary": "Shownotes converter已查工程版本为6.1.1(24)，并grep到UIContext.d.ts中openMenu/closeMenu的声明行；\n但它把文件名中的UIContext当作所属类型，写出uiContext.openMenu与this.getUIContext().closeMenu。\n页面spec原要求用Web的onContextMenuShow承载长按链接菜单，改用程序化菜单是converter为处理email/纯文本长按而自选。\n编译报Property 'openMenu'/'closeMenu' does not exist on type 'UIContext'（agent-a63fc4b92df631825.jsonl:L406）。\n修复者猜测为@since 18不可用，改成getPromptAction().openCustomDialog/closeCustomDialog并删去BaseDialogOptions不支持的title（L419-L422、L429-L430），锚点语义暂缺。\n",
+      "recommendations": [
+        "grep到openMenu等声明后，向上定位所属class；若属于PromptAction，则写this.getUIContext().getPromptAction().openMenu(content, {id}, options)，或按spec改用bindContextMenu。",
+        "版本检查只说明API级别可用，不能代替对调用对象类型的核对。"
+      ],
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/fuxi-ailabs/AntennaPod-hmos-glm53/build-profile.json5",
+          "at": "2026-09-06T16:13:55.081Z",
+          "reason": "正常输入：grep回执给出targetSdkVersion与compatibleSdkVersion均为6.1.1(24)（agent-ab0c76b56d230d0fb.jsonl:L133-L134）；openMenu标@since 18，版本不是不可用原因。"
+        },
+        {
+          "key": "/Applications/DevEco-Studio.app/Contents/sdk/default/openharmony/ets/api/@ohos.arkui.UIContext.d.ts",
+          "at": "2026-09-06T16:16:22.921Z",
+          "reason": "正常输入：grep回执只返回第1418行openMenu<T>(content, target: TargetInfo, options?)与第1456行closeMenu的声明，未含所属类（同转录L144-L145）；该文件还声明PromptAction等类，需再确认所属类型。"
+        },
+        {
+          "key": "agent-ab0c76b56d230d0fb.jsonl",
+          "at": "2026-09-06T16:25:28.115Z",
+          "reason": "把该文件中的命中当作UIContext成员：思考认为UIContext.openMenu可用（同转录L146），决定this.getUIContext().openMenu（L151），未核所属类型；Write写出uiContext.openMenu(content, {id: 'shownotes_webview'}, {title})与this.getUIContext().closeMenu(...)（L193-L194）。spec原映射为onContextMenuShow（L9-L10）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "Shownotes converter用Bash grep工程根build-profile.json5的compatibleSdkVersion/compileSdkVersion/targetSdkVersion，回执返回6.1.1(24)；这是该agent写前对版本的真实查阅。",
+          "evidence": [
+            {
+              "source": "runs/16e4459b-fa2d-45fb-97f3-f1bc1e06cee6/epoch-0/sessions/agent-ab0c76b56d230d0fb.jsonl",
+              "line": 133
+            },
+            {
+              "source": "runs/16e4459b-fa2d-45fb-97f3-f1bc1e06cee6/epoch-0/sessions/agent-ab0c76b56d230d0fb.jsonl",
+              "line": 134
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "同一agent以SDK=/Applications/DevEco-Studio.app/Contents/sdk/default/openharmony/ets执行grep -n openMenu|closeMenu $SDK/api/@ohos.arkui.UIContext.d.ts，回执只返回1418/1456两条声明行；这支持它写前据此文件判断openMenu可用。",
+          "evidence": [
+            {
+              "source": "runs/16e4459b-fa2d-45fb-97f3-f1bc1e06cee6/epoch-0/sessions/agent-ab0c76b56d230d0fb.jsonl",
+              "line": 144
+            },
+            {
+              "source": "runs/16e4459b-fa2d-45fb-97f3-f1bc1e06cee6/epoch-0/sessions/agent-ab0c76b56d230d0fb.jsonl",
+              "line": 145
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/fuxi-ailabs/AntennaPod-hmos-glm53/entry/src/main/ets/components/EpisodesListSkeleton.ets",
+        "since": "2026-09-06T16:36:26.328Z",
+        "at": "2026-09-06T17:37:08.024Z"
+      },
+      "summary": "源码要求已播放行的无障碍文本为title + '. ' + getString(R.string.is_played)，语义清楚。\nconverter把activity.getString映射成this.getUIContext().getResourceManager().getStringSync(res)，UIContext并无getResourceManager。\n写后自检只确认ResourceManager.getStringSync存在（agent-af687d951ce6e7f22.jsonl:L178），对IDataSource/DataChangeListener/KeyCode查了SDK（L182-L187），却没查UIContext这一跳；此后各次Edit未改动该行。\n编译报该成员不存在（agent-a63fc4b92df631825.jsonl:L214-L215），修复改为getHostContext()取resourceManager并在undefined时返回空串（L395-L396）。\n",
+      "recommendations": [
+        "组件内把Resource解析为string时，走getUIContext().getHostContext()→判空→resourceManager.getStringSync；自检对链上每一跳都查声明。"
+      ],
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/fuxi-ailabs/AntennaPod/app/src/main/java/de/danoeh/antennapod/ui/episodeslist/EpisodeItemViewHolder.java",
+          "at": "2026-09-06T16:03:04.886Z",
+          "reason": "正常输入：Read回执给出item.isPlayed()时leftPadding.setContentDescription(title + \". \" + activity.getString(R.string.is_played))（agent-af687d951ce6e7f22.jsonl:L30-L31）；只需把字符串资源解析为文本，未指定目标API。"
+        },
+        {
+          "key": "agent-af687d951ce6e7f22.jsonl",
+          "at": "2026-09-06T16:28:12.231Z",
+          "reason": "将activity.getString映射为this.getUIContext().getResourceManager().getStringSync(res)，Write写入getContextString（同转录L176-L177）；UIContext没有该成员，输入中也无此写法。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/fuxi-ailabs/AntennaPod-hmos-glm53/entry/src/main/ets/entryability/EntryAbility.ets",
+        "since": "2026-09-06T16:36:26.328Z",
+        "at": "2026-09-06T17:37:08.024Z"
+      },
+      "summary": "pitfall P-06给出AppStorageV2.connect(Cls, key, () => new Cls())写法，并说明defaultCreator兜底、可在EntryAbility.onCreate预热，但未提返回类型可空。\nconverter据此写stashLaunchIntent，connect返回后直接给intent.action/uri/params赋值；写后自检只核API 12+版本（agent-adc168b90bd7a8cb3.jsonl:L74）。\n严格空检查报'intent' is possibly 'undefined'（agent-a63fc4b92df631825.jsonl:L141-L142），修复加undefined守卫并hilog.error后return（L147-L150）。\n",
+      "recommendations": [
+        "写AppStorageV2.connect时查d.ts返回类型，拿到结果先判undefined，再读写字段；不要因defaultCreator兜底省略判空。"
+      ],
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/fuxi-ailabs/AntennaPod-hmos-glm53/.claude/skills/android-ui-graph-query/references/ui-migration-pitfalls.md",
+          "at": "2026-09-06T16:03:25.765Z",
+          "reason": "正常输入但不完整：Read回执P-06给出V2写法AppStorageV2.connect(Cls, key, () => new Cls())、首次connect由defaultCreator初始化、可在EntryAbility.onCreate预热（agent-adc168b90bd7a8cb3.jsonl:L46-L47）；只讲运行时初始化，未说明返回类型可空，属于外部skill参考的边界缺口。"
+        },
+        {
+          "key": "agent-adc168b90bd7a8cb3.jsonl",
+          "at": "2026-09-06T16:09:47.114Z",
+          "reason": "按P-06设计启动意图暂存（同转录L48），Write中const intent = AppStorageV2.connect(...)后直接写intent.action、intent.uri、intent.params，未判空（L66-L67），写前未查connect的声明返回类型。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "ShownotesComponent：材料只显示openMenu/closeMenu位于UIContext.d.ts第1418/1456行、PromptAction的openCustomDialog/closeCustomDialog在第1208/1265行、UIContext.getPromptAction在第4107行，未打印类边界；“openMenu属于PromptAction、应经getPromptAction()调用”由行号区段与编译结果推断。修复者提出的“@since 18不被当前API集识别”与工程compatibleSdkVersion 6.1.1(24)不符，未采作成因。",
+    "EntryAbility：材料未直接打印AppStorageV2.connect的d.ts签名，其可空返回由编译错误与修复判断支撑。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-a3c9f45c1b4dd1fb77b8",
+  "metadata": {
+    "migration": {
+      "project": "AntennaPod",
+      "server_session_id": "f9c0ac8a-b8da-4de5-b365-2ee95430d6ef"
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "glm-5.3",
+        "glm-5.3-flash"
+      ],
+      "client_versions": [
+        "2.1.247"
+      ]
+    },
+    "source_set_id": "sources-bfaba00639da741a9982",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/fuxi-ailabs/AntennaPod-hmos-glm53",
+        "at": "2026-09-06T15:39:20.104Z",
+        "ref": "runs/16e4459b-fa2d-45fb-97f3-f1bc1e06cee6/epoch-0/sessions/agent-a589cbb2b25b1751b.jsonl:L50",
+        "request_ref": "runs/16e4459b-fa2d-45fb-97f3-f1bc1e06cee6/epoch-0/sessions/agent-a589cbb2b25b1751b.jsonl:L49",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/fuxi-ailabs/AntennaPod-hmos-glm53",
+        "at": "2026-09-06T15:39:20.104Z",
+        "ref": "runs/16e4459b-fa2d-45fb-97f3-f1bc1e06cee6/epoch-0/sessions/agent-a589cbb2b25b1751b.jsonl:L50",
+        "request_ref": "runs/16e4459b-fa2d-45fb-97f3-f1bc1e06cee6/epoch-0/sessions/agent-a589cbb2b25b1751b.jsonl:L49",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.10.0"
+  },
+  "revision": "7dd76cf99fd24003745dc6b06b3a6794d63a1b9be13b039c76d288c87575a7a3"
+}
