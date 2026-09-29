@@ -1,7 +1,5 @@
 # 当前经验入口
 
-[打开分层 memory](runs/f6f89fad6b0f16f2/memory/index.md)
+[打开分层 memory](runs/024d2c9c041e2896/memory/index.md)
 
-发布版本：`5029e760087a880dd195a495d83a8f49a8af713418995ceb7679594dbf756af5`
-
-183 张自包含 case/4 卡片，182 条经验。完整模型稿保留；校验回执、绑定操作与其他派生展示数据不进入卡片。
+发布版本：`bbc497417bf3a6800f211b205ab4fbacaa400928417bc140547894d2efa78e4a`

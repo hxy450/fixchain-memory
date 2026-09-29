@@ -1,0 +1,28 @@
+# 一进入就无条件跳转并 finish 的 Activity 是路由跳板：目标按同样条件直达实际页面，不把它的布局做成可见页
+
+ID：`lesson-0b72c197ea20fbe6f277` · 版本：1
+
+[本主题](index.md)
+
+## 何时使用
+
+页面转换阶段迁移入口类 Activity、以及调用方为 Intent(X) 确定目标路由时
+
+## 适用情境
+
+Android Activity 在 onCreate/initView 开头按条件 startActivity 到另一页并立即 finish()（如登录入口按配置转到短信登录或一键登录），它的布局文件仍含可渲染的按钮；多个调用方以 Intent 指向这个跳板 Activity。
+
+## 原因
+
+照布局渲染会凭空多出一层用户在 Android 上看不到的选择页，无条件跳转被降级成“点击后跳转”；调用方按类名映射把入口指向这一页，就多了一步。来源中转换者读到入口判断与两支 finish 后，仍以布局为真值建了可见的登录方式选择页，并在报告里称其“对应启动后 finish”；个人中心的登录入口随之指向选择页。
+
+## 做法
+
+1. 页面转换时先读 onCreate/initView：开头无条件跳转并 finish 的按跳板处理；目标页进入时按同样条件 replacePath 到实际目标，或在转换报告中要求调用方直接路由到实际目标。
+2. 调用方翻译 Intent(X) 时，确认 X 是否一进入就跳走，导航指向用户实际看到的首屏。
+3. 报告若把无条件跳转改成了点击后跳转，把它作为行为改变显式标出。
+
+## 来源（按需复核）
+
+- case-327636c44f08419021a9 · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
+  卡片版本：`c67142ff0da9abe2dfa969ea7b93c8b2ce15330970d0a744e5eb2b6124e30b33`

@@ -1,0 +1,202 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-6b781bb8b1a4eb80b808",
+  "created_at": "2026-09-29T14:32:19.642913+00:00",
+  "migration_key": "bc16995e-3fe1-41da-85f4-11f10a1f4203",
+  "title": "手写proto3解码把int32(VARINT)字段按fixed32读取，编解码两侧wire type不对称",
+  "when": "数据层实现阶段，手写protobuf编解码基座并为每个消息字段选择读/写方法时",
+  "description": "目标平台无可用protobuf运行时，需按字段表（字段号、wire type、标量类型）手写proto3编解码；字段表含wire type 0的有符号int32字段（如可能为负的RSSI），同时存在fixed32/sfixed32等4字节定长字段。",
+  "summary": "生成会话main-01a0d107写前已读到正确且足够的字段事实：L329读回data-proto-brief.md的表头\n“field number (wire tag) | wire type | Kotlin type”，L559-L560 Select-String读回\n`| MeshPacket | rx_rssi | 12 | 0 | Int (INT32) |`，即字段12为wire type 0的有符号varint。\n该行由上游brief作者从protobufs AAR的javap结果得到（`int rx_rssi | tag=12 | ProtoAdapter#INT32`，\nagent-01a0d109-60e4-7e12-9ed3-30b69d9fc7de.jsonl:L164），brief本身没有偏差，因此在生成者处停止上溯。\n本次输出却在编解码两侧取了不同wire type：L569写ProtoCodec.ets时，ProtoWriter有int32()\n（VARINT，负值写10字节符号扩展），ProtoReader只有无符号varint()、le32()和按4字节小端读取并做符号还原的\nfixed32()，没有与int32()对称的读取方法；L583写MeshProto.ets part B时，MeshPacket.encode写\nw.int32(12, this.rxRssi)，decode却写`out.rxRssi = r.fixed32();`，按wire type 5固定消耗4字节，\n字段12一旦出现就会使其后的整条流错位。同一次输出中另一个INT32字段Channel.index用r.varint()解码，\n可见偏差集中在rx_rssi这一有符号字段的读法选择：读端唯一返回有符号数的方法是4字节的fixed32()。\n偏差位于“brief正确→实现者编写codec与decoder”这一环。生成期之后无写者改动这两个片段；修复会话Round 3\n读回encode仍为w.int32(12)（main-01a0d133-de9b-7892-9462-a08f8a582ff3.jsonl:L234-L235），\nL296以`out.rxRssi = r.fixed32();`为唯一锚点改为r.int32()，并在ProtoReader.tag()之前插入int32()\n（按32位窗口累加7位组、`value | 0`符号还原，读指针推进与varint一致），L297回执patched OK；\nL487 task_complete记录补了回归用例。观察截止时两处修改仍保留。\n",
+  "recommendations": [
+    "手写protobuf编解码时，按字段表的wire type而不是值是否有符号来选读写方法：wire 0用varint族（int32/uint32/enum/bool），wire 5用fixed32/sfixed32/float，wire 1用fixed64族；int32负值在线上是10字节varint，不能用4字节定长读法代替。",
+    "编写codec基座时为每个写方法提供对称的读方法（writer.int32↔reader.int32，sfixed32↔sfixed32），方法名与proto标量类型一致，避免出现名为fixed32()却返回sfixed32语义、又缺少有符号varint读法的API。",
+    "每个message写完后逐字段核对encode与decode的wire type是否一致（例如grep `w.xxx(N,` 与 `field === N` 分支中的 `r.xxx()` 对照），并用负值有符号字段（如rx_rssi=-90）后接更高字段号的round-trip用例检查后续字段未错位。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/AI/test-data/meshtastic-0924c-mem-codex/entry/src/main/ets/model/MeshProto.ets",
+        "since": "2026-09-24T02:17:08.984Z",
+        "at": "2026-09-24T05:50:57.314Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/AI/test-data/meshtastic-0924c-mem-codex/spec/a2h/_work/data-proto-brief.md",
+          "at": "2026-09-24T01:43:28.318Z",
+          "reason": "正常输入：生成者Select-String读回MeshPacket字段表，含`| MeshPacket | rx_rssi | 12 | 0 | Int (INT32) |`，第4列为wire type（表头在L329已读到）；足以确定字段12编解码都应走有符号VARINT（main-01a0d107-c6aa-7590-9107-4a589ee091d5.jsonl:L559-L560）。"
+        },
+        {
+          "key": "main-01a0d107-c6aa-7590-9107-4a589ee091d5.jsonl",
+          "at": "2026-09-24T01:44:15.616Z",
+          "reason": "已收到上述输入，写MeshProto.ets part B时encode为w.int32(12, this.rxRssi)，decode却写out.rxRssi = r.fixed32()（wire type 5、固定4字节），同一消息编解码两侧wire type不一致；输入要求未落实到解码输出，在此停止上溯（同转录L583-L584）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "生成者在项目根（session cwd=C:/AI/test-data/meshtastic-0924c-mem-codex）用Select-String -Path spec/a2h/_work/data-proto-brief.md按ToRadio|FromRadio|MeshPacket等模式读取该文件，回执返回MeshPacket字段表含rx_rssi | 12 | 0 | Int (INT32)；这是写前对brief的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/599197e2-7372-4099-8b14-1104ef7ef8a0/epoch-0/sessions/main-01a0d107-c6aa-7590-9107-4a589ee091d5.jsonl",
+              "line": 559
+            },
+            {
+              "source": "runs/599197e2-7372-4099-8b14-1104ef7ef8a0/epoch-0/sessions/main-01a0d107-c6aa-7590-9107-4a589ee091d5.jsonl",
+              "line": 560
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": "target",
+          "force": true,
+          "reason": "同一生成者以$dir=Join-Path $PWD 'entry/src/main/ets/model'、[System.IO.File]::WriteAllText(MeshProto.ets, $existing + $partB)追加MeshPacket等消息，正文含decode分支out.rxRssi = r.fixed32()，回执MeshProto.ets bytes: 22859；这是对目标文件的真实写入。",
+          "evidence": [
+            {
+              "source": "runs/599197e2-7372-4099-8b14-1104ef7ef8a0/epoch-0/sessions/main-01a0d107-c6aa-7590-9107-4a589ee091d5.jsonl",
+              "line": 583
+            },
+            {
+              "source": "runs/599197e2-7372-4099-8b14-1104ef7ef8a0/epoch-0/sessions/main-01a0d107-c6aa-7590-9107-4a589ee091d5.jsonl",
+              "line": 584
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/AI/test-data/meshtastic-0924c-mem-codex/entry/src/main/ets/model/ProtoCodec.ets",
+        "since": "2026-09-24T02:17:08.984Z",
+        "at": "2026-09-24T05:50:57.314Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/AI/test-data/meshtastic-0924c-mem-codex/spec/a2h/_work/data-proto-brief.md",
+          "at": "2026-09-24T01:43:28.318Z",
+          "reason": "正常输入：生成者读回的字段表已给出wire type 0的INT32字段（MeshPacket.rx_rssi=12），足以说明读端需要与写端int32对称的有符号varint读取（main-01a0d107-c6aa-7590-9107-4a589ee091d5.jsonl:L559-L560）。"
+        },
+        {
+          "key": "main-01a0d107-c6aa-7590-9107-4a589ee091d5.jsonl",
+          "at": "2026-09-24T01:43:48.614Z",
+          "reason": "已收到上述输入，写ProtoCodec.ets时ProtoWriter提供int32()（VARINT，负值10字节符号扩展），ProtoReader只给varint()（无符号）、le32()和4字节有符号fixed32()，缺少对应的int32()读取；读端唯一的有符号读法是定长4字节，为后续字段12误读留下入口（同转录L569-L570）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "生成者在项目根（session cwd=C:/AI/test-data/meshtastic-0924c-mem-codex）用Select-String -Path spec/a2h/_work/data-proto-brief.md按ToRadio|FromRadio|MeshPacket等模式读取该文件，回执返回MeshPacket字段表含rx_rssi | 12 | 0 | Int (INT32)；这是写前对brief的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/599197e2-7372-4099-8b14-1104ef7ef8a0/epoch-0/sessions/main-01a0d107-c6aa-7590-9107-4a589ee091d5.jsonl",
+              "line": 559
+            },
+            {
+              "source": "runs/599197e2-7372-4099-8b14-1104ef7ef8a0/epoch-0/sessions/main-01a0d107-c6aa-7590-9107-4a589ee091d5.jsonl",
+              "line": 560
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": "target",
+          "force": true,
+          "reason": "同一生成者以$dir=Join-Path $PWD 'entry/src/main/ets/model'、[System.IO.File]::WriteAllText(ProtoCodec.ets, $part1)写出ProtoWriter/ProtoReader，正文含writer int32()而reader无int32()，回执ProtoCodec.ets bytes: 8419；这是对目标文件的真实写入。",
+          "evidence": [
+            {
+              "source": "runs/599197e2-7372-4099-8b14-1104ef7ef8a0/epoch-0/sessions/main-01a0d107-c6aa-7590-9107-4a589ee091d5.jsonl",
+              "line": 569
+            },
+            {
+              "source": "runs/599197e2-7372-4099-8b14-1104ef7ef8a0/epoch-0/sessions/main-01a0d107-c6aa-7590-9107-4a589ee091d5.jsonl",
+              "line": 570
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-6b781bb8b1a4eb80b808",
+  "metadata": {
+    "migration": {
+      "project": "Meshtastic",
+      "server_session_id": "bc16995e-3fe1-41da-85f4-11f10a1f4203"
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "codex-auto-review",
+        "deepseek-v4-flash"
+      ],
+      "providers": [
+        "hmigbot"
+      ],
+      "client_versions": [
+        "0.147.0"
+      ]
+    },
+    "source_set_id": "sources-cbd13def091586c15326",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-09-24T01:29:46.774Z",
+        "ref": "runs/599197e2-7372-4099-8b14-1104ef7ef8a0/epoch-0/sessions/main-01a0d107-c6aa-7590-9107-4a589ee091d5.jsonl:L84",
+        "request_ref": "runs/599197e2-7372-4099-8b14-1104ef7ef8a0/epoch-0/sessions/main-01a0d107-c6aa-7590-9107-4a589ee091d5.jsonl:L82",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-09-24T01:29:46.774Z",
+        "ref": "runs/599197e2-7372-4099-8b14-1104ef7ef8a0/epoch-0/sessions/main-01a0d107-c6aa-7590-9107-4a589ee091d5.jsonl:L84",
+        "request_ref": "runs/599197e2-7372-4099-8b14-1104ef7ef8a0/epoch-0/sessions/main-01a0d107-c6aa-7590-9107-4a589ee091d5.jsonl:L82",
+        "phase": "generation"
+      },
+      {
+        "name": "toolchain.kotlin",
+        "value": "2.4.0",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": null,
+        "at": "2026-09-24T01:31:10.175Z",
+        "ref": "runs/599197e2-7372-4099-8b14-1104ef7ef8a0/epoch-0/sessions/agent-01a0d109-60e4-7e12-9ed3-30b69d9fc7de.jsonl:L34",
+        "request_ref": "runs/599197e2-7372-4099-8b14-1104ef7ef8a0/epoch-0/sessions/agent-01a0d109-60e4-7e12-9ed3-30b69d9fc7de.jsonl:L31",
+        "phase": "generation"
+      },
+      {
+        "name": "toolchain.agp",
+        "value": "9.2.1",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": null,
+        "at": "2026-09-24T01:31:10.175Z",
+        "ref": "runs/599197e2-7372-4099-8b14-1104ef7ef8a0/epoch-0/sessions/agent-01a0d109-60e4-7e12-9ed3-30b69d9fc7de.jsonl:L34",
+        "request_ref": "runs/599197e2-7372-4099-8b14-1104ef7ef8a0/epoch-0/sessions/agent-01a0d109-60e4-7e12-9ed3-30b69d9fc7de.jsonl:L31",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.10.0"
+  },
+  "revision": "5e2dce4e3906596750aee83beb0adb21c0fc4bdfcb3f01191af5a3992c3221a0"
+}

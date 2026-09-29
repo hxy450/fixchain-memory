@@ -1,0 +1,147 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-315ff2de8e2d8d4c0c8d",
+  "created_at": "2026-09-29T14:38:15.059828+00:00",
+  "migration_key": "bc16995e-3fe1-41da-85f4-11f10a1f4203",
+  "title": "手写 protobuf int32 负值编码时把跨 32 位边界的第 5 个 varint 字节写死为 0xFF",
+  "when": "编解码实现阶段，在无 protobuf 运行时的平台上手写 int32 负值的 varint 字节拆分逻辑时",
+  "description": "目标端（ArkTS/JS number）没有可用的 protobuf 运行时，需要手写 proto3 编解码器；源消息含 int32（非 sint32）字段，负值必须按 64 位符号扩展写成 10 字节 varint，且只能用 32 位位运算拼出各 7 位分组。",
+  "summary": "生成会话 main-01a0d107 写 ProtoCodec.ets 前，已按决策 D-003 手写 ArkTS 编解码器、严格对齐 wire 格式（用户提示 L7、契约回读 L424-L426），\n并用 Select-String 从 data-proto-brief.md 读回 Position.altitude、timestamp_millis_adjust、Channel.index 等字段为 wire type 0、INT32（L563-L564）。\nbrief 没有逐字给出负值字节规则，但生成者写前推理已正确陈述 proto3 规则：负 int32 按 64 位补码（0xFFFFFFFF00000000 + v）拆成 10 组 7 位（L566）。\n随后它手工推导时假定“前 4 组取 u 的 bit0..27 后，剩余 36 位全为 1”，Write 出的 rawInt32 因而在 4 组低位后写死 0xFF×5 再加 0x01（L569-L570）。\n实际第 5 组覆盖 bit28..34，其中 bit28..31 来自低 32 位，只有 v ≥ -268435456（-2^28）时才全为 1；INT32_MIN..-268435457 会被编成错误字节。\n偏差位于“已知编码规则 → 逐组位拆分实现”这一环，输入已经足够，不再上溯 brief 作者。同会话 L573 只把 float 的数组展开改为循环，rawInt32 片段未动。\n修复会话在设备单测（29 条 28 过）中由 int32_reader_roundtrip_including_negatives 以 INT32_MIN 暴露问题（main-01a0d133 L887-L896）；\nL898 的替换原文与生成期 rawInt32 逐字匹配（PATCH OK，L899），说明该片段保留到返修前。最终改为 lo/hi 两个 32 位半字逐 7 位写出，\n第 5 组取 (lo>>>28)|((hi&0x0f)<<4)，并补 INT32_MIN 字节级用例 6080808080f8ffffffff01，设备单测 30/30 通过（L904、L929）。\n",
+  "recommendations": [
+    "手写 varint 等位级编码时，不凭“高位全 1”之类的直觉拼接常量字节；把 64 位值拆成 lo/hi 两个 32 位半字，逐组计算 7 位分组，单独核对跨 32 位边界的第 5 组（bit28..34）由哪些位组成。",
+    "为 int32 负值编码写字节级断言，至少覆盖 -1、-268435456、-268435457 与 INT32_MIN，并对照标准 protobuf 编码结果（如 INT32_MIN → 80 80 80 80 F8 FF FF FF FF 01），不要只依赖自写读写往返。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:\\AI\\test-data\\meshtastic-0924c-mem-codex\\entry\\src\\main\\ets\\model\\ProtoCodec.ets",
+        "since": "2026-09-24T02:17:08.984Z",
+        "at": "2026-09-24T05:50:57.314Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/AI/test-data/meshtastic-0924c-mem-codex/spec/a2h/_work/data-proto-brief.md",
+          "at": "2026-09-24T01:43:30.373Z",
+          "reason": "正常输入：生成者写前 Select-String 回读字段表，返回 Position.altitude=3、timestamp_millis_adjust=8、Channel.index=1 均为 wire type 0、Int (INT32)（main-01a0d107 L563-L564）。结合 D-003 对齐 wire 格式的要求，足以确定这些字段须按 proto3 int32 语义编码，负值为 64 位符号扩展 varint。"
+        },
+        {
+          "key": "main-01a0d107-c6aa-7590-9107-4a589ee091d5.jsonl",
+          "at": "2026-09-24T01:43:48.614Z",
+          "reason": "写前推理已写出负 int32 = 0xFFFFFFFF00000000 + v、共 10 组 7 位（L566），却推定前 4 组之后的 36 位全为 1；Write 的 rawInt32 在 4 组低位后写死 0xff×5 + 0x01，第 5 组丢掉了低 32 位的 bit28..31，对 < -2^28 的负值编码错误（L569，回执 L570）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "生成者在写 ProtoCodec.ets 前 18 秒用 Select-String 读取 spec/a2h/_work/data-proto-brief.md（工作目录为鸿蒙工程根），回执返回 Position.altitude、timestamp_millis_adjust、Channel.index 等 INT32/wire 0 行；这是同一 agent 写前的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/599197e2-7372-4099-8b14-1104ef7ef8a0/epoch-0/sessions/main-01a0d107-c6aa-7590-9107-4a589ee091d5.jsonl",
+              "line": 563
+            },
+            {
+              "source": "runs/599197e2-7372-4099-8b14-1104ef7ef8a0/epoch-0/sessions/main-01a0d107-c6aa-7590-9107-4a589ee091d5.jsonl",
+              "line": 564
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": "target",
+          "force": true,
+          "reason": "PowerShell here-string 经 [System.IO.File]::WriteAllText 写入 entry/src/main/ets/model/ProtoCodec.ets，正文含 rawInt32 的 0xff×5 + 0x01 分支；回执 ProtoCodec.ets bytes: 8419 表明写入已完成。",
+          "evidence": [
+            {
+              "source": "runs/599197e2-7372-4099-8b14-1104ef7ef8a0/epoch-0/sessions/main-01a0d107-c6aa-7590-9107-4a589ee091d5.jsonl",
+              "line": 569
+            },
+            {
+              "source": "runs/599197e2-7372-4099-8b14-1104ef7ef8a0/epoch-0/sessions/main-01a0d107-c6aa-7590-9107-4a589ee091d5.jsonl",
+              "line": 570
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-315ff2de8e2d8d4c0c8d",
+  "metadata": {
+    "migration": {
+      "project": "Meshtastic",
+      "server_session_id": "bc16995e-3fe1-41da-85f4-11f10a1f4203"
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "codex-auto-review",
+        "deepseek-v4-flash"
+      ],
+      "providers": [
+        "hmigbot"
+      ],
+      "client_versions": [
+        "0.147.0"
+      ]
+    },
+    "source_set_id": "sources-cbd13def091586c15326",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-09-24T01:29:46.774Z",
+        "ref": "runs/599197e2-7372-4099-8b14-1104ef7ef8a0/epoch-0/sessions/main-01a0d107-c6aa-7590-9107-4a589ee091d5.jsonl:L84",
+        "request_ref": "runs/599197e2-7372-4099-8b14-1104ef7ef8a0/epoch-0/sessions/main-01a0d107-c6aa-7590-9107-4a589ee091d5.jsonl:L82",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-09-24T01:29:46.774Z",
+        "ref": "runs/599197e2-7372-4099-8b14-1104ef7ef8a0/epoch-0/sessions/main-01a0d107-c6aa-7590-9107-4a589ee091d5.jsonl:L84",
+        "request_ref": "runs/599197e2-7372-4099-8b14-1104ef7ef8a0/epoch-0/sessions/main-01a0d107-c6aa-7590-9107-4a589ee091d5.jsonl:L82",
+        "phase": "generation"
+      },
+      {
+        "name": "toolchain.kotlin",
+        "value": "2.4.0",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": null,
+        "at": "2026-09-24T01:31:10.175Z",
+        "ref": "runs/599197e2-7372-4099-8b14-1104ef7ef8a0/epoch-0/sessions/agent-01a0d109-60e4-7e12-9ed3-30b69d9fc7de.jsonl:L34",
+        "request_ref": "runs/599197e2-7372-4099-8b14-1104ef7ef8a0/epoch-0/sessions/agent-01a0d109-60e4-7e12-9ed3-30b69d9fc7de.jsonl:L31",
+        "phase": "generation"
+      },
+      {
+        "name": "toolchain.agp",
+        "value": "9.2.1",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": null,
+        "at": "2026-09-24T01:31:10.175Z",
+        "ref": "runs/599197e2-7372-4099-8b14-1104ef7ef8a0/epoch-0/sessions/agent-01a0d109-60e4-7e12-9ed3-30b69d9fc7de.jsonl:L34",
+        "request_ref": "runs/599197e2-7372-4099-8b14-1104ef7ef8a0/epoch-0/sessions/agent-01a0d109-60e4-7e12-9ed3-30b69d9fc7de.jsonl:L31",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.10.0"
+  },
+  "revision": "117f2ebc648f0d1f783adcf13579de0b316cbb61751b59239cde09bed3e73570"
+}
