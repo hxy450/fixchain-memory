@@ -1,0 +1,547 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-8f714106a538afa3c22a",
+  "created_at": "2026-09-30T05:12:00.372653+00:00",
+  "migration_key": "7117da4e-7187-4a29-8d35-25d345e0e57e",
+  "title": "拆除共享ViewModel单例时未迁移空间筛选状态，日历各视图与“所有空间”查询失去统一来源",
+  "when": "架构重构阶段，把跨页面共享的ViewModel单例改为页面级实例时；以及修复阶段为页面补传空间选择参数时",
+  "description": "页面通过AppStorageV2等全局单例共用同一个ViewModel，其中的selectedSpaceId等筛选状态由侧栏空间选择动作写入（“所有空间”在该动作里归一化为空ID），日/月/四象限等页面只调用queryCalendarRange(start, end)隐式使用该状态；重构要求改为page-scope ViewModel。",
+  "summary": "生成期R6.2（agent 019fc628，r6_core_impl）写前实际读到CalendarViewsSearchViewModel：\ngetInstance()经AppStorageV2同一键返回共享实例，@Trace selectedSpaceId由initialize()从偏好\nloadSelectedSpaceId()读取，并由handleAction('homeSpaceSelectionChanged')写成\npayload === 'all' ? '' : value（agent-019fc628…jsonl:L1757-L1758）；同批读到日/月页只调用\nqueryCalendarRange(start, end)、不传空间（L1753-L1754），rg又列出HomeLeftPopup、NewMainActivityPage、\n日/月/四象限、首页容器等20余页都在getInstance()（L1779-L1780）。这些输入足以说明：侧栏选空间后，各日历页正是靠同一实例\n拿到新的、已归一化的空间过滤。改为页面实例是计划方向，本身没有错。\n输出却在06:21删除getInstance（L1774-L1775），06:23一个补丁把20余处调用机械替换成\nnew CalendarViewsSearchViewModel()（L1829-L1830），只加页面代次守卫，没有为selectedSpaceId建立\n@Param/@Monitor或typed event传递。结果HomeLeftPopup的homeSpaceSelectionChanged只改自己的私有实例；\n月历、四象限页实例的selectedSpaceId停留在初始化值，切空间后不刷新或混入其他空间数据；\nVM的loadSelectedDay仍无请求身份地写visibleCalendarItems，页面代次只拦页面提交（L1813-L1814）。\n修复期又出现一次新偏差：08-11 main-019fef8a已读到VM的all→''归一化（L604-L605）和偏好读取（L608-L609），\n并看到NewMainActivityPage.updateSpaceHeader把原始spaceId存入selectedSpaceId（L620-L621），\n却在L714-L715把这个原始ID经NewHomeFragmentPage只传给日视图（未同时传给月历），并在L720-L721直接赋给VM。\n“所有空间”条目的非空namespace ID因此成了过滤条件，用户报告选所有空间反而无数据（L1921第3点）；\n新加的@Monitor又和抽屉关闭后的calendarDataRevision++叠成两轮刷新（main-01a00e85 L238诊断）。\n最终修改：HomeLeftPopup与NewMainActivityPage在“所有空间”时用空ID（main-019fef8a L2123-L2124）；\nHomeLeftPopup删除私有VM查询，改为保存成功后通知父页；VM为选中日查询加代次/日期/空间校验；\nNewMainActivityPage删除无效VM调用，日历模式下不再二次递增revision（main-01a00e85 L633、L694、L700）；\n月历接收并监听selectedSpaceId（main-01a00ea6-c814 L123）；四象限查询前同步空间（main-019ff40e L637-L638）。\n",
+  "recommendations": [
+    "架构重构阶段拆除共享ViewModel单例前，先列出其中跨页面状态字段（本例selectedSpaceId、selectedDate）的写入动作和全部读取页；每个读取页改成显式@Param+@Monitor或订阅typed event，不能只把getInstance()替换成new。",
+    "替换后逐个检查隐式依赖VM状态的查询（如queryCalendarRange(start, end)不传空间）：查询前由页面同步当前空间，或改成显式传参。",
+    "保留哨兵值归一化：“所有空间”在查询层统一为空spaceId，与cur_space_all_type/loadSelectedSpaceId一致；不要把侧栏条目的原始ID直接下传给查询。",
+    "加请求代次时，ViewModel内部写共享列表也要校验请求身份（代次、日期、空间），一次空间切换只保留一个刷新入口；用“具体空间→无数据空间→所有空间”和跨视图往返各测一次。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/xyz/work/HMRmbr/features/business_calendar/src/main/ets/pages/HomeLeftPopup.ets",
+        "since": "2026-08-11T06:08:24.647Z",
+        "at": "2026-08-19T07:18:47.009Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/xyz/work/HMRmbr/features/business_calendar/src/main/ets/viewmodel/CalendarViewsSearchViewModel.ets",
+          "at": "2026-08-03T06:20:56.786Z",
+          "reason": "正常输入：sed读取回执显示VM经AppStorageV2同一键共享，@Trace selectedSpaceId由homeSpaceSelectionChanged写成payload==='all'?'':value，并由initialize从偏好读取；侧栏选空间正是经共享实例传给各日历页（agent-019fc628…jsonl:L1757-L1758）。"
+        },
+        {
+          "key": "019fc628-75e1-7ab0-93f2-e36f79f0cc44",
+          "at": "2026-08-03T06:23:58.713Z",
+          "reason": "偏差：删除getInstance后把HomeLeftPopup等20余处调用机械替换成new CalendarViewsSearchViewModel()，没有另建空间选择的传递；此后HomeLeftPopup的homeSpaceSelectionChanged只改自己的私有实例，“所有空间”归一化也只留在该实例内（同转录L1774-L1775、L1829-L1831）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/xyz/work/HMRmbr/products/phone/src/main/ets/pages/HomeLeftPopup.ets",
+          "at": "2026-08-07T04:06:27.150Z",
+          "reason": "交接桥梁：019fc628写入的旧路径文件；其后L1919只加代次守卫，私有VM与原始ID回调保持不变，直到被mv搬走。"
+        },
+        {
+          "key": "019fd4b0-61c0-76a3-93e7-cd325f684683",
+          "at": "2026-08-07T04:06:27.150Z",
+          "reason": "搬迁接线：模块拆分时用shell mv把44个日历页面从products/phone原样移到features/business_calendar/pages，未改本项空间传递（epoch-2 main-019fd4b0…jsonl:L10505-L10506）。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "exec中sed -n '1,240p'读取该VM文件，回执含getInstance/AppStorageV2、@Trace selectedSpaceId、homeSpaceSelectionChanged与initialize；这是写前实际收到的VM内容。",
+          "evidence": [
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/agent-019fc628-75e1-7ab0-93f2-e36f79f0cc44.jsonl",
+              "line": 1757
+            },
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/agent-019fc628-75e1-7ab0-93f2-e36f79f0cc44.jsonl",
+              "line": 1758
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "L10505用files数组拼出mv products/phone/src/main/ets/pages/HomeLeftPopup.ets features/business_calendar/src/main/ets/pages/HomeLeftPopup.ets，L10506回执成功；mv以旧路径文件为源。",
+          "evidence": [
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-2/sessions/main-019fd4b0-61c0-76a3-93e7-cd325f684683.jsonl",
+              "line": 10505
+            },
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-2/sessions/main-019fd4b0-61c0-76a3-93e7-cd325f684683.jsonl",
+              "line": 10506
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": "target",
+          "force": true,
+          "reason": "同一mv命令把HomeLeftPopup.ets写到features/business_calendar/src/main/ets/pages/HomeLeftPopup.ets，L10506回执成功；索引未解析该shell mv。",
+          "evidence": [
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-2/sessions/main-019fd4b0-61c0-76a3-93e7-cd325f684683.jsonl",
+              "line": 10505
+            },
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-2/sessions/main-019fd4b0-61c0-76a3-93e7-cd325f684683.jsonl",
+              "line": 10506
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/xyz/work/HMRmbr/features/business_calendar/src/main/ets/pages/home/month/PhoneMonthCalendarFragmentPage.ets",
+        "since": "2026-08-11T06:08:24.647Z",
+        "at": "2026-08-19T07:18:47.009Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/xyz/work/HMRmbr/products/phone/src/main/ets/pages/PhoneMonthCalendarFragmentPage.ets",
+          "at": "2026-08-03T06:20:49.270Z",
+          "reason": "正常输入：读取回执显示月历页经getInstance()取VM，只调用queryCalendarRange(start, end)、不传空间，过滤条件完全来自共享VM（agent-019fc628…jsonl:L1753-L1754）。"
+        },
+        {
+          "key": "/Users/xyz/work/HMRmbr/features/business_calendar/src/main/ets/viewmodel/CalendarViewsSearchViewModel.ets",
+          "at": "2026-08-03T06:20:56.786Z",
+          "reason": "正常输入：VM中selectedSpaceId由homeSpaceSelectionChanged和initialize写入（L1757-L1758）。"
+        },
+        {
+          "key": "019fc628-75e1-7ab0-93f2-e36f79f0cc44",
+          "at": "2026-08-03T06:23:58.713Z",
+          "reason": "偏差：把月历页VM换成new实例，只加代次守卫，没有增加selectedSpaceId参数或空间变更订阅；月历实例的空间停留在初始化值，切空间后不刷新（L1829-L1831）。最终修复为月历增加@Param selectedSpaceId与@Monitor（main-01a00ea6-c814 L123）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/xyz/work/HMRmbr/products/phone/src/main/ets/pages/PhoneMonthCalendarFragmentPage.ets",
+          "at": "2026-08-07T04:06:27.150Z",
+          "reason": "交接桥梁：019fc628写入的旧路径月历页，直到被mv搬走时仍无空间参数。"
+        },
+        {
+          "key": "019fd4b0-61c0-76a3-93e7-cd325f684683",
+          "at": "2026-08-07T04:06:27.150Z",
+          "reason": "搬迁接线：模块拆分时用shell mv把44个日历页面从products/phone原样移到features/business_calendar/pages，未改本项空间传递（epoch-2 main-019fd4b0…jsonl:L10505-L10506）。"
+        },
+        {
+          "key": "/Users/xyz/work/HMRmbr/features/business_calendar/src/main/ets/pages/PhoneMonthCalendarFragmentPage.ets",
+          "at": "2026-08-17T07:14:03.624Z",
+          "reason": "交接桥梁：mv后的中间路径；08-17改名前的读取回执仍显示月历页无selectedSpaceId参数（main-01a00e91…jsonl:L30-L31）。"
+        },
+        {
+          "key": "01a00e91-4d37-7080-ba7a-7ee0c4803652",
+          "at": "2026-08-17T07:18:15.860Z",
+          "reason": "改名接线：读中间路径后，L72-L73以apply_patch移到home/month，L88继续写该目标；未改本项空间传递。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "exec中sed -n '1,280p'读取月历页，回执含getInstance()与queryCalendarRange(start, end)；这是替换前实际读到的月历取数方式。",
+          "evidence": [
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/agent-019fc628-75e1-7ab0-93f2-e36f79f0cc44.jsonl",
+              "line": 1753
+            },
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/agent-019fc628-75e1-7ab0-93f2-e36f79f0cc44.jsonl",
+              "line": 1754
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "exec中sed -n '1,240p'读取该VM文件，回执含getInstance/AppStorageV2、@Trace selectedSpaceId、homeSpaceSelectionChanged与initialize；这是写前实际收到的VM内容。",
+          "evidence": [
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/agent-019fc628-75e1-7ab0-93f2-e36f79f0cc44.jsonl",
+              "line": 1757
+            },
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/agent-019fc628-75e1-7ab0-93f2-e36f79f0cc44.jsonl",
+              "line": 1758
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 5,
+          "force": true,
+          "reason": "L10505用files数组拼出mv products/phone/src/main/ets/pages/PhoneMonthCalendarFragmentPage.ets features/business_calendar/src/main/ets/pages/PhoneMonthCalendarFragmentPage.ets，L10506回执成功；mv以旧路径文件为源。",
+          "evidence": [
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-2/sessions/main-019fd4b0-61c0-76a3-93e7-cd325f684683.jsonl",
+              "line": 10505
+            },
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-2/sessions/main-019fd4b0-61c0-76a3-93e7-cd325f684683.jsonl",
+              "line": 10506
+            }
+          ]
+        },
+        {
+          "from": 5,
+          "to": 6,
+          "force": true,
+          "reason": "同一mv命令把PhoneMonthCalendarFragmentPage.ets写到features/business_calendar/src/main/ets/pages/PhoneMonthCalendarFragmentPage.ets，L10506回执成功；索引未解析该shell mv。",
+          "evidence": [
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-2/sessions/main-019fd4b0-61c0-76a3-93e7-cd325f684683.jsonl",
+              "line": 10505
+            },
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-2/sessions/main-019fd4b0-61c0-76a3-93e7-cd325f684683.jsonl",
+              "line": 10506
+            }
+          ]
+        },
+        {
+          "from": 6,
+          "to": 7,
+          "force": true,
+          "reason": "exec中sed -n '1,760p'读取中间路径月历页，L31回执返回文件内容；随后同一agent把它改名到目标路径。",
+          "evidence": [
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/main-01a00e91-4d37-7080-ba7a-7ee0c4803652.jsonl",
+              "line": 30
+            },
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/main-01a00e91-4d37-7080-ba7a-7ee0c4803652.jsonl",
+              "line": 31
+            }
+          ]
+        },
+        {
+          "from": 7,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/xyz/work/HMRmbr/features/business_calendar/src/main/ets/pages/quadrant/NewTime4ListFragmentPage.ets",
+        "since": "2026-08-11T06:08:24.647Z",
+        "at": "2026-08-19T07:18:47.009Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/xyz/work/HMRmbr/features/business_calendar/src/main/ets/viewmodel/CalendarViewsSearchViewModel.ets",
+          "at": "2026-08-03T06:20:56.786Z",
+          "reason": "正常输入：VM中selectedSpaceId由homeSpaceSelectionChanged和initialize写入，是queryCalendarRange的隐式过滤条件（L1757-L1758）。"
+        },
+        {
+          "key": "019fc628-75e1-7ab0-93f2-e36f79f0cc44",
+          "at": "2026-08-03T06:23:58.713Z",
+          "reason": "偏差：四象限页的readonly VM改成new实例；该页虽有selectedSpaceId参数，查询仍走VM自身的selectedSpaceId，替换时没有同步，周/月查询因此混入其他空间数据（L1829-L1831）。最终修复在loadPageInternally查询前同步空间（main-019ff40e L637-L638）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/xyz/work/HMRmbr/products/phone/src/main/ets/pages/NewTime4ListFragmentPage.ets",
+          "at": "2026-08-07T04:06:27.150Z",
+          "reason": "交接桥梁：019fc628写入的旧路径四象限页，直到被mv搬走。"
+        },
+        {
+          "key": "019fd4b0-61c0-76a3-93e7-cd325f684683",
+          "at": "2026-08-07T04:06:27.150Z",
+          "reason": "搬迁接线：模块拆分时用shell mv把44个日历页面从products/phone原样移到features/business_calendar/pages，未改本项空间传递（epoch-2 main-019fd4b0…jsonl:L10505-L10506）。"
+        },
+        {
+          "key": "/Users/xyz/work/HMRmbr/features/business_calendar/src/main/ets/pages/NewTime4ListFragmentPage.ets",
+          "at": "2026-08-12T03:40:55.802Z",
+          "reason": "交接桥梁：mv后的中间路径，改名前被读取（main-019ff40e…jsonl:L27-L28）。"
+        },
+        {
+          "key": "019ff40e-75be-7651-81f7-8d6b60347164",
+          "at": "2026-08-12T03:47:34.236Z",
+          "reason": "改名接线：L208-L209以apply_patch移到quadrant/，L223继续写该目标；此时未改本项空间同步，同一会话08:03才补上。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "exec中sed -n '1,240p'读取该VM文件，回执含getInstance/AppStorageV2、@Trace selectedSpaceId、homeSpaceSelectionChanged与initialize；这是写前实际收到的VM内容。",
+          "evidence": [
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/agent-019fc628-75e1-7ab0-93f2-e36f79f0cc44.jsonl",
+              "line": 1757
+            },
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/agent-019fc628-75e1-7ab0-93f2-e36f79f0cc44.jsonl",
+              "line": 1758
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "L10505用files数组拼出mv products/phone/src/main/ets/pages/NewTime4ListFragmentPage.ets features/business_calendar/src/main/ets/pages/NewTime4ListFragmentPage.ets，L10506回执成功；mv以旧路径文件为源。",
+          "evidence": [
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-2/sessions/main-019fd4b0-61c0-76a3-93e7-cd325f684683.jsonl",
+              "line": 10505
+            },
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-2/sessions/main-019fd4b0-61c0-76a3-93e7-cd325f684683.jsonl",
+              "line": 10506
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": 5,
+          "force": true,
+          "reason": "同一mv命令把NewTime4ListFragmentPage.ets写到features/business_calendar/src/main/ets/pages/NewTime4ListFragmentPage.ets，L10506回执成功；索引未解析该shell mv。",
+          "evidence": [
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-2/sessions/main-019fd4b0-61c0-76a3-93e7-cd325f684683.jsonl",
+              "line": 10505
+            },
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-2/sessions/main-019fd4b0-61c0-76a3-93e7-cd325f684683.jsonl",
+              "line": 10506
+            }
+          ]
+        },
+        {
+          "from": 5,
+          "to": 6,
+          "force": true,
+          "reason": "exec中sed -n '1,360p'读取中间路径四象限页，L28回执返回文件内容；随后同一agent把它改名到目标路径。",
+          "evidence": [
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/main-019ff40e-75be-7651-81f7-8d6b60347164.jsonl",
+              "line": 27
+            },
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/main-019ff40e-75be-7651-81f7-8d6b60347164.jsonl",
+              "line": 28
+            }
+          ]
+        },
+        {
+          "from": 6,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/xyz/work/HMRmbr/features/business_calendar/src/main/ets/viewmodel/CalendarViewsSearchViewModel.ets",
+        "since": "2026-08-11T06:08:24.647Z",
+        "at": "2026-08-19T07:18:47.009Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/xyz/work/HMRmbr/features/business_calendar/src/main/ets/viewmodel/CalendarViewsSearchViewModel.ets",
+          "at": "2026-08-03T06:20:56.786Z",
+          "reason": "正常输入：写前读取的VM含共享getInstance、selectedSpaceId写入动作及initialize（L1757-L1758）。"
+        },
+        {
+          "key": "019fc628-75e1-7ab0-93f2-e36f79f0cc44",
+          "at": "2026-08-03T06:23:58.713Z",
+          "reason": "偏差：删除VM的AppStorageV2单例（L1774-L1775），并把beginPageRequest改为每次递增，声称可防旧请求覆盖新数据（L1811-L1814）；但loadSelectedDay仍无请求身份地写visibleCalendarItems，页面代次只拦页面提交。最终修复加selectedDayGeneration及日期/空间校验（main-01a00e85 L633）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "exec中sed -n '1,240p'读取该VM文件，回执含getInstance/AppStorageV2、@Trace selectedSpaceId、homeSpaceSelectionChanged与initialize；这是写前实际收到的VM内容。",
+          "evidence": [
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/agent-019fc628-75e1-7ab0-93f2-e36f79f0cc44.jsonl",
+              "line": 1757
+            },
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/agent-019fc628-75e1-7ab0-93f2-e36f79f0cc44.jsonl",
+              "line": 1758
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/xyz/work/HMRmbr/features/business_calendar/src/main/ets/pages/home/NewHomeFragmentPage.ets",
+        "since": "2026-08-11T06:08:24.647Z",
+        "at": "2026-08-19T07:18:47.009Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/xyz/work/HMRmbr/features/business_calendar/src/main/ets/viewmodel/CalendarViewsSearchViewModel.ets",
+          "at": "2026-08-11T07:19:04.273Z",
+          "reason": "正常输入（修复期）：main-019fef8a读取VM，回执含homeSpaceSelectionChanged的payload==='all'?'':value归一化；偏好读取loadSelectedSpaceId对cur_space_all_type返回空ID见L608-L609（main-019fef8a…jsonl:L604-L605）。"
+        },
+        {
+          "key": "019fef8a-afc9-7c82-bb44-5cf8c6d0103f",
+          "at": "2026-08-11T07:27:05.607Z",
+          "reason": "修复中新生偏差：已读到归一化，却给首页容器加@Param selectedSpaceId，把父页原始ID直接传给日视图（未同时传给月历）；“所有空间”的非空namespace ID因此成为过滤条件，且新@Monitor与抽屉关闭后的revision递增叠成二次刷新（L714-L716）。最终修复为月历补传selectedSpaceId并回报视图模式（main-01a00ea6-c814 L123；main-01a00e85 L700）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "exec中sed读取VM 1-470行，回执含homeSpaceSelectionChanged的payload==='all'?'':value归一化；这是修复期接线前实际读到的内容。",
+          "evidence": [
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/main-019fef8a-afc9-7c82-bb44-5cf8c6d0103f.jsonl",
+              "line": 604
+            },
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/main-019fef8a-afc9-7c82-bb44-5cf8c6d0103f.jsonl",
+              "line": 605
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/xyz/work/HMRmbr/products/phone/src/main/ets/pages/NewMainActivityPage.ets",
+        "since": "2026-08-11T06:08:24.647Z",
+        "at": "2026-08-19T07:18:47.009Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/xyz/work/HMRmbr/features/business_calendar/src/main/ets/viewmodel/CalendarViewsSearchViewModel.ets",
+          "at": "2026-08-03T06:20:56.786Z",
+          "reason": "正常输入：VM共享实例承载selectedSpaceId（L1757-L1758）。"
+        },
+        {
+          "key": "019fc628-75e1-7ab0-93f2-e36f79f0cc44",
+          "at": "2026-08-03T06:23:58.713Z",
+          "reason": "偏差：主页面VM改成new私有实例，后续refreshDayEvents只刷新无人显示的实例，空间选择仍无显式通道（L1829-L1831）。最终修复删除该无效VM调用（main-01a00e85 L700）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/xyz/work/HMRmbr/features/business_calendar/src/main/ets/viewmodel/CalendarViewsSearchViewModel.ets",
+          "at": "2026-08-11T07:19:04.273Z",
+          "reason": "正常输入（修复期）：VM回执含all→''归一化，偏好读取见L608-L609（main-019fef8a…jsonl:L604-L605）。"
+        },
+        {
+          "key": "019fef8a-afc9-7c82-bb44-5cf8c6d0103f",
+          "at": "2026-08-11T07:27:05.607Z",
+          "reason": "修复中新生偏差：读到updateSpaceHeader把原始spaceId存入selectedSpaceId（L620-L621）后，仍在主页面加selectedSpaceId: this.selectedSpaceId下传日历视图，未归一化“所有空间”（L714-L716）。最终修复在恢复空间时按cur_space_all_type传空ID（L2123-L2124）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "exec中sed -n '1,240p'读取该VM文件，回执含getInstance/AppStorageV2、@Trace selectedSpaceId、homeSpaceSelectionChanged与initialize；这是写前实际收到的VM内容。",
+          "evidence": [
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/agent-019fc628-75e1-7ab0-93f2-e36f79f0cc44.jsonl",
+              "line": 1757
+            },
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/agent-019fc628-75e1-7ab0-93f2-e36f79f0cc44.jsonl",
+              "line": 1758
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": "target"
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "exec中sed读取VM 1-470行，回执含homeSpaceSelectionChanged的payload==='all'?'':value归一化；这是修复期接线前实际读到的内容。",
+          "evidence": [
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/main-019fef8a-afc9-7c82-bb44-5cf8c6d0103f.jsonl",
+              "line": 604
+            },
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/main-019fef8a-afc9-7c82-bb44-5cf8c6d0103f.jsonl",
+              "line": 605
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "root→r6_core_impl的R6.2派工载荷已加密，未能核实root是否转达r6_harmony_calendar_audit的结论（main-019fc543 L4974：日/月/首页/搜索共用selectedSpaceId，应改page-scope VM，跨页面只共享只读数据源和typed event）；本卡只归因实现者可见输入下的机械替换。",
+    "HomeLeftPopup中onSpaceSelectionChange(item.spaceId)传原始ID、月历页不收selectedSpaceId的写法早于本材料，未追到首次写入；本卡只归因它们在生成期失去共享实例这一隐式通道后的后果。",
+    "HomeLeftPopup、月历、四象限页在生成后被shell mv及修复期改名移动；索引按路径登记写入，图中保留旧路径文件与搬迁者作为交接桥梁，搬迁本身未改变本项空间传递。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-8f714106a538afa3c22a",
+  "metadata": {
+    "migration": {
+      "project": "记得日历",
+      "server_session_id": "7117da4e-7187-4a29-8d35-25d345e0e57e"
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "gpt-5.6-sol"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.146.0-alpha.9.2",
+        "0.147.0-alpha.1.2",
+        "0.147.0-alpha.6.5",
+        "0.148.0-alpha.15",
+        "0.148.0-alpha.9"
+      ]
+    },
+    "source_set_id": "sources-e29c9382987c75013258",
+    "card_tool_version": "0.10.0"
+  },
+  "revision": "4178e08f1d972c169a443a946592976e887b273265984ae03c685e6e9f412eaa"
+}

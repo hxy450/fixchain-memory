@@ -1,0 +1,515 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-282d676ed02777809cac",
+  "created_at": "2026-09-29T18:20:21.863315+00:00",
+  "migration_key": "7117da4e-7187-4a29-8d35-25d345e0e57e",
+  "title": "模块化与测试插桩中HAR直接引用宿主BuildProfile、宿主页跨模块相对路径导入",
+  "when": "多模块拆分与后续插桩/结构修复阶段，把代码迁入或写入features/components等HAR模块、或为通过编译与结构检测而调整导入时，确定构建模式开关的来源和跨模块导入方式",
+  "description": "HarmonyOS工程已拆为products壳HAP与features/business_*、components/module_* HAR；被迁移或新增的HAR代码需要DEBUG等构建模式常量（裸模块名'BuildProfile'只在宿主HAP中可解析，每个HAR有自身生成的BuildProfile.ets），或宿主页面要使用其他模块的类；hvigor按HAP整体assembleHap能通过，IDE的ArkTSCheck按模块校验。",
+  "summary": "本问题有三条同属“模块边界依赖”的成因分支。\n(1) 模块化下沉（main-019fd4b0，R17 Observability）：写前已读到phone版BqLogService第2行\nimport { DEBUG } from 'BuildProfile'（epoch-2 main-019fd4b0 L5576-L5577），也读到module_observability自带生成的\nBuildProfile.ets（L5581-L5582）；同一会话早先迁移MineSetActPage时已明确“解除页面对phone测试态与BuildProfile的反向依赖”，\n删除页面导入并在壳侧SettingsComposition提供DEBUG（L2664、L2679、L2686、L2705）。但L5589-L5590用apply_patch Move把\nBqLogService移入HAR时只改了日志保留注释，裸'BuildProfile'导入与模块级LOG_CONFIG原样进入目标；L5619-L5620把\nEntryAbility、WidgetFormExtensionAbility、WidgetRefreshWorkAbility、EntryBackupAbility的appLogger改为从module_observability导入，\n仍调用无参initialize()，没有把构建模式决定权交还宿主。随后的边界扫描只查business_/products/phone/../network等（L5629-L5630），\nHAP构建通过（L5651-L5662），问题保留到修复期。修复把initialize改为接收consoleEnabled，四个宿主入口传入各自DEBUG\n（main-019ff910 L1140、L1235、L1309）。\n(2) UI测试修复（round-5，08-10）：fix worker agent-019febed读到phone Index.ets中的DEBUG && uiTestBridgeState.testMode门控\n（L1391-L1392），把同样门控写进HAR页面AttentionUsersActivityPage、SpaceEditActivityPage，HAR内没有DEBUG来源且未构建\n（L1577、L1890）。构建代理agent-019febae遇到Cannot find name 'DEBUG'（L2803、L4375）；其约定检索（L2812-L2813）显示裸\n'BuildProfile'导入只在products/phone的Index/EntryAbility/SettingsComposition中，各features模块另有自身BuildProfile.ets，\n它仍在HAR页面补import { DEBUG } from 'BuildProfile'（L2817、L4384，称“只补既有BuildProfile导入”），HAP构建随即通过。\n另一worker agent-019febea读到这个HAR先例（L1729-L1730）及Index门控（L1721-L1722），把同样导入与门控写入\nNewActDetailActivityPage等HAR页面（L1979-L1980）。这两个页面后由修复期整理会话经shell mv迁到pages/space与pages/eventline，\n导入原样保留（main-01a00db9 L19-L20、L42、L53；main-01a01433 L34-L35、L345、L380）。修复删除导入，测试态只依赖共享\nUITestBridgeState/AppStorage（main-01a00e55 L258；main-01a01842 L147）。\n(3) 结构闭环（agent-019fcbe4，08-04）：arkts-structural-closure检测把ActivityListViewModel报为orphan并建议\nimport ... from '<relative-path>'（L227-L228）；代理读到NewMainActivityPage已从'business_social'模块入口导入该类（L235-L236），\n也读到import_resolver.py对裸模块名直接返回None、注明“outside graph scope”（L239-L240），却删除模块入口导入，改成\n../../../../../../features/business_social/...跨模块相对路径让检测收敛（L243-L244、L252）。修复改回从business_social入口导入\n（main-019ffe38 L36）。\n",
+  "recommendations": [
+    "把代码迁入HAR或在HAR中新增代码时，逐文件检查裸模块名'BuildProfile'等只在宿主HAP可解析的依赖；需要构建模式时改为由壳层入口/组合层注入参数或读取共享状态，不在HAR里import宿主BuildProfile。",
+    "下沉带构建开关的服务时同步改宿主调用：开关改成初始化参数后，在主Ability、卡片、WorkScheduler、备份扩展等所有入口传入宿主DEBUG。",
+    "HAR编译报Cannot find name 'DEBUG'时，先判断该门控是否应存在于HAR；不要照抄products壳层Index/EntryAbility的import { DEBUG } from 'BuildProfile'，测试门控优先用business_common的UITestBridgeState.testMode等共享状态。",
+    "跨模块使用类只从模块包名入口（Index.ets导出）导入；静态检测因不解析模块名而报orphan时，记录误报或修检测配置，不把合法的模块入口导入改成跨模块相对路径。",
+    "模块化或插桩批次的边界验收除assembleHap外，增加rg \"from 'BuildProfile'\" features components为0、rg \"from '(\\.\\./)+.*(features|components)/\" products features components为0的检查，并按模块跑ArkTS检查。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/xyz/work/HMRmbr/products/phone/src/main/ets/entryability/EntryAbility.ets",
+        "since": "2026-08-11T06:08:24.647Z",
+        "at": "2026-08-19T07:18:47.009Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/xyz/work/HMRmbr/products/phone/src/main/ets/services/BqLogService.ets",
+          "at": "2026-08-06T13:57:03.385Z",
+          "reason": "正常输入：读取回执显示日志服务自行从'BuildProfile'取DEBUG决定控制台输出（main-019fd4b0 L5576-L5577）；服务下沉到HAR后，这一决定只能由宿主提供。"
+        },
+        {
+          "key": "019fd4b0-61c0-76a3-93e7-cd325f684683",
+          "at": "2026-08-06T13:59:48.506Z",
+          "reason": "把BqLogService下沉后，apply_patch仅把EntryAbility的appLogger导入改为'module_observability'，入口仍调用无参initialize()，未由宿主注入DEBUG（L5619-L5620）；与同会话MineSetActPage由壳侧提供DEBUG的做法不一致（L2686、L2705）。修复在此处改为initialize(DEBUG)（main-019ff910 L1140）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "exec调用sed -n '1,240p' products/phone/src/main/ets/services/BqLogService.ets，回执包含第2行import { DEBUG } from 'BuildProfile'；这是下沉前对该文件的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/main-019fd4b0-61c0-76a3-93e7-cd325f684683.jsonl",
+              "line": 5576
+            },
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/main-019fd4b0-61c0-76a3-93e7-cd325f684683.jsonl",
+              "line": 5577
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/xyz/work/HMRmbr/products/phone/src/main/ets/form/WidgetFormExtensionAbility.ets",
+        "since": "2026-08-11T06:08:24.647Z",
+        "at": "2026-08-19T07:18:47.009Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/xyz/work/HMRmbr/products/phone/src/main/ets/services/BqLogService.ets",
+          "at": "2026-08-06T13:57:03.385Z",
+          "reason": "正常输入：读取回执显示日志服务自行从'BuildProfile'取DEBUG（main-019fd4b0 L5576-L5577）。"
+        },
+        {
+          "key": "019fd4b0-61c0-76a3-93e7-cd325f684683",
+          "at": "2026-08-06T13:59:48.506Z",
+          "reason": "同一次apply_patch把卡片扩展的appLogger改为从module_observability导入，onAddForm仍调用无参initialize()，宿主未注入构建模式（L5619-L5620）；修复补DEBUG导入并传参（main-019ff910 L1140）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "exec调用sed -n '1,240p' products/phone/src/main/ets/services/BqLogService.ets，回执包含第2行import { DEBUG } from 'BuildProfile'；这是下沉前对该文件的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/main-019fd4b0-61c0-76a3-93e7-cd325f684683.jsonl",
+              "line": 5576
+            },
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/main-019fd4b0-61c0-76a3-93e7-cd325f684683.jsonl",
+              "line": 5577
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/xyz/work/HMRmbr/products/phone/src/main/ets/workers/WidgetRefreshWorkAbility.ets",
+        "since": "2026-08-11T06:08:24.647Z",
+        "at": "2026-08-19T07:18:47.009Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/xyz/work/HMRmbr/products/phone/src/main/ets/services/BqLogService.ets",
+          "at": "2026-08-06T13:57:03.385Z",
+          "reason": "正常输入：读取回执显示日志服务自行从'BuildProfile'取DEBUG（main-019fd4b0 L5576-L5577）。"
+        },
+        {
+          "key": "019fd4b0-61c0-76a3-93e7-cd325f684683",
+          "at": "2026-08-06T13:59:48.506Z",
+          "reason": "同一次apply_patch把WorkScheduler入口的appLogger改为从module_observability导入，onWorkStart仍调用无参initialize()（L5619-L5620）；修复补DEBUG导入并传参（main-019ff910 L1140）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "exec调用sed -n '1,240p' products/phone/src/main/ets/services/BqLogService.ets，回执包含第2行import { DEBUG } from 'BuildProfile'；这是下沉前对该文件的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/main-019fd4b0-61c0-76a3-93e7-cd325f684683.jsonl",
+              "line": 5576
+            },
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/main-019fd4b0-61c0-76a3-93e7-cd325f684683.jsonl",
+              "line": 5577
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/xyz/work/HMRmbr/products/phone/src/main/ets/entrybackupability/EntryBackupAbility.ets",
+        "since": "2026-08-11T06:08:24.647Z",
+        "at": "2026-08-19T07:18:47.009Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/xyz/work/HMRmbr/products/phone/src/main/ets/services/BqLogService.ets",
+          "at": "2026-08-06T13:57:03.385Z",
+          "reason": "正常输入：读取回执显示日志服务自行从'BuildProfile'取DEBUG（main-019fd4b0 L5576-L5577）。"
+        },
+        {
+          "key": "019fd4b0-61c0-76a3-93e7-cd325f684683",
+          "at": "2026-08-06T13:59:48.506Z",
+          "reason": "同一次apply_patch把备份扩展的appLogger改为从module_observability导入，onBackup/onRestore仍调用无参initialize()（L5619-L5620）；修复补DEBUG导入并传参（main-019ff910 L1140）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "exec调用sed -n '1,240p' products/phone/src/main/ets/services/BqLogService.ets，回执包含第2行import { DEBUG } from 'BuildProfile'；这是下沉前对该文件的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/main-019fd4b0-61c0-76a3-93e7-cd325f684683.jsonl",
+              "line": 5576
+            },
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/main-019fd4b0-61c0-76a3-93e7-cd325f684683.jsonl",
+              "line": 5577
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/xyz/work/HMRmbr/features/business_calendar/src/main/ets/pages/space/SpaceEditActivityPage.ets",
+        "since": "2026-08-11T06:08:24.647Z",
+        "at": "2026-08-19T07:18:47.009Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/xyz/work/HMRmbr/products/phone/src/main/ets/pages/Index.ets",
+          "at": "2026-08-10T15:53:39.589Z",
+          "reason": "模板输入：fix worker读取壳层HAP的Index.ets，其中DEBUG && uiTestBridgeState.testMode门控只在宿主模块成立（agent-019febed L1391-L1392）。"
+        },
+        {
+          "key": "019febed-0c41-7ba3-8803-34b3470e79f8",
+          "at": "2026-08-10T21:48:12.051Z",
+          "reason": "把壳层门控照搬进HAR页面features/business_calendar/.../SpaceEditActivityPage.ets：apply_patch新增两处if (DEBUG && this.uiTestBridgeState.testMode)，HAR内没有DEBUG来源，且本轮未构建（同转录L1889-L1890、L1935）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/xyz/work/HMRmbr/features/business_calendar/src/main/ets/pages/SpaceEditActivityPage.ets",
+          "at": "2026-08-10T21:49:15.315Z",
+          "reason": "交接：构建代理读取该HAR页面头部与DEBUG用法，回执显示其只从business_common/module_*等模块导入（agent-019febae L4380-L4381）。"
+        },
+        {
+          "key": "019febae-1871-7d33-8992-006f2dae84cd",
+          "at": "2026-08-10T21:49:18.610Z",
+          "reason": "收到Cannot find name 'DEBUG'（L4375）后在该HAR页面补import { DEBUG } from 'BuildProfile'（L4383-L4384）。它此前的约定检索已显示该导入只出现在products/phone，各features模块另有自身BuildProfile.ets（L2812-L2813），仍把宿主专属导入写进HAR；HAP构建随后通过（L4397-L4400）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/xyz/work/HMRmbr/features/business_calendar/src/main/ets/pages/SpaceEditActivityPage.ets",
+          "at": "2026-08-17T03:17:26.514Z",
+          "reason": "交接：整理会话读取旧路径文件，第13行仍为import { DEBUG } from 'BuildProfile'（main-01a00db9 L19-L20）。"
+        },
+        {
+          "key": "01a00db9-01c1-7842-88c6-f68b289975ce",
+          "at": "2026-08-17T03:20:19.769Z",
+          "reason": "按用户要求把页面shell mv到pages/space（L42-L43），随后apply_patch改写新路径，导入作为上下文原样保留（L52-L53）；只做搬迁拆分，本项未变，后由main-01a00e55 L258删除。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "exec调用sed -n '838,880p' products/phone/src/main/ets/pages/Index.ets，回执含DEBUG && uiTestBridgeState.testMode门控；该worker写SpaceEdit前的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/agent-019febed-0c41-7ba3-8803-34b3470e79f8.jsonl",
+              "line": 1391
+            },
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/agent-019febed-0c41-7ba3-8803-34b3470e79f8.jsonl",
+              "line": 1392
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "exec调用sed -n '1,32p'及rg DEBUG读取旧路径SpaceEditActivityPage.ets，回执为该HAR页面导入与DEBUG用法；构建代理补导入前的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/agent-019febae-1871-7d33-8992-006f2dae84cd.jsonl",
+              "line": 4380
+            },
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/agent-019febae-1871-7d33-8992-006f2dae84cd.jsonl",
+              "line": 4381
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": 6,
+          "force": true,
+          "reason": "exec调用sed -n '1,260p'读取旧路径SpaceEditActivityPage.ets，回执第13行为import { DEBUG } from 'BuildProfile'；整理会话mv前的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/main-01a00db9-01c1-7842-88c6-f68b289975ce.jsonl",
+              "line": 19
+            },
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/main-01a00db9-01c1-7842-88c6-f68b289975ce.jsonl",
+              "line": 20
+            }
+          ]
+        },
+        {
+          "from": 6,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/xyz/work/HMRmbr/features/business_calendar/src/main/ets/pages/eventline/NewActDetailActivityPage.ets",
+        "since": "2026-08-11T06:08:24.647Z",
+        "at": "2026-08-19T07:18:47.009Z"
+      },
+      "nodes": [
+        {
+          "key": "019febae-1871-7d33-8992-006f2dae84cd",
+          "at": "2026-08-10T17:34:08.278Z",
+          "reason": "形成HAR先例：修Cannot find name 'DEBUG'（L2803）时，约定检索回执显示裸'BuildProfile'导入只在products/phone、各features模块另有自身BuildProfile.ets（L2812-L2813），仍在business_social的AttentionUsersActivityPage补import { DEBUG } from 'BuildProfile'（L2816-L2817）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/xyz/work/HMRmbr/features/business_social/src/main/ets/pages/AttentionUsersActivityPage.ets",
+          "at": "2026-08-10T17:59:46.276Z",
+          "reason": "交接：另一worker读取该HAR页面，回执含import { DEBUG } from 'BuildProfile'与UITestBridgeState门控，成为同模块先例（agent-019febea L1729-L1730）。"
+        },
+        {
+          "key": "/Users/xyz/work/HMRmbr/products/phone/src/main/ets/pages/Index.ets",
+          "at": "2026-08-10T17:59:38.696Z",
+          "reason": "模板输入：壳层Index中的DEBUG && uiTestBridgeState.testMode门控（agent-019febea L1721-L1722）。"
+        },
+        {
+          "key": "019febea-2fea-7bb3-a337-4faab07ac639",
+          "at": "2026-08-10T18:40:38.660Z",
+          "reason": "沿用上述先例与壳层门控，apply_patch在business_social的NewActDetailActivityPage新增import { DEBUG } from 'BuildProfile'及if (DEBUG && this.uiTestBridgeState.testMode)，同批还写入NewFriends、TsInfo、AddEventLine（L1979-L1980）；本链确认传递。"
+        },
+        {
+          "key": "/Users/xyz/work/HMRmbr/features/business_social/src/main/ets/pages/NewActDetailActivityPage.ets",
+          "at": "2026-08-18T09:29:35.180Z",
+          "reason": "交接：修复期整理会话读取旧路径，回执仍含import { DEBUG } from 'BuildProfile'（main-01a01433 L34-L35）。"
+        },
+        {
+          "key": "01a01433-c248-7362-a0ce-6c0ff0ab2858",
+          "at": "2026-08-18T11:01:24.835Z",
+          "reason": "事线归并时shell mv到business_calendar/pages/eventline（L345-L346），随后apply_patch改写新路径的模型与VM导入，BuildProfile导入保留（L379-L380）；本项未变，后由main-01a01842 L147删除。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 4,
+          "force": true,
+          "reason": "exec调用sed -n '1,145p'读取AttentionUsersActivityPage.ets，回执含import { DEBUG } from 'BuildProfile'；该worker写NewActDetail前的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/agent-019febea-2fea-7bb3-a337-4faab07ac639.jsonl",
+              "line": 1729
+            },
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/agent-019febea-2fea-7bb3-a337-4faab07ac639.jsonl",
+              "line": 1730
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "exec调用sed -n '820,885p' products/phone/src/main/ets/pages/Index.ets，回执含DEBUG && uiTestBridgeState.testMode门控；真实读取。",
+          "evidence": [
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/agent-019febea-2fea-7bb3-a337-4faab07ac639.jsonl",
+              "line": 1721
+            },
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/agent-019febea-2fea-7bb3-a337-4faab07ac639.jsonl",
+              "line": 1722
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": 6,
+          "force": true,
+          "reason": "exec调用sed -n '1,280p'读取旧路径business_social的NewActDetailActivityPage.ets，回执含import { DEBUG } from 'BuildProfile'；整理会话mv前的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/main-01a01433-c248-7362-a0ce-6c0ff0ab2858.jsonl",
+              "line": 34
+            },
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/main-01a01433-c248-7362-a0ce-6c0ff0ab2858.jsonl",
+              "line": 35
+            }
+          ]
+        },
+        {
+          "from": 6,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/xyz/work/HMRmbr/products/phone/src/main/ets/pages/NewMainActivityPage.ets",
+        "since": "2026-08-11T06:08:24.647Z",
+        "at": "2026-08-19T07:18:47.009Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/xyz/work/HMRmbr/docs/autofix-log/round-5/loop-result-latest-group-5.json",
+          "at": "2026-08-04T08:37:09.623Z",
+          "reason": "外部检测输入：structural loop把ActivityListViewModel报为C1 orphan，suggested_action写“Add import ... from '<relative-path>'”（agent-019fcbe4 L227-L228）；这是检测脚本边界处的误导，未区分跨模块导入。"
+        },
+        {
+          "key": "/Users/xyz/work/HMRmbr/.agents/skills/arkts-structural-closure/scripts/ref_graph_lib/import_resolver.py",
+          "at": "2026-08-04T08:37:45.457Z",
+          "reason": "正常输入：读取回执显示解析器对裸模块名直接return None并注明HAR/HSP“outside graph scope”，足以判断orphan是模块名导入未被解析的误报（L239-L240）。"
+        },
+        {
+          "key": "/Users/xyz/work/HMRmbr/products/phone/src/main/ets/pages/NewMainActivityPage.ets",
+          "at": "2026-08-04T08:37:28.255Z",
+          "reason": "正常输入：页面当时已在import {...} from 'business_social'中导入ActivityListViewModel，即合法的模块入口导入（L235-L236）。"
+        },
+        {
+          "key": "019fcbe4-62d8-7d33-bf74-ef3db61a183e",
+          "at": "2026-08-04T08:37:53.057Z",
+          "reason": "已知页面用模块入口导入且解析器不认模块名，仍按建议删除该导入，改为'../../../../../../features/business_social/src/main/ets/viewmodels/ActivityListViewModel'跨模块相对路径，只为让检测CONVERGED（L243-L244、L252）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4,
+          "force": true,
+          "reason": "exec运行python json.load读取docs/autofix-log/round-5/loop-result-latest-group-5.json并打印，回执含C1_orphan与'<relative-path>'建议；改导入前的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/agent-019fcbe4-62d8-7d33-bf74-ef3db61a183e.jsonl",
+              "line": 227
+            },
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/agent-019fcbe4-62d8-7d33-bf74-ef3db61a183e.jsonl",
+              "line": 228
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 4,
+          "force": true,
+          "reason": "exec调用sed -n '1,260p'读取import_resolver.py，回执显示裸模块名返回None；改导入前的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/agent-019fcbe4-62d8-7d33-bf74-ef3db61a183e.jsonl",
+              "line": 239
+            },
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/agent-019fcbe4-62d8-7d33-bf74-ef3db61a183e.jsonl",
+              "line": 240
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "exec调用sed -n '1,120p' products/phone/src/main/ets/pages/NewMainActivityPage.ets，回执含从'business_social'导入ActivityListViewModel；改导入前的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/agent-019fcbe4-62d8-7d33-bf74-ef3db61a183e.jsonl",
+              "line": 235
+            },
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/agent-019fcbe4-62d8-7d33-bf74-ef3db61a183e.jsonl",
+              "line": 236
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/xyz/work/HMRmbr/components/module_observability/src/main/ets/service/BqLogService.ets",
+      "reason": "已确认修改（main-019ff910 L1140、L1235）及生成期来源：main-019fd4b0在读到phone版第2行import { DEBUG } from 'BuildProfile'（epoch-0/2 main-019fd4b0 L5576-L5577）后，于L5589-L5590用apply_patch Update File+Move to将其移入该HAR路径，裸导入原样保留。但索引把这次Move只登记为对旧路径products/phone/src/main/ets/services/BqLogService.ets的写入，未登记move_path到目标路径；普通边无确认写入，force被判“contradicts indexed operation endpoints”，目标在08-13修复会话之前无可核写入者，故本图未能机械连到目标。同一偏差由四个宿主入口图承载。"
+    }
+  ],
+  "job": "issue-282d676ed02777809cac",
+  "metadata": {
+    "migration": {
+      "project": "记得日历",
+      "server_session_id": "7117da4e-7187-4a29-8d35-25d345e0e57e"
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "gpt-5.6-sol"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.146.0-alpha.9.2",
+        "0.147.0-alpha.1.2",
+        "0.147.0-alpha.6.5",
+        "0.148.0-alpha.15",
+        "0.148.0-alpha.9"
+      ]
+    },
+    "source_set_id": "sources-e29c9382987c75013258",
+    "card_tool_version": "0.10.0"
+  },
+  "revision": "3ccee452becb0b8d6692069a021264d71465c9d94d907359d731e30f191bde9b"
+}

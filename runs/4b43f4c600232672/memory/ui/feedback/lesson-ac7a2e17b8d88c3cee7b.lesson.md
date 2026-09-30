@@ -1,0 +1,41 @@
+# 迁移源端异步结果回调时，按成功、失败分支（含失败类型）列出全部副作用（跳转与关页、提示、引导弹窗、标记写入），计划与代码逐项对上
+
+ID：`lesson-ac7a2e17b8d88c3cee7b` · 版本：4
+
+[本主题](index.md)
+
+## 何时使用
+
+界面、流程实现与页面接线阶段，把源页面对异步操作结果的观察（LiveData observe 等）改成目标页面的 await 结果、try/catch 或路由枚举，并决定各分支的跳转、反馈与状态写入时；把源端控制器的多段启动流程（登录 → 权限 → 启动）接到宿主页时
+
+## 适用情境
+
+源 Activity/Fragment 在结果观察回调里按成功/失败分支同时做几件事（写本地标记、跳页并 finish、showToast、更新计数）；目标 ViewModel 方法只更新状态，或把失败折叠成返回值，由页面决定导航和提示；页面里可能留有“登录成功跳 X”的注释或 TODO。也包括源端按失败类型给不同反馈（权限被拒弹“去设置”引导框，启动失败才 toast），目标 ViewModel 方法只返回 boolean、失败类型另存；接线任务的核查清单只列出部分弹窗调用（如 MessageDialog.show），用 AlertDialog.Builder 构造的弹窗不在清单里。
+
+## 原因
+
+分支动作在转述计划、改写异步调用时最容易被概括成“失败留页”“调用登录”这样一句话，其余副作用随之丢掉；只接上调用、不处理结果时，编译和页面显示都正常，点完没有去向或失败没有提示。来源两例：启动链路迁移者读过源端失败分支的 showToast，自己的梳理里也写着“失败 → toast”，到计划只剩导航，代码照计划漏了提示；页面接线者读到 TODO 和“登录成功跳主页”的注释，只接上登录调用，不等结果、不跳转，还删了 TODO。反方向也会出错：另一应用的首页计数请求失败时被置 0，而源端只在成功回调里更新计数，失败时保留原值。另一应用中，添加城市的接线者读到定位成功跳主页、重复添加弹 Toast，输出仍停在本页、失败无提示；定位入口只写了成功分支，拒绝授权与服务关闭都静默。另一应用的接线者读到了源端权限拒绝的引导弹窗与目标 ViewModel 记录的失败类型，仍把所有启动失败统一为一个 toast；清单里没有 AlertDialog.Builder 构造的引导框，预检结论就已漏掉该分支。
+
+## 做法
+
+1. 从源端的结果观察者（如 initObserve 里对 xxxFinished 的处理）按分支列出全部动作：跳转与关页、toast/弹窗、标记写入、状态更新；计划和代码逐项对照，不把分支简化成只导航或只留页，也不给源端没有动作的分支添加清零、默认值覆盖。
+2. 让页面拿到结果：await ViewModel 返回的成败，或监听对应状态；ViewModel 吞掉异常时把失败结果返回页面，由页面负责提示。
+3. 源失败分支有 showToast 时，在目标对应的失败处调用 UIContext.getPromptAction().showToast，文案取源字符串资源的对应值；源端只在成功时更新的计数或状态，失败时保留旧值，需要可见性时另设失败/重试状态。
+4. 转写源注释（如“失败留在当前页，用户可重试”）后，核对注释之后的源语句是否都已落地；可 grep 源页面与目标页面的 showToast 和跳转调用，逐一核对数量与分支。
+5. 目标方法以 boolean 返回、失败类型另存时，宿主按类型分派失败 UI：权限被拒显示“去设置”引导弹窗，确认后用 startAbility 打开系统设置中本应用的详情页（参数带当前 bundleName），其他失败保留原提示。
+6. 核查清单由抽取器生成时，在源文件补查 AlertDialog.Builder、Settings.ACTION_APPLICATION_DETAILS_SETTINGS 等调用，补齐清单外的弹窗分支。
+
+## 来源（按需复核）
+
+- case-3eb3514a903386524e37 · 结论：recommendation:5
+  卡片版本：`8f8e255c460178fbe3ef8723444aa256aff9d73234d6b49fcffa0ed15dda4204`
+- case-766f31f27e3feb426eb4 · 结论：recommendation:4
+  卡片版本：`f02e7c6184df5dd5fdd6edde83de9769ac89d999200fefddedb5e4dc7e209c19`
+- case-845435c8343c4c012e1f · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
+  卡片版本：`a9d00f06ae48fb6a1f8f95ac5290a4be407b4ac4de2d1daf9fdc78dea46f750a`
+- case-8c249997059a2524ea7b · 结论：recommendation:4
+  卡片版本：`419b77f02d456c484f3a903a61eb81b6cbf5319584c81500d9da4c46b109b9d2`
+- case-9618601c4a21f2f18560 · 结论：diagnosis, recommendation:1, recommendation:2
+  卡片版本：`870a2d98075a73dc88a2cfd3ac2fb801bc3d216cf1120c6f9583496d9f1c6941`
+- case-dac1fda1c66cbfa8bc78 · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
+  卡片版本：`ab39f6b4fbefd2e63757c8197e2298157f2bd77d5bb063c598f2afdc61bcab08`

@@ -1,0 +1,354 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-69d294e4afbc31f4ab87",
+  "created_at": "2026-09-30T05:07:32.862777+00:00",
+  "migration_key": "7117da4e-7187-4a29-8d35-25d345e0e57e",
+  "title": "列表节点复用或稳定key时把条目数据按值传给子渲染，切换数据后界面不刷新",
+  "when": "列表渲染迁移/重构及缺陷修复阶段，把LazyForEach或复合key的ForEach改为Repeat.virtualScroll、或为消除重建抖动而稳定列表key时，决定条目数据如何传入@Builder/子组件",
+  "description": "ArkUI V2页面用Repeat（尤其virtualScroll）或ForEach渲染会整体切换的数据集（按日期/周/月/分页替换数组），条目经@Builder或@Param子组件渲染，条目模型是普通interface对象。",
+  "summary": "本问题有两个不同起点，分属两个职责阶段。\n一、生成期结构收口（日视图日程列表）：019fd4b0在R19收口前读回客户检查清单R6.1b'——LazyForEach→Repeat时拆出的@Builder必须接整个RepeatItem、不能传obj.item，否则item变更不触发重绘——以及refactor-plan第6条“Builder接完整RepeatItem，virtualScroll()空参”（epoch-2 main-019fd4b0 L9496-L9497、L9500-L9501）。\n08-07T03:33:26的apply_patch却把PhoneDayCalendarFragmentPage的LazyForEach改成Repeat<PhoneDayEventUiItem>(...).each(ri => this.EventRow(ri.item)).key(...).virtualScroll()，EventRow是按值接收普通对象的@Builder（L9614-L9615）；同批03:33:11对时间线也写成this.DaySection(repeatItem.item, repeatItem.index)（L9609-L9610）。\n04:06该页随日历页面被shell mv到features/business_calendar/pages（L10505-L10506）。修复会话019fef8a于08-11读回的仍是同一片段（main-019fef8a L33-L34），08-12把页面移到home/day并拆出PhoneDayEventPanel，原样保留EventRow(repeatItem.item)与.virtualScroll()（L1549、L1798-L1799）。\n用户随后报告“8日切到9日仍显示8日数据”（main-019fef8a L5074第4点）；019fef8a加日期进key、加请求代次均未解决。019ff55b在用户否定“旧请求乱序”后（main-019ff55b L239）真机复现：非空日期切到另一非空日期时列表保留旧条目并追加新条目，空态切换正常（L461）。\n它先删.virtualScroll()，再把Repeat改为ForEach+EventRow(item)，同时撤销取消旧请求方案、月内选日只查当天（L556-L557、L859-L860、L1323）。\n修复者的归因是virtualScroll复用旧节点；清单R6.1b'说明的机制（复用节点只更新RepeatItem.item，按值传入@Builder的旧对象不会重绘）与现象一致。\n二、修复期新生（四象限）：四象限Swiper原为ForEach+含requestId/loadState/events的复合key，页模型Time4ListDatePage是普通interface，updatePage以新对象替换数组项；019ff40e写前已读回这些代码（main-019ff40e L400、L416），并自述抖动来自key拼入请求状态与数据（L414）。\n07:14:41它把key改成仅page.queryKey（L454-L455），同一轮新建的QuadrantModels仍是普通interface，QuadrantGrid以@Param page接普通对象（L435-L436）。这样异步结果生成的新页对象再也到不了已创建的页面节点。\n08-17用户报告天/周/月都无数据（main-01a00f48 L9）。01a00f48先改Repeat，但仍把RepeatItem.item解包传给PageContent和Grid，两轮真机仍空（L747、L795）；最终把页模型改为@ObservedV2/@Trace并原位更新才显示（L839、L882、L909）。\n08-19的01a017a5又把页对象改成不可变替换，再次无数据，随后回退为“稳定实例+@Trace字段更新”（main-01a017a5 L471-L472、L556、L589）。\n",
+  "recommendations": [
+    "列表迁移阶段把LazyForEach改为Repeat时，逐个检查each回调：拆出的@Builder或子组件应接收完整RepeatItem，并在内部读取ri.item；出现this.Xxx(repeatItem.item)写法时，先按清单R6.1b'改正再提交，静态审计也加这一条grep。",
+    "对按日期/分页整体替换数组的列表使用Repeat.virtualScroll时，在真机做一次“非空→非空”切换，确认已显示条目随新数据刷新；列表很短、无需懒加载时，可按清单的短列表豁免改用ForEach，并写明理由。",
+    "修复阶段为消除重建抖动而稳定ForEach/Repeat的key前，先确认新数据怎样到达已创建的节点：普通interface对象整体替换只能靠key变化触发重建；若要稳定key，就把条目模型改为@ObservedV2/@Trace并原位更新，Builder与子组件@Param链路都传可观察实例或完整RepeatItem。",
+    "采用“稳定key+可观察实例原位更新”后，在测试断言或注释中写明禁止替换该实例；后续修改不再对其做不可变替换。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/xyz/work/HMRmbr/features/business_calendar/src/main/ets/pages/home/day/components/PhoneDayEventPanel.ets",
+        "since": "2026-08-11T06:08:24.647Z",
+        "at": "2026-08-19T07:18:47.009Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/xyz/work/HMRmbr/.agents/skills/arkts-architecture-refactor/references/customer-checklist.md",
+          "at": "2026-08-07T03:28:21.127Z",
+          "reason": "正常输入：019fd4b0用sed读取客户检查清单，回执含R6.1b'：LazyForEach→Repeat时RepeatItem整体传@Builder，拆@Builder渲染item时必须传整个obj: RepeatItem<T>、不能传obj.item，否则item变更不触发UI重绘，audit命中即P1（epoch-2 main-019fd4b0 L9496-L9497）。该要求足以决定EventRow的传参方式。"
+        },
+        {
+          "key": "/Users/xyz/work/HMRmbr/spec/refactor-plan.md",
+          "at": "2026-08-07T03:28:31.231Z",
+          "reason": "正常输入：同一轮sed读回refactor-plan第6条“LazyForEach/LazyDataSource改为普通数组+Repeat，Builder接完整RepeatItem，virtualScroll()空参”（epoch-2 main-019fd4b0 L9500-L9501）。"
+        },
+        {
+          "key": "019fd4b0-61c0-76a3-93e7-cd325f684683",
+          "at": "2026-08-07T03:33:26.386Z",
+          "reason": "已收到上述两条要求，apply_patch仍把日程列表写成Repeat<PhoneDayEventUiItem>(this.dayEventItems).each(repeatItem => this.EventRow(repeatItem.item)).key(...).virtualScroll()，EventRow为按值接收普通对象的@Builder；偏差是把RepeatItem解包后传给Builder（epoch-2 main-019fd4b0 L9614-L9615）。输入已足够，本分支在此停止上溯。",
+          "problem": true
+        },
+        {
+          "key": "/Users/xyz/work/HMRmbr/products/phone/src/main/ets/pages/PhoneDayCalendarFragmentPage.ets",
+          "at": "2026-08-07T04:06:27.150Z",
+          "reason": "交付桥梁：03:33:26的patch_apply_end写入此页面，含Repeat+EventRow(repeatItem.item)+virtualScroll片段（epoch-2 main-019fd4b0 L9615）；此后至04:06 mv前该片段未再改动。"
+        },
+        {
+          "key": "019fd4b0-61c0-76a3-93e7-cd325f684683",
+          "at": "2026-08-07T04:06:27.150Z",
+          "reason": "交接：同一agent把44个日历页面从products/phone/pages逐个mv到features/business_calendar/pages，列表含PhoneDayCalendarFragmentPage.ets，回执无错误（epoch-2 main-019fd4b0 L10505-L10506）。本步只搬移文件，未改片段。"
+        },
+        {
+          "key": "/Users/xyz/work/HMRmbr/features/business_calendar/src/main/ets/pages/PhoneDayCalendarFragmentPage.ets",
+          "at": "2026-08-11T06:38:58.346Z",
+          "reason": "交付桥梁：mv后的页面路径；修复会话08-11读回的内容仍含同一Repeat<PhoneDayEventUiItem>…this.EventRow(repeatItem.item)片段（main-019fef8a L33-L34）。"
+        },
+        {
+          "key": "019fef8a-afc9-7c82-bb44-5cf8c6d0103f",
+          "at": "2026-08-12T01:39:59.213Z",
+          "reason": "传递者：读回上述页面后，于08-12先mv到pages/home/day（main-019fef8a L1549），再按用户要求拆组件，Add PhoneDayEventPanel.ets时原样带入Repeat…each(repeatItem => this.EventRow(repeatItem.item))与.virtualScroll()（L1798-L1799）。本链确认片段交付到目标，不另推定其独立失职。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "019fd4b0在exec中用sed -n '1,260p'读取该客户检查清单，回执含R6.1b'（拆@Builder必须传整个RepeatItem、不能传obj.item）；这是写前的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-2/sessions/main-019fd4b0-61c0-76a3-93e7-cd325f684683.jsonl",
+              "line": 9496
+            },
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-2/sessions/main-019fd4b0-61c0-76a3-93e7-cd325f684683.jsonl",
+              "line": 9497
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "019fd4b0在exec中用sed -n '190,245p'读取refactor-plan，回执含第6条“Builder接完整RepeatItem，virtualScroll()空参”；发生在03:33写入之前。",
+          "evidence": [
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-2/sessions/main-019fd4b0-61c0-76a3-93e7-cd325f684683.jsonl",
+              "line": 9500
+            },
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-2/sessions/main-019fd4b0-61c0-76a3-93e7-cd325f684683.jsonl",
+              "line": 9501
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 5,
+          "force": true,
+          "reason": "019fd4b0的exec按文件名列表拼出mv products/phone/src/main/ets/pages/<f> features/business_calendar/src/main/ets/pages/<f>，列表包含PhoneDayCalendarFragmentPage.ets，回执无错误；mv以该页面为源。",
+          "evidence": [
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-2/sessions/main-019fd4b0-61c0-76a3-93e7-cd325f684683.jsonl",
+              "line": 10505
+            },
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-2/sessions/main-019fd4b0-61c0-76a3-93e7-cd325f684683.jsonl",
+              "line": 10506
+            }
+          ]
+        },
+        {
+          "from": 5,
+          "to": 6,
+          "force": true,
+          "reason": "同一mv调用把PhoneDayCalendarFragmentPage.ets写到features/business_calendar/src/main/ets/pages/下；后续019fef8a读回的内容与03:33写入的片段一致。",
+          "evidence": [
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-2/sessions/main-019fd4b0-61c0-76a3-93e7-cd325f684683.jsonl",
+              "line": 10505
+            },
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-2/sessions/main-019fd4b0-61c0-76a3-93e7-cd325f684683.jsonl",
+              "line": 10506
+            }
+          ]
+        },
+        {
+          "from": 6,
+          "to": 7,
+          "force": true,
+          "reason": "019fef8a在exec中sed -n '1,760p'读取features路径下的PhoneDayCalendarFragmentPage.ets，回执含Repeat<PhoneDayEventUiItem>…this.EventRow(repeatItem.item)片段；其后它移动并拆分此页。",
+          "evidence": [
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/main-019fef8a-afc9-7c82-bb44-5cf8c6d0103f.jsonl",
+              "line": 33
+            },
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/main-019fef8a-afc9-7c82-bb44-5cf8c6d0103f.jsonl",
+              "line": 34
+            }
+          ]
+        },
+        {
+          "from": 7,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/xyz/work/HMRmbr/features/business_calendar/src/main/ets/pages/quadrant/NewTime4ListFragmentPage.ets",
+        "since": "2026-08-11T06:08:24.647Z",
+        "at": "2026-08-19T07:18:47.009Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/xyz/work/HMRmbr/features/business_calendar/src/main/ets/pages/quadrant/NewTime4ListFragmentPage.ets",
+          "at": "2026-08-12T07:11:07.233Z",
+          "reason": "正常输入：019ff40e写前sed读回页面，回执显示Swiper内ForEach(this.pages)的key为`${queryKey}_${requestId}_${loadState}_`+events（main-019ff40e L399-L400），且updatePage用新对象替换数组项、Time4ListDatePage为普通对象（L415-L416）。这些代码已表明页数据只靠key变化重建才能进入UI。"
+        },
+        {
+          "key": "019ff40e-75be-7651-81f7-8d6b60347164",
+          "at": "2026-08-12T07:14:41.442Z",
+          "reason": "修复期新生偏差：它自述抖动来自key拼入请求状态与数据（L414），随后apply_patch把key改为仅page.queryKey，仍保留ForEach与普通对象替换（L454-L455）；同轮新建的QuadrantModels为普通interface、QuadrantGrid以@Param page接普通对象（L435-L436）。稳定key后没有补可观察模型或原位更新。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "019ff40e在exec中用sed分段读取四象限页面：L399-L400回执含ForEach(this.pages)及含requestId/loadState/events的复合key，L415-L416回执含updatePage以新对象替换数组项；两次读取都在07:14写入之前。",
+          "evidence": [
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/main-019ff40e-75be-7651-81f7-8d6b60347164.jsonl",
+              "line": 399
+            },
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/main-019ff40e-75be-7651-81f7-8d6b60347164.jsonl",
+              "line": 400
+            },
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/main-019ff40e-75be-7651-81f7-8d6b60347164.jsonl",
+              "line": 415
+            },
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/main-019ff40e-75be-7651-81f7-8d6b60347164.jsonl",
+              "line": 416
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/xyz/work/HMRmbr/features/business_calendar/src/main/ets/pages/quadrant/QuadrantModels.ets",
+        "since": "2026-08-11T06:08:24.647Z",
+        "at": "2026-08-19T07:18:47.009Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/xyz/work/HMRmbr/features/business_calendar/src/main/ets/pages/quadrant/NewTime4ListFragmentPage.ets",
+          "at": "2026-08-12T07:11:07.233Z",
+          "reason": "正常输入：同上，页面回执显示Time4ListDatePage是靠整体替换与复合key重建驱动的普通对象（main-019ff40e L399-L400、L415-L416）。"
+        },
+        {
+          "key": "019ff40e-75be-7651-81f7-8d6b60347164",
+          "at": "2026-08-12T07:14:41.442Z",
+          "reason": "同一偏差的模型分支：07:12:59 Add QuadrantModels.ets时把Time4ListDatePage原样作为普通interface导出（main-019ff40e L435-L436），07:14:41又把外层key稳定为queryKey（L454-L455）；两者组合使新页对象无法到达已建节点。修复最终改为@ObservedV2 class+@Trace字段（main-01a00f48 L839、L882）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "019ff40e在exec中用sed分段读取四象限页面：L399-L400回执含ForEach(this.pages)及含requestId/loadState/events的复合key，L415-L416回执含updatePage以新对象替换数组项；两次读取都在07:14写入之前。",
+          "evidence": [
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/main-019ff40e-75be-7651-81f7-8d6b60347164.jsonl",
+              "line": 399
+            },
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/main-019ff40e-75be-7651-81f7-8d6b60347164.jsonl",
+              "line": 400
+            },
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/main-019ff40e-75be-7651-81f7-8d6b60347164.jsonl",
+              "line": 415
+            },
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/main-019ff40e-75be-7651-81f7-8d6b60347164.jsonl",
+              "line": 416
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/xyz/work/HMRmbr/features/business_calendar/src/main/ets/pages/quadrant/components/QuadrantGrid.ets",
+        "since": "2026-08-11T06:08:24.647Z",
+        "at": "2026-08-19T07:18:47.009Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/xyz/work/HMRmbr/features/business_calendar/src/main/ets/pages/quadrant/NewTime4ListFragmentPage.ets",
+          "at": "2026-08-12T07:11:07.233Z",
+          "reason": "正常输入：同上，页面回执显示页数据以普通对象整体替换、依赖复合key重建（main-019ff40e L399-L400、L415-L416）。"
+        },
+        {
+          "key": "019ff40e-75be-7651-81f7-8d6b60347164",
+          "at": "2026-08-12T07:14:41.442Z",
+          "reason": "同一偏差的子组件分支：07:12:59 Add QuadrantGrid.ets，以@Param page: Time4ListDatePage接收普通对象（main-019ff40e L435-L436），随后把外层key稳定为queryKey（L454-L455）；01a00f48确认页对象解包后传给Grid的@Param仍拿首个空对象（main-01a00f48 L795）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "019ff40e在exec中用sed分段读取四象限页面：L399-L400回执含ForEach(this.pages)及含requestId/loadState/events的复合key，L415-L416回执含updatePage以新对象替换数组项；两次读取都在07:14写入之前。",
+          "evidence": [
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/main-019ff40e-75be-7651-81f7-8d6b60347164.jsonl",
+              "line": 399
+            },
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/main-019ff40e-75be-7651-81f7-8d6b60347164.jsonl",
+              "line": 400
+            },
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/main-019ff40e-75be-7651-81f7-8d6b60347164.jsonl",
+              "line": 415
+            },
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/main-019ff40e-75be-7651-81f7-8d6b60347164.jsonl",
+              "line": 416
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "日视图修复直接改为ForEach，未验证“保留virtualScroll、改传完整RepeatItem”能否同样消除旧条目；本卡按已读清单归因传参偏离，不声称virtualScroll本身在此场景必然出错。",
+    "01a017a5重新引入不可变替换前读到的回归测试把目标写作“observe replacement page objects”（main-01a017a5 L413-L414），措辞可能误导；该次回归未单独画图。"
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/xyz/work/HMRmbr/features/business_calendar/src/main/ets/pages/NewTimeListFragmentPage.ets",
+      "reason": "已确认生成期019fd4b0在03:33:11按同一计划把时间线LazyForEach改为Repeat…virtualScroll，并写DaySection(repeatItem.item, repeatItem.index)（epoch-2 main-019fd4b0 L9609-L9610），04:06被mv到本路径。但修复的是“一个item占满屏”的高度问题：01a012a8先改过轨道叠层，又依次去掉virtualScroll、改轨道对齐和layoutWeight，最后改ForEach才恢复（main-01a012a8 L870、L902、L939、L975-L977）。去掉virtualScroll后结论不变，决定高度的具体因素未分离，也未找到写前说明该高度约束的输入，暂不归因。"
+    },
+    {
+      "key": "/Users/xyz/work/HMRmbr/features/business_calendar/src/main/ets/pages/home/day/PhoneDayCalendarFragmentPage.ets",
+      "reason": "本文件的修复是月内选日不再调用loadCalendarEvents查询约5个月的圆点数据（main-019ff55b L556-L557）。这解释了日志中的8日请求，但不是列表旧条目的原因；该调用在019fef8a写入中保持不变，生成来源未追查。本文件曾承载的Repeat片段已在08-12T01:41:56移入PhoneDayEventPanel，归因见第一张图。"
+    },
+    {
+      "key": "/Users/xyz/work/HMRmbr/features/business_calendar/src/main/ets/viewmodel/CalendarViewsSearchViewModel.ets",
+      "reason": "修复删除的selectedDayGeneration是修复期019fef8a在08-12T08:00:38为“取消旧请求”方案加入的尝试，不是生成期偏差；选日只查当天的范围调整同上一条，未另追生成来源。"
+    }
+  ],
+  "job": "issue-69d294e4afbc31f4ab87",
+  "metadata": {
+    "migration": {
+      "project": "记得日历",
+      "server_session_id": "7117da4e-7187-4a29-8d35-25d345e0e57e"
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "gpt-5.6-sol"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.146.0-alpha.9.2",
+        "0.147.0-alpha.1.2",
+        "0.147.0-alpha.6.5",
+        "0.148.0-alpha.15",
+        "0.148.0-alpha.9"
+      ]
+    },
+    "source_set_id": "sources-e29c9382987c75013258",
+    "card_tool_version": "0.10.0"
+  },
+  "revision": "83646bcc4a686ba7c4fa1208c57db16d61e353729b9b398c389e36cf1245b0a7"
+}

@@ -1,0 +1,117 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-61576f6bb7eacb427f94",
+  "created_at": "2026-09-29T18:15:30.831840+00:00",
+  "migration_key": "7117da4e-7187-4a29-8d35-25d345e0e57e",
+  "title": "同步提示事件的发布粒度与条件偏离预期：补跑多轮时终态逐轮发布，开始进度缺首次同步门控",
+  "when": "同步调度修改与数据同步迁移阶段，决定同步协调器在何处发布开始进度、结束/失败终态事件，以及首页据此显示同步进度或错误提示时",
+  "description": "目标端由统一同步服务向首页发布progress/失败事件，同一批同步可能合并请求或补跑多轮；源端开始进度事件受首次同步门控（已登录且空间cursor为0），失败提示在同步结束后才检测。",
+  "summary": "已画链分支（SyncErrorHint中途闪现，修复中新生问题）：修复期main-019ffa86为解决\"同步进行中入队的请求被合并丢失\"，\n写前在L33-L34用sed读回SyncService，回执已显示终态事件绑定在单轮runFullSync内：结束时publishProgress(100)、\n异常时publishFailure()。它在L82-L83新增drainFullSyncRequests，循环调用runFullSync补跑尾随请求，却没有把终态移出单轮；\n于是一批同步里每一轮都发100/失败，首页每收到100就刷新队列并按pending+error>0显示SyncErrorHint，尾随轮尚未执行时提示短暂出现。\n用户17分钟后在L205报告该现象。同一会话L262、L291、L435把100/失败移到整批最后一轮结束后只发一次，\n并新增SYNC_ACTIVITY_CHANGED（AppEvents）、VM的syncInProgress并入service.isSyncing()、首页开始即隐藏错误提示。\n\"重新触发同步时先隐藏\"在生成期首页和Android首页都没有（开始事件只控制进度提示），属本次用户新提的行为要求，未作为偏差归因。\n未画链分支（SyncProgressHint非首次同步也显示）：SyncService在每次全量同步开头无条件publishProgress(0)，首页收到0即显示进度提示，\n并在刷新状态时按通用syncInProgress快照补显示；Android的BoxSpace.postSyncStart只在Const.isLogin()且getSpaceCursor()==0时\npost EventSyncProgress(0)。这两段在本材料开始前已存在（08-03审计读到的鸿蒙旧代码已含），材料中没有它们的首次写入。\n材料内唯一按\"先核对Android与鸿蒙同步通知再动代码\"重核的是R6：r6_android_calendar_audit在L1031-L1032读回了postSyncStart的\ncursor门控，但L1158的P0同步事实报告只列推拉顺序和触发入口，并单报\"finally仍发送进度100\"，未携带开始进度的首次同步条件；\nroot收到报告后以fork派出r6_core_impl，后者把全量同步改为performFullSync并抽出runFullSync（对应lifeSyncAll），\n开头仍保留无条件publishProgress(0)（agent-019fc628…jsonl:L1550-L1551）。该片段保留到修复前，最终由main-019fef82改为\nrepository.isInitialSync()（namespace cursor缺失或为0）时才发布0，并删除首页syncInProgress补显示（main-019fef82…jsonl:L293-L294）。\n审计报告回传root、root派发fork子代理这两次交接在索引中无可绑定的派发记录，故该分支只保留为文字依据。\n",
+  "recommendations": [
+    "修改同步调度（合并请求、尾随补跑、重试）时，先列出单轮函数里已发布的事件；把100/失败等批次终态移到整批最后一轮结束处只发一次，并补'连续触发只收到一次终态、失败只在批次停止后发布'的回归断言。",
+    "改动事件发布粒度前，查看首页等订阅方收到终态后做什么（如立即查pending/error队列显示提示），确认中间轮次不会被当成最终结果。",
+    "Android行为审计汇总同步链路时，把每个UI通知事件（进度0/100、失败）的发布位置和前置条件逐条写入事实报告，例如postSyncStart的isLogin且spaceCursor==0门控；实现与lifeSyncAll等价的入口时按该条件发布首次同步进度，首页不再用通用syncInProgress快照补显示。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/xyz/work/HMRmbr/features/business_calendar/src/main/ets/service/SyncService.ets",
+        "since": "2026-08-11T06:08:24.647Z",
+        "at": "2026-08-19T07:18:47.009Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/xyz/work/HMRmbr/features/business_calendar/src/main/ets/service/SyncService.ets",
+          "at": "2026-08-13T09:50:15.236Z",
+          "reason": "正常输入：修复期main-019ffa86写前用sed读回SyncService，回执显示runFullSync结束时publishProgress(100)、异常时publishFailure()，即终态事件绑定在单轮函数内；足以判断循环调用会逐轮发终态（main-019ffa86-ca3a-7f70-9ef6-dce2dca84299.jsonl:L33-L34）。"
+        },
+        {
+          "key": "019ffa86-ca3a-7f70-9ef6-dce2dca84299",
+          "at": "2026-08-13T09:52:13.271Z",
+          "reason": "为补跑同步中途入队的请求，apply_patch新增drainFullSyncRequests循环调用runFullSync，未把终态移出单轮，导致一批同步每轮都发100/失败，首页在尾随轮前查到pending而闪现SyncErrorHint；属修复中新生偏差（同转录L82-L83；用户L205报告，L262、L291、L435修正）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "main-019ffa86在exec中用sed -n '1,260p'读取SyncService.ets，回执显示runFullSync结束publishProgress(100)、异常publishFailure()；这是L82写入前的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/main-019ffa86-ca3a-7f70-9ef6-dce2dca84299.jsonl",
+              "line": 33
+            },
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/main-019ffa86-ca3a-7f70-9ef6-dce2dca84299.jsonl",
+              "line": 34
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "开始进度无条件发布与首页syncInProgress补显示的最初写入发生在材料之前的首轮迁移；R6审计报告到root、root到r6_core_impl的交接在索引中没有可绑定的派发记录，r6_core_impl派工正文亦为加密内容，未能机械核验。"
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/xyz/work/HMRmbr/features/business_calendar/src/main/ets/pages/home/NewHomeFragmentPage.ets",
+      "reason": "已确认修复删除state.syncInProgress补显示、改为progress==0才显示进度提示，并在同步开始时隐藏SyncErrorHint；补显示逻辑在材料开始前已存在，生成期对首页的写入（含路径迁移）未触及这些片段，缺首次写入来源；开始即隐藏属用户新要求。"
+    },
+    {
+      "key": "/Users/xyz/work/HMRmbr/features/business_calendar/src/main/ets/pages/home/components/SyncProgressHint.ets",
+      "reason": "该文件在修复期由main-019fef82从首页拆出并迁到pages/home/components（08-11T07:03），生成期不存在；其显示时机由首页与SyncService的开始进度决定，生成来源同上述未画链分支。"
+    },
+    {
+      "key": "/Users/xyz/work/HMRmbr/features/business_calendar/src/main/ets/repository/PersistenceSyncRepository.ets",
+      "reason": "修复新增isInitialSync()（namespace cursor缺失或为0）供SyncService判定首次同步；生成期缺的是该判定，成因属未画链的首次同步门控分支（R6审计报告遗漏、派发交接不可绑定）。"
+    },
+    {
+      "key": "/Users/xyz/work/HMRmbr/features/business_calendar/src/main/ets/viewmodel/PersistenceSyncViewModel.ets",
+      "reason": "修复把syncInProgress并入service.isSyncing()，防止页面错过开始信号后误显错误提示，是SyncService终态合并的配套修改；未见与本问题相关的生成期偏差写入。"
+    },
+    {
+      "key": "/Users/xyz/work/HMRmbr/features/business_common/src/main/ets/events/AppEvents.ets",
+      "reason": "修复新增SYNC_ACTIVITY_CHANGED事件与载荷，是为满足'任意同步开始即隐藏错误提示'新增的机制，生成期无对应偏差写入可归因。"
+    }
+  ],
+  "job": "issue-61576f6bb7eacb427f94",
+  "metadata": {
+    "migration": {
+      "project": "记得日历",
+      "server_session_id": "7117da4e-7187-4a29-8d35-25d345e0e57e"
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "gpt-5.6-sol"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.146.0-alpha.9.2",
+        "0.147.0-alpha.1.2",
+        "0.147.0-alpha.6.5",
+        "0.148.0-alpha.15",
+        "0.148.0-alpha.9"
+      ]
+    },
+    "source_set_id": "sources-e29c9382987c75013258",
+    "card_tool_version": "0.10.0"
+  },
+  "revision": "81433d51d37a7ab99b966540db2b149f7392e0fc3e57758fab68382387b5bf8c"
+}

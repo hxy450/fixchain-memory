@@ -1,0 +1,281 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-e218dc5f282b590164d7",
+  "created_at": "2026-09-29T18:04:43.038999+00:00",
+  "migration_key": "7117da4e-7187-4a29-8d35-25d345e0e57e",
+  "title": "页面迁入或跨 HAR 模块移动时资源闭包未随迁，$r 引用落在其他模块资源上",
+  "when": "架构重构/模块拆分阶段，把页面代码迁入 features/business_* 等 HAR 模块或在 feature 间移动页面，并确定其字符串、媒体、颜色资源归属时；以及在 HAR 页面内把按名称动态取资源改写为静态 $r 时",
+  "description": "HarmonyOS 多模块工程（products 壳 HAP + features/components HAR），页面或组件从壳或其他 feature 移入某个 HAR；页面通过 $r('app.string/media/color.x') 或 getStringByNameSync(name)/localized('x') 使用资源，而资源定义可能仍只在壳模块、AppScope 或另一 feature 中。整包 assembleHap 会合并资源，构建和运行都能通过，只有按模块做静态分析时才会报 Unknown resource name。",
+  "summary": "本问题有两个起点：一个是生成期留下的问题（设置页），一个是修复期新引入的问题（事线详情页）。两处成因相同：页面进了某个 HAR 模块，它引用的资源却没有进入该模块自己的资源闭包。整包构建会把壳、AppScope 和各 HAR 的资源合并，所以编译、安装和运行都正常；DevEco 单独分析该 HAR 时解析不到这些资源，于是报 Unknown resource name（main-019ff8c2 L42、L475；main-01a00ee0 L528）。\n\n设置页（生成期）：main-019fd4b0 在 R11 把设置页抽到 business_settings 前，读到 MineSetActPage/AppearanceActivityPage 使用 this.localized('mine_prepare_upload') 这类 getStringByNameSync 按名取字符串（L2671-L2672）。它还明确说“资源在整包中可从 phone 的 app.* 解析，但不满足 feature 独立归属”，要把页面所需文案放入 business_settings（L2825）。但它用来生成资源清单的扫描只匹配静态写法 app.(string|media|color).X（L2801-L2802）；据此新建的 business_settings string.json（L2826-L2827，L2948 重写为 99 条独占项）不含按名引用的 mine_sync_failed、mine_prepare_upload、log_upload_failed。\n后来 UI 修复子代理 agent-019febe9 为处理 P0043 fatal，把 MineSetActPage 中的 localized(...) 改成静态 $r。写前 rg 已返回：mine_sync_failed 只在 products/phone 的三语 string.json 里（L4201-L4202）；business_settings 的依赖里没有 phone，本模块资源也查不到该名称（L4210-L4211）。它自己的判断也写着“位于未依赖模块的 key 继续改成 $r 会产生模块级资源不确定性”，并据此给 business_support 中的两个 key 在 business_settings 建了自有资源（L4216）。可是在同一补丁里，它仍把 mine_sync_failed 写成 $r('app.string.mine_sync_failed')（L4217-L4218；L4242-L4243 又包进 resourceText）。这是该 HAR 页面第一次静态引用只存在于壳里的资源，也就是用户在 main-019ff8c2 L9 报告的两处 Unknown resource name。\n修复者没有让设置页去依赖 phone，而是改用模块自有的 mine_settings_sync_failed，并补齐 base/zh_CN/en_US 三语（main-019ff8c2 L270-L272）；phone 中的 mine_sync_failed 继续留给 Mine2FragmentPage。\n\n事线详情（修复期新引入）：用户确认事线属于 Calendar 后，main-01a01433 已读到 business_social 下 NewActDetailActivityPage 的源码，其中有 $r('app.string.event_create_reminder')、$r('app.media.ic_chahua')、$r('app.media.ic_delete_gray') 等本模块资源引用（L39-L40）；也读了架构重构 skill，其中提到客户曾反馈“资源囤壳”、原则是“就近放置”（L251-L252）。它的迁移范围表和 R19.1 计划只列了页面、VM、模型、Service、Repository、Port 和 adapter（L188、L326），没有列资源。随后用 shell mv 把页面移入 business_calendar/pages/eventline（L345），在 L379-L380 只改了 import 和 ViewModel 接线。验收用的是整包 assembleHap 和真机一跳（L740-L852），这两种验证都会合并 HAR 资源，所以发现不了资源缺失。\n用户随后报告 app.string、app.media、app.color 全部显示 Unknown resource（main-01a017ad L218、L227、L607；main-01a01842 L9）。修复者统计出：页面引用的 11 个事线专属字符串、15 个媒体仍只在 business_social。他把这些资源迁入 business_calendar，并从 Social 移除仅 Calendar 使用的条目，用于避免跨 HAR 重名；越界的文案改成 Calendar 自有名称；颜色改用 DesignTokens；另外加了模块资源闭包检查（main-01a017ad L252、L276-L319；main-01a01842 L147）。\n",
+  "recommendations": [
+    "架构重构阶段在迁移页面前，以页面（及其直接组件）为单位列出资源闭包：静态的 $r('app.string/media/color.X')，以及 getStringByNameSync/getMediaByNameSync/localized('X') 这类按名引用的字面量都要算进去。然后确认每个名称定义在目标 HAR 自身或它在 oh-package.json5 中声明的依赖里；壳模块、AppScope 或未依赖的 feature 里的名称，要复制或迁入目标模块。",
+    "在 feature 之间移动页面时，把 resources/*/element 中的对应条目和 media 文件列入同一个迁移清单，和 model/VM/service 一起搬。已声明“禁止新增 A→B 依赖”时，更要把 B 中被页面引用的资源迁到 A，不能留给整包合并兜底。",
+    "资源迁移不能只用 assembleHap 通过或真机运行来验收，因为整包会合并资源。要逐模块检查：对每个 HAR 抽取 $r 名称，与该模块及其声明依赖的资源并集比对，缺失即失败；也可以按 hvigor 的 module 模式单独构建该 HAR。",
+    "在 HAR 页面内把按名取资源改写为静态 $r 时，对每个名称都要先确认它在本模块或已声明依赖中存在；只存在于 products/phone、AppScope 或未依赖模块的，按本模块命名建立三语自有资源，不直接写 $r('app.string.<壳里的名字>')。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/xyz/work/HMRmbr/features/business_settings/src/main/ets/pages/MineSetActPage.ets",
+        "since": "2026-08-11T06:08:24.647Z",
+        "at": "2026-08-19T07:18:47.009Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/xyz/work/HMRmbr/products/phone/src/main/resources/base/element/string.json",
+          "at": "2026-08-11T02:59:36.092Z",
+          "reason": "正常输入：agent-019febe9 写前用 rg 查询多个 key 的定义位置。结果显示 mine_sync_failed 只在 products/phone 的 base/en_US/zh_CN string.json 中，business_settings 没有（agent-019febe9-e609-7582-af2f-b79154acaf80.jsonl:L4201-L4202）。"
+        },
+        {
+          "key": "/Users/xyz/work/HMRmbr/features/business_settings/oh-package.json5",
+          "at": "2026-08-11T02:59:56.948Z",
+          "reason": "正常输入：同一次命令读出 business_settings 的依赖只有 business_common、business_calendar 和 module_* 等，没有 phone；对本模块 string.json 的 rg 也没有返回 mine_sync_failed（同转录 L4210-L4211）。这足以说明该名称不在本 HAR 的资源闭包里。"
+        },
+        {
+          "key": "agent-019febe9-e609-7582-af2f-b79154acaf80.jsonl",
+          "at": "2026-08-11T03:00:29.636Z",
+          "reason": "已拿到上述输入，也在 L4216 说明未依赖模块的 key 不能直接改成 $r，并为 business_support 的 key 建了自有资源。同一补丁却把 MineSetActPage 的 localized('mine_sync_failed') 改成 $r('app.string.mine_sync_failed')，两处都引用只在壳模块中的资源（L4217-L4218）。L4242-L4243 又包成 resourceText($r(...))，一直保留到 main-019ff8c2 L272 修复。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "agent-019febe9 写前在工作区执行 rg，按名称查询包括 mine_sync_failed 在内的多个 key 在各 string.json 中的定义。回执列出 products/phone/src/main/resources/base/element/string.json:48 的 mine_sync_failed，其他模块没有该名称。这支持它写前已经收到“该名称只在壳模块”的事实。",
+          "evidence": [
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/agent-019febe9-e609-7582-af2f-b79154acaf80.jsonl",
+              "line": 4201
+            },
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/agent-019febe9-e609-7582-af2f-b79154acaf80.jsonl",
+              "line": 4202
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "agent-019febe9 写前用 cat 读取 features/business_settings/oh-package.json5，同一命令还对本模块 string.json 执行了 rg mine_sync_failed。回执列出的依赖中没有 phone，rg 没有匹配。这支持它写前已知该名称不在本 HAR 的资源闭包中。",
+          "evidence": [
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/agent-019febe9-e609-7582-af2f-b79154acaf80.jsonl",
+              "line": 4210
+            },
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/agent-019febe9-e609-7582-af2f-b79154acaf80.jsonl",
+              "line": 4211
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/xyz/work/HMRmbr/features/business_settings/src/main/resources/base/element/string.json",
+        "since": "2026-08-11T06:08:24.647Z",
+        "at": "2026-08-19T07:18:47.009Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/xyz/work/HMRmbr/products/phone/src/main/ets/pages/MineSetActPage.ets",
+          "at": "2026-08-06T10:31:48.080Z",
+          "reason": "正常输入：main-019fd4b0 抽取设置页前，sed 读出的 MineSetActPage 片段用 this.localized('mine_prepare_upload') 按名取字符串；同一输出中 AppearanceActivityPage 的 localized 实现就是 getStringByNameSync(name)（main-019fd4b0-61c0-76a3-93e7-cd325f684683.jsonl:L2671-L2672）。这说明页面所需文案不只有静态 $r。"
+        },
+        {
+          "key": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/main-019fd4b0-61c0-76a3-93e7-cd325f684683.jsonl",
+          "at": "2026-08-06T10:37:38.988Z",
+          "reason": "它已声明要把 R11 页面所需文案放进 business_settings（L2825），但资源清单来自只匹配 app.(string|media|color).X 的 rg 扫描（L2801-L2802）。据此新建的 business_settings string.json（L2826-L2827，L2948 重写为 99 条独占项）没有 mine_sync_failed 等按名引用的键，让这些页面文案继续依赖壳模块资源。",
+          "problem": true
+        },
+        {
+          "key": "/Users/xyz/work/HMRmbr/products/phone/src/main/resources/base/element/string.json",
+          "at": "2026-08-11T02:59:36.092Z",
+          "reason": "正常输入：agent-019febe9 的 rg 回执显示 mine_sync_failed 只在 products/phone 的三语 string.json 中（agent-019febe9-e609-7582-af2f-b79154acaf80.jsonl:L4201-L4202）。"
+        },
+        {
+          "key": "/Users/xyz/work/HMRmbr/features/business_settings/oh-package.json5",
+          "at": "2026-08-11T02:59:56.948Z",
+          "reason": "正常输入：business_settings 不依赖 phone；本模块 string.json 中也查不到 mine_sync_failed（同转录 L4210-L4211）。"
+        },
+        {
+          "key": "agent-019febe9-e609-7582-af2f-b79154acaf80.jsonl",
+          "at": "2026-08-11T03:00:29.636Z",
+          "reason": "同一补丁往 business_settings 三语 string.json 补了 mine_prepare_reset、mine_settings_prepare_upload、mine_settings_log_upload_failed，但没给同步失败文案建本模块条目，页面反而改为静态引用壳里的 mine_sync_failed（L4216-L4218）。修复者后来在这个文件中补上 mine_settings_sync_failed（main-019ff8c2 L270-L272）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "main-019fd4b0 抽取设置页前用 sed -n '185,220p' 读取 products/phone/src/main/ets/pages/MineSetActPage.ets（同一命令也读了 AppearanceActivityPage 等）。回执中有 this.localized('mine_prepare_upload') 这类按名取字符串，以及 localized 调用 getStringByNameSync(name) 的实现。这支持它写资源清单前已看到页面依赖按名引用的文案。",
+          "evidence": [
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/main-019fd4b0-61c0-76a3-93e7-cd325f684683.jsonl",
+              "line": 2671
+            },
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/main-019fd4b0-61c0-76a3-93e7-cd325f684683.jsonl",
+              "line": 2672
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": "target"
+        },
+        {
+          "from": 3,
+          "to": 5,
+          "force": true,
+          "reason": "agent-019febe9 写前在工作区执行 rg，按名称查询包括 mine_sync_failed 在内的多个 key 在各 string.json 中的定义。回执列出 products/phone/src/main/resources/base/element/string.json:48 的 mine_sync_failed，其他模块没有该名称。这支持它写前已经收到“该名称只在壳模块”的事实。",
+          "evidence": [
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/agent-019febe9-e609-7582-af2f-b79154acaf80.jsonl",
+              "line": 4201
+            },
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/agent-019febe9-e609-7582-af2f-b79154acaf80.jsonl",
+              "line": 4202
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": 5,
+          "force": true,
+          "reason": "agent-019febe9 写前用 cat 读取 features/business_settings/oh-package.json5，同一命令还对本模块 string.json 执行了 rg mine_sync_failed。回执列出的依赖中没有 phone，rg 没有匹配。这支持它写前已知该名称不在本 HAR 的资源闭包中。",
+          "evidence": [
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/agent-019febe9-e609-7582-af2f-b79154acaf80.jsonl",
+              "line": 4210
+            },
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/agent-019febe9-e609-7582-af2f-b79154acaf80.jsonl",
+              "line": 4211
+            }
+          ]
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/xyz/work/HMRmbr/features/business_calendar/src/main/ets/pages/eventline/NewActDetailActivityPage.ets",
+        "since": "2026-08-11T06:08:24.647Z",
+        "at": "2026-08-19T07:18:47.009Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/xyz/work/HMRmbr/features/business_social/src/main/ets/pages/NewActDetailActivityPage.ets",
+          "at": "2026-08-18T09:29:49.866Z",
+          "reason": "正常输入：main-01a01433 用 nl 读出迁移前的 Social 页面，其中有 $r('app.string.event_create_reminder')、$r('app.media.ic_chahua')、$r('app.media.ic_delete_gray')、$r('app.media.ic_edit_gray') 等引用（main-01a01433-c248-7362-a0ce-6c0ff0ab2858.jsonl:L39-L40）。页面的资源依赖在写前就可见。"
+        },
+        {
+          "key": "/Users/xyz/work/HMRmbr/.agents/skills/arkts-architecture-refactor/SKILL.md",
+          "at": "2026-08-18T10:51:34.918Z",
+          "reason": "正常输入：迁移前读到的架构重构 skill 记录了客户曾反馈“资源囤壳”，并强调“就近放置、壳工程瘦身”（同转录 L251-L252）。这提示资源应随所属模块放置；它不是逐条的资源迁移步骤。"
+        },
+        {
+          "key": "main-01a01433-c248-7362-a0ce-6c0ff0ab2858.jsonl",
+          "at": "2026-08-18T11:01:24.835Z",
+          "reason": "迁移范围表和 R19.1 计划只含页面、VM、模型、Service、Repository、Port 和 adapter（L188、L326），并规定不新增 Calendar→Social 依赖。L345 用 mv 把 Social 页面移到 business_calendar/pages/eventline，L379-L380 只改 import 和 ViewModel；页面中的 app.string/app.media 引用仍指向只在 business_social 的资源。之后仅用整包构建和真机一跳验收（L740-L852），没发现模块级资源缺失。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "main-01a01433 用 nl -ba 读取 features/business_social/src/main/ets/pages/NewActDetailActivityPage.ets 的多个行段。回执中有 event_create_reminder、ic_chahua、ic_delete_gray 等 $r 资源引用，说明迁移前它已看到页面依赖本模块的这些资源。",
+          "evidence": [
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/main-01a01433-c248-7362-a0ce-6c0ff0ab2858.jsonl",
+              "line": 39
+            },
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/main-01a01433-c248-7362-a0ce-6c0ff0ab2858.jsonl",
+              "line": 40
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "main-01a01433 在实施迁移前用 sed 读取 .agents/skills/arkts-architecture-refactor/SKILL.md 全文。回执包含“资源囤壳”的客户反馈和“就近放置”原则，这是它写前收到的资源归属指引。",
+          "evidence": [
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/main-01a01433-c248-7362-a0ce-6c0ff0ab2858.jsonl",
+              "line": 251
+            },
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/main-01a01433-c248-7362-a0ce-6c0ff0ab2858.jsonl",
+              "line": 252
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/xyz/work/HMRmbr/features/business_calendar/src/main/resources/base/element/string.json",
+      "reason": "已确认两次修改：事线字符串迁入（main-01a017ad L278、L319），以及为 MonthCalendarPopup 补 app_name（main-01a00ee0 L550）。前者的遗漏由第三张图中的 main-01a01433 造成，但它没有写过这个文件，没有真实写入可以连到这里。app_name 在 main-019fd4b0 L11171-L11172（2026-08-07T04:27Z）删除 business_common 的重复条目后只剩 AppScope；月历页面的 $r('app.string.app_name') 随页面迁入 business_calendar，又由 main-01a00e91 L77-L78 拆到 MonthCalendarPopup。当时 business_calendar 资源由谁、按什么规则分配（L11053 之后的脚本归位）尚未逐项核实，所以不画图。"
+    },
+    {
+      "key": "/Users/xyz/work/HMRmbr/features/business_social/src/main/resources/base/element/string.json",
+      "reason": "迁移前这个文件作为 Social 页面资源的归属是正确的。修复时把只由 Calendar 使用的事线字符串从这里移走，是为了避免跨 HAR 重名（main-01a017ad L304-L319）。偏差在于第三张图里页面迁走时没有带走资源，引入者 main-01a01433 没写过这个文件，所以不另画图。"
+    }
+  ],
+  "job": "issue-e218dc5f282b590164d7",
+  "metadata": {
+    "migration": {
+      "project": "记得日历",
+      "server_session_id": "7117da4e-7187-4a29-8d35-25d345e0e57e"
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "gpt-5.6-sol"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.146.0-alpha.9.2",
+        "0.147.0-alpha.1.2",
+        "0.147.0-alpha.6.5",
+        "0.148.0-alpha.15",
+        "0.148.0-alpha.9"
+      ]
+    },
+    "source_set_id": "sources-e29c9382987c75013258",
+    "card_tool_version": "0.10.0"
+  },
+  "revision": "b35de5831b981222b29d58f675566fd5e21d05b9c996f7b049492ec10de6bedb"
+}

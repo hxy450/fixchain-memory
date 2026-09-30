@@ -1,0 +1,28 @@
+# 本地文件路径接到 ArkUI Video 前规范成 file:// URI，并分清缓存接口返回的是路径还是播放地址
+
+ID：`lesson-2b3d45c1a89dc1ead7e3` · 版本：1
+
+[本主题](index.md)
+
+## 何时使用
+
+页面转换与跨页接线阶段，把路由参数或缓存/预载接口给出的本地文件接到 Video src 时
+
+## 适用情境
+
+源端把缓存文件路径交给第三方播放器 setUrl(path)（其内部把本地文件转成 Uri）；目标用 ArkUI Video；工程缓存单例可能同时提供返回裸沙箱路径和返回 file:// 播放地址的两个方法。
+
+## 原因
+
+ArkUI Video 播放本地文件需要 URI；裸沙箱路径传入不报错，只是不渲染。映射参考里 Video({ src: '/sdcard/video.mp4' }) 这类裸路径示例会误导。来源中页面写者当时还看不到缓存接口，后来的接线者读到了“路径与播放地址”的接口说明，仍把返回裸路径的方法接进参数。
+
+## 做法
+
+1. 在 Video src 的消费边界统一规范：以 / 开头的沙箱路径转成 file://（或 fileUri.getUriFromPath），网络 URL 原样传入。
+2. 把缓存/预载接口接到播放器前，核对它返回文件系统路径还是可播放 URI；传路径时在参数契约里注明格式。
+3. 同一接线任务改动了某处 Video 的来源后，逐个检查工程内其他 Video src 是否经过同样的转换。
+
+## 来源（按需复核）
+
+- case-2515d9d83b3905d78424 · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
+  卡片版本：`73c58f43ab5cd40a2b49e6de485368066f596fbc8e279df3a57bcc6d083cdd1a`
