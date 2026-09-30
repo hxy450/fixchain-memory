@@ -1,6 +1,6 @@
 # data/parsing
 
-JSON 解析：打包资源的字段必填与空值语义，源解析器（如 Gson）的标量宽松转换与源数据实际类型，接口响应容器 Bean 的取值层级
+JSON 解析：打包资源的字段必填与空值语义，源解析器（如 Gson）的标量宽松转换与源数据实际类型，接口响应容器 Bean 的取值层级，自写 fromJson 的运行期类型收窄
 
 [上一级](../index.md)
 
@@ -16,3 +16,7 @@ JSON 解析：打包资源的字段必填与空值语义，源解析器（如 Gs
 - [翻译源端 JSON 解析时按源端取值 API 的空值语义定字段规则：org.json 的 getString 对 null 不抛错，只有缺键才抛](lesson-5034b56be6fd828164c9.lesson.md)
   - 时机：实现阶段把源端 JSON 解析函数翻成 ArkTS 手写解析器、决定各字段必填与空值处理时
   - 情境：源端用 Android org.json 的 getString 等读取打包 JSON 资源；对应 Kotlin 数据类字段声明为非空 String；目标解析器任一字段校验失败就让整页进入加载失败。
+- [自写 fromJson 从宽类型输入取值时用 typeof/instanceof 收窄：as 只是编译期断言，?? 只兜底缺失与 null](lesson-2622bc32995ac62389c3.lesson.md)
+  - 时机：数据模型实现阶段，为迁移实体编写 fromJson 反序列化方法、确定字段取值与默认值时
+  - 情境：ArkTS 模型的 fromJson 接收 Record&lt;string, Object&gt; 等宽类型输入，字段声明为 number/string/boolean 并带默认值；源端是强类型 data class（Int/Long/Boolean 字段），没有可照搬的序列化代码，由目标自行补写。
+  - 例外：源端经 Gson 等解析器填充并容忍数字与字符串互转时，按源解析器的接受范围转换（见本主题 Gson 标量宽松转换的经验），不一律回落默认值

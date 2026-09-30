@@ -1,14 +1,15 @@
 # arkts
 
-ArkTS 语言与 SDK 接口：类型、签名、V2 组件成员声明、严格模式限制与异步错误路径，以及不能编译时的写后自检
+ArkTS 语言与 SDK 接口：类型、签名、V2 组件成员声明、严格模式限制、数值语义与异步错误路径，以及不能编译时的写后自检
 
 [上一级](../index.md)
 
 ## 子主题
 
 - [api-signatures](api-signatures/index.md) — 调用 ArkUI 组件属性方法或 SDK 接口时的参数类型、重载匹配与必填参数，成员名、所属类型与返回可空性的声明核对：@BuilderParam 传入 builder 的写法与 this 绑定，intl 格式化等接口不能省略的参数
-- [async](async/index.md) — 源端同步调用改成 ArkTS 异步（Promise/async）后新增的失败分支、加载态，以及异步初始化与用户输入的先后顺序
+- [async](async/index.md) — 源端同步调用改成 ArkTS 异步（Promise/async）后新增的失败分支、加载态，异步初始化与用户输入的先后顺序，以及仓库方法前置失败分支（未初始化、未授权）的错误通道
 - [decorators](decorators/index.md) — ArkUI V2 自定义组件的成员声明：装饰器是否带括号、@BuilderParam 默认值的写法、状态成员名与组件通用属性方法的冲突
+- [numeric](numeric/index.md) — 数值语义：ArkTS number 与 Kotlin 在除法、零分母与范围钳制上的差异，迁移比值和进度计算时要保留的保护
 - [strict-mode](strict-mode/index.md) — ArkTS 严格模式对写法的限制（throw、对象字面量类型、索引签名、类型收窄等），在不编译的生成批次或未接线文件里容易留到编译门
 
 ## 本级经验

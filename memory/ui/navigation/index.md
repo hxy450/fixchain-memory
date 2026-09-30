@@ -36,9 +36,10 @@
 - [源端对同一次成功有多条导航响应时，目标只保留一个导航出口，并按净效果定义返回栈](lesson-683d8f5070802c518020.lesson.md)
   - 时机：规格提取与接线阶段，把源页面对同一业务结果的多条响应（事件订阅里 finish、成功回调里 startActivity）翻译成目标 NavPathStack 操作时
   - 情境：源 Activity 对同一次成功既在全局事件订阅里关闭本页，又在回调里启动主页（可能带 FLAG_ACTIVITY_NEW_TASK）；全局管理器在回调前发布成功事件；目标由单一 NavPathStack 管理页面，Navigation 根内容可能是启动页。
-- [源端独立窗口的对话框改成页内覆盖层后，在宿主 onBackPressed 里自顶向下逐层关闭，全部关闭后才进未保存门禁或出栈](lesson-396d54479492828eeea3.lesson.md)
-  - 时机：页面转换阶段，把 BackHandler 与 AlertDialog/ModalBottomSheet 改写成 NavDestination.onBackPressed 加页内覆盖层时
-  - 情境：源页用 BackHandler 处理行内编辑器或未保存门禁，另有 AlertDialog、Dialog 或 ModalBottomSheet 以 onDismissRequest 关闭；目标把这些弹层做成页内 Stack 覆盖层或由 activeDialog 一类状态驱动的组件，系统返回统一交给宿主。
+- [源端对话框、底部弹层或下拉菜单改成页内覆盖层后，在宿主 onBackPressed 里自顶向下逐层关闭，全部关闭后才进未保存门禁或出栈](lesson-396d54479492828eeea3.lesson.md)
+  - 时机：页面转换阶段，把源端 Dialog/AlertDialog/ModalBottomSheet/ExposedDropdownMenu（以及可能存在的 BackHandler）改写成 NavDestination 页内覆盖层、确定系统返回如何处理时
+  - 情境：源页的对话框、底部弹层或下拉菜单以 onDismissRequest 关闭；源页可能另有 BackHandler 处理行内编辑器或未保存门禁，也可能完全没有 BackHandler。目标把这些弹层做成 NavDestination 内 Stack 条件渲染的覆盖层或由 activeDialog 一类状态驱动的组件，而不是自带返回关闭的弹窗机制，系统返回统一交给宿主。
+  - 例外：弹层改用自带返回关闭的弹窗机制（openCustomDialog、bindSheet、NavDestinationMode.DIALOG 等）时，由弹窗自身处理返回
 - [源端跳转前写入的共享状态（如播放队列）是跳转契约的一部分，按原顺序迁移](lesson-dfcdbb19cd93d29159b2.lesson.md)
   - 时机：功能接线阶段，把列表项点击 → 启动目标页的链路迁成目标导航调用时；路由核验阶段比对跳转一致性时
   - 情境：源端点击处理在 startActivity 之前先把当前列表（过滤后）交给共享播放器或仓库（如 setPlaylist(list, position, true)），目标页只显示共享状态；目标跳转参数只带 id 一类字段。

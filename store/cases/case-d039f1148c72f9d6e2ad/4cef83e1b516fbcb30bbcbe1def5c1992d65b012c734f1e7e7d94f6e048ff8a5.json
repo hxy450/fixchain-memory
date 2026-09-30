@@ -1,0 +1,155 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-d039f1148c72f9d6e2ad",
+  "created_at": "2026-09-30T08:46:19.514491+00:00",
+  "migration_key": "MTcyLjE3LjY0LjEyMDI2LTA4LTA4VDA2OjM1OjMzWg==",
+  "title": "把 as 类型断言当作 fromJson 的运行期类型收窄",
+  "when": "数据模型实现阶段，为迁移实体编写 fromJson 反序列化方法、确定各字段取值与默认值时",
+  "description": "ArkTS 模型的 fromJson 接收 Record<string, Object> 等宽类型输入，字段声明为 number/string/boolean 并带默认值；源端是强类型 data class（Int/Long/Boolean 字段），且没有可照搬的序列化代码。",
+  "summary": "Base-1 Models 生成者写前实际收到的派工要求“实体用 class + 显式类型注解、遵守 ArkTS 严格模式、\n包含 fromJson/toJson（如源有）”，并读到源 FolderDetails.kt：Kotlin data class，itemCount: Int、\ntotalSize: Long、isSystemFolder: Boolean 等字段由语言保证运行期类型，文件中没有任何序列化代码\n（agent-a8167d5eda16c90c1.jsonl:L1、L26-L27）。生成者在思考中确认源端无 fromJson，仍决定自行补上\n（同转录 L47），随后 Write 为六个字段统一写成 `(json['itemCount'] as number) ?? 0` 这类表达式（L68-L69）。\nArkTS 的 `as` 只是编译期断言，`??` 只兜底 null/undefined，因此类型不符的值（如 itemCount='abc'）\n会原样进入声明为 number 的字段，源端“字段类型恒定”的约束在移植后失去保证。偏差位于从强类型源模型\n到宽类型 JSON 入口的实现一环；生成者的自检只 grep any/unknown/TODO（L92-L100），handoff 称\n“typed fields + fromJson/toJson”。生成期内没有其他写者改动此文件。\n需要区分的是：生成期输入并没有给出“类型不符取默认”的明确契约。baseline 的 F001-AC19 只写\n“文件夹详情展示 itemCount/totalSize（含缓存）”（main-eb525e87-668c-4c34-a83f-a3ee071613e9.jsonl:L684）；\n这一条异常用例是验证期 UT 设计者按“每条 AC 覆盖正常/边界/异常”新增的，而且设计者看到 `??`\n就把它判为 GREEN（agent-a9e0f2671fc3424aa.jsonl:L33、L59）。新增用例在 round-0 实测为 RED\n（expect abc equals 0，agent-a430f7e2ace471185.jsonl:L522），暴露的正是生成片段里的类型漏洞。\n修复者把六个字段都改成先用 typeof 判断、否则回落默认；第二次编辑去掉了 `Object | undefined`\n中间变量，最终保留直接用 typeof 的版本（agent-a792cad63b9155c12.jsonl:L188-L189、L229-L230）。\n材料中只有单测调用 FolderDetails.fromJson，未见生产代码调用。\n",
+  "recommendations": [
+    "数据模型实现阶段，从 Record<string, Object> 取值时把 `as T` 当作编译期断言。基元字段先用 typeof 判断，对象字段用 instanceof，判断通过再赋值，否则回落默认值；`?? 默认` 只处理缺失和 null。",
+    "源端没有序列化代码、需要自行补 fromJson 时，在代码注释或 handoff 中写明缺字段、null、类型不符三种输入各自的结果，并用一个类型不符样例自查（如数值字段传字符串），确认声明为 number 的字段不会拿到字符串。",
+    "移植强类型源模型（Kotlin Int/Long/Boolean）时，把“字段运行期类型恒定”当作要保留的约束：凡是宽类型输入进入模型的入口，都要显式收窄。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "D:/Harmony_AI_Memory/CleanSweep-arkts/entry/src/main/ets/models/FolderDetails.ets",
+        "since": "2026-08-08T13:28:16.717Z",
+        "at": "2026-08-10T06:29:38.757Z"
+      },
+      "nodes": [
+        {
+          "key": "main-eb525e87-668c-4c34-a83f-a3ee071613e9.jsonl",
+          "at": "2026-08-08T09:54:11.702Z",
+          "reason": "派工输入：Agent 派发 Base-1 Models，要求“实体用 class + 显式类型注解、遵守 ArkTS 严格模式（禁止 any/unknown，用明确类型）、包含 fromJson/toJson 序列化方法（如源有）”；没有规定类型不符时的处理（同转录 L1620-L1621，生成者收到的文本见 agent-a8167d5eda16c90c1.jsonl:L1）。"
+        },
+        {
+          "key": "D:/Harmony_AI_Memory/CleanSweep/app/src/main/java/com/cleansweep/domain/model/FolderDetails.kt",
+          "at": "2026-08-08T09:54:26.865Z",
+          "reason": "正常输入：Read 回执显示源模型是 data class，path/name 为 String，itemCount 为 Int，totalSize 为 Long，isSystemFolder/isPrimarySystemFolder 为 Boolean，没有序列化代码；字段运行期类型由语言保证，足以说明 ArkTS 模型需要保持同样的类型约束（agent-a8167d5eda16c90c1.jsonl:L26-L27）。"
+        },
+        {
+          "key": "agent-a8167d5eda16c90c1.jsonl",
+          "at": "2026-08-08T09:56:21.457Z",
+          "reason": "收到上述输入后，思考中确认源端无 fromJson 仍自行补上（L47），Write 把 fromJson(json: Record<string, Object>) 的六个字段都写成 `(json[k] as T) ?? 默认`（L68-L69）。`as` 不做运行期校验，类型不符的值会原样进入 number/boolean 字段；同时加载的 arkts-knowledge-verifier 只说明 `as` 是合法的转换/窄化语法（L17），导航技能则提示 Object 值用 instanceof 比 `as` 下行断言更安全（L14）。生成者的自检没有覆盖这一点（L92-L100）。本分支在此停止上溯。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "arkts-data-layer 技能要求写 fromJson 前先读 references/v2-model-patterns.md，但生成者没有读取，材料中也没有该文件内容，无法确认这份参考是否给出过运行期类型收窄的范式。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-d039f1148c72f9d6e2ad",
+  "metadata": {
+    "migration": {
+      "project": "CleanSweep",
+      "server_session_id": "MTcyLjE3LjY0LjEyMDI2LTA4LTA4VDA2OjM1OjMzWg=="
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "deepseek-v4-flash",
+        "deepseek-v4-pro"
+      ],
+      "client_versions": [
+        "2.1.220"
+      ]
+    },
+    "source_set_id": "sources-0b97b24d3ef3c2246145",
+    "environment": [
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "D:\\Harmony_AI_Memory\\CleanSweep-arkts",
+        "at": "2026-08-08T07:11:57.427Z",
+        "ref": "runs/978cbade-2f23-4297-99f2-4fbe10e6f084/epoch-0/sessions/main-eb525e87-668c-4c34-a83f-a3ee071613e9.jsonl:L253",
+        "request_ref": "runs/978cbade-2f23-4297-99f2-4fbe10e6f084/epoch-0/sessions/main-eb525e87-668c-4c34-a83f-a3ee071613e9.jsonl:L249",
+        "phase": "generation"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "36",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "D:\\Harmony_AI_Memory\\CleanSweep-arkts",
+        "at": "2026-08-08T07:13:44.848Z",
+        "ref": "runs/978cbade-2f23-4297-99f2-4fbe10e6f084/epoch-0/sessions/agent-a04ddb800841b5e82.jsonl:L13",
+        "request_ref": "runs/978cbade-2f23-4297-99f2-4fbe10e6f084/epoch-0/sessions/agent-a04ddb800841b5e82.jsonl:L12",
+        "phase": "generation"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "36",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "D:\\Harmony_AI_Memory\\CleanSweep-arkts",
+        "at": "2026-08-08T07:13:44.848Z",
+        "ref": "runs/978cbade-2f23-4297-99f2-4fbe10e6f084/epoch-0/sessions/agent-a04ddb800841b5e82.jsonl:L13",
+        "request_ref": "runs/978cbade-2f23-4297-99f2-4fbe10e6f084/epoch-0/sessions/agent-a04ddb800841b5e82.jsonl:L12",
+        "phase": "generation"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "29",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "D:\\Harmony_AI_Memory\\CleanSweep-arkts",
+        "at": "2026-08-08T07:13:44.848Z",
+        "ref": "runs/978cbade-2f23-4297-99f2-4fbe10e6f084/epoch-0/sessions/agent-a04ddb800841b5e82.jsonl:L13",
+        "request_ref": "runs/978cbade-2f23-4297-99f2-4fbe10e6f084/epoch-0/sessions/agent-a04ddb800841b5e82.jsonl:L12",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.0.2(22)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "D:\\Harmony_AI_Memory\\CleanSweep-arkts",
+        "at": "2026-08-08T07:43:48.696Z",
+        "ref": "runs/978cbade-2f23-4297-99f2-4fbe10e6f084/epoch-0/sessions/main-eb525e87-668c-4c34-a83f-a3ee071613e9.jsonl:L800",
+        "request_ref": "runs/978cbade-2f23-4297-99f2-4fbe10e6f084/epoch-0/sessions/main-eb525e87-668c-4c34-a83f-a3ee071613e9.jsonl:L799",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.0.2(22)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "D:\\Harmony_AI_Memory\\CleanSweep-arkts",
+        "at": "2026-08-08T07:43:48.696Z",
+        "ref": "runs/978cbade-2f23-4297-99f2-4fbe10e6f084/epoch-0/sessions/main-eb525e87-668c-4c34-a83f-a3ee071613e9.jsonl:L800",
+        "request_ref": "runs/978cbade-2f23-4297-99f2-4fbe10e6f084/epoch-0/sessions/main-eb525e87-668c-4c34-a83f-a3ee071613e9.jsonl:L799",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.10.0"
+  },
+  "revision": "4cef83e1b516fbcb30bbcbe1def5c1992d65b012c734f1e7e7d94f6e048ff8a5"
+}
