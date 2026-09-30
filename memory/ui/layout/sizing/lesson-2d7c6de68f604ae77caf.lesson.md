@@ -25,3 +25,7 @@ ArkUI 滚动容器的交叉轴不随内容收缩，横向不设高度时会撑�
 
 - 对高度有疑问且能上设备时，用 dumpLayout 看滚动容器的高度是否与子项高度一致。
 
+## 来源（按需复核）
+
+- [case-2018daf21990f553ec22](../../../../store/cases/case-2018daf21990f553ec22/28ef980edd82e29589d8923bf1fff263161ff6975ab9fe8a33e7149e781419c0.json) · 结论：diagnosis, recommendation:1
+  卡片版本：`28ef980edd82e29589d8923bf1fff263161ff6975ab9fe8a33e7149e781419c0`

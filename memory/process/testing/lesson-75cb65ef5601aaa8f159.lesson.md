@@ -25,3 +25,11 @@ ID：`lesson-75cb65ef5601aaa8f159` · 版本：1
 1. 分诊时先用同一输入核对源端实现；源端得出同样结果时，按测试契约问题记录（manual_review 或退回设计），不标为源码缺陷，也不建议改算法。
 2. 修复时失败期望与已核的源端语义矛盾，就在 BLOCKED 或处置提示中写明源端行为和需要修正的用例或规格条目，保持产品与源端一致；不按其他用例反推编码方向凑出通过。
 
+## 来源（按需复核）
+
+- [case-742d1ed012293496650a](../../../store/cases/case-742d1ed012293496650a/aeaa74f6a3024eeb144e708c0d3ffb523700a5aadd350eb226d50e96febc9652.json) · 结论：recommendation:3
+  卡片版本：`aeaa74f6a3024eeb144e708c0d3ffb523700a5aadd350eb226d50e96febc9652`
+- [case-d13badc5c213ff514cbf](../../../store/cases/case-d13badc5c213ff514cbf/1f0879100cd143bf31d5d71fe26739212af48f8c5c283eecc2f41831a016c904.json) · 结论：diagnosis, recommendation:3
+  卡片版本：`1f0879100cd143bf31d5d71fe26739212af48f8c5c283eecc2f41831a016c904`
+- [case-ef8330b60b73e7df48fd](../../../store/cases/case-ef8330b60b73e7df48fd/efcb9b2a733ba75ff0fb5e7ac4e796b7fa7bb049b9393f55f564d6138bc5f5ed.json) · 结论：recommendation:2, recommendation:3
+  卡片版本：`efcb9b2a733ba75ff0fb5e7ac4e796b7fa7bb049b9393f55f564d6138bc5f5ed`

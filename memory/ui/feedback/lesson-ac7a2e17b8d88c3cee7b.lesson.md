@@ -25,3 +25,17 @@ ID：`lesson-ac7a2e17b8d88c3cee7b` · 版本：4
 5. 目标方法以 boolean 返回、失败类型另存时，宿主按类型分派失败 UI：权限被拒显示“去设置”引导弹窗，确认后用 startAbility 打开系统设置中本应用的详情页（参数带当前 bundleName），其他失败保留原提示。
 6. 核查清单由抽取器生成时，在源文件补查 AlertDialog.Builder、Settings.ACTION_APPLICATION_DETAILS_SETTINGS 等调用，补齐清单外的弹窗分支。
 
+## 来源（按需复核）
+
+- [case-3eb3514a903386524e37](../../../store/cases/case-3eb3514a903386524e37/1236f09edef125248d0e00d310ba34a2b80cc47b92e7ad721d0a7a13a4f89aa6.json) · 结论：recommendation:5
+  卡片版本：`1236f09edef125248d0e00d310ba34a2b80cc47b92e7ad721d0a7a13a4f89aa6`
+- [case-766f31f27e3feb426eb4](../../../store/cases/case-766f31f27e3feb426eb4/063edaee6e569759de04205fb992c40c13efa6f80b313fae8049fe972318d4c4.json) · 结论：recommendation:4
+  卡片版本：`063edaee6e569759de04205fb992c40c13efa6f80b313fae8049fe972318d4c4`
+- [case-845435c8343c4c012e1f](../../../store/cases/case-845435c8343c4c012e1f/68ab16b9112c85d3355a0548d963fe9e347178c301269162dfa692892d0551b5.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
+  卡片版本：`68ab16b9112c85d3355a0548d963fe9e347178c301269162dfa692892d0551b5`
+- [case-8c249997059a2524ea7b](../../../store/cases/case-8c249997059a2524ea7b/921750461c1e7e278c419ca26c21b17048d692c94b180c54164c66f94aafa6e6.json) · 结论：recommendation:4
+  卡片版本：`921750461c1e7e278c419ca26c21b17048d692c94b180c54164c66f94aafa6e6`
+- [case-9618601c4a21f2f18560](../../../store/cases/case-9618601c4a21f2f18560/870a2d98075a73dc88a2cfd3ac2fb801bc3d216cf1120c6f9583496d9f1c6941.json) · 结论：diagnosis, recommendation:1, recommendation:2
+  卡片版本：`870a2d98075a73dc88a2cfd3ac2fb801bc3d216cf1120c6f9583496d9f1c6941`
+- [case-dac1fda1c66cbfa8bc78](../../../store/cases/case-dac1fda1c66cbfa8bc78/ab39f6b4fbefd2e63757c8197e2298157f2bd77d5bb063c598f2afdc61bcab08.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
+  卡片版本：`ab39f6b4fbefd2e63757c8197e2298157f2bd77d5bb063c598f2afdc61bcab08`

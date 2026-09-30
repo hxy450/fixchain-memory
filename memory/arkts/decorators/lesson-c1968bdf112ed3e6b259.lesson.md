@@ -21,3 +21,7 @@ ID：`lesson-c1968bdf112ed3e6b259` · 版本：1
 1. 把源字段名转成成员名前对照组件通用属性清单（position、width、height、id、visibility、enabled、zIndex、opacity 等），同名就改为带语义前缀的名字（如 playbackPosition），并在规格表里写出成员名与源字段的对应。
 2. 实现时即使规格已给出成员名也再对照一次；该限制适用于所有自定义组件 struct，不只页面。发现规格名冲突时改名并回写规格。
 
+## 来源（按需复核）
+
+- [case-d33b282e5bf383e03328](../../../store/cases/case-d33b282e5bf383e03328/1dda694184b7fe969b4168eab455475da924bf8c39cf9e3dcdcb55cc6c09b7d4.json) · 结论：diagnosis, recommendation:3, recommendation:4
+  卡片版本：`1dda694184b7fe969b4168eab455475da924bf8c39cf9e3dcdcb55cc6c09b7d4`

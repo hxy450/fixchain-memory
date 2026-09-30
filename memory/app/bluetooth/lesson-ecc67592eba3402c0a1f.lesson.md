@@ -21,3 +21,7 @@ ID：`lesson-ecc67592eba3402c0a1f` · 版本：1
 1. 维护“设备 → 各协议状态”，任一协议仍为连接，或已连接设备并集中仍含该设备时，不判定断开或断开成功。
 2. 连接、配对、断开的成功提示都在收到系统回调或回读确认后再显示。
 
+## 来源（按需复核）
+
+- [case-c9f54856d3fb74cbd54b](../../../store/cases/case-c9f54856d3fb74cbd54b/44393c2b1eb069a8783fb6cdaf2173655cd8ced3e5c347c5d8df872baf20fba2.json) · 结论：diagnosis, recommendation:3
+  卡片版本：`44393c2b1eb069a8783fb6cdaf2173655cd8ced3e5c347c5d8df872baf20fba2`

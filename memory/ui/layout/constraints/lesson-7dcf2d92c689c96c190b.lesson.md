@@ -25,3 +25,7 @@ ID：`lesson-7dcf2d92c689c96c190b` · 版本：2
 1. 逐个检查子 View 是否有相对规则；没有的放进同一个 Stack，或用 position 定位到源端同一坐标。
 2. 写完把各子区块高度相加，与源 item 的固定高度对照；超出就说明把叠放写成了顺序排列。
 
+## 来源（按需复核）
+
+- [case-55bbad53c11b2d1b95e6](../../../../store/cases/case-55bbad53c11b2d1b95e6/0fc10fb1ff61028dc2a64bc1cea2a5a75c8437eb92967ddc5ada779fa4b263c7.json) · 结论：diagnosis, recommendation:3
+  卡片版本：`0fc10fb1ff61028dc2a64bc1cea2a5a75c8437eb92967ddc5ada779fa4b263c7`

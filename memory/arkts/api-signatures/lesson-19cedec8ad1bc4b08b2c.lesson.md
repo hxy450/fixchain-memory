@@ -29,3 +29,7 @@ ES Intl 与 @ohos.intl 声明都规定 style 为 currency 时必须提供 ISO-42
 
 - 无法运行时，用一个样例值（如 499 分）对照基线期望字符串核对格式化结果。
 
+## 来源（按需复核）
+
+- [case-a5c3358954b32d8de1a4](../../../store/cases/case-a5c3358954b32d8de1a4/7b21adbce08b927dc204f4850fa661029b29fca5233c7b7034838e100c1e6aa0.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
+  卡片版本：`7b21adbce08b927dc204f4850fa661029b29fca5233c7b7034838e100c1e6aa0`

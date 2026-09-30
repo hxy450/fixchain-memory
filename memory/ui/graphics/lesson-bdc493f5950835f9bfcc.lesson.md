@@ -26,3 +26,11 @@ centerInside 只缩不放，小于盒子的图标按固有尺寸居中；Contain
 
 - dumpLayout 读取图标 bounds 除以屏幕密度，与 Android 固有 dp 逐项对比。
 
+## 来源（按需复核）
+
+- [case-747484a613e86334516d](../../../store/cases/case-747484a613e86334516d/c17375c37c6410806f89e51707baf458f2a7269ddea6fe33e4ea348696489ff9.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3, recommendation:5
+  卡片版本：`c17375c37c6410806f89e51707baf458f2a7269ddea6fe33e4ea348696489ff9`
+- [case-9d7fa754a567e2ecec7e](../../../store/cases/case-9d7fa754a567e2ecec7e/08068dd456a4c32cc1327c39f339215b49dab4ffc8f5a25dc8024b7112ebbd28.json) · 结论：recommendation:4
+  卡片版本：`08068dd456a4c32cc1327c39f339215b49dab4ffc8f5a25dc8024b7112ebbd28`
+- [case-e7f02c687378e98dc213](../../../store/cases/case-e7f02c687378e98dc213/f677d5dd553cd45d59f7923188d8619553ab21da646d51a68e575b3586c406c8.json) · 结论：diagnosis, recommendation:1
+  卡片版本：`f677d5dd553cd45d59f7923188d8619553ab21da646d51a68e575b3586c406c8`

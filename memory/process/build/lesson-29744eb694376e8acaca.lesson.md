@@ -22,3 +22,11 @@ ID：`lesson-29744eb694376e8acaca` · 版本：3
 2. 报错只指向导入或单个符号时，修正导入（如改用全局可用的类型）并保留功能；确需降级时回写规格、把对应验收保持未完成，不以占位替换后报告通过。
 3. 报错指向不存在的 API 字段时，改用能承载同一内容的可用 API（例如用自定义弹窗承载复选框），而不是连内容一起删掉；只能临时降级时按占位规则登记丢失的控件与写入、回补位置，并在报告中列为行为差异。
 
+## 来源（按需复核）
+
+- [case-11c15d99c36e52d8aa59](../../../store/cases/case-11c15d99c36e52d8aa59/13cf01300f38651f13dba6e9eab38436d577ff8111953ca3aa037fc488b886af.json) · 结论：diagnosis, recommendation:1
+  卡片版本：`13cf01300f38651f13dba6e9eab38436d577ff8111953ca3aa037fc488b886af`
+- [case-9d7fa754a567e2ecec7e](../../../store/cases/case-9d7fa754a567e2ecec7e/08068dd456a4c32cc1327c39f339215b49dab4ffc8f5a25dc8024b7112ebbd28.json) · 结论：diagnosis, recommendation:2
+  卡片版本：`08068dd456a4c32cc1327c39f339215b49dab4ffc8f5a25dc8024b7112ebbd28`
+- [case-d8867d30fe76e4d44ceb](../../../store/cases/case-d8867d30fe76e4d44ceb/3537efdf372896502b8a0b63e22b06ece4e7d54e2c06ca2c8c0ff730e6a5f932.json) · 结论：diagnosis, recommendation:3
+  卡片版本：`3537efdf372896502b8a0b63e22b06ece4e7d54e2c06ca2c8c0ff730e6a5f932`

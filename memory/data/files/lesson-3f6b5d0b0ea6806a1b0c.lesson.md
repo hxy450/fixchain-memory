@@ -22,3 +22,7 @@ mkdirSync(dir, true) 的“递归”不等于“已存在即成功”，目录�
 2. 源端是覆盖写入时，移动或复制前显式处理已存在目标（unlinkSync 或确认 mode 语义）；把建目录、删旧、移动分开处理和记录，避免一个 catch 把可恢复的“已存在”判为整链失败。
 3. 在固定目录里重复执行的下载、设置链，写完按“第二次执行、目录与同名文件都已存在”走查一遍。
 
+## 来源（按需复核）
+
+- [case-1a45c3a64c664128775e](../../../store/cases/case-1a45c3a64c664128775e/1b2dcb8f0690a65d2e7512b4157ddffe7ada585da58cef24f9f7ef50fe96fe5a.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
+  卡片版本：`1b2dcb8f0690a65d2e7512b4157ddffe7ada585da58cef24f9f7ef50fe96fe5a`

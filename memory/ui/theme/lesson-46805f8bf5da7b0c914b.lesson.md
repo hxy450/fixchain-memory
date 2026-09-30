@@ -21,3 +21,7 @@ ID：`lesson-46805f8bf5da7b0c914b` · 版本：1
 1. 源背景是 Brush.horizontalGradient(colors.xxx) 时保留为 linearGradient({ direction: GradientDirection.Right, colors: [...] })，先在主题与 Color 定义中把调色板名解析成具体色阶顺序（如 interactivePrimary = Shadow4 → Shadow11）；源 Surface 为 Transparent 时目标 backgroundColor 也设透明。
 2. 渐变色阶用 $r 引用时逐个核对令牌值与源色值；缺的色阶按调色板命名新增条目后引用，或按流程回报 design_tokens_missing。
 
+## 来源（按需复核）
+
+- [case-4a0392021e915d5b60d1](../../../store/cases/case-4a0392021e915d5b60d1/378f0a8a42ee9a8396cd872dd333f44c057886acbe7053987099bc83f3af1790.json) · 结论：diagnosis, recommendation:3, recommendation:1
+  卡片版本：`378f0a8a42ee9a8396cd872dd333f44c057886acbe7053987099bc83f3af1790`

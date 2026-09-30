@@ -26,3 +26,11 @@ ID：`lesson-5bc9af19bedaecaf627c` · 版本：1
 2. 复制相邻用例的夹具时，确认预期中的成员满足被测函数的过滤条件（如确实在 mock 的可用列表中）；只有改变产品过滤语义才能变绿的用例，先判为夹具错误。
 3. 条目文字与实现冲突、又怀疑归属其他功能时，先查源端写入点与其他功能规格；无法确认就记为规格待确认，不直接写成要求当前方法实现的失败用例。
 
+## 来源（按需复核）
+
+- [case-742d1ed012293496650a](../../../store/cases/case-742d1ed012293496650a/aeaa74f6a3024eeb144e708c0d3ffb523700a5aadd350eb226d50e96febc9652.json) · 结论：diagnosis, recommendation:1, recommendation:2
+  卡片版本：`aeaa74f6a3024eeb144e708c0d3ffb523700a5aadd350eb226d50e96febc9652`
+- [case-d13badc5c213ff514cbf](../../../store/cases/case-d13badc5c213ff514cbf/1f0879100cd143bf31d5d71fe26739212af48f8c5c283eecc2f41831a016c904.json) · 结论：recommendation:2
+  卡片版本：`1f0879100cd143bf31d5d71fe26739212af48f8c5c283eecc2f41831a016c904`
+- [case-ef8330b60b73e7df48fd](../../../store/cases/case-ef8330b60b73e7df48fd/efcb9b2a733ba75ff0fb5e7ac4e796b7fa7bb049b9393f55f564d6138bc5f5ed.json) · 结论：diagnosis, recommendation:1
+  卡片版本：`efcb9b2a733ba75ff0fb5e7ac4e796b7fa7bb049b9393f55f564d6138bc5f5ed`

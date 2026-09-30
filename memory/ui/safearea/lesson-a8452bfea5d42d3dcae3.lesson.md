@@ -25,3 +25,7 @@ setWindowLayoutFullScreen(true) 让窗口内容铺到系统栏下，expandSafeAr
 
 - 工程开启了全屏布局，却找不到任何 getWindowAvoidArea 读取或基于避让高度的 padding 时，视为安全区未落实；有设备时截图核对标题与状态栏的纵向区间不重叠。
 
+## 来源（按需复核）
+
+- [case-57a2aab5dd7835648d69](../../../store/cases/case-57a2aab5dd7835648d69/ed5970e0c92c3f4c6519a62ea560cfbab2e6927727a69c6e7430ebc372453828.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
+  卡片版本：`ed5970e0c92c3f4c6519a62ea560cfbab2e6927727a69c6e7430ebc372453828`

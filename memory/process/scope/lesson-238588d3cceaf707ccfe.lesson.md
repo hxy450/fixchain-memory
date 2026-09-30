@@ -26,3 +26,7 @@ ID：`lesson-238588d3cceaf707ccfe` · 版本：1
 2. 巡检发现替代页不可达时，修法先对照决策作用域；任何可见入口都会改动受保护页面时，给出不改变可见结构的入口（如给已有区域加长按手势），或标为决策冲突上报。
 3. 在对等页面加入口前，列出该区域在源端的全部子元素；出现源端没有的可见控件即视为越界。
 
+## 来源（按需复核）
+
+- [case-ef57c4f09ada0a4edec0](../../../store/cases/case-ef57c4f09ada0a4edec0/a5b81e51fb3ba901fb07b360b6cc61e36e32a7580d2019a94292a53870fe4444.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
+  卡片版本：`a5b81e51fb3ba901fb07b360b6cc61e36e32a7580d2019a94292a53870fe4444`

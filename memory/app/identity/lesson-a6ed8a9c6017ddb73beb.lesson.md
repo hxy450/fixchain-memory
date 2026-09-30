@@ -21,3 +21,7 @@ ID：`lesson-a6ed8a9c6017ddb73beb` · 版本：1
 1. 读取 bundleManager.getBundleInfoForSelfSync(bundleManager.BundleFlag.GET_BUNDLE_INFO_DEFAULT) 的 versionName / versionCode。
 2. 删除占位标记后 grep 页面代码，确认没有与 app.json5 相同的版本字面量。
 
+## 来源（按需复核）
+
+- [case-f935850c669c48f05a00](../../../store/cases/case-f935850c669c48f05a00/69dfa72ef88368edd0415d1e9f4e42348abeb6abd342525bb8b208074d2011a3.json) · 结论：diagnosis, recommendation:3, recommendation:4
+  卡片版本：`69dfa72ef88368edd0415d1e9f4e42348abeb6abd342525bb8b208074d2011a3`

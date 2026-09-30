@@ -22,3 +22,7 @@ ID：`lesson-e6b1f9094ec3b905cab5` · 版本：1
 2. 同名媒体已存在时，打开核对它画的是哪一帧。
 3. 资源迁移阶段为保证引用可解析导出起始帧静态 SVG 时，在资源映射表同一行写明“仅起始帧，动画与终点帧已丢弃”。
 
+## 来源（按需复核）
+
+- [case-753b41488ff67ec1d068](../../../store/cases/case-753b41488ff67ec1d068/24570f598b1c5b1bdb181efddaac5a79a2aac2ad6e83f5f171a7107944d77842.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:4
+  卡片版本：`24570f598b1c5b1bdb181efddaac5a79a2aac2ad6e83f5f171a7107944d77842`

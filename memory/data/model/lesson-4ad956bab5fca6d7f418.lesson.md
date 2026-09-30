@@ -23,3 +23,9 @@ ID：`lesson-4ad956bab5fca6d7f418` · 版本：2
 3. 改写入键或删除范围前读源端状态创建与删除实现，逐项对齐：哪种完成模式写成员 ID，实例日期条件是否只对重复事件生效。
 4. 按审查意见修一个范围缺陷时只改意见指明的条件，不顺带改变共享/私有语义；确需改变以源码为据说明。为三类组合（任一成员非重复、任一成员重复、全部成员）各备写入、他人查询与撤销后的回归数据。
 
+## 来源（按需复核）
+
+- [case-32cd7964a05af40fea9a](../../../store/cases/case-32cd7964a05af40fea9a/9837f9192fc6f6dc634af7630f76bec511c1f81865e99d6d9b91d62f042d549c.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
+  卡片版本：`9837f9192fc6f6dc634af7630f76bec511c1f81865e99d6d9b91d62f042d549c`
+- [case-9831097c34ea91e10955](../../../store/cases/case-9831097c34ea91e10955/eb48d48452e3c299998d43df266d76d64c34ee78e80ab090ee418f3e9ea21df6.json) · 结论：diagnosis, recommendation:1, recommendation:2
+  卡片版本：`eb48d48452e3c299998d43df266d76d64c34ee78e80ab090ee418f3e9ea21df6`

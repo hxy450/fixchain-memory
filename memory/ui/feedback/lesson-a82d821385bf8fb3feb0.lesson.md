@@ -27,3 +27,13 @@ ID：`lesson-a82d821385bf8fb3feb0` · 版本：1
 3. XML 里已有的静态文案与图标作为首帧默认值同步渲染；共享快照的加载钩子只合并本来源负责的字段，不新建快照整体替换。
 4. 可选的附属数据（历史、节假日）单独 try/catch，失败或空结果都不覆盖主数据和已有列表。
 
+## 来源（按需复核）
+
+- [case-4dad731ff5682f738fa4](../../../store/cases/case-4dad731ff5682f738fa4/6168f9d70770bc1fc216ded48fcf43b43c7ca6922885699c785f7542476f9da0.json) · 结论：diagnosis, recommendation:1, recommendation:2
+  卡片版本：`6168f9d70770bc1fc216ded48fcf43b43c7ca6922885699c785f7542476f9da0`
+- [case-b59456e0156cf1b82ad6](../../../store/cases/case-b59456e0156cf1b82ad6/46b98bf7c659544be609e04289fc8912a181b381f6d9a2e585c36845ef62af27.json) · 结论：diagnosis
+  卡片版本：`46b98bf7c659544be609e04289fc8912a181b381f6d9a2e585c36845ef62af27`
+- [case-cf6e5b0120e30d1395dd](../../../store/cases/case-cf6e5b0120e30d1395dd/b9d68df544a7243c08d693c40c5cc2e10739c6b1ade0979e0a38df5aaf8e78e4.json) · 结论：diagnosis, recommendation:1, recommendation:2
+  卡片版本：`b9d68df544a7243c08d693c40c5cc2e10739c6b1ade0979e0a38df5aaf8e78e4`
+- [case-e7af91622703010ed47f](../../../store/cases/case-e7af91622703010ed47f/ca3bef0c958a548e08983f174d26cced13cdd7ea2a57be3536b0c7ea8d2a7c32.json) · 结论：diagnosis, recommendation:1
+  卡片版本：`ca3bef0c958a548e08983f174d26cced13cdd7ea2a57be3536b0c7ea8d2a7c32`

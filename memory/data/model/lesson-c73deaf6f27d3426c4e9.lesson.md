@@ -21,3 +21,7 @@ ID：`lesson-c73deaf6f27d3426c4e9` · 版本：1
 1. 对每个数值字段同时列出来源模型与目标模型已声明的单位，不同就在构造处显式换算，不以“源码直传”作为等价依据。
 2. grep 目标字段的现有消费方（显示拼接、×1000 转换等）确认目标单位域。
 
+## 来源（按需复核）
+
+- [case-bcd193a878c677a92cc0](../../../store/cases/case-bcd193a878c677a92cc0/a0f7a870be1933bffe828633f63435bda8846f686d6255bbf56d20673cc7ea46.json) · 结论：diagnosis, recommendation:1, recommendation:2
+  卡片版本：`a0f7a870be1933bffe828633f63435bda8846f686d6255bbf56d20673cc7ea46`

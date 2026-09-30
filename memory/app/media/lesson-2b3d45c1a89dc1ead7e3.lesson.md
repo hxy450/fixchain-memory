@@ -22,3 +22,7 @@ ArkUI Video 播放本地文件需要 URI；裸沙箱路径传入不报错，只�
 2. 把缓存/预载接口接到播放器前，核对它返回文件系统路径还是可播放 URI；传路径时在参数契约里注明格式。
 3. 同一接线任务改动了某处 Video 的来源后，逐个检查工程内其他 Video src 是否经过同样的转换。
 
+## 来源（按需复核）
+
+- [case-2515d9d83b3905d78424](../../../store/cases/case-2515d9d83b3905d78424/92c33239d3edb6eff856e7313cd414ce1c6de877a712e83a1b9cc27fc776b36b.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
+  卡片版本：`92c33239d3edb6eff856e7313cd414ce1c6de877a712e83a1b9cc27fc776b36b`

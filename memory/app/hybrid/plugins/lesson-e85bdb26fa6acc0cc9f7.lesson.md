@@ -26,3 +26,9 @@ Flutter 应用 Dart 冻结；本地兼容包把系统选择器结果包装成 As
 
 - 改动共享选图入口后，至少打开一个依赖宽高的页面，并用千万像素级相机原图走会压缩或上传的入口，同时过滤 hilog 中的 FlutterWatchdog 与 BUSSINESS_THREAD_BLOCK_3S/6S。
 
+## 来源（按需复核）
+
+- [case-64090e208edc24d57300](../../../../store/cases/case-64090e208edc24d57300/0756a248ab4a76e6552d3400a0989a2b2c6dd261eb316f12770137719651c4fc.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
+  卡片版本：`0756a248ab4a76e6552d3400a0989a2b2c6dd261eb316f12770137719651c4fc`
+- [case-d166fd60d66832c204bc](../../../../store/cases/case-d166fd60d66832c204bc/4648fa06f0a9fabfb6528377404ad8649b35325131d57ed0913b90e17ab3d92f.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3, recommendation:4
+  卡片版本：`4648fa06f0a9fabfb6528377404ad8649b35325131d57ed0913b90e17ab3d92f`

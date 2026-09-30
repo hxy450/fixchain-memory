@@ -21,3 +21,7 @@ ViewModel 实现阶段，编排页面初始化方法中异步存储/SDK 绑定�
 1. 把源端同步设置的输入类状态（关键词、输入框文本、清除按钮可见性）放在第一个 await 之前赋值；异步步骤只加载数据，不在续体里回写用户可编辑字段。
 2. 确需在续体赋值时，先确认字段仍是进入时的值再写。
 
+## 来源（按需复核）
+
+- [case-7b90b1ebaae140988b90](../../../store/cases/case-7b90b1ebaae140988b90/30d01989c7dc2ab2b6f917df7ad2afba49c66c5d0889f6324c8ad9ba83ad6544.json) · 结论：diagnosis, recommendation:1, recommendation:2
+  卡片版本：`30d01989c7dc2ab2b6f917df7ad2afba49c66c5d0889f6324c8ad9ba83ad6544`

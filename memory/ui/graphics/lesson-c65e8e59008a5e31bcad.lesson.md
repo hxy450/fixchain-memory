@@ -20,3 +20,7 @@ ID：`lesson-c65e8e59008a5e31bcad` · 版本：1
 
 1. 按源端取值字段拆分映射函数（图标、背景、第二套图标各一个），在每个使用处按源端绑定的字段选择。
 
+## 来源（按需复核）
+
+- [case-9d7fa754a567e2ecec7e](../../../store/cases/case-9d7fa754a567e2ecec7e/08068dd456a4c32cc1327c39f339215b49dab4ffc8f5a25dc8024b7112ebbd28.json) · 结论：diagnosis, recommendation:3
+  卡片版本：`08068dd456a4c32cc1327c39f339215b49dab4ffc8f5a25dc8024b7112ebbd28`

@@ -25,3 +25,7 @@ ID：`lesson-fd3add7128663eb9998f` · 版本：1
 
 - 改完点搜索栏中间的提示区，确认外层节点 clickable=true，且只进入一次目标页。
 
+## 来源（按需复核）
+
+- [case-adacd41d159c24498006](../../../store/cases/case-adacd41d159c24498006/52623310cff384d4d631931cb3ba7842cfaf2b307a632155d9385c258313b9a4.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
+  卡片版本：`52623310cff384d4d631931cb3ba7842cfaf2b307a632155d9385c258313b9a4`

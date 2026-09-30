@@ -25,3 +25,9 @@ aboutToAppear 只在组件创建时执行；子页 pop 返回时根页组件没�
 
 - 登录后返回该页、保存或删除记录后返回该页，数据无需重进即更新。
 
+## 来源（按需复核）
+
+- [case-46ac36102451125de693](../../../store/cases/case-46ac36102451125de693/86c57b38cd3897abac8b2c1d68ca50b219ea6c13be75dcd1fd0045e39be6fba6.json) · 结论：diagnosis, recommendation:2
+  卡片版本：`86c57b38cd3897abac8b2c1d68ca50b219ea6c13be75dcd1fd0045e39be6fba6`
+- [case-6077d9f3d384e0cb140f](../../../store/cases/case-6077d9f3d384e0cb140f/d4db908aa23c5fb9494c808b0986c8d73a46e81f50b35e70e79146b6235a6d02.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
+  卡片版本：`d4db908aa23c5fb9494c808b0986c8d73a46e81f50b35e70e79146b6235a6d02`

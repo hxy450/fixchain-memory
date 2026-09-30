@@ -26,3 +26,7 @@ onDispose 只在所在 Composable 离开组合时触发；外层 Composable 同�
 2. 写“页面销毁/页面退出”类判据前，列出源码里所有会改屏幕状态的入口，确认它们在目标端对应的导航动作不会被写成释放条件。
 3. 实现时把共享服务的最终释放放在拥有它的层级（如 EntryAbility.onDestroy），页面离开只解除自身监听；挂到页面回调前先确认页面挂载方式（Navigation 首页内容或 NavPathStack 页面）和推入子页时实际触发的回调。
 
+## 来源（按需复核）
+
+- [case-f4de4c0baf567b736a95](../../../../store/cases/case-f4de4c0baf567b736a95/4a91ed6ed85947112fda96591e5edd557cb0dd09e6db25063b92355193ac95c6.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
+  卡片版本：`4a91ed6ed85947112fda96591e5edd557cb0dd09e6db25063b92355193ac95c6`

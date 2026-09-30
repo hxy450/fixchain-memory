@@ -22,3 +22,7 @@ Android 页面以全屏 MapView/导航视图为底层，前景由 ViewModel 布�
 2. 驱动界面的常量与状态从源 ViewModel 一并迁移：Tab 顺序按其 tabData 与类型码映射，列表项字段按数据类与 item 布局，选中项按选中索引，距离等文本按源格式化函数；内部 id 不作用户可见标题。
 3. 地图/导航 SDK 不可用时，承载层仍放在全屏底层（占位面或显式未配置提示），前景覆盖层结构不变；源端无标题栏的导航页不加标题栏。
 
+## 来源（按需复核）
+
+- [case-ff24fb8ea8e66a1cadd5](../../../../store/cases/case-ff24fb8ea8e66a1cadd5/0f61ad0da67f3c08fc31506fea75dcac3fc3a6636c4a9df5d76a7e4d3a93830c.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
+  卡片版本：`0f61ad0da67f3c08fc31506fea75dcac3fc3a6636c4a9df5d76a7e4d3a93830c`

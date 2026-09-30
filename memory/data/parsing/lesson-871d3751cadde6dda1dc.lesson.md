@@ -27,3 +27,9 @@ Gson 会把 JSON 数字填入 String 字段、把数字字符串填入 Int 字�
 3. 响应壳等共享类型从模型规格表或 Android Bean 取字段类型并复用已有定义，不在网络层另写一份。
 4. 可用一组最小样例核对：{code:'200', msg:'ok', time:1723456789} 解析为 code=200、time='1723456789'；{id:123, aqi:'42'} 得到 id='123'、aqi=42。
 
+## 来源（按需复核）
+
+- [case-853ca988d9a2683b1c8d](../../../store/cases/case-853ca988d9a2683b1c8d/9481017a4a478ff69e2b3212fc23467ff3598149ba121d6de3e300271444d53d.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:4, recommendation:5
+  卡片版本：`9481017a4a478ff69e2b3212fc23467ff3598149ba121d6de3e300271444d53d`
+- [case-c9f068102d7b9057938e](../../../store/cases/case-c9f068102d7b9057938e/dfe948af75e0f1c102fa7d2444c640253b28a02af635ad7f4efaaf9e01ef20ed.json) · 结论：diagnosis, recommendation:1, recommendation:2
+  卡片版本：`dfe948af75e0f1c102fa7d2444c640253b28a02af635ad7f4efaaf9e01ef20ed`

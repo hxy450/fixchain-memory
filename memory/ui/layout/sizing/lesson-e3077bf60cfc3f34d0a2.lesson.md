@@ -21,3 +21,7 @@ ID：`lesson-e3077bf60cfc3f34d0a2` · 版本：2
 1. 需要随布局方向翻转时写 .margin({ bottom: LengthMetrics.vp(16), end: LengthMetrics.vp(16) })，并从 @kit.ArkUI 导入 LengthMetrics；同一对象内不混用数字与 LengthMetrics。
 2. 不需要 RTL 时统一写 left/right/top/bottom 数值（如 { bottom: 16, right: 16 }）。映射参考示例与 SDK 声明不一致时以声明为准，并修正参考。
 
+## 来源（按需复核）
+
+- [case-de8de9ff9274ca3ce884](../../../../store/cases/case-de8de9ff9274ca3ce884/d059c48a9b93c30e4e67d4f95f146b58539dcd29ad987d6d6a4b1dcdd3f6e3f8.json) · 结论：diagnosis, recommendation:2
+  卡片版本：`d059c48a9b93c30e4e67d4f95f146b58539dcd29ad987d6d6a4b1dcdd3f6e3f8`

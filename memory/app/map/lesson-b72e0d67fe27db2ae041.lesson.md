@@ -21,3 +21,9 @@ ID：`lesson-b72e0d67fe27db2ae041` · 版本：2
 1. authResults 中任一定位权限授予（至少模糊位置为 0）就继续定位；只有精确权限缺失时按降级精度处理，两项都拒绝才走失败提示。
 2. Android 的 ACCESS_FINE_LOCATION + ACCESS_COARSE_LOCATION 映射为 LOCATION + APPROXIMATELY_LOCATION：需要精确定位时，module.json5 的 requestPermissions 与 requestPermissionsFromUser 的列表都同时包含两项，LOCATION 不单独申请；调用定位 API 前查 d.ts 的 @permission 注解，不以通用常用权限表代替。
 
+## 来源（按需复核）
+
+- [case-8c249997059a2524ea7b](../../../store/cases/case-8c249997059a2524ea7b/921750461c1e7e278c419ca26c21b17048d692c94b180c54164c66f94aafa6e6.json) · 结论：diagnosis, recommendation:1, recommendation:2
+  卡片版本：`921750461c1e7e278c419ca26c21b17048d692c94b180c54164c66f94aafa6e6`
+- [case-f9c6cd0dc22c13bdcdd8](../../../store/cases/case-f9c6cd0dc22c13bdcdd8/49829f5fdc419a33101e6e6ef4b3c0cc17771d6649145267def11b9498e45dfc.json) · 结论：diagnosis, recommendation:1
+  卡片版本：`49829f5fdc419a33101e6e6ef4b3c0cc17771d6649145267def11b9498e45dfc`

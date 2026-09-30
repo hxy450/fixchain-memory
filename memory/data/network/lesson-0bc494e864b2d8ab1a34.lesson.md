@@ -21,3 +21,7 @@ ID：`lesson-0bc494e864b2d8ab1a34` · 版本：1
 1. 规格提取时，API 表也列出本功能调用的跨模块端点；遇到 @Body RequestBody 这类不透明参数就追到构造处，记下字段名和取值来源。
 2. 实现 Repository 时，从规格锚点里的 ViewModel 追到源端实际调用的 Repository 方法，逐项照搬 body 字段；先给每个 POST 端点列出字段出处，出处为空就读源码，不写 {} 占位。
 
+## 来源（按需复核）
+
+- [case-2c1f292dab668274366a](../../../store/cases/case-2c1f292dab668274366a/8c984c0d9f97cf54d6be55cd26b3b6970d0ee3325f5cddd2d1156632f23e3689.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
+  卡片版本：`8c984c0d9f97cf54d6be55cd26b3b6970d0ee3325f5cddd2d1156632f23e3689`

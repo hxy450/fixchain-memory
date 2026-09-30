@@ -28,3 +28,13 @@ ArkUI 中没有 onClick 的容器同样参与命中测试（HitTestMode.Default 
 - 调整 Stack 对齐、上层几何或新增定位壳后，对被覆盖区域的按钮逐个实际点击（不只看节点 clickable 与 bounds），检查 hilog 有无 Touch test result is empty。
 - 一次性动效层改动后，空闲态用 dumpLayout 确认该节点不存在，再实测点击、横滑与折叠。
 
+## 来源（按需复核）
+
+- [case-37ef7d33ab4655385e6f](../../../store/cases/case-37ef7d33ab4655385e6f/fdcf6c3cd31bc1665c4c5019cb403126011d55c2fef18000c729355e6c5af9ee.json) · 结论：recommendation:3, recommendation:4
+  卡片版本：`fdcf6c3cd31bc1665c4c5019cb403126011d55c2fef18000c729355e6c5af9ee`
+- [case-51d51ad98738e338df19](../../../store/cases/case-51d51ad98738e338df19/4b4648a54d0b19a84c842088554c0b057c5c8941db9a7d98ae885a39678a9db7.json) · 结论：diagnosis, recommendation:1
+  卡片版本：`4b4648a54d0b19a84c842088554c0b057c5c8941db9a7d98ae885a39678a9db7`
+- [case-57a208ad2e9541272704](../../../store/cases/case-57a208ad2e9541272704/8d2a2903f578b837bbe4fbae23c3df7cbdd8897003895ed0d906609949fd4c6d.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
+  卡片版本：`8d2a2903f578b837bbe4fbae23c3df7cbdd8897003895ed0d906609949fd4c6d`
+- [case-7d423b2bf98cdaabda82](../../../store/cases/case-7d423b2bf98cdaabda82/8441ff125fb267f472ee908947f3d00c83fcf6594fca7b15991b175092fe51b9.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
+  卡片版本：`8441ff125fb267f472ee908947f3d00c83fcf6594fca7b15991b175092fe51b9`

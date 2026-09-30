@@ -21,3 +21,9 @@ ID：`lesson-ad6f23b88f09b55dd92a` · 版本：1
 1. 替换前对照源码调用点，逐项比较页面片段与共享组件的颜色、尾部图标、形状与内边距；组件与源码不符时先修组件再替换，不以替换换取检查通过。
 2. 不为保持旧页面外观给共享组件传覆盖参数；只有源码在该调用点确有覆写时才传。
 
+## 来源（按需复核）
+
+- [case-5adfa1aabec5f52b2744](../../../store/cases/case-5adfa1aabec5f52b2744/8d73f1f55f7e5d92563cd9bff885e8803e2cdc7f766006a6e4539d1560ef5cbb.json) · 结论：recommendation:4
+  卡片版本：`8d73f1f55f7e5d92563cd9bff885e8803e2cdc7f766006a6e4539d1560ef5cbb`
+- [case-ed8b01a83bca9f70218f](../../../store/cases/case-ed8b01a83bca9f70218f/89421e3e5a72a2c844dc265044e86267d70a2e8a32d19b7d3e344b71719f3611.json) · 结论：recommendation:3
+  卡片版本：`89421e3e5a72a2c844dc265044e86267d70a2e8a32d19b7d3e344b71719f3611`

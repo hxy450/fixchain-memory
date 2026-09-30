@@ -22,3 +22,7 @@ ID：`lesson-2a4e6af209308c08aaa6` · 版本：1
 2. 源接口有 Response<> 包裹的端点时，HTTP 封装把响应头随结果返回（例如在响应对象上加 header 字段）；读取时兼容头名大小写。
 3. 实现登录 Repository 前读源 Repository 的成功回调，核对 token 与 refreshToken 各自来源；源端写了 refreshToken 时，不向保存函数传空串。
 
+## 来源（按需复核）
+
+- [case-31852e28af4327a408a3](../../../store/cases/case-31852e28af4327a408a3/7901de8f36fd97f41e540052b94a4d9fdf875fa7e6f69b23452e8f15f8fc467b.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
+  卡片版本：`7901de8f36fd97f41e540052b94a4d9fdf875fa7e6f69b23452e8f15f8fc467b`

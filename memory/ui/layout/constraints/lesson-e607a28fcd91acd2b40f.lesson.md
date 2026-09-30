@@ -31,3 +31,9 @@ ID：`lesson-e607a28fcd91acd2b40f` · 版本：3
 
 - 对居中结果有疑问时，用布局 dump 比较被居中视图的中心与容器内容区中心，单视图居中时两者应重合；无需另起截图任务。
 
+## 来源（按需复核）
+
+- [case-06c7df8f8d85e13580ac](../../../../store/cases/case-06c7df8f8d85e13580ac/ca52540bea37bccd8d5ad10a7f6923c33ff17356042c3c86ff15c469f7a1ac44.json) · 结论：diagnosis, recommendation:1
+  卡片版本：`ca52540bea37bccd8d5ad10a7f6923c33ff17356042c3c86ff15c469f7a1ac44`
+- [case-6448a485599bfc0740c6](../../../../store/cases/case-6448a485599bfc0740c6/ee79f91fda0232a915c1fd976889b9b074c5a5ebef6177e7b7704b4c30211b79.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
+  卡片版本：`ee79f91fda0232a915c1fd976889b9b074c5a5ebef6177e7b7704b4c30211b79`

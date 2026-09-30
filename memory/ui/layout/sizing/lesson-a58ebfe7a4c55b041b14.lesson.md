@@ -26,3 +26,7 @@ ArkUI 的百分比尺寸在由内容定尺寸的父级里会向上取到最近�
 2. 选中与未选中两态保留同样宽度的描边，未选中用 Color.Transparent，切换时尺寸不变。
 3. 写完 grep width('100%') 与 height('100%')，逐处确认父级有确定尺寸。
 
+## 来源（按需复核）
+
+- [case-2018daf21990f553ec22](../../../../store/cases/case-2018daf21990f553ec22/28ef980edd82e29589d8923bf1fff263161ff6975ab9fe8a33e7149e781419c0.json) · 结论：diagnosis, recommendation:2
+  卡片版本：`28ef980edd82e29589d8923bf1fff263161ff6975ab9fe8a33e7149e781419c0`

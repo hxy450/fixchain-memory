@@ -22,3 +22,11 @@ ID：`lesson-afae8d13e00941efe808` · 版本：1
 2. UI 测试被环境问题阻断时，改用 uitest 点击 + dumpLayout 做设备断言（点击后标题、日期等可见状态的变化）；修复前已存在的源码字符串在修复前后都会通过，不作为 RED/GREEN 依据。
 3. 编译被阻断、没有完成设备验证、功能点因宿主不可达被 BLOCKED 或页面因数据未加载不可见时，在交付说明中标为未验证，并回流为待补项或用静态检查覆盖，不写成已修复或通过。
 
+## 来源（按需复核）
+
+- [case-4a7f1aef1c804d227365](../../../store/cases/case-4a7f1aef1c804d227365/83a164c0c21b0ec53df7351e60b5c6f224aa9054a713f5374dfef8a8f3452270.json) · 结论：recommendation:3
+  卡片版本：`83a164c0c21b0ec53df7351e60b5c6f224aa9054a713f5374dfef8a8f3452270`
+- [case-7f25b9e411fd7ea08eb8](../../../store/cases/case-7f25b9e411fd7ea08eb8/b0032836632c952424844dd36317b057e3978e311730fb0f18415b55dc9cec96.json) · 结论：recommendation:4
+  卡片版本：`b0032836632c952424844dd36317b057e3978e311730fb0f18415b55dc9cec96`
+- [case-e5d42507c82fd492f62b](../../../store/cases/case-e5d42507c82fd492f62b/8893472b8fe96d909e01764d81865f80681f137f4e7482c990f84f36d5924130.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
+  卡片版本：`8893472b8fe96d909e01764d81865f80681f137f4e7482c990f84f36d5924130`

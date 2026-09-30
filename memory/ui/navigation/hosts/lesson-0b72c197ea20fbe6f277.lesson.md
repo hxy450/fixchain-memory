@@ -22,3 +22,7 @@ Android Activity 在 onCreate/initView 开头按条件 startActivity 到另一�
 2. 调用方翻译 Intent(X) 时，确认 X 是否一进入就跳走，导航指向用户实际看到的首屏。
 3. 报告若把无条件跳转改成了点击后跳转，把它作为行为改变显式标出。
 
+## 来源（按需复核）
+
+- [case-327636c44f08419021a9](../../../../store/cases/case-327636c44f08419021a9/a81fd42e755d24a97b9baac6d5a59e30f4af3c0e5b6ee50b74648ddf1e0cb781.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
+  卡片版本：`a81fd42e755d24a97b9baac6d5a59e30f4af3c0e5b6ee50b74648ddf1e0cb781`

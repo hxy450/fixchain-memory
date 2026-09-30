@@ -25,3 +25,7 @@ Image 组件缓存只作用于已经渲染过的图片，源端预取的是尚�
 1. 按源端规则在推进后选出后续 N 项（N 与跳过条件取当前源码），用 image.createImageSource(uri).createPixelMap() 一类解码接口预取到内存缓存；给缓存设上限并 release 被淘汰的 PixelMap，解码失败不阻断主流程。
 2. 写“无对等 API”前先查当前 SDK 的图片解码与缩略图接口；确实不能实现时按工程约定登记占位或决策，让对应验收项仍能被追踪，不只写在差异清单里。
 
+## 来源（按需复核）
+
+- [case-d9fc3c9129fee3f38c91](../../../store/cases/case-d9fc3c9129fee3f38c91/e59cc13b105334857fde72d014dceae630889a4a34e5a42ded01c5c4d92f765e.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
+  卡片版本：`e59cc13b105334857fde72d014dceae630889a4a34e5a42ded01c5c4d92f765e`

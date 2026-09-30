@@ -30,3 +30,15 @@ ID：`lesson-8119d8bf0b58e4daac24` · 版本：4
 
 - 改动带 clip 的自绘容器后，用行数不同的数据（如 5 行、6 行月份）及折叠中间态截图，核对末行完整、相邻面板不遮挡。
 
+## 来源（按需复核）
+
+- [case-0389a44b7fd28f48c094](../../../store/cases/case-0389a44b7fd28f48c094/bd04c4ab8c8692acfb38d631723e4a4a6f34243ffc490332ab7d81077ec41390.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
+  卡片版本：`bd04c4ab8c8692acfb38d631723e4a4a6f34243ffc490332ab7d81077ec41390`
+- [case-0dd25455d592a77ed652](../../../store/cases/case-0dd25455d592a77ed652/19d02d00861a1bd7de2ec6438327de64840673553c49ad924dd1632801b8a9d2.json) · 结论：recommendation:3
+  卡片版本：`19d02d00861a1bd7de2ec6438327de64840673553c49ad924dd1632801b8a9d2`
+- [case-55e8dd5a2281c1b13411](../../../store/cases/case-55e8dd5a2281c1b13411/49eaefef107874a24fa2bbe49d3fe9f863476afebacc98e78f10086d21554b59.json) · 结论：recommendation:4
+  卡片版本：`49eaefef107874a24fa2bbe49d3fe9f863476afebacc98e78f10086d21554b59`
+- [case-5b1c11815476c648a9dc](../../../store/cases/case-5b1c11815476c648a9dc/92beb152d27b49d2a0ff5099af02806a8dd65402fb1e8539656c9492ad7304d3.json) · 结论：diagnosis, recommendation:1, recommendation:2
+  卡片版本：`92beb152d27b49d2a0ff5099af02806a8dd65402fb1e8539656c9492ad7304d3`
+- [case-6a2ee155bd552b418d50](../../../store/cases/case-6a2ee155bd552b418d50/6dc0d6a18f682cfae946e22e5d47a2394f9371fc8cb5560d9120d9f5e5828386.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
+  卡片版本：`6dc0d6a18f682cfae946e22e5d47a2394f9371fc8cb5560d9120d9f5e5828386`

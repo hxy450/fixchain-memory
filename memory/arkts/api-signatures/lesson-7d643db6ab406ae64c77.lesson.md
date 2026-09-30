@@ -27,3 +27,9 @@ ID：`lesson-7d643db6ab406ae64c77` · 版本：2
 
 - 不确定时查编译中间产物：出现 this.xxx.bind(this)()，且该 builder 内部调用了与子组件成员同名的 this.yyy() 或读取页面独有的状态，即有错绑风险。
 
+## 来源（按需复核）
+
+- [case-24118d7af444a7062829](../../../store/cases/case-24118d7af444a7062829/fbf192a9e65930a755e50cbf7ca6668227d6f46275793d4bfa2859c279832928.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
+  卡片版本：`fbf192a9e65930a755e50cbf7ca6668227d6f46275793d4bfa2859c279832928`
+- [case-8081ee8b9265d77fd5a8](../../../store/cases/case-8081ee8b9265d77fd5a8/b45088a666c525a38b412ae81d73c335245dc4f9969f972d5b772297f6fe3503.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
+  卡片版本：`b45088a666c525a38b412ae81d73c335245dc4f9969f972d5b772297f6fe3503`

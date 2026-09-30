@@ -20,3 +20,7 @@ ID：`lesson-eb59181d6dfaeb014aef` · 版本：1
 
 1. 新增列表查询前，在源端找到该列表自己的排序器与排序键、方向，按其实现独立的比较函数；源端列表读取用户排序偏好时，只把适用于该列表的配置传入。
 
+## 来源（按需复核）
+
+- [case-ea1fc6a0711a8176b79c](../../../store/cases/case-ea1fc6a0711a8176b79c/7eacf7d6fe6f97cf98c91ebecec4431cc188b0bc40b4866c5d4f39bc62b18a23.json) · 结论：diagnosis, recommendation:1
+  卡片版本：`7eacf7d6fe6f97cf98c91ebecec4431cc188b0bc40b4866c5d4f39bc62b18a23`

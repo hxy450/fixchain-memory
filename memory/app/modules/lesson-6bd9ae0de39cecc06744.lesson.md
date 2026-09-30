@@ -26,3 +26,7 @@ HAR 里写 import { DEBUG } from 'BuildProfile' 时整包构建能由宿主解�
 
 - 模块化或插桩批次除 assembleHap 外，确认 features/components 中没有 from 'BuildProfile'、没有指向其他模块目录的相对路径导入，并按模块跑 ArkTS 检查。
 
+## 来源（按需复核）
+
+- [case-282d676ed02777809cac](../../../store/cases/case-282d676ed02777809cac/eab8108abf2710c6c0db3d794e2a5f56cc8185903938c300442069d2d2fc6ccc.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3, recommendation:4, recommendation:5
+  卡片版本：`eab8108abf2710c6c0db3d794e2a5f56cc8185903938c300442069d2d2fc6ccc`

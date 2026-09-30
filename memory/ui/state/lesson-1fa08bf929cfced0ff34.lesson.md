@@ -24,3 +24,11 @@ ID：`lesson-1fa08bf929cfced0ff34` · 版本：3
 4. 访问器返回 ResourceStr 而状态是 string 时，按工程已有方式解析资源（宿主 context 判空同时排除 undefined 与 null），不因类型不合回退成占位字符串。
 5. 源端经工具类把数值码映射成文案时，目标调用同表的映射函数，不用 toString() 输出原始码；再按 UI 数据模型逐字段核对每个显示字段都有来源。
 
+## 来源（按需复核）
+
+- [case-1cfad6c2eaf32070939a](../../../store/cases/case-1cfad6c2eaf32070939a/22c647b810d09efec62c8bd0f841bcc9e4f190e1a6f8e9f9a5ac20ff7e81d33d.json) · 结论：recommendation:3
+  卡片版本：`22c647b810d09efec62c8bd0f841bcc9e4f190e1a6f8e9f9a5ac20ff7e81d33d`
+- [case-1ea05be22c68b8603ea7](../../../store/cases/case-1ea05be22c68b8603ea7/4cc7a73bb9841e4befe283207b510fec7f3ef0deb69ddb7ca78c89528097c31c.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
+  卡片版本：`4cc7a73bb9841e4befe283207b510fec7f3ef0deb69ddb7ca78c89528097c31c`
+- [case-ca0f19f5d338e37a710e](../../../store/cases/case-ca0f19f5d338e37a710e/29933bfec96bf8cbcf277775edf599de86352a66da73c5531c5cd994d5ced700.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
+  卡片版本：`29933bfec96bf8cbcf277775edf599de86352a66da73c5531c5cd994d5ced700`

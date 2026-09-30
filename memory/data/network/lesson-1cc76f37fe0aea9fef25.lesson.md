@@ -26,3 +26,7 @@ Android 通过 Retrofit 通用 post(url, Map) 包装或 @FormUrlEncoded + @Field
 2. 搬迁或复用既有端点与 jsonBody 调用时，把它们当作未核验的现状，按上一条核对编码，不一致就在交接里列为待修。
 3. 发现一处表单被迁成 JSON 后，按模式检索全仓 jsonBody/默认 post 调用及对应源端 post(url, Map) 调用点，覆盖所有适配器和端点目录，不只修当前模块。
 
+## 来源（按需复核）
+
+- [case-5c348565d345d0c6b3bc](../../../store/cases/case-5c348565d345d0c6b3bc/f987b996a3cdc55b5cf4f8197fb8e77bd00d6c812d4f1a1df24a68fa7f451476.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
+  卡片版本：`f987b996a3cdc55b5cf4f8197fb8e77bd00d6c812d4f1a1df24a68fa7f451476`
