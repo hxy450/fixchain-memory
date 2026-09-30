@@ -2,4 +2,4 @@
 
 [打开分层 memory](memory/index.md)
 
-发布版本：`f4ada74daf7411ba475d1b9eefd120638cf13f95a1f2216e66b1f8b068702d55`
+发布版本：`808e61c9b254873ca3625ec75a2028df16c6ab55c16b313803acd1889540e931`
