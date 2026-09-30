@@ -21,9 +21,3 @@ ID：`lesson-11e9d15d947b30d2ce7e` · 版本：2
 1. 写日志前 rg 工程现有写法（如 import { hilog } from '@kit.PerformanceAnalysisKit' 与 TAG、DOMAIN 常量），照它写 hilog.error(DOMAIN, TAG, '<说明>: %{public}s', String(error))，TAG 取当前类名。
 2. 每个切片写完，rg -n 'console\.' 本次改动的 .ets 文件，已登记占位之外的命中都改成 hilog。
 
-## 来源（按需复核）
-
-- case-2b82a569104ca26f84ae · 结论：diagnosis, recommendation:1, recommendation:2
-  卡片版本：`f1850eb1032b509abdc74d54d07eb436c4dd08567fb70c7ba3e9ab984d43cf5d`
-- case-98e7bd27bb334db83f51 · 结论：diagnosis
-  卡片版本：`2bd8a63105c2a86e012e477614f9ed3d54d26dbfc05250b99a797f194a3e1b79`

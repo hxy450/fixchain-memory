@@ -1,0 +1,207 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-fa7bbda457517260efc4",
+  "created_at": "2026-09-27T22:17:34.284768+00:00",
+  "migration_key": "dc1176d6-edc1-4b76-a9d4-31bd94c63ea0",
+  "title": "天气首页加载状态机：全失败结果写成有效缓存，重复加载入口在单例 ViewModel 中互相取消",
+  "when": "功能切片的数据层与页面接线阶段，实现首页天气的按城市 TTL 缓存判定、请求取消语义及页面加载入口时",
+  "description": "Android ViewModel 按城市以 refreshTime+4h 缓存首页与趋势两路并发结果（两支各自可失败），迁移为 ArkTS 单例 ViewModel/Service，页面同时存在 aboutToAppear、Refresh(onRefreshing) 等多个加载入口；规格要求成功后才写缓存、按 areaId 丢弃旧城市迟到响应。",
+  "summary": "同一生成者（Slice 6/F002 实现 agent 019ff63c）在 08-13 04:18 写前拿到三类输入：\nF002 规格（Get-Content 未指定 UTF8，中文在回执里是 GBK 乱码，但 AC 编号、Promise.allSettled、areaId、generation key 等 ASCII 部分可辨；\n原文含 AC02“缓存不存在时请求并在成功后写入该城市独立缓存”、实现映射“不把空模型等同网络成功”、\n状态段“请求切城时以 areaId 作为 generation key”、AC34“一次刷新只产生一次首页请求”）；\ndecision-ledger D-008（可读：“网络失败优先读有效缓存”）；\nAndroid NewWeatherViewModel（initData 每次只启动一组 home+trend 并发请求，viewModelScope 不取消前一组；\n但两支均失败时仍以空 WeatherHomeBean/FortyDayTrendBean 和当前 refreshTime 写缓存）。\n生成者在源码笔记中自述“网络失败时保留缓存”“切城用 generation 丢弃迟到响应”。\n输出却在两处偏离：\n(1) WeatherService.loadHome（04:24:23 写入）只在“已有缓存且两支都失败”时返回旧缓存；无缓存且两支都失败时\n仍 new WeatherHomeCacheRecord(Date.now(), null, null) 落盘，缓存命中条件只看 savedAt < 4h，\n于是一次失败被当作 4 小时有效缓存，之后冷启动直接返回空结果、不再请求。\n(2) WeatherViewModel.run（04:24:45 写入）对任何新请求先 cancel() 上一请求、generation 全局递增，\n而非按 areaId 只丢弃旧城市响应；04:27:39 接线 NewWeatherComponent 时又把 aboutToAppear→loadWeather\n与 refreshWeather→loadHome(force).then(loadWeather) 都接到这一单例上，页面没有单飞保护。\n修复期 14:01–14:18 另一修复 agent 改为按 @Param areaId 请求、仅激活页加载，并把 refreshWeather 改为 loadWeather(true)，\n但保留 aboutToAppear 与 Refresh 两个入口；16:42 真机日志同一时刻出现 homeV2/fortyDayTrend 各一条 cancelled\n及随后一组失败（main-019ffb4e…jsonl:L1357），主代理判定页面初始化触发两次 loadWeather（L1361）。\n最终修复：WeatherService 命中缓存要求 home 或 trend 非空，全失败且无有效缓存时抛 WeatherBranchError（L1334-L1335）；\nNewWeatherComponent 增加 loadInFlight 单飞（L1363-L1364），16:54 复测只剩一组请求（L1484）。\n注意：修复者称“与安卓请求成功才更新一致”，但生成者读到的 Android 源码两支失败也写空缓存；\n此处真正被违反的是 F002 AC02/D-008，而非 Android 字面行为。\n",
+  "recommendations": [
+    "数据层实现阶段：多分支聚合写 TTL 缓存前，先判断是否至少一支成功；全部失败时不写入新时间戳，有旧有效缓存则回退，否则抛出/暴露分支错误。缓存命中条件同时校验时效和载荷非空。最小检查：模拟两支都失败后再调用一次，第二次必须重新请求。",
+    "源码字面行为（如 Android 失败也写空 bean）与规格 AC（成功后写入）、ledger（网络失败读有效缓存）冲突时，按规格/ledger 实现，并在报告中写明与源码的差异，不以“忠实复刻”静默照搬。",
+    "共享单例 ViewModel 的取消语义按规格键实现（如以 areaId 为 generation key 只丢弃旧城市迟到响应），不要写成“任何新请求取消上一请求”；同城重复调用应合并或复用在途请求。",
+    "页面接线时列出所有加载入口（aboutToAppear、Refresh 的 refreshing 初值与 onRefreshing、@Monitor 等），在调用单例加载方法前加单飞/在途复用，并核对冷启动时实际触发次数。",
+    "在 Windows PowerShell 5.1 读取 UTF-8 规格须显式 -Encoding UTF8；回执中出现乱码时重读，不凭 ASCII 片段实现验收条款。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "D:/HnaccurateWeather_HarmonyOS/entry/src/main/ets/services/WeatherService.ets",
+        "since": "2026-08-13T13:29:02.643Z",
+        "at": "2026-08-21T09:35:59.738Z"
+      },
+      "nodes": [
+        {
+          "key": "D:/HnaccurateWeather_HarmonyOS/spec/baseline/features/F002-weather.md",
+          "at": "2026-08-13T04:18:25.551Z",
+          "reason": "正常输入（有编码缺陷）：生成者 Get-Content -Raw 读取 F002 全文。原文 AC02 要求“缓存不存在时请求并在成功后写入该城市独立缓存”，实现映射写“不把空模型等同网络成功”；回执中文为 GBK 乱码，AC 编号与 Promise.allSettled、areaId 等 ASCII 可辨（agent-019ff63c…jsonl:L2412-L2413）。"
+        },
+        {
+          "key": "D:/HnaccurateWeather_HarmonyOS/spec/decision-ledger.md",
+          "at": "2026-08-13T04:18:25.551Z",
+          "reason": "正常输入：同一调用中 Select-String 取出的 D-008 可读，明确“网络失败优先读有效缓存”；空的失败结果不是有效缓存（同转录 L2412-L2413）。"
+        },
+        {
+          "key": "E:/Androidproject/app_hnaccurateweather_live_android/app/src/main/java/com/cstools/weather/ui/weather/viewmodel/NewWeatherViewModel.kt",
+          "at": "2026-08-13T04:18:38.246Z",
+          "reason": "源码输入：initData 按 refreshTime+4h 判定缓存；getHomeWeatherInfoAndFortyDayTrend 两支失败时仍用空 bean 和当前 refreshTime 调 CacheUtil.updateSharedPreferences。说明 Android 字面代码也会写空缓存，本项偏离依据是规格/ledger 而非源码（同转录 L2416-L2417）。"
+        },
+        {
+          "key": "agent-019ff63c-2781-7133-806d-caa5045ec057.jsonl",
+          "at": "2026-08-13T04:24:23.632Z",
+          "reason": "偏差输出：Add File 写出 loadHome，缓存命中只判断 cached!==null 且 savedAt<4h；两支均失败时仅在已有缓存时回退，无缓存则仍以 Date.now() 写入 home/trend 皆 null 的记录，把失败结果变成 4 小时有效缓存。与其随后笔记“网络失败时保留缓存”（L2574-L2575）及 D-008/AC02 不符（同转录 L2546-L2547）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4,
+          "force": true,
+          "reason": "exec 调用 Get-ChildItem spec/baseline/features 过滤 F002 后 Get-Content -Raw 输出全文，回执含 F002-weather.md 路径及 AC02/AC10/AC34、generation key 等内容；这是生成者写前对该规格的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff63c-2781-7133-806d-caa5045ec057.jsonl",
+              "line": 2412
+            },
+            {
+              "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff63c-2781-7133-806d-caa5045ec057.jsonl",
+              "line": 2413
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 4,
+          "force": true,
+          "reason": "同一 exec 调用对 spec/decision-ledger.md 执行 Select-String 取 D-003/D-005/D-008/D-012，回执可读地返回 D-008“网络失败优先读有效缓存”；这是生成者写前对 ledger 的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff63c-2781-7133-806d-caa5045ec057.jsonl",
+              "line": 2412
+            },
+            {
+              "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff63c-2781-7133-806d-caa5045ec057.jsonl",
+              "line": 2413
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "exec 调用在 E:/Androidproject 源码根按文件名查找并输出 NewWeatherViewModel.kt 等，回执以该完整路径为标题返回 initData 与 getHomeWeatherInfoAndFortyDayTrend 源码；这是生成者写前对该源码的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff63c-2781-7133-806d-caa5045ec057.jsonl",
+              "line": 2416
+            },
+            {
+              "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff63c-2781-7133-806d-caa5045ec057.jsonl",
+              "line": 2417
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "D:/HnaccurateWeather_HarmonyOS/entry/src/main/ets/pages/NewWeatherComponent.ets",
+        "since": "2026-08-13T13:29:02.643Z",
+        "at": "2026-08-21T09:35:59.738Z"
+      },
+      "nodes": [
+        {
+          "key": "D:/HnaccurateWeather_HarmonyOS/spec/baseline/features/F002-weather.md",
+          "at": "2026-08-13T04:18:25.551Z",
+          "reason": "正常输入：状态段“请求切城时以 areaId 作为 generation key；旧城市晚到响应不得覆盖新城市页面”（ASCII 部分可辨）、AC10 同义、AC34“一次刷新只产生一次首页请求”；只要求按城市丢弃迟到响应，未要求同城新请求取消在途请求（agent-019ff63c…jsonl:L2412-L2413）。"
+        },
+        {
+          "key": "E:/Androidproject/app_hnaccurateweather_live_android/app/src/main/java/com/cstools/weather/ui/weather/viewmodel/NewWeatherViewModel.kt",
+          "at": "2026-08-13T04:18:38.246Z",
+          "reason": "源码输入：initData 每次只 launch 一组 home+trend 的 viewModelScope.async 请求，后续调用不会取消已在途的前一组（同转录 L2416-L2417）。"
+        },
+        {
+          "key": "agent-019ff63c-2781-7133-806d-caa5045ec057.jsonl",
+          "at": "2026-08-13T04:27:39.378Z",
+          "reason": "偏差输出：04:24:45 写入的 WeatherViewModel.run 对任何新调用先 cancel() 上一请求、generation 全局递增（L2553-L2554）；04:27:39 接线本文件时，把 aboutToAppear→loadWeather→vm.loadHome 与 refreshWeather→loadHome(force).then(loadWeather) 都接到该单例，未加单飞，页面多个加载入口可互相取消（L2598-L2599）。写前已读到本文件 refreshing 初值 true 与 aboutToAppear→loadWeather（L2501-L2502）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "exec 调用 Get-ChildItem spec/baseline/features 过滤 F002 后 Get-Content -Raw 输出全文，回执含 F002-weather.md 路径及 AC02/AC10/AC34、generation key 等内容；这是生成者写前对该规格的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff63c-2781-7133-806d-caa5045ec057.jsonl",
+              "line": 2412
+            },
+            {
+              "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff63c-2781-7133-806d-caa5045ec057.jsonl",
+              "line": 2413
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "exec 调用在 E:/Androidproject 源码根按文件名查找并输出 NewWeatherViewModel.kt 等，回执以该完整路径为标题返回 initData 与 getHomeWeatherInfoAndFortyDayTrend 源码；这是生成者写前对该源码的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff63c-2781-7133-806d-caa5045ec057.jsonl",
+              "line": 2416
+            },
+            {
+              "source": "runs/f654fdb1-141f-4c4a-9963-2f2fc868b714/epoch-0/sessions/agent-019ff63c-2781-7133-806d-caa5045ec057.jsonl",
+              "line": 2417
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "修复者未写明 16:42 第二次 loadWeather 的触发源。按当时代码，同一实例初始化的入口只有 aboutToAppear、@Monitor('isActive')（修复期 14:18 新增，初始化时参数值不变）与 Refresh（生成期 UI 转换器以 refreshing=true 初始化并绑定 onRefreshing→refreshWeather）；最可能是后者，但材料中没有直接回执确认 ArkUI 在 refreshing 初值为 true 时触发 onRefreshing。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-fa7bbda457517260efc4",
+  "metadata": {
+    "migration": {
+      "project": "app_hnaccurateweather_live_android",
+      "server_session_id": "dc1176d6-edc1-4b76-a9d4-31bd94c63ea0"
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "440cf162-4136-497e-b93d-c5037e2bf6a7"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "gpt-5.6-sol"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.147.0-alpha.6.5",
+        "0.147.0-alpha.6.6",
+        "0.148.0-alpha.15"
+      ]
+    },
+    "source_set_id": "sources-c7d168a1d2603d15ed6b",
+    "card_tool_version": "0.8.3"
+  },
+  "revision": "58d73cfa31553fee929796eb72c6f37fc2faba952a2e2f334aa420b8f0325b08"
+}

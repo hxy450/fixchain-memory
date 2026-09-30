@@ -22,13 +22,3 @@ ID：`lesson-77ca67f164d77ec63cda` · 版本：1
 2. 中间文件只给出指针（拦截器路径加 header_write 标签、地址键名、枚举名）时，沿指针读源码，把具体值（头名与格式、各环境 host、码与动作）写进规格；读不到就写“未解析，待核”并注明源文件。
 3. 规格写“见某数据源”之前，确认该数据源确实含这些值；查不到就写未核和源码位置，不保留推断值。
 
-## 来源（按需复核）
-
-- case-31852e28af4327a408a3 · 结论：diagnosis, recommendation:1
-  卡片版本：`7901de8f36fd97f41e540052b94a4d9fdf875fa7e6f69b23452e8f15f8fc467b`
-- case-69bfbfee5841bf8c60cf · 结论：diagnosis, recommendation:1
-  卡片版本：`2798032985b4b2364eb1764bb0a269cda08617887fbebf8f07e1a8d025e06f7f`
-- case-7478183bbcfea10865d1 · 结论：diagnosis, recommendation:2
-  卡片版本：`6a67c10c5843039d9605d2674ad05a8fd93aeb449ce5b1925b68e23389947a5d`
-- case-b000698af8cbbc664b87 · 结论：diagnosis, recommendation:1
-  卡片版本：`acc888ff43f4b5d71e80aba0739c35c15dd80e7fa4ad95bf37aeb8acebfc619b`

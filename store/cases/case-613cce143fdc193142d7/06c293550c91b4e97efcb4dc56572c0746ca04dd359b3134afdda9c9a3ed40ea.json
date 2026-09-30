@@ -1,0 +1,346 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-613cce143fdc193142d7",
+  "created_at": "2026-09-27T18:07:22.098149+00:00",
+  "migration_key": "9264617d-5373-4aca-8c7d-94c70606545c",
+  "title": "网络装配根以空baseUrl/签名材料构造HttpClient且未实现AES响应解码，登录请求发包前即被拦截",
+  "when": "基础设施实现与装配阶段，实现网络运行配置来源、响应解密并在装配根注入HttpClient时；以及编排者处理网络巡检BLOCKER时",
+  "description": "Android通过BuildConfig/gradle注入API_HOST、请求签名材料和release AES_KEY，并在Gson解析前做Base64+AES/CBC解密；目标端决策要求密钥不进源码、构建期从本地私有配置注入，网络层对空配置fail-closed；另有决策记录“未提供测试环境base_url/测试账号”。",
+  "summary": "写前输入已正确且足够：api-inventory common.md 记录 BaseURL 来自 BuildConfig.API_HOST（debug/release 分别取测试/生产地址），\n签名规则追加私有 secret 后 MD5，release 响应在解析前按 AES/CBC/PKCS5Padding（key=IV，Base64 输入）解密；\nchain-auth L0/L2 标明 BaseUrl、MD5、AES-CBC 均已捕获，“HMOS 由 Base network 接线”；\n决策 D-013 要求签名/加密材料经构建 profile 或 gitignored 本地私有配置注入、由 Base Network 集中读取配置并保持 MD5/AES 语义；\nD-009 要求网络、鉴权、签名与解密只在 Base Network 实现一份；D-005 虽写“未提供测试 base_url/测试账号”，\n但作用域限定为登录联调时点，明确不得外延为把请求失败当成功。\nBase-3 网络实现者（base_network_events）读到上述全部内容及 Android App.kt 的 beforeResponse→aesDecrypt、gradle 的 API_HOST/AES_KEY，\n却只把 baseUrl/signSecret/responseDecoder 设计成 NetworkRuntimeConfig 构造参数（decoder 默认 null），未实现 AES 解码器，也未实现任何配置读取；\nHttpClient 在 baseUrl 或 signSecret 为空时直接返回 network configuration unavailable，decoder 为 null 时原样透传，\n回执称“签名密钥与响应解码器通过 NetworkRuntimeConfig 注入”（agent-01a08b71…jsonl:L137-L140、L185）。\n三次 closer 未写出装配根后，execute_four_pages 接管 Base-6.5，读到 HttpClient 空配置守卫、NetworkRuntimeConfig 签名与账本 D-013/D-005/D-009，\n于 13:27 创建 AppAssembly.ets：new NetworkRuntimeConfig('', '9.9.9', '004', '100001', '158', 'HarmonyOS', '')，不传 decoder\n（agent-01a08b18…jsonl:L2108-L2111），随后在 base-contracts.md 写下“D-005/D-013 约束：仓库未保存测试 Base URL 或签名材料；配置缺失时网络返回明确失败”（L2141-L2142），\n即把“测试环境未提供”和“密钥不进源码”解释成“装配空配置”，未消费任何构建期配置源。\n生成期网络巡检 NG01-01 已把此项判为 BLOCKER（空 baseUrl/signSecret 使所有自有后端请求本地失败；D-013 要求私有配置注入；不要把密钥不写源码外延为永久拒绝服务）。\n编排者读到报告后派发 patrol_repair_network_g1 因 agent thread limit reached 失败（L3345-L3354），上下文随即压缩；\n14:33 又完整重读账本 D-013/D-005，14:38 同一补丁修了同报告的 NG01-02/03（installCapabilities 返回 ready 并水合会话），\n却未改 networkConfig（L3481-L3490、L3602-L3605）。之后的装配根写入也未触及该行，生成结束时空配置与无解码器保留。\n09-14 真机登录报“网络配置不可用”，修复改为构建期从环境变量或 gitignored local.properties 生成 NetworkPrivateConfig，\nAppAssembly 以 NETWORK_BASE_URL、NETWORK_SIGN_SECRET 与 createAesCbcResponseDecoder(NETWORK_RESPONSE_AES_KEY) 构造配置\n（agent-01a08e4c…jsonl:L884-L897 读回）；首版解码器把服务端明文 JSON 当密文属修复中新生问题，已改为合法 JSON 透传（epoch-1 main L1774），不在此归因。\n",
+  "recommendations": [
+    "网络基础设施实现阶段：决策要求“构建期从私有配置注入、由网络层集中读取”时，同一任务内交付配置来源（构建插件/生成模块+忽略规则+缺键即构建失败）和源端等价的响应解码器；不要只留可注入参数并把接线推给装配者。",
+    "迁移release响应解密时，按源端 beforeResponse/解密工具的算法、key/IV、编码与debug/release分支实现解码器，并用合成向量测试；decoder 为 null 时不能在release默认透传密文。",
+    "装配根注入网络配置前，先查配置来源：源端 gradle/BuildConfig 已有地址与材料、决策要求私有注入时，接入构建期生成的配置；不得以空字符串构造客户端，缺失应让构建或启动显式失败并登记阻断。",
+    "区分“无测试环境/测试账号”（影响联调与设备级 PASS）与“生产配置来源存在”（仍须接线）；带作用域限定的决策不能外延为允许请求永久失败。",
+    "编排者处理巡检BLOCKER时，派发失败（如线程上限）要重试或就地修复，并在关闭前逐项核对该报告的每个BLOCKER是否都已落地，而不是只修同批次中顺手的项。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "D:/temp_ctools/app_shared_bike_riding_records_harmony/entry/src/main/ets/AppAssembly.ets",
+        "since": "2026-09-10T19:10:12.041Z",
+        "at": "2026-09-15T09:23:49.093Z"
+      },
+      "nodes": [
+        {
+          "key": "D:/temp_ctools/app_shared_bike_riding_records_harmony/spec/decision-ledger.md",
+          "at": "2026-09-10T13:11:45.754Z",
+          "reason": "正常输入：Base-3 网络实现者首轮 Get-Content 读取账本全文，回执含 D-013“签名/加密材料通过构建 profile 或 gitignored 本地私有配置注入…MD5/AES 字节协议保持 Android 语义，由 Base Network 集中读取配置”与 D-009“网络、鉴权、签名与解密只在 Base Network 实现一份”（agent-01a08b71-d783-7923-a857-d11ba1d1790c.jsonl:L40-L43）。"
+        },
+        {
+          "key": "D:/temp_ctools/app_shared_bike_riding_records_harmony/spec/baseline/api-inventory/common.md",
+          "at": "2026-09-10T13:13:16.187Z",
+          "reason": "正常输入：同一实现者读取 common.md，回执给出 BaseURL 来自 BuildConfig.API_HOST（debug/release 分地址）及 release 在解析前执行 AES/CBC/PKCS5Padding、key 与 IV 同为 AES_KEY、Base64 输入；同批还读到 Android App.beforeResponse→aesDecrypt（同转录 L82-L85）。"
+        },
+        {
+          "key": "agent-01a08b71-d783-7923-a857-d11ba1d1790c.jsonl",
+          "at": "2026-09-10T13:16:40.868Z",
+          "reason": "base_network_events：收到上述要求后 apply_patch 新增 NetworkTypes/HttpClient，NetworkRuntimeConfig 只接收 baseUrl/signSecret/responseDecoder 参数（decoder 默认 null），无 AES 解码器、无任何配置读取；HttpClient 对空 baseUrl/signSecret 返回 network configuration unavailable，decoder 为 null 时透传（同转录 L137-L140）；回执称密钥与解码器“通过 NetworkRuntimeConfig 注入”（L185）。",
+          "problem": true
+        },
+        {
+          "key": "D:/temp_ctools/app_shared_bike_riding_records_harmony/entry/src/main/ets/network/HttpClient.ets",
+          "at": "2026-09-10T13:22:38.738Z",
+          "reason": "交付桥梁：装配者 Get-Content 读回 HttpClient.ets，回执含空 baseUrl/signSecret 即返回 network configuration unavailable 的守卫与 decoder 为 null 时透传（agent-01a08b18-4da1-7061-8f7b-c8e82bea46c5.jsonl:L2006-L2009）。"
+        },
+        {
+          "key": "D:/temp_ctools/app_shared_bike_riding_records_harmony/entry/src/main/ets/network/NetworkTypes.ets",
+          "at": "2026-09-10T13:26:09.956Z",
+          "reason": "交付桥梁：装配者读回 NetworkTypes.ets，回执为 NetworkRuntimeConfig(baseUrl, version, channel, appClient, projectId, model, signSecret, responseDecoder=null) 的构造签名（同转录 L2087-L2090）。"
+        },
+        {
+          "key": "D:/temp_ctools/app_shared_bike_riding_records_harmony/spec/decision-ledger.md",
+          "at": "2026-09-10T13:26:18.821Z",
+          "reason": "正常输入：装配前 rg 检索账本与 api-inventory，回执含 D-013 索引“鉴权材料不写入 ArkTS 源码，构建时从本地私有配置注入”、D-005 作用域限定“不得外延为…把请求失败当成功”、D-009 正文，以及 chain-auth L0/L2 BaseUrl 与 AES-CBC 已捕获（同转录 L2094-L2097）。"
+        },
+        {
+          "key": "agent-01a08b18-4da1-7061-8f7b-c8e82bea46c5.jsonl",
+          "at": "2026-09-10T13:27:23.240Z",
+          "reason": "execute_four_pages 接管 Base-6.5：Add File AppAssembly.ets，以 NetworkRuntimeConfig('', '9.9.9', '004', '100001', '158', 'HarmonyOS', '') 构造唯一 HttpClient，未接构建期配置、未传 decoder（同转录 L2108-L2111）；随后 base-contracts.md 写明其依据为“D-005/D-013…配置缺失时网络返回明确失败”（L2141-L2142）。",
+          "problem": true
+        },
+        {
+          "key": "D:/temp_ctools/app_shared_bike_riding_records_harmony/spec/fix/round-1/patrol/network-group-01.md",
+          "at": "2026-09-10T14:28:09.886Z",
+          "reason": "关键纠正：编排者读取网络巡检报告，NG01-01 BLOCKER 指出 AppAssembly 空 baseUrl/signSecret 使所有自有后端请求本地失败，D-013 要求私有配置注入，修复方向为在装配根接入实际运行配置（同转录 L3345-L3348）。"
+        },
+        {
+          "key": "D:/temp_ctools/app_shared_bike_riding_records_harmony/spec/decision-ledger.md",
+          "at": "2026-09-10T14:33:57.898Z",
+          "reason": "正常输入：编排者再次读取账本全文（Get-Content -Raw 管道 Select-String），回执含 D-013 全文与 D-005 作用域限定（同转录 L3481、L3489-L3490）。"
+        },
+        {
+          "key": "agent-01a08b18-4da1-7061-8f7b-c8e82bea46c5.jsonl",
+          "at": "2026-09-10T14:38:58.810Z",
+          "reason": "纠正未落实：派发 patrol_repair_network_g1 因 agent thread limit reached 失败后未重试（L3352-L3354）；本次 apply_patch 更新 AppAssembly.ets，修了同报告 NG01-02/03（installCapabilities 返回 ready 并 hydrate 会话），networkConfig 空值与缺 decoder 原样保留（L3602-L3605）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "base_network_events首轮exec用Get-Content -Raw读取base-plan、feature-base与spec/decision-ledger.md，CommandExecution完成且回执含D-013全文与D-009；在其写网络层之前。",
+          "evidence": [
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b71-d783-7923-a857-d11ba1d1790c.jsonl",
+              "line": 40
+            },
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b71-d783-7923-a857-d11ba1d1790c.jsonl",
+              "line": 42
+            },
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b71-d783-7923-a857-d11ba1d1790c.jsonl",
+              "line": 43
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "同一实现者exec读取Android网络源码后以Get-Content读取api-inventory.json与common.md，CommandExecution完成，回执含BaseURL来源与release AES/CBC解密规则。",
+          "evidence": [
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b71-d783-7923-a857-d11ba1d1790c.jsonl",
+              "line": 82
+            },
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b71-d783-7923-a857-d11ba1d1790c.jsonl",
+              "line": 84
+            },
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b71-d783-7923-a857-d11ba1d1790c.jsonl",
+              "line": 85
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "该实现者exec调用apply_patch Add File新增network/HttpClient.ets（含空配置守卫与decoder为null透传），FileChange完成、回执{}。",
+          "evidence": [
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b71-d783-7923-a857-d11ba1d1790c.jsonl",
+              "line": 137
+            },
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b71-d783-7923-a857-d11ba1d1790c.jsonl",
+              "line": 138
+            },
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b71-d783-7923-a857-d11ba1d1790c.jsonl",
+              "line": 140
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": 5,
+          "force": true,
+          "reason": "同一apply_patch新增network/NetworkTypes.ets，定义NetworkRuntimeConfig且responseDecoder默认null，FileChange完成、回执{}。",
+          "evidence": [
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b71-d783-7923-a857-d11ba1d1790c.jsonl",
+              "line": 137
+            },
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b71-d783-7923-a857-d11ba1d1790c.jsonl",
+              "line": 138
+            },
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b71-d783-7923-a857-d11ba1d1790c.jsonl",
+              "line": 140
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": 7,
+          "force": true,
+          "reason": "execute_four_pages在写装配根前exec用Get-Content -Raw读取HttpClient.ets，CommandExecution完成且回执含空baseUrl/signSecret即返回network configuration unavailable的守卫。",
+          "evidence": [
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b18-4da1-7061-8f7b-c8e82bea46c5.jsonl",
+              "line": 2006
+            },
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b18-4da1-7061-8f7b-c8e82bea46c5.jsonl",
+              "line": 2008
+            },
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b18-4da1-7061-8f7b-c8e82bea46c5.jsonl",
+              "line": 2009
+            }
+          ]
+        },
+        {
+          "from": 5,
+          "to": 7,
+          "force": true,
+          "reason": "execute_four_pages写装配根前exec读取NetworkTypes.ets与network/index.ets，回执含NetworkRuntimeConfig构造签名与decoder默认null。",
+          "evidence": [
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b18-4da1-7061-8f7b-c8e82bea46c5.jsonl",
+              "line": 2087
+            },
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b18-4da1-7061-8f7b-c8e82bea46c5.jsonl",
+              "line": 2089
+            },
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b18-4da1-7061-8f7b-c8e82bea46c5.jsonl",
+              "line": 2090
+            }
+          ]
+        },
+        {
+          "from": 6,
+          "to": 7,
+          "force": true,
+          "reason": "execute_four_pages写装配根前exec以rg检索spec/decision-ledger.md与api-inventory；rg因api-usage.md缺失返回非零，但回执已输出账本D-013/D-005/D-009与chain-auth匹配段。",
+          "evidence": [
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b18-4da1-7061-8f7b-c8e82bea46c5.jsonl",
+              "line": 2094
+            },
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b18-4da1-7061-8f7b-c8e82bea46c5.jsonl",
+              "line": 2096
+            },
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b18-4da1-7061-8f7b-c8e82bea46c5.jsonl",
+              "line": 2097
+            }
+          ]
+        },
+        {
+          "from": 7,
+          "to": "target",
+          "force": true,
+          "reason": "execute_four_pages exec调用apply_patch Add File创建AppAssembly.ets（空baseUrl/signSecret、无decoder），FileChange完成、回执{}。",
+          "evidence": [
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b18-4da1-7061-8f7b-c8e82bea46c5.jsonl",
+              "line": 2108
+            },
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b18-4da1-7061-8f7b-c8e82bea46c5.jsonl",
+              "line": 2109
+            },
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b18-4da1-7061-8f7b-c8e82bea46c5.jsonl",
+              "line": 2111
+            }
+          ]
+        },
+        {
+          "from": 8,
+          "to": 10,
+          "force": true,
+          "reason": "编排者exec用Get-Content -Raw读取network-group-01.md，CommandExecution完成且回执含NG01-01 BLOCKER与修复方向；在14:38装配根写入之前。",
+          "evidence": [
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b18-4da1-7061-8f7b-c8e82bea46c5.jsonl",
+              "line": 3345
+            },
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b18-4da1-7061-8f7b-c8e82bea46c5.jsonl",
+              "line": 3347
+            },
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b18-4da1-7061-8f7b-c8e82bea46c5.jsonl",
+              "line": 3348
+            }
+          ]
+        },
+        {
+          "from": 9,
+          "to": 10,
+          "force": true,
+          "reason": "编排者exec并行读取多文件，其中Get-Content -Raw spec/decision-ledger.md管道Select-String的CommandExecution完成，回执输出账本全文含D-013与D-005。",
+          "evidence": [
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b18-4da1-7061-8f7b-c8e82bea46c5.jsonl",
+              "line": 3481
+            },
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b18-4da1-7061-8f7b-c8e82bea46c5.jsonl",
+              "line": 3489
+            },
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b18-4da1-7061-8f7b-c8e82bea46c5.jsonl",
+              "line": 3490
+            }
+          ]
+        },
+        {
+          "from": 10,
+          "to": "target",
+          "force": true,
+          "reason": "编排者exec调用apply_patch同时更新AppAssembly.ets等文件（修NG01-02/03，未改networkConfig），FileChange完成、回执{}。",
+          "evidence": [
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b18-4da1-7061-8f7b-c8e82bea46c5.jsonl",
+              "line": 3602
+            },
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b18-4da1-7061-8f7b-c8e82bea46c5.jsonl",
+              "line": 3603
+            },
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b18-4da1-7061-8f7b-c8e82bea46c5.jsonl",
+              "line": 3605
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "execute_four_pages 发给 base_network_events 的派工内容为加密/空载荷（agent-01a08b71…jsonl:L35），无法确认派工是否要求把配置与解码器留给装配根。",
+    "编排者推理内容加密；其对 D-005/D-013 的解释只见于它写的 base-contracts.md（agent-01a08b18…jsonl:L2141-L2142）。",
+    "修复写入由截断后的 five_page_flow_closure 完成，材料无写入调用；最终状态依据独立审查代理 09-14 05:06 的读回与构建/测试回执。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-613cce143fdc193142d7",
+  "metadata": {
+    "migration": {
+      "project": "骑行记录",
+      "server_session_id": "9264617d-5373-4aca-8c7d-94c70606545c"
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "b8a0e4bd-257d-4c7c-adeb-30d94a4f03fa"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "gpt-5.6-sol",
+        "gpt-5.6-terra",
+        "gpt-6-astra"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.153.4"
+      ]
+    },
+    "source_set_id": "sources-51973a3274ea587edce3",
+    "card_tool_version": "0.8.3"
+  },
+  "revision": "06c293550c91b4e97efcb4dc56572c0746ca04dd359b3134afdda9c9a3ed40ea"
+}

@@ -1,0 +1,220 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-76f1ad233b6f000cb4ec",
+  "created_at": "2026-09-27T16:01:38.140509+00:00",
+  "migration_key": "34f1eb1d-61e3-4b07-b51c-a3ef5890fad8",
+  "title": "导航指示条避让误读topRect并升级为全局WindowModel，全屏播放页底钮未消费底部避让",
+  "when": "沉浸式安全区实现阶段，测量导航指示条避让区、并决定底部前景按钮是否叠加bottomPadding时",
+  "description": "HarmonyOS页面在setWindowLayoutFullScreen(true)全屏布局下，用getWindowAvoidArea(TYPE_SYSTEM/TYPE_NAVIGATION_INDICATOR)测量避让值，写入页面级替身模型或全局WindowModel；Android源布局底部按钮行没有显式导航栏间距（源窗口本身不延伸到导航栏下）。",
+  "summary": "本问题有两个独立偏差，最终在彩铃播放页一起暴露：底钮贴屏底，bottomPadding实测为0。\n其一在避让测量。SplashPage生成者写前已加载arkts-immersive-safearea，\n其中Layer 1图示写明“TYPE_SYSTEM → topRect、TYPE_NAVIGATION_INDICATOR → bottom”。\n但写出的页级refreshSafeArea对导航指示条也读topRect.height。\nFrontPage随后照这个写法仿写。Base-6收尾者新建全局WindowModel时，派工只说测量这两类避让区，\n它实际读到的只有这两页的过渡实现，于是把topRect.height / density照搬进measure()。\n页级错误由此变成全局单例的bottomPadding恒为0。\n其二在页面布局。CallPreviewPage生成者的派工和页面spec都要求按四层架构实施沉浸式安全区，\n它读到的同切片先例页也在根容器叠加了bottom避让。它却以“视频铺满到底、Android也没有底部避让”为由，\n不在任何地方使用windowBottomPadding；sl_bottom只写pV10，tv_title底距也不含避让。\nSlice 6换绑时改成WindowModel.connect()，但只消费了topPadding。\n修复分两处：WindowModel改读bottomRect.height / density；\nCallPreviewItem新增@Param bottomSafe，由宿主注入safeArea.bottomPadding，sl_bottom与tv_title底距叠加这个值。\n真机上双钮离屏底由10vp抬到37.4vp（main-7e6e56d7-2af8-4e87-8002-7c576089489c.jsonl:L515-L522、L570-L571、L587-L589）。\n09-22本地铃声页挖孔修复曾在WindowModel加入TYPE_CUTOUT/getCutoutInfo/余量（main-5a5b6f69-54bc-4aa7-ba2a-29e5fc9bc4ee.jsonl:L1182、L1294、L1332、L1371、L1374），\n随后L1436、L1439回退。L1439的new_string与L1167读回的measure()逐行一致，\n所以观察截止时WindowModel只保留09-21的bottomRect修复。\ntv_title的bottom: 85是09-21返修会话自己写入的（main-7e6e56d7 L264-L277），不属于生成遗留。\n",
+  "recommendations": [
+    "写安全区测量代码时，按避让区所在方位取矩形：TYPE_SYSTEM取topRect.height，TYPE_NAVIGATION_INDICATOR取bottomRect.height。复制上一行后若只改AvoidAreaType常量，必须同时核对矩形字段。",
+    "把页面过渡测量收敛成全局WindowModel等共享数据源时，不直接照搬现有页面片段。先对照沉浸式skill图示或工程内已正确的实现（如navArea.bottomRect）逐字段核API语义，再核对带导航指示条设备上bottomPadding非0。",
+    "全屏布局页面迁移底部按钮行时，不因Android XML没有底部间距就判定无需避让。源窗口不延伸到导航栏下，而目标窗口延伸；底部CTA和贴底浮层都要叠加N + bottomPadding，子组件经@Param由宿主注入。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "D:/tusi/app_rings_harmony/entry/src/main/ets/model/WindowModel.ets",
+        "since": "2026-09-20T10:51:00Z",
+        "at": "2026-09-23T02:54:21Z"
+      },
+      "summary": "SplashPage生成者已收到“导航指示条 → bottom”的skill图示，仍把导航指示条避让写成topRect.height。\nBase-6收尾者的派工未指定矩形，它自己也未加载沉浸式skill，只从SplashPage/FrontPage读到这个写法，\n于是照搬进全局WindowModel.measure()，所有消费页的bottomPadding恒为0。\n最终修复改读bottomRect.height / density，观察截止时保留。\n",
+      "recommendations": [
+        "页面或全局模型测量导航指示条时，读取bottomRect.height；写完后在有导航指示条的设备上打印或读回bottomPadding，确认非0。",
+        "收敛过渡实现为全局单例的收尾任务，把“核对复制来源的API语义”列为交付前检查项，不以“与页面同式”作为正确依据。"
+      ],
+      "nodes": [
+        {
+          "key": "D:/ai_coding/hmigbot-1.5.2/skills/arkts-immersive-safearea/SKILL.md",
+          "at": "2026-09-17T06:24:45.827Z",
+          "reason": "正常输入：SplashPage生成者调用Skill加载arkts-immersive-safearea，正文Layer 1图示写明③getWindowAvoidArea(TYPE_SYSTEM) → topRect、④getWindowAvoidArea(TYPE_NAVIGATION_INDICATOR) → bottom，并要求底部CTA用N + windowBottomPadding避让；足以确定导航指示条避让高度应取底边矩形（agent-afd59383835a61a40.jsonl:L85-L87）。"
+        },
+        {
+          "key": "agent-afd59383835a61a40.jsonl",
+          "at": "2026-09-17T06:36:22.739Z",
+          "reason": "收到上述图示后，Write SplashPage.refreshSafeArea时把bottomPadding写成px2vp(getWindowAvoidArea(TYPE_NAVIGATION_INDICATOR).topRect.height)，与TYPE_SYSTEM一样取topRect（同转录L98-L99）；随后Edit只把px2vp换成uiContext.px2vp，未改矩形（L103-L104）。同一skill下PlayMusicPage生成者写的是navArea.bottomRect.height（agent-aebd60440eb6ba62e.jsonl:L280），说明输入足够。偏差在skill方位语义到测量代码这一环。",
+          "problem": true
+        },
+        {
+          "key": "D:/tusi/app_rings_harmony/entry/src/main/ets/pages/SplashPage.ets",
+          "at": "2026-09-17T13:38:27.808Z",
+          "reason": "交付桥梁：Base-6收尾者按派工grep共享键window_safe_area_model后，Grep -A 20读回SplashPage.refreshSafeArea，回执含TYPE_NAVIGATION_INDICATOR).topRect.height（agent-adafc5523e9119ef6.jsonl:L63-L64）；同时读到FrontPage的同式片段（L61-L62，由agent-afebd85e7e8203bc3照SplashPage仿写）。截至该读取，SplashPage中这一术语只由上一节点写入。"
+        },
+        {
+          "key": "agent-adafc5523e9119ef6.jsonl",
+          "at": "2026-09-17T13:42:34.813Z",
+          "reason": "派工只要求getWindowAvoidArea(TYPE_SYSTEM/TYPE_NAVIGATION_INDICATOR)测量写入（px2vp），未指定矩形（同转录L1）。收尾者未加载沉浸式skill，转录中没有bottomRect输入；它Write新建WindowModel.measure()，照搬页面过渡式写成TYPE_NAVIGATION_INDICATOR).topRect.height / density，并注释“与页面uiContext.px2vp同式”（L137-L138），把页级错误升级为全局bottomPadding。本链确认传递，不另推定独立失职。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "SplashPage生成者用Skill工具调用hmigbot:arkts-immersive-safearea（L85），回执Launching skill（L86），紧接着注入的正文就是该SKILL.md全文（L87，Base directory为arkts-immersive-safearea），其中含“TYPE_NAVIGATION_INDICATOR → bottom”。这支持生成者写SplashPage前已收到该要求。",
+          "evidence": [
+            {
+              "source": "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/agent-afd59383835a61a40.jsonl",
+              "line": 85
+            },
+            {
+              "source": "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/agent-afd59383835a61a40.jsonl",
+              "line": 86
+            },
+            {
+              "source": "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/agent-afd59383835a61a40.jsonl",
+              "line": 87
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "D:/tusi/app_rings_harmony/entry/src/main/ets/pages/CallPreviewPage.ets",
+        "since": "2026-09-20T10:51:00Z",
+        "at": "2026-09-23T02:54:21Z"
+      },
+      "summary": "CallPreviewPage生成者收到的输入已说明需要沉浸式安全区：派工、页面spec要求按四层架构实施，\n同切片先例页的根容器也叠加了bottom避让。它却把Android XML无底部间距当成全屏布局无需避让，\nsl_bottom只写pV10，windowBottomPadding声明了但从未使用。\nSlice 6换绑WindowModel时只接入topPadding，这段底部片段一直保留到返修。\n返修的Edit old_string仍匹配原padding({ left: 12, right: 12, top: 10, bottom: 10 })，\n并改为叠加bottomSafe（main-7e6e56d7-2af8-4e87-8002-7c576089489c.jsonl:L517-L518）。\n",
+      "recommendations": [
+        "迁移全屏页面时，列出所有贴底的前景控件（按钮行、标题浮层），逐个叠加N + bottomPadding；宿主页面连接WindowModel后，经@Param把避让值传给Swiper/List内的item子组件。",
+        "即使本页背景或视频需要铺满到底，也只让背景层越过导航条，按钮等前景仍要避让；未使用的bottomPadding变量要当作漏项复查。"
+      ],
+      "nodes": [
+        {
+          "key": "D:/tusi/app_rings_harmony/spec/baseline/ui/page_0045_CallPreviewActivity.md",
+          "at": "2026-09-17T08:54:06.371Z",
+          "reason": "正常输入：Read回执“沉浸式+安全区”一节写明needs_immersive_safearea=true，要求converter按arkts-immersive-safearea四层架构实施（spec不列API）。派工同样注明needs_immersive_safearea: true（四层×4），系统提示Hook 1要求新页默认追加该skill做Layer 1-3自检（agent-a6f5fd93527438831.jsonl:L1、L11、L29-L30）。"
+        },
+        {
+          "key": "D:/tusi/app_rings_harmony/entry/src/main/ets/pages/RingAndCrbtPage.ets",
+          "at": "2026-09-17T08:57:10.625Z",
+          "reason": "正常输入：Bash读回同切片先例页根容器，注释为“Layer 3：前景避让状态栏/导航条”，代码为padding({ top: windowTopPadding, bottom: windowBottomPadding })，给出底部前景需叠加导航条避让的现成做法（agent-a6f5fd93527438831.jsonl:L116-L117）。"
+        },
+        {
+          "key": "agent-a6f5fd93527438831.jsonl",
+          "at": "2026-09-17T09:07:49.440Z",
+          "reason": "规划时已判断sl_bottom位于屏幕底部、可能落在导航手势区，却以“视频铺满到底、Android也没有底部避让”为由，决定windowBottomPadding不在任何位置使用（同转录L129）。随后Write的sl_bottom只写padding({ left: 12, right: 12, top: 10, bottom: 10 })，tv_title底距也不含避让（L163-L164）。偏差在把源XML无底部间距等同于目标全屏布局无需前景避让。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-76f1ad233b6f000cb4ec",
+  "metadata": {
+    "migration": {
+      "project": "免费来电多多",
+      "server_session_id": "34f1eb1d-61e3-4b07-b51c-a3ef5890fad8"
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "4c2ade21-d470-4b84-97bf-86300d6a72d9"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code",
+        "codex"
+      ],
+      "models": [
+        "glm-5.3",
+        "glm-5.3-flash",
+        "gpt-5.6-sol"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.155.0-alpha.9.2",
+        "2.1.274",
+        "2.1.275",
+        "2.1.276",
+        "2.1.278",
+        "2.1.280"
+      ]
+    },
+    "source_set_id": "sources-8decedd1032cf015dca8",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "D:\\tusi\\app_rings_harmony",
+        "at": "2026-09-17T06:35:46.709Z",
+        "ref": "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/agent-ac567ed4068ed6644.jsonl:L149",
+        "request_ref": "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/agent-ac567ed4068ed6644.jsonl:L148",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "5.0.0(12)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "D:\\tusi\\app_rings_harmony",
+        "at": "2026-09-17T06:35:46.709Z",
+        "ref": "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/agent-ac567ed4068ed6644.jsonl:L149",
+        "request_ref": "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/agent-ac567ed4068ed6644.jsonl:L148",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "D:\\tusi\\app_rings_harmony\\entry\\build\\default\\outputs\\default",
+        "at": "2026-09-22T02:47:00.902Z",
+        "ref": "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/agent-a52e02c077767c03c.jsonl:L15",
+        "request_ref": "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/agent-a52e02c077767c03c.jsonl:L14",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "5.0.0(12)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "D:\\tusi\\app_rings_harmony\\entry\\build\\default\\outputs\\default",
+        "at": "2026-09-22T02:47:00.902Z",
+        "ref": "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/agent-a52e02c077767c03c.jsonl:L15",
+        "request_ref": "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/agent-a52e02c077767c03c.jsonl:L14",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.8.3"
+  },
+  "revision": "b38360ee810a9327147edb83c54c0e473406270d41eaee0e0397146c587febb9"
+}

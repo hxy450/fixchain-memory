@@ -27,7 +27,3 @@ ID：`lesson-e9f03fcc7f1e781c4b24` · 版本：1
 
 - 开启提醒后切到其他 Tab、强停后冷启动，再触发连接、断开或电量事件，确认同一 ID 的通知仍在更新；关闭开关后通知撤销。
 
-## 来源（按需复核）
-
-- case-2bb1f7385338bea7e396 · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3, recommendation:4, recommendation:5
-  卡片版本：`9f4af4ce005700de9eddebf85c8c007eed2fc93e951190ea169b51bac19d3977`

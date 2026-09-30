@@ -20,7 +20,3 @@ tabBar 的重载里没有 title 字段；{ title: 'X' } 在全部重载下都不
 
 1. 纯文字页签写 .tabBar('首页')；文字加图标用 TabBarOptions 的 { icon, text } 或 BottomTabBarStyle；需要按选中态改颜色等自定义样式时用 @Builder 方法作为 CustomBuilder 传入。
 
-## 来源（按需复核）
-
-- case-11c15d99c36e52d8aa59 · 结论：diagnosis, recommendation:2
-  卡片版本：`f735359e7a35d9224d411b87e20f996252584d5a1aec1ea5c36eec984cf325af`

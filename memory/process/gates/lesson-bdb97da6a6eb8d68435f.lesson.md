@@ -22,7 +22,3 @@ ID：`lesson-bdb97da6a6eb8d68435f` · 版本：1
 2. 图标尺寸自愈只处理缺少尺寸的 Image；同一组件已有显式尺寸的跳过，读不出合法像素尺寸时不写入。
 3. 构建或验证中读到同一组件出现两组 width/height 时，按后写生效核对最终尺寸，异常值当场删除或上报。
 
-## 来源（按需复核）
-
-- case-500cf2e63e19988f0420 · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
-  卡片版本：`0657099babd87c4c1da1de4bd2b7ba04e79d5f948857d5520e44e3686dba980b`

@@ -27,11 +27,3 @@ ID：`lesson-a2f6a4ae9a72be740de6` · 版本：2
 3. 收口或验收阶段处理这类条目时先回看条目指向的源码；能实现就实现，只有确需真机数据时才改为 deferred。
 4. 写 fail-loud 或不可用提示前逐项核对：源端该动作是否已有实现、目标端是否已有等价组件或服务；两者都有就接线复用；只有平台凭据等真实外部缺口才给阻断提示，并在提示和交接中写明具体缺口。
 
-## 来源（按需复核）
-
-- case-265e1cc8347c261db79d · 结论：diagnosis, recommendation:2
-  卡片版本：`41047fd7996dc37d25536c62885f26d3d9d8c36d4eb9209eb96e145ca0a1f49c`
-- case-66f3c1649b7b5c4f38b5 · 结论：recommendation:3, recommendation:4
-  卡片版本：`686410a72e498ff1fb1d9233686e5ebc690a444c3056d62bc78d50dbcb257140`
-- case-753b41488ff67ec1d068 · 结论：diagnosis, recommendation:3
-  卡片版本：`24570f598b1c5b1bdb181efddaac5a79a2aac2ad6e83f5f171a7107944d77842`

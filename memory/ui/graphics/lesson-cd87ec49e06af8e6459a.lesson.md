@@ -20,7 +20,3 @@ ID：`lesson-cd87ec49e06af8e6459a` · 版本：1
 
 1. Adapter 中被注释的数据绑定按未启用处理，只按 XML 静态属性实现该 View（颜色、点色、固定位置）；需要启用时作为新需求或决策差异登记。
 
-## 来源（按需复核）
-
-- case-04bf2dcacf8602ede15e · 结论：diagnosis, recommendation:1
-  卡片版本：`d601763d31d2b5edae13a790bc92239987a21a5102f7bd1f5233e030cdc075bf`

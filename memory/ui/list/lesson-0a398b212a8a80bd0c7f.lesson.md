@@ -26,7 +26,3 @@ SmartRefreshLayout 自带“加载中不重入、刷新与加载互斥”的状�
 
 - 逐个查看含 onReachEnd 的处理函数，确认都有门闩与互斥，且复位点覆盖 Promise 的所有分支。
 
-## 来源（按需复核）
-
-- case-a77939503960ebd3437d · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3, recommendation:4, recommendation:5
-  卡片版本：`8ebe5dbd0d8274d95b7d522ffe525f94ad52213d443933fb4ce7465232f4ffd5`

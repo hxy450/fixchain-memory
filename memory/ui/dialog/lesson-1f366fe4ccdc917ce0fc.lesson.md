@@ -22,15 +22,3 @@ ID：`lesson-1f366fe4ccdc917ce0fc` · 版本：3
 2. 按源布局逐控件核对：标题文案、图标、正文与说明、按钮数量与文案、关闭控件类型与位置、遮罩点击行为，hint 取 android:hint；每个容器自身的 layout_margin/padding 与子控件属性分开检查。
 3. 通用弹窗缺少任一项时不作为等价实现；公共组件不在写权限内时，在页面内用条件浮层复刻，确实做不到就登记未决项并写明缺口。
 
-## 来源（按需复核）
-
-- case-89e7732b8a374944c6b2 · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
-  卡片版本：`62dfa7b623e412c31d8bf57348f4be8d7af8eb2410ef56f7babb145a90508e62`
-- case-91f8e7d157380a2457fa · 结论：recommendation:2
-  卡片版本：`3923f3fa9d2994e3a5bd679740e4adefcac488d68e70dbb7d9f15a09f6ec0cf4`
-- case-ae1e7b09c5cfe5214cd2 · 结论：diagnosis, recommendation:1
-  卡片版本：`be18e5750fafdc812c4a8a7e896090fcc2611319d2efa715e6f4175689f74e9b`
-- case-d5caf639de4ba1e70e28 · 结论：diagnosis, recommendation:1, recommendation:2
-  卡片版本：`3abe400efaffec0a44280f2d3933c6b3829667a375d51680a451be2a2c33f7ba`
-- case-f62209d059dec8e6aca4 · 结论：diagnosis, recommendation:1, recommendation:2
-  卡片版本：`0e5af9a8eb613b7ad7629ec8f85cf3096410afb67b9f0b9d6cad030cb0c99b61`

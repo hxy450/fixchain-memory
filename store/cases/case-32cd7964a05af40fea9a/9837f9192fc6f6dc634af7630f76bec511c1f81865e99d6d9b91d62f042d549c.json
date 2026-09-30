@@ -1,0 +1,148 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-32cd7964a05af40fea9a",
+  "created_at": "2026-09-30T04:44:19.081151+00:00",
+  "migration_key": "7117da4e-7187-4a29-8d35-25d345e0e57e",
+  "title": "按审查意见修撤销范围时把 ANY_MEMBER 共享完成/子任务状态改成当前用户私有",
+  "when": "数据层迁移与缺陷修正阶段，按审查意见调整协作提醒完成态、子任务状态的写入键和撤销删除范围时",
+  "description": "源端按 completionMode 区分共享状态（ANY_MEMBER：任一成员完成即完成，状态不绑定成员）与按成员状态（ALL_MEMBERS）；目标仓库把状态写入本地表并入同步队列，本次任务同时在搬迁仓库文件并修正某个范围缺陷。",
+  "summary": "生成期 r6_core_impl（agent-019fc628）写前实际读到的现有 EventLifecycleRepository 中，\nchangeCompletion 与 changeSubTaskCompletion 都用 `localUserId = completionMode === 'ANY_MEMBER' ? '' : currentUid`，\n即 ANY_MEMBER 写成不绑定成员的共享状态，这与 Android BoxEventSubTask.createSubTaskStates\n“仅 ALL_MEMBERS 写 userId、ANY_MEMBER 先按 eventJdid+subtaskId 清旧状态，重复事件才加 occurrenceDate”一致\n（写前读取回执 agent-019fc628-75e1-7ab0-93f2-e36f79f0cc44.jsonl:L1356-L1357）。\n同一时刻根会话收到审计代理的意见，只要求 ANY_MEMBER 重复事件撤销完成时增加 occurrence 条件\n（epoch-2 main-019fc543 L4974）；根会话对 r6_core_impl 的派工正文是加密内容，无法逐字核对，只能由该代理\n最终回执“修复 … ANY_MEMBER 撤销范围”（agent L1738）确认它在处理这一项。\n实际输出（agent L1406-L1408，2026-08-03T05:50:50Z）却超出该范围：两处 localUserId 都改成 currentUid，\nANY_MEMBER 撤销/子任务删除加上 userId=currentUid，且 occurrenceDate 条件对非重复事件也无条件生效，\n把共享状态改成了当前用户私有状态。偏差位于“已有正确语义 + 局部范围意见 → 实现修改”这一环；\n写前没有查看 Android 状态创建/删除实现来确认 userId 语义。\n该片段保留到返修：用户 2026-08-12 报告“子任务单条点击后状态不变”（main-019fef8a L5074 第3点），\n返修者新增 ANY_MEMBER 子任务共享状态用例，RED 失败为“expect u1 equals ''”（L5284），\n随后把 localUserId 恢复为 ANY_MEMBER ? '' : currentUid、payload userId 改用 localUserId、\n删除条件改为 eventJdid 加“仅重复事件才加 occurrenceDate”（L5487-L5488）。\n同一子任务症状在后续会话还有修复期引入的列表 key 未含子任务状态等原因，不归入本链。\n",
+  "recommendations": [
+    "修改完成态或子任务状态的存储键、删除范围前，先读源端状态创建与删除实现（如 createSubTaskStates、removeOldStateForAnyMember、resolveStatus），逐项对齐：哪种 completionMode 写 userId，occurrenceDate 条件是否只对重复事件生效。",
+    "按审查意见修一个范围缺陷时，只改意见指明的条件（例如重复事件撤销加 occurrence 限定），不顺带改变共享/私有语义；确需改变时以源码为据说明理由。",
+    "为 ANY_MEMBER 非重复、ANY_MEMBER 重复、ALL_MEMBERS 三类各补一条最小用例：写入后的 userId、另一成员查询时的完成/子任务显示、撤销后删除了哪些行。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/xyz/work/HMRmbr/features/business_calendar/src/main/ets/repository/EventLifecycleRepository.ets",
+        "since": "2026-08-11T06:08:24.647Z",
+        "at": "2026-08-19T07:18:47.009Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/xyz/work/HMRmbr/products/phone/src/main/ets/repositories/EventLifecycleRepository.ets",
+          "at": "2026-08-03T05:47:52.181Z",
+          "reason": "正常输入：r6_core_impl 用 rg 读取现有仓库实现，回执显示 changeCompletion 与 changeSubTaskCompletion 均为 localUserId = completionMode === 'ANY_MEMBER' ? '' : currentUid，ANY_MEMBER 为共享状态；这足以说明该语义已存在且不属于待修的撤销范围（agent-019fc628-75e1-7ab0-93f2-e36f79f0cc44.jsonl:L1356-L1357）。"
+        },
+        {
+          "key": "019fc628-75e1-7ab0-93f2-e36f79f0cc44",
+          "at": "2026-08-03T05:50:50.810Z",
+          "reason": "读到上述共享语义后，apply_patch 把两处 localUserId 改为 currentUid，并给 ANY_MEMBER 撤销与子任务删除加 userId=currentUid、无条件 occurrenceDate 过滤，将共享状态写成当前用户私有状态（同转录 L1406-L1408）；超出审计意见仅限重复事件 occurrence 的范围。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "r6_core_impl 在工作目录 /Users/xyz/work/HMRmbr 下执行 rg -n -A90 -B15 \"setCompletion|completion|ANY_MEMBER|finished\" products/phone/src/main/ets/repositories/EventLifecycleRepository.ets，回执返回 changeCompletion/changeSubTaskCompletion 中 localUserId = completionMode === 'ANY_MEMBER' ? '' : currentUid 等片段；这是写前对该文件的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/agent-019fc628-75e1-7ab0-93f2-e36f79f0cc44.jsonl",
+              "line": 1356
+            },
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/agent-019fc628-75e1-7ab0-93f2-e36f79f0cc44.jsonl",
+              "line": 1357
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/xyz/work/HMRmbr/features/business_calendar/src/main/ets/pages/home/day/PhoneDayCalendarFragmentPage.ets",
+      "reason": "已确认返修（main-019fef8a L130-L154：行 key 含完成状态、完成未乐观更新；main-019ff55b L1628 等）。生成期写入在旧路径 products/phone/.../PhoneDayCalendarFragmentPage.ets（019fd4b0 于 08-07 的补丁前后，列表 key 均已含 finished/completionPending），之后经 shell mv 与修复期移动到目标路径；目标键在生成截止前无原生写入，跨路径交接及生成者写前输入未核。后续 key 加 completionPending 属修复期引入。"
+    },
+    {
+      "key": "/Users/xyz/work/HMRmbr/features/business_calendar/src/main/ets/pages/home/day/components/PhoneDayEventPanel.ets",
+      "reason": "文件于修复期 2026-08-12 由 main-019fef8a L1798 创建，列表 key 的 finished/completionPending 组合是修复期拆分与多轮返修中形成（main-019ff55b L1628、main-01a017a0 L711/L1306），未追到生成期来源。"
+    },
+    {
+      "key": "/Users/xyz/work/HMRmbr/features/business_calendar/src/main/ets/pages/home/month/MonthCalendarPopup.ets",
+      "reason": "目标键在生成截止前无原生写入；本次修改是用户 2026-08-19 新要求“先本地查询显示、后台同步后再刷新”（main-01a017a1 L239、L443），生成期对应代码的来源与写前输入未核。"
+    },
+    {
+      "key": "/Users/xyz/work/HMRmbr/features/business_calendar/src/main/ets/pages/home/todo/TodoFragmentPage.ets",
+      "reason": "目标键在生成截止前无原生写入；LazyForEach 删除/插入排序动画是用户在修复期新提的要求（main-01a012b0 L9 第3点），未作生成遗留归因。"
+    },
+    {
+      "key": "/Users/xyz/work/HMRmbr/features/business_calendar/src/main/ets/pages/home/todo/components/TodoListItem.ets",
+      "reason": "文件于修复期 2026-08-12 由 main-019ff397（TodoFragmentPage UI 整理）创建；标题全宽 Column 覆盖 check 热区（main-01a012b0 L159-L252）出自修复期写入，未追溯该次写入的输入。"
+    },
+    {
+      "key": "/Users/xyz/work/HMRmbr/features/business_calendar/src/main/ets/pages/quadrant/NewTime4ListFragmentPage.ets",
+      "reason": "目标键在生成截止前无原生写入；pending 清除早于提交、镜像状态回写（main-01a017a5 L205、L601，main-01a017f8 L139、L1081）来自修复期多轮改写，生成期来源与交接未核。"
+    },
+    {
+      "key": "/Users/xyz/work/HMRmbr/features/business_calendar/src/main/ets/pages/quadrant/components/QuadrantEventItem.ets",
+      "reason": "同四象限页：目标键在生成截止前无原生写入，子组件 displayedFinished 镜像回写的形成时间与输入未核。"
+    },
+    {
+      "key": "/Users/xyz/work/HMRmbr/features/business_calendar/src/main/ets/pages/quadrant/components/QuadrantGrid.ets",
+      "reason": "同四象限页：目标键在生成截止前无原生写入，点击路由与刷新问题的生成期来源未核。"
+    },
+    {
+      "key": "/Users/xyz/work/HMRmbr/features/business_calendar/src/main/ets/pages/timeline/NewTimeListFragmentPage.ets",
+      "reason": "目标键在生成截止前无原生写入；改为直接使用控件传出的目标状态并订阅 EVENT_DATA_CHANGED（main-01a017e9 L174、L384），key 含 pendingCompletionEventIds 等片段的形成时间未核。"
+    },
+    {
+      "key": "/Users/xyz/work/HMRmbr/features/business_calendar/src/main/ets/pages/timeline/components/TimelineDaySection.ets",
+      "reason": "同时间线页：目标键在生成截止前无原生写入，onCompletedChange 丢弃目标状态的写入来源未核。"
+    },
+    {
+      "key": "/Users/xyz/work/HMRmbr/features/business_calendar/src/main/ets/service/EventService.ets",
+      "reason": "修改是 2026-08-19 新增 changeCompletionLocally/synchronizePendingChanges 以支持本地优先后同步（main-01a017a1 L443）；生成期 changeCompletion 等待同步的写入者与写前输入未核。"
+    },
+    {
+      "key": "/Users/xyz/work/HMRmbr/features/business_calendar/src/main/ets/viewmodel/CalendarViewsSearchViewModel.ets",
+      "reason": "同 EventService：新增本地优先完成接口（main-01a017a1 L443），生成期实现来源未核。"
+    }
+  ],
+  "job": "issue-32cd7964a05af40fea9a",
+  "metadata": {
+    "migration": {
+      "project": "记得日历",
+      "server_session_id": "7117da4e-7187-4a29-8d35-25d345e0e57e"
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "1a9777c8-c9e6-48ae-80c3-ff5be17a28a5"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "gpt-5.6-sol"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.146.0-alpha.9.2",
+        "0.147.0-alpha.1.2",
+        "0.147.0-alpha.6.5",
+        "0.148.0-alpha.15",
+        "0.148.0-alpha.9"
+      ]
+    },
+    "source_set_id": "sources-e29c9382987c75013258",
+    "card_tool_version": "0.10.0"
+  },
+  "revision": "9837f9192fc6f6dc634af7630f76bec511c1f81865e99d6d9b91d62f042d549c"
+}

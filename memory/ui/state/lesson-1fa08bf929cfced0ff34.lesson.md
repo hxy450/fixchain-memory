@@ -24,11 +24,3 @@ ID：`lesson-1fa08bf929cfced0ff34` · 版本：3
 4. 访问器返回 ResourceStr 而状态是 string 时，按工程已有方式解析资源（宿主 context 判空同时排除 undefined 与 null），不因类型不合回退成占位字符串。
 5. 源端经工具类把数值码映射成文案时，目标调用同表的映射函数，不用 toString() 输出原始码；再按 UI 数据模型逐字段核对每个显示字段都有来源。
 
-## 来源（按需复核）
-
-- case-1cfad6c2eaf32070939a · 结论：recommendation:3
-  卡片版本：`78f3350b6b023b1fc08c9b23ca592c3b1fa5918f875f7133bb7e2d04c929fcb6`
-- case-1ea05be22c68b8603ea7 · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
-  卡片版本：`0f6564ae83205e1521fc56029f16e8376ec432110bfa7b149a9e72b9ef18699b`
-- case-ca0f19f5d338e37a710e · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
-  卡片版本：`3ef23c9a9fa455039aa61f4ad95726a1dc0931a105046e800a59d526242a14d8`

@@ -22,7 +22,3 @@ photoAccessHelper 的资源类型只有图片和视频（PhotoType 没有 AUDIO�
 2. 规格指定的 API 与参考或 SDK 声明对不上时，不自拟枚举成员，把“目标平台没有此能力”作为规格问题回报；编译修复遇到缺失枚举说明能力缺失时，不删约束换取编译通过，标明该功能链不可达。
 3. 实现权限门时核对所申请的权限正是后续 API 需要的权限；module.json5 的声明变动后，复核所有 requestPermissions 调用点。
 
-## 来源（按需复核）
-
-- case-1607d055621c41c4c087 · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3, recommendation:4
-  卡片版本：`202eca2eb1c58a4ade7f31cecdcf8e1a2c3415e73da050dd988b1dc29c4685fa`

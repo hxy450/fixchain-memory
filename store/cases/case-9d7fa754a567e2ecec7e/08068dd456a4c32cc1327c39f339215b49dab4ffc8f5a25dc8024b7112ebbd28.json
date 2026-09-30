@@ -1,0 +1,418 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-9d7fa754a567e2ecec7e",
+  "created_at": "2026-09-27T21:17:53.092639+00:00",
+  "migration_key": "3a9f41ad-48a4-4f1a-a085-fb6393b81f8a",
+  "title": "天气页迁移：15日折线被编译修复删掉、重建后坐标双重偏移，天气图标变体被压成单一资源，切换图标被固定小框压缩",
+  "when": "界面实现、编译修复与截图返修阶段，把 Android 天气页的自定义折线装饰、按使用场景区分的天气图标资源和 wrap_content 图片控件迁移为 ArkUI 时",
+  "description": "源端15日趋势由 RecyclerView ItemDecoration（LineChartDecoration）在同一画布坐标里绘制高/低温折线与节点温度标签；天气编码经 iconEx 返回（白色 *_1 图标、bg_ 背景、蓝色 *_2 图标）三元组，页面各处分别绑定 iconEx/bgEx/icon2Ex；15日切换按钮是 wrap_content 图片加 10dp padding；目标用 ArkUI Canvas/Polyline、$r 资源映射函数和 Image 组件实现。",
+  "summary": "本问题由多个生成/返修环节的不同偏差叠加，分三张图归因：\n1）OPT-005 规格（S2 写入 spec）已明确“15 日趋势用 Canvas 复刻 LineChartDecoration 的两条温度折线、节点温度标签和滚动偏移”\n以及“资源复用 bg_home_weather_*、ic_home_weather_*、home_page_weather_ic_* 与生活/指数图标”。天气 worker Kuhn 读到该规格后，\n先写 Divider 竖条代替折线，再补成只有两条线、无节点标签/昼夜图标、固定 360×150 的 Canvas，并从 '@kit.ArkUI' 导入 SDK 未导出的\nCanvasRenderingContext2D；指数/生活指数用 SymbolGlyph，小时/15日图标取的是 bg_ 背景图。随后 hmos-builder James 看到的编译日志只报这两个\nimport 未导出，却把整个 Canvas 趋势图替换成“最高温·•·最低温”文字点列以通过编译，15 日折线由此消失，直到 S1 返修新建 WeatherTrendChart。\n2）S1 新建的 WeatherTrendChart 在 05:11 的整文件改写中，trendY 已按 LineChartDecoration 把 paddingT(150dp)+文字高度计入（178 + … × 122），\n又把用这些点坐标绘制的 Polyline 定位在 position({y:150})，折线相对标签整体再下移 150vp、落到 410vp 容器底部被裁剪；S2 改为 108 + … × 100、\nposition y:120 修复。S3 在 05:03–05:08 对该组件的改动只是模板字符串/Stack 编译修正，已被 S1 05:09、05:11 的整文件写入覆盖，不属本偏差来源。\n3）S3 首轮返修读到 Android 的 iconEx 三元组及 hour/day15 列表绑定 icon2Ex（非选中与 15 日用 *_2 蓝色），却把 weatherIcon 一律映射到 *_1 白色图标并供\n小时卡、15 日列表/趋势共用；该映射保留到 S2 按“白色云换成蓝色”改为 *_2。同一轮 S3 把 Android wrap_content+padding 10dp 的切换图标写成\n34×34 固定框再加 padding(10)，可视图形只剩约 14vp，后由 S2 按 180×81px 资源改为 60×30vp、Contain。\n其余布局尺寸（顶部天气区、今日/明日卡片、24 小时 75×175、AQI 环与四列指数网格）的多轮截图返修未逐项追溯来源，见 unknown。\n",
+  "recommendations": [
+    "实现自定义图表时，折线点与温度标签必须共用同一坐标原点：Android 在同一 Canvas 用 valToY（已含 paddingT、文字高度）画线和标签，ArkUI 若给 Polyline/Shape 设 position 偏移，点坐标需扣除同一偏移；提交前用最高、最低温两组边界值算出屏幕 y，确认都在容器高度内且与标签对齐。",
+    "编译修复只修报错符号，不删规格要求的功能：'@kit.ArkUI' 未导出 CanvasRenderingContext2D/RenderingContextSettings 时删除该 import、使用全局 Canvas 类型；若确需降级，回写 spec 并保持未完成状态，而不是用文字占位替换折线图。",
+    "迁移资源映射时按源端取值字段拆分函数：iconEx(*_1)、bgEx(bg_*)、icon2Ex(选中 *_1 / 非选中与 15 日 *_2) 分别映射，并在每个使用处按 Android 绑定的字段选择，不要用一个映射覆盖所有场景。",
+    "wrap_content 图片迁移前先查资源像素尺寸与密度目录（如 xxldpi 180×81px ≈ 60×27vp），按固有比例设宽高或 Contain；不要用固定正方形再叠加原 padding 压缩可视内容。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "D:/anhuizhongyi/huoche/harmony_train-ticket_vest28/entry/src/main/ets/pages/WeatherPage.ets",
+        "since": null,
+        "at": "2026-09-05T12:45:25.464Z"
+      },
+      "summary": "Kuhn 写前读到 OPT-005 spec 的 Canvas 复刻 LineChartDecoration（两条折线、节点温度标签、滚动偏移）与资源复用要求，输出却是无标签/无昼夜图标的简化 Canvas、\n错误的 '@kit.ArkUI' import 及 SymbolGlyph 指数图标；James 面对只报 import 未导出的编译日志，删除整个 Canvas 趋势图改为文字点列，\n折线缺失延续到 S1:L9471 以 WeatherTrendChart 替换（S3:L3396 改写该 builder 时仍无折线）。S3 首轮返修读到切换按钮 wrap_content+padding 10dp，\n写成 .width(34).height(34).padding(10)，由 S1:L9313 整段改写时沿用，直到 S2:L7187/L7215 改为 60×30 Contain。\n",
+      "nodes": [
+        {
+          "key": "D:/anhuizhongyi/huoche/harmony_train-ticket_vest28/spec/optimizations/2026-09-04-OPT-005-weather-android-parity.md",
+          "at": "2026-09-04T07:39:31.980Z",
+          "reason": "正常输入：Kuhn 的 Get-Content 回执包含“15 日趋势用 ArkUI Canvas/绘制组件复刻 Android LineChartDecoration 的两条温度折线、节点温度标签和滚动偏移”和“资源优先复用 bg_home_weather_*、ic_home_weather_*、home_page_weather_ic_* 与生活/指数图标”（agent-01a06b5b-672e-7272-a528-dbf534a9e287.jsonl:L39-L41），足以指导趋势图与图标实现。"
+        },
+        {
+          "key": "agent-01a06b5b-672e-7272-a528-dbf534a9e287.jsonl",
+          "at": "2026-09-04T08:07:22.989Z",
+          "reason": "已收到上述规格，首稿 15 日趋势只写 Divider 竖条（L169-L171），补稿 Canvas 仅画两条线、无节点温度标签和昼夜图标，并 import { CanvasRenderingContext2D, RenderingContextSettings } from '@kit.ArkUI'（L309-L311）；指数/生活指数用 SymbolGlyph 云朵/爱心（L169、L252），小时与 15 日列表图标改用 weatherIcon 即 bg_ 背景图（L321-L323）。",
+          "problem": true
+        },
+        {
+          "key": "D:/anhuizhongyi/huoche/harmony_train-ticket_vest28/build_out.log",
+          "at": "2026-09-04T08:11:25.211Z",
+          "reason": "正常输入：James 读取的编译日志只报 WeatherPage.ets:7 从 '@kit.ArkUI' 导入的 CanvasRenderingContext2D/RenderingContextSettings 未导出（agent-01a06b77-6d98-7000-93db-e9706af4c5e5.jsonl:L81-L83）；其 hmos-fix-build-errors skill 也写明 ArkUI 内置组件无需 import、须按报错修复（同转录 L27-L29）。"
+        },
+        {
+          "key": "agent-01a06b77-6d98-7000-93db-e9706af4c5e5.jsonl",
+          "at": "2026-09-04T08:12:03.726Z",
+          "reason": "编译错误只涉及 import 符号，apply_patch 却删除 trendContext、drawTrend 与 Canvas 调用，改为 @Builder trendChart() 的“最高温·•·最低温”文字点列（L99-L101），并在回执中报“以 ArkTS trendChart 替代 Canvas 趋势图”（L164）；规格要求的两条温度折线自此消失。",
+          "problem": true
+        },
+        {
+          "key": "D:/anhuizhongyi/huoche/android-train-ticket-vest7/app/src/main/res/layout/fragment_weather.xml",
+          "at": "2026-09-04T09:40:18.749Z",
+          "reason": "正常输入：S3 读取回执中 15 日切换 ImageView 为 layout_width/height=wrap_content、padding=10dp、src=home_page_toggle_0（main-01a06b28-0c59-7042-9414-614a253fd770.jsonl:L2505-L2507）；同轮 rg 还列出该资源为 xxldpi/media/home_page_toggle_0.png（L2511-L2513），可据此按固有尺寸实现。"
+        },
+        {
+          "key": "main-01a06b28-0c59-7042-9414-614a253fd770.jsonl",
+          "at": "2026-09-04T09:51:18.056Z",
+          "reason": "读到 wrap_content+padding 10dp 后，apply_patch 把切换图标写成 Image(home_page_toggle_0/1).width(34).height(34).padding(10)，未查资源像素尺寸，可视图形被压到约 14vp（同转录 L2753-L2755）；S2 量得 180×81px 后改为 60×30、Contain（main-01a06b1c-4512-7a61-988f-86413715d804.jsonl:L7180-L7215）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "Kuhn 的 exec 调用 Get-Content 读取 OPT-005 spec（-TotalCount 260），回执包含 15 日趋势 Canvas 复刻 LineChartDecoration 与图标资源复用要求；这是其写 WeatherPage 前的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/agent-01a06b5b-672e-7272-a528-dbf534a9e287.jsonl",
+              "line": 39
+            },
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/agent-01a06b5b-672e-7272-a528-dbf534a9e287.jsonl",
+              "line": 41
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": "target",
+          "force": true,
+          "reason": "Kuhn 的 apply_patch 先 Add File 新建 WeatherPage.ets（Divider 竖条趋势、SymbolGlyph 指数图标），再 Update File 加入 '@kit.ArkUI' import 与简化 Canvas 双线、把列表图标改为 weatherIcon；回执 {} 表示补丁成功。",
+          "evidence": [
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/agent-01a06b5b-672e-7272-a528-dbf534a9e287.jsonl",
+              "line": 169
+            },
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/agent-01a06b5b-672e-7272-a528-dbf534a9e287.jsonl",
+              "line": 171
+            },
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/agent-01a06b5b-672e-7272-a528-dbf534a9e287.jsonl",
+              "line": 309
+            },
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/agent-01a06b5b-672e-7272-a528-dbf534a9e287.jsonl",
+              "line": 311
+            },
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/agent-01a06b5b-672e-7272-a528-dbf534a9e287.jsonl",
+              "line": 321
+            },
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/agent-01a06b5b-672e-7272-a528-dbf534a9e287.jsonl",
+              "line": 323
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "James 的 exec 调用 Get-Content build_out.log -Tail 50，回执为 ArkTS 编译失败，只报 WeatherPage.ets:7 从 '@kit.ArkUI' 导入的 CanvasRenderingContext2D/RenderingContextSettings 未导出；这是其修改前读取的构建日志。",
+          "evidence": [
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/agent-01a06b77-6d98-7000-93db-e9706af4c5e5.jsonl",
+              "line": 81
+            },
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/agent-01a06b77-6d98-7000-93db-e9706af4c5e5.jsonl",
+              "line": 83
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": "target",
+          "force": true,
+          "reason": "James 的 apply_patch 以 Update File 修改 WeatherPage.ets，删除 import、trendContext、drawTrend 和 Canvas 调用，新增 trendChart() 文字点列；回执 {} 表示补丁成功。",
+          "evidence": [
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/agent-01a06b77-6d98-7000-93db-e9706af4c5e5.jsonl",
+              "line": 99
+            },
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/agent-01a06b77-6d98-7000-93db-e9706af4c5e5.jsonl",
+              "line": 101
+            }
+          ]
+        },
+        {
+          "from": 5,
+          "to": 6,
+          "force": true,
+          "reason": "S3 的 exec 调用 Get-Content 读取 fragment_weather.xml 第 241 行起的布局，回执包含 15 日切换 ImageView 的 wrap_content 与 padding=10dp；这是 S3 首轮返修写入前的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/main-01a06b28-0c59-7042-9414-614a253fd770.jsonl",
+              "line": 2505
+            },
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/main-01a06b28-0c59-7042-9414-614a253fd770.jsonl",
+              "line": 2507
+            }
+          ]
+        },
+        {
+          "from": 6,
+          "to": "target",
+          "force": true,
+          "reason": "S3 的 apply_patch 同时 Update WeatherModels.ets 与 WeatherPage.ets，在 WeatherPage 写入 Image(home_page_toggle_0/1).width(34).height(34).padding(10)；回执 {} 表示补丁成功。",
+          "evidence": [
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/main-01a06b28-0c59-7042-9414-614a253fd770.jsonl",
+              "line": 2753
+            },
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/main-01a06b28-0c59-7042-9414-614a253fd770.jsonl",
+              "line": 2755
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "D:/anhuizhongyi/huoche/harmony_train-ticket_vest28/entry/src/main/ets/components/WeatherTrendChart.ets",
+        "since": null,
+        "at": "2026-09-05T12:45:25.464Z"
+      },
+      "summary": "S1 在用户指出“15日预报中的元素和安卓不一致”后读到 LineChartDecoration：valToY =(max−v)/(max−min)×(height−paddingT150−paddingB100−2textH)+textH+paddingT，\n折线与温度标签画在同一 RecyclerView 画布坐标。S1 05:11 整文件改写 WeatherTrendChart 时，trendY 已按该公式取绝对 y（178 + … × 122），\n标签用 position({y: trendY−24/+10}) 定位，但两条 Polyline 用同一批点并再设 position({x:0, y:150})，等于重复加上 paddingT，\n折线落到 328–450vp，超出 410vp 容器底部，低温线被裁剪、整体贴近下方模块。此片段保留到 S2 读取（main-01a06b1c…:L6684-L6687），\nS2 改为 108 + … × 100 且 position y:120（L6700）。S3 05:03–05:08 的并行写入只修模板字符串与 Stack 包裹，已被 S1 05:09、05:11 的整文件写入覆盖。\n",
+      "recommendations": [
+        "把源端 ItemDecoration 迁移为 ArkUI 叠加层时，先确定唯一坐标系：点坐标若已包含 paddingT 等偏移，Polyline 就放在容器原点；若 Polyline 需 position 偏移，点坐标改为相对值，并以最高/最低温边界点检查 y 均落在容器高度内且与标签同基线。"
+      ],
+      "nodes": [
+        {
+          "key": "D:/anhuizhongyi/huoche/android-train-ticket-vest7/app/src/main/java/com/njclx/yisanfare/widget/LineChartDecoration.kt",
+          "at": "2026-09-05T04:41:14.236Z",
+          "reason": "正常输入：Get-Content 回执给出 paddingT=150dp、paddingB=100dp、textH，以及 valToY=(max−v)/(max−min)×(height−paddingT−paddingB−textH×2)+textH+paddingT，线与 °C 标签都在同一 canvas 坐标绘制（main-01a06a30-cfe0-7971-9329-2ce966ab0820.jsonl:L9270-L9272）；足以确定点坐标已含顶部留白。"
+        },
+        {
+          "key": "main-01a06a30-cfe0-7971-9329-2ce966ab0820.jsonl",
+          "at": "2026-09-05T05:11:15.555Z",
+          "reason": "读到上述公式后，Set-Content 整文件写入 trendY=178+(high−v)/range×122（已含 paddingT+文字高度），标签以该绝对 y 定位，却把用同一点集的两条 Polyline 再 position({x:0,y:150})、高度 140，折线相对标签下移 150vp、超出 410vp 容器（同转录 L9739-L9741）；后续 L9756、L9835、L9858 只改类型、日期标签与换行，未动该片段。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "S1 的 exec 调用 Get-Content 读取 app/src/main/java/com/njclx/yisanfare/widget/LineChartDecoration.kt（workdir 为 Android 工程根），回执包含 paddingT/paddingB/textH 与 valToY 公式；这是其重写趋势组件前的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/main-01a06a30-cfe0-7971-9329-2ce966ab0820.jsonl",
+              "line": 9270
+            },
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/main-01a06a30-cfe0-7971-9329-2ce966ab0820.jsonl",
+              "line": 9272
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": "target",
+          "force": true,
+          "reason": "S1 的 exec 用 PowerShell here-string 经 Set-Content 整文件写入 entry/src/main/ets/components/WeatherTrendChart.ets，内容含 trendY=178+…×122 与 Polyline.position({x:0,y:150})；回执完成且无错误输出。",
+          "evidence": [
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/main-01a06a30-cfe0-7971-9329-2ce966ab0820.jsonl",
+              "line": 9739
+            },
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/main-01a06a30-cfe0-7971-9329-2ce966ab0820.jsonl",
+              "line": 9741
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "D:/anhuizhongyi/huoche/harmony_train-ticket_vest28/entry/src/main/ets/models/WeatherModels.ets",
+        "since": null,
+        "at": "2026-09-05T12:45:25.464Z"
+      },
+      "summary": "两个先后起点：Kuhn 读到规格的 ic_home_weather_* 复用要求和 Android Weather.kt（每个编码对应 bg_、*_1、*_2 三个资源），\n却把 weatherIcon 映射成 bg_home_weather_* 背景图并用作小时/15日小图标；S3 首轮返修识别“背景图当小图标”，转换 80 个矢量资源后改映射，\n但它读到 Entities.kt 中 Hour24.icon2Ex=selected?first:third、Day30.icon2Ex=third 及 day15 条目绑定 icon2Ex 后，仍把 weatherIcon 一律映射到 *_1 白色图标，\n并让小时卡、15 日列表/趋势共用；该映射保留到 S2 读取（main-01a06b1c…:L6830-L6833），S2 按用户“白色云换成蓝色”改为 *_2（L6851、L6963）。\n",
+      "recommendations": [
+        "迁移天气图标时按 Android iconEx/bgEx/icon2Ex 分别建立映射（*_1、bg_、*_2），列表、趋势等非选中场景用 icon2Ex 对应的 *_2；资源缺失时先按计划从 Android drawable 转换补齐，不用背景图或系统 Symbol 代替。"
+      ],
+      "nodes": [
+        {
+          "key": "D:/anhuizhongyi/huoche/harmony_train-ticket_vest28/spec/optimizations/2026-09-04-OPT-005-weather-android-parity.md",
+          "at": "2026-09-04T07:39:31.980Z",
+          "reason": "正常输入：Kuhn 读到的规格要求“资源优先复用 bg_home_weather_*、ic_home_weather_*、home_page_weather_ic_*”，计划 Task 1 要求“天气 code 到背景/昼夜图标的确定性映射”（agent-01a06b5b-672e-7272-a528-dbf534a9e287.jsonl:L39-L41）。"
+        },
+        {
+          "key": "D:/anhuizhongyi/huoche/android-train-ticket-vest7/app/src/main/java/com/njclx/yisanfare/module/weather/Weather.kt",
+          "at": "2026-09-04T07:40:06.978Z",
+          "reason": "正常输入：Kuhn 读取回执中 Weather 枚举逐项列出 (bg_home_weather_x, ic_home_weather_x_1, ic_home_weather_x_2) 三个资源（同转录 L60、L75），背景与图标明确分开。"
+        },
+        {
+          "key": "agent-01a06b5b-672e-7272-a528-dbf534a9e287.jsonl",
+          "at": "2026-09-04T07:42:12.622Z",
+          "reason": "已收到上述输入，apply_patch 新建 WeatherModels 时 weatherIcon 只映射 bg_home_weather_* 背景图（同转录 L150-L152），随后 WeatherPage 小时与 15 日列表以 Image(weatherIcon(...)) 26×26 使用（L321-L323）；S3 在 L2504 指出“鸿蒙把天气背景图当作小图标使用”。",
+          "problem": true
+        },
+        {
+          "key": "D:/anhuizhongyi/huoche/android-train-ticket-vest7/app/src/main/res/layout/fragment_home_day15_item.xml",
+          "at": "2026-09-04T09:40:30.717Z",
+          "reason": "正常输入：S3 读取回执中 15 日趋势条目的昼/夜 ImageView 均绑定 viewModel.icon2Ex（tools:src=ic_home_weather_101_2），小时条目同样绑定 icon2Ex；同一调用的 rg 返回 Entities.kt:33 icon2Ex=if(selected) first else third、:78 Day30.icon2Ex=third（main-01a06b28-0c59-7042-9414-614a253fd770.jsonl:L2511-L2513）。"
+        },
+        {
+          "key": "D:/anhuizhongyi/huoche/android-train-ticket-vest7/app/src/main/java/com/njclx/yisanfare/data/net/response/Entities.kt",
+          "at": "2026-09-04T09:40:45.061Z",
+          "reason": "正常输入：S3 读取 Entities.kt 与 Weather.kt 的回执给出 iconEx=first、bgEx=second、icon2Ex=third 及 100 -> Triple(ic_home_weather_100_1, bg_home_weather_100, ic_home_weather_100_2)（同转录 L2517-L2519），足以区分白色 *_1 与蓝色 *_2 的使用场景。"
+        },
+        {
+          "key": "main-01a06b28-0c59-7042-9414-614a253fd770.jsonl",
+          "at": "2026-09-04T09:42:37.939Z",
+          "reason": "读到 icon2Ex 场景区分后，apply_patch 把 weatherIcon 全部改为 ic_home_weather_*_1、另建 weatherBackground，没有 *_2 变体函数（同转录 L2549-L2551）；WeatherPage 小时卡、15 日列表及后来的 15 日趋势（S3:L3396、S1 WeatherTrendChart）都调用该函数，白色云保留到 S2:L6851 改 *_2。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "Kuhn 的 exec 调用 Get-Content 读取 OPT-005 spec 与 plan，回执包含 ic_home_weather_* 资源复用和“背景/昼夜图标确定性映射”要求；这是其新建 WeatherModels 前的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/agent-01a06b5b-672e-7272-a528-dbf534a9e287.jsonl",
+              "line": 39
+            },
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/agent-01a06b5b-672e-7272-a528-dbf534a9e287.jsonl",
+              "line": 41
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "Kuhn 的 exec 批量 Get-Content 读取 Android weather 模块源码（含 Weather.kt），回执列出 Weather 枚举的 bg_home_weather_x、ic_home_weather_x_1、ic_home_weather_x_2 三资源；这是写前真实读取。",
+          "evidence": [
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/agent-01a06b5b-672e-7272-a528-dbf534a9e287.jsonl",
+              "line": 60
+            },
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/agent-01a06b5b-672e-7272-a528-dbf534a9e287.jsonl",
+              "line": 75
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target",
+          "force": true,
+          "reason": "Kuhn 的 apply_patch 以 Add File 新建 WeatherModels.ets，weatherIcon 只映射 bg_home_weather_*；回执 {} 表示补丁成功。",
+          "evidence": [
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/agent-01a06b5b-672e-7272-a528-dbf534a9e287.jsonl",
+              "line": 150
+            },
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/agent-01a06b5b-672e-7272-a528-dbf534a9e287.jsonl",
+              "line": 152
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": 6,
+          "force": true,
+          "reason": "S3 的 exec 调用 Get-Content 读取 fragment_home_hour_item.xml、fragment_home_day15_item.xml 并 rg Entities.kt 的 iconEx/bgEx，回执显示条目绑定 icon2Ex 且 Day30.icon2Ex=third；这是 S3 改映射前的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/main-01a06b28-0c59-7042-9414-614a253fd770.jsonl",
+              "line": 2511
+            },
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/main-01a06b28-0c59-7042-9414-614a253fd770.jsonl",
+              "line": 2513
+            }
+          ]
+        },
+        {
+          "from": 5,
+          "to": 6,
+          "force": true,
+          "reason": "S3 的 exec 调用 Get-Content 读取 Entities.kt 并 rg Weather.kt 的 iconEx，回执给出 iconEx/bgEx/icon2Ex 定义与 100 -> Triple(ic_home_weather_100_1, bg_home_weather_100, ic_home_weather_100_2)；这是改映射前的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/main-01a06b28-0c59-7042-9414-614a253fd770.jsonl",
+              "line": 2517
+            },
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/main-01a06b28-0c59-7042-9414-614a253fd770.jsonl",
+              "line": 2519
+            }
+          ]
+        },
+        {
+          "from": 6,
+          "to": "target",
+          "force": true,
+          "reason": "S3 的 apply_patch 以 Update File 修改 WeatherModels.ets，把 weatherIcon 全部改为 ic_home_weather_*_1 并新增 weatherBackground；回执 {} 表示补丁成功。",
+          "evidence": [
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/main-01a06b28-0c59-7042-9414-614a253fd770.jsonl",
+              "line": 2549
+            },
+            {
+              "source": "runs/a5bafa53-0bf4-46da-a110-558c2d05e387/epoch-0/sessions/main-01a06b28-0c59-7042-9414-614a253fd770.jsonl",
+              "line": 2551
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "Kuhn 与 James 收到的 root 派工消息为加密内容，无法确认派工是否额外允许降级；本卡依据其写前读取的 spec、编译日志与写入内容对照。",
+    "顶部天气区、今日/明日卡片、24 小时与 15 日卡片尺寸、AQI 环和四列指数网格的尺寸返修（S3:L3376-L3513、S3:L4351-L4704、S1:L9150-L9422）未逐项定位首个偏差写者，本卡未为其单独画链。",
+    "S2 最终把所有场景统一改为 *_2；Android 顶部天气区 hour.iconEx 仍取 *_1，本卡不评价该最终取舍。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-9d7fa754a567e2ecec7e",
+  "metadata": {
+    "migration": {
+      "project": "android-train-ticket-vest7",
+      "server_session_id": "3a9f41ad-48a4-4f1a-a085-fb6393b81f8a"
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "c76595c5-8c6b-41b9-911a-7d9638278fb4"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "gpt-5.6-sol"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.152.1",
+        "0.153.0-alpha.5"
+      ]
+    },
+    "source_set_id": "sources-8b0a7c0de0b3c4c2be88",
+    "card_tool_version": "0.8.3"
+  },
+  "revision": "08068dd456a4c32cc1327c39f339215b49dab4ffc8f5a25dc8024b7112ebbd28"
+}

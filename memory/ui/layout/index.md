@@ -1,65 +1,21 @@
 # ui/layout
 
-容器选择、约束与定位（ConstraintLayout、RelativeContainer、RelativeLayout 无相对规则子项的叠放、Column、Stack 内子项的纵向定位等），默认对齐差异、百分比尺寸与 margin、并排 wrap_content 列的宽度分配、跟随等高、滚动容器的包含范围、运行时挂载层与锚点转换、随滚动折叠的顶栏、全屏底层与状态覆盖层骨架、gone 节点与列表 item 布局，以及视觉修复中固定尺寸的依据；方向相关边距（start/end）的 LengthMetrics 写法；从点击处发出的动效与气泡的锚点坐标取值时机，自绘组件的容器与绘制尺寸同源
+页面几何与层级：按约束定位、尺寸与边距、滚动区域、运行时覆盖层选择分支；通用页面结构与视觉修复依据留在本级。
 
 [上一级](../index.md)
 
+## 子主题
+
+- [constraints](constraints/index.md) — ConstraintLayout/RelativeLayout的锚点、叠放与默认对齐，及ArkUI容器中的子项定位。
+- [layers](layers/index.md) — 运行时addView挂载、全屏底层与状态覆盖层，以及动效/气泡锚点的坐标与取值时机。
+- [scrolling](scrolling/index.md) — 滚动范围、连续折叠顶栏与滚动容器内的跟随等高。
+- [sizing](sizing/index.md) — 宽高、比例、百分比与边距的组合，贴合内容的背景，以及横向滚动容器的交叉轴定高。
+
 ## 本级经验
 
-- [ConstraintLayout 中单视图对 parent 居中、兄弟单向悬挂时，用 RelativeContainer 复刻，不用 Column 整组居中](lesson-e607a28fcd91acd2b40f.lesson.md)
-  - 时机：规格提取阶段把 ConstraintLayout 约束翻译成容器与定位决策，或页面实现阶段落定容器时
-  - 情境：源 ConstraintLayout 中一个子视图以 start/end/top/bottom 四向锚定 parent 自身居中，另一个兄弟只以 constraintTop_toBottomOf 等单向约束挂在它下方，兄弟之间没有双向约束。
-  - 例外：兄弟之间有双向约束构成 chain 时，按 chain 语义（chainStyle）另行转换，不适用本条
-- [ConstraintLayout 改写成 Column 顺序流前先列出各子项锚点：锚父底、锚兄弟与双 0dp 比例子项都要保留语义](lesson-3fe0026df9abc72ff788.lesson.md)
-  - 时机：界面实现阶段，把 ConstraintLayout 转成 Column/Row 顺序流或 Stack 层级，确定锚点边距与比例子项尺寸时
-  - 情境：源 ConstraintLayout 中有多个子项 constraintBottom_toBottomOf=parent（含 invisible 仍占位的行）、按钮上方的文字以 constraintBottom_toTopOf 锚在兄弟上、0dp×0dp 加 dimensionRatio 的子项夹在上下锚点之间；目标用 Column 顺序流、layoutWeight、Visibility.Hidden 或父 Stack 的 BottomStart。
-- [RelativeLayout 中没有相对规则的子 View 叠放在同一区域：用 Stack 或同一坐标定位，不改成 Column 顺序排列](lesson-7dcf2d92c689c96c190b.lesson.md)
-  - 时机：界面实现与视觉返修阶段，把 RelativeLayout 或 FrameLayout 内的多个子 View（如两条曲线、图层）翻译成 ArkUI 容器时
-  - 情境：源 item 在固定高度的 RelativeLayout 中放置多个子 View，它们没有 below/above/toEndOf 等相对规则，只有相同的 margin 或对齐，实际重叠绘制在同一区域；目标沿用了上一版的 Column 顺序结构。
-  - 例外：子 View 之间写有 layout_below/above/toStartOf 等相对规则，此时按规则排布
-- [Stack 中内容尺寸的子项按 alignContent 定位：子项自身的 .align() 不改变它在父容器中的位置，需要的对齐用满尺寸容器或显式 position](lesson-92aee54a305ea0bde363.lesson.md)
-  - 时机：界面转换与巡检修复阶段，把 Compose 自定义 Layout 或 Box 中的文字改写为 ArkUI Stack 子节点并确定纵向位置时；修复或编译清理删除 height('100%')、.align() 等居中手段时；把 FrameLayout 中按 layout_gravity 叠放的角标、重叠头像翻译成 Stack 时
-  - 情境：源端自定义 Layout 用 placeRelative(x, (maxHeight - height) / 2) 把定宽文字纵向居中，或 Box 中文字按居中对齐放置；目标用 Stack({ alignContent: Alignment.TopStart }) 同时容纳文字与图片等对齐需求不同的子项。也包括源端固定尺寸 FrameLayout 中的小角标以 layout_gravity=end|bottom 贴右下，目标写成 Stack({ alignContent: Alignment.TopStart }) 并只给角标加 .align(Alignment.BottomEnd)。
-- [layout_marginStart/End 写成 margin 的 start/end 时同一对象各边都用 LengthMetrics；不需要随语言方向翻转时改用 left/right 数值](lesson-e3077bf60cfc3f34d0a2.lesson.md)
-  - 时机：界面实现阶段，把 layout_marginStart/End 一类方向相关边距写成 ArkUI margin 时；维护映射参考的边距示例时
-  - 情境：源布局用 marginEnd/marginStart（常与 marginBottom 等写在同一控件上）；映射参考把它对到 .margin({ end }) 并给出纯数字示例。
-- [match_parent/0dp 加同轴 margin 表示“父尺寸减边距”：不写成百分比加 margin，等权重兄弟的间距改用 space](lesson-75f4743dff663f50966b.lesson.md)
-  - 时机：界面实现阶段，把 match_parent 或两侧约束 0dp 且带同轴 margin 的视图、或带 margin 的等权重兄弟翻译成 ArkUI 尺寸与间距时；按要求调整左右边距时
-  - 情境：源元素 match_parent（或约束到父两侧的 0dp）同时设 layout_marginHorizontal/Start/End 或 marginTop/Bottom；或水平 LinearLayout 中等权重（0dp + weight）的子项以 marginStart 作间距；目标用 width/height('100%') 或 layoutWeight。
-- [为已转换页面接线时保留“全屏底层 + 按状态切换的前景层”骨架；地图 SDK 不可用也不把全屏承载改成自绘小卡](lesson-4de4283ec625be7e976c.lesson.md)
-  - 时机：功能切片为已转换页面接入 ViewModel、Service 与跳转，决定保留还是重写布局骨架时；巡检修复处理“缺少全屏地图承载”一类发现时
-  - 情境：Android 页面以全屏 MapView/导航视图为底层，前景由 ViewModel 布尔状态（如 showRoute）切换两套覆盖层；导航页 FEATURE_NO_TITLE、只承载导航视图；目标地图/导航 SDK 暂不可用，页面转换阶段已写出带全屏占位底图与两态覆盖层的骨架。
-- [并排 wrap_content 图片列不按固有 dp 写死宽度：按固有宽度比例分列，高度用 aspectRatio](lesson-0618cdf331560d389f0e.lesson.md)
-  - 时机：界面实现阶段，把 match_parent 父行中并排的 wrap_content 图片列转换为 ArkUI Row/Column 并确定列宽时；修复“右侧顶满/被遮挡”时
-  - 情境：源布局在 match_parent 的水平 LinearLayout 中并排放置 wrap_content 图片列，列宽来自 drawable 固有尺寸与左右、列间 margin，其总和接近或超过常见手机屏宽；目标要在宽度不同的设备上与源截图对齐。
-- [播放器面等运行时 addView 挂到根部的层，按运行时层级实现，不按 XML 里的占位区域定几何](lesson-c3dcc5a25a0ad59c53c1.lesson.md)
-  - 时机：界面实现阶段，转换含运行时挂载子视图（播放器面等）的列表项或页面、确定视频层与浮层关系时
-  - 情境：源 Fragment/Adapter 在播放时通过 addView/LayoutParams 把视图挂到根容器（如 addView(videoView, 0) 无约束铺满），XML 里同名区域只是封面或控制视图；目标用 Stack/Column 重建层级。
-- [横向滚动容器给交叉轴写数值高度，按内容算出，不写 'auto' 也不留空](lesson-2d7c6de68f604ae77caf.lesson.md)
-  - 时机：界面实现阶段，把 Compose 可滚动 Tab 行、LazyRow、horizontalScroll 等按内容定高的横向滚动行翻译成 ArkUI 滚动容器时
-  - 情境：源端横向滚动行的高度由子项固有高度决定；目标用 Scroll(ScrollDirection.Horizontal) 或横向 List/Grid 实现，所在父容器在纵向上还有剩余空间。
-- [源端 exitUntilCollapsed 连续折叠顶栏按滚动偏移算折叠比例插值，不用首个可见行索引做两态切换](lesson-67ab02abe6ec76f4129e.lesson.md)
-  - 时机：界面转换阶段，把 LargeTopAppBar/LargeFlexibleTopAppBar 配合 exitUntilCollapsedScrollBehavior 的顶栏落成 ArkUI 时
-  - 情境：源端顶栏由 collapsedFraction 驱动高度、标题、背景色与阴影；目标页用 List 或 Scroll 承载内容。
-- [源端“右列 match_parent 跟随左卡等高”在 Scroll 内用实测高度传递实现，不用估算常量](lesson-8334433bea644f2a89ae.lesson.md)
-  - 时机：界面实现与验证期修复阶段，为并排卡片确定跟随等高约束，而整行位于 Scroll 等纵向无界容器中时
-  - 情境：Android 水平行里右列 height=match_parent 随左侧 wrap_content 卡片等高；整行在 NestedScrollView（ArkUI Scroll）中；目标在 Scroll 内用纵向 layoutWeight 或 height('100%') 会被撑高失控。
-- [源端在触发瞬间读取锚点窗口位置时，目标在点击回调里取本次手势坐标或即时查询，onAreaChange 缓存只作兜底；锚点取源端传入的同一元素](lesson-963bf871aa4e910a8fc8.lesson.md)
-  - 时机：界面实现与修复阶段，为从点击处发出的动效或气泡（完成彩纸、锚点提示）确定起点坐标与锚点元素时
-  - 情境：源端在动效或弹窗被调用时用 getLocationInWindow 读取传入锚点 View 的当下窗口中心；目标列表项存在 translate 平移、LazyForEach/Repeat 节点复用或弹层内滚动，写者准备用 onAreaChange 缓存控件位置。
-- [源端默认起始对齐和贴顶要显式写出：Android 与 Compose 的纵向容器默认贴起始边，ArkUI Column 交叉轴默认居中，Scroll 内不满一屏的内容默认居中](lesson-08b9064f678f1635e647.lesson.md)
-  - 时机：界面实现阶段，把纵向 LinearLayout、带 constraintStart/Top 的 ConstraintLayout 或 ScrollView/NestedScrollView 转成 ArkUI Column 与 Scroll 时；以及把 Compose Column 中的文本块转成 ArkUI Column 子项时
-  - 情境：源纵向 LinearLayout 没写 gravity（子项默认贴起始边），或 wrap_content 子项以 constraintStart_toStartOf=parent 靠起始边、卡片以 constraintTop_toTopOf=parent 贴顶；目标 Column 宽度撑满，子项为固定或内容宽度；滚动页内容常不满一屏。或显示卡片用 layoutWeight 分高，源端卡内内容 wrap_content 自上而下排列并带上内边距。也包括 Compose Column 未声明 horizontalAlignment（默认 Start），文本只带水平 padding 而无 fillMaxWidth，仅个别项以 fillMaxWidth + TextAlign.Center 居中。
 - [视觉修复以源布局与源码分支为准：截图尺寸差先折算成 vp 对照，容器尺寸与自绘组件的绘制尺寸同源修改，截图里缺少的入口先查渠道与开关分支，文档截图与 @Preview 示例不当应用真值](lesson-8119d8bf0b58e4daac24.lesson.md)
   - 时机：视觉校验与修复阶段，根据截图差异撰写工单，决定修改固定尺寸、列数、背景，删减截图中没有出现的入口与区块，或按基线截图选定空态等文案与图标时；按差异单调整包裹自绘组件（Canvas 日历等）的容器高度与折叠范围时
   - 情境：源端基线截图与目标截图来自不同设备或屏幕密度，并排对比显示目标主内容“偏小”或“偏上”；目标页的主要区块已按源布局 dp 字面值写入固定高度与 marginTop，并与底部 Tab 共享有限的纵向空间。截图也可能只来自某个渠道、会员或开关变体，或只反映某一时刻的天气与昼夜状态；源 Fragment 中有按 getChannel()、开关对入口 setVisibility 的分支。也包括把源仓库 docs/assets 下的截图或 @Preview 预览当作基线，而其中的示例文案、图标与应用实际调用链不同的情形。也包括外层容器按“行数 × 行高”计算高度并 clip、同一行高还决定手势折叠范围，而行高实际由内部 Canvas 的常量绘制；差异单只有“行高更大”一类文字结论。
-- [贴合内容的描边、选中背景画在由内容定尺寸的节点自身，不用 width/height('100%') 覆盖层](lesson-a58ebfe7a4c55b041b14.lesson.md)
-  - 时机：界面实现阶段，翻译用 fillMaxSize()、matchContentSize 贴合内容的选中指示器、描边或背景时
-  - 情境：源端指示器或背景层以 fillMaxSize、matchContentSize 贴合某个由内容定尺寸的格子；目标准备在 Stack/Row 里叠一层 width/height('100%') 的节点来画描边或背景。
-  - 例外：父节点有确定的宽高（显式数值，或已被外层约束定死）时，百分比层按该尺寸解析，可以使用
-- [转换 NestedScrollView/ScrollView 时只把源滚动容器内的子节点放进 Scroll，位于其前的固定头部留在 Scroll 外](lesson-46a0d7f239efac925d33.lesson.md)
-  - 时机：界面实现阶段，把 Android 页面转成 ArkUI 时确定固定区域与 Scroll 的包含范围；以及规格提取阶段书写滚动容器的转换决策时
-  - 情境：源布局根为纵向 LinearLayout 或 RelativeLayout，顶部用户栏、工具栏或横幅位于 NestedScrollView 之前（RelativeLayout 中滚动容器以 layout_below 排在其下），滚动容器承载地图、主按钮、卡片、宫格等主体；目标用 ArkUI Scroll 实现。
 - [页面转换逐项落实源 XML 的 gone 节点、固定尺寸点击容器与 tools:listitem 行布局](lesson-f1a98587fe72ff68c5a8.lesson.md)
   - 时机：页面转换阶段，把 Android 页面 XML 翻译为 ArkUI 结构与几何时
   - 情境：源布局含 visibility=gone 的标题等节点、固定尺寸的点击容器（如 40×48dp 的返回 ImageView），列表 RecyclerView 用 tools:listitem 引用独立的 item 布局；迁移用的页面快照是合成的，可能把 gone 节点列为可见文本。

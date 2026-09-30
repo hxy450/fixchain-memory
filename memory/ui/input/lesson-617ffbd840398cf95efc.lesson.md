@@ -25,7 +25,3 @@ Compose 输入框只显示状态值，拒绝写回就等于拒绝输入；ArkUI 
 
 - 能上设备时输入 N+1 个字符，核对 TextInput 文本长度。
 
-## 来源（按需复核）
-
-- case-e3cd92963aa40d922fdc · 结论：diagnosis, recommendation:1, recommendation:2
-  卡片版本：`9788f0e9846113141c74603b6f4b949ae84f08bb07d5f725949650546de97620`

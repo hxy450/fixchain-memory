@@ -22,7 +22,3 @@ ID：`lesson-34c8ac69ad849f8c24e1` · 版本：1
 2. 上游索引或派工声称某页有某组件、源布局却没有对应容器时，登记为待决冲突交裁决；不要把验收锚点改挂到无关源行来保住这条要求。
 3. 页面转换时派工要求的槽位在源布局中不存在，在回报里列为冲突并请求确认，不自行放到“常见位置”。
 
-## 来源（按需复核）
-
-- case-3db1068ed462e12cf813 · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3, recommendation:4
-  卡片版本：`de14a7ceed8f2040536b7acd797e712fcb0f61b8b362efe681dc9b37f8577ee6`

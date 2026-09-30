@@ -1,0 +1,155 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-69e9fe864e45c19bce9d",
+  "created_at": "2026-09-29T14:39:41.383748+00:00",
+  "migration_key": "bc16995e-3fe1-41da-85f4-11f10a1f4203",
+  "title": "手写RDB建表DDL时裸写列名to，撞SQLite关键字导致数据库初始化失败",
+  "when": "数据层实现阶段，把Room实体列清单手写为HarmonyOS relationalStore建表SQL（SCHEMA_DDL）时",
+  "description": "Android端表结构由Room注解生成，Room生成的createSql会自动给表名、列名加反引号；迁移到ArkTS relationalStore需手写CREATE TABLE字符串，且实体列名中含to、order、group、index、default、key等SQL关键字。",
+  "summary": "生成者写前实际收到data-proto-brief §2.4逐列给出的reactions表清单，其中\n`| ReactionEntity | reactions | to | to | TEXT | nullable |` 已正确给出列名to、类型TEXT、可空\n（main-01a0d107 L546、L548）。源端实体为 @ColumnInfo(name = \"to\")，Room schema v44 的 createSql 写作 `to` TEXT\n（brief作者 agent-01a0d109 L224、L254 读取回执）；brief §2.1 还把 44.json 登记为 authoritative DDL，\n但生成者按正则分段 grep 只取了实体行，没有取到该行或原始 createSql。列名事实本身正确、清晰，\n足以写出这一列，只需按 SQL 规则转义标识符。\n本次输出（L594 WriteAllText，L596 回执）却把全部列名不加引号地平移进 SCHEMA_DDL，reactions 表写成 `to TEXT,`，\n并在注释中声称列名与 Room @Entity 一致。TO 是 SQLite 关键字，这条 CREATE TABLE 本身语法错误。\n偏差位于\"列清单 → 手写DDL\"的实现环节：名称照抄正确，却丢掉了 Room 原本替开发者完成的标识符转义，写后也没有执行一遍 DDL。\n随后 L605 补丁只改 traceroute_node_position、discovery_session 两张表，reactions 片段保留到返修前；\nSQL 位于字符串内，ArkTS 编译成功也没有暴露该问题。\n修复会话在设备 hilog 看到 DatabaseService init failed: SQLite: Generic error（main-01a0d133 L1199），\n用本地 sqlite3 按顺序执行定位 FAIL #9 near \"to\": syntax error（L1217、L1223）；init 逐条 await，\n第 10 条语句抛错后，后续表与索引均未创建。最终把该列改为 \"to\" TEXT（L1231-L1232），观察截止时仍保留。\n规格侧的 brief 并未写错；若供手写 DDL 使用，保留 createSql 可以减少这一步重拼，这只是辅助预防，不作为本条偏差起点。\n",
+  "recommendations": [
+    "数据层实现阶段，把Room实体手写成RDB建表SQL时，对所有表名、列名统一加双引号（或反引号），不要按列清单裸写标识符；列名为to、order、group、index、default、key等关键字时必须转义，谓词、查询、索引中引用该列时也要同样处理。",
+    "优先以Room导出schema（schemas/<Database类>/<version>.json）中每张表的createSql为DDL底稿，把${TABLE_NAME}替换为实际表名，而不是从列表重新拼写。",
+    "写完SCHEMA_DDL后，在本地sqlite3单连接中按init的实际执行顺序逐条执行全部语句，确认0失败再交付；编译成功不代表SQL字符串有效。",
+    "侦察/规格阶段为手写DDL整理Room列清单时，一并保留原始createSql，或标注属于SQL关键字的列名，便于实现者直接核对。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:\\AI\\test-data\\meshtastic-0924c-mem-codex\\entry\\src\\main\\ets\\services\\DatabaseService.ets",
+        "since": "2026-09-24T02:17:08.984Z",
+        "at": "2026-09-24T05:50:57.314Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/AI/test-data/meshtastic-0924c-mem-codex/spec/a2h/_work/data-proto-brief.md",
+          "at": "2026-09-24T01:43:18.977Z",
+          "reason": "正常输入：生成者用Select-String读取brief §2.4实体行，回执逐列返回reactions表，其中列名to、TEXT、nullable与Room schema v44一致（main-01a0d107 L546、L548）。列名事实正确、清晰，足以写出该列；该brief由agent-01a0d109据44.json写成（其读到的createSql为`to` TEXT，L254），本支不再上溯。"
+        },
+        {
+          "key": "main-01a0d107-c6aa-7590-9107-4a589ee091d5.jsonl",
+          "at": "2026-09-24T01:44:43.343Z",
+          "reason": "已收到上述列清单，WriteAllText生成DatabaseService.ets时把SCHEMA_DDL中所有标识符裸写，reactions表写成`to TEXT,`，SQLite关键字未加引号；注释却称列名与Room @Entity一致，写后未执行DDL核验（同转录L594、L596）。L605补丁未触及该片段。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "生成者在写DatabaseService前用Select-String -Path spec/a2h/_work/data-proto-brief.md按实体名过滤，回执返回ReactionEntity/reactions各列，含 to | to | TEXT | nullable 行；这是写前对该brief的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/599197e2-7372-4099-8b14-1104ef7ef8a0/epoch-0/sessions/main-01a0d107-c6aa-7590-9107-4a589ee091d5.jsonl",
+              "line": 546
+            },
+            {
+              "source": "runs/599197e2-7372-4099-8b14-1104ef7ef8a0/epoch-0/sessions/main-01a0d107-c6aa-7590-9107-4a589ee091d5.jsonl",
+              "line": 548
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": "target",
+          "force": true,
+          "reason": "同一生成者的shell_command以Join-Path拼出entry/src/main/ets/services，并[System.IO.File]::WriteAllText写入DatabaseService.ets，正文SCHEMA_DDL含 to TEXT,；回执返回DatabaseService.ets bytes: 12512。",
+          "evidence": [
+            {
+              "source": "runs/599197e2-7372-4099-8b14-1104ef7ef8a0/epoch-0/sessions/main-01a0d107-c6aa-7590-9107-4a589ee091d5.jsonl",
+              "line": 594
+            },
+            {
+              "source": "runs/599197e2-7372-4099-8b14-1104ef7ef8a0/epoch-0/sessions/main-01a0d107-c6aa-7590-9107-4a589ee091d5.jsonl",
+              "line": 596
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-69e9fe864e45c19bce9d",
+  "metadata": {
+    "migration": {
+      "project": "Meshtastic",
+      "server_session_id": "bc16995e-3fe1-41da-85f4-11f10a1f4203"
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "0adcc467-1ed1-4ac1-9dfd-826c3fae2bb7"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "codex-auto-review",
+        "deepseek-v4-flash"
+      ],
+      "providers": [
+        "hmigbot"
+      ],
+      "client_versions": [
+        "0.147.0"
+      ]
+    },
+    "source_set_id": "sources-cbd13def091586c15326",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-09-24T01:29:46.774Z",
+        "ref": "runs/599197e2-7372-4099-8b14-1104ef7ef8a0/epoch-0/sessions/main-01a0d107-c6aa-7590-9107-4a589ee091d5.jsonl:L84",
+        "request_ref": "runs/599197e2-7372-4099-8b14-1104ef7ef8a0/epoch-0/sessions/main-01a0d107-c6aa-7590-9107-4a589ee091d5.jsonl:L82",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-09-24T01:29:46.774Z",
+        "ref": "runs/599197e2-7372-4099-8b14-1104ef7ef8a0/epoch-0/sessions/main-01a0d107-c6aa-7590-9107-4a589ee091d5.jsonl:L84",
+        "request_ref": "runs/599197e2-7372-4099-8b14-1104ef7ef8a0/epoch-0/sessions/main-01a0d107-c6aa-7590-9107-4a589ee091d5.jsonl:L82",
+        "phase": "generation"
+      },
+      {
+        "name": "toolchain.kotlin",
+        "value": "2.4.0",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": null,
+        "at": "2026-09-24T01:31:10.175Z",
+        "ref": "runs/599197e2-7372-4099-8b14-1104ef7ef8a0/epoch-0/sessions/agent-01a0d109-60e4-7e12-9ed3-30b69d9fc7de.jsonl:L34",
+        "request_ref": "runs/599197e2-7372-4099-8b14-1104ef7ef8a0/epoch-0/sessions/agent-01a0d109-60e4-7e12-9ed3-30b69d9fc7de.jsonl:L31",
+        "phase": "generation"
+      },
+      {
+        "name": "toolchain.agp",
+        "value": "9.2.1",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": null,
+        "at": "2026-09-24T01:31:10.175Z",
+        "ref": "runs/599197e2-7372-4099-8b14-1104ef7ef8a0/epoch-0/sessions/agent-01a0d109-60e4-7e12-9ed3-30b69d9fc7de.jsonl:L34",
+        "request_ref": "runs/599197e2-7372-4099-8b14-1104ef7ef8a0/epoch-0/sessions/agent-01a0d109-60e4-7e12-9ed3-30b69d9fc7de.jsonl:L31",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.10.0"
+  },
+  "revision": "3a478cf77040c1f346a0d54db4be4ea9279279d86235d91f729ea7f0bac8c376"
+}

@@ -23,9 +23,3 @@ ID：`lesson-4b7012d4bdceef5e8c36` · 版本：1
 3. 权限组在 OHOS 映射为空或恒判拒绝、而被门控的操作只写应用私有目录（getApplicationDocumentsDirectory 等）时，把它列为 Dart 受控修改的必须修改点：加最小的 Platform.isOhos 跳过分支，其他平台保持原请求。
 4. verified 标记以真机调用该链路（含拒绝、取消路径）的结果为依据；只有构建、注册器与宿主首屏证据时，记为待运行验证，不据此判定应用 Dart 无需修改。
 
-## 来源（按需复核）
-
-- case-3cc99a6c512ab85ed874 · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
-  卡片版本：`5e18ba0f9468a1e03fda2867a660ed15f19c7390779e7c954b521edac73422a9`
-- case-96b417fb2e059d43f8bf · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
-  卡片版本：`1b8210052527566bf7896e9220b3fb2063b3276a319b8dfd363365bb670dc01e`

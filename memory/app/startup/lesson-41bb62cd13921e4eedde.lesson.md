@@ -28,7 +28,3 @@ ID：`lesson-41bb62cd13921e4eedde` · 版本：1
 
 - 清数据冷启动测量加载页实际停留时间，低于可感知阈值时按未满足处理。
 
-## 来源（按需复核）
-
-- case-9a108f83b6eca279b883 · 结论：diagnosis, recommendation:3, recommendation:4
-  卡片版本：`ef2ce34680db56deb721a97561c6c5cda02dd259d9937c81405705e51056f86b`

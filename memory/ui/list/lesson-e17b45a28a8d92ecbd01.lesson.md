@@ -22,9 +22,3 @@ ID：`lesson-e17b45a28a8d92ecbd01` · 版本：1
 2. 逐个 handleXxx 抄录 setText 的文案模板和全部分支、visibility 控制的子卡、默认选中态；默认分支就是首屏形态，切换控件要真正切换渲染内容。删除旧骨架入口前，先找到它在源端对应的完整区块并用等价组件替换。
 3. 源 RecyclerView 与根容器没有背景、头图在下层时，目标滚动内容层保持透明，只给各卡片设置自身背景。
 
-## 来源（按需复核）
-
-- case-55bbad53c11b2d1b95e6 · 结论：diagnosis, recommendation:1, recommendation:2
-  卡片版本：`b23fae9cfd1d1656d9a5ecb824d2151dfc94d9f78a910b09f2d0b86cf9c6b07c`
-- case-5d12548f9d559985c27d · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3, recommendation:4
-  卡片版本：`04736cf715d71d3e14d93830493689cb2e6b52405aa8d4ea2bf3f4b0bce09869`

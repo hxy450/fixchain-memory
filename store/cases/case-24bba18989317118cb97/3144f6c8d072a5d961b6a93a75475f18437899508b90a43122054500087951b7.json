@@ -1,0 +1,160 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-24bba18989317118cb97",
+  "created_at": "2026-09-30T05:43:47.257369+00:00",
+  "migration_key": "7117da4e-7187-4a29-8d35-25d345e0e57e",
+  "title": "只迁移公参读取侧，漏掉源端写入 oaid、当前空间的步骤",
+  "when": "迁移/重构实现阶段，改写启动隐私后初始化链或空间同步流程、确认网络公共参数各字段由谁写入时",
+  "description": "目标端拦截器每次请求从偏好键或当前空间缓存读取 oaid、nsjdid 等公参；源端这些值由隐私同意后的 SDK 初始化序列（OAIDHelper.getOAID）或空间同步后的默认空间处理（handleDefaultSpace → saveSelectedSpace）写入，目标端只有读取侧、没有对应生产者。",
+  "summary": "两个公参字段为空，成因相同：拦截器只读取本地值，而源端负责写入这些值的步骤没有迁移过来。\n（1）oaid：PlatformInfo 只读取偏好键 key_device_oaid（首轮迁移时已如此，生成期把它当作用户保护文件，SHA 一直不变），工程里没有任何代码写这个键。\n根会话 019fc543 在写前读到了 F001 源码笔记：Android 同意隐私后 App.initSdk() 会依次调用 RXLog、HTTPDNS、广告、OAIDHelper.getOAID、推送等\n（main-019fc543…jsonl:L3453-L3454）；r4_android_facts 的回报也列出 initSdk 第 4 步是 OAID，\n并说明它会先请求证书、再初始化设备标识 SDK（同转录 L3561）。\nr4_startup_impl 从已有启动链迁出 StartupComposition 时没有 OAID 步骤；它的派工正文是加密的，无法核对是否收到过这项要求。\n随后根会话在 05:07 改写 NetworkSessionInitializer.initializeAfterPrivacyAccepted（拆出 UserSessionInitializer，L4025-L4027），\n保持\"凭据偏好 → PlatformInfo.create → NetworkBootstrap\"这一顺序，仍没有补获取 OAID 并写入 key_device_oaid 的步骤；06:05 又在同一方法里加了 calendar 网络就绪回调（L5245），同样没有补上。\n整个生成期没有任何写入实现 OAID 获取（只有 Debug 页测试文案提到 OAID）。\n（2）nsjdid：它取的是 selectedSpace(token)，登录时写入空值。Android 在 BoxSpace.lifeSyncAll 的 realSave、排序之后调用 handleDefaultSpace(getSpaces())：\n当前空间为空或已失效时，选第一个非\"全部\"空间并 saveSelectedSpace。根会话写前读到了这段同步序列（L986-L987）；\nR6 Android 审计读到了 handleDefaultSpace 的完整函数体，但给根会话的同步顺序总结漏掉了这一步（agent-019fc621-644d…jsonl:L1032、L1158）。\n根会话在 06:08 重写 PersistenceSyncRepository 的 namespace 拉取：级联删除已删空间，cursor=0 时按远端集合对账（L5329-L5337），\n没有补\"同步后校验并持久化当前空间\"，也没有处理当前选中空间被删除的情况；R6.3b 新增的全量刷新同样缺这一步。\n最终修复：新增 OaidManager，复用 lib_common.requestOAID，并在 StartupComposition 的隐私后初始化中先 initialize、再创建 PlatformInfo，同时声明 APP_TRACKING_CONSENT；\nPersistenceSyncRepository 在增量 namespace 同步和全量刷新之后调用 repairSelectedSpace\n（main-019fff86…jsonl:L160、L184、L304）。ADID/AAID 改名是修复期提出的新要求，本卡只作背景。\n",
+  "recommendations": [
+    "启动组合实现者：改写隐私同意后的初始化链时，把源端 initSdk 的步骤逐项对到目标 initializer；每个公参字段（如 oaid）都要在链上找到明确的生产者（获取并写缓存），或者登记为缺口，不能只保留读取偏好键的 provider。",
+    "网络公参迁移：对拦截器读取的每个本地键，在工程内检索写入点；只有读取、没有写入的键（如 key_device_oaid），按源端来源（OAIDHelper、隐私门禁、跟踪权限）补实现，并确认所需权限已声明。",
+    "同步流程实现者：重写源端 sync 序列（如 lifeSyncAll）对应的目标仓库方法时，保留 realSave 之后的副作用步骤；handleDefaultSpace 这类当前空间校验与持久化，要在增量和全量两条路径上都落地，删除或对账空间时同步修复当前选中空间。",
+    "审计/规格总结源端同步顺序时，不要省略写全局状态的步骤（Const.spaceId、saveSelectedSpace），因为后续实现者会按这份总结做迁移。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/xyz/work/HMRmbr/products/phone/src/main/ets/startup/StartupComposition.ets",
+        "since": "2026-08-11T06:08:24.647Z",
+        "at": "2026-08-19T07:18:47.009Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/xyz/work/HMRmbr/spec/baseline/source-understanding/F001-startup-privacy-source-notes.md",
+          "at": "2026-08-03T04:44:11.477Z",
+          "reason": "正常输入：根会话用 sed 读取 F001 源码笔记，回执写明同意隐私后 App.initSdk() 会串行触发 OAIDHelper.getOAID 等步骤，对应实现分属后续网络等 Slice。这足以说明隐私后初始化链需要一个 OAID 生产者（main-019fc543-9ced-7ec0-a1d6-8b1bc8c9dd5a.jsonl:L3453-L3454）。"
+        },
+        {
+          "key": "019fc543-9ced-7ec0-a1d6-8b1bc8c9dd5a",
+          "at": "2026-08-03T05:07:05.620Z",
+          "reason": "根会话已读到上述笔记，也收到 r4_android_facts 关于 initSdk 第 4 步为 OAID 的回报（L3561），并早先读过 PlatformInfo 只读 key_device_oaid（L1424-L1425）。它 apply_patch 改写 NetworkSessionInitializer.initializeAfterPrivacyAccepted，保留'凭据偏好 → PlatformInfo.create → NetworkBootstrap'，没有获取 OAID、也没有写 key_device_oaid 的步骤（L4025-L4027）。修复正是在这里插入 oaidManager.initialize。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "根会话 exec_command 依次 sed 读取 F001 feature spec 与 spec/baseline/source-understanding/F001-startup-privacy-source-notes.md 1-300 行，回执包含 App.initSdk() 串行触发 OAIDHelper.getOAID 的笔记段落；这是根会话写 StartupComposition 前实际收到该要求的调用。",
+          "evidence": [
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/main-019fc543-9ced-7ec0-a1d6-8b1bc8c9dd5a.jsonl",
+              "line": 3453
+            },
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/main-019fc543-9ced-7ec0-a1d6-8b1bc8c9dd5a.jsonl",
+              "line": 3454
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/xyz/work/HMRmbr/features/business_calendar/src/main/ets/repository/PersistenceSyncRepository.ets",
+        "since": "2026-08-11T06:08:24.647Z",
+        "at": "2026-08-19T07:18:47.009Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/xyz/work/ASCode/rmbr-android/app/src/main/java/com/rmbr/android/box/BoxSpace.kt",
+          "at": "2026-08-03T02:54:35.072Z",
+          "reason": "正常输入：根会话用 sed 读取 BoxSpace.kt 110-190 行，回执给出 lifeSyncAll 在 realSave、lifeSortStr 之后、syncEvent 之前调用 handleDefaultSpace(getSpaces())。这说明空间同步后要校验并写入当前空间，Android 请求头 nsjdid 取的就是这个 Const.spaceId（main-019fc543-9ced-7ec0-a1d6-8b1bc8c9dd5a.jsonl:L986-L987）。"
+        },
+        {
+          "key": "019fc543-9ced-7ec0-a1d6-8b1bc8c9dd5a",
+          "at": "2026-08-03T06:08:51.755Z",
+          "reason": "根会话 06:06 已把 CalendarImportRepository 的当前空间改为读 DynamicPreferenceKeys.selectedSpace(token)（L5278），知道当前空间存在哪个键。之后它 apply_patch 重写 namespace 拉取：级联删除已删空间，cursor=0 时按远端集合对账（L5329-L5337），但没有补 handleDefaultSpace 对应的'当前空间缺失或失效时选默认并持久化'。修复在同一方法和全量刷新之后加了 repairSelectedSpace。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "根会话 exec_command 用 sed -n '110,190p' 读取 /Users/xyz/work/ASCode/rmbr-android/app/src/main/java/com/rmbr/android/box/BoxSpace.kt，回执中 lifeSyncAll 在 realSave、SortHelper.lifeSortStr 之后调用 handleDefaultSpace(getSpaces())，再进入 BoxEvent.syncEvent；这是根会话后续改写 namespace 拉取前的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/main-019fc543-9ced-7ec0-a1d6-8b1bc8c9dd5a.jsonl",
+              "line": 986
+            },
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/main-019fc543-9ced-7ec0-a1d6-8b1bc8c9dd5a.jsonl",
+              "line": 987
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "PlatformInfo 读取 key_device_oaid、namespace 同步缺少默认空间处理，这两处的最初写法都早于本批材料（首轮迁移）；本卡只归因到生成期根会话，它读到了源端步骤并改写了相应片段，但没有补上。",
+    "r4_startup_impl 与 r6_core_impl 的派工正文是加密的，无法确认根会话派工时是否传达了 OAID 获取或默认空间处理的要求。",
+    "根会话在本窗口只读到 handleDefaultSpace(getSpaces()) 的调用位置，没有打开函数体；函数体由 R6 Android 审计读取。"
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/xyz/work/HMRmbr/products/phone/src/main/ets/network/PlatformInfo.ets",
+      "reason": "修复把 oaid 改为读取 OaidManager.current()，这一点已确认。但生成窗口内这个文件没有任何写入：读取 key_device_oaid 的写法来自材料之前的首轮迁移，生成期作为用户保护文件多次核对 SHA，保持不变。成因已放在 StartupComposition 图中归因。"
+    },
+    {
+      "key": "/Users/xyz/work/HMRmbr/products/phone/src/main/ets/platform/OaidManager.ets",
+      "reason": "修复期新增的文件，生成期没有对应写入，无法建立生成链；它补的是 StartupComposition 图所述缺失的 OAID 生产者。"
+    },
+    {
+      "key": "/Users/xyz/work/HMRmbr/products/phone/src/main/module.json5",
+      "reason": "APP_TRACKING_CONSENT 权限是修复期新增的。生成期唯一一次写入是 r1_dependency_probe 把模块名 entry 改为 phone，与本问题无关；权限缺失是 OAID 获取缺失的附带结果，没有单独的生成期偏差可绑定。"
+    }
+  ],
+  "job": "issue-24bba18989317118cb97",
+  "metadata": {
+    "migration": {
+      "project": "记得日历",
+      "server_session_id": "7117da4e-7187-4a29-8d35-25d345e0e57e"
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "1a9777c8-c9e6-48ae-80c3-ff5be17a28a5"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "gpt-5.6-sol"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.146.0-alpha.9.2",
+        "0.147.0-alpha.1.2",
+        "0.147.0-alpha.6.5",
+        "0.148.0-alpha.15",
+        "0.148.0-alpha.9"
+      ]
+    },
+    "source_set_id": "sources-e29c9382987c75013258",
+    "card_tool_version": "0.10.0"
+  },
+  "revision": "3144f6c8d072a5d961b6a93a75475f18437899508b90a43122054500087951b7"
+}

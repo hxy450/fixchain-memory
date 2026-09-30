@@ -22,9 +22,3 @@ ID：`lesson-686bbe76f7c2c783f2bd` · 版本：2
 2. 把源端服务流程内联到目标方法前，按阶段列出源函数的全部副作用调用（缓存预过滤读取、缓存写入、偏好标记、结果持久化），逐项落位或登记为显式缺口；移植了仓库/DAO 写方法后 grep 其调用点，已定义却无调用者时回查源流程哪一步应调用它。
 3. 审计或规格总结流程顺序时，不省略写全局状态或缓存的步骤，并注明触发条件。
 
-## 来源（按需复核）
-
-- case-24bba18989317118cb97 · 结论：diagnosis, recommendation:3, recommendation:4
-  卡片版本：`151d15daa8c791fc229bcd79a366d7e0801c851a32ab375a607d6a28f122e35a`
-- case-bb57d08fe5ccef38d904 · 结论：diagnosis, recommendation:1, recommendation:2
-  卡片版本：`f0020eede9014e13c8666780554ad0caa75aed1dc68f52b361678110ea7d5228`

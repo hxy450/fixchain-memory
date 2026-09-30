@@ -24,23 +24,3 @@ ID：`lesson-4f81eeea17b94190c2de` · 版本：4
 4. 接线时读到上游文件要求本文件转发或补调用点，就在本文件实现；派工不允许或实现不了时作为阻塞项上报。接手者从登记里取不到确切值时，打开出处源码取值，取不到就登记缺口，不写推测值。
 5. 派工只允许写本文件、而源端依赖的共享工具还没有目标文件时，在本文件实现等价逻辑，或登记前向引用交给后续切片；不要静默省略。
 
-## 来源（按需复核）
-
-- case-2906493a39c662495a11 · 结论：recommendation:5
-  卡片版本：`81e3b4dae068b28a33eb18ec39c22502d1a683f4e331f7693036eadb95373280`
-- case-2b9869554cf9027174a0 · 结论：diagnosis, recommendation:2, recommendation:3
-  卡片版本：`399f7b12747efb0e2c5ee69d85083f67576d91c11b7c8f93adacb6d0713f92f6`
-- case-37a2c6aacb67d1fc0aee · 结论：diagnosis, recommendation:2, recommendation:3
-  卡片版本：`528d09b041c06639c78c05521087576cda7b79594f84cb4fcc278d8c2c62a75b`
-- case-4ecfc0b10264caacad49 · 结论：diagnosis, recommendation:1
-  卡片版本：`835f62531c4af3bb399501c80a195e3c92963c42039e11ed0609e7994c554c89`
-- case-7b64dd743c1260eb910f · 结论：recommendation:3
-  卡片版本：`298567a76aee47097df89ce461b5d22ce36838d3b34afa1f21008596f2358535`
-- case-8128c57ee5fb2e4f49d1 · 结论：recommendation:3
-  卡片版本：`d0184e877064d037eceb8bc968cb0949b5d0bffb239f02ec1d1a93bf7a391713`
-- case-8555b02fdd531952938b · 结论：recommendation:1
-  卡片版本：`2c653cb3c662f222539425f30a42c5c464378add268afd8085c556bada7a052d`
-- case-9618601c4a21f2f18560 · 结论：recommendation:4
-  卡片版本：`870a2d98075a73dc88a2cfd3ac2fb801bc3d216cf1120c6f9583496d9f1c6941`
-- case-ef4b9ae3acaea9323135 · 结论：diagnosis, recommendation:1
-  卡片版本：`224b39c5df19751e0b18f8c6328b47d00202ad917de1149b4faf5dde5c73fe9d`

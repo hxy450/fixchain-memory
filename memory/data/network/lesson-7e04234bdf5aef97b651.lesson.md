@@ -20,7 +20,3 @@ ID：`lesson-7e04234bdf5aef97b651` · 版本：1
 
 1. 改写初始化链时把源端初始化序列的步骤逐项对到目标 initializer；对拦截器读取的每个本地键在工程内检索写入点，只有读取、没有写入的键按源端来源补实现（含隐私门禁与所需权限声明），或登记为缺口。
 
-## 来源（按需复核）
-
-- case-24bba18989317118cb97 · 结论：diagnosis, recommendation:1, recommendation:2
-  卡片版本：`151d15daa8c791fc229bcd79a366d7e0801c851a32ab375a607d6a28f122e35a`

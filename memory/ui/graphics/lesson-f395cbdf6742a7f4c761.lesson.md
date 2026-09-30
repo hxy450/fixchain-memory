@@ -24,7 +24,3 @@ ID：`lesson-f395cbdf6742a7f4c761` · 版本：1
 
 - 用一个 5 周月份与一个 6 周月份对照：6 周月至少放下最少行数，5 周月因行高相同而多显示行。
 
-## 来源（按需复核）
-
-- case-84e889d80b54dca3e119 · 结论：diagnosis, recommendation:1, recommendation:2
-  卡片版本：`2df74deafe930d018346ba782a3396e43ccb105ef5cef0b9f84e5790e8bc1303`

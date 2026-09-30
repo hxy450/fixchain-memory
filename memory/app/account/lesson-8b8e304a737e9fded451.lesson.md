@@ -22,7 +22,3 @@ ID：`lesson-8b8e304a737e9fded451` · 版本：1
 2. 按“停止并等待同步 → 单个事务清表（保留图标、颜色、节日等公共静态表）→ 广播数据变化让存活页面刷新”的顺序实现。
 3. 编计划或合并批次时核对仓库里状态仍为 planned 的增量规格，把已写明的退出清理要求写进对应批次的验收条件，不只写“符合源端行为”。
 
-## 来源（按需复核）
-
-- case-6c62d7c44b9a82b2388c · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
-  卡片版本：`153567361c4cdb3d7f17e08ffff797688c9be6dad65b1efd744d7a074f9b1154`

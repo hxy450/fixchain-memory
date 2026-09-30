@@ -21,9 +21,3 @@ ID：`lesson-73a7dd4f78cb747f7e7e` · 版本：2
 1. 转述规则时保留原文的替代写法或示例，不只写禁令；把某任务的做法推广给后续派工前，回读它所依据的参考条目，把适用范围、负向守卫和配套要求一并写进派工。
 2. 禁止 worker 并发构建时，收齐改动后立即全量构建，并逐一核对 worker 新引入的类型声明。
 
-## 来源（按需复核）
-
-- case-0fc468c36c3cf09b06bb · 结论：recommendation:3
-  卡片版本：`c7733cd29d0e8c43934c8472a9c7ad6e30129d2dee380cded4770540ad130745`
-- case-98e7bd27bb334db83f51 · 结论：diagnosis, recommendation:4
-  卡片版本：`2bd8a63105c2a86e012e477614f9ed3d54d26dbfc05250b99a797f194a3e1b79`

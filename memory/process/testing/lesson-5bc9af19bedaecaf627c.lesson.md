@@ -26,11 +26,3 @@ ID：`lesson-5bc9af19bedaecaf627c` · 版本：1
 2. 复制相邻用例的夹具时，确认预期中的成员满足被测函数的过滤条件（如确实在 mock 的可用列表中）；只有改变产品过滤语义才能变绿的用例，先判为夹具错误。
 3. 条目文字与实现冲突、又怀疑归属其他功能时，先查源端写入点与其他功能规格；无法确认就记为规格待确认，不直接写成要求当前方法实现的失败用例。
 
-## 来源（按需复核）
-
-- case-742d1ed012293496650a · 结论：diagnosis, recommendation:1, recommendation:2
-  卡片版本：`ceae1e5005320e7585a72a919fc7b9b9f5e812aa702b71b16cc5f7c8ddeb878d`
-- case-d13badc5c213ff514cbf · 结论：recommendation:2
-  卡片版本：`21f30677277630b9e9aec70706561bcc6075fa0eff2d0bf92864ffb2fef9fa61`
-- case-ef8330b60b73e7df48fd · 结论：diagnosis, recommendation:1
-  卡片版本：`dee29225df2b2ac78c2791619d261d5e694ee9fefbf3628d411540839bc54c36`

@@ -30,7 +30,3 @@ HarmonyOS 在中文系统语言下优先取 zh_CN，合成的中文译文让界�
 
 - 对非 base 语言目录对账：取值与 base 不同的业务字符串，都应能追溯到源端对应的 values-<locale> 条目。
 
-## 来源（按需复核）
-
-- case-311b8c323b04022b2a04 · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
-  卡片版本：`d75ee510440349ece0c7439522c238bcb89290f58a0b37e3c27c034155437b20`

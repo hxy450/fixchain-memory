@@ -1,0 +1,216 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-1c1dc6394c428c959798",
+  "created_at": "2026-09-29T18:12:20.020193+00:00",
+  "migration_key": "7117da4e-7187-4a29-8d35-25d345e0e57e",
+  "title": "同步调度把源端逐次加锁排队的触发合并进在途任务，尾随变更与fail队列不再推送",
+  "when": "数据同步迁移的规格对照、调度实现与复核阶段，确定多次同步触发的并发语义和失败队列重试范围时",
+  "description": "源端每次同步触发都启动新任务并在互斥锁后排队执行（如Kotlin协程launch+Mutex.withLock，锁内先推送队列再拉取），待推送队列按资源类型而非状态选取；目标端用单一同步服务和Promise串行队列统一调度全量同步、定向拉取与状态推送。",
+  "summary": "写前实际收到的源码语义是清楚的：根会话在2026-08-03T02:52读完Android BoxSync.kt，lifeSyncEvent用queuesEvent()只按\nresourceType选取、不按syncStatus过滤，业务失败置fail的项下一轮会被重推（main-019fc543 epoch-2 L923-L924）；02:54又读到\nBoxEvent.syncEvent与BoxSpace.lifeSyncAll：每次调用都boxScope.launch新任务，在eventMutex/taskMutex.withLock内按\n“推送排序/事件/完成态/子任务队列→按空间拉取”执行，不复用在途任务（L986-L987）。同时它在02:25读到材料前（2026-07-27）\n已存在的F021增量规格：“全量同步、定向空间刷新和人工重置共用一个active task”“并发触发复用当前任务”“业务失败标记fail后继续”\n（L364-L365），与源码逐次排队、fail自动重推的语义冲突；旧SyncService的activeTask复用和pending-only查询也形成于本材料之前。\nR6阶段根会话自述要“先重新核对Android与现有鸿蒙的数据写入、同步通知……避免把当前不可用逻辑原样搬入新模块”（L4816），\n但偏差没有被纠正。实现环节：r6_core_impl在05:52（L1464）已把定向拉取“等待在途任务后直接return”改为继续执行，05:56（L1551）\n重建operationTail串行队列时却为syncAll写入`if (this.pendingFullSync !== null) return await this.pendingFullSync`；\n同一代理05:51-05:52改写syncPending阶段筛选时保留getByStatus('pending')（L1431、L1464）。复核环节：根会话05:54读回\npending-only的syncPending（L5083-L5084），05:58读回含pendingFullSync复用的syncAll（L5134-L5135），06:06-06:10亲自改写\n这两个文件（L5258-L5383）却都未纠正；refactor-plan §5.2（L1314）也只写阶段顺序和“各入口统一调coordinator”。\n另有Android审计终报把fail队列写成“永久置FAIL、没有自动恢复”（agent-019fc621-644d L1158，L4968交付根会话），与源码相反。\n两处片段此后生成期未再改动，保留到修复前。结果：本地编辑或完成态在全量同步越过event推送阶段后入队，syncAll直接复用旧Promise，\n本轮不再推送，队列留下“1项未同步”；随后的拉取把云端旧状态写回本地，界面出现“先未完成又回到已完成并提示同步失败”；fail项不自动重推。\n修复：08-13 main-019ffa86为syncAll加fullSyncRequestVersion，本轮结束时比较并补跑尾随请求（L83、L89）；08-19 main-01a017a0\n让前一轮失败而后面仍有请求时继续补跑、只在最后一次请求失败时发布失败（L967、L1019），syncPending同时取pending与fail\n（L962、L1005），并在拉取写库前用未同步的EVENT_USER_STATE意图保护本地完成态（L962）。本地意图保护层同时对应用户L753提出的\n“完成态以本地为准”的新要求；EventService改为定向推送用户状态针对的是修复期新增的调用，见unresolved_targets。\n",
+  "recommendations": [
+    "规格提取阶段：迁移同步调度时逐项写出源端“每次触发如何执行”——是否每次新建任务、是否在锁后排队、是否合并或丢弃；若目标实现采用单飞合并，契约必须写明运行中到达的请求会触发尾随补跑，保证触发前入队的本地变更在该轮拉取之前被推送。已有规格（如“并发触发复用当前任务”）与源码不一致时以源码为准并回写规格。",
+    "源码审计与规格阶段：描述失败语义时核对队列选取条件本身（按resourceType还是按syncStatus），不要只看置fail的分支；源端选取不过滤状态，就意味着fail项会在下一次同步自动重推，目标syncPending需同时取pending与fail。",
+    "实现阶段：用Promise链/operationTail串行化后，不要再给全量同步加“返回在途Promise”的捷径；需要合并时用请求版本号在本轮结束时比较并补跑一轮，失败只在最后一个请求仍失败时发布。修复某个入口的“等待后return”问题时，同步排查syncAll等其他入口的同类写法。",
+    "复核阶段：审阅迁移后的同步服务时，拿源端锁/任务模型逐一对照每个入口的合并、丢弃与失败发布行为，并补测试：在同步越过推送阶段、尚未结束时入队并再次触发，断言推送次数增加且pending为0；fail项在下一次触发时被重推。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/xyz/work/HMRmbr/features/business_calendar/src/main/ets/service/SyncService.ets",
+        "since": "2026-08-11T06:08:24.647Z",
+        "at": "2026-08-19T07:18:47.009Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/xyz/work/HMRmbr/spec/features/2026-07-27-F021-complete-sync-coordination.md",
+          "at": "2026-08-03T02:25:53.411Z",
+          "reason": "有误输入：根会话sed读取回执给出F021“统一并发与停止协议”：全量同步、定向刷新共用一个active task，“并发触发复用当前任务”；与源端逐次排队冲突，形成于材料之前（main-019fc543 epoch-2 L364-L365）。"
+        },
+        {
+          "key": "/Users/xyz/work/ASCode/rmbr-android/app/src/main/java/com/rmbr/android/box/BoxEvent.kt",
+          "at": "2026-08-03T02:54:35.072Z",
+          "reason": "正常输入：根会话读取回执给出syncEvent每次调用boxScope.launch新任务，在eventMutex.withLock内先推送排序/事件/完成态/子任务队列再按空间拉取；同回执含BoxSpace.lifeSyncAll的taskMutex.withLock。足以说明源端不合并在途请求（epoch-2 L986-L987）。"
+        },
+        {
+          "key": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-2/sessions/main-019fc543-9ced-7ec0-a1d6-8b1bc8c9dd5a.jsonl",
+          "at": "2026-08-03T06:10:26.677Z",
+          "reason": "同时收到冲突规格与源码；计划§5.2（L1314）只写阶段顺序，05:58复核读回syncAll的pendingFullSync复用（L5134-L5135），06:10亲自改写本文件（L5376-L5377新增走queueOperation的prepareCurrentAccount）却未纠正合并语义。复核/规格环节的偏差在此保留。",
+          "problem": true
+        },
+        {
+          "key": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/agent-019fc628-75e1-7ab0-93f2-e36f79f0cc44.jsonl",
+          "at": "2026-08-03T05:56:09.812Z",
+          "reason": "L1545读回旧activeTask复用实现；05:52已把定向拉取“等待在途任务后return”改为继续执行（L1464），05:56重建operationTail串行队列时却为syncAll写入pendingFullSync复用：在途时直接return await旧Promise，运行中新到的请求不再获得推送轮次（L1550-L1551）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "根会话exec调用sed -n '1,180p' spec/features/2026-07-27-F021-complete-sync-coordination.md，回执返回F021全文，含“并发触发复用当前任务”与“业务失败标记fail后继续”；支持它写前已收到该规格。",
+          "evidence": [
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-2/sessions/main-019fc543-9ced-7ec0-a1d6-8b1bc8c9dd5a.jsonl",
+              "line": 364
+            },
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-2/sessions/main-019fc543-9ced-7ec0-a1d6-8b1bc8c9dd5a.jsonl",
+              "line": 365
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "根会话exec调用sed读取BoxSpace.kt 110-190行与BoxEvent.kt 139-212行，回执返回syncEvent的boxScope.launch与eventMutex.withLock全段；支持它写前已收到源端逐次排队语义。",
+          "evidence": [
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-2/sessions/main-019fc543-9ced-7ec0-a1d6-8b1bc8c9dd5a.jsonl",
+              "line": 986
+            },
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-2/sessions/main-019fc543-9ced-7ec0-a1d6-8b1bc8c9dd5a.jsonl",
+              "line": 987
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target"
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/xyz/work/HMRmbr/features/business_calendar/src/main/ets/repository/PersistenceSyncRepository.ets",
+        "since": "2026-08-11T06:08:24.647Z",
+        "at": "2026-08-19T07:18:47.009Z"
+      },
+      "summary": "fail队列分支：根会话02:52读完Android BoxSync.kt，lifeSyncEvent用queuesEvent()只按resourceType选取，fail项下一轮会重推；\nF021只写“业务失败标记fail后继续”，未说明下一轮是否重选fail。r6_core_impl 05:51-05:52改写syncPending阶段筛选时保留\ngetByStatus('pending')；根会话05:54复核读回该查询（L5083-L5084），06:06-06:10改写本文件（L5258-L5383）仍未纠正，\nAndroid审计终报又把fail写成“没有自动恢复”。pending-only查询本身形成于材料之前。修复在L962/L1005把fail并入syncPending；\n同文件的本地完成意图保护层对应用户L753的新要求与主图拉取覆盖问题。\n",
+      "recommendations": [
+        "源码审计与复核阶段：核对队列选取条件（按resourceType还是按syncStatus），不要只根据置fail的分支下结论；源端选取不过滤状态，目标syncPending就应同时取pending与fail，并补“fail项下一次触发被重推”的测试。"
+      ],
+      "nodes": [
+        {
+          "key": "/Users/xyz/work/ASCode/rmbr-android/app/src/main/java/com/rmbr/android/box/BoxSync.kt",
+          "at": "2026-08-03T02:52:08.728Z",
+          "reason": "正常输入：根会话sed读取BoxSync.kt 1-680行，回执含lifeSyncEvent调用queuesEvent()，queuesEvent只equal(resourceType, EVENT)并按id排序，未过滤syncStatus；失败项只handleTaskError置fail不删除，下一轮会再次选中（epoch-2 L923-L924）。"
+        },
+        {
+          "key": "/Users/xyz/work/HMRmbr/spec/features/2026-07-27-F021-complete-sync-coordination.md",
+          "at": "2026-08-03T02:25:53.411Z",
+          "reason": "不充分输入：F021只写“业务失败标记fail后继续；传输失败立即中止流水线，未处理队列保持pending”，未说明下一轮是否重选fail项（epoch-2 L364-L365）。"
+        },
+        {
+          "key": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-2/sessions/main-019fc543-9ced-7ec0-a1d6-8b1bc8c9dd5a.jsonl",
+          "at": "2026-08-03T06:10:40.970Z",
+          "reason": "已读到源端选取规则，05:54复核读回syncPending只取getByStatus('pending')（L5083-L5084），06:06-06:10多次改写本文件（L5258-L5383，账号门禁与级联清理）却未把fail纳入选取。",
+          "problem": true
+        },
+        {
+          "key": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/agent-019fc628-75e1-7ab0-93f2-e36f79f0cc44.jsonl",
+          "at": "2026-08-03T05:52:44.541Z",
+          "reason": "生成期实际改写该选取语句的写者：L1431加阶段排序、L1464改为阶段筛选，沿用旧的getByStatus('pending')；其可读输入未含源端选取规则，本链确认片段在生成期的写入，不单独归责。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "根会话exec调用sed -n读取BoxSync.kt 1-280与280-680行，回执返回lifeSyncEvent、queuesEvent（仅按resourceType选取）与handleTaskError置fail；支持它写前已收到源端fail重推语义。",
+          "evidence": [
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-2/sessions/main-019fc543-9ced-7ec0-a1d6-8b1bc8c9dd5a.jsonl",
+              "line": 923
+            },
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-2/sessions/main-019fc543-9ced-7ec0-a1d6-8b1bc8c9dd5a.jsonl",
+              "line": 924
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "根会话exec调用sed -n '1,180p' spec/features/2026-07-27-F021-complete-sync-coordination.md，回执返回F021全文，含“并发触发复用当前任务”与“业务失败标记fail后继续”；支持它写前已收到该规格。",
+          "evidence": [
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-2/sessions/main-019fc543-9ced-7ec0-a1d6-8b1bc8c9dd5a.jsonl",
+              "line": 364
+            },
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-2/sessions/main-019fc543-9ced-7ec0-a1d6-8b1bc8c9dd5a.jsonl",
+              "line": 365
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target"
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "根会话派给r6_core_impl的任务与05:53-05:58审阅消息正文加密，无法确认F021条款、审计终报或Android逐次排队语义是否被转达；可读的计划§5.2与根会话自述（L5104只提到定向拉取互不取消、全量同步不被定向拉取顶掉）均未包含尾随请求语义。",
+    "F021规格与旧SyncService的activeTask复用、pending-only查询形成于2026-07-27前后的首轮会话，不在本材料内，其作者与写前输入无法核对。"
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/xyz/work/HMRmbr/features/business_calendar/src/main/ets/service/EventService.ets",
+      "reason": "被修的synchronizePendingChanges→syncAll调用在修复期由main-01a017a1于2026-08-19T02:07:17Z（L443）新增，生成期无此调用；它让完成操作等待全量链路并放大了SyncService的合并问题，最终改为定向同步EVENT_USER_STATE属修复设计选择，不归因生成期偏差。"
+    }
+  ],
+  "job": "issue-1c1dc6394c428c959798",
+  "metadata": {
+    "migration": {
+      "project": "记得日历",
+      "server_session_id": "7117da4e-7187-4a29-8d35-25d345e0e57e"
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "1a9777c8-c9e6-48ae-80c3-ff5be17a28a5"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "gpt-5.6-sol"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.146.0-alpha.9.2",
+        "0.147.0-alpha.1.2",
+        "0.147.0-alpha.6.5",
+        "0.148.0-alpha.15",
+        "0.148.0-alpha.9"
+      ]
+    },
+    "source_set_id": "sources-e29c9382987c75013258",
+    "card_tool_version": "0.10.0"
+  },
+  "revision": "8522836a02690e765c6451a585efa01733771e3eec3f998f728bc5da4c51b278"
+}

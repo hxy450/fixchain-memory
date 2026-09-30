@@ -27,11 +27,3 @@ ForEach 键值不变时复用已有子组件、不再执行条目构建，子组
 3. 对每个修改动作核一遍：动作 → 数组元素是否换成新对象 → ForEach 键是否变化 → 子组件 @Param 绑定的是哪个对象，确认新值能到达条目界面；页面交付自检对每个 ForEach 都做这一核对。
 4. 为消除抖动稳定键时，同步把条目或页模型改为 @ObservedV2 类、需要显示的字段标 @Trace 并原位赋值，@Builder 与子组件 @Param 链传可观察实例或完整 RepeatItem；在测试断言或注释中写明该实例禁止整体替换。
 
-## 来源（按需复核）
-
-- case-3045f4019d7d543e18ca · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
-  卡片版本：`c70e115876997fe84358e56664eb1d94839a3eaa89da89d4b73b2c4e1a132451`
-- case-69d294e4afbc31f4ab87 · 结论：diagnosis, recommendation:3, recommendation:4
-  卡片版本：`83646bcc4a686ba7c4fa1208c57db16d61e353729b9b398c389e36cf1245b0a7`
-- case-b0c0f14a07fefbd87d63 · 结论：diagnosis, recommendation:2, recommendation:3
-  卡片版本：`1cfeb018d4c1dbb61f66f7d19d73d53e6c5b6047e5ba376464aaa5e28cbcc9a4`

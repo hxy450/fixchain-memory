@@ -25,17 +25,3 @@ ID：`lesson-ac7a2e17b8d88c3cee7b` · 版本：4
 5. 目标方法以 boolean 返回、失败类型另存时，宿主按类型分派失败 UI：权限被拒显示“去设置”引导弹窗，确认后用 startAbility 打开系统设置中本应用的详情页（参数带当前 bundleName），其他失败保留原提示。
 6. 核查清单由抽取器生成时，在源文件补查 AlertDialog.Builder、Settings.ACTION_APPLICATION_DETAILS_SETTINGS 等调用，补齐清单外的弹窗分支。
 
-## 来源（按需复核）
-
-- case-3eb3514a903386524e37 · 结论：recommendation:5
-  卡片版本：`8f8e255c460178fbe3ef8723444aa256aff9d73234d6b49fcffa0ed15dda4204`
-- case-766f31f27e3feb426eb4 · 结论：recommendation:4
-  卡片版本：`f02e7c6184df5dd5fdd6edde83de9769ac89d999200fefddedb5e4dc7e209c19`
-- case-845435c8343c4c012e1f · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
-  卡片版本：`a9d00f06ae48fb6a1f8f95ac5290a4be407b4ac4de2d1daf9fdc78dea46f750a`
-- case-8c249997059a2524ea7b · 结论：recommendation:4
-  卡片版本：`419b77f02d456c484f3a903a61eb81b6cbf5319584c81500d9da4c46b109b9d2`
-- case-9618601c4a21f2f18560 · 结论：diagnosis, recommendation:1, recommendation:2
-  卡片版本：`870a2d98075a73dc88a2cfd3ac2fb801bc3d216cf1120c6f9583496d9f1c6941`
-- case-dac1fda1c66cbfa8bc78 · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
-  卡片版本：`ab39f6b4fbefd2e63757c8197e2298157f2bd77d5bb063c598f2afdc61bcab08`

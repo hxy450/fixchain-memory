@@ -22,13 +22,3 @@ Windows PowerShell 5.1 的 Get-Content/Select-String 默认按系统 ANSI 代码
 2. 回执里出现成片乱码时，把该文件视为未读，用 UTF-8 重读后再据此实现；不要凭可读的 AC 编号、方法名推断条款内容。
 3. 乱码回执里代码看似并入注释行时，先用 UTF-8 重读，或以 analyzer 行号、补丁上下文核对原文件的行结构，再判断代码是否真被注释。
 
-## 来源（按需复核）
-
-- case-3cc99a6c512ab85ed874 · 结论：diagnosis, recommendation:4
-  卡片版本：`5e18ba0f9468a1e03fda2867a660ed15f19c7390779e7c954b521edac73422a9`
-- case-46ac36102451125de693 · 结论：diagnosis, recommendation:3
-  卡片版本：`a0cb5480cef6a49622457138ad9cd8a7ee71744015b777d54e9f01f433c3d4ce`
-- case-8c249997059a2524ea7b · 结论：recommendation:3
-  卡片版本：`419b77f02d456c484f3a903a61eb81b6cbf5319584c81500d9da4c46b109b9d2`
-- case-fa7bbda457517260efc4 · 结论：diagnosis, recommendation:5
-  卡片版本：`e0982ecc31ac0b66f180ea74e3d7fc7415458b4f6c15814c92650d0401b8c13d`

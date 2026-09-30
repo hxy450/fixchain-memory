@@ -25,11 +25,3 @@ ID：`lesson-75cb65ef5601aaa8f159` · 版本：1
 1. 分诊时先用同一输入核对源端实现；源端得出同样结果时，按测试契约问题记录（manual_review 或退回设计），不标为源码缺陷，也不建议改算法。
 2. 修复时失败期望与已核的源端语义矛盾，就在 BLOCKED 或处置提示中写明源端行为和需要修正的用例或规格条目，保持产品与源端一致；不按其他用例反推编码方向凑出通过。
 
-## 来源（按需复核）
-
-- case-742d1ed012293496650a · 结论：recommendation:3
-  卡片版本：`ceae1e5005320e7585a72a919fc7b9b9f5e812aa702b71b16cc5f7c8ddeb878d`
-- case-d13badc5c213ff514cbf · 结论：diagnosis, recommendation:3
-  卡片版本：`21f30677277630b9e9aec70706561bcc6075fa0eff2d0bf92864ffb2fef9fa61`
-- case-ef8330b60b73e7df48fd · 结论：recommendation:2, recommendation:3
-  卡片版本：`dee29225df2b2ac78c2791619d261d5e694ee9fefbf3628d411540839bc54c36`

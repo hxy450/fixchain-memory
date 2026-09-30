@@ -21,7 +21,3 @@ ID：`lesson-40fc63b124b4a44e7a9f` · 版本：1
 1. 组件事件给出的目标值原样传给对应 setter（如 setX(enabled)），页面本地状态与持久化都用这个值；ViewModel 需要时新增显式 setter，不让页面经 toggle 取反。
 2. 替换源端整行可点的实现时，保留点击热区与无障碍分组，不把热区缩到图标。
 
-## 来源（按需复核）
-
-- case-ab54d746c8c33d3061ed · 结论：diagnosis, recommendation:2
-  卡片版本：`515e3a27291093d0ccc4c4cd2c730f9f3d318cff0e1413655febba1ecc6b88ac`

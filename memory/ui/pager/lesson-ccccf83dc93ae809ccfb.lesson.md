@@ -26,7 +26,3 @@ ID：`lesson-ccccf83dc93ae809ccfb` · 版本：1
 
 - 从列表非首项进入，核对标题与播放项和点击项一致。
 
-## 来源（按需复核）
-
-- case-fe6ca54f30a78eb885f3 · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3, recommendation:4
-  卡片版本：`ba59b468491375b17434c208405d83cbda83bedc7be77666f96729a149878b24`

@@ -22,7 +22,3 @@ EntryAbility.onCreate 以不等待的方式启动异步装配（先 await 数据
 2. 装配时先发布路由决策所需的服务，数据库等与路由无关的慢初始化放在其后。
 3. 路由决策仍等于当前首屏或服务为空时按失败处理：显示可重试的错误并记录日志，不静默返回。
 
-## 来源（按需复核）
-
-- case-5fcc464cf9b9cd1034f1 · 结论：diagnosis, recommendation:3, recommendation:4
-  卡片版本：`145074fa18b47de6f8104b1e1d1e0bd3013f2f4ce0d99fe1e2c964a56cbab257`

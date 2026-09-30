@@ -26,11 +26,3 @@ ID：`lesson-22f5100f6718eaecc66f` · 版本：1
 
 - 对展示有疑问时，用含提醒、重复、成员等字段的真实记录核对可见文本与图标是源端文案，而非原始值。
 
-## 来源（按需复核）
-
-- case-182739cdd6b02b7eed15 · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
-  卡片版本：`df73d474aefb82feb88b6339a679c1d02aafddac8756089d557d1d3c7f90f5cf`
-- case-35171ce59437beebb0ea · 结论：recommendation:1
-  卡片版本：`b9718ee34168bf5c7791bc7114e6d1692d53208b1f487392b9a74475ef0341c1`
-- case-c2923d8f21d1ab03bb58 · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
-  卡片版本：`0eeeb4e9375ba1e141c72f5c0d1b649dd3c8fe08feee05c583f3046d31246c53`

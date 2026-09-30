@@ -1,0 +1,160 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-6c62d7c44b9a82b2388c",
+  "created_at": "2026-09-29T18:14:25.578660+00:00",
+  "migration_key": "7117da4e-7187-4a29-8d35-25d345e0e57e",
+  "title": "退出登录只清会话偏好，未停同步并清理账号本地业务表",
+  "when": "重构计划与账户域实现阶段，确定退出登录/游客重建要清理哪些本地状态时",
+  "description": "源端退出除清 token 与账号偏好外，还会清空本地业务数据库（如 Android Const.userLoginOut 调用 BoxInit.removeAll）；仓库中已有增量规格要求退出前停止同步并清理账号业务数据；目标端把会话清理拆到 Repository 与 SessionBridge，旧实现只删偏好。",
+  "summary": "根会话 main-019fc543 在 02:25 读取 F021 规格（spec/features/2026-07-27-F021-complete-sync-coordination.md），\n其中明确“退出登录和账号销毁在清会话前停止并等待同步，随后清理账号业务数据，避免旧账号数据泄漏给下一个登录用户”，\n并写明当时 HarmonyOS“退出登录不等待同步任务也不清理账号业务数据”，应由 AccountRepository 补齐（L364-L365）。\n该会话随后在 03:08 写出 spec/refactor-plan.md：范围写成“全部 F001～F020”，未纳入仍为 planned 的 F021；\nR5 business_account 验收只写“登录/退出/游客重建”，完成定义只写“退出/重置取消均符合 Android 行为”，\n这条已知的“停同步→清账号业务表”缺口在计划中丢失（L1313-L1315）。R5 派工前，根会话还收到 Android 事实审计回报\n“Const.userLoginOut() … calls BoxInit.removeAll()”（L4368），但派给 r5_account_impl 的任务正文是加密内容，无法核实是否转交。\nr5_account_impl（agent-019fc612）读到该计划的 R5 验收行及“从 baseline/Android 重新读该域 source anchors 与异常路径”的统一步骤，\n又读到旧 products/phone AccountRepository.clearSession 只做 clearAccount 偏好、loginState、httpDns reset 和登录状态事件（L30-L35）；\n全程未读 Android 源码或 F021，把旧 clearSession 原样拆进新建的 PhoneAccountSessionBridge.onSessionCleared，\n并在 handoff 与回报中声称 clearAccount 已恢复完整游客态（L81-L83、L104、L163）。偏差位于计划收敛与账户域实现两环。\n该片段在返修前未变（main-019ff8d9 L483-L484 读回相同实现）；退出后首页重新查询 RDB，仍显示旧用户日程/待办/四象限。\n返修把 onSessionCleared 改为先 syncService.stopAndWait('logout')，再在一个 RDB 事务中清理事件、例外、完成态、子任务、游标、\n订阅、倒数日、同步队列、搜索历史和空间，保留图标/颜色/节日等静态表，最后广播 EVENT_DATA_CHANGED 与 COUNTDOWN_CHANGED\n（main-019ff8d9 L652-L654、L779）。\n",
+  "recommendations": [
+    "制定或合并迁移计划时，逐条核对仓库中状态仍为 planned 的增量规格；像“退出前停止同步、清理账号业务表并通知刷新”这类已写明的行为要求，要写进对应批次（账户/同步）的验收条件，不能只写“符合源端行为”。",
+    "迁移或重构退出/会话清理钩子时，先读源端退出实现及其调用的数据库清理（如 userLoginOut → BoxInit.removeAll），列出所有按账号归属的本地状态（业务表、游标、同步队列、搜索历史、订阅、倒数日等）逐项对照；旧目标实现只作待验证输入，不能直接当作完整游客态。",
+    "实现清理时按“停止并等待同步 → 单事务清表 → 广播数据变化”的顺序，并用“先写入一条事件，执行退出钩子，断言表为空”的测试检查。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/xyz/work/HMRmbr/products/phone/src/main/ets/account/PhoneAccountSessionBridge.ets",
+        "since": "2026-08-11T06:08:24.647Z",
+        "at": "2026-08-19T07:18:47.009Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/xyz/work/HMRmbr/spec/features/2026-07-27-F021-complete-sync-coordination.md",
+          "at": "2026-08-03T02:25:53.411Z",
+          "reason": "正常输入：根会话 sed 读取 F021 规格，回执给出“退出登录和账号销毁在清会话前停止并等待同步，随后清理账号业务数据”，并把 AccountRepository 列为退出时清理账号业务数据的实现文件；足以说明退出不能只清会话（main-019fc543 L364-L365）。"
+        },
+        {
+          "key": "019fc543-9ced-7ec0-a1d6-8b1bc8c9dd5a",
+          "at": "2026-08-03T03:08:36.978Z",
+          "reason": "已读 F021 后，apply_patch 新建 refactor-plan.md：范围写成 F001～F020，R5 验收只写“登录/退出/游客重建”，完成定义只写“退出/重置取消均符合 Android 行为”，未带入 F021 的停同步与清账号业务数据要求（同转录 L1313-L1315）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/xyz/work/HMRmbr/spec/refactor-plan.md",
+          "at": "2026-08-03T05:22:08.369Z",
+          "reason": "交付桥梁：r5_account_impl 的 sed 回执包含 R5 验收行“登录/退出/游客重建”和“从 baseline/Android 重新读该域 source anchors 与异常路径”的步骤，但没有账号业务数据清理要求（agent-019fc612 L30-L31）。"
+        },
+        {
+          "key": "/Users/xyz/work/HMRmbr/products/phone/src/main/ets/repositories/AccountRepository.ets",
+          "at": "2026-08-03T05:22:13.026Z",
+          "reason": "旧实现输入：sed 回执中 logout 在 finally 调 clearSession，clearSession 只做 preferences.clearAccount、loginState.updateFromToken('')、httpDnsManager.reset 和发布登录状态，没有 RDB 清理（agent-019fc612 L34-L35）。"
+        },
+        {
+          "key": "agent-019fc612-1625-76d0-8e7d-affbc1d1688e.jsonl",
+          "at": "2026-08-03T05:26:03.162Z",
+          "reason": "读到上述计划和旧实现后未读 Android 退出源码或 F021，apply_patch 新建 PhoneAccountSessionBridge，onSessionCleared 只 refresh 凭据、清 loginState、reset httpDns、发布登录状态，把旧的“只清会话”原样迁入；handoff 与回报还声称 clearAccount 恢复完整游客态（同转录 L81-L83、L104、L163）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "根会话 exec 调用 sed -n '1,180p' spec/features/2026-07-27-F021-complete-sync-coordination.md，回执返回“退出登录和账号销毁在清会话前停止并等待同步，随后清理账号业务数据”及 AccountRepository 的实现指引；这是根会话写计划前实际收到的规格内容。",
+          "evidence": [
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/main-019fc543-9ced-7ec0-a1d6-8b1bc8c9dd5a.jsonl",
+              "line": 364
+            },
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/main-019fc543-9ced-7ec0-a1d6-8b1bc8c9dd5a.jsonl",
+              "line": 365
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 5,
+          "force": true,
+          "reason": "r5_account_impl 在 /Users/xyz/work/HMRmbr 下 exec 调用 sed -n '1,280p' spec/refactor-plan.md，回执包含 R5 验收“登录/退出/游客重建”和每个 business 先从 baseline/Android 重读 anchors 的步骤；这是实现者写桥接前收到的计划。",
+          "evidence": [
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/agent-019fc612-1625-76d0-8e7d-affbc1d1688e.jsonl",
+              "line": 30
+            },
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/agent-019fc612-1625-76d0-8e7d-affbc1d1688e.jsonl",
+              "line": 31
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": 5,
+          "force": true,
+          "reason": "r5_account_impl 在 /Users/xyz/work/HMRmbr 下 exec 调用 sed -n '1,360p' products/phone/src/main/ets/repositories/AccountRepository.ets，回执中的 clearSession 只清账号偏好、登录态、HTTPDNS 并发布登录状态；随后该逻辑被迁入 onSessionCleared。",
+          "evidence": [
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/agent-019fc612-1625-76d0-8e7d-affbc1d1688e.jsonl",
+              "line": 34
+            },
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/agent-019fc612-1625-76d0-8e7d-affbc1d1688e.jsonl",
+              "line": 35
+            }
+          ]
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "根会话派给 r5_account_impl 的任务正文加密，无法确认是否转交了 BoxInit.removeAll 或 F021 要求；本卡只归因可见的计划遗漏和实现者未重读源端。",
+    "旧 products/phone AccountRepository.clearSession 形成于本材料之前的首轮迁移，其生成过程不在材料内。"
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/xyz/work/HMRmbr/features/business_settings/src/main/ets/service/SettingsToolsService.ets",
+      "reason": "已确认修复只把 logout 前 uploadLogs 的空 catch 改为记录 warning 后继续（main-019ff8c2 L233-L234）。生成期代码已在上传失败后继续退出，并注明 Android 上传失败仍退出（旧 phone 版 agent-019fc621-887c L1085；08-06 抽取到 business_settings 时同样保留，main-019fd4b0 L2461、L2877；修复前 git blame 仍为 8e2e8578/d89bfa8b，main-019ff8c2 L69-L70）；修复者也说明原代码语义上会继续（L129）。未发现本文件导致上传失败阻断退出的生成期偏差；用户所见阻断的实际成因也未在该次修复中定位（L97 提到远端 logout 失败时页面按失败留在原页，但未修改）。"
+    }
+  ],
+  "job": "issue-6c62d7c44b9a82b2388c",
+  "metadata": {
+    "migration": {
+      "project": "记得日历",
+      "server_session_id": "7117da4e-7187-4a29-8d35-25d345e0e57e"
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "1a9777c8-c9e6-48ae-80c3-ff5be17a28a5"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "gpt-5.6-sol"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.146.0-alpha.9.2",
+        "0.147.0-alpha.1.2",
+        "0.147.0-alpha.6.5",
+        "0.148.0-alpha.15",
+        "0.148.0-alpha.9"
+      ]
+    },
+    "source_set_id": "sources-e29c9382987c75013258",
+    "card_tool_version": "0.10.0"
+  },
+  "revision": "407b891f913ef3bab511fccff5c9a787b3b700c41ff63d0e850af6da48ec357c"
+}

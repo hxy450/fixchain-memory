@@ -1,0 +1,257 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-1607d055621c41c4c087",
+  "created_at": "2026-09-27T16:41:04.953831+00:00",
+  "migration_key": "34f1eb1d-61e3-4b07-b51c-a3ef5890fad8",
+  "title": "把只含图片/视频的媒体库当作本地音频来源，并以READ_AUDIO权限门驱动扫描",
+  "when": "平台能力映射与实现阶段，为Android MediaStore本地音频扫描选择HarmonyOS读取方式和权限链时",
+  "description": "源端先申请READ_EXTERNAL_STORAGE/READ_MEDIA_AUDIO，再查询MediaStore.Audio列出本地音频；目标端受「不申请图片/视频媒体权限、优先picker」约束，候选方案涉及photoAccessHelper(MediaLibraryKit)、READ_AUDIO与AudioViewPicker。",
+  "summary": "规格阶段：page_0028 UI规格作者分析时自述「READ_EXTERNAL_STORAGE/MediaStore → photo/music picker 或权限模型 + MediaLibraryKit，needs decision」\n（agent-afe29016d3da2653c.jsonl:L196），写出的规格却定为「MediaStore音频扫描 → MediaLibraryKit查询音频资产；\nREAD_EXTERNAL_STORAGE → 音频库读取权限 + requestPermissionsFromUser，拒绝 → 引导空态」，未登记决策（L223-L224）。\nF003规格作者读到该行（agent-a251313b388027e29.jsonl:L79-L80），写成「本地铃声扫描用MediaLibraryKit音频资产查询；\n所需音频读取权限按需user_grant，与媒体图片/视频权限无关」，并把AC20写成音频权限门双空态（L226-L227、L288-L289）。\n规格阶段没有输入核实MediaLibraryKit是否有音频类型、读取需要什么权限，这是本链上游的材料缺口。\n实现阶段：Slice 10生成者写前读到上述规格（agent-a9476669c2230f2f9.jsonl:L50-L51），也读到photo-access-helper参考：\ngrep AUDIO只命中播放/后台任务，按类型筛选只有PhotoType.IMAGE/VIDEO（L348-L349、L354-L355）。\n它却自拟PhotoType.AUDIO谓词写成LocalMediaService（L357、L427-L428），并把LocalRingPage的「获取本地铃声」\n接到READ_AUDIO查询/申请 → getLocalRing（L528-L529）。写权限链前它读回module.json5，当时READ_AUDIO是激活声明（L252-L257），\n所以不是明知权限未声明而照写。\n编译修复阶段：group-3收尾者收到「Property 'AUDIO' does not exist on type 'typeof PhotoType'」\n（agent-a11e683a77adce7bd.jsonl:L389-L390），自述「Audio assets aren't in the photo library by type」（L417），\n仍删掉类型谓词、改为扫描全部相册资产再按扩展名/时长过滤，并判为可接受parity（L455-L457）。\n编译通过了，但这条扫描链仍不能产出本地音频；该片段保留到修复前（main-5a5b6f69 L796读回第52-54行）。\n参考文件后半段写明媒体库读取需READ_IMAGEVIDEO（其他agent读回L157-L177，如agent-add4709f2216e709a.jsonl:L296），\n生成者只读了前120行。\n直接的「无响应」来自module.json5里READ_CONTACTS与READ_AUDIO两段声明被整体注释：\n09-18T05:49Z读回仍激活，09-20T11:03Z（main-01a0be79 L100）读回已注释，期间材料中没有对应写入。\nverify期真机已记录CTA点击无弹窗（agent-a3826ae20c9278a73.jsonl:L528-L531、L690），但未修。\n关于P-S3-909与U-1：U-1原文只禁READ_IMAGEVIDEO/WRITE_IMAGEVIDEO，并要求设铃/壁纸改picker保存（main-7bcbff75 L443）；\nfeature-base把READ_MEDIA_AUDIO映射为READ_AUDIO「F001本地铃声按需user_grant」（agent-a6aceec0775dc528e.jsonl:L121）；\n主线派工要求补登（main-7bcbff75 L2606），Slice 3照此添加（agent-af82330e45d7543a5.jsonl:L522）。\n生成期并无禁用READ_AUDIO的决定，「U-1零媒体权限覆盖READ_AUDIO」是修复会话的解读（main-5a5b6f69 L791）。\n最终修复（main-5a5b6f69 L814-L850、L894）：LocalMediaService改为AudioViewPicker多选导入 → 复制进沙箱local_rings\n→ AVMetadataExtractor取时长，进页扫描沙箱；LocalRingPage删除权限查询/申请链，按钮直接拉picker；\nmodule.json5只同步注释（READ_AUDIO保持不申）。\n",
+  "recommendations": [
+    "规格提取阶段：映射本地音频扫描时，先核实目标媒体库API覆盖哪些资源类型、读取需要什么权限。photoAccessHelper面向图片/视频，读取需READ_IMAGEVIDEO；在禁申图片/视频权限的约束下，应写成AudioViewPicker选择导入并复制到应用沙箱，而不是「MediaLibraryKit音频资产查询 + 音频权限门」。确认不了就登记待决策，不写成确定映射。",
+    "实现阶段：规格指定的API与参考示例对不上时（参考只列PhotoType.IMAGE/VIDEO），不要自拟枚举成员；按参考或SDK声明核对类型，把「目标平台没有此能力」作为规格问题回报。",
+    "编译修复阶段：缺失的枚举/API如果说明平台缺少该能力（如PhotoType没有AUDIO），不要删掉约束换取编译通过；在回执中标明该功能链不可达并上报，由规格/实现改用picker等可行方案。",
+    "实现权限门时，核对所申请的权限就是后续API实际需要的权限；module.json5声明有变动时，同步复核所有requestPermissions调用点。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "D:/tusi/app_rings_harmony/entry/src/main/ets/services/LocalMediaService.ets",
+        "since": "2026-09-20T10:51:00Z",
+        "at": "2026-09-23T02:54:21Z"
+      },
+      "nodes": [
+        {
+          "key": "D:/tusi/app_rings_harmony/spec/baseline/features/F003-ringtone-set-download.md",
+          "at": "2026-09-18T05:44:37.346Z",
+          "reason": "上游有误的输入：Read回执给出「本地铃声扫描用MediaLibraryKit音频资产查询（替代MediaStore）；所需音频读取权限按需user_grant」（agent-a9476669c2230f2f9.jsonl:L50-L51）。这一映射的形成见图2。"
+        },
+        {
+          "key": "D:/ai_coding/hmigbot-1.5.2/skills/arkts-system-capabilities/references/photo-access-helper.md",
+          "at": "2026-09-18T05:55:03.793Z",
+          "reason": "正常输入：生成者先grep参考目录的AUDIO，只命中播放/后台任务（L348-L349），再Read本参考前120行：photoAccessHelper定位为相册媒体库，按类型筛选只有PhotoType.IMAGE与VIDEO（L354-L355）。这足以说明不能凭空写音频类型谓词。"
+        },
+        {
+          "key": "agent-a9476669c2230f2f9.jsonl",
+          "at": "2026-09-18T06:00:28.068Z",
+          "reason": "读到上述参考后，思考中写「For audio: PhotoType.AUDIO」（L357），Write LocalMediaService用predicates.equalTo(PHOTO_TYPE, PhotoType.AUDIO)查询photoAccessHelper（L427-L428）：把规格的音频映射落成一个不存在的枚举，没有回报参考与规格不符。",
+          "problem": true
+        },
+        {
+          "key": "D:/tusi/app_rings_harmony/build_out.log",
+          "at": "2026-09-18T11:23:53.131Z",
+          "reason": "正常输入：group-3编译门用Bash读取构建日志，回执给出LocalMediaService.ets:52「Property 'AUDIO' does not exist on type 'typeof PhotoType'」（agent-a11e683a77adce7bd.jsonl:L389-L390）。"
+        },
+        {
+          "key": "agent-a11e683a77adce7bd.jsonl",
+          "at": "2026-09-18T11:26:29.469Z",
+          "reason": "根据报错已自述PhotoType只有DEFAULT/PHOTO/VIDEO、音频不在相册类型中（L392、L417），仍Edit删除类型谓词，改为扫描全部相册资产再按扩展名与时长过滤，并判为可接受parity（L455-L457）。编译过了，但保留了一条不能产出本地音频的扫描链。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        },
+        {
+          "from": 4,
+          "to": 5,
+          "force": true,
+          "reason": "编译门收尾者用Bash执行sed -n '839,858p' build_out.log读取构建日志，回执返回LocalMediaService.ets:52的PhotoType.AUDIO不存在报错；这支持它写前已收到该输入。",
+          "evidence": [
+            {
+              "source": "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/agent-a11e683a77adce7bd.jsonl",
+              "line": 389
+            },
+            {
+              "source": "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/agent-a11e683a77adce7bd.jsonl",
+              "line": 390
+            }
+          ]
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "D:/tusi/app_rings_harmony/entry/src/main/ets/pages/LocalRingPage.ets",
+        "since": "2026-09-20T10:51:00Z",
+        "at": "2026-09-23T02:54:21Z"
+      },
+      "summary": "本图说明LocalRingPage的权限门链怎样从UI规格一路交付到页面。起点是page_0028规格作者：它自己标了「需决策」，\n写出的却是确定的「MediaLibraryKit查询音频资产 + 音频库读取权限 + 拒绝→引导空态」；F003规格沿用并写成AC20，\nSlice 10生成者据此实现权限门。生成者写前读到的module.json5中READ_AUDIO是激活声明，页面的权限门本身与当时输入一致。\n页面接到的扫描是它在图1中基于虚构PhotoType.AUDIO写成的媒体库查询。后来声明被未入材料的编辑注释掉，\n表现就成了点击无响应；修复删除了权限查询/申请链，按钮改为直接拉AudioViewPicker。\n",
+      "recommendations": [
+        "规格提取阶段：平台差异若自己已判为需决策（picker还是权限模型），就登记决策项；不要在映射表里写成确定的「媒体库查询 + 权限申请」。",
+        "规格提取阶段：为本地音频入口写AC时，把picker导入的空态/导入态作为目标契约，不照搬Android的权限门双空态。"
+      ],
+      "nodes": [
+        {
+          "key": "agent-afe29016d3da2653c.jsonl",
+          "at": "2026-09-17T03:59:32.188Z",
+          "reason": "UI规格作者分析时自述「READ_EXTERNAL_STORAGE/MediaStore query → photo/music picker 或权限模型 + MediaLibraryKit，needs decision」（L196）；Write page_0028时却定为「MediaStore音频扫描 → MediaLibraryKit查询音频资产；READ_EXTERNAL_STORAGE → 音频库读取权限 + requestPermissionsFromUser，拒绝 → 「获取本地铃声」引导空态」，未登记决策（L223-L224）。上游缺口：它的输入只有Level 2 API表中的「@kit.MediaLibraryKit（媒体库）」（L8），没有核实音频能力的材料。",
+          "problem": true
+        },
+        {
+          "key": "D:/tusi/app_rings_harmony/spec/baseline/ui/page_0028_LocalRingActivity.md",
+          "at": "2026-09-17T04:24:56.019Z",
+          "reason": "交付桥梁：F003规格作者的Read回执包含上述两行映射（agent-a251313b388027e29.jsonl:L79-L80）。"
+        },
+        {
+          "key": "agent-a251313b388027e29.jsonl",
+          "at": "2026-09-17T04:47:43.116Z",
+          "reason": "沿用该映射：Write F003写入「本地铃声扫描用MediaLibraryKit音频资产查询；所需音频读取权限按需user_grant，与媒体图片/视频权限无关」（L226-L227），Edit AC20为「未授权READ_EXTERNAL_STORAGE（鸿蒙映射音频库读取权限）→「获取本地铃声」引导空态 + 按钮触发权限申请」（L288-L289）。本链确认传递。"
+        },
+        {
+          "key": "D:/tusi/app_rings_harmony/spec/baseline/features/F003-ringtone-set-download.md",
+          "at": "2026-09-18T05:44:37.346Z",
+          "reason": "交付桥梁：Slice 10生成者的Read回执包含上述约束与AC20（agent-a9476669c2230f2f9.jsonl:L50-L51）。"
+        },
+        {
+          "key": "D:/tusi/app_rings_harmony/entry/src/main/module.json5",
+          "at": "2026-09-18T05:49:30.494Z",
+          "reason": "写权限链前的输入：Grep与Read回执显示READ_AUDIO（以及READ_CONTACTS）是激活声明（agent-a9476669c2230f2f9.jsonl:L252-L257），生成者据此判断已声明，并非明知未声明。"
+        },
+        {
+          "key": "agent-a9476669c2230f2f9.jsonl",
+          "at": "2026-09-18T06:05:35.679Z",
+          "reason": "按AC20把「获取本地铃声」接到READ_AUDIO查询/申请，授权后调用自己06:00写成的PhotoType.AUDIO媒体库扫描（L528-L529）。权限门本身与规格和当时的声明一致，本链确认传递；它独立的音频类型偏差见图1。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 6
+        },
+        {
+          "from": 5,
+          "to": 6
+        },
+        {
+          "from": 6,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "module.json5中READ_CONTACTS/READ_AUDIO两段声明被注释的写者和原因不在材料中（09-18T05:49:30Z至09-20T11:03:09Z之间无对应Write/Edit/Bash），本卡不归因这次改动。"
+  ],
+  "unresolved_targets": [
+    {
+      "key": "D:/tusi/app_rings_harmony/entry/src/main/module.json5",
+      "reason": "修复只同步了注释文字（main-5a5b6f69 L848-L850）。造成点击无响应的注释态（READ_CONTACTS与READ_AUDIO两段整体加//）形成于09-18T05:49:30Z（agent-a9476669 L257读回仍激活）至09-20T11:03:09Z（main-01a0be79 L100读回已注释）之间，材料中没有对应的Write/Edit/Bash写入。生成期写者agent-a7272db8415ebb906（L280暂不列）与agent-af82330e45d7543a5（L522补登）都与feature-base权限表及主线派工一致，未见可核的偏差起点。"
+    }
+  ],
+  "job": "issue-1607d055621c41c4c087",
+  "metadata": {
+    "migration": {
+      "project": "免费来电多多",
+      "server_session_id": "34f1eb1d-61e3-4b07-b51c-a3ef5890fad8"
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "4c2ade21-d470-4b84-97bf-86300d6a72d9"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code",
+        "codex"
+      ],
+      "models": [
+        "glm-5.3",
+        "glm-5.3-flash",
+        "gpt-5.6-sol"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.155.0-alpha.9.2",
+        "2.1.274",
+        "2.1.275",
+        "2.1.276",
+        "2.1.278",
+        "2.1.280"
+      ]
+    },
+    "source_set_id": "sources-8decedd1032cf015dca8",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "D:\\tusi\\app_rings_harmony",
+        "at": "2026-09-17T06:35:46.709Z",
+        "ref": "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/agent-ac567ed4068ed6644.jsonl:L149",
+        "request_ref": "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/agent-ac567ed4068ed6644.jsonl:L148",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "5.0.0(12)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "D:\\tusi\\app_rings_harmony",
+        "at": "2026-09-17T06:35:46.709Z",
+        "ref": "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/agent-ac567ed4068ed6644.jsonl:L149",
+        "request_ref": "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/agent-ac567ed4068ed6644.jsonl:L148",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "D:\\tusi\\app_rings_harmony\\entry\\build\\default\\outputs\\default",
+        "at": "2026-09-22T02:47:00.902Z",
+        "ref": "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/agent-a52e02c077767c03c.jsonl:L15",
+        "request_ref": "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/agent-a52e02c077767c03c.jsonl:L14",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "5.0.0(12)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "D:\\tusi\\app_rings_harmony\\entry\\build\\default\\outputs\\default",
+        "at": "2026-09-22T02:47:00.902Z",
+        "ref": "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/agent-a52e02c077767c03c.jsonl:L15",
+        "request_ref": "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/agent-a52e02c077767c03c.jsonl:L14",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.8.3"
+  },
+  "revision": "749b041f8fc4fe0cbf6a7d45c8b653dd0dd049028fdeeb48d6d466ee3164e85f"
+}

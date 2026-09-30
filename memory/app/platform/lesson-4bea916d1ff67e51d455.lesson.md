@@ -22,7 +22,3 @@ ID：`lesson-4bea916d1ff67e51d455` · 版本：1
 2. startAbility 失败要让调用方可观察（返回结果或给用户提示），不只 hilog 后吞掉。
 3. 维护参考文档时为系统应用包名注明验证时的系统版本与设备，HarmonyOS NEXT 与旧版 EMUI/HarmonyOS 分开写。
 
-## 来源（按需复核）
-
-- case-5aa1e2ae875c4bef3df1 · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
-  卡片版本：`79cd1c853dee477a1bccffcc2cf69a629ae5e85fa6d0295db4ac62c31ef45d45`

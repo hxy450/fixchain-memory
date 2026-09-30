@@ -25,7 +25,3 @@ ID：`lesson-c6379cfcbee86500f91f` · 版本：1
 
 - 对缓存逻辑有疑问时，模拟所有分支失败后再调用一次，第二次必须重新发出请求。
 
-## 来源（按需复核）
-
-- case-fa7bbda457517260efc4 · 结论：diagnosis, recommendation:1
-  卡片版本：`e0982ecc31ac0b66f180ea74e3d7fc7415458b4f6c15814c92650d0401b8c13d`

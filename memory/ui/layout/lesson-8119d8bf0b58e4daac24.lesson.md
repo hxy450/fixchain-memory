@@ -30,15 +30,3 @@ ID：`lesson-8119d8bf0b58e4daac24` · 版本：4
 
 - 改动带 clip 的自绘容器后，用行数不同的数据（如 5 行、6 行月份）及折叠中间态截图，核对末行完整、相邻面板不遮挡。
 
-## 来源（按需复核）
-
-- case-0389a44b7fd28f48c094 · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
-  卡片版本：`820a7fe12a1fc6e1ca53446c510b63447e737cd4cf20f4838b0862d9e2705ac5`
-- case-0dd25455d592a77ed652 · 结论：recommendation:3
-  卡片版本：`006b43007be7916a7a93e397f0b1d290666a55070cfba032c9a7e080356adb2b`
-- case-55e8dd5a2281c1b13411 · 结论：recommendation:4
-  卡片版本：`f5020678359c0de58d337bc078ae0a4e91c515959557bee60863b0afee45b916`
-- case-5b1c11815476c648a9dc · 结论：diagnosis, recommendation:1, recommendation:2
-  卡片版本：`818d4255bfec8ef2aa8a84c84c3c63b1f8134dd43f3d83608b5ec7d4bc3543a2`
-- case-6a2ee155bd552b418d50 · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
-  卡片版本：`98108dec3d5fb895eb1c784dcae5a4bf5bc44ff90c67d21e9d2cd7ba01986ae0`

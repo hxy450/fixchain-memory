@@ -28,13 +28,3 @@ ArkUI 中没有 onClick 的容器同样参与命中测试（HitTestMode.Default 
 - 调整 Stack 对齐、上层几何或新增定位壳后，对被覆盖区域的按钮逐个实际点击（不只看节点 clickable 与 bounds），检查 hilog 有无 Touch test result is empty。
 - 一次性动效层改动后，空闲态用 dumpLayout 确认该节点不存在，再实测点击、横滑与折叠。
 
-## 来源（按需复核）
-
-- case-37ef7d33ab4655385e6f · 结论：recommendation:3, recommendation:4
-  卡片版本：`88751aad836b72f3c464d8020b00b1f0292a8c683547ef71fdc19979ac8ed972`
-- case-51d51ad98738e338df19 · 结论：diagnosis, recommendation:1
-  卡片版本：`8185e0ee426842028420f1afc9b8834be11e69de8790a178b63655018c74ef22`
-- case-57a208ad2e9541272704 · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
-  卡片版本：`aeed6c0400b8e3633a7519cb161b7f7c5a7705890598067729231649087916b4`
-- case-7d423b2bf98cdaabda82 · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
-  卡片版本：`6f73cfbf4411b268f35a5835fb6a075e76a92a73aa629564da18c78946a43ecb`

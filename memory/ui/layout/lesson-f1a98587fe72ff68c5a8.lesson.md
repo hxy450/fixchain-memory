@@ -22,7 +22,3 @@ ID：`lesson-f1a98587fe72ff68c5a8` · 版本：1
 2. 固定尺寸的点击容器按其宽高作为热区，图标尺寸另按 src 与 scaleType 取。
 3. 列表行结构打开 tools:listitem（或适配器 inflate 的）item 布局，取图标、文字层级与右侧列。
 
-## 来源（按需复核）
-
-- case-436d1b16d79796c667d6 · 结论：diagnosis, recommendation:4
-  卡片版本：`bcedd95d940d1697859f10f28939878092bb557f168239227e66a6e3f3f82b83`

@@ -26,9 +26,3 @@ wire type 决定线上字节数：wire 0 的 varint 长度可变，负 int32 在
 
 - 对负值字段有疑问时，用字节级用例对照标准编码：INT32_MIN 的值部分为 80 80 80 80 F8 FF FF FF FF 01，并覆盖 -1、-268435456、-268435457；再用“负值 int32 字段后接更高字段号”的往返用例确认后续字段未错位。
 
-## 来源（按需复核）
-
-- case-315ff2de8e2d8d4c0c8d · 结论：diagnosis, recommendation:1, recommendation:2
-  卡片版本：`117f2ebc648f0d1f783adcf13579de0b316cbb61751b59239cde09bed3e73570`
-- case-6b781bb8b1a4eb80b808 · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
-  卡片版本：`5e2dce4e3906596750aee83beb0adb21c0fc4bdfcb3f01191af5a3992c3221a0`

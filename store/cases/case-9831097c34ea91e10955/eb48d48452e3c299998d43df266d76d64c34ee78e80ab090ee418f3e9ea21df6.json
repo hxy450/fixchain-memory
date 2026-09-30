@@ -1,0 +1,158 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-9831097c34ea91e10955",
+  "created_at": "2026-09-29T18:09:44.245214+00:00",
+  "migration_key": "7117da4e-7187-4a29-8d35-25d345e0e57e",
+  "title": "查询层重算日程完成态时丢掉非重复ANY_MEMBER豁免，同步落库未生成状态主键",
+  "when": "数据层实现阶段，在日历列表查询中为日程派生完成态（finished/完成人数），以及把远端完成状态写入本地库时",
+  "description": "源端按完成模式（ANY_MEMBER/ALL_MEMBERS）、是否重复事件和occurrenceDate组合判定完成态，完成记录表以eventJdid-occurrenceDate-userId组合键存储；目标在查询仓库中重新计算完成态，或在同步仓库中批量落库远端状态。",
+  "summary": "R6主线程复核写CalendarViewsSearchRepository前，实际收到两类输入：鸿蒙侧审计的FINAL_ANSWER只概括为\n“finished仍取event.finish，必须按completionMode + occurrenceDate + currentUser/state派生”\n（main-019fc543 L4974，审计自身转录agent-019fc621-769e L1160）；随后git diff读回的旧版\nEventOccurrenceResolver.applyCompletion已写明非重复事件不限occurrenceDate\n（!repeating || state.occurrenceDate === date），ANY_MEMBER只要任一completed记录即完成\n（main-019fc543 L5021-L5022）。该规则与Android BoxEvent.checkEventState一致：非重复ANY_MEMBER按\neventJdid取全部状态，finish = completedStates.isNotEmpty()，完成人数才按有效userId去重\n（修复期读回原文main-019fef8a L4306）。主线程写前又读到toEventItem里的eventStates按\nstate.occurrenceDate === occurrenceDate过滤、completedUserIds只收非空且非'0'的userId（L5283-L5284）。\n06:07:10的补丁却把finished改为completionMode === 'ANY_MEMBER' ? completedUserIds.size > 0 : ...，\n用按发生日过滤、按有效userId收集的集合重算并替换了event.finish（L5291-L5292）。\n偏差位于“已给出的完成规则 → 查询层重算实现”这一环：非重复ANY_MEMBER被强制限定发生日，且空userId的\n完成记录不再算完成。写前未查Android源码；审计摘要本身没有区分重复/非重复，但读回的旧实现已足以指出豁免。\n该片段保留到返修前，“哈哈宝宝”（非重复ANY_MEMBER）因此显示未完成；2026-08-12修复按checkEventState\n加入ignoreOccurrence = ANY_MEMBER && !repeat，并改为completedStates.length > 0（main-019fef8a L4314、L4809-L4810）。\n同一小时内r6_core_impl也把EventOccurrenceResolver的!repeating豁免删去（agent-019fc628 L1406-L1407），\n该处未在本job返修，本卡不单独归因。第二轮返修中“旧空UID记录按当前用户兼容”来自真机存量数据，\n属返修期新增兼容，不计入生成偏差。\nPersistenceSyncRepository的空主键覆盖另见第二张图。\n",
+  "recommendations": [
+    "在查询层重新派生完成态前，先定位Android的checkEventState、filterEventStatesForCheck和resolveEventCompletion，逐分支移植：非重复ANY_MEMBER只按eventJdid匹配；重复事件或ALL_MEMBERS才按occurrenceDate匹配；ANY_MEMBER完成=存在任一completed记录，不以有效userId为前提；完成人数才按非空、非'0'且去重的userId统计。",
+    "审计或交接摘要只作线索。仓内已有实现（如applyCompletion的!repeating豁免）与摘要冲突时，以源端规则裁决；不要用更严格的重算覆盖已有结果。改完用三类数据各做一条回归：非重复ANY_MEMBER且记录日期不同、completed记录userId为空、重复事件按实例日期。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/xyz/work/HMRmbr/features/business_calendar/src/main/ets/repository/CalendarViewsSearchRepository.ets",
+        "since": "2026-08-11T06:08:24.647Z",
+        "at": "2026-08-19T07:18:47.009Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/xyz/work/HMRmbr/products/phone/src/main/ets/repositories/EventOccurrenceResolver.ets",
+          "at": "2026-08-03T05:48:47.458Z",
+          "reason": "正常输入：主线程git diff读回旧版applyCompletion，非重复事件以(!repeating || state.occurrenceDate === date)跳过发生日过滤，ANY_MEMBER以related.some(completed)判完成，与Android checkEventState一致，足以指导查询层的ANY_MEMBER判定（main-019fc543 L5021-L5022）。同期收到的鸿蒙审计摘要（L4974）未区分重复/非重复，只作上下文，见summary。"
+        },
+        {
+          "key": "019fc543-9ced-7ec0-a1d6-8b1bc8c9dd5a",
+          "at": "2026-08-03T06:07:10.267Z",
+          "reason": "读到上述规则及toEventItem中按occurrenceDate过滤、只收有效userId的集合（L5283-L5284）后，补丁写入finished = completionMode === 'ANY_MEMBER' ? completedUserIds.size > 0 : ...并替换event.finish，使非重复ANY_MEMBER被限定发生日、空userId完成记录失效（L5291-L5292）。写前未读Android完成规则。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "主线程exec执行git diff -- products/phone/src/main/ets/repositories/EventOccurrenceResolver.ets，回执输出该文件被删除前的全文，其中含applyCompletion的!repeating豁免与ANY_MEMBER任一完成规则；这是06:07写入前主线程对该实现的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-2/sessions/main-019fc543-9ced-7ec0-a1d6-8b1bc8c9dd5a.jsonl",
+              "line": 5021
+            },
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-2/sessions/main-019fc543-9ced-7ec0-a1d6-8b1bc8c9dd5a.jsonl",
+              "line": 5022
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/xyz/work/HMRmbr/features/business_calendar/src/main/ets/repository/PersistenceSyncRepository.ets",
+        "since": "2026-08-11T06:08:24.647Z",
+        "at": "2026-08-19T07:18:47.009Z"
+      },
+      "summary": "R6.3b全量原子刷新的实现者写前读到DatabaseSchema：event_us_state、event_sub_task以uniqueId建UNIQUE索引且NOT NULL\n（agent-019fc621-887c L1242-L1243），也读到既有增量拉取路径直接用EventUSState.fromJson映射远端状态（L1187-L1188）。\n其新增的stageFullRefresh同样以EventUSState.fromJson/EventSubTask.fromJson收集远端状态，\napplyFullRefresh再以ON_CONFLICT_REPLACE批量插入（L1296-L1297）。整个过程未按Android createUniqueId\n生成eventJdid-occurrenceDate-userId（子任务再加subtaskId）主键。远端payload不带uniqueId时，多条状态落在同一空键上，\n后写覆盖前写。唯一约束已在输入中给出，偏差位于“远端行映射为本地行”这一环。Android主键公式未出现在该写者输入里，\n这是本链的材料缺口；增量路径的同类写法早于材料窗口，未追到其生成者。\n2026-08-12修复为增量和全量两条路径加入normalizeRemoteUserState/normalizeRemoteSubTask重建主键，\n并把status=2改为删除（main-019fef8a L5114-L5115读回Android createUniqueId，L5474-L5475写入修复）。\n",
+      "recommendations": [
+        "同步落库远端完成状态/子任务时，对照Android实体的createUniqueId在客户端生成主键：状态用eventJdid-occurrenceDate-userId，子任务再加subtaskId，null或'0'的userId归一为空；不要依赖远端payload自带uniqueId。增量与全量路径共用同一个归一化函数。",
+        "对带唯一索引的表使用ON_CONFLICT_REPLACE批量写入前，确认每行唯一键可区分；补一条“远端返回多条无uniqueId的状态时全部保留”的测试。"
+      ],
+      "nodes": [
+        {
+          "key": "/Users/xyz/work/HMRmbr/features/business_common/src/main/ets/database/raw/DatabaseSchema.ets",
+          "at": "2026-08-03T06:44:31.241Z",
+          "reason": "正常输入：sed读回event_us_state.uniqueId TEXT NOT NULL及CREATE UNIQUE INDEX ux_event_us_state_unique_id、event_sub_task(uniqueId)唯一索引，已说明每条状态须有可区分的主键（agent-019fc621-887c L1242-L1243）。"
+        },
+        {
+          "key": "019fc621-887c-7e60-9c39-bed2a936d36e",
+          "at": "2026-08-03T06:47:29.332Z",
+          "reason": "读到唯一约束后，新增stageFullRefresh用EventUSState.fromJson/EventSubTask.fromJson映射远端状态，并以ON_CONFLICT_REPLACE批量插入event_us_state/event_sub_task，未生成uniqueId，无主键远端状态会互相覆盖（同转录L1296-L1297）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "该写者exec执行sed -n '1,250p' features/business_common/src/main/ets/database/raw/DatabaseSchema.ets，回执含event_us_state.uniqueId TEXT NOT NULL与ux_event_us_state_unique_id、ux_event_sub_task_unique_id唯一索引；读取完成于06:47全量刷新写入之前。",
+          "evidence": [
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/agent-019fc621-887c-7e60-9c39-bed2a936d36e.jsonl",
+              "line": 1242
+            },
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/agent-019fc621-887c-7e60-9c39-bed2a936d36e.jsonl",
+              "line": 1243
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/xyz/work/HMRmbr/features/business_calendar/src/main/ets/repository/EventOccurrenceResolver.ets",
+      "reason": "已确认修复把重复实例完成态的applyCompletion(..., baseJdid, originalDate)改为displayDate（main-01a012a4 L315-L316，第二轮保留）。该片段在材料最早的读取中已存在（2026-08-03T05:39:08审计读取，git索引f2ad25a的products/phone版本），agent-019fc628仅于05:47:06原样迁移，窗口内没有写出该片段的生成记录，生成来源缺失。同文件05:50:50删除!repeating豁免属相关但未返修的偏差，未单独归因。"
+    },
+    {
+      "key": "/Users/xyz/work/HMRmbr/features/business_calendar/src/main/ets/pages/home/day/PhoneDayCalendarFragmentPage.ets",
+      "reason": "已确认修复把timeLabel由`${start}-${end}`拼接改为按所选日调用formatQuadrantEventTimeLabel（main-01a012a4 L653-L654）。旧拼接在材料最早的读取中已存在（2026-08-03T04:11:56读取的products/phone版本L163），products/phone与features两处旧路径在窗口内均无写出该片段的生成调用；Android兼容formatter在2026-08-18返修期才出现，生成来源与写前输入缺失。"
+    },
+    {
+      "key": "/Users/xyz/work/HMRmbr/features/business_calendar/src/main/ets/pages/home/month/PhoneMonthCalendarFragmentPage.ets",
+      "reason": "已确认修复把scheduleTimeLabel(item)的开始-结束拼接改为按弹窗日期格式化（main-01a012a4 L653-L654、L674-L675）。同样的开始-结束拼接在2026-08-03T02:26:45读取的entry版PhoneMonthCalendarFragmentPage中已存在，products/phone与features两处旧路径在窗口内均无写出该片段的生成调用，生成来源缺失；Android兼容formatter同样在返修期才出现。"
+    }
+  ],
+  "job": "issue-9831097c34ea91e10955",
+  "metadata": {
+    "migration": {
+      "project": "记得日历",
+      "server_session_id": "7117da4e-7187-4a29-8d35-25d345e0e57e"
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "1a9777c8-c9e6-48ae-80c3-ff5be17a28a5"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "gpt-5.6-sol"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.146.0-alpha.9.2",
+        "0.147.0-alpha.1.2",
+        "0.147.0-alpha.6.5",
+        "0.148.0-alpha.15",
+        "0.148.0-alpha.9"
+      ]
+    },
+    "source_set_id": "sources-e29c9382987c75013258",
+    "card_tool_version": "0.10.0"
+  },
+  "revision": "eb48d48452e3c299998d43df266d76d64c34ee78e80ab090ee418f3e9ea21df6"
+}

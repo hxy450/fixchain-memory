@@ -24,7 +24,3 @@ ID：`lesson-dca31bed776aaf7cb328` · 版本：1
 
 - 需要确认时，用最高、最低两组边界值算出屏幕 y，确认都在容器高度内且与标签对齐。
 
-## 来源（按需复核）
-
-- case-9d7fa754a567e2ecec7e · 结论：diagnosis, recommendation:1
-  卡片版本：`bea0753f350d28c7200a88687c9f9206bfffa2cb74e927a39a4a094bdf56a08e`

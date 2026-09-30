@@ -27,7 +27,3 @@ Android 页面在透明状态栏下用自屏幕顶部起算的固定顶距（lay
 
 - 需要确认时，用 dump 核对标题的 y 坐标与状态栏区域颜色。
 
-## 来源（按需复核）
-
-- case-6597b7f7858db941262c · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3, recommendation:4
-  卡片版本：`990b43574474bb436c78f31681e153d12ea684eed9544d500129c491520c6826`

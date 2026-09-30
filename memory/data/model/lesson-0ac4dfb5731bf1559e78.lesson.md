@@ -24,7 +24,3 @@ ID：`lesson-0ac4dfb5731bf1559e78` · 版本：1
 
 - 对归一语义存疑时，用混合大小写样例直接调用谓词，对照源端归一后再判定的结果
 
-## 来源（按需复核）
-
-- case-91a128fa3eca526ab6bb · 结论：diagnosis, recommendation:1, recommendation:2
-  卡片版本：`b09963e84b9a1ee6cbe5069c994532d8d1d65914364f351126c5a28ee606c38d`

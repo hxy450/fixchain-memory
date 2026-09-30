@@ -1,0 +1,149 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-3ae52645230514452828",
+  "created_at": "2026-09-30T08:51:03.081585+00:00",
+  "migration_key": "MTcyLjE3LjY0LjEyMDI2LTA4LTA4VDA2OjM1OjMzWg==",
+  "title": "迁移进度计算时丢掉源端的零分母保护与0..1钳制",
+  "when": "服务/业务逻辑实现阶段，把源端进度比值计算改写到目标回调中时",
+  "description": "源端用 ProgressTracker 一类辅助方法计算 completed/total 进度，其中含 total==0 分支与 coerceIn(0,1) 钳制；目标实现改为在进度回调里直接用 current/total 写入共享状态（ArkTS number 除法 0/0 得 NaN）。",
+  "summary": "F005 生成者写前实际读取了 Android DuplicateScanService.kt，回执中 ProgressTracker.getProgress()\n写明 `if (totalUnits == 0) 1f else (completedUnits.toFloat() / totalUnits.toFloat()).coerceIn(0f, 1f)`，\n之后 updateSharedProgress 再把该值交给 stateHolder.setProgress（agent-ae3c536e9cde77910.jsonl:L24、L31）。\n这一输入已经给出分母为零的分支和0..1范围，足以指导目标侧的进度写入。\n生成者在 source-notes 中只记下 ProgressTracker(100, 0, phase) 与 updateSharedProgress 的接线（同转录L142），\n随后 Write ScanBackgroundService.ets 时把比值计算搬进 DuplicatesService.startScan 的进度回调，\n写成 `this.holder.setProgress(p.current / p.total, this.phaseText(p.phase))`，零分母分支与钳制都未保留（同转录L154-L155）。\n偏差位于\"源端带保护的进度计算 → 目标回调内联除法\"这一实现环节；Kotlin 中该保护显式写在 getProgress 里，\nArkTS number 的 0/0 得 NaN，并直接写入 holder.progress。\n生成期后续 Edit 均未触及该表达式；验证阶段 UT 设计把 onProgress(0,0) 列为防御缺口\n（并注明生产路径 DuplicatesService 恒传 total=100，低优先；agent-a2d243f9e3081e3be.jsonl:L75），\nUT round-0 发现 NaN 并写问题文件（agent-a430f7e2ace471185.jsonl:L556）。\n修复在调用侧改为 `const pct = p.total > 0 ? p.current / p.total : 0` 再 setProgress，最终保留\n（agent-a792cad63b9155c12.jsonl:L206-L207）。注意源端 total==0 返回 1f，修复按 UT 期望回落 0，两者语义不同；\n本卡归因的是\"零分母与范围保护被丢失\"，不声称 0 是源端等价值。\n",
+  "recommendations": [
+    "实现阶段迁移进度/比率计算时，先列出源端辅助方法中的分母为零分支、coerceIn/clamp 等守卫，并在目标写入共享状态前原样保留；若把计算内联到回调，守卫须随之移动。",
+    "ArkTS/TS 中 number 除法不会抛异常，0/0 为 NaN、x/0 为 Infinity；写入进度等0..1状态前，用 total>0 判断并钳制到[0,1]，零分母的返回值按源端语义（本例源端为1f）或已确认的规格决定，并在注释中说明取舍。",
+    "写 source-notes 时把源端的边界保护（零分母、钳制、空集合）作为行为要点记录，而不只记录调用接线，便于实现与测试对照。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "D:/Harmony_AI_Memory/CleanSweep-arkts/entry/src/main/ets/services/ScanBackgroundService.ets",
+        "since": "2026-08-08T13:28:16.717Z",
+        "at": "2026-08-10T06:29:38.757Z"
+      },
+      "nodes": [
+        {
+          "key": "D:/Harmony_AI_Memory/CleanSweep/app/src/main/java/com/cleansweep/service/DuplicateScanService.kt",
+          "at": "2026-08-08T12:19:29.370Z",
+          "reason": "正常输入：生成者Read回执中ProgressTracker.getProgress()为 if (totalUnits == 0) 1f else (completed/total).coerceIn(0f, 1f)，updateSharedProgress 再调用 stateHolder.setProgress(progress, phase)；明确给出零分母分支与0..1范围（agent-ae3c536e9cde77910.jsonl:L24、L31，源码第84-98、171-173行）。"
+        },
+        {
+          "key": "eb525e87-668c-4c34-a83f-a3ee071613e9:ae3c536e9cde77910",
+          "at": "2026-08-08T12:27:50.637Z",
+          "reason": "已读到上述带保护的进度计算，Write ScanBackgroundService.ets 时在 startScan 进度回调内写 this.holder.setProgress(p.current / p.total, ...)，未保留 total==0 分支与 coerceIn 钳制，ArkTS 下 0/0 得 NaN（同转录L154-L155；source-notes L142 亦只记接线未记守卫）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-3ae52645230514452828",
+  "metadata": {
+    "migration": {
+      "project": "CleanSweep",
+      "server_session_id": "MTcyLjE3LjY0LjEyMDI2LTA4LTA4VDA2OjM1OjMzWg=="
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "d612f535-b996-439c-92d1-04b5ec97ef42"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "deepseek-v4-flash",
+        "deepseek-v4-pro"
+      ],
+      "client_versions": [
+        "2.1.220"
+      ]
+    },
+    "source_set_id": "sources-0b97b24d3ef3c2246145",
+    "environment": [
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "D:\\Harmony_AI_Memory\\CleanSweep-arkts",
+        "at": "2026-08-08T07:11:57.427Z",
+        "ref": "runs/978cbade-2f23-4297-99f2-4fbe10e6f084/epoch-0/sessions/main-eb525e87-668c-4c34-a83f-a3ee071613e9.jsonl:L253",
+        "request_ref": "runs/978cbade-2f23-4297-99f2-4fbe10e6f084/epoch-0/sessions/main-eb525e87-668c-4c34-a83f-a3ee071613e9.jsonl:L249",
+        "phase": "generation"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "36",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "D:\\Harmony_AI_Memory\\CleanSweep-arkts",
+        "at": "2026-08-08T07:13:44.848Z",
+        "ref": "runs/978cbade-2f23-4297-99f2-4fbe10e6f084/epoch-0/sessions/agent-a04ddb800841b5e82.jsonl:L13",
+        "request_ref": "runs/978cbade-2f23-4297-99f2-4fbe10e6f084/epoch-0/sessions/agent-a04ddb800841b5e82.jsonl:L12",
+        "phase": "generation"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "36",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "D:\\Harmony_AI_Memory\\CleanSweep-arkts",
+        "at": "2026-08-08T07:13:44.848Z",
+        "ref": "runs/978cbade-2f23-4297-99f2-4fbe10e6f084/epoch-0/sessions/agent-a04ddb800841b5e82.jsonl:L13",
+        "request_ref": "runs/978cbade-2f23-4297-99f2-4fbe10e6f084/epoch-0/sessions/agent-a04ddb800841b5e82.jsonl:L12",
+        "phase": "generation"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "29",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "D:\\Harmony_AI_Memory\\CleanSweep-arkts",
+        "at": "2026-08-08T07:13:44.848Z",
+        "ref": "runs/978cbade-2f23-4297-99f2-4fbe10e6f084/epoch-0/sessions/agent-a04ddb800841b5e82.jsonl:L13",
+        "request_ref": "runs/978cbade-2f23-4297-99f2-4fbe10e6f084/epoch-0/sessions/agent-a04ddb800841b5e82.jsonl:L12",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.0.2(22)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "D:\\Harmony_AI_Memory\\CleanSweep-arkts",
+        "at": "2026-08-08T07:43:48.696Z",
+        "ref": "runs/978cbade-2f23-4297-99f2-4fbe10e6f084/epoch-0/sessions/main-eb525e87-668c-4c34-a83f-a3ee071613e9.jsonl:L800",
+        "request_ref": "runs/978cbade-2f23-4297-99f2-4fbe10e6f084/epoch-0/sessions/main-eb525e87-668c-4c34-a83f-a3ee071613e9.jsonl:L799",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.0.2(22)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "D:\\Harmony_AI_Memory\\CleanSweep-arkts",
+        "at": "2026-08-08T07:43:48.696Z",
+        "ref": "runs/978cbade-2f23-4297-99f2-4fbe10e6f084/epoch-0/sessions/main-eb525e87-668c-4c34-a83f-a3ee071613e9.jsonl:L800",
+        "request_ref": "runs/978cbade-2f23-4297-99f2-4fbe10e6f084/epoch-0/sessions/main-eb525e87-668c-4c34-a83f-a3ee071613e9.jsonl:L799",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.10.0"
+  },
+  "revision": "3fe388cb88fdd18267a1f4f26bf4af9d5f5e015b53b526968d7e5f10ca2ec728"
+}

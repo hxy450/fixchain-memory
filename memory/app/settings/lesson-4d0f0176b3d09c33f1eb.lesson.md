@@ -25,13 +25,3 @@ ID：`lesson-4d0f0176b3d09c33f1eb` · 版本：2
 5. 迁移设置页保存逻辑时列出源端保存处理的全部副作用（远端同步、本地配置缓存、刷新事件），每一项在目标端指明消费者；配置键或加载函数在仓库、查询服务中没有调用点就是未接通。
 6. 切换即持久化、启动恢复的界面状态，写入与恢复两端都落地：切换时先持久化再更新状态，恢复放在偏好异步加载完成之后，非法值按源端规则回退。
 
-## 来源（按需复核）
-
-- case-290eac71ee43fe336138 · 结论：diagnosis, recommendation:2
-  卡片版本：`36fe85bdc79e77054719ea97a0169df35b9ef6bf2d243da993b6623a7ca4e681`
-- case-470d704a6ec794b4c3c9 · 结论：diagnosis, recommendation:2, recommendation:4
-  卡片版本：`e7b22c984628feae31f593f0a2b3ecb03c60fc956620aa16dc545800bc3c3def`
-- case-7f25b9e411fd7ea08eb8 · 结论：recommendation:3
-  卡片版本：`e1db9722af0e10e9467ac643a5b8995598f1456ec5c7b55f4bbb58ea9fa32ee4`
-- case-ea1fc6a0711a8176b79c · 结论：diagnosis, recommendation:2, recommendation:3
-  卡片版本：`a9c1d8e183831e5fa63e679f365d6ab9d2c6222ea8bd086abf9907492dcc6aec`

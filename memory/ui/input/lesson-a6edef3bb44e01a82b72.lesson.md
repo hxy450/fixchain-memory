@@ -22,7 +22,3 @@ ID：`lesson-a6edef3bb44e01a82b72` · 版本：1
 2. 在注释里分开写“XML 声明值”和“运行时生效值”，依据写到读取该属性的代码行。
 3. 用户描述与源 XML 不一致时，先核源控件的运行语义，再决定记为复刻缺陷还是新要求。
 
-## 来源（按需复核）
-
-- case-c1b719dc488b73e382db · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
-  卡片版本：`87d8ee19c5e6d70e6af0f04d480a03c1d9092d6e1fbeb85c10bd03de02ec053a`

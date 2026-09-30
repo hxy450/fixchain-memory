@@ -21,7 +21,3 @@ Android 页面在静态背景 ImageView 之上叠加 LottieAnimationView，代�
 1. 看到 LottieAnimationView 或 setAnimation("json/...") 时，在 oh-package.json5 接入 @ohos/lottie，把 assets/json 动画文件迁入工程，并复刻状态到动画文件的选择表；静态图只作加载前或失败时的兜底。
 2. 本文件完成不了动画层时登记占位并在报告写明，不以静态图静默替代。
 
-## 来源（按需复核）
-
-- case-0dd25455d592a77ed652 · 结论：diagnosis, recommendation:1
-  卡片版本：`006b43007be7916a7a93e397f0b1d290666a55070cfba032c9a7e080356adb2b`

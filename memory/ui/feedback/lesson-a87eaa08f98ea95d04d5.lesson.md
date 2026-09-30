@@ -23,7 +23,3 @@ ID：`lesson-a87eaa08f98ea95d04d5` · 版本：1
 3. 按“loading 在任一终态恰好收口一次”走查：每个 busy=true 都能经服务终态到达 busy=false。
 4. 接线或路由核验时打开方法体确认服务调用与收口存在，不凭方法名或注释判定已接通。
 
-## 来源（按需复核）
-
-- case-879046ceea442517d7ce · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3, recommendation:4
-  卡片版本：`922078c8c399cee313640f2e52d6bd8e3a930aae13369cf4a76070e1d8a7c21d`

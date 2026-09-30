@@ -22,11 +22,3 @@ ID：`lesson-29744eb694376e8acaca` · 版本：3
 2. 报错只指向导入或单个符号时，修正导入（如改用全局可用的类型）并保留功能；确需降级时回写规格、把对应验收保持未完成，不以占位替换后报告通过。
 3. 报错指向不存在的 API 字段时，改用能承载同一内容的可用 API（例如用自定义弹窗承载复选框），而不是连内容一起删掉；只能临时降级时按占位规则登记丢失的控件与写入、回补位置，并在报告中列为行为差异。
 
-## 来源（按需复核）
-
-- case-11c15d99c36e52d8aa59 · 结论：diagnosis, recommendation:1
-  卡片版本：`f735359e7a35d9224d411b87e20f996252584d5a1aec1ea5c36eec984cf325af`
-- case-9d7fa754a567e2ecec7e · 结论：diagnosis, recommendation:2
-  卡片版本：`bea0753f350d28c7200a88687c9f9206bfffa2cb74e927a39a4a094bdf56a08e`
-- case-d8867d30fe76e4d44ceb · 结论：diagnosis, recommendation:3
-  卡片版本：`87b82a98d256223044dd3a7fc491156a6842fddbf9bcd3d6e09dea313f604906`

@@ -22,7 +22,3 @@ CustomDialogController 的 builder 约定是 @CustomDialog 组件；把 @Compone
 2. 写 CustomDialogController 前先核其 builder 约定；“全 V2、不混用”的规则与之冲突时换载体，不要把弹窗 struct 改写成 @ComponentV2 来绕开。
 3. 自检时 grep CustomDialogController，逐个确认 builder 组件的装饰器，以及控制器是否在页面字段初始化时就执行构造。
 
-## 来源（按需复核）
-
-- case-18113e210e1369d79e1d · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:4
-  卡片版本：`f118b24992c47615a323e9cd4cf8c08e8e3a7acd66b35477acf908f62cb6e81a`

@@ -1,0 +1,167 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-bb57d08fe5ccef38d904",
+  "created_at": "2026-09-30T08:35:30.319263+00:00",
+  "migration_key": "MTcyLjE3LjY0LjEyMDI2LTA4LTA4VDA2OjM1OjMzWg==",
+  "title": "内联移植扫描流程时遗漏收尾阶段的不可读文件缓存写入",
+  "when": "功能实现阶段，把源端后台扫描服务的阶段流程内联移植到目标服务 startScan 并确定收尾副作用时",
+  "description": "Android 扫描服务在收尾阶段除保存扫描结果外还调用 Repository 更新不可读文件缓存；目标端将该流程内联到 Service 的 startScan，并已移植对应的缓存写入方法与 DAO。",
+  "summary": "F003 slice worker（agent-a8ae098dd97be1e73）写 DuplicatesService 前实际读到三类正确输入：\nF003 spec 的 F003-AC15“不可读文件记入 UnreadableFileCache 并汇总展示”（L40-L41）；\nfeature-base 表格中 UnreadableFileCache“不可读文件缓存（扫描时记录）”（L74-L75）；\n以及它为对齐阶段自行读取的 Android DuplicateScanService.startScan 第 230-429 行，\n其中收尾段在 setHasRunDuplicateScanOnce、saveScanResults 之前明确调用\nduplicatesRepository.updateUnreadableFileCache(filesToCache)，开头还有 Phase 0 读取该缓存做预过滤（L201-L202）。\n这些输入已足以说明扫描流程必须写入不可读缓存。\n本次 Write（L247-L248）却只把 skipped 汇入 run.unscannableFiles 并传给 persistScanResults，\n虽照源码定义了 updateUnreadableCache(paths)（注释“对齐 updateUnreadableFileCache”），startScan 中从未调用；\n文件头的“扫描流程（对齐 DuplicateScanService 各阶段）”也漏列了缓存读取与更新两步。\n同一 agent 在 L272-L273 再次改写 Phase 6 片段（只替换阶段常量）仍未补调用。偏差位于“源码流程已给出 → 目标流程实现”这一环。\n该遗漏保留到验证阶段：UT round-0 用例 F003_AC15_pipeline_wiring 期望 unreadable_file_cache 有 2 行，实际为 0\n（agent-a430f7e2ace471185.jsonl:L581）。修复者在 Phase 6 的 persistScanResults 前加入\nawait this.updateUnreadableCache(run.unscannableFiles)，round-1 通过（agent-a792cad63b9155c12.jsonl:L176-L177）。\n修复只补写入调用，未涉及 Phase 0 的缓存预过滤。后续 F005 worker 在 f005-source-notes 中记下了该收尾步骤\n（agent-ae3c536e9cde77910.jsonl:L142），但未改动本目标，故不入图。\n",
+  "recommendations": [
+    "把源端服务流程内联移植到目标方法前，逐阶段列出源函数的全部副作用调用（如缓存读取预过滤、updateUnreadableFileCache、偏好标记、结果持久化），在目标方法中逐项落位，或登记为显式缺口。",
+    "移植 Repository/DAO 写方法后，在目标工程 grep 其调用点并与源码调用点对照；方法已定义却无调用者时，回查源流程哪一步应调用它。",
+    "AC 写明“记入某缓存”但标注目标是展示页时，实现数据层仍要确认写入发生在哪一步（本例为扫描收尾），不能只实现读取与展示。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "D:/Harmony_AI_Memory/CleanSweep-arkts/entry/src/main/ets/repositories/DuplicatesService.ets",
+        "since": "2026-08-08T13:28:16.717Z",
+        "at": "2026-08-10T06:29:38.757Z"
+      },
+      "nodes": [
+        {
+          "key": "D:/Harmony_AI_Memory/CleanSweep-arkts/spec/baseline/features/F003-duplicates.md",
+          "at": "2026-08-08T10:04:56.156Z",
+          "reason": "正常输入：生成者 Read 回执含 F003-AC15“不可读文件记入 UnreadableFileCache 并汇总展示”，以及服务接口 startScan；说明扫描结果中的不可读文件须写入缓存（agent-a8ae098dd97be1e73.jsonl:L40-L41）。"
+        },
+        {
+          "key": "D:/Harmony_AI_Memory/CleanSweep-arkts/spec/baseline/feature-base.md",
+          "at": "2026-08-08T10:05:26.271Z",
+          "reason": "正常输入：Read 回执的数据表清单写明 UnreadableFileCache 为“不可读文件缓存（扫描时记录）”，指出写入时机在扫描流程（agent-a8ae098dd97be1e73.jsonl:L74-L75）。"
+        },
+        {
+          "key": "D:/Harmony_AI_Memory/CleanSweep/app/src/main/java/com/cleansweep/service/DuplicateScanService.kt",
+          "at": "2026-08-08T10:12:37.335Z",
+          "reason": "正常输入：生成者 Read startScan 第 230-429 行，回执含 Phase 0 读取不可读缓存预过滤，以及收尾“Update the unreadable cache for next time”调用 duplicatesRepository.updateUnreadableFileCache(filesToCache)，随后才 setHasRunDuplicateScanOnce/saveScanResults；调用位置和顺序已明确给出（agent-a8ae098dd97be1e73.jsonl:L201-L202）。"
+        },
+        {
+          "key": "agent-a8ae098dd97be1e73.jsonl",
+          "at": "2026-08-08T10:17:45.108Z",
+          "reason": "已收到上述输入，Write 创建 DuplicatesService.ets：startScan 的 Phase 5/6 照源码移植了隐藏组过滤、persistScanResults 和 setHasRunDuplicateScanOnce，却遗漏 updateUnreadableFileCache 调用；同一文件定义的 updateUnreadableCache(paths) 无调用者，文件头流程说明也漏列缓存读写（同转录 L247-L248；L272-L273 再改 Phase 6 仍未补）。本分支在此停止上溯。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-bb57d08fe5ccef38d904",
+  "metadata": {
+    "migration": {
+      "project": "CleanSweep",
+      "server_session_id": "MTcyLjE3LjY0LjEyMDI2LTA4LTA4VDA2OjM1OjMzWg=="
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "d612f535-b996-439c-92d1-04b5ec97ef42"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "deepseek-v4-flash",
+        "deepseek-v4-pro"
+      ],
+      "client_versions": [
+        "2.1.220"
+      ]
+    },
+    "source_set_id": "sources-0b97b24d3ef3c2246145",
+    "environment": [
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "D:\\Harmony_AI_Memory\\CleanSweep-arkts",
+        "at": "2026-08-08T07:11:57.427Z",
+        "ref": "runs/978cbade-2f23-4297-99f2-4fbe10e6f084/epoch-0/sessions/main-eb525e87-668c-4c34-a83f-a3ee071613e9.jsonl:L253",
+        "request_ref": "runs/978cbade-2f23-4297-99f2-4fbe10e6f084/epoch-0/sessions/main-eb525e87-668c-4c34-a83f-a3ee071613e9.jsonl:L249",
+        "phase": "generation"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "36",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "D:\\Harmony_AI_Memory\\CleanSweep-arkts",
+        "at": "2026-08-08T07:13:44.848Z",
+        "ref": "runs/978cbade-2f23-4297-99f2-4fbe10e6f084/epoch-0/sessions/agent-a04ddb800841b5e82.jsonl:L13",
+        "request_ref": "runs/978cbade-2f23-4297-99f2-4fbe10e6f084/epoch-0/sessions/agent-a04ddb800841b5e82.jsonl:L12",
+        "phase": "generation"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "36",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "D:\\Harmony_AI_Memory\\CleanSweep-arkts",
+        "at": "2026-08-08T07:13:44.848Z",
+        "ref": "runs/978cbade-2f23-4297-99f2-4fbe10e6f084/epoch-0/sessions/agent-a04ddb800841b5e82.jsonl:L13",
+        "request_ref": "runs/978cbade-2f23-4297-99f2-4fbe10e6f084/epoch-0/sessions/agent-a04ddb800841b5e82.jsonl:L12",
+        "phase": "generation"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "29",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "D:\\Harmony_AI_Memory\\CleanSweep-arkts",
+        "at": "2026-08-08T07:13:44.848Z",
+        "ref": "runs/978cbade-2f23-4297-99f2-4fbe10e6f084/epoch-0/sessions/agent-a04ddb800841b5e82.jsonl:L13",
+        "request_ref": "runs/978cbade-2f23-4297-99f2-4fbe10e6f084/epoch-0/sessions/agent-a04ddb800841b5e82.jsonl:L12",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.0.2(22)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "D:\\Harmony_AI_Memory\\CleanSweep-arkts",
+        "at": "2026-08-08T07:43:48.696Z",
+        "ref": "runs/978cbade-2f23-4297-99f2-4fbe10e6f084/epoch-0/sessions/main-eb525e87-668c-4c34-a83f-a3ee071613e9.jsonl:L800",
+        "request_ref": "runs/978cbade-2f23-4297-99f2-4fbe10e6f084/epoch-0/sessions/main-eb525e87-668c-4c34-a83f-a3ee071613e9.jsonl:L799",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.0.2(22)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "D:\\Harmony_AI_Memory\\CleanSweep-arkts",
+        "at": "2026-08-08T07:43:48.696Z",
+        "ref": "runs/978cbade-2f23-4297-99f2-4fbe10e6f084/epoch-0/sessions/main-eb525e87-668c-4c34-a83f-a3ee071613e9.jsonl:L800",
+        "request_ref": "runs/978cbade-2f23-4297-99f2-4fbe10e6f084/epoch-0/sessions/main-eb525e87-668c-4c34-a83f-a3ee071613e9.jsonl:L799",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.10.0"
+  },
+  "revision": "3e70e3f314dcf92c4dffad5157ed1299c1685a570a6c735b5bda40f0a3095d27"
+}

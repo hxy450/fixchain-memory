@@ -1,6 +1,6 @@
 # 沿用已生成页面、兄弟任务的写法或已有解析函数前，回到源码核对该片段的语义
 
-ID：`lesson-e9c6e8ef1b29a6fe9c26` · 版本：7
+ID：`lesson-e9c6e8ef1b29a6fe9c26` · 版本：8
 
 [本主题](index.md)
 
@@ -14,7 +14,7 @@ ID：`lesson-e9c6e8ef1b29a6fe9c26` · 版本：7
 
 ## 原因
 
-已生成片段可能带着偏差，照搬会把它复制到新文件，形成多处同源缺陷。来源跨多个应用：公共组件逐字沿用页面里的 @Builder 值参写法与输入框 onChange 限长，列表页重建沿用只含 id 的 ForEach 键；另一应用里两位设置页转换者都读到了源端连续折叠顶栏的写法，前一位沿用兄弟页的两态近似并称之为项目约定，后一位把前一位的输出当作“约定锚点”再抄一次；第三个应用里写者读到源端新登录方法从响应头取凭证，仍复用了已有的按响应体解析的函数，把同一偏差扩到新方法。写者都读过源码，却以已有代码为准。第四个应用里多处沿用：个人资料页照抄周铃页把 V2 组件交给 CustomDialogController 的写法并推断“builder 接受任意组件”，本地播放页照抄网络播放页满盒 Contain 的图标行，多个页面沿用透明底 SaveButton 的“范式”，修复时又以“壁纸页同款”接受了授权窗口风险。第五个应用里，Tab 子页转换者照搬压栈页在 onReady 取 context.pathStack 的写法，页面嵌入 Swiper 后点击失效或崩溃；多个写者把工程里已有的连字符共享状态 key 当作命名约定继续使用。这些先例本身都没有经过运行验证。第六个应用里，写者已读全账本详情页 XML（背景图、统计卡、预算圆环、流水/日历页签），仍保留基线页面的渐变头、“账单数量”“最近账单”等源端不存在的区块，只改高度与边距；附近页执行者也保留了基线自创的渐变头部，没有按规格改成白色标题区。
+已有目标代码可能带有尚未暴露的偏差，或依赖原来的输入来源、状态更新、挂载方式与生命周期。把它直接当成项目约定，会让先例覆盖当前已经读到的源端语义，并把同一偏差复制到更多文件。来源中的这些先例尚未经相应运行验证，不能仅凭存在相似写法推断当前场景可用；对齐已有页面时，旧骨架也可能包含源端没有的结构。
 
 ## 做法
 
@@ -23,33 +23,3 @@ ID：`lesson-e9c6e8ef1b29a6fe9c26` · 版本：7
 3. 先例本身没有经过运行验证（弹窗打开路径、真机截图）时，不以“先例能用”推断可运行；某处写法被修复后，搜索同一写法的其他页面一并核对。
 4. 对齐既有页面时先按源 XML 列组件清单（背景、标题栏、卡片子项、主按钮文案、页签/ViewPager、空态），与现有组件树逐项比对；源端不存在的区块替换，不在旧骨架上只调尺寸。
 
-## 来源（按需复核）
-
-- case-1740a4d06903ea105e81 · 结论：recommendation:2
-  卡片版本：`f33c04c888ead05d598724d2cdb944c0d4242df33395ff5e5e0d4c48d929aef1`
-- case-18113e210e1369d79e1d · 结论：recommendation:3
-  卡片版本：`f118b24992c47615a323e9cd4cf8c08e8e3a7acd66b35477acf908f62cb6e81a`
-- case-3045f4019d7d543e18ca · 结论：diagnosis
-  卡片版本：`c70e115876997fe84358e56664eb1d94839a3eaa89da89d4b73b2c4e1a132451`
-- case-31852e28af4327a408a3 · 结论：diagnosis, recommendation:3
-  卡片版本：`7901de8f36fd97f41e540052b94a4d9fdf875fa7e6f69b23452e8f15f8fc467b`
-- case-37ef7d33ab4655385e6f · 结论：recommendation:2
-  卡片版本：`88751aad836b72f3c464d8020b00b1f0292a8c683547ef71fdc19979ac8ed972`
-- case-6597b7f7858db941262c · 结论：recommendation:5
-  卡片版本：`990b43574474bb436c78f31681e153d12ea684eed9544d500129c491520c6826`
-- case-66f3c1649b7b5c4f38b5 · 结论：diagnosis, recommendation:2
-  卡片版本：`686410a72e498ff1fb1d9233686e5ebc690a444c3056d62bc78d50dbcb257140`
-- case-747484a613e86334516d · 结论：recommendation:4
-  卡片版本：`00aff1ffd0671a468df70a715054a6fe1a866bf3178456b88133464bc82537ff`
-- case-7bc774bebe74d00dfa24 · 结论：recommendation:3
-  卡片版本：`eef2f208911a46393489775cc790d5186aaba016ea1cd5acaa7f542ae65d5080`
-- case-affc8177e24ce9f71b47 · 结论：recommendation:3
-  卡片版本：`a4462470cf805175952adf203bd0a6cd4cb5f186643243d2520727d26ddbf1d3`
-- case-bd76c218ac0773e443e3 · 结论：diagnosis, recommendation:1
-  卡片版本：`7d3116df886e05d93080ca9808d7c31472088893f2c0341ecffa38e0869a41d7`
-- case-c4b0a71b1ff405c63013 · 结论：diagnosis, recommendation:3
-  卡片版本：`cf40af4452211b1663624d236fa85bb538c2147abecce670074002e2a91b17cc`
-- case-c9cc6663456a2ef02f89 · 结论：recommendation:2, recommendation:3
-  卡片版本：`36bbabfa7940b1a90550ec40228028a22a570da94bbc2bb2c2cfa44306198cdf`
-- case-e3cd92963aa40d922fdc · 结论：diagnosis, recommendation:3
-  卡片版本：`9788f0e9846113141c74603b6f4b949ae84f08bb07d5f725949650546de97620`

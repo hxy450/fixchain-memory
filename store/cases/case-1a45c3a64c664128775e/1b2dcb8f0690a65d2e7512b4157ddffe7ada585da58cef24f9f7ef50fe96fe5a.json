@@ -1,0 +1,219 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-1a45c3a64c664128775e",
+  "created_at": "2026-09-27T16:13:02.682483+00:00",
+  "migration_key": "34f1eb1d-61e3-4b07-b51c-a3ef5890fad8",
+  "title": "把 mkdirSync(dir, true) 当作幂等建目录，二次下载/设铃抛 13900015",
+  "when": "数据/服务层实现阶段，把 Android 的建目录、文件移动/复制落盘步骤翻译为 ArkTS fileIo 调用时",
+  "description": "源端用 FileUtils.createOrExistsDir、getExternalFilesDir 或 mkdirs 保证目录存在，并在同一固定目录内重复下载、复制或覆盖文件（ignoreFilePathOccupy、exists 后 delete 再 copyTo）；目标端用 @kit.CoreFileKit 的 fileIo.mkdirSync / moveFileSync / copyFileSync 实现同一管线。",
+  "summary": "生成者 a9476669 写 DownloadService 与 RingtoneSetService 前，实际读到 Android DownLoadManager.kt：\n下载前 FileUtils.createOrExistsDir(fileDir)，同目录已有同名非空文件则短路，Aria 以 ignoreFilePathOccupy 覆盖目标；\n以及 SetRingtoneUtil.kt：getExternalFilesDir(\"/audio/\") 取固定目录，清空旧文件，目标存在先 delete 再 copyTo。\n两段源码都表明目录会被重复使用、“已存在”应视为成功，这一契约已经给出。\n同时加载的 arkts-download-manager skill 把 fileIo.mkdirSync(dir, true) 写成“递归创建”的标准步骤\n（文件移动管线示例、坑4的正确写法、生成检查清单），错误码表只列 13900002 → mkdirSync(dir, true)，\n未说明目录或目标文件已存在时的行为；其示例把 mkdir 与 move 放在同一个 try 中，失败时回退到 cache 路径。\n生成者据此在 finalizeFile 写出裸 mkdirSync(dir, true) 加默认模式 moveFileSync，并把整个 try 的异常归为\nfinalize 失败返回空串（走下载失败分支）；在 copyToAudioDir 同样写裸 mkdirSync(dir, true)，\n尽管它在同文件 cleanupPreviousRing 的注释中写明“目录本身保留”。偏差位于“源端 create-or-exists 契约 →\n鸿蒙 fileIo 调用”的实现环节；skill 的写法是促成它的外部输入缺口，该 skill 的形成不在本批材料内。\n两处片段保留到返修：2026-09-21 真机 hilog 为 finalizeFile failed {\"code\":13900015}；修复者先改 moveFileSync\nmode 1、再改先删后移，全清构建后仍报同码，才依据 VideoPreloadManager 的“mkdir skipped: 13900015”日志确认\nmkdirSync 对已存在目录即便传 true 也抛错（main-7e6e56d7 L1968、L1978、L2006-L2009）。最终 finalizeFile\n将 mkdir 单独包 try 容错、move 前 unlinkSync 目标（L2010-L2011）；随后 copyToAudioDir 也报 13900015\n（目标文件名带时间戳，不会预先存在），mkdir 包 try 后两条链路真机保存成功（L2065-L2081、L2139-L2144）。\nmove 前 unlink 是对源端覆盖语义的防御补充，本次未单独复现 moveFile 目标已存在导致的失败。\n",
+  "recommendations": [
+    "翻译 createOrExistsDir、mkdirs、getExternalFilesDir 时保留“已存在即成功”：先用 fileIo.accessSync(dir) 判断，或仅在捕获 code 13900015 时继续，不把 mkdirSync(dir, true) 当作幂等调用。",
+    "源端是覆盖写入（ignoreFilePathOccupy、exists 后 delete 再 copyTo）时，moveFileSync 前显式处理已存在目标（unlinkSync 或确认 mode 语义）；把建目录、删旧文件、移动/复制分开处理和记录，避免一个 catch 把可恢复的“已存在”判为下载或设置失败。",
+    "对在固定目录内重复执行的下载、设铃链，写完后按第二次执行走查：目录和同名文件都已存在时每一步是否仍成功。skill 中的 mkdir 示例只覆盖 ENOENT，不能当作已存在情形的依据。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "D:/tusi/app_rings_harmony/entry/src/main/ets/services/DownloadService.ets",
+        "since": "2026-09-20T10:51:00Z",
+        "at": "2026-09-23T02:54:21Z"
+      },
+      "nodes": [
+        {
+          "key": "D:/tusi/app-rings-android/app/src/main/java/com/ringtone/dudu/util/DownLoadManager.kt",
+          "at": "2026-09-18T05:46:51.139Z",
+          "reason": "正常输入：Read 回执给出 download() 先 FileUtils.createOrExistsDir(fileDir)，file.exists() && length>0 时短路，否则 Aria setFilePath(...).ignoreFilePathOccupy() 下载到同一目录；足以说明目录会复用、建目录须容忍已存在、目标可覆盖（agent-a9476669c2230f2f9.jsonl:L137-L138）。"
+        },
+        {
+          "key": "D:/ai_coding/hmigbot-1.5.2/skills/arkts-download-manager/SKILL.md",
+          "at": "2026-09-18T05:47:35.045Z",
+          "reason": "外部 skill 输入缺口：Skill 加载内容把 mkdirSync(dir, true) 作为“递归创建”的文件移动管线步骤、坑4正确写法和检查清单项，错误码表只列 13900002 ENOENT，未提已存在目录/目标抛 13900015；其示例 mkdir 与 move 共用一个 try 并回退 cache 路径。该 skill 的形成不在材料内（agent-a9476669c2230f2f9.jsonl:L189-L191）。",
+          "problem": true
+        },
+        {
+          "key": "agent-a9476669c2230f2f9.jsonl",
+          "at": "2026-09-18T05:58:15.168Z",
+          "reason": "读到上述源码与 skill 后，Write 的 finalizeFile 为裸 fileIo.mkdirSync(dir, true) 加默认模式 moveFileSync(cachePath, destPath)，整个 try 的异常返回空串走下载失败分支；丢掉了 createOrExistsDir 的已存在分支和 ignoreFilePathOccupy 的覆盖语义（同转录L388-L389；L398 的 Edit 只改签名，该片段不变）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "生成者调用 Skill 工具加载 hmigbot:arkts-download-manager，回执随即注入该 skill 目录下 SKILL.md 正文（Base directory 为 arkts-download-manager），其中含 mkdirSync(dir, true) 递归创建的管线示例、坑4写法与检查清单；这支持生成者写前已收到该写法。",
+          "evidence": [
+            {
+              "source": "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/agent-a9476669c2230f2f9.jsonl",
+              "line": 189
+            },
+            {
+              "source": "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/agent-a9476669c2230f2f9.jsonl",
+              "line": 190
+            },
+            {
+              "source": "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/agent-a9476669c2230f2f9.jsonl",
+              "line": 191
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "D:/tusi/app_rings_harmony/entry/src/main/ets/services/RingtoneSetService.ets",
+        "since": "2026-09-20T10:51:00Z",
+        "at": "2026-09-23T02:54:21Z"
+      },
+      "nodes": [
+        {
+          "key": "D:/tusi/app-rings-android/app/src/main/java/com/ringtone/dudu/util/SetRingtoneUtil.kt",
+          "at": "2026-09-18T05:46:48.239Z",
+          "reason": "正常输入：Read 回执给出 saveRingtoneSettings 以 getExternalFilesDir(\"/audio/\") 取固定目录，listFiles 逐个 delete 后保留目录，目标 exists 先 delete 再 copyTo；足以说明第二次设铃时目录必然已存在且应继续（agent-a9476669c2230f2f9.jsonl:L132-L133）。"
+        },
+        {
+          "key": "D:/ai_coding/hmigbot-1.5.2/skills/arkts-download-manager/SKILL.md",
+          "at": "2026-09-18T05:47:35.045Z",
+          "reason": "外部 skill 输入缺口：同一 Skill 加载内容把 mkdirSync(dir, true) 作为确保目录存在的标准写法，只覆盖 ENOENT，未说明目录已存在时抛 13900015（agent-a9476669c2230f2f9.jsonl:L189-L191）。",
+          "problem": true
+        },
+        {
+          "key": "agent-a9476669c2230f2f9.jsonl",
+          "at": "2026-09-18T05:59:29.791Z",
+          "reason": "Write 的 copyToAudioDir 为裸 fileIo.mkdirSync(dir, true) 后 copyFileSync，异常返回空串走设置失败；同一次写入的 cleanupPreviousRing 注释已写“目录本身保留”，却未给 mkdir 保留已存在分支（同转录L402-L403）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "生成者调用 Skill 工具加载 hmigbot:arkts-download-manager，回执随即注入该 skill 目录下 SKILL.md 正文（Base directory 为 arkts-download-manager），其中含 mkdirSync(dir, true) 递归创建的管线示例、坑4写法与检查清单；这支持生成者写前已收到该写法。",
+          "evidence": [
+            {
+              "source": "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/agent-a9476669c2230f2f9.jsonl",
+              "line": 189
+            },
+            {
+              "source": "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/agent-a9476669c2230f2f9.jsonl",
+              "line": 190
+            },
+            {
+              "source": "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/agent-a9476669c2230f2f9.jsonl",
+              "line": 191
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-1a45c3a64c664128775e",
+  "metadata": {
+    "migration": {
+      "project": "免费来电多多",
+      "server_session_id": "34f1eb1d-61e3-4b07-b51c-a3ef5890fad8"
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "4c2ade21-d470-4b84-97bf-86300d6a72d9"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code",
+        "codex"
+      ],
+      "models": [
+        "glm-5.3",
+        "glm-5.3-flash",
+        "gpt-5.6-sol"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.155.0-alpha.9.2",
+        "2.1.274",
+        "2.1.275",
+        "2.1.276",
+        "2.1.278",
+        "2.1.280"
+      ]
+    },
+    "source_set_id": "sources-8decedd1032cf015dca8",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "D:\\tusi\\app_rings_harmony",
+        "at": "2026-09-17T06:35:46.709Z",
+        "ref": "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/agent-ac567ed4068ed6644.jsonl:L149",
+        "request_ref": "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/agent-ac567ed4068ed6644.jsonl:L148",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "5.0.0(12)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "D:\\tusi\\app_rings_harmony",
+        "at": "2026-09-17T06:35:46.709Z",
+        "ref": "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/agent-ac567ed4068ed6644.jsonl:L149",
+        "request_ref": "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/agent-ac567ed4068ed6644.jsonl:L148",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "D:\\tusi\\app_rings_harmony\\entry\\build\\default\\outputs\\default",
+        "at": "2026-09-22T02:47:00.902Z",
+        "ref": "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/agent-a52e02c077767c03c.jsonl:L15",
+        "request_ref": "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/agent-a52e02c077767c03c.jsonl:L14",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "5.0.0(12)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "D:\\tusi\\app_rings_harmony\\entry\\build\\default\\outputs\\default",
+        "at": "2026-09-22T02:47:00.902Z",
+        "ref": "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/agent-a52e02c077767c03c.jsonl:L15",
+        "request_ref": "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/agent-a52e02c077767c03c.jsonl:L14",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.8.3"
+  },
+  "revision": "1b2dcb8f0690a65d2e7512b4157ddffe7ada585da58cef24f9f7ef50fe96fe5a"
+}

@@ -22,11 +22,3 @@ ID：`lesson-afae8d13e00941efe808` · 版本：1
 2. UI 测试被环境问题阻断时，改用 uitest 点击 + dumpLayout 做设备断言（点击后标题、日期等可见状态的变化）；修复前已存在的源码字符串在修复前后都会通过，不作为 RED/GREEN 依据。
 3. 编译被阻断、没有完成设备验证、功能点因宿主不可达被 BLOCKED 或页面因数据未加载不可见时，在交付说明中标为未验证，并回流为待补项或用静态检查覆盖，不写成已修复或通过。
 
-## 来源（按需复核）
-
-- case-4a7f1aef1c804d227365 · 结论：recommendation:3
-  卡片版本：`47d877fa31bdd943782bd778362fcbed7a8914acc10bad52186cf3269f13c5c8`
-- case-7f25b9e411fd7ea08eb8 · 结论：recommendation:4
-  卡片版本：`e1db9722af0e10e9467ac643a5b8995598f1456ec5c7b55f4bbb58ea9fa32ee4`
-- case-e5d42507c82fd492f62b · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
-  卡片版本：`c7922c888668827220013e5ef7a1528d77bfcacc73c6e3dfd962eb9c4735de01`

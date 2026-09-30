@@ -24,7 +24,3 @@ InputType.Number 按纯数字输入处理，小数点无法输入；源端能输
 
 - 需要确认时，在真机键入 66.2、22.63 一类值确认小数点可输入。
 
-## 来源（按需复核）
-
-- case-0d37e50dbb1a2e0a9bee · 结论：diagnosis, recommendation:1
-  卡片版本：`dd0c06714b2aa06b01298a979372bf1f1269462a6ea360cb9816f57b9fe57ad1`

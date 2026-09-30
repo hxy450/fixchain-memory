@@ -1,0 +1,244 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-2f0ae037cbd33aafdcfd",
+  "created_at": "2026-09-29T17:47:59.921270+00:00",
+  "migration_key": "7117da4e-7187-4a29-8d35-25d345e0e57e",
+  "title": "会从弹层内跳页的月历弹窗套用 OVERLAY 半模态，改 EMBEDDED 时又漏传 targetId",
+  "when": "界面实现或缺陷修复阶段，把页面内弹层改造成 bindSheet 系统半模态、确定其 SheetMode 与挂载节点时",
+  "description": "弹层内条目会通过单一 Navigation/NavPathStack 压入新页面（如节日页、订阅详情），且要求不关闭弹层、新页面盖住弹层、返回后弹层仍在；目标实现使用 UIContext.openBindSheet 或 harmony-dialog 的 DialogHelper.showBindSheet，并参考了不含页面跳转的选择器类半模态模板。",
+  "summary": "引入者 main-01a00ec3 写前实际收到：用户要求把 MonthCalendarPopup 改为真正的底部弹窗并参考 WheelPickerBottomDialog（L9）；\nAndroid MonthCalendarPopup.kt 回执显示弹窗内 onOpenFestival 直接 FestivalActivity.open、openSubscribe 打开 SubscribeDetailAct，均未先 dismiss（L53-L54）；\n旧鸿蒙 MonthCalendarPopup 是页面内自绘蒙层组件，发出 OPEN_FESTIVAL/OPEN_SUBSCRIPTION 动作（L35-L36）。\n这些输入已足以说明该弹层会从内部打开整页，新页面应覆盖弹层、返回后弹层保留。\n参考模板 WheelPickerBottomDialog 写的是 mode: SheetMode = SheetMode.OVERLAY（L31-L32），但它是不从弹层内跳页的滚轮选择器，ledger D-028 也只针对滚轮选择器（L21-L22）。\n该 agent 没有读取 SheetMode 或 openBindSheet 的层级说明，就把模板的 OVERLAY 原样写进 MonthCalendarPopupSheetOptions，\n并设计了只含 uiContext、没有 targetId 的 MonthCalendarPopupConfig/Controller（L94-L95，08-17T08:11:37Z）。\n偏差位于“参考模板 → 新弹层层级选择”这一环：OVERLAY 显示在窗口顶层、高于所有页面。\n随后 main-01a00ea6 读取该文件（L578-L579，其中可见 OVERLAY 与无 targetId 的配置接口）后，用该 Controller 替换 PhoneMonthCalendarFragmentPage 的页面内 PhoneMonthDayPopup，\n写出 show({ uiContext: this.getUIContext(), ... })，并把 OPEN_FESTIVAL 转给 onFestivalRequested 走 Navigation 压栈（L643-L644）。\n窗口级弹层与 Navigation 跳转由此在目标页组合，节日页显示在弹窗下方（用户报告 main-01a017c5 L382）。\n修复期第一次（main-01a017c5 L486-L487）只把 mode 改成 EMBEDDED。写前它已读到 harmony-dialog BaseSheetOptions 的 targetId 注释\n“需要绑定组件的ID，若不指定则不绑定任何组件”，也读到 openBindSheet 仅在有 targetId 时才传第三参（L435-L436）；\nSDK 的 SheetMode.EMBEDDED 说明只能挂在 Page/NavDestination 节点上（L447-L448）。但它未核 UIContext.openBindSheet 声明，也没有接入 targetId。\n用户实测仍被覆盖（L524）后，它读到 openBindSheet 注释“未传 targetId 时 mode 不能设为 EMBEDDED，默认 OVERLAY”（L543-L544）。\n最终在 Config/SheetOptions 中增加 targetId，并由 PhoneMonthCalendarFragmentPage 传入 this.getUniqueId()（L580-L581）。\n",
+  "recommendations": [
+    "把页面内弹层改成系统半模态前，先列出弹层内会触发的跳转；若会压入 Navigation 页面且需保留弹层，选 SheetMode.EMBEDDED，不沿用选择器类模板的 OVERLAY。",
+    "使用 openBindSheet 或 harmony-dialog showBindSheet 的 EMBEDDED 时，把宿主 Page/NavDestination 内组件的 targetId（如 this.getUniqueId()）纳入弹窗配置接口并在调用方传入；核对 openBindSheet 声明，未传 targetId 会回退 OVERLAY。",
+    "复用已有弹窗 Controller 接入新页面时，核对其 SheetMode、挂载参数与本页跳转动作是否匹配；回归断言同时检查 mode 与 targetId 传入，不只匹配 mode 字面值。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/xyz/work/HMRmbr/features/business_calendar/src/main/ets/pages/home/month/MonthCalendarPopup.ets",
+        "since": "2026-08-11T06:08:24.647Z",
+        "at": "2026-08-19T07:18:47.009Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/xyz/work/ASCode/rmbr-android/app/src/main/java/com/rmbr/android/ui/calender/MonthCalendarPopup.kt",
+          "at": "2026-08-17T08:09:51.019Z",
+          "reason": "正常输入：sed 读取回执显示 DayEventAdapter 中 onOpenFestival 调 FestivalActivity.open(context, jdid)、openSubscribe 打开 SubscribeDetailAct，弹窗不先关闭；说明弹层内会打开整页，且新页面要盖住弹层（main-01a00ec3 L53-L54）。"
+        },
+        {
+          "key": "/Users/xyz/work/HMRmbr/features/business_settings/src/main/ets/components/WheelPickerBottomDialog.ets",
+          "at": "2026-08-17T08:09:04.685Z",
+          "reason": "用户指定的参考模板：回执中的 BaseSheetOptions 实现写 mode: SheetMode = SheetMode.OVERLAY；该模板是只回调取消/确定的滚轮选择器，不从弹层内压入新页面，其 OVERLAY 不能直接推广到会跳页的弹层（main-01a00ec3 L31-L32）。"
+        },
+        {
+          "key": "01a00ec3-3f19-7ad0-b276-056ea260d2ca",
+          "at": "2026-08-17T08:11:37.778Z",
+          "reason": "已读到 Android 弹窗内直接跳页、旧鸿蒙弹窗发出 OPEN_FESTIVAL（L35-L36、L53-L54），却在 apply_patch 中照模板写 mode: SheetMode = SheetMode.OVERLAY，并定义只含 uiContext、无 targetId 的 MonthCalendarPopupConfig 与 Controller.show（L94-L95）；未读取 SheetMode/openBindSheet 层级说明。",
+          "problem": true
+        },
+        {
+          "key": "/Users/xyz/work/HMRmbr/oh_modules/@pura/harmony-dialog/src/main/ets/model/base/BaseSheetOptions.ets",
+          "at": "2026-08-19T03:08:03.315Z",
+          "reason": "修复期正常输入：sed 回执显示 BaseSheetOptions 带 targetId?: number | string，注释为“需要绑定组件的ID，若不指定则不绑定任何组件”，同一回执中的 ActionBaseCore 只在 options.targetId 存在时向 openBindSheet 传第三参（main-01a017c5 L435-L436）。"
+        },
+        {
+          "key": "/Applications/DevEco-Studio.app/Contents/sdk/default/openharmony/ets/component/common.d.ts",
+          "at": "2026-08-19T03:08:27.180Z",
+          "reason": "修复期正常输入：SDK 回执说明 OVERLAY 显示在窗口顶层、高于所有页面；EMBEDDED 只能挂载在 Page 或 NavDestination 节点上，新页面可覆盖 sheet（main-01a017c5 L447-L448）。"
+        },
+        {
+          "key": "01a017c5-f0de-7882-a3c3-ac3a669ea0a0",
+          "at": "2026-08-19T03:09:24.873Z",
+          "reason": "第一次修复只把 mode 从 OVERLAY 改成 EMBEDDED（L486-L487），没有把 targetId 接入配置和调用方，也未核 UIContext.openBindSheet 声明；用户实测仍覆盖（L524）后，它才读到“未传 targetId 时 EMBEDDED 回退 OVERLAY”（L543-L544）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "01a00ec3 用 exec 执行 sed -n '1,360p' 读取该 Android 文件，回执返回 onOpenFestival→FestivalActivity.open 与 openSubscribe 的整页跳转，支持引入者写前已收到弹层内跳页事实。",
+          "evidence": [
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/main-01a00ec3-3f19-7ad0-b276-056ea260d2ca.jsonl",
+              "line": 53
+            },
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/main-01a00ec3-3f19-7ad0-b276-056ea260d2ca.jsonl",
+              "line": 54
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "01a00ec3 用 exec 执行 sed 读取 business_settings 的 WheelPickerBottomDialog.ets，回执含 BaseSheetOptions 实现与 mode: SheetMode = SheetMode.OVERLAY，支持引入者写前拿到该模板。",
+          "evidence": [
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/main-01a00ec3-3f19-7ad0-b276-056ea260d2ca.jsonl",
+              "line": 31
+            },
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/main-01a00ec3-3f19-7ad0-b276-056ea260d2ca.jsonl",
+              "line": 32
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target"
+        },
+        {
+          "from": 4,
+          "to": 6,
+          "force": true,
+          "reason": "01a017c5 用 exec 执行 sed -n '1,220p' oh_modules/@pura/harmony-dialog/src/main/ets/model/base/BaseSheetOptions.ets（相对工作区 /Users/xyz/work/HMRmbr），回执返回 targetId 字段及其“不指定则不绑定任何组件”注释，支持第一次修复写前已收到挂载参数。",
+          "evidence": [
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/main-01a017c5-f0de-7882-a3c3-ac3a669ea0a0.jsonl",
+              "line": 435
+            },
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/main-01a017c5-f0de-7882-a3c3-ac3a669ea0a0.jsonl",
+              "line": 436
+            }
+          ]
+        },
+        {
+          "from": 5,
+          "to": 6,
+          "force": true,
+          "reason": "01a017c5 用 exec 执行 sed 读取 SDK common.d.ts 的 SheetMode 段，回执返回 OVERLAY 窗口级与 EMBEDDED 只能挂载在 Page/NavDestination 的说明，支持第一次修复写前已收到该约束。",
+          "evidence": [
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/main-01a017c5-f0de-7882-a3c3-ac3a669ea0a0.jsonl",
+              "line": 447
+            },
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/main-01a017c5-f0de-7882-a3c3-ac3a669ea0a0.jsonl",
+              "line": 448
+            }
+          ]
+        },
+        {
+          "from": 6,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/xyz/work/HMRmbr/features/business_calendar/src/main/ets/pages/home/month/PhoneMonthCalendarFragmentPage.ets",
+        "since": "2026-08-11T06:08:24.647Z",
+        "at": "2026-08-19T07:18:47.009Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/xyz/work/ASCode/rmbr-android/app/src/main/java/com/rmbr/android/ui/calender/MonthCalendarPopup.kt",
+          "at": "2026-08-17T08:09:51.019Z",
+          "reason": "正常输入：Android 弹窗在不关闭的情况下直接打开节日页和订阅详情页（main-01a00ec3 L53-L54）。"
+        },
+        {
+          "key": "01a00ec3-3f19-7ad0-b276-056ea260d2ca",
+          "at": "2026-08-17T08:11:37.778Z",
+          "reason": "偏差起点：给会跳页的弹层写入窗口级 OVERLAY，弹窗配置接口只有 uiContext、没有 targetId（main-01a00ec3 L94-L95）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/xyz/work/HMRmbr/features/business_calendar/src/main/ets/pages/home/month/MonthCalendarPopup.ets",
+          "at": "2026-08-17T08:22:35.965Z",
+          "reason": "交付桥梁：该文件的 MonthCalendarPopupConfig 只要求 uiContext，MonthCalendarPopupSheetOptions 为 SheetMode.OVERLAY；后续接入者读取回执第106-118、146、233-246行仍是这一契约（main-01a00ea6 L578-L579）。"
+        },
+        {
+          "key": "01a00ea6-c814-7be3-b019-58596d35da3d",
+          "at": "2026-08-17T08:25:39.037Z",
+          "reason": "读到上述契约后，用 MonthCalendarPopupController 替换页面内 PhoneMonthDayPopup，写出 show({ uiContext: this.getUIContext(), ... })，未传挂载节点；同时把 OPEN_FESTIVAL 转给 onFestivalRequested 走 Navigation 压栈（L638-L644）。本链确认契约传到目标，不另推定其独立失职。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "01a00ec3 用 exec 执行 sed -n '1,360p' 读取该 Android 文件，回执返回弹窗内 FestivalActivity.open/SubscribeDetailAct.open 的跳转，支持引入者写前已收到弹层内跳页事实。",
+          "evidence": [
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/main-01a00ec3-3f19-7ad0-b276-056ea260d2ca.jsonl",
+              "line": 53
+            },
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/main-01a00ec3-3f19-7ad0-b276-056ea260d2ca.jsonl",
+              "line": 54
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "01a00ea6 用 exec 执行 nl -ba features/business_calendar/src/main/ets/pages/home/month/MonthCalendarPopup.ets | sed -n '1,300p' 等读取该文件，回执第106-118行 MonthCalendarPopupConfig 只有 uiContext、第146行为 SheetMode.OVERLAY、第233-246行为 Controller.show，支持接入者写前实际收到这一契约。",
+          "evidence": [
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/main-01a00ea6-c814-7be3-b019-58596d35da3d.jsonl",
+              "line": 578
+            },
+            {
+              "source": "runs/ca861b4e-0459-4d5a-a0c8-f037c41cbacf/epoch-0/sessions/main-01a00ea6-c814-7be3-b019-58596d35da3d.jsonl",
+              "line": 579
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-2f0ae037cbd33aafdcfd",
+  "metadata": {
+    "migration": {
+      "project": "记得日历",
+      "server_session_id": "7117da4e-7187-4a29-8d35-25d345e0e57e"
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "1a9777c8-c9e6-48ae-80c3-ff5be17a28a5"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "gpt-5.6-sol"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.146.0-alpha.9.2",
+        "0.147.0-alpha.1.2",
+        "0.147.0-alpha.6.5",
+        "0.148.0-alpha.15",
+        "0.148.0-alpha.9"
+      ]
+    },
+    "source_set_id": "sources-e29c9382987c75013258",
+    "card_tool_version": "0.10.0"
+  },
+  "revision": "842bded2b0f6f6f775ecff2e4f1692fd64a37f78ee6e2a096aece4322e655c5a"
+}

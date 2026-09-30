@@ -1,0 +1,279 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-31b1116c0e0aec40a307",
+  "created_at": "2026-09-27T19:35:05.583719+00:00",
+  "migration_key": "b732e9f2-3b17-42ec-a7e4-51abb6e40d05",
+  "title": "移植高德原生地图时只搬adapter，未带入宿主页的触摸分层与可见性生命周期",
+  "when": "三方SDK接入阶段，把参考工程的原生地图组件接入本工程已有Tab页面，并确定其触摸分工和初始化/暂停/释放挂载点时",
+  "description": "目标页面作为Swiper/Tabs子页被宿主一次性预构建，页面在高德MapViewComponent等原生XComponent地图之上叠放ArkUI搜索栏、按钮等覆盖层；参考实现的SDK桥接把激活/暂停与完整释放分成不同接口。",
+  "summary": "生成期交付（09-03 02:06）后，用户要求参照内网鸿蒙工程harmony_MapDaoHang_vest_5接入高德地图。\nport_amap_navigation（agent-01a06666）写前实际读到：参考adapter中的AmapSdkBridge/AmapHarmonySdkBridge\n把activateMap→MapView.onResume、deactivateMap→onPause与releaseMap（注销创建回调并onDestroy全部MapView）分开；\nSDK的MapView.d.ets同样区分onPause“暂停”与onDestroy“销毁地图”；rg结果还显示MapPage除路由外在MainPage.ets:75被当作子组件实例化\n（agent-01a06666 L34-L36、L40-L42、L57-L59）。\n它在L101一次写出AmapMapBridge、AmapMapSurface并改MapService/MapPage：桥接层保留了activate/deactivate，\n但MapService只暴露initializeNative/releaseNative；MapPage在NavDestination.onReady中初始化原生地图，\n在onDisappear（L125改为onDisAppear）调用releaseNative做完整销毁，从未调用暂停/恢复，也没有打开MainPage核对宿主。\n实际宿主是MainPage的Swiper，三个Tab页一次性构建，隐藏的MapPage在启动时就创建原生地图\n（真机日志mapcore SurfaceManager::Init: napi_unwrap fail，agent-01a0669e L473），离开时又整体销毁仍挂载的XComponent。\n这一分支的偏差位于“把参考SDK生命周期接到本工程页面回调”的实现环节。\n同一次写入中，AmapMapSurface照搬参考AmapRuntimeMapView：MapViewComponent 100%×100%、无hitTestBehavior，\n并作为MapPage最底层放在SideComponent、定位按钮、搜索栏之下。移植者只读了参考adapter目录，\n未读取参考中真正承载地图的MapTabView（覆盖行用HitTestMode.Transparent、加载层用None划分地图与控件的触摸，\n后由诊断代理在agent-01a0669e L57-L59读到），因此输出没有地图与ArkUI覆盖层的触摸分工约定。\n修复：主会话真机复现“页面无法点击”后给MapViewComponent加.hitTestBehavior(HitTestMode.None)，把地图定为纯视觉层\n（main-01a060e7 L10663-L10665）；诊断代理把地图初始化与首次定位移到onAppear，onDisAppear改调新增的\nMapService.pauseNative()（bridge.deactivate），不再销毁仍挂载的原生组件（agent-01a0669e L503-L505）。两处在观察截止前仍保留。\n首页搜索闪退最终定位为MapPage覆盖navPathStack引起的TypeError（agent-01a0669e L698，另案），\n生命周期修改是同一排查中保留下来的可见性驱动方案，本卡不把闪退本身归因于它。\n",
+  "recommendations": [
+    "移植第三方原生地图组件时，除adapter和宿主组件外，同时阅读参考工程中真正承载地图的页面/ViewModel，确认它如何划分覆盖层触摸、何时调用激活/暂停/释放，再移植到本工程页面。",
+    "把原生地图接入已有页面前，先查页面在哪里被实例化；若位于Swiper/Tabs等预构建子页的容器，不在onReady/aboutToAppear中创建原生地图，改在页面实际可见时初始化或恢复，隐藏时调用MapView.onPause类暂停接口，完整释放只放在真正卸载时。",
+    "服务层同时暴露初始化、暂停/恢复与完整释放接口，页面回调按可见性调用对应接口，不以释放代替暂停。",
+    "在原生地图上叠放ArkUI控件时显式写出触摸分工：地图需要手势则让全宽覆盖容器使用HitTestMode.Transparent，只作视觉层则给MapViewComponent设HitTestMode.None；真机逐个点击覆盖层控件验证，并与Swiper enabled等其他禁用点击因素分开验证。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "D:/anhuizhongyi/panorama_map/harmony-panorama-map-vest1/entry/src/main/ets/components/AmapMapSurface.ets",
+        "since": "2026-09-03T02:06:01.239Z",
+        "at": "2026-09-06T09:34:12.089Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/41676/AppData/Local/Temp/harmony_MapDaoHang_vest_5_inspect/feature/navigation/src/main/ets/adapter/AmapSurfaceHost.ets",
+          "at": "2026-09-03T08:33:46.561Z",
+          "reason": "正常但不完整的输入：移植者L40 Get-Content、L42返回参考AmapRuntimeMapView/AmapSurfaceHost，只有MapViewComponent 100%宽高、READY时才渲染，文件内不含触摸分层；参考中给覆盖层设HitTestMode的是承载页MapTabView，不在本次读取范围（agent-01a06666 L40-L42）。"
+        },
+        {
+          "key": "agent-01a06666-993e-7ba2-ad06-933824e98a4e.jsonl",
+          "at": "2026-09-03T08:35:51.945Z",
+          "reason": "L101 apply_patch新增AmapMapSurface：照搬MapViewComponent 100%×100%、无hitTestBehavior，并放进MapPage最底层mapSurface，SideComponent、mapLocation、mapSearchBar覆盖层不变；只读了参考adapter目录（L34-L42），未查参考承载页的触摸分工，输出没有地图与ArkUI控件的触摸约定。主会话同名写入在main-01a060e7 L9248-L9249失败后，读取并沿用了该文件（L9259-L9261）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "移植者exec_command以$ref指向参考adapter目录并Get-Content -Raw AmapSurfaceHost.ets，L42回执在---SURFACE---段返回该文件全文；这是写AmapMapSurface前的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/2039ebb1-08dc-4537-a87e-fffe5817c7e7/epoch-0/sessions/agent-01a06666-993e-7ba2-ad06-933824e98a4e.jsonl",
+              "line": 40
+            },
+            {
+              "source": "runs/2039ebb1-08dc-4537-a87e-fffe5817c7e7/epoch-0/sessions/agent-01a06666-993e-7ba2-ad06-933824e98a4e.jsonl",
+              "line": 42
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": "target",
+          "force": true,
+          "reason": "移植者exec中tools.apply_patch的补丁含*** Add File: entry/src/main/ets/components/AmapMapSurface.ets（MapViewComponent 100%宽高、无hitTestBehavior），L103回执{}表示补丁成功写入。",
+          "evidence": [
+            {
+              "source": "runs/2039ebb1-08dc-4537-a87e-fffe5817c7e7/epoch-0/sessions/agent-01a06666-993e-7ba2-ad06-933824e98a4e.jsonl",
+              "line": 101
+            },
+            {
+              "source": "runs/2039ebb1-08dc-4537-a87e-fffe5817c7e7/epoch-0/sessions/agent-01a06666-993e-7ba2-ad06-933824e98a4e.jsonl",
+              "line": 103
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "D:/anhuizhongyi/panorama_map/harmony-panorama-map-vest1/entry/src/main/ets/pages/MapPage.ets",
+        "since": "2026-09-03T02:06:01.239Z",
+        "at": "2026-09-06T09:34:12.089Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/41676/AppData/Local/Temp/harmony_MapDaoHang_vest_5_inspect/feature/navigation/src/main/ets/adapter/AmapHarmonySdkBridge.ets",
+          "at": "2026-09-03T08:33:46.561Z",
+          "reason": "正常输入：L40读取、L42返回参考桥接，AmapSdkBridge接口分列activateMap/deactivateMap/releaseMap；实现中activateMap→mapView.onResume、deactivateMap→onPause，releaseMap先置inactive、注销MapViewCreated回调再onDestroy全部MapView。足以区分页面隐藏时的暂停与最终卸载时的释放（agent-01a06666 L40-L42）。"
+        },
+        {
+          "key": "D:/anhuizhongyi/panorama_map/harmony-panorama-map-vest1/oh_modules/.ohpm/@amap+amap_lbs_map3d@11.2.0/oh_modules/@amap/amap_lbs_map3d/src/main/ets/com/amap/api/MapView.d.ets",
+          "at": "2026-09-03T08:34:16.842Z",
+          "reason": "正常输入：L57读取、L59返回SDK声明，onCreate创建地图、onResume恢复、onPause暂停、onDestroy销毁地图，生命周期语义清楚（agent-01a06666 L57-L59）。"
+        },
+        {
+          "key": "agent-01a06666-993e-7ba2-ad06-933824e98a4e.jsonl",
+          "at": "2026-09-03T08:37:08.249Z",
+          "reason": "读到上述输入，且L36的rg结果显示MainPage.ets:75直接实例化MapPage()，却未打开MainPage核对宿主。L101在MapPage.onReady中调用initializeNativeMap（与refreshLocation同处），并加.onDisappear(() => releaseNative())，L125改为onDisAppear；桥接层写了activate/deactivate却没有调用。页面消失被映射为完整销毁，初始化挂在构建即触发的onReady上（agent-01a06666 L101-L103、L125-L127）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "同一exec_command以$ref指向参考adapter目录并Get-Content -Raw AmapHarmonySdkBridge.ets，L42回执在---BRIDGE---段返回activateMap/deactivateMap/releaseMap实现；这是改MapPage前的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/2039ebb1-08dc-4537-a87e-fffe5817c7e7/epoch-0/sessions/agent-01a06666-993e-7ba2-ad06-933824e98a4e.jsonl",
+              "line": 40
+            },
+            {
+              "source": "runs/2039ebb1-08dc-4537-a87e-fffe5817c7e7/epoch-0/sessions/agent-01a06666-993e-7ba2-ad06-933824e98a4e.jsonl",
+              "line": 42
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "移植者exec_command对oh_modules中amap_lbs_map3d的MapView.d.ets执行Get-Content -Raw，L59回执返回onCreate/onResume/onPause/onDestroy声明；这是改MapPage前的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/2039ebb1-08dc-4537-a87e-fffe5817c7e7/epoch-0/sessions/agent-01a06666-993e-7ba2-ad06-933824e98a4e.jsonl",
+              "line": 57
+            },
+            {
+              "source": "runs/2039ebb1-08dc-4537-a87e-fffe5817c7e7/epoch-0/sessions/agent-01a06666-993e-7ba2-ad06-933824e98a4e.jsonl",
+              "line": 59
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target",
+          "force": true,
+          "reason": "移植者apply_patch含*** Update File: entry/src/main/ets/pages/MapPage.ets，加入onReady内initializeNativeMap与onDisappear→releaseNative（L103成功）；L125再次Update MapPage把onDisappear改为onDisAppear（L127成功）。",
+          "evidence": [
+            {
+              "source": "runs/2039ebb1-08dc-4537-a87e-fffe5817c7e7/epoch-0/sessions/agent-01a06666-993e-7ba2-ad06-933824e98a4e.jsonl",
+              "line": 101
+            },
+            {
+              "source": "runs/2039ebb1-08dc-4537-a87e-fffe5817c7e7/epoch-0/sessions/agent-01a06666-993e-7ba2-ad06-933824e98a4e.jsonl",
+              "line": 103
+            },
+            {
+              "source": "runs/2039ebb1-08dc-4537-a87e-fffe5817c7e7/epoch-0/sessions/agent-01a06666-993e-7ba2-ad06-933824e98a4e.jsonl",
+              "line": 125
+            },
+            {
+              "source": "runs/2039ebb1-08dc-4537-a87e-fffe5817c7e7/epoch-0/sessions/agent-01a06666-993e-7ba2-ad06-933824e98a4e.jsonl",
+              "line": 127
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "D:/anhuizhongyi/panorama_map/harmony-panorama-map-vest1/entry/src/main/ets/services/MapService.ets",
+        "since": "2026-09-03T02:06:01.239Z",
+        "at": "2026-09-06T09:34:12.089Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/41676/AppData/Local/Temp/harmony_MapDaoHang_vest_5_inspect/feature/navigation/src/main/ets/adapter/AmapHarmonySdkBridge.ets",
+          "at": "2026-09-03T08:33:46.561Z",
+          "reason": "正常输入：参考桥接把deactivateMap（onPause）与releaseMap（完整销毁）作为不同接口提供给调用方（agent-01a06666 L40-L42）。"
+        },
+        {
+          "key": "agent-01a06666-993e-7ba2-ad06-933824e98a4e.jsonl",
+          "at": "2026-09-03T08:35:51.945Z",
+          "reason": "L101给MapService新增bridge、initializeNative、releaseNative，只暴露初始化与完整释放，没有把桥接层已有的deactivate/activate作为页面可调用的暂停/恢复接口，MapPage因此只能在消失时releaseNative。修复新增pauseNative()调用bridge.deactivate()（agent-01a0669e L503-L505）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "同一exec_command以$ref指向参考adapter目录并Get-Content -Raw AmapHarmonySdkBridge.ets，L42回执返回deactivateMap与releaseMap分列的实现；这是改MapService前的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/2039ebb1-08dc-4537-a87e-fffe5817c7e7/epoch-0/sessions/agent-01a06666-993e-7ba2-ad06-933824e98a4e.jsonl",
+              "line": 40
+            },
+            {
+              "source": "runs/2039ebb1-08dc-4537-a87e-fffe5817c7e7/epoch-0/sessions/agent-01a06666-993e-7ba2-ad06-933824e98a4e.jsonl",
+              "line": 42
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": "target",
+          "force": true,
+          "reason": "移植者apply_patch含*** Update File: entry/src/main/ets/services/MapService.ets，新增bridge、initializeNative、releaseNative，L103回执{}表示写入成功。",
+          "evidence": [
+            {
+              "source": "runs/2039ebb1-08dc-4537-a87e-fffe5817c7e7/epoch-0/sessions/agent-01a06666-993e-7ba2-ad06-933824e98a4e.jsonl",
+              "line": 101
+            },
+            {
+              "source": "runs/2039ebb1-08dc-4537-a87e-fffe5817c7e7/epoch-0/sessions/agent-01a06666-993e-7ba2-ad06-933824e98a4e.jsonl",
+              "line": 103
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "派工内容（agent-01a06666 L29 NEW_TASK、main-01a060e7 L9158/L9195 send_message）与forked压缩历史为加密内容，无法确认主会话是否要求移植者参考MapTabView或核对MainPage宿主；本卡按移植者实际读取与写出归因。",
+    "hitTest修改与MainPage Swiper由enabled(false)改为disableSwipe(true).enabled(true)的修复同批构建安装，材料未单独验证地图Surface本身是否独立拦截点击；本卡只归因触摸分工缺失，最终保留的是纯视觉层方案。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-31b1116c0e0aec40a307",
+  "metadata": {
+    "migration": {
+      "project": "android-panorama-map-vest7",
+      "server_session_id": "b732e9f2-3b17-42ec-a7e4-51abb6e40d05"
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "f7db989f-16e0-4851-af87-daba61f6cc34"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "codex-auto-review",
+        "gpt-5.3-codex-spark",
+        "gpt-5.4-mini",
+        "gpt-5.6-sol",
+        "gpt-5.6-terra"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.151.0-alpha.7.2",
+        "0.152.1",
+        "0.153.4"
+      ]
+    },
+    "source_set_id": "sources-98613bd90677ff53c5e1",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-09-02T13:56:08.145Z",
+        "ref": "runs/2039ebb1-08dc-4537-a87e-fffe5817c7e7/epoch-0/sessions/agent-01a06265-0064-7221-9f99-de87d96a7fc1.jsonl:L59",
+        "request_ref": "runs/2039ebb1-08dc-4537-a87e-fffe5817c7e7/epoch-0/sessions/agent-01a06265-0064-7221-9f99-de87d96a7fc1.jsonl:L57",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-09-02T13:56:08.145Z",
+        "ref": "runs/2039ebb1-08dc-4537-a87e-fffe5817c7e7/epoch-0/sessions/agent-01a06265-0064-7221-9f99-de87d96a7fc1.jsonl:L59",
+        "request_ref": "runs/2039ebb1-08dc-4537-a87e-fffe5817c7e7/epoch-0/sessions/agent-01a06265-0064-7221-9f99-de87d96a7fc1.jsonl:L57",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.8.3"
+  },
+  "revision": "45f29a424b3a08df11908ce33b195bcdd94d531f1e4b5399880ce50a928efcd3"
+}

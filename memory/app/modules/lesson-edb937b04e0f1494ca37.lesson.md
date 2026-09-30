@@ -25,7 +25,3 @@ ID：`lesson-edb937b04e0f1494ca37` · 版本：1
 
 - 不确定时逐模块比对：抽取每个 HAR 的 $r 名称，与该模块及其声明依赖的资源并集比对，缺失即不通过；或按模块单独构建该 HAR。
 
-## 来源（按需复核）
-
-- case-e218dc5f282b590164d7 · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3, recommendation:4
-  卡片版本：`b35de5831b981222b29d58f675566fd5e21d05b9c996f7b049492ec10de6bedb`

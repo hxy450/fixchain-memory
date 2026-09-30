@@ -26,9 +26,3 @@ ID：`lesson-1c513fdf2cf212354aa0` · 版本：2
 2. 规格提取时把这份数据表完整写进规格（每项的值，而非只写数量与比例），供实现阶段直接对照。
 3. 源端从 assets 文件解析的参考数据，按源解析规则转换成目标资源或数据文件（保留层级与编码）；暂未接入时把对应验收标为未完成，不报告页面已完成。
 
-## 来源（按需复核）
-
-- case-14907fccc49923f3401f · 结论：diagnosis, recommendation:1, recommendation:3
-  卡片版本：`08d196b30cb2d941dc8b65f5383248980c89e294f1e2f75345ff190847ec9b69`
-- case-7d027e7b2cd42e741308 · 结论：diagnosis, recommendation:1
-  卡片版本：`036caa3b4f745cceb31b7f25c702c09a55c77990044369e49b07fdd4b8dbe66c`
