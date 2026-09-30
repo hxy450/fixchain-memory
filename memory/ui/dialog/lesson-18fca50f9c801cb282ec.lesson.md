@@ -30,6 +30,8 @@ AlertDialog.show 的参数只有标题、副标题、必填的 message、按钮�
 
 - [@ComponentV2 页面的弹窗不用 CustomDialogController 承载 V2 组件，改用状态驱动浮层、半模态或 openCustomDialog](lesson-3f3e1ff0a4d0e0299bda.lesson.md)
 
+来源支持：1 张卡 · 1 次迁移 · 1 个应用
+
 ## 来源（按需复核）
 
 - [case-d8867d30fe76e4d44ceb](../../../store/cases/case-d8867d30fe76e4d44ceb/3537efdf372896502b8a0b63e22b06ece4e7d54e2c06ca2c8c0ff730e6a5f932.json) · 结论：diagnosis, recommendation:1, recommendation:3

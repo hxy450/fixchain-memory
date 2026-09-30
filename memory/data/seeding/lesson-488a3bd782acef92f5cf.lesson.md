@@ -26,6 +26,8 @@ ID：`lesson-488a3bd782acef92f5cf` · 版本：1
 
 - 删光全部数据后重启，列表应保持为空。
 
+来源支持：1 张卡 · 1 次迁移 · 1 个应用
+
 ## 来源（按需复核）
 
 - [case-b2793695ef65617c820a](../../../store/cases/case-b2793695ef65617c820a/9c30f15ba64082b90317b9cb20aa187c32cf5f93197443b2a9a78fe723ec3a47.json) · 结论：diagnosis, recommendation:1, recommendation:2

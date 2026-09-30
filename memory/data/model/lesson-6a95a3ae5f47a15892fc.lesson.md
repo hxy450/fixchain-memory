@@ -21,6 +21,8 @@ ID：`lesson-6a95a3ae5f47a15892fc` · 版本：1
 1. 把源端实体构造参数与查询条件逐项映射为目标模型字段和仓储方法参数；带“本月/当日”语义的数据要有对应时间键，页面按当前选中时间过滤。
 2. 收尾时沿源端调用链核对保存、读取、展示三处使用同一关联键，不只核对弹窗外观与校验文案。
 
+来源支持：1 张卡 · 1 次迁移 · 1 个应用
+
 ## 来源（按需复核）
 
 - [case-0d37e50dbb1a2e0a9bee](../../../store/cases/case-0d37e50dbb1a2e0a9bee/a72d2163734bf85155f4e46236ac3ab57df7d675bfda616e92a576af577688da.json) · 结论：diagnosis, recommendation:2, recommendation:3

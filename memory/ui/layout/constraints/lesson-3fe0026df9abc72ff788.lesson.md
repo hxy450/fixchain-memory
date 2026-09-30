@@ -27,6 +27,8 @@ ID：`lesson-3fe0026df9abc72ff788` · 版本：2
 
 - dumpLayout 核对比例子项不超出其容器、锚底子项到内容层底的距离等于源 margin。
 
+来源支持：2 张卡 · 1 次迁移 · 1 个应用
+
 ## 来源（按需复核）
 
 - [case-50467dd451cd7c5be566](../../../../store/cases/case-50467dd451cd7c5be566/5252de23fda80022e42e0854a0d037a0dc80da44f0e76686e72fd88823b11917.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3

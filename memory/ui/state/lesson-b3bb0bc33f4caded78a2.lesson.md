@@ -25,6 +25,8 @@ aboutToAppear 只在组件创建时执行；子页 pop 返回时根页组件没�
 
 - 登录后返回该页、保存或删除记录后返回该页，数据无需重进即更新。
 
+来源支持：2 张卡 · 2 次迁移 · 2 个应用
+
 ## 来源（按需复核）
 
 - [case-46ac36102451125de693](../../../store/cases/case-46ac36102451125de693/86c57b38cd3897abac8b2c1d68ca50b219ea6c13be75dcd1fd0045e39be6fba6.json) · 结论：diagnosis, recommendation:2

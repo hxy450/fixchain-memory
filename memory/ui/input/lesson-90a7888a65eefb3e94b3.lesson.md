@@ -23,6 +23,8 @@ ID：`lesson-90a7888a65eefb3e94b3` · 版本：1
 3. 条件挂载的弹窗给输入框设 key，在 onAppear 中 requestFocus；格区点击也显式 requestFocus，键盘收起后可以再拉起。
 4. 源端多段是独立 Dialog 时，目标按段拆成独立分支节点（可共用 builder），不用阶段标志复用同一受控输入。
 
+来源支持：1 张卡 · 1 次迁移 · 1 个应用
+
 ## 来源（按需复核）
 
 - [case-1822d49fe750e20bd3be](../../../store/cases/case-1822d49fe750e20bd3be/de807630ef074f361680da7c5e52de6117b84d0dbe59f43683c0f0010cfcdf1a.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3, recommendation:4

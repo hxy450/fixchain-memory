@@ -26,6 +26,8 @@ ID：`lesson-22f5100f6718eaecc66f` · 版本：1
 
 - 对展示有疑问时，用含提醒、重复、成员等字段的真实记录核对可见文本与图标是源端文案，而非原始值。
 
+来源支持：3 张卡 · 1 次迁移 · 1 个应用
+
 ## 来源（按需复核）
 
 - [case-182739cdd6b02b7eed15](../../../store/cases/case-182739cdd6b02b7eed15/28610bcea0f56a1e7f6c01dc85b6e5fadf855d24c442598056a858bb895cfc3e.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3

@@ -21,6 +21,8 @@ ID：`lesson-32af50a1dfb0c1c254af` · 版本：2
 1. 从源端副作用处理函数反查每个 effect 的触发者，列出“可交互元素 → 目标页 + 参数”清单（例如卡片、整项待办 → 详情页(id)，空状态创建按钮 → 编辑页），逐项写成实际跳转调用，并确认目标页已登记或已在导航映射中。
 2. 回调体不写只有注释的占位；当前确实无法实现时按工程的移交约定登记，并如实报告未完成。
 
+来源支持：1 张卡 · 1 次迁移 · 1 个应用
+
 ## 来源（按需复核）
 
 - [case-be539ffd7751410d8ad6](../../../../store/cases/case-be539ffd7751410d8ad6/3a857fbf25d8cfb92ac87bc78117796295be5d80f42d7b01f077b06692c136e0.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3

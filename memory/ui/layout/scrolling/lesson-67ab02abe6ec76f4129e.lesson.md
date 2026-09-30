@@ -21,6 +21,8 @@ onScrollIndex 只在首个可见行变化时触发，两态切换丢掉了连续
 1. 在承载内容的 List 或 Scroll 上挂 onScroll（或 onDidScroll），fraction = clamp(Scroller.currentOffset().yOffset / (展开高度 − 收起高度), 0, 1)，展开、收起高度取源端值。
 2. 高度、标题字号，以及源端用 lerp 过渡的背景色和阴影，都按 fraction 插值。
 
+来源支持：1 张卡 · 1 次迁移 · 1 个应用
+
 ## 来源（按需复核）
 
 - [case-66f3c1649b7b5c4f38b5](../../../../store/cases/case-66f3c1649b7b5c4f38b5/686410a72e498ff1fb1d9233686e5ebc690a444c3056d62bc78d50dbcb257140.json) · 结论：diagnosis, recommendation:1

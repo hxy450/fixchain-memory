@@ -25,6 +25,8 @@ ID：`lesson-ad1db0aa0434c2e766fd` · 版本：1
 1. 选图入口用 PhotoViewPicker（Flutter 中可复用已适配 OHOS、按图片类型选择的 file_picker），把返回的 URI 复制到应用缓存，后续预览、读取、编辑都用缓存路径；用户取消时按原接口的“无结果”返回。
 2. 上层期待原选图 API 的对象（如 AssetEntity）时，在兼容层用缓存路径构造该对象，并为依赖它的原生读取方法（原图、缩略图、文件）补本地路径分支。
 
+来源支持：1 张卡 · 1 次迁移 · 1 个应用
+
 ## 来源（按需复核）
 
 - [case-96b417fb2e059d43f8bf](../../../store/cases/case-96b417fb2e059d43f8bf/b19ceb28695c5cd396d90d8eb8cdaf92306b067d26ce80fe0ba8b310d812ec4e.json) · 结论：diagnosis, recommendation:2

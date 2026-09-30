@@ -20,6 +20,8 @@ ID：`lesson-c3dcc5a25a0ad59c53c1` · 版本：2
 
 1. 先在 Fragment/Adapter 中查 addView/removeView/LayoutParams，确认运行时视图挂在哪一层、有无约束，再定层级：无约束挂到根部的，放在根 Stack 最底层铺满；XML 占位区只保留封面与播放态显隐。
 
+来源支持：1 张卡 · 1 次迁移 · 1 个应用
+
 ## 来源（按需复核）
 
 - [case-c85d8667f78c2cc8f53a](../../../../store/cases/case-c85d8667f78c2cc8f53a/0a66d146244ac3bab2016664057dd3427c0c6c210bea434eab6b298234f871bf.json) · 结论：diagnosis, recommendation:1

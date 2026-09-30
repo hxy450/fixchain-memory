@@ -21,6 +21,8 @@ ID：`lesson-bad79e090d2af44d167b` · 版本：1
 1. 写失效策略前读响应拦截器（如 HandleErrorInterceptor、TokenInterceptor）实际分支的 reasonCode 和后续动作，写成“码 → 动作”表（踢登、异地登录提示、刷新），实现按表判定。
 2. 写“自动刷新”前确认源端的刷新调用在哪里（拦截器里还是某个页面的初始化请求里），按源端位置迁移。
 
+来源支持：1 张卡 · 1 次迁移 · 1 个应用
+
 ## 来源（按需复核）
 
 - [case-7478183bbcfea10865d1](../../../store/cases/case-7478183bbcfea10865d1/6a67c10c5843039d9605d2674ad05a8fd93aeb449ce5b1925b68e23389947a5d.json) · 结论：diagnosis, recommendation:1, recommendation:2

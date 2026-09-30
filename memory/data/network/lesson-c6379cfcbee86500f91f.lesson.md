@@ -25,6 +25,8 @@ ID：`lesson-c6379cfcbee86500f91f` · 版本：1
 
 - 对缓存逻辑有疑问时，模拟所有分支失败后再调用一次，第二次必须重新发出请求。
 
+来源支持：1 张卡 · 1 次迁移 · 1 个应用
+
 ## 来源（按需复核）
 
 - [case-fa7bbda457517260efc4](../../../store/cases/case-fa7bbda457517260efc4/58d73cfa31553fee929796eb72c6f37fc2faba952a2e2f334aa420b8f0325b08.json) · 结论：diagnosis, recommendation:1

@@ -26,6 +26,8 @@ centerInside 只缩不放，小于盒子的图标按固有尺寸居中；Contain
 
 - dumpLayout 读取图标 bounds 除以屏幕密度，与 Android 固有 dp 逐项对比。
 
+来源支持：3 张卡 · 2 次迁移 · 2 个应用
+
 ## 来源（按需复核）
 
 - [case-747484a613e86334516d](../../../store/cases/case-747484a613e86334516d/c17375c37c6410806f89e51707baf458f2a7269ddea6fe33e4ea348696489ff9.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3, recommendation:5

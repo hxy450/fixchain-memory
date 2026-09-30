@@ -22,6 +22,8 @@ ID：`lesson-2bd2620e5d1ef4bb17b4` · 版本：1
 2. 必须保留跨列项时，按插入规则推一遍它落在哪一列，确认不会让前一行缺格。
 3. 规格或全局决策把广告定为 no-op 时，对 Grid、WaterFlow 等多列容器单独写明占位是否参与排布。
 
+来源支持：1 张卡 · 1 次迁移 · 1 个应用
+
 ## 来源（按需复核）
 
 - [case-1b0f5d29f08f055878f4](../../../store/cases/case-1b0f5d29f08f055878f4/0c4f086a537fd33ec32d7ba71d9e1cc939751b54e61f093dcdaa6695bc541b01.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3

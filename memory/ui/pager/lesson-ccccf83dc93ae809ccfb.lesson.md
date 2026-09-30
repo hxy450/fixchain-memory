@@ -26,6 +26,8 @@ ID：`lesson-ccccf83dc93ae809ccfb` · 版本：1
 
 - 从列表非首项进入，核对标题与播放项和点击项一致。
 
+来源支持：1 张卡 · 1 次迁移 · 1 个应用
+
 ## 来源（按需复核）
 
 - [case-fe6ca54f30a78eb885f3](../../../store/cases/case-fe6ca54f30a78eb885f3/2da2d9466d0e035a3ff7fe827f6a82b3a09a0da8562ebc78f67fae673e604bc0.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3, recommendation:4

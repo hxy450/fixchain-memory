@@ -27,6 +27,8 @@ ID：`lesson-a82d821385bf8fb3feb0` · 版本：1
 3. XML 里已有的静态文案与图标作为首帧默认值同步渲染；共享快照的加载钩子只合并本来源负责的字段，不新建快照整体替换。
 4. 可选的附属数据（历史、节假日）单独 try/catch，失败或空结果都不覆盖主数据和已有列表。
 
+来源支持：4 张卡 · 1 次迁移 · 1 个应用
+
 ## 来源（按需复核）
 
 - [case-4dad731ff5682f738fa4](../../../store/cases/case-4dad731ff5682f738fa4/6168f9d70770bc1fc216ded48fcf43b43c7ca6922885699c785f7542476f9da0.json) · 结论：diagnosis, recommendation:1, recommendation:2

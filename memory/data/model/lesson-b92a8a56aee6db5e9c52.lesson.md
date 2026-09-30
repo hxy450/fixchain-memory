@@ -21,6 +21,8 @@ ID：`lesson-b92a8a56aee6db5e9c52` · 版本：1
 1. 按模型枚举成员逐一 switch，或复用已有的映射函数。
 2. 遍历全部枚举成员跑一次映射，确认只有真正的默认项落到默认分支。
 
+来源支持：1 张卡 · 1 次迁移 · 1 个应用
+
 ## 来源（按需复核）
 
 - [case-37a2c6aacb67d1fc0aee](../../../store/cases/case-37a2c6aacb67d1fc0aee/528d09b041c06639c78c05521087576cda7b79594f84cb4fcc278d8c2c62a75b.json) · 结论：diagnosis, recommendation:1

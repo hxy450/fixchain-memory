@@ -26,6 +26,8 @@ ID：`lesson-d434bb5c16bc721d9a00` · 版本：1
 2. 网络层处理预签名等动态绝对 URL 时，按端点声明允许的协议（如仅日志上传 PUT 允许 http），其余请求保持默认 HTTPS。
 3. 实现归档时按源端上传函数逐项对齐：日志目录内全部留存文件（而非内存中的当日快照）、设备信息、各表文本导出；决策约束与源端清单冲突时先确认，不自行以替代物交付。
 
+来源支持：1 张卡 · 1 次迁移 · 1 个应用
+
 ## 来源（按需复核）
 
 - [case-6a6e6b7124655d1844a6](../../../store/cases/case-6a6e6b7124655d1844a6/29f65c5a77bf9c2608fffe81f8604b9fb194326fa294baa9057de2c9ad8b72ef.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3, recommendation:4

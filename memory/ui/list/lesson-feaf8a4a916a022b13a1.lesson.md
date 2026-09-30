@@ -21,6 +21,8 @@ swipeAction 是 ListItem 的属性，接在 builder 根节点（Row 等）的属
 1. swipeAction 这类只对容器子项生效的属性写在 ListItem 节点上：ListItem() { this.row(item) }.swipeAction({ start: ..., end: ... })，builder 只负责行内容。
 2. 抽出 @Builder 后，对照实际输出确认每条容器专属属性的宿主与规格一致，不按计划推定。
 
+来源支持：1 张卡 · 1 次迁移 · 1 个应用
+
 ## 来源（按需复核）
 
 - [case-de8de9ff9274ca3ce884](../../../store/cases/case-de8de9ff9274ca3ce884/d059c48a9b93c30e4e67d4f95f146b58539dcd29ad987d6d6a4b1dcdd3f6e3f8.json) · 结论：diagnosis, recommendation:3

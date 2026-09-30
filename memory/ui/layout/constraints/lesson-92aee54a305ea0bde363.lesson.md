@@ -22,6 +22,8 @@ Stack 按 alignContent 放置未撑满的子节点；Text 的 .align() 只对齐
 2. 删除 height('100%')、.align() 等手段前，确认替代约束仍实现原来的纵向位置；枚举名以 ArkUI SDK 为准，不照搬 Compose 的 Alignment 名称。
 3. 按 layout_gravity 单独对齐某个子项（如 end|bottom 的角标）时，在已知 W×H 的容器里写 position({ x: W - 子宽, y: H - 子高 })，或给该子项单独套一个 alignContent 为对应方向的 Stack。
 
+来源支持：2 张卡 · 2 次迁移 · 2 个应用
+
 ## 来源（按需复核）
 
 - [case-c9cc6663456a2ef02f89](../../../../store/cases/case-c9cc6663456a2ef02f89/ae6747eccb36d26241318b2258e46b0c5b7289bd01e525c168b0fbc5b8ab4ace.json) · 结论：diagnosis, recommendation:1

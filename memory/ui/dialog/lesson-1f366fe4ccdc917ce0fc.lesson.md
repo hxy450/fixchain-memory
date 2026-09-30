@@ -22,6 +22,8 @@ ID：`lesson-1f366fe4ccdc917ce0fc` · 版本：3
 2. 按源布局逐控件核对：标题文案、图标、正文与说明、按钮数量与文案、关闭控件类型与位置、遮罩点击行为，hint 取 android:hint；每个容器自身的 layout_margin/padding 与子控件属性分开检查。
 3. 通用弹窗缺少任一项时不作为等价实现；公共组件不在写权限内时，在页面内用条件浮层复刻，确实做不到就登记未决项并写明缺口。
 
+来源支持：5 张卡 · 3 次迁移 · 3 个应用
+
 ## 来源（按需复核）
 
 - [case-89e7732b8a374944c6b2](../../../store/cases/case-89e7732b8a374944c6b2/810639d11dab94e726e28bbf772da715ae79949171acbf4ea64889179116cb69.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3

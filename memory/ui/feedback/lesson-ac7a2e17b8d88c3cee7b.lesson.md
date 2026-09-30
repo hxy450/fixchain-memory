@@ -25,6 +25,8 @@ ID：`lesson-ac7a2e17b8d88c3cee7b` · 版本：4
 5. 目标方法以 boolean 返回、失败类型另存时，宿主按类型分派失败 UI：权限被拒显示“去设置”引导弹窗，确认后用 startAbility 打开系统设置中本应用的详情页（参数带当前 bundleName），其他失败保留原提示。
 6. 核查清单由抽取器生成时，在源文件补查 AlertDialog.Builder、Settings.ACTION_APPLICATION_DETAILS_SETTINGS 等调用，补齐清单外的弹窗分支。
 
+来源支持：6 张卡 · 4 次迁移 · 4 个应用
+
 ## 来源（按需复核）
 
 - [case-3eb3514a903386524e37](../../../store/cases/case-3eb3514a903386524e37/1236f09edef125248d0e00d310ba34a2b80cc47b92e7ad721d0a7a13a4f89aa6.json) · 结论：recommendation:5

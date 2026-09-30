@@ -22,6 +22,8 @@ ID：`lesson-dfcdbb19cd93d29159b2` · 版本：2
 2. 想把某一步归给其他模块、或假定目标页按参数自行加载时，先打开目标页与共享引擎确认数据来源。
 3. 路由核验比对一致性时，除目标页与参数外，还要比对跳转前的状态写入。
 
+来源支持：1 张卡 · 1 次迁移 · 1 个应用
+
 ## 来源（按需复核）
 
 - [case-4bee394dacd5496ecb42](../../../../store/cases/case-4bee394dacd5496ecb42/b82f0950b495e48a29fc2b0d324caaca0a3b90843a01588bc07ebf43c4414270.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3

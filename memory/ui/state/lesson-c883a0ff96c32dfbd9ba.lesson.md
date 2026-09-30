@@ -21,6 +21,8 @@ ID：`lesson-c883a0ff96c32dfbd9ba` · 版本：1
 1. 共享单例的取消语义按规格键实现：以 areaId 等作为 generation key，只丢弃旧键的迟到响应；同键的重复调用合并或复用在途请求。
 2. 页面接线时列出所有加载入口（生命周期、Refresh 初值与 onRefreshing、@Monitor），调用单例加载方法前加单飞或在途复用，并核对冷启动时实际触发了几次。
 
+来源支持：1 张卡 · 1 次迁移 · 1 个应用
+
 ## 来源（按需复核）
 
 - [case-fa7bbda457517260efc4](../../../store/cases/case-fa7bbda457517260efc4/58d73cfa31553fee929796eb72c6f37fc2faba952a2e2f334aa420b8f0325b08.json) · 结论：diagnosis, recommendation:3, recommendation:4

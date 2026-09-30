@@ -26,6 +26,8 @@ ID：`lesson-289cab2abd4268b26ce0` · 版本：3
 
 - 从宿主进入该页时，组件收到的实体键有效（如 cityCode > 0），事件回调已绑定到导航。
 
+来源支持：4 张卡 · 2 次迁移 · 2 个应用
+
 ## 来源（按需复核）
 
 - [case-1cfad6c2eaf32070939a](../../../../store/cases/case-1cfad6c2eaf32070939a/22c647b810d09efec62c8bd0f841bcc9e4f190e1a6f8e9f9a5ac20ff7e81d33d.json) · 结论：diagnosis, recommendation:1, recommendation:2

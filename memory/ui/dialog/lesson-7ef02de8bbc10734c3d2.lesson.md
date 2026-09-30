@@ -22,6 +22,8 @@ Android 入口经 bottomDialog/Dialog 在当前 Activity 上 show 全宽底部�
 2. 选用非同页承载时，先确认该机制能保留宿主页可见与点背景关闭，并在验收中写明对应检查。
 3. 弹窗内的二级日历或选择器放在根 Stack 顶层（遮罩加底部半屏容器），覆盖面板和键盘；不在受 layoutWeight 约束的内容列里插入可见性切换块。
 
+来源支持：1 张卡 · 1 次迁移 · 1 个应用
+
 ## 来源（按需复核）
 
 - [case-504604963e18f4b6e2f3](../../../store/cases/case-504604963e18f4b6e2f3/2d6d9f26afdb00a773c7f7b41b7fef1e5a693fe0c73c340835a3b288d00d85bd.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3

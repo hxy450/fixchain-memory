@@ -26,6 +26,8 @@ WebView 页面实现与修复阶段，决定宿主原生返回/标题栏在 H5 �
 
 - 需要确认时，在真机逐个状态核对：首页有返回和标题、每个子状态只有一层导航栏、从子状态返回后宿主栏恢复。
 
+来源支持：1 张卡 · 1 次迁移 · 1 个应用
+
 ## 来源（按需复核）
 
 - [case-f04d62041916ea4f2191](../../../store/cases/case-f04d62041916ea4f2191/2deb07fe58a039a70b4cb56f1a2afb7f9e5cbd6ef06997895ab5ed013bd0dfb9.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3, recommendation:4

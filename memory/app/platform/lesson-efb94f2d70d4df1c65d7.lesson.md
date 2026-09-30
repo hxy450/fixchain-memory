@@ -28,6 +28,8 @@ ID：`lesson-efb94f2d70d4df1c65d7` · 版本：2
 4. 判定平台无对等能力前，在本地 SDK 的 ets/api/*.d.ts 里查（含标记 deprecated 的接口）；确需替代时把“源端能力 → 目标实现”写成显式映射，并登记到迁移报告或决策账本，不在实现里默默降级。
 5. 自检：对本次实现的函数 grep 恒定返回和“? X : X”，再与账本里 approved 的实现类决策逐条对照。
 
+来源支持：5 张卡 · 2 次迁移 · 2 个应用
+
 ## 来源（按需复核）
 
 - [case-470d704a6ec794b4c3c9](../../../store/cases/case-470d704a6ec794b4c3c9/e7b22c984628feae31f593f0a2b3ecb03c60fc956620aa16dc545800bc3c3def.json) · 结论：recommendation:3

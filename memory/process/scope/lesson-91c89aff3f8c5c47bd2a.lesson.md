@@ -26,6 +26,8 @@ ID：`lesson-91c89aff3f8c5c47bd2a` · 版本：1
 2. 覆盖检查报被范围内页面引用的 Activity 未计入时，补页面规格或功能锚点，不用自拟的范围决策登记跳过；写完核对导航表和验收条目要打开的目标都在页面清单里，冲突先消解。
 3. 范围确被限定时，入口不以“暂不可用”Toast、无响应或其他入口兜底冒充完成；把未实现入口汇总给协调者，并在交付总结中逐项列出。
 
+来源支持：1 张卡 · 1 次迁移 · 1 个应用
+
 ## 来源（按需复核）
 
 - [case-ae269ba9b3d5c8def239](../../../store/cases/case-ae269ba9b3d5c8def239/3be43e5537954ec0a05660e7f4836041bda09417d9ae60b31217715f288f692b.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3

@@ -22,6 +22,8 @@ HarmonyOS 资源编译只接受 #rgb/#argb/#rrggbb/#aarrggbb 或指向已定义�
 2. strarray/intarray 的 value 写成对象数组，每项 {"value": ...}；plural 写成 {quantity, value} 对象数组。数组项里的 @string/、@color/ 引用与标量值走同一套映射（@string/x → $string:x）。
 3. 写完 element JSON、镜像到 zh_CN 等限定目录之前，按规则扫描产物：颜色值全文正则、$color:/$string: 目标存在、数组项都是含 value 键的对象、没有残留 @ 前缀引用；unresolved 清单按值形态分组列出（@android:、@color/、?attr），结果为零再宣布资源阶段通过。
 
+来源支持：2 张卡 · 1 次迁移 · 1 个应用
+
 ## 来源（按需复核）
 
 - [case-66bbb9dcd4568f498efa](../../../store/cases/case-66bbb9dcd4568f498efa/a668b37585e092e10f862a75cefefce50ae7d604fbfea6e2d82f302822a41ab1.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3

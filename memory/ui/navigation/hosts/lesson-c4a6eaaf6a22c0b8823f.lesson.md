@@ -22,6 +22,8 @@ main_pages 的每个登记项都被当成路由页，必须恰有一个 @Entry�
 2. 遇到 10905402 时，以 main_pages 实际 src 列表逐项检查：该文件被导入作子组件或是弹窗，就移除登记；确为路由页才补 @Entry，并去掉 export、确认没有导入方。若出于既有约束保留某弹窗的登记，就同时保证它恰有一个 @Entry，登记与装饰器一起改。
 3. 同一内容既做 Tab 又要单独路由时，抽出 export 的 @Component 供 Tab 使用，另写 @Entry 外壳页包装它；不要用占位 builder 顶替原页面内容。
 
+来源支持：2 张卡 · 1 次迁移 · 1 个应用
+
 ## 来源（按需复核）
 
 - [case-8138261443f6e670dc52](../../../../store/cases/case-8138261443f6e670dc52/05df112d6b87d22410a4eacf876c8a881d8910657f8f05a7e2d2ff9132d21531.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3

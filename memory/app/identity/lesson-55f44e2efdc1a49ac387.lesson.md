@@ -27,6 +27,8 @@ ID：`lesson-55f44e2efdc1a49ac387` · 版本：2
 3. 编译修复补回缺失的身份字符串时，值从 Android 应用名或身份步骤的产物取；取不到就登记占位并回报，不按工程目录名自造用户可见名称。
 4. 改完读回两个文件，确认两处值都等于 Android 应用名，没有残留脚手架工程名。
 
+来源支持：2 张卡 · 2 次迁移 · 2 个应用
+
 ## 来源（按需复核）
 
 - [case-224eb9de83aa652829f4](../../../store/cases/case-224eb9de83aa652829f4/1c6accbb95b548e17b357f44673488687037364da1317e7c01d09e4b507d3953.json) · 结论：diagnosis, recommendation:2, recommendation:3, recommendation:4

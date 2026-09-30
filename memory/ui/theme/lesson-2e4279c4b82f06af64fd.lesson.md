@@ -21,6 +21,8 @@ ID：`lesson-2e4279c4b82f06af64fd` · 版本：1
 1. 规格写这类约束时同时写明“颜色一律用 $r('app.color.<语义名>') 引用已迁移资源”，并在需要颜色的控件行给出具体资源名。
 2. 实现时遇到该约束，只避免 '#RRGGBB' 等字面色值，按源端语义把 backgroundColor、fontColor 等属性设为资源引用。
 
+来源支持：1 张卡 · 1 次迁移 · 1 个应用
+
 ## 来源（按需复核）
 
 - [case-97a40a9d2dce65dc9f9c](../../../store/cases/case-97a40a9d2dce65dc9f9c/6f204ffd524b55f7ea8cef5e4a2e75cc8330004f202fd635570857c43cef5a2a.json) · 结论：diagnosis, recommendation:2, recommendation:3

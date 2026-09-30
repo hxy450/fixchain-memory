@@ -22,6 +22,8 @@ ID：`lesson-187c725b1bb9d8d1bf4d` · 版本：1
 2. 提示时长按源端调用换算：没有 actionLabel 的短提示自动消失，带 actionLabel 的按 Material3 默认常驻到点动作或离页；与评审口径不同时在迁移报告登记差异。
 3. 状态接口列出的每个结果态都在 build 里找到渲染分支；确要留给接线阶段，在占位登记里写明“某态需渲染什么”，不只登记状态回填。每个 catch 写入的状态都要有消费它的分支，不同操作不借用同一个状态。
 
+来源支持：1 张卡 · 1 次迁移 · 1 个应用
+
 ## 来源（按需复核）
 
 - [case-2f11f734c53d33bee770](../../../store/cases/case-2f11f734c53d33bee770/df8821d7d8f96d34ab58ab850b2ead61a6460456ffb80a548e22d0421a5c0f15.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3, recommendation:4

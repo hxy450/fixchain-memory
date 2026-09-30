@@ -25,6 +25,8 @@ ID：`lesson-dc5c370e370c2be803c1` · 版本：1
 
 - 决定后续页面是否创建的解析结果（如分类 Tab）用一次真实响应或样例确认非空，并区分“服务端返回空”与“取值路径未命中”。
 
+来源支持：1 张卡 · 1 次迁移 · 1 个应用
+
 ## 来源（按需复核）
 
 - [case-18365c67d94d72d8a825](../../../store/cases/case-18365c67d94d72d8a825/373986a1238f539d399390372bcd09d27fa876d8acb70d6604e9722c9b467222.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3

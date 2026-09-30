@@ -21,6 +21,8 @@ ID：`lesson-bbb31db6c369047ee32c` · 版本：1
 1. 先确认源函数实际调用的接口与返回对象再选数据源；目标缺少同源接口时补齐该接口能力，不因已有同名内容的接口而替换。
 2. 把源函数的每条显示守卫写成实现检查项：登录/token 门禁、返回对象字段完整性、频次限制；写后逐项对照源函数。修复计划只写“恢复带守卫的触发”时，也要读完源函数全文再实现。
 
+来源支持：1 张卡 · 1 次迁移 · 1 个应用
+
 ## 来源（按需复核）
 
 - [case-e3b4733dbfbc7b73d7d4](../../../store/cases/case-e3b4733dbfbc7b73d7d4/5c3070046cde22307d3a5877543d0b27d4703ca152306e4178ed42e7e69a7760.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
