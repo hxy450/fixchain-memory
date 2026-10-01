@@ -1,6 +1,6 @@
 # ui/layout/layers
 
-运行时addView挂载、全屏底层与状态覆盖层，以及动效/气泡锚点的坐标与取值时机。
+运行时addView、全屏底层与状态覆盖层：确定视图挂在哪里、如何叠放及几何范围；点击命中与事件时坐标属于ui/interaction。
 
 [上一级](../index.md)
 
@@ -12,6 +12,3 @@
 - [播放器面等运行时 addView 挂到根部的层，按运行时层级实现，不按 XML 里的占位区域定几何](lesson-c3dcc5a25a0ad59c53c1.lesson.md)
   - 时机：界面实现阶段，转换含运行时挂载子视图（播放器面等）的列表项或页面、确定视频层与浮层关系时
   - 情境：源 Fragment/Adapter 在播放时通过 addView/LayoutParams 把视图挂到根容器（如 addView(videoView, 0) 无约束铺满），XML 里同名区域只是封面或控制视图；目标用 Stack/Column 重建层级。
-- [源端在触发瞬间读取锚点窗口位置时，目标在点击回调里取本次手势坐标或即时查询，onAreaChange 缓存只作兜底；锚点取源端传入的同一元素](lesson-963bf871aa4e910a8fc8.lesson.md)
-  - 时机：界面实现与修复阶段，为从点击处发出的动效或气泡（完成彩纸、锚点提示）确定起点坐标与锚点元素时
-  - 情境：源端在动效或弹窗被调用时用 getLocationInWindow 读取传入锚点 View 的当下窗口中心；目标列表项存在 translate 平移、LazyForEach/Repeat 节点复用或弹层内滚动，写者准备用 onAreaChange 缓存控件位置。

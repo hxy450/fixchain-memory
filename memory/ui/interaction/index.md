@@ -1,6 +1,6 @@
 # ui/interaction
 
-点击命中与遮罩：Stack 叠层的 hitTestBehavior、弹窗遮罩与内容面板的防穿透写法（Block 的影响范围）、贴底栏定位壳与页面级全屏遮罩的挂载方式、覆盖层对下层控件点击的影响、点击事件挂在哪一层节点，以及控件点击处理器副作用（音效、振动、持久化、面板）的迁移，以及 Button 等单子组件容器内按状态切换内容的写法；可侧滑列表行的命中与手势归属，一次性全屏动效层的挂载
+点击命中与手势：Stack/弹窗覆盖层对下层点击的影响、hitTestBehavior与防穿透、事件绑定和点击副作用、侧滑行的手势归属，以及事件触发时的坐标与锚点取值；含状态按钮的内容分支。
 
 [上一级](../index.md)
 
@@ -18,6 +18,9 @@
 - [弹窗防穿透的 Block 只放在无子控件的遮罩层，内容面板与根容器保持 Default；改真弹窗 API 后删掉自绘防穿透](lesson-cf018b76af68b4c00895.lesson.md)
   - 时机：弹窗或浮层实现与改造阶段，为遮罩、内容面板、根容器设置 hitTestBehavior，或把页面内浮层迁到 showCustomDialog/showBindSheet、openCustomDialog 等真弹窗时
   - 情境：弹窗或底部面板采用“根 Stack + 遮罩 + 内容面板”结构，在根或内容面板上写 hitTestBehavior(HitTestMode.Block)（含 visible ? Block : None）防止点击穿透；面板内有按钮、checkbox、列表项等要响应点击的子控件。
+- [源端在触发瞬间读取锚点窗口位置时，目标在点击回调里取本次手势坐标或即时查询，onAreaChange 缓存只作兜底；锚点取源端传入的同一元素](lesson-963bf871aa4e910a8fc8.lesson.md)
+  - 时机：界面实现与修复阶段，为从点击处发出的动效或气泡（完成彩纸、锚点提示）确定起点坐标与锚点元素时
+  - 情境：源端在动效或弹窗被调用时用 getLocationInWindow 读取传入锚点 View 的当下窗口中心；目标列表项存在 translate 平移、LazyForEach/Repeat 节点复用或弹层内滚动，写者准备用 onAreaChange 缓存控件位置。
 - [点击事件挂在源布局真正持有点击的节点上；清理重复绑定时保留整栏容器的事件](lesson-fd3add7128663eb9998f.lesson.md)
   - 时机：界面实现与返修阶段，为由多个子控件拼成的搜索栏、入口条决定 onClick 挂在哪一层，或清理其中的重复点击绑定时
   - 情境：源布局只在整条容器上绑定点击（如 LinearLayout 的 onClick 或 DataBinding 点击），内部图标、提示文字、“搜索”字样只负责展示；目标用 Row + Image + Text 模拟占位搜索框（不是 TextInput），点击后压栈进入目标页。

@@ -66,3 +66,20 @@
 0.10.3 增加上述自动来源计数，部署版每条只多这一行，不恢复来源清单；未修改分类、卡片或经验正文，未增加模型必填项及评分机制。
 
 [维护前的阅读入口](https://github.com/hxy450/fixchain-memory/blob/f6c57898066f8abd5c37e6a12d48815ae3509896/memory/index.md)
+
+## 2026-10-01：触发目录小修与完整版本冻结
+
+冻结标签：`memory-full-20261001`。知识 revision：`d7f8451f268e6beb805c73be4ccb6702c9de33203a3e214a37a1777d2a2af934`。完整保留 **276 张卡、256 条 active 经验**，不排除任何项目、不做应用留出；AntennaPod 的来源与相关经验均保留。因此，用这份库在 AntennaPod 上实验应解释为包含同应用历史经验的复用实验，而非严格的跨应用留出验证。本次没有运行迁移或恢复批量分析。
+
+本轮只更新三条经验与五处目录介绍：
+
+- [横向滚动容器交叉轴定高](memory/ui/layout/scrolling/lesson-2d7c6de68f604ae77caf.lesson.md)：由 sizing 移到 scrolling；保留 API 12 模拟器约 597vp 的观察、陷阱表依据和“已有设备测量值时以测量值为准”。how 留直接实现动作，全量 grep／设备必验要求改为有条件的局部可选检查。
+- [点击时读取锚点坐标](memory/ui/interaction/lesson-963bf871aa4e910a8fc8.lesson.md)：由 layers 移到 interaction，正文与来源不变。
+- [视觉修复依据](memory/ui/layout/lesson-8119d8bf0b58e4daac24.lesson.md)：情境 340 → 116 字符，why 541 → 161 字符；保留跨设备、渠道/运行状态、文档预览和 Canvas 内外尺寸一致的条件，动作、例外和来源未改。
+- layers 保留运行时挂载、叠放与几何职责；interaction 介绍聚焦点击命中、手势、事件时坐标，不再把挂载位置作为入口。parameters 介绍以“跳转契约”开头，路径不改。
+
+三条经验沿用 ID、正常版本 +1；其余 253 条经验不变，全部卡片文件及来源绑定未变。skill 0.10.4 增加按事前已知任务归类的原则、LazyRow 与点击锚点的正向示例，以及少量代表任务的选路检查；没有新增必填字段、查询工具或审核步骤。
+
+人工目录走查以来源经验记录的真实任务情境为输入：横向标签行 → ui/layout/scrolling；点击触发动效/气泡 → ui/interaction；点击接页面跳转 → ui/navigation/parameters。检查的是目录介绍与链接是否提供自然入口，并非独立模型召回率评测。278 项 skill 回归通过，1 项跳过。
+
+维护源码已发布到 [migloop 的工作分支](https://github.com/hxy450/migloop/tree/feat/memory-reading-ergonomics)，冻结源码提交为 `97e9c211b8eee754a34cde926901c60ebba94911`；本地包来自干净源码，Server 未改。开发版保留完整来源；从本标签对应 store 用 0.10.4 的默认 export 可重建带计数、不带来源清单的完整部署包。该部署包 `manifest.json` 的 SHA-256 为 `4561e7f307226ce858b1b2265a1e3b8389f229f00a3c8de17c34a86d7b63725c`。冻结后不自动跟随后续批次更新。

@@ -1,6 +1,6 @@
 # 源端在触发瞬间读取锚点窗口位置时，目标在点击回调里取本次手势坐标或即时查询，onAreaChange 缓存只作兜底；锚点取源端传入的同一元素
 
-ID：`lesson-963bf871aa4e910a8fc8` · 版本：2
+ID：`lesson-963bf871aa4e910a8fc8` · 版本：3
 
 [本主题](index.md)
 
@@ -26,5 +26,5 @@ onAreaChange 缓存的是布局时的位置，不含之后的平移，也会在�
 
 ## 来源（按需复核）
 
-- [case-51d51ad98738e338df19](../../../../store/cases/case-51d51ad98738e338df19/4b4648a54d0b19a84c842088554c0b057c5c8941db9a7d98ae885a39678a9db7.json) · 结论：diagnosis, recommendation:2, recommendation:3, recommendation:4
+- [case-51d51ad98738e338df19](../../../store/cases/case-51d51ad98738e338df19/4b4648a54d0b19a84c842088554c0b057c5c8941db9a7d98ae885a39678a9db7.json) · 结论：diagnosis, recommendation:2, recommendation:3, recommendation:4
   卡片版本：`4b4648a54d0b19a84c842088554c0b057c5c8941db9a7d98ae885a39678a9db7`
