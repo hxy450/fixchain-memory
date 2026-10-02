@@ -1,0 +1,120 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-8f1c44fda18a688f1260",
+  "created_at": "2026-10-02T23:02:30.760258+00:00",
+  "migration_key": "79d06d8a-539f-4725-90ec-eba139dc647b",
+  "title": "把单次离屏快照当成可承载任意长度的长图方案",
+  "when": "界面实现阶段，为“保存完整长内容为图片”选择截图/离屏渲染方案，并确定超长内容如何输出时",
+  "description": "源端以内容总高度创建Bitmap再整体绘制（如Android getBitmapFromView、Canvas.draw），高度随文本无上限增长；目标端改用ArkUI componentSnapshot.createFromBuilder等单次离屏快照，根组件只定宽、高度由内容撑开。",
+  "summary": "生成者（f9e30908）收到的需求是“长文本时保存完整的可视和不可视区域，跟Android一样”（L476）。\n写前实际读到的Android ShareFlashPanel.getBitmapFromView以子View总高度创建Bitmap并整体draw（L492），\n即保存结果须对任意文本长度完整成立；这部分输入正确且足以说明“超长内容”是本需求的验收边界。\n它读到的SDK d.ts createFromBuilder说明（L494、L510）只列出500ms延迟、不支持动画、图片加载、根组件宽高为0报100001、不支持全局builder，\n未涉及输出尺寸上限；网页示例（L550）也未涉及。生成者在写前思考中已自问“createFromBuilder能否处理无界高度……需要查证”（L479），\n且项目skill要求“不确定HarmonyOS API用法时优先查harmony-next离线文档”（L9），但它没有查该文档、也没有用超长文本验证，\n就把卡片Builder写成根组件只定宽、高度不设限（L614/L616），在保存按钮onClick里只做一次createFromBuilder快照（L626/L628），\n注释和交付说明断言“不受弹窗可视区域、屏幕边界和裁剪限制”（L626、L648）。偏差位于“API能力边界未核实→单次快照方案”这一实现决策。\n同项目harmony-next离线文档的SnapshotOptions说明写有“截图不建议超过屏幕尺寸，目标长宽超过底层限制时截图会失败，不同设备限制不同”\n（修复会话9119b238 L4211-L4213读到）。\n2f62a443（L1750/L1752）只把同一单次快照扩展到微信分享，未改变本问题。2026-09-20用户报告超长文本保存仍不完整（9119b238 L4184），\n修复会话据上述文档判断单次离屏快照被尺寸限制截断（L4228），改为renderCardPixelMap：先单次快照，与隐形测量副本比较像素高度，\n不一致则按600vp分段渲染并readPixels/writePixels拼接。第一轮测量副本放在高度0的Stack里，被弹窗可用高度夹紧，\n与被截断的快照高度“一致”，分段从未触发（L4459、L4471）——这是修复中新生的问题，非生成遗留；\n第二轮把测量副本与分段视口都改为Scroll（主轴不限测量）并补日志（L4472-L4483），即最终保留版本。\n修复会话中“截断来自渲染表面像素上限还是离屏根布局约束”未经日志确认，最终版本也未经设备验证（L4631后退出）；\n两种机制下单次无界快照都不可靠，本卡只归因“未核实能力边界就以单次快照承载任意长度内容”。\n",
+  "recommendations": [
+    "需求要求“任意长度内容完整导出”时，把最长内容当作验收边界：选定createFromBuilder/componentSnapshot前，先在项目指定的离线API文档中查SnapshotOptions等尺寸限制说明，不要依据“离屏渲染”字面推断不受尺寸限制。",
+    "源端Bitmap可按内容总高度创建，并不意味着目标端单次快照也能承载；超出约一屏高度的内容默认按固定视口分段渲染再拼接（或其他不受单次表面尺寸约束的方式），并对返回PixelMap高度与内容实测高度做校验。",
+    "需要测量内容自然高度来判断是否被截断时，测量副本要放在主轴不限测量的容器（如Scroll）中，不要放在受父容器可用高度约束的Stack/Column里；校验通过与降级两条路径都打日志，并用超过一屏的真实长文本验证。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/user/Developer/ldxapp-to-harmonyapp/LDXHarmonyAPP/entry/src/main/ets/modules/News/components/FlashShareHelper.ets",
+        "since": "2026-09-10T07:02:42.873Z",
+        "at": "2026-09-21T08:12:23.429Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/user/Developer/ldxapp-to-harmonyapp/LDXApp/app/src/main/java/com/lanyife/langya/information/ShareFlashPanel.kt",
+          "at": "2026-09-16T05:32:01.335Z",
+          "reason": "正常输入：生成者Read回执给出getBitmapFromView——遍历子View累加高度、Bitmap.createBitmap(width, height)后scrollView.draw，保存图高度随内容无上限；结合用户L476的“保存完整可视和不可视区域、跟Android一样”，足以确定超长文本必须完整输出（f9e30908 L489/L492）。"
+        },
+        {
+          "key": "/Applications/DevEco-Studio.app/Contents/sdk/default/openharmony/ets/api/@ohos.arkui.componentSnapshot.d.ts",
+          "at": "2026-09-16T05:32:01.436Z",
+          "reason": "实际收到的API说明：createFromBuilder注释只含离屏回调延迟、不支持transition、图片加载未完成、根组件宽高为0报100001、不支持全局builder，未提输出尺寸上限（f9e30908 L490/L494；UIContext版同类说明见L508/L510）。它既不支持也不否定“无尺寸限制”，能力边界仍待核实。"
+        },
+        {
+          "key": "f9e30908-64ef-4c82-95e1-f4e3baa4dedc.jsonl",
+          "at": "2026-09-16T05:39:16.110Z",
+          "reason": "写前已自问createFromBuilder能否处理无界高度、需要查证（L479），项目skill要求不确定API时先查harmony-next离线文档（L9），但未查证也未测超长文本；Edit写入根组件只定宽、高度不设限的ShareCardContentBuilder（L614/L616），并在保存onClick中只做一次createFromBuilder快照，注释称“长文本完整撑开，不受弹窗可视区域/裁剪限制”（L626/L628），交付说明称不受屏幕边界限制（L648）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-8f1c44fda18a688f1260",
+  "metadata": {
+    "migration": {
+      "project": "五星智投",
+      "server_session_id": "79d06d8a-539f-4725-90ec-eba139dc647b"
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "7cd80eb4-f024-472f-b5f0-9064ee953432"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "77b61614-1f0e-41a5-add3-0ea79387956e",
+        "claude-opus-4-7",
+        "gmodel"
+      ],
+      "client_versions": [
+        "1.1.46",
+        "1.1.48",
+        "1.1.51",
+        "1.1.53",
+        "1.1.57",
+        "2.1.152"
+      ]
+    },
+    "source_set_id": "sources-83f775cdb79fdec473d9",
+    "environment": [
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "5.0.4(16)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/user/Developer/ldxapp-to-harmonyapp",
+        "at": "2026-09-16T03:24:00.128Z",
+        "ref": "f9e30908-64ef-4c82-95e1-f4e3baa4dedc.jsonl:L319",
+        "request_ref": "f9e30908-64ef-4c82-95e1-f4e3baa4dedc.jsonl:L317",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "5.0.4(16)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/user/Developer/ldxapp-to-harmonyapp",
+        "at": "2026-09-16T10:01:22.492Z",
+        "ref": "9119b238-c226-43a9-9bb1-3322d63a7241.jsonl:L1146",
+        "request_ref": "9119b238-c226-43a9-9bb1-3322d63a7241.jsonl:L1144",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.4"
+  },
+  "revision": "263d7a0541362d1cc6b026f839585f264701322c3fb87cc6e9b000c3abe819e1"
+}

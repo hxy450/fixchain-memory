@@ -29,8 +29,8 @@
   - 时机：页面转换、公共组件抽取、切片接线或页面重建阶段，参照已生成页面中的同名控件、弹窗、列表、顶栏或导航栈写法时；数据层为新增接口方法复用已有的解析、封装函数时；复用工程已有的共享状态 key 时；按“与 Android 1:1 对齐”修改已有页面（含基线遗留骨架）时
   - 情境：后写的 worker 同时读到源码与先前 agent 已生成的目标代码片段（@Builder 控件、输入弹窗、弹窗承载方式、列表键函数、顶栏折叠、图标控件行、安全控件样式、全屏遮罩、onReady 取栈写法、共享状态 key、登录结果解析函数等），准备当作项目约定直接沿用。或对齐任务在一个与源端结构不同的既有页面上进行，写者已读到源布局 XML。 也包括后一批执行代理把同批尚未验收的兄弟页（如只回显接口 JSON 的页面）当作模板，照同一模式写出更多页面。也包括 1:1 返修重写已有片段时，沿用目标端已有的尺寸、颜色、限制属性（如三框统一的 maxLength、硬编码字色）或注释里的结论（“源码未设，保真”“已裁定”），以及以仓内同族页面为模板复刻输入行时照搬其图标尺寸与光标色。
 - [源端行为经 helper、DAO、适配器或子组件层层委托时，追到最终实现再写规格与代码，不以调用点推断](lesson-4606ccc434e247d4a240.lesson.md)
-  - 时机：规格提取与页面、数据层实现阶段，源端调用点只是一行委托（Activity 调 DialogHelper.showXxx、Repository 经 DAO 调 Helper、Fragment 的分页适配器再建 item 适配器、Compose 页面把整块列表交给另一文件的子 Composable）时
-  - 情境：源端真正的布局、点击时序、数据来源、选中样式或空列表分支写在被委托的方法、类或子组件里：调用点只剩 DialogHelper.showXxxDialog(ctx) { 回调 }、repository.queryByDay → dao → DateHelper、CalendarViewPageAdapter(R.layout.item) → CalendarAdapter，或 DeviceList(...) 一类带参数的子 Composable 调用（其 LazyColumn 按分区渲染，列表为空时显示内联空态）；规格按页面类或所有权切分，锚点只列到调用方。也包括 Compose 页面调用项目自定义组件（如图片组件 XxxImage(...)），形状、裁剪与填充方式写在组件定义里，调用点只给尺寸。 也包括 Compose 页面把规格选择等交互交给共享弹层组件，选中切换、数量步进与按钮可用条件写在组件定义里。
+  - 时机：规格提取与页面、数据层实现阶段，源端调用点只是一行委托（Activity 调 DialogHelper.showXxx、Repository 经 DAO 调 Helper、Fragment 的分页适配器再建 item 适配器、Compose 页面把整块列表交给另一文件的子 Composable）时；增量迁移源端经公共构建器新注册的条目、列出目标端需要登记的全部位置时
+  - 情境：源端真正的布局、点击时序、数据来源、选中样式或空列表分支写在被委托的方法、类或子组件里：调用点只剩 DialogHelper.showXxxDialog(ctx) { 回调 }、repository.queryByDay → dao → DateHelper、CalendarViewPageAdapter(R.layout.item) → CalendarAdapter，或 DeviceList(...) 一类带参数的子 Composable 调用（其 LazyColumn 按分区渲染，列表为空时显示内联空态）；规格按页面类或所有权切分，锚点只列到调用方。也包括 Compose 页面调用项目自定义组件（如图片组件 XxxImage(...)），形状、裁剪与填充方式写在组件定义里，调用点只给尺寸。 也包括 Compose 页面把规格选择等交互交给共享弹层组件，选中切换、数量步进与按钮可用条件写在组件定义里。 也包括源端条目经公共构建器注册（如 buildXxxIndex(...)），构建器为每个条目统一附加说明链接、图标或回调等隐式能力，目标端把这些能力拆成分散在多个文件、按 key 登记的白名单或映射表。
 - [生成期无法核验的规格结论标明置信度与核验方法，不定为硬性决策或带具体 dp 的视觉判据](lesson-c0f990ea57a901951ba8.lesson.md)
   - 时机：规格提取阶段，在没有真机布局 dump、生成期又不能编译或上设备时，写带具体 dp 的视觉验收判据、决策台账条目或 HARD 映射决策时
   - 情境：基线快照由源码合成、bounds 为空，或 SDK 文档对关键语义只有模糊措辞、参考检索为空；规格准备写入源码字面尺寸、“近乎不可见、按源码保留”类结论，或把依赖未验证语义的映射定为 HARD，把可靠方案降为“真机偏色再回退”。

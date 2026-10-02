@@ -1,6 +1,6 @@
 # ui/graphics
 
-图标与图形资源：动画矢量的状态帧、Lottie 动画层的接入、被注释的自定义绘制绑定、系统符号替代、资源迁移中的静态化标注，图标固有尺寸与 scaleType（含 vector 转来的 SVG），整屏背景图的缩放方式，自定义图片组件的形状与裁剪（含被父级自定义 Layout 放置时），自绘图表的坐标原点，按使用场景区分的资源变体映射，自绘视图自适应尺寸公式的参照基数，按产品 flavor 覆盖的 layer-list 根背景逐层落地与位图暂缺时的引用保留
+图标与图形资源：动画矢量的状态帧、Lottie 动画层的接入、被注释的自定义绘制绑定、系统符号替代、资源迁移中的静态化标注，图标固有尺寸与 scaleType（含 vector 转来的 SVG），整屏背景图的缩放方式，自定义图片组件的形状与裁剪（含被父级自定义 Layout 放置时），自绘图表的坐标原点，按使用场景区分的资源变体映射，自绘视图自适应尺寸公式的参照基数，按产品 flavor 覆盖的 layer-list 根背景逐层落地与位图暂缺时的引用保留，以及多个指标共用的绘制分支按源端通用参数（线宽、描边）统一实现
 
 [上一级](../index.md)
 
@@ -16,6 +16,9 @@
 - [centerInside、wrap_content 或未设尺寸的图片按资源固有 dp 显示，外层保留触摸盒；ImageFit.Contain 会放大小图标](lesson-bdc493f5950835f9bfcc.lesson.md)
   - 时机：界面实现阶段，把 ImageButton/ImageView 的固定触摸盒与 scaleType、或 wrap_content/drawableLeft 图标翻译成 ArkUI Image 尺寸时；复用已完成页面的控件行时；为不设尺寸的 Compose Image(painterResource) 确定目标尺寸时
   - 情境：源图标按钮是固定 dp 盒加 scaleType=centerInside，或图标以 wrap_content、TextView drawableLeft/Start 显示，渲染尺寸取决于资源像素与密度目录；映射参考把 centerInside 对到 ImageFit.Contain。也包括 Compose Image(painterResource(vector drawable)) 不设尺寸、按 drawable 声明的 dp 固有尺寸与 ContentScale.Fit 显示，目标 SVG 由 vector drawable 转来。
+- [修共享绘制分支里某一指标的显示差异时，按源端通用规则统一实现，不写单 key 特判；先列出落入该分支的全部指标](lesson-17d6e4c04764983be25a.lesson.md)
+  - 时机：界面绘制修复阶段，按用户对某一指标的视觉反馈，调整多个指标共用的 Canvas 绘制分支（线宽、描边、填充样式）时
+  - 情境：源端同类图形由通用 helper 按统一规则绘制（如 drawBars 中 STROKE/FILL_AND_STROKE 与 strokeWidth ?: 3f 像素），不区分指标 key；目标多个指标经分派落到同一绘制分支，用户只报告其中一个与源端粗细不一致。
 - [判定 $r('app.media.X') 是否可用时检索全部限定词目录，按源布局的 drawable 名取图；确认缺失才登记缺口，不用文字字形、纯色底或近似图标替代](lesson-943544ce27bf04f9faf8.lesson.md)
   - 时机：页面转换与截图对齐修复阶段，把源布局中的 @drawable 引用（头像、图标、装饰图、带透明边缘的头图、行尾箭头）落成 $r('app.media.X') 并确认资源是否已迁移时
   - 情境：资源迁移把 drawable-xhdpi 等位图直接复制到 resources/xldpi/media 一类限定词目录，不在 base/media；构建日志对这些图只报“does not have a base resource”警告；工程里还有外观相近的通用图标（如生活指数图标）。

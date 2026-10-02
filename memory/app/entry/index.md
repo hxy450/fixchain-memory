@@ -6,6 +6,9 @@
 
 ## 本级经验
 
+- [ohos.ability.shortcuts 挂在承载快捷方式的 UIAbility 的 metadata 下，不追加到 module 级 metadata](lesson-67118603fcc769a5edc9.lesson.md)
+  - 时机：配置实现阶段，在 module.json5 中挂载桌面长按快捷菜单（ohos.ability.shortcuts）时；构建后长按不出菜单或快捷方式条目变少时
+  - 情境：把 Android App Shortcuts 迁为 HarmonyOS 静态快捷方式：在 resources/base/profile 下新建快捷方式配置，并在 module.json5 中用 metadata 引用；module 级已有 metadata 数组（如 client_id），入口 UIAbility 还没有 metadata。
 - [入口 Ability 注册全局未捕获异常观察器，Android 源里没有对应代码也要补](lesson-c6132bf52c26ec226788.lesson.md)
   - 时机：入口装配阶段，改写 EntryAbility（或 AbilityStage）的 onCreate/onDestroy 并决定入口需要哪些平台级守护时
   - 情境：目标为 HarmonyOS Stage 模型应用，入口 UIAbility 由模板改写而来；Android 源没有可对照的全局异常处理，按源码迁移不会产生这段代码，而验收（如 ECAT crash_risk 规则）要求存在全局异常观察。

@@ -1,6 +1,6 @@
 # ui/layout/sizing
 
-宽高、比例、百分比与边距的组合（父尺寸减边距、占剩余空间），Compose 修饰符链顺序与 Row 的测量顺序、固有高度，Material 按钮的布局占位与实绘尺寸，px 域整数布局公式与随进度收放的间距，以及随内容定尺寸的图片、背景和描边。
+宽高、比例、百分比与边距的组合（父尺寸减边距、占剩余空间），Compose 修饰符链顺序与 Row 的测量顺序、固有高度，Material 按钮的布局占位与实绘尺寸，px 域整数布局公式与随进度收放的间距，以及随内容定尺寸的图片、背景和描边，以及非 Row/Column/Flex 父级中 layoutWeight 不生效时的显式尺寸。
 
 [上一级](../index.md)
 
@@ -33,6 +33,9 @@
 - [并排 wrap_content 图片列不按固有 dp 写死宽度：按固有宽度比例分列，高度用 aspectRatio](lesson-0618cdf331560d389f0e.lesson.md)
   - 时机：界面实现阶段，把 match_parent 父行中并排的 wrap_content 图片列转换为 ArkUI Row/Column 并确定列宽时；修复“右侧顶满/被遮挡”时
   - 情境：源布局在 match_parent 的水平 LinearLayout 中并排放置 wrap_content 图片列，列宽来自 drawable 固有尺寸与左右、列间 margin，其总和接近或超过常见手机屏宽；目标要在宽度不同的设备上与源截图对齐。
+- [把靠 layoutWeight 填满并居中的内容移进 Refresh、Stack 等非 Row/Column/Flex 父级时，改用 height('100%') 等显式尺寸](lesson-1c3d6367be48f70bb001.lesson.md)
+  - 时机：界面实现阶段，把已有空态、未登录引导等内容 builder 放进下拉刷新组件或其他封装容器的 content 时，确定内容根节点的高度约束
+  - 情境：内容根节点原本在 Column 中用 layoutWeight(1) + justifyContent(Center) 占满剩余空间并居中；新父级是封装了原生 Refresh（或 Stack、Scroll 等）的组件，经 @BuilderParam 注入内容；工程里可能已有同样写法可以照搬。
 - [源端在整数 px 上取整的布局公式：规格写明运算域，实现在 px 域取整、写入布局属性前再换回 vp](lesson-0ef2cd00e1a91491b350.lesson.md)
   - 时机：规格提取阶段，把自定义 Layout、MeasureScope 里的测量与整数几何公式翻成目标契约时；界面实现阶段，用 onAreaChange、measureText 等返回值驱动这类公式时
   - 情境：源算法在约束或测量结果（Compose constraints、placeable 宽高等整数 px）上做整数除法、.toInt() 截断或取整；目标布局属性和尺寸回调（onAreaChange）使用 vp 等逻辑单位，回调值通常不是整数，measureText 返回 px。

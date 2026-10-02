@@ -19,9 +19,9 @@
 - [全屏窗口下先确认路由页的内容原点：已在状态栏 inset 之下就只补源端顶距的剩余部分，背景需延伸到状态栏时在背景节点自身 expandSafeArea](lesson-c7ee1769ca29abd236d3.lesson.md)
   - 时机：界面实现阶段，为全屏窗口中的路由页（NavDestination/HMRouter 页，含 Tab 子页）确定顶部起点、状态栏 inset 的消费位置以及背景是否延伸到状态栏时
   - 情境：Android 页面在透明状态栏下用自屏幕顶部起算的固定顶距（layout_marginTop、getStatusBarsHeight）给顶栏留位，背景铺到状态栏后面；目标 EntryAbility 全屏并发布 windowTopPadding，入口只在 Navigation 宿主上 expandSafeArea(TOP)，页面经路由框架承载。
-- [全屏窗口的底部避让：导航指示条取 bottomRect，贴底按钮、按键区、Tab 栏与 bindSheet 内容都叠加避让值，并加在占据屏幕底边的那一层](lesson-0e1c846868f2683cc280.lesson.md)
-  - 时机：沉浸式安全区实现阶段，测量导航指示条避让区，并为底部按钮行、按键区、Tab 栏或贴底弹层确定底部间距及承载它的容器层时
-  - 情境：目标页面在 setWindowLayoutFullScreen(true) 下用 getWindowAvoidArea 测避让值，写入页面或全局窗口模型；Android 源布局的底部按钮行、底部 sheet 没有导航栏间距（源窗口不延伸到导航栏下，BottomSheetDialog 由系统处理 inset）。或页面规格标注全屏页、需要沉浸式安全区，入口对 BOTTOM 边 expandSafeArea，根容器与底部内容层背景色不同。
+- [全屏窗口的底部避让：导航指示条取 bottomRect，贴底按钮、按键区、Tab 栏与 bindSheet 内容都让出避让值（原高度已含底部留白时先抵扣），并加在占据屏幕底边的那一层](lesson-0e1c846868f2683cc280.lesson.md)
+  - 时机：沉浸式安全区实现阶段，测量导航指示条避让区，并为底部按钮行、按键区、Tab 栏或贴底弹层确定底部间距及承载它的容器层时；为已有固定高度（含内容下方留白）的底部 Tab 栏或底部定位元素补导航条避让时
+  - 情境：目标页面在 setWindowLayoutFullScreen(true) 下用 getWindowAvoidArea 测避让值，写入页面或全局窗口模型；Android 源布局的底部按钮行、底部 sheet 没有导航栏间距（源窗口不延伸到导航栏下，BottomSheetDialog 由系统处理 inset）。或页面规格标注全屏页、需要沉浸式安全区，入口对 BOTTOM 边 expandSafeArea，根容器与底部内容层背景色不同。 也包括底部 Tab 栏原固定高度已在图标文字下方留有空白，避让值取自 TYPE_NAVIGATION_INDICATOR 的单一 px 快照、不区分三键与手势模式，用户只报告某一种导航模式被遮挡。
 - [向子页或页内浮层下发状态栏高度参数时写明消费方式，挂在同一 Stack 的每一层都拿到它](lesson-2cf2614847a8dba832b3.lesson.md)
   - 时机：派工与界面实现阶段，向子页、页内浮层下发状态栏高度参数，或把浮层挂进从窗口顶起的宿主 Stack 时
   - 情境：宿主页采用“子页自理”分工，以组件参数下发状态栏高度；子页或浮层（遮罩 + 居中卡片、铺满父容器）与列表、顶栏同挂一个 Stack；派工或槽位契约可能只列出回调参数，或写“接收但本页不使用”。

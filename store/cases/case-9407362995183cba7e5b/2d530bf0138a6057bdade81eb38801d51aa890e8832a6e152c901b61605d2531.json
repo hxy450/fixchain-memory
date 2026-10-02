@@ -1,0 +1,145 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-9407362995183cba7e5b",
+  "created_at": "2026-10-02T23:09:24.680074+00:00",
+  "migration_key": "79d06d8a-539f-4725-90ec-eba139dc647b",
+  "title": "横屏可触发的登录拦截直接在同一窗口push竖屏登录页，未处理窗口级方向",
+  "when": "交互实现阶段，把Android中启动登录等独立Activity的拦截流程翻译为鸿蒙页面跳转、且该入口在横屏界面也可触发时",
+  "description": "源端在可运行时切横屏（setRequestedOrientation）的页面中调用userService.login(activity)等方式另起Activity；目标端用Navigation在同一窗口push页面，方向由window.setPreferredOrientation在窗口级控制，登录页等目标页按竖屏设计。",
+  "summary": "2026-09-16生成者处理“未登录用户点击付费指标未跳登录页”时，写前已读到三项输入：\nAndroid TEXTChartView对isNeedLogin指标在未登录时调用userService.login(baseActivity)，\n即从图表所在Activity另起登录页，再按登录结果决定是否选中；\nHarmony LDXStockChartSection的横屏LDXLandscapeIndicatorList把onMainClick/onSubClick\n接到setKLineMainIndicator/setKLineSubIndicators；LDXLoginGuard.requireLogin()经pushLoginPage\n调用LDXNavigator.pushPage，在同一导航栈push登录页，自身不处理方向。\n生成者在推理中已把横屏入口列入门控范围（2f62a443:L2638、L2644），\n却写出gateIndicatorLogin直接return LDXLoginGuard.requireLogin()（L2764/L2766），\n并接入三个K线指标setter（L2769–L2782），横屏状态下没有任何方向处理。\nAndroid端方向按Activity隔离：登录Activity不继承详情页的横屏请求，返回后详情页按自己的请求恢复。\n鸿蒙端横屏则是对同一窗口setPreferredOrientation的运行时覆盖，push出来的登录页仍处在横屏窗口中。\n偏差位于从“另起Activity”到“同窗口push”的平台语义翻译：生成者保留了跳转与回调结构，\n但没有把方向隔离一起翻译过来。2026-09-20修复前读回该片段，仍是requireLogin()（L10713）。\n用户报告横屏点击付费指标时登录页应切竖屏，且无论登录是否成功，返回后都要保持横屏（L10695）。\n修复者确认LoginPage不处理方向、登录页以横屏渲染（L10748、L10767、L10815），\n于是新增pendingRestoreLandscape：横屏时先置标志并OrientationUtils.setPortrait，再pushLoginPage；\nconsumePendingIndicatorAfterLogin在onShown中先setLandscape并延后消费，\n等onWindowSizeChange回到横屏后再应用暂存指标（L10772–L10791）。\n修复者分析原代码返回时窗口仍是横屏（L10752）；恢复与延后消费是新增切竖屏后才需要的，\n因此09:27写入的consumePendingIndicatorAfterLogin不另列为偏差起点。\n",
+  "recommendations": [
+    "实现登录/跳转拦截前，先列出该入口能在哪些方向的界面触发；如果当前页可能处于运行时横屏、而目标页按竖屏设计，就在跳转前切到目标页方向，并记录需要恢复的原方向。",
+    "把Android startActivity、userService.login这类“另起Activity”翻译成同窗口Navigation push时，要补上Activity级的方向隔离：在返回回调（如onShown）中恢复原方向；依赖横屏状态的后续动作，等windowSizeChange确认方向后再执行。",
+    "自检：在横屏下逐个触发跳转入口，确认目标页方向正确；再分别走成功与取消两条返回路径，确认原页面的方向和暂存动作都恢复正确。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/user/Developer/ldxapp-to-harmonyapp/LDXHarmonyAPP/common/ldxstock/src/main/ets/ViewModel/LDXQuoteDetailViewModelBase.ets",
+        "since": "2026-09-10T07:02:42.873Z",
+        "at": "2026-09-21T08:12:23.429Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/user/Developer/ldxapp-to-harmonyapp/LDXApp/shared/stock/stock_quote/src/main/java/com/lanyife/stock/quote/widgets/TEXTChartView.java",
+          "at": "2026-09-16T09:10:49.525Z",
+          "reason": "正常输入：Bash rg回执给出isNeedLogin指标的回调。未登录时取当前BaseActivity并调用userService.login(baseActivity)另起登录页，按登录结果result.on(true/false)决定是否选中。这表明源端登录是一个独立Activity，方向不随图表页（2f62a443:L2634/L2636）。"
+        },
+        {
+          "key": "/Users/user/Developer/ldxapp-to-harmonyapp/LDXHarmonyAPP/common/ldxstock/src/main/ets/pages/components/LDXStockChartSection.ets",
+          "at": "2026-09-16T09:09:52.446Z",
+          "reason": "正常输入：Read回执第329–355行为buildLandscape，横屏LDXLandscapeIndicatorList的onMainClick调用setKLineMainIndicator，onSubClick调用setKLineSubIndicators([key])。这足以表明门控会在横屏界面被触发（2f62a443:L2603/L2605）。"
+        },
+        {
+          "key": "/Users/user/Developer/ldxapp-to-harmonyapp/LDXHarmonyAPP/common/ldxcommon/src/main/ets/LDXLoginGuard.ets",
+          "at": "2026-09-16T08:58:09.793Z",
+          "reason": "正常输入：完整Read回执显示requireLogin()在未登录时调用pushLoginPage，后者执行LDXNavigator.pushPage(routeName)并加1.5秒防抖，没有任何方向处理。登录页因此会push进同一窗口的导航栈（2f62a443:L2507/L2509）。"
+        },
+        {
+          "key": "2f62a443-10e0-4f6a-b07c-566d53bbe9ee.jsonl",
+          "at": "2026-09-16T09:18:07.146Z",
+          "reason": "生成者已在推理中列出横屏onMainClick/onSubClick入口（L2638、L2644），Edit仍写出gateIndicatorLogin直接return LDXLoginGuard.requireLogin()（L2764/L2766），随后接入三个K线setter（L2769–L2782）。横屏触发时，竖屏登录页被push进横屏窗口：源端Activity级的方向隔离没有被翻译过来。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4,
+          "force": true,
+          "reason": "生成者用Bash rg -n -B3 -A25读取TEXTChartView.java的onSuccess(List<IndexOption>)段，回执返回isNeedLogin回调：未登录时调用userService.login(baseActivity)另起登录页，再按结果result.on(true/false)处理。这支持生成者在写门控之前已经收到源端的登录跳转方式。",
+          "evidence": [
+            {
+              "source": "2f62a443-10e0-4f6a-b07c-566d53bbe9ee.jsonl",
+              "line": 2634
+            },
+            {
+              "source": "2f62a443-10e0-4f6a-b07c-566d53bbe9ee.jsonl",
+              "line": 2636
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "池内未见Android LoginActivity的screenOrientation声明或Android横屏登录实测，用户也未引用Android。“登录页应为竖屏”是根据三点推断的：应用默认竖屏、修复者观察到横屏渲染异常、Android Activity的方向隔离语义。",
+    "原代码返回时是否保持横屏，只有修复者的推理（L10752），未见运行验证。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-9407362995183cba7e5b",
+  "metadata": {
+    "migration": {
+      "project": "五星智投",
+      "server_session_id": "79d06d8a-539f-4725-90ec-eba139dc647b"
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "7cd80eb4-f024-472f-b5f0-9064ee953432"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "77b61614-1f0e-41a5-add3-0ea79387956e",
+        "claude-opus-4-7",
+        "gmodel"
+      ],
+      "client_versions": [
+        "1.1.46",
+        "1.1.48",
+        "1.1.51",
+        "1.1.53",
+        "1.1.57",
+        "2.1.152"
+      ]
+    },
+    "source_set_id": "sources-83f775cdb79fdec473d9",
+    "environment": [
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "5.0.4(16)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/user/Developer/ldxapp-to-harmonyapp",
+        "at": "2026-09-16T03:24:00.128Z",
+        "ref": "f9e30908-64ef-4c82-95e1-f4e3baa4dedc.jsonl:L319",
+        "request_ref": "f9e30908-64ef-4c82-95e1-f4e3baa4dedc.jsonl:L317",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "5.0.4(16)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/user/Developer/ldxapp-to-harmonyapp",
+        "at": "2026-09-16T10:01:22.492Z",
+        "ref": "9119b238-c226-43a9-9bb1-3322d63a7241.jsonl:L1146",
+        "request_ref": "9119b238-c226-43a9-9bb1-3322d63a7241.jsonl:L1144",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.4"
+  },
+  "revision": "2d530bf0138a6057bdade81eb38801d51aa890e8832a6e152c901b61605d2531"
+}

@@ -1,6 +1,6 @@
 # ui/text
 
-文本展示与排版：源端对展示文本的加工（富文本、链接识别与点击）到 ArkUI Text/StyledString 的转换，Compose 行高到单行文本盒与多行行距的映射，多行末行省略的截断粒度，静态说明页的逐字文案与图文结构，Tab、页面标题、设置行等可见文案的逐字取值，以及字符串资源生成哪些语言限定目录，单行中间/开头省略的测量截断，setSpan 区间拆成 Span 时的着色范围
+文本展示与排版：源端对展示文本的加工（富文本、链接识别与点击）到 ArkUI Text/StyledString 的转换，Compose 行高到单行文本盒与多行行距的映射，多行末行省略的截断粒度，静态说明页的逐字文案与图文结构，Tab、页面标题、设置行等可见文案的逐字取值，以及字符串资源生成哪些语言限定目录，单行中间/开头省略的测量截断，setSpan 区间拆成 Span 时的着色范围，以及数值显示精度（复用基类格式化 getter 与品类精度不一致时的子类覆写）
 
 [上一级](../index.md)
 
@@ -24,6 +24,9 @@
   - 时机：资源迁移阶段，决定目标工程生成哪些语言限定字符串目录（base、zh_CN 等）及各键取值时
   - 情境：Android 源只有默认 res/values/strings.xml（常为英文），没有 values-zh 等语言限定目录；规格要求与源应用逐屏对齐或写明“不擅自翻译”；资源转换 skill 带有“至少生成两套语言、默认英文则补 zh_CN”一类通用规则；设备可能使用中文系统语言。
   - 例外：规格或决策明确要求本轮新增本地化语言；此时按批准的译文来源生成，并在报告中注明源端没有该语言
+- [复用基类的显示格式化 getter 前核对精度：品类精度不同（如 ETF 三位小数）时在子类覆写全部相关 getter，同一字段的各分支用同一精度](lesson-042445ba332611e04a80.lesson.md)
+  - 时机：界面实现阶段，把源端十字光标、高亮联动等显示接入目标页面，决定复用基类 ViewModel 的格式化 getter 还是在子类覆写时；修改同一显示字段的任一分支（静态值、无数据兜底、高亮值）时
+  - 情境：多个品类详情页共用一个基类 ViewModel，基类显示 getter 用通用精度格式化（如 formatPrice 保留两位）；某一品类的静态字段与源端联动代码使用不同精度（如 getPrice(..., 3)），子类尚未覆写对应 getter。
 - [多行 maxLines + Ellipsis 两端末行截断粒度不同：规格写明差异，确需字符级一致时才用测量截断兜底](lesson-836a5414b52f0e062f1f.lesson.md)
   - 时机：规格提取阶段为带 maxLines(N) + TextOverflow.Ellipsis（或 android:ellipsize）的多行正文写转换决策，以及界面实现阶段落实折叠态末行时
   - 情境：源端多行正文以 maxLines + Ellipsis 折叠；目标用 .maxLines() + .textOverflow({ overflow: TextOverflow.Ellipsis })，默认 wordBreak 为 BREAK_WORD；映射参考只记 ellipsize → textOverflow 的 API 对应；项目可能要求完整复刻源端可观察行为。
