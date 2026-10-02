@@ -1,11 +1,14 @@
 # ui/navigation/back-stack
 
-系统/页面返回、覆盖层关闭顺序、清栈重建与重复导航的净效果。
+系统/页面返回、覆盖层关闭顺序、清栈重建与重复导航的净效果，底部 tab 的 popUpTo 返回语义与外部深链的清栈。
 
 [上一级](../index.md)
 
 ## 本级经验
 
+- [底部 tab 的 popUpTo(start){saveState} 与外部入口的 CLEAR_TOP 要拆出返回栈后果写成验收，并在 onBackPress、onNewWant 显式实现](lesson-39f137ee173e50363f79.lesson.md)
+  - 时机：规格提取阶段描述底部 tab 切换和外部深链入口，以及实现阶段核对导航壳差异时
+  - 情境：源端 tab 切换用 navigate { popUpTo(startDestination){ saveState }; launchSingleTop; restoreState }，桌面卡片、通知等外部入口用带 FLAG_ACTIVITY_CLEAR_TOP/NEW_TASK 的 Intent 拉起主 Activity；目标端用单 Navigation 加下标或条件渲染切 tab，NavPathStack 承载详情页。
 - [源端 popUpTo(根){inclusive=true} 加 navigate(根) 映射为 NavPathStack 重建，不用 pop() 代替](lesson-96c890012b26b5cb32cd.lesson.md)
   - 时机：接线阶段实现删除、克隆等操作完成后的导航时
   - 情境：源端在操作完成后 navigate 到列表并 popUpTo 列表 inclusive，重建返回栈；目标用 Navigation + NavPathStack，列表是 Navigation 根内容。

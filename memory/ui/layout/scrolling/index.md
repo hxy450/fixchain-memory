@@ -1,11 +1,17 @@
 # ui/layout/scrolling
 
-ScrollView/NestedScrollView的滚动范围、LazyRow/横向滚动行的交叉轴尺寸、连续折叠顶栏与滚动区内跟随等高。
+ScrollView/NestedScrollView的滚动范围、LazyRow/横向滚动行的交叉轴尺寸、Lazy 列表 contentPadding 的内容偏移、带高度上限的滚动卡片、连续折叠顶栏与滚动区内跟随等高。
 
 [上一级](../index.md)
 
 ## 本级经验
 
+- [LazyRow/LazyColumn 的 contentPadding 译为 contentStartOffset/contentEndOffset，不用 List.padding](lesson-4030f978a230df37de2b.lesson.md)
+  - 时机：界面实现阶段为滚动列表确定首尾留白时；规格提取阶段描述 Lazy 列表留白时
+  - 情境：源 LazyRow/LazyColumn 用 contentPadding（PaddingValues start/end）给首尾项留白；目标 ArkUI List 可写 .padding，也可写 contentStartOffset/contentEndOffset；映射参考只有通用的 padding → .padding()。
+- [heightIn(max) 紧接 verticalScroll 的卡片拆成多节点时，把高度上限挂在 Scroll 上](lesson-420023d472f48bed8ef9.lesson.md)
+  - 时机：界面实现阶段，把 heightIn(max) 紧接 verticalScroll 的卡片拆成“外层容器 + Scroll + 内容”结构时
+  - 情境：源 Modifier 链里 heightIn(max = H) 紧接 verticalScroll，同一节点还带圆角、背景；目标需要拆成外层卡片包 Scroll 的多节点结构；迁移陷阱表有“滚动容器须显式给交叉轴尺寸”一类条目。
 - [横向滚动容器给交叉轴写数值高度，按内容算出，不写 'auto' 也不留空](lesson-2d7c6de68f604ae77caf.lesson.md)
   - 时机：界面实现阶段，把 Compose 可滚动 Tab 行、LazyRow、horizontalScroll 等按内容定高的横向滚动行翻译成 ArkUI 滚动容器时
   - 情境：源端横向滚动行的高度由子项固有高度决定；目标用 Scroll(ScrollDirection.Horizontal) 或横向 List/Grid 实现，所在父容器在纵向上还有剩余空间。

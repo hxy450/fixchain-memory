@@ -1,11 +1,15 @@
 # ui/safearea
 
-沉浸式安全区：全屏布局下前景避让与 expandSafeArea 的区别，避让区测量与 px/vp 换算（状态栏、导航指示条），系统栏图标深浅，路由页内容原点与顶部 inset 的消费位置，Tab 宿主按各 Tab 沉浸设置处理顶部安全区，全屏页底部按钮、按键区与贴底弹层的避让及承载层，逐页落实前景避让
+沉浸式安全区：全屏布局下前景避让与 expandSafeArea 的区别，避让区测量与 px/vp 换算（状态栏、导航指示条），系统栏图标深浅，路由页内容原点与顶部 inset 的消费位置，Compose Scaffold innerPadding 的顶部 inset 由宿主还是子页消费，向子页与页内浮层下发的状态栏高度参数，Tab 宿主按各 Tab 沉浸设置处理顶部安全区，全屏页底部按钮、按键区与贴底弹层的避让及承载层，逐页落实前景避让
 
 [上一级](../index.md)
 
 ## 本级经验
 
+- [Compose Scaffold 无 topBar 时 innerPadding 顶部就是状态栏 inset：目标端只在一处落实，同一内容区各层用同一基准](lesson-f64afc22d41b130f1628.lesson.md)
+  - 时机：规格提取与界面实现阶段，把 Compose Scaffold 的 content padding 与 consumeWindowInsets 拆成宿主壳与各子页（含页内浮层）的顶部避让分工时
+  - 情境：源端 Scaffold 不传 topBar、未覆写 contentWindowInsets（默认含状态栏），把 Modifier.padding(innerPadding).consumeWindowInsets(innerPadding) 交给嵌套内容；子页自身可能没有 statusBarsPadding，也可能另写 statusBarsPadding 或 windowInsetsTopHeight(statusBars + N)；目标端全屏窗口，由宿主 padding 或向子页下发状态栏高度来避让。
+  - 例外：Scaffold 传了 topBar 或覆写了 contentWindowInsets 时，innerPadding 顶部不再等于状态栏高，按实际来源推导
 - [Tab 宿主按各 Tab 源 Fragment 的沉浸设置分别处理顶部安全区，Activity 只加在底栏的 padding 只加到 tabBar](lesson-48e9408812c28e934db8.lesson.md)
   - 时机：界面实现与规格阶段，实现 MainActivity/Tab 宿主的内容区内边距，以及转换作为 Tab 子组件的 Fragment 的顶部布局时
   - 情境：Android MainActivity 只给底栏容器加内边距，ViewPager 全宽；部分 Tab 的 Fragment 调用 ImmersionBar.titleBarMarginTop/fitsSystemWindows 让头图延伸到状态栏，其余 Tab 不沉浸；目标宿主可能给整个 Tabs 统一加顶部安全区和左右 padding，页面规格按 page_type（sub_component）自动标记“无需沉浸”。
@@ -18,6 +22,10 @@
 - [全屏窗口的底部避让：导航指示条取 bottomRect，贴底按钮、按键区、Tab 栏与 bindSheet 内容都叠加避让值，并加在占据屏幕底边的那一层](lesson-0e1c846868f2683cc280.lesson.md)
   - 时机：沉浸式安全区实现阶段，测量导航指示条避让区，并为底部按钮行、按键区、Tab 栏或贴底弹层确定底部间距及承载它的容器层时
   - 情境：目标页面在 setWindowLayoutFullScreen(true) 下用 getWindowAvoidArea 测避让值，写入页面或全局窗口模型；Android 源布局的底部按钮行、底部 sheet 没有导航栏间距（源窗口不延伸到导航栏下，BottomSheetDialog 由系统处理 inset）。或页面规格标注全屏页、需要沉浸式安全区，入口对 BOTTOM 边 expandSafeArea，根容器与底部内容层背景色不同。
+- [向子页或页内浮层下发状态栏高度参数时写明消费方式，挂在同一 Stack 的每一层都拿到它](lesson-2cf2614847a8dba832b3.lesson.md)
+  - 时机：派工与界面实现阶段，向子页、页内浮层下发状态栏高度参数，或把浮层挂进从窗口顶起的宿主 Stack 时
+  - 情境：宿主页采用“子页自理”分工，以组件参数下发状态栏高度；子页或浮层（遮罩 + 居中卡片、铺满父容器）与列表、顶栏同挂一个 Stack；派工或槽位契约可能只列出回调参数，或写“接收但本页不使用”。
+  - 例外：目标父容器已替该层加了顶部避让，且能指出对应代码位置
 - [开启全屏布局后，前景按测得的避让区补 padding；expandSafeArea 只让背景越过安全区，不是避让](lesson-a8452bfea5d42d3dcae3.lesson.md)
   - 时机：界面实现阶段，为调用 setWindowLayoutFullScreen(true) 的入口壳（根 Navigation + Tabs/NavDestination）落实状态栏与底部导航条避让时
   - 情境：规格或 ui-manifest 标注全屏页、需要沉浸式安全区，并把 API 细节委托给具名 skill（如 arkts-immersive-safearea）；EntryAbility 开启全屏布局，页面标题由 NavDestination 标题栏或自绘标题承担；源端通常是 enableEdgeToEdge 加 safeDrawingPadding。

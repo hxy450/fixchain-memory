@@ -1,0 +1,304 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-5184da257133ebcc7073",
+  "created_at": "2026-09-25T12:14:02.180563+00:00",
+  "migration_key": "C:\\Users\\hongy\\projects\\_migloop-jetnack924-memory-20260925\\materials",
+  "title": "状态变更信号与 ArkUI 观察方式不匹配：替换同 key 行对象、原位 push 被 @Monitor 漏掉",
+  "when": "状态模型与 ViewModel 实现阶段，决定列表项字段或消息队列的更新写法（原位修改 @Trace 字段，还是替换对象或数组）时",
+  "description": "源端用 Kotlin 不可变数据驱动 Compose 重组：data class copy 替换列表项，StateFlow.update { list + item } 生成新列表。目标端用 ArkUI V2 的 @Trace 数组，ForEach 按稳定 id 生成 key 且行组件用 @Param 接收整个元素，或用 @Monitor 监听数组属性路径来模拟 collect。",
+  "summary": "购物车行数量（数据模型阶段）：Base-1 数据层 worker 刚读完源码模型时，自问 cart count 是否会变，没有读取 CartViewModel，就写下 \"Yes, the demo never mutates cart\"。之后它读到两份材料：一是 feature-base，CartViewModel 映射为页面级状态，购物车有人为随机失败演示，QuantitySelector 是 −/+ 步进器；二是 v2-model-patterns 的购物车示例，@Trace quantity 原位修改，ForEach 按 id 生成 key。它没有回头核对先前的断言，写出 readonly count，头注释为\"count 无独立有态需求，购物车种子为静态 mock\"。\n购物车行数量（ViewModel/页面实现阶段）：Slice 4 购物车 worker 改写前读到的 CartPage 已有一套能刷新行的写法：本地 @ObservedV2 OrderLine（@Trace count），增减时原位改 line.count，ForEach 的 key 为 snack.id。它以 Base 头注释（\"deliberately non-observed per its header comment\"）和 F004 不变式④\"仅替换目标行（map + copy）\"为依据，设计中写 \"Rows re-render when array reassigned\"。于是 CartStore.updateSnackCount 用 map 生成 new OrderLine；CartPage 删掉本地可观察类，保留 key=snack.id 和行组件 @Param line。数组重新赋值后，读数组的小计会刷新；同 key 的行没有重建，行内数量仍停在旧对象上。\nSnackbar（队列模型阶段）：Base-1 读到 Kotlin showMessage 为 currentMessages + Message(...)，每次都生成新列表交给 StateFlow。它在思考中把这一步等同于 push，考虑过重新赋值后放弃，所以 showMessage 原位 push，setMessageShown 却重新赋值。之后 F007 worker 写 SnackbarHostBinder，用 @Monitor('manager.messages') 模拟 collect，注释声称 push 也会触发。它在思考中已意识到\"push 不触发则 snackbar 永不出现\"，但没有验证（generation/.../agent-a7ce7b43fed7acf23.jsonl:L74、L80、L90）。该 worker 没有写 SnackbarManager.ets，只在此说明，不画进图。\n规格侧：F004 把 map+copy 和 key=snack.id 当作源端事实写入，并写\"@Trace orderLines 驱动刷新\"。F007 写了\"update 尾拼接\"和宿主订阅队列。两份都没有说明 ArkUI 端靠什么观察到变化。因此偏差出在\"变更信号是否匹配观察者\"这一状态模型设计环节：生产方选定的变更写法，需要与 ForEach key 或 @Monitor 路径的观察方式一起确定。\n修复（repair 主会话 L1418 脚本正文，L1420/L1426 执行与回执）：OrderLine 加 @ObservedV2，count 改 @Trace；CartStore.updateSnackCount 改为原位写 line.count；SnackbarManager.showMessage 改为 this.messages = [...this.messages, new Message(...)]。复测后行内数量随增减变化，第 5 次失败弹出错误 snackbar（L1451、L1462）。\n",
+  "recommendations": [
+    "数据模型阶段：判定某字段无需 @Trace 前，先读其消费方。本例 CartViewModel.increase/decreaseSnackCount 会改 count，Cart 行也显示数量。不要把未经读取核实的“静态 mock、从不修改”写进模型注释，后续 worker 会把它当作契约。",
+    "列表实现阶段：ForEach 的 key 只含稳定 id（本例 line.snack.id），行组件又以 @Param 接收整个元素时，更新行内显示字段应把该字段设为 @Trace 并原位修改。若坚持替换对象，就把变化字段并入 key（如 id 加 count）。改写已有页面时，不要删掉原有的原位 @Trace 写法而不补刷新机制。最小检查：点一次 +，确认行内数字与小计同时变化。",
+    "队列/事件模型阶段：源端以 StateFlow.update { list + item } 生成新列表时，ArkTS 仍写成重新赋值新数组（this.messages = [...this.messages, m]），入队和出队使用同一种变更信号。不要只因 @Trace 数组 push 能刷新渲染就改成原位 push。",
+    "消费者实现阶段：用 @Monitor('manager.messages') 充当 collect 前，先读生产方写法。生产方原位 push 时不要假定它会触发，应要求生产方重新赋值，或实测确认（本例为连续第 5 次购物车增减时应弹出错误 snackbar）。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-jetnack924/entry/src/main/ets/models/OrderLine.ets",
+        "since": "2026-09-24T12:35:18.136Z",
+        "at": "2026-09-25T09:28:22.184Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-jetnack924/spec/baseline/feature-base.md",
+          "at": "2026-09-24T06:26:48.639Z",
+          "reason": "正常输入：Base-1 的 Read 回执给出 OrderLine 为 data class，CartViewModel 映射为页面级状态类，购物车有人为随机失败演示（F004 业务规则），QuantitySelector 为 −/+ 步进器。这些内容说明购物车数量在运行期会变（generation/.../agent-a11d0afb5f1eca1b8.jsonl:L55-L56）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-jetnack924/.claude/skills/arkts-data-layer/references/v2-model-patterns.md",
+          "at": "2026-09-24T06:27:26.973Z",
+          "reason": "正常输入：Read 回执的 §6 购物车示例中，CartItemModel.quantity 标 @Trace，increaseQuantity 原位 += 1，页面 ForEach 按 productId 生成 key，行组件用 @Param item。这足以说明按稳定 id 渲染的行要靠可观察字段刷新（同转录 L68-L69）。"
+        },
+        {
+          "key": "agent-a11d0afb5f1eca1b8.jsonl",
+          "at": "2026-09-24T06:45:54.071Z",
+          "reason": "它读这两份输入之前，已在思考中自问 cart count 是否会变，随即写 'Let me verify… Yes, the demo never mutates cart'，其间没有读取 CartViewModel 的调用（同转录 L48）。读到上述输入后没有回头核对，L70 的设计和 L77-L78 的 Write 都沿用 readonly count，头注释写'count 无独立有态需求，购物车种子为静态 mock'。readonly 与 Kotlin @Immutable 一致；偏差在于这条未核实的前提写成了模型契约，被后续 worker 当作不需观察的依据。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-jetnack924/entry/src/main/ets/viewmodels/CartStore.ets",
+        "since": "2026-09-24T12:35:18.136Z",
+        "at": "2026-09-25T09:28:22.184Z"
+      },
+      "nodes": [
+        {
+          "key": "agent-a11d0afb5f1eca1b8.jsonl",
+          "at": "2026-09-24T06:45:54.071Z",
+          "reason": "上游偏差：未核实就断言购物车从不修改，写出 readonly count 和头注释'count 无独立有态需求，购物车种子为静态 mock'（generation/.../agent-a11d0afb5f1eca1b8.jsonl:L48、L77-L78）。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-jetnack924/entry/src/main/ets/models/OrderLine.ets",
+          "at": "2026-09-24T09:20:57.326Z",
+          "reason": "交付桥梁：Slice 4 worker 的 Read 回执仍是 readonly count 及上述头注释（generation/.../agent-a15a5b99bcce44826.jsonl:L63、L65）。它据此认定 'mutations must replace the whole array'（L68）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-jetnack924/entry/src/main/ets/pages/CartPage.ets",
+          "at": "2026-09-24T09:16:22.279Z",
+          "reason": "正常输入：同一 worker 改写前读到的 CartPage 有本地 @ObservedV2 OrderLine（@Trace count），increase/decrease 原位改 line.count，ForEach 按 snack.id 生成 key（agent-a15a5b99bcce44826.jsonl:L31、L33，回执第 50-59、501-522、811-824 行）。这是一套在同 key 下能刷新行内数量的现成写法。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-jetnack924/spec/baseline/features/F004-cart.md",
+          "at": "2026-09-24T09:16:15.625Z",
+          "reason": "正常输入：规格把 orderLines 映射为 @Trace 数组，列出源端列表键 key=snack.id（Cart.kt:172）及不变式④'仅替换目标行（map + copy）、行序不变'（agent-a15a5b99bcce44826.jsonl:L25-L26）。规格没有说明同 key 行在对象替换后如何刷新，属于缺口；其行为要求（其余行不变、行序不变）用原位修改也能满足。"
+        },
+        {
+          "key": "agent-a15a5b99bcce44826.jsonl",
+          "at": "2026-09-24T09:33:19.902Z",
+          "reason": "读到上述输入后，它在设计中写 'ForEach(this.cartStore.orderLines, …) with key snack.id. Rows re-render when array reassigned'（L102），并以 OrderLine 头注释为由认定行对象无需 @Trace（L68、L108）。随后 Write CartStore.updateSnackCount，用 map 生成 new OrderLine(line.snack, count)（L110-L111）；CartPage 改写时删掉本地可观察 OrderLine，保留 key=snack.id 与行组件 @Param line（L122-L123）。已有的原位刷新写法因此被替换成同 key 替换对象，行内数量不再刷新。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 5
+        },
+        {
+          "from": 3,
+          "to": 5
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-jetnack924/entry/src/main/ets/models/SnackbarManager.ets",
+        "since": "2026-09-24T12:35:18.136Z",
+        "at": "2026-09-25T09:28:22.184Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/demo-Jetsnack-android/app/src/main/java/com/example/jetsnack/model/SnackbarManager.kt",
+          "at": "2026-09-24T06:24:03.451Z",
+          "reason": "正常输入：Base-1 的 Read 回执给出 showMessage 为 _messages.update { currentMessages -> currentMessages + Message(...) }，setMessageShown 为 filterNot。两条变更都生成新列表交给 StateFlow（generation/.../agent-a11d0afb5f1eca1b8.jsonl:L39、L41）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-jetnack924/spec/baseline/feature-base.md",
+          "at": "2026-09-24T06:26:48.639Z",
+          "reason": "正常输入：§事件系统写明 MutableStateFlow<List<Message>>，消费链为宿主观察队列 → 展示 → setMessageShown，ArkTS 映射为单例 + @Trace 队列（同转录 L55-L56）。它说明存在订阅式消费者，但没有规定用 @Monitor 还是渲染读取。"
+        },
+        {
+          "key": "agent-a11d0afb5f1eca1b8.jsonl",
+          "at": "2026-09-24T06:46:21.917Z",
+          "reason": "它在思考中先定下 push（L48），读完输入后又写 'Android _messages.update { it + Message(...) } ≈ push' 和 'I could also reassign for safety… Keep push'（L70）。Write SnackbarManager.ets 时，showMessage 用 this.messages.push，setMessageShown 却重新赋值（L83-L84）。源端'每次变更生成新列表'的信号被改成原位修改，入队与出队的变更信号不对称；后来的 @Monitor 消费者恰好只对重新赋值有反应。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "“push 不触发 @Monitor('manager.messages')”和“同 key 的 ForEach 行不重建”两项判断，依据是修复者诊断与改后设备复测（repair 主会话 L1405、L1451、L1462），未另查 ArkUI 官方文档，不外推为所有 API 版本的平台规则。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-5184da257133ebcc7073",
+  "metadata": {
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3-flash"
+      ],
+      "client_versions": [
+        "2.1.281",
+        "2.1.282"
+      ]
+    },
+    "source_set_id": "sources-02e0d2c9b93b47169df1",
+    "environment": [
+      {
+        "name": "android.compile_sdk",
+        "value": "36",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-jetnack924",
+        "at": "2026-09-24T04:41:39.758Z",
+        "ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-aa8e920d18784dcc5.jsonl:L41",
+        "request_ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-aa8e920d18784dcc5.jsonl:L39",
+        "phase": "generation"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "36",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-jetnack924",
+        "at": "2026-09-24T04:41:39.758Z",
+        "ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-aa8e920d18784dcc5.jsonl:L41",
+        "request_ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-aa8e920d18784dcc5.jsonl:L39",
+        "phase": "generation"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "23",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-jetnack924",
+        "at": "2026-09-24T04:41:39.758Z",
+        "ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-aa8e920d18784dcc5.jsonl:L41",
+        "request_ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-aa8e920d18784dcc5.jsonl:L39",
+        "phase": "generation"
+      },
+      {
+        "name": "toolchain.kotlin",
+        "value": "2.3.21",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-jetnack924",
+        "at": "2026-09-24T04:41:39.758Z",
+        "ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-aa8e920d18784dcc5.jsonl:L41",
+        "request_ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-aa8e920d18784dcc5.jsonl:L39",
+        "phase": "generation"
+      },
+      {
+        "name": "toolchain.agp",
+        "value": "9.1.0",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-jetnack924",
+        "at": "2026-09-24T04:41:39.758Z",
+        "ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-aa8e920d18784dcc5.jsonl:L41",
+        "request_ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-aa8e920d18784dcc5.jsonl:L39",
+        "phase": "generation"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.05.00",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-jetnack924",
+        "at": "2026-09-24T04:41:39.758Z",
+        "ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-aa8e920d18784dcc5.jsonl:L41",
+        "request_ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-aa8e920d18784dcc5.jsonl:L39",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-jetnack924",
+        "at": "2026-09-24T04:51:03.791Z",
+        "ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa.jsonl:L200",
+        "request_ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa.jsonl:L199",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-jetnack924",
+        "at": "2026-09-24T04:51:03.791Z",
+        "ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa.jsonl:L200",
+        "request_ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa.jsonl:L199",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-jetnack924\\entry\\src\\main\\ets",
+        "at": "2026-09-24T14:05:15.353Z",
+        "ref": "repair/5072ba6e-d20d-40e9-9730-811760f61591/subagents/agent-aee6e31ae09e2eb3e.jsonl:L118",
+        "request_ref": "repair/5072ba6e-d20d-40e9-9730-811760f61591/subagents/agent-aee6e31ae09e2eb3e.jsonl:L117",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-jetnack924\\entry\\src\\main\\ets",
+        "at": "2026-09-24T14:05:15.353Z",
+        "ref": "repair/5072ba6e-d20d-40e9-9730-811760f61591/subagents/agent-aee6e31ae09e2eb3e.jsonl:L118",
+        "request_ref": "repair/5072ba6e-d20d-40e9-9730-811760f61591/subagents/agent-aee6e31ae09e2eb3e.jsonl:L117",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.8.2",
+    "migration": {
+      "id": "f83745cd-1ce0-46ce-acf5-5a32e07242fa",
+      "project": "Jetsnack",
+      "root_session_ids": [
+        "5072ba6e-d20d-40e9-9730-811760f61591",
+        "f83745cd-1ce0-46ce-acf5-5a32e07242fa"
+      ],
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3-flash"
+      ]
+    }
+  },
+  "revision": "fed0f7aa28d6ee296719c0490ea8a5ff6c8212ba348c192ba1d653410ad7b9a9"
+}

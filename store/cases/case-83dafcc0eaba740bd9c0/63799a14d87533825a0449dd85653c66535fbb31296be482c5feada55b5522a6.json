@@ -1,0 +1,302 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-83dafcc0eaba740bd9c0",
+  "created_at": "2026-09-25T12:56:38.027085+00:00",
+  "migration_key": "C:\\Users\\hongy\\projects\\_migloop-jetnack924-memory-20260925\\materials",
+  "title": "Compose 子项定位与 Row 测量语义在页面转换中丢失：购买栏未贴底、筛选头部与购物车行错位",
+  "when": "页面转换阶段，把 Compose Box/Row 的子项定位、顺序测量、固有高度与默认对齐写成 ArkUI Stack/Row/Flex 布局时",
+  "description": "源为 Compose：Box 内子项靠 Modifier.align(BottomCenter) 定位；Row 中无 weight 的 fillMaxWidth 子项先占满剩余宽，Row 用 height(IntrinsicSize.Min) 配子项 fillMaxHeight+padding(top)；Row 未写对齐（默认 Top）；alignBy(LastBaseline) 对齐文本与自定义组件；各子 Row 各自 padding(horizontal) 而分隔线在行外全宽，标签用 weight+wrapContentWidth(End) 靠右。目标以 Stack(alignContent)、Row/Flex、layoutWeight/flexGrow 实现，转换期禁止编译构建、无法截图核对。",
+  "summary": "三个页面转换者写前都拿到了正确的源码，页面 spec 也基本正确，偏差出在“把 Compose 布局语义翻成 ArkUI 属性”这一步，三处各有侧重。\n（1）详情页：a2h-activity-converter（agent-af4c9e0a37b581a44）读到 spec 中“CartBottomBar: 底部居中”“Stack 底部对齐 Column”（L24）\n和源码 CartBottomBar(modifier = Modifier.align(Alignment.BottomCenter))（L30），思考中也写了“Stack bottom-centered”（L101、L107），\n但 Write（L138）把六层统一放进 Stack({ alignContent: Alignment.TopStart })，购买栏 Column 只写 width/zIndex(4)/transition，没有任何底部定位，\n于是贴在页面顶部。同一转换者 06:56 写的转换报告仍称“底部 Column”，Slice 5 worker 09:28 整文件重写（agent-a4b26313545b92628 L83）和组件接线（agent-af4ef2fa79f6dbad0 L159，只换 JetsnackDivider）都保留原状。\n修复在 patch_detail.py 为该 Column 加 .position({ left: 0, bottom: 0 })（repair L922/L931-L932）。\n（2）筛选头部：转换者（agent-a52154ab6ac5bacf9）读到源码 Text(fillMaxWidth().fillMaxHeight().padding(top = 8.dp, end = 48.dp)) 与 Row(height(IntrinsicSize.Min))（L23），\nspec 只写“IntrinsicSize.Min 高度”“标题水平居中、end 48dp 挤占 + 右侧 Reset 文本按钮”（L16），未提 fillMaxWidth，也没有声明 Reset 可见是有意偏离源码。\n转换者在思考中把 fillMaxWidth 理解成“pushes Reset to end”，改写成 layoutWeight(1)，给 Reset 48×48（L70、L82）；而 Compose Row 按顺序测量，fillMaxWidth 先吃掉剩余宽，Reset 实得 0 不可见。\n同时它明知源码是 fillMaxHeight+top 8，却以 P-20（百分比子项在不定高父级里撑满，L63）为由改成 Row 垂直居中、删去 top 8、不给 Row 定高 48，并在转换报告里记为“视觉偏差 ≤4vp”（L121）；\nSortOption Row 未写 alignItems，沿用 ArkUI 默认 Center，而 Compose Row 默认 Top。因此 Reset 可见属于实现偏差，只有标题居中是转换者自记的有意偏离，不来自 spec。\n修复 patch_filter.py 改为 Reset width(0)+clip、标题 height('100%')+align(Top)+padding top 8、头部 Row height(48)、排序行 alignItems(Top)（repair L1025/L1027-L1028）。\n（3）购物车：转换者（agent-a8aeda7484919b1c4）读到 Cart.kt SummaryItem 各 Row 各自 padding(horizontal = 24.dp)、JetsnackDivider 在行外全宽、Total 标签 weight(1)+padding(end 16)+wrapContentWidth(End)，\n价格行 alignBy(LastBaseline) 对齐 QuantitySelector（L27），DestinationBar.kt 的标题 Row 在 TopAppBar title 槽内、无右内距（L37）；spec 另写“价格行基线对齐”（L23）。\nWrite（L124）与 SummaryItem 重写 Edit（L134）却把全部摘要行和两条分隔线包进一个 padding({ start: 24, end: 24, top: 8 }) 的 Column，分隔线因此缩进、顶部多 8，Total 标签 flexGrow(1) 但无右对齐；\n价格行写成 Flex(ItemAlign.Base)，思考中自认“Approximation OK”未核实自定义组件的基线（L86）；目的地栏 padding({ start: 16, end: 4 }) 来自“padding horizontal 4?”的猜测。\n之后 ItemAlign.Base 在编译修复中被 sed 成 Baseline（agent-a53fd231ae3cada57 L168），start/end 改 left/right（L156），均未改变布局语义；Slice 4 worker 整文件重写（agent-a15a5b99bcce44826 L122）、组件接线（agent-af4ef2fa79f6dbad0 L173-L177）也都保留。\n装机后 Flex Baseline 取不到 QuantitySelector 基线，把数量选择器排到价格下方（repair L867）。修复 patch_cart.py 与 patch_cart2.py 按 Cart.kt:381-436 逐行 padding h24、分隔线全宽、去掉额外 top 8、Total 标签 textAlign(End)，\n价格行改 Row+alignItems(Center)+layoutWeight(1)，目的地栏删去 right 4（repair L689/L691-L697、L879/L881-L887），复核文本锚点误差约 0.5dp（L1247）。\n",
+  "recommendations": [
+    "页面转换阶段写 Stack 叠层时，逐个核对源 Box 子项的 Modifier.align：Stack 用 alignContent(TopStart) 后，凡源为 BottomCenter 等非默认位置的子项都要写成 .position/.align/markAnchor 等实际属性，例如 CartBottomBar 用 position({ left: 0, bottom: 0 })；spec 里的“底部对齐”要落到代码属性，不能只留在注释或转换报告里。",
+    "转换 Compose Row 时按顺序测量推算每个子项的实得宽度：无 weight 的 fillMaxWidth 先占满剩余宽，后续兄弟实得 0，不能改写成 layoutWeight(1)（ArkUI 会先扣除兄弟再分配）；忠实复刻时把后续兄弟设 width(0)+clip。若 spec 描述的可见结果与此不同，要在 spec 或报告中明写为有意偏离。",
+    "遇到 Row(height(IntrinsicSize.Min)) + 子项 fillMaxHeight 时，先算出固有高度（此处为 IconButton 48），给 Row 写显式 height，再让子项 height('100%') 并保留 align(Top)+padding(top)；P-20 只提示不定高父级下的百分比子项会撑满，给父级定高后就可以用，不应删掉源码的偏移。",
+    "Compose Row 默认 verticalAlignment 为 Top，ArkUI Row 默认 Center：源 Row 未写对齐时，ArkUI 侧显式写 alignItems(VerticalAlign.Top)。",
+    "alignBy(LastBaseline) 的一端是自定义组件（如 QuantitySelector）时，不要直接用 Flex ItemAlign.Baseline 了事；单行文本与控件对齐时改用 Row+alignItems(Center)+layoutWeight(1)，并在首次可构建时截图核对两子项的纵向位置。",
+    "转换“每行各自 padding(horizontal)、分隔线在行外全宽”的结构时逐行复制 padding，不把 padding 提到外层容器；weight(1)+wrapContentWidth(End) 写成 layoutWeight/flexGrow 加 textAlign(End)；M3 TopAppBar title 槽内的 Row 不自行补右内距。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-jetnack924/entry/src/main/ets/pages/SnackDetailPage.ets",
+        "since": "2026-09-24T12:35:18.136Z",
+        "at": "2026-09-25T09:28:22.184Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/demo-Jetsnack-android/app/src/main/java/com/example/jetsnack/ui/snackdetail/SnackDetail.kt",
+          "at": "2026-09-24T06:17:37.760Z",
+          "reason": "正常输入：Read 回执第 188 行 CartBottomBar(modifier = Modifier.align(Alignment.BottomCenter))，明确购买栏在 Box 中底部居中（agent-af4c9e0a37b581a44.jsonl:L27/L30）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-jetnack924/spec/baseline/ui/page_0006_SnackDetail.md",
+          "at": "2026-09-24T06:17:28.119Z",
+          "reason": "正常输入：spec 写“CartBottomBar: 底部居中 JetsnackSurface（zIndex=4…）”，转换表写“Stack 底部对齐 Column”，足以指导底部定位（agent-af4c9e0a37b581a44.jsonl:L22/L24）。"
+        },
+        {
+          "key": "agent-af4c9e0a37b581a44.jsonl",
+          "at": "2026-09-24T06:38:22.372Z",
+          "reason": "思考中已写“CartBottomBar: Stack bottom-centered”（L101）并引用 spec 的“Stack 底部对齐”（L107），Write 却把购买栏放进 Stack({ alignContent: Alignment.TopStart })，只写 width/zIndex(4)/transition，没有 align/position，购买栏停在顶部（L138/L139）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-jetnack924/entry/src/main/ets/pages/FilterSheet.ets",
+        "since": "2026-09-24T12:35:18.136Z",
+        "at": "2026-09-25T09:28:22.184Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/demo-Jetsnack-android/app/src/main/java/com/example/jetsnack/ui/home/FilterScreen.kt",
+          "at": "2026-09-24T07:35:03.597Z",
+          "reason": "正常输入：Read 回执给出头部 Row(Modifier.height(IntrinsicSize.Min)) 内 IconButton、Text(fillMaxWidth().fillMaxHeight().padding(top = 8.dp, end = 48.dp))、Reset IconButton，以及 SortOption Row 未写对齐；足以推出 Reset 实得宽 0、标题顶部偏移 8、排序行按 Top 对齐（agent-a52154ab6ac5bacf9.jsonl:L21/L23）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-jetnack924/spec/baseline/ui/page_0007_FilterScreen.md",
+          "at": "2026-09-24T07:34:56.601Z",
+          "reason": "输入有缺口但不构成有意偏离：spec 写“卡片头部 Row（IntrinsicSize.Min 高度）…标题水平居中、end 48dp padding 挤占 + 右侧 Reset 文本按钮”，未提 fillMaxWidth 及其对 Reset 的挤占，也没有声明 Reset 应与源码运行结果不同；Reset 的“存疑”只针对 onClick 语义（agent-a52154ab6ac5bacf9.jsonl:L14/L16）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-jetnack924/.claude/skills/android-ui-graph-query/references/ui-migration-pitfalls.md",
+          "at": "2026-09-24T07:37:51.366Z",
+          "reason": "正常输入：P-20 说明 width/height('100%') 在 wrap-content 或不定高父级中会撑满，提示检查父级是否定高；它不要求删除源码的 top 偏移（agent-a52154ab6ac5bacf9.jsonl:L62/L63）。"
+        },
+        {
+          "key": "agent-a52154ab6ac5bacf9.jsonl",
+          "at": "2026-09-24T07:49:10.809Z",
+          "reason": "思考中把 fillMaxWidth 理解成“pushes Reset to end”，写成 layoutWeight(1) 并给 Reset 48×48；又以 P-20 为由删去 top 8、不给 Row 定高、改为垂直居中（L70、L82）；SortOption Row 未写 alignItems(Top)。Write 落盘这些选择（L84/L85），转换报告自记“标题垂直居中替代源 fillMaxHeight+top8”（L121）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-jetnack924/entry/src/main/ets/pages/CartPage.ets",
+        "since": "2026-09-24T12:35:18.136Z",
+        "at": "2026-09-25T09:28:22.184Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/demo-Jetsnack-android/app/src/main/java/com/example/jetsnack/ui/home/cart/Cart.kt",
+          "at": "2026-09-24T06:17:49.992Z",
+          "reason": "正常输入：Read 回执给出 SummaryItem 各 Row 各自 padding(horizontal = 24.dp)、JetsnackDivider 位于行外、Total 标签 weight(1)+padding(end 16)+wrapContentWidth(End)，以及价格 Text 与 QuantitySelector 以 alignBy(LastBaseline) 对齐（agent-a8aeda7484919b1c4.jsonl:L26/L27）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/demo-Jetsnack-android/app/src/main/java/com/example/jetsnack/ui/home/DestinationBar.kt",
+          "at": "2026-09-24T06:17:58.218Z",
+          "reason": "正常输入：TopAppBar title 槽内 Row{Text(weight 1) + IconButton}，源码未给该 Row 加右内距（agent-a8aeda7484919b1c4.jsonl:L35/L37）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-jetnack924/spec/baseline/ui/page_0004_Cart.md",
+          "at": "2026-09-24T06:17:36.542Z",
+          "reason": "正常输入：spec 写“价格行（8dp 上间距，基线对齐）”，SummaryItem 按顺序列出标题、Subtotal、Shipping（垂直 8dp）、8dp spacer、JetsnackDivider、Total、JetsnackDivider；未写逐行 padding 与 Total 右对齐，但转换任务注明结构权威是 Compose 源码（agent-a8aeda7484919b1c4.jsonl:L1、L21/L23）。"
+        },
+        {
+          "key": "agent-a8aeda7484919b1c4.jsonl",
+          "at": "2026-09-24T06:59:22.629Z",
+          "reason": "Write（L124/L125）与 SummaryItem 重写 Edit（L134/L135）把摘要各行和两条分隔线包进 padding({ start: 24, end: 24, top: 8 }) 的 Column，Total 标签无右对齐；价格行用 Flex ItemAlign.Base，思考中自认“Approximation OK”未核实（L86）；目的地栏 padding({ start: 16, end: 4 }) 来自“padding horizontal 4?”的猜测（L86）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-83dafcc0eaba740bd9c0",
+  "metadata": {
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3-flash"
+      ],
+      "client_versions": [
+        "2.1.281",
+        "2.1.282"
+      ]
+    },
+    "source_set_id": "sources-02e0d2c9b93b47169df1",
+    "environment": [
+      {
+        "name": "android.compile_sdk",
+        "value": "36",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-jetnack924",
+        "at": "2026-09-24T04:41:39.758Z",
+        "ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-aa8e920d18784dcc5.jsonl:L41",
+        "request_ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-aa8e920d18784dcc5.jsonl:L39",
+        "phase": "generation"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "36",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-jetnack924",
+        "at": "2026-09-24T04:41:39.758Z",
+        "ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-aa8e920d18784dcc5.jsonl:L41",
+        "request_ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-aa8e920d18784dcc5.jsonl:L39",
+        "phase": "generation"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "23",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-jetnack924",
+        "at": "2026-09-24T04:41:39.758Z",
+        "ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-aa8e920d18784dcc5.jsonl:L41",
+        "request_ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-aa8e920d18784dcc5.jsonl:L39",
+        "phase": "generation"
+      },
+      {
+        "name": "toolchain.kotlin",
+        "value": "2.3.21",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-jetnack924",
+        "at": "2026-09-24T04:41:39.758Z",
+        "ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-aa8e920d18784dcc5.jsonl:L41",
+        "request_ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-aa8e920d18784dcc5.jsonl:L39",
+        "phase": "generation"
+      },
+      {
+        "name": "toolchain.agp",
+        "value": "9.1.0",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-jetnack924",
+        "at": "2026-09-24T04:41:39.758Z",
+        "ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-aa8e920d18784dcc5.jsonl:L41",
+        "request_ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-aa8e920d18784dcc5.jsonl:L39",
+        "phase": "generation"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.05.00",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-jetnack924",
+        "at": "2026-09-24T04:41:39.758Z",
+        "ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-aa8e920d18784dcc5.jsonl:L41",
+        "request_ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-aa8e920d18784dcc5.jsonl:L39",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-jetnack924",
+        "at": "2026-09-24T04:51:03.791Z",
+        "ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa.jsonl:L200",
+        "request_ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa.jsonl:L199",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-jetnack924",
+        "at": "2026-09-24T04:51:03.791Z",
+        "ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa.jsonl:L200",
+        "request_ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa.jsonl:L199",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-jetnack924\\entry\\src\\main\\ets",
+        "at": "2026-09-24T14:05:15.353Z",
+        "ref": "repair/5072ba6e-d20d-40e9-9730-811760f61591/subagents/agent-aee6e31ae09e2eb3e.jsonl:L118",
+        "request_ref": "repair/5072ba6e-d20d-40e9-9730-811760f61591/subagents/agent-aee6e31ae09e2eb3e.jsonl:L117",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-jetnack924\\entry\\src\\main\\ets",
+        "at": "2026-09-24T14:05:15.353Z",
+        "ref": "repair/5072ba6e-d20d-40e9-9730-811760f61591/subagents/agent-aee6e31ae09e2eb3e.jsonl:L118",
+        "request_ref": "repair/5072ba6e-d20d-40e9-9730-811760f61591/subagents/agent-aee6e31ae09e2eb3e.jsonl:L117",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.8.2",
+    "migration": {
+      "id": "f83745cd-1ce0-46ce-acf5-5a32e07242fa",
+      "project": "Jetsnack",
+      "root_session_ids": [
+        "5072ba6e-d20d-40e9-9730-811760f61591",
+        "f83745cd-1ce0-46ce-acf5-5a32e07242fa"
+      ],
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3-flash"
+      ]
+    }
+  },
+  "revision": "63799a14d87533825a0449dd85653c66535fbb31296be482c5feada55b5522a6"
+}

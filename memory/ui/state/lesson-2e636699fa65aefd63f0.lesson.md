@@ -1,6 +1,6 @@
 # 列表条目以新对象替换或整表重建时，ForEach/Repeat 键要包含会变且需要显示的字段；要稳定键就改为可观察实例原位更新
 
-ID：`lesson-2e636699fa65aefd63f0` · 版本：3
+ID：`lesson-2e636699fa65aefd63f0` · 版本：4
 
 [本主题](index.md)
 
@@ -27,12 +27,14 @@ ForEach 键值不变时复用已有子组件、不再执行条目构建，子组
 3. 对每个修改动作核一遍：动作 → 数组元素是否换成新对象 → ForEach 键是否变化 → 子组件 @Param 绑定的是哪个对象，确认新值能到达条目界面；页面交付自检对每个 ForEach 都做这一核对。
 4. 为消除抖动稳定键时，同步把条目或页模型改为 @ObservedV2 类、需要显示的字段标 @Trace 并原位赋值，@Builder 与子组件 @Param 链传可观察实例或完整 RepeatItem；在测试断言或注释中写明该实例禁止整体替换。
 
-来源支持：3 张卡 · 3 次迁移 · 3 个应用
+来源支持：4 张卡 · 4 次迁移 · 4 个应用
 
 ## 来源（按需复核）
 
 - [case-3045f4019d7d543e18ca](../../../store/cases/case-3045f4019d7d543e18ca/c70e115876997fe84358e56664eb1d94839a3eaa89da89d4b73b2c4e1a132451.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
   卡片版本：`c70e115876997fe84358e56664eb1d94839a3eaa89da89d4b73b2c4e1a132451`
+- [case-5184da257133ebcc7073](../../../store/cases/case-5184da257133ebcc7073/fed0f7aa28d6ee296719c0490ea8a5ff6c8212ba348c192ba1d653410ad7b9a9.json) · 结论：diagnosis, recommendation:2
+  卡片版本：`fed0f7aa28d6ee296719c0490ea8a5ff6c8212ba348c192ba1d653410ad7b9a9`
 - [case-69d294e4afbc31f4ab87](../../../store/cases/case-69d294e4afbc31f4ab87/482f975670aa8a524ba4731d49a54edcd885b84ce6161a9413dadfa75baff5db.json) · 结论：diagnosis, recommendation:3, recommendation:4
   卡片版本：`482f975670aa8a524ba4731d49a54edcd885b84ce6161a9413dadfa75baff5db`
 - [case-b0c0f14a07fefbd87d63](../../../store/cases/case-b0c0f14a07fefbd87d63/062128bbb9142f6226678dcce11c36b96b76244588e2d4a2080c8a72c4036043.json) · 结论：diagnosis, recommendation:2, recommendation:3

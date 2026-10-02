@@ -1,0 +1,285 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-6aedeaac4c252c3c5626",
+  "created_at": "2026-09-25T12:34:58.683253+00:00",
+  "migration_key": "C:\\Users\\hongy\\projects\\_migloop-jetnack924-memory-20260925\\materials",
+  "title": "把 Compose elevation 的 dp 数值直写进 px 单位的 ShadowOptions",
+  "when": "界面实现阶段，把源端 elevation 阴影（Compose Modifier.shadow / Surface 的 elevation 参数）写成 ArkUI .shadow(ShadowOptions) 参数时",
+  "description": "源端用 Compose Modifier.shadow(elevation = N.dp) 或带 elevation: Dp 参数的 Surface 类容器表示投影，目标用 ArkUI .shadow(ShadowOptions) 实现；ShadowOptions 的 radius/offsetX/offsetY 数值按 px 解释，与 width、padding 等缺省 vp 的尺寸属性不同。",
+  "summary": "三个生成期写者写前都拿到了源端 Dp 口径。Base-6b 公共组件库 worker 读 Surface.kt，回执给出 elevation: Dp = 0.dp\n与 .shadow(elevation = elevation, shape = shape, clip = false)（agent-af242dc74bb7c022c.jsonl:L44-L45）；\nFeed 转换器读 page_0002 spec（FilterChip elevation 2dp、SnackImage elevation 1dp）、Filters.kt:124 JetsnackSurface(elevation = 2.dp)\n和 Surface.kt（agent-ad4df3005be176112.jsonl:L14-L15、L29-L31、L81-L83）；Search 转换器读 Categories.kt:101\n.shadow(elevation = 3.dp, shape = CategoryShape)（agent-aab0d698e70126426.jsonl:L22-L26）。\nArkUI ShadowOptions 的 radius/offsetX/offsetY 数值按 px 解释（SDK common.d.ts：\"Blur radius of the shadow and the unit is px\"，\n修复期 agent-a1a9b7ceb51db897a.jsonl:L333-L334 核实）。三个写者都把 dp 数值原样写进这些 px 字段：\nJetsnackSurface 写成 radius = elevation、offsetY = elevation / 2、25% 黑（L48；L183 重构为 shadowOptions() 时数值未变）；\nFeedPage 用一个“Compose shadow(elevation) 视觉近似”常量 SHADOW_RADIUS = 4、offsetY 1，胶囊（elevation 2）与 SnackImage（elevation 1）共用（L102）；\nSearchPage 写 CATEGORY_SHADOW_RADIUS = 3、offsetY 1（L100，L106 保留）。在 3.5px/vp 设备上 elevation 2 的模糊只剩约 0.6vp，\nround-0 判定 FilterScreen 胶囊（FilterChip → JetsnackSurface(elevation 2)）投影几乎不可见，fixer 又旁观发现 Feed 胶囊、Search 分类卡同根偏弱。\n写前输入里没有 ShadowOptions 的单位说明：af242 收到的 arkts-component-builder 规则只有“dp → vp (1:1)”和\n“CardView → Column + .borderRadius() + .shadow()”（agent-af242dc74bb7c022c.jsonl:L7），Feed/Search 转换器的角色定义只写\n“Android dp → HarmonyOS vp”（两份转录各自 L12）。项目映射参考 android-to-harmonyOS-ui-atomic-component-mapping-reference.md\n的 elevation 示例把 8dp 写成 radius 8、offsetY 4，同样不提单位；这三个写者写前都没读它，所以只作为同向潜在缺口记录，不入链。\n偏差位于实现阶段把源端 Dp 翻成 ArkUI 阴影参数这一步：长度属性的 dp→vp 1:1 规则被套到了 px 字段上，写者也没有查 ShadowOptions 类型注释。\n修复：round-0 fixer 在 JetsnackSurface 新增 elevationShadow(ctx, e)：radius = vp2px(e)、offsetY = vp2px(e / 2)、25% 黑，替换 px 直写，\n并把 Feed 胶囊、Search 分类卡改用它（agent-a1a9b7ceb51db897a.jsonl:L257-L262、L267-L272、L296-L301）。\nFeed 的 SnackImage 阴影（elevation 1）到观察截止仍是 SHADOW_RADIUS = 4 的 px 直写，不在本次修复内。\nround-1 判定换算后的固定映射在屏幕上部偏重（Feed 胶囊 2–2.5 倍、Search 分类卡 1.5 倍），fixer 按 Android RenderNode 主光\n（光源在屏幕顶端中央，light_z 500dp）拟合随元素下沿 y 变化的 positionedElevationShadow，Feed/Search 经 onAreaChange 回填位置\n（agent-adad4f7d5c4b0ee25.jsonl:L187-L189、L198-L203、L227-L232）；round-2 仍有 Search 分类卡前两行比 Android 深 1.05–1.29 倍未修。\n这部分光源几何是修复期依据设备截图实测提出的新精度要求：生成期输入没有 Android 运行截图，单层 ShadowOptions 也表达不了随位置变化的\n双层平台阴影，生成期能合理要求的是换算单位并把阴影登记为待截图校准的视觉近似。本卡只把 px 单位归为生成偏差。\n",
+  "recommendations": [
+    "界面实现阶段：把 Compose Modifier.shadow(elevation) 或 Surface elevation 翻成 ArkUI .shadow(ShadowOptions) 时，radius、offsetX、offsetY 的数值按 px 计，要用 uiContext.vp2px() 换算源端 dp 值（例如 elevation 2dp → radius vp2px(2)、offsetY vp2px(1)），不能套用长度属性的 dp→vp 1:1 直写；拿不准的数值参数先查 SDK .d.ts 注释里的单位。",
+    "界面实现阶段：阴影参数按源端每处的 elevation 值推导，并集中到一个共享换算函数（本例 JetsnackSurface 的 elevationShadow），不要在各页面另写与 elevation 无关的“视觉近似”常量。最小检查：grep `.shadow({`，确认每个数字字段都经过 vp2px 或该共享函数。",
+    "界面实现阶段：Compose 平台阴影由环境光和主光两层组成，主光位于屏幕顶端，投影随元素位置变化；单层 ShadowOptions 只能近似，写入时在报告里登记为需截图校准的视觉近似项，不要在注释里写成等价映射。",
+    "迁移规则维护：在组件生成规则“dp → vp (1:1)”和映射参考的 elevation → shadow 示例旁注明 ShadowOptions 数值为 px，示例改用 vp2px 写法，避免写者把长度换算规则用到阴影字段上。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-jetnack924/entry/src/main/ets/components/common/JetsnackSurface.ets",
+        "since": "2026-09-24T12:35:18.136Z",
+        "at": "2026-09-25T09:28:22.184Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/demo-Jetsnack-android/app/src/main/java/com/example/jetsnack/ui/components/Surface.kt",
+          "at": "2026-09-24T07:28:31.206Z",
+          "reason": "正常输入：派工要求 JetsnackSurface.ets ← Surface.kt（agent-af242dc74bb7c022c.jsonl:L1），Read 回执给出 elevation: Dp = 0.dp 与 Surface.kt:55 .shadow(elevation = elevation, shape = shape, clip = false)；源端阴影量纲是 Dp，足以确定写到目标时需要按目标字段单位换算（同转录 L44-L45）。"
+        },
+        {
+          "key": "agent-af242dc74bb7c022c.jsonl",
+          "at": "2026-09-24T07:29:27.185Z",
+          "reason": "读到上述源码后，思考中定为“shadow radius = elevation”（L46），Write 写出 .shadow({ radius: this.elevation, color: '#40000000', offsetY: this.elevation / 2 })，把 Dp 数值原样写进 px 字段（L48-L49）；L183 重构为 shadowOptions() 时数值未变，一直保留到修复前。写前收到的规则只有“dp → vp (1:1)”与“CardView → Column + .borderRadius() + .shadow()”，没有 ShadowOptions 单位说明（L7）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-jetnack924/entry/src/main/ets/pages/FeedPage.ets",
+        "since": "2026-09-24T12:35:18.136Z",
+        "at": "2026-09-25T09:28:22.184Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-jetnack924/spec/baseline/ui/page_0002_Feed.md",
+          "at": "2026-09-24T07:06:22.179Z",
+          "reason": "正常输入：页面 spec 回执写明 FilterChip 为 JetsnackSurface 药丸（elevation 2dp）、SnackItem 圆形图像 elevation 1dp；规格层口径正确（agent-ad4df3005be176112.jsonl:L14-L15）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/demo-Jetsnack-android/app/src/main/java/com/example/jetsnack/ui/components/Filters.kt",
+          "at": "2026-09-24T07:06:55.970Z",
+          "reason": "正常输入：Read 回执给出 FilterChip 的 JetsnackSurface(... elevation = 2.dp)（Filters.kt:119-124；agent-ad4df3005be176112.jsonl:L29-L31）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/demo-Jetsnack-android/app/src/main/java/com/example/jetsnack/ui/components/Surface.kt",
+          "at": "2026-09-24T07:16:19.127Z",
+          "reason": "正常输入：Bash 进入 ui/components 目录 sed 读取 Surface.kt，回执给出 elevation: Dp 与 .shadow(elevation = elevation, shape = shape, clip = false)（agent-ad4df3005be176112.jsonl:L81-L83）。"
+        },
+        {
+          "key": "agent-ad4df3005be176112.jsonl",
+          "at": "2026-09-24T07:29:46.396Z",
+          "reason": "收到 elevation 2dp/1dp 的源码与 spec 后，思考中按 dp 估“radius ~ 2dp*2”并定为 radius 4、offsetY 1（L96、L100）；Write 写出 SHADOW_RADIUS = 4“Compose shadow(elevation) 视觉近似”，胶囊 .shadow({ radius: SHADOW_RADIUS, offsetY: 1, color: SHADOW_COLOR })，SnackImage 共用同一常量，数值以 px 生效且与 elevation 无关（L102-L103）。角色定义只给“Android dp → HarmonyOS vp”（L12）。胶囊阴影保留到 round-0 修复（repair agent-a1a9b7ceb51db897a.jsonl:L269）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "Feed 转换器用 Bash 先 cd 到 Android ui/components 目录，再 sed -n '1,120p' Surface.kt；回执返回 JetsnackSurface 的 elevation: Dp 参数与 .shadow(elevation = elevation, shape = shape, clip = false)，时间早于其 FeedPage Write，支持写者写前已收到源端 Dp 阴影口径。",
+          "evidence": [
+            {
+              "source": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-ad4df3005be176112.jsonl",
+              "line": 81
+            },
+            {
+              "source": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-ad4df3005be176112.jsonl",
+              "line": 83
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-jetnack924/entry/src/main/ets/pages/SearchPage.ets",
+        "since": "2026-09-24T12:35:18.136Z",
+        "at": "2026-09-25T09:28:22.184Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/demo-Jetsnack-android/app/src/main/java/com/example/jetsnack/ui/home/search/Categories.kt",
+          "at": "2026-09-24T07:18:28.249Z",
+          "reason": "正常输入：Read 回执给出 Categories.kt:101 .shadow(elevation = 3.dp, shape = CategoryShape)，源端阴影量纲为 Dp（agent-aab0d698e70126426.jsonl:L22-L26）。"
+        },
+        {
+          "key": "agent-aab0d698e70126426.jsonl",
+          "at": "2026-09-24T07:41:15.196Z",
+          "reason": "读到上述源码后，思考中定为“elevation 3dp → shadow radius ≈ 3”（L75、L98），Write 写出 CATEGORY_SHADOW_RADIUS = 3 与 .shadow({ radius: CATEGORY_SHADOW_RADIUS, offsetY: 1, color: 'rgba(0,0,0,0.26)' })，dp 数值直写进 px 字段（L100-L101）；L106 Edit 保留该阴影，一直到 round-0 修复（repair agent-a1a9b7ceb51db897a.jsonl:L296）。角色定义只给“Android dp → HarmonyOS vp”（L12）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-6aedeaac4c252c3c5626",
+  "metadata": {
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3-flash"
+      ],
+      "client_versions": [
+        "2.1.281",
+        "2.1.282"
+      ]
+    },
+    "source_set_id": "sources-02e0d2c9b93b47169df1",
+    "environment": [
+      {
+        "name": "android.compile_sdk",
+        "value": "36",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-jetnack924",
+        "at": "2026-09-24T04:41:39.758Z",
+        "ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-aa8e920d18784dcc5.jsonl:L41",
+        "request_ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-aa8e920d18784dcc5.jsonl:L39",
+        "phase": "generation"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "36",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-jetnack924",
+        "at": "2026-09-24T04:41:39.758Z",
+        "ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-aa8e920d18784dcc5.jsonl:L41",
+        "request_ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-aa8e920d18784dcc5.jsonl:L39",
+        "phase": "generation"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "23",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-jetnack924",
+        "at": "2026-09-24T04:41:39.758Z",
+        "ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-aa8e920d18784dcc5.jsonl:L41",
+        "request_ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-aa8e920d18784dcc5.jsonl:L39",
+        "phase": "generation"
+      },
+      {
+        "name": "toolchain.kotlin",
+        "value": "2.3.21",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-jetnack924",
+        "at": "2026-09-24T04:41:39.758Z",
+        "ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-aa8e920d18784dcc5.jsonl:L41",
+        "request_ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-aa8e920d18784dcc5.jsonl:L39",
+        "phase": "generation"
+      },
+      {
+        "name": "toolchain.agp",
+        "value": "9.1.0",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-jetnack924",
+        "at": "2026-09-24T04:41:39.758Z",
+        "ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-aa8e920d18784dcc5.jsonl:L41",
+        "request_ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-aa8e920d18784dcc5.jsonl:L39",
+        "phase": "generation"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.05.00",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-jetnack924",
+        "at": "2026-09-24T04:41:39.758Z",
+        "ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-aa8e920d18784dcc5.jsonl:L41",
+        "request_ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-aa8e920d18784dcc5.jsonl:L39",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-jetnack924",
+        "at": "2026-09-24T04:51:03.791Z",
+        "ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa.jsonl:L200",
+        "request_ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa.jsonl:L199",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-jetnack924",
+        "at": "2026-09-24T04:51:03.791Z",
+        "ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa.jsonl:L200",
+        "request_ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa.jsonl:L199",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-jetnack924\\entry\\src\\main\\ets",
+        "at": "2026-09-24T14:05:15.353Z",
+        "ref": "repair/5072ba6e-d20d-40e9-9730-811760f61591/subagents/agent-aee6e31ae09e2eb3e.jsonl:L118",
+        "request_ref": "repair/5072ba6e-d20d-40e9-9730-811760f61591/subagents/agent-aee6e31ae09e2eb3e.jsonl:L117",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-jetnack924\\entry\\src\\main\\ets",
+        "at": "2026-09-24T14:05:15.353Z",
+        "ref": "repair/5072ba6e-d20d-40e9-9730-811760f61591/subagents/agent-aee6e31ae09e2eb3e.jsonl:L118",
+        "request_ref": "repair/5072ba6e-d20d-40e9-9730-811760f61591/subagents/agent-aee6e31ae09e2eb3e.jsonl:L117",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.8.2",
+    "migration": {
+      "id": "f83745cd-1ce0-46ce-acf5-5a32e07242fa",
+      "project": "Jetsnack",
+      "root_session_ids": [
+        "5072ba6e-d20d-40e9-9730-811760f61591",
+        "f83745cd-1ce0-46ce-acf5-5a32e07242fa"
+      ],
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3-flash"
+      ]
+    }
+  },
+  "revision": "cb859fb4cd4eff0d54a717636ac7b7bcac5b5b0656eb9688d0f19721977a84b9"
+}

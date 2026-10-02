@@ -1,6 +1,6 @@
 # ui/state
 
-ArkUI V2 状态刷新与订阅：@Builder 参数（含异步重赋值的数组与对象）、复用开关组件的事件值、页面与共享模型的绑定、共享状态 key 的命名、按状态显隐、事件驱动的重新加载、生命周期回调迁入 ViewModel 时的成对状态、单例 ViewModel 的取消语义与页面加载入口单飞、ForEach 键与子组件刷新、监听的注册与释放、乐观更新与访问器兜底，多个 ViewModel 实例间的跨页面状态（拆单例、弹窗与宿主），稳定列表键与可观察实例原位更新，Repeat 条目的传参
+ArkUI V2 状态刷新与订阅：@Builder 参数（含异步重赋值的数组与对象）、复用开关组件的事件值、页面与共享模型的绑定、共享状态 key 的命名、按状态显隐、事件驱动的重新加载、生命周期回调迁入 ViewModel 时的成对状态、单例 ViewModel 的取消语义与页面加载入口单飞、ForEach 键与子组件刷新、变更信号与 @Monitor 数组路径的配套、可观察字段的判定、监听的注册与释放、乐观更新与访问器兜底，多个 ViewModel 实例间的跨页面状态（拆单例、弹窗与宿主），稳定列表键与可观察实例原位更新，Repeat 条目的传参，离开组合即销毁的复位与框架会恢复的界面状态
 
 [上一级](../index.md)
 
@@ -16,6 +16,9 @@ ArkUI V2 状态刷新与订阅：@Builder 参数（含异步重赋值的数组�
   - 时机：功能实现与页面接线阶段，为可编辑或会重新拉取的列表选定条目更新方式与 ForEach 键时；为消除重建抖动而稳定 ForEach/Repeat 的键时
   - 情境：列表条目编辑（如改名）后以保留 id 的新对象替换，或操作成功后重新请求列表并整表 setList（id 不变、计数等字段变化）；ArkUI 用 ForEach 渲染，并把条目字段作为子组件的 @Param 传入；源端是 Compose 不设 key 的 forEach 加不可变 copy，或 RecyclerView 整表刷新。也包括分页或 Swiper 的页模型是普通 interface，键原先拼入请求状态与数据导致每次加载都销毁重建（抖动），修复者准备把键缩成只含页标识。
   - 例外：更新方式是对 @ObservedV2 条目的 @Trace 字段原地赋值，子组件绑定的仍是同一对象，此时可保留只含 id 的键
+- [判定模型字段不需要可观察之前，先读修改它的方法和显示它的界面](lesson-4d1c980bbbd20275f5c3.lesson.md)
+  - 时机：数据模型阶段，决定模型字段是否需要 @Trace 或其他可观察包装，或在模型注释里写“静态、不会修改”时
+  - 情境：源端模型是不可变数据类，字段值通过 copy 替换变化；只读模型定义看不出哪些字段会变，目标端要决定哪些字段可观察。
 - [复用开关组件的变更事件给出目标值时，把它原样写入该开关的 setter，不改成无参回调再按旧值取反](lesson-40fc63b124b4a44e7a9f.lesson.md)
   - 时机：界面接线阶段，把开关行接入带 @Param isOn 与 @Event onToggleChange(nextState) 的复用组件，并连到 ViewModel 的开关接口时
   - 情境：源端每个开关点击时翻转自身字段、写偏好并刷新自身图标；目标复用组件在事件里给出下一状态，ViewModel 提供 toggleX() 取反接口，页面本地 @Local 与 ViewModel 各持一份开关值。
@@ -31,6 +34,12 @@ ArkUI V2 状态刷新与订阅：@Builder 参数（含异步重赋值的数组�
 - [源页面由事件订阅或结果回调触发的重新加载要迁成订阅；Navigation 根页或 Tab 内容在子页返回时不会再走 aboutToAppear](lesson-b3bb0bc33f4caded78a2.lesson.md)
   - 时机：ViewModel 与页面接线阶段，决定目标页由哪些入口触发数据重新加载时；流程闭环阶段从该页新增 push 子流程时
   - 情境：源 Fragment 用 EventBus @Subscribe（登录成功、记录变化等）和 ActivityResult 回调重拉数据；目标页是 Navigation 下常驻的根内容或 Tab 页，登录、详情等子页用 pushPathByName 覆盖后 pop 返回；工程已有会话状态与应用事件总线。
+- [用 @Monitor 监听数组路径代替 collect 时，生产方按源端以新数组重新赋值发出变更](lesson-0cc7ae4eec0a59086202.lesson.md)
+  - 时机：状态模型与 ViewModel 实现阶段，把 StateFlow/Flow 的列表或消息队列迁成 @Trace 数组，并由消费方用 @Monitor 监听数组属性路径时
+  - 情境：源端以 StateFlow.update { list + item } 一类写法每次发射新列表；目标生产方准备原位 push（出队却重新赋值），消费方以 @Monitor('model.items') 一类路径模拟 collect。
+- [翻译“离开组合即销毁”的状态复位时，同时列出目标框架会替用户恢复的界面状态](lesson-1f6e36f8e8bf9df951da.lesson.md)
+  - 时机：规格提取阶段，把源端 remember（非 rememberSaveable）随组合销毁的状态语义翻译成目标端复位方案时
+  - 情境：源页面离开组合时丢弃全部状态，其中 focused 等由框架事件驱动的字段直接决定显示分支；目标端该页面常驻在 Navigation 的 NavBar（或 Stack、Tabs 保活）中，经 pushPath 进入子页后再系统返回。
 - [规格要求乐观更新时，先本地翻转状态再发请求，回调只用服务端真值回填](lesson-18c8e7630a96d66540bc.lesson.md)
   - 时机：界面交互实现阶段，编写收藏、点赞类切换的点击处理，确定本地状态翻转与服务端调用的先后时
   - 情境：验收要求点击后状态翻转、界面即时刷新（乐观更新）；源端把选中态设置写在网络接口的成功回调里；目标用状态变量驱动图标并异步调用接口。

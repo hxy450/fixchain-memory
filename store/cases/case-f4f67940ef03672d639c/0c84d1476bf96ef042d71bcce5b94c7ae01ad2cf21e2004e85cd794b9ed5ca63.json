@@ -1,0 +1,273 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-f4f67940ef03672d639c",
+  "created_at": "2026-09-25T12:44:00.600344+00:00",
+  "migration_key": "C:\\Users\\hongy\\projects\\_migloop-jetnack924-memory-20260925\\materials",
+  "title": "Compose 端点渐变与 Mirror 平铺译成 ArkUI linearGradient 时周期与平移语义走样：精选卡 stop 未按周期缩放，详情头部平移改成转角、blur 未换单位",
+  "when": "界面实现阶段，把 Compose Brush 渐变（startX/endX 或 start/end 端点、TileMode.Mirror、随滚动或无限动画平移）和 Modifier.blur(dp) 翻译成 ArkUI linearGradient/blur 时",
+  "description": "源端用 Brush.horizontalGradient/linearGradient 以像素或 dp 端点定义渐变长度并配 TileMode.Mirror，靠平移 offset 做视差或无限漂移，可能再叠 blur(40.dp)；目标端 ArkUI linearGradient 只有 angle/direction、按组件自身渐变线长取比例的 stop 和 repeating 开关，需要换算周期、用面板平移代替端点移动。",
+  "summary": "本问题有两个生成写者，都已从源码拿到正确的渐变长度和平铺语义，偏差出在译成 ArkUI 的那一步。\n\nFeedPage 精选大卡（Feed 页面转换者 agent-ad4df3005be176112）：写前 Read 回执给出 Snacks.kt 的\noffsetGradientBackground(width = 6 * cardWidthWithPaddingPx, offset = index*step - scroll/3)（L28/L30），\nBash 读 Gradient.kt 回执给出 horizontalGradient(startX = -offset, endX = width - offset, tileMode = TileMode.Mirror)（L91/L92）；\n页面 spec 也写了“按 6 张卡宽度取色 + 1/3 速度视差”（L14/L15）。\nL93 思考据此推出“首尾同色的 5 色回文 + repeating 就等于 Mirror 平铺，图案每 1116 重复一次”，理解是对的。\n但 ArkUI 的 stop 位置是相对组件自身渐变线长的比例。L96 为保证覆盖把面板宽定成 GRADIENT_PANEL_WIDTH = 1116 + 170 + 32 = 1318，\nstop 仍写 [0, 0.25, 0.5, 0.75, 1]；末 stop 已是 1，repeating 不生效，5 色被拉满 1318vp，周期比源长约 18%，\n也和 phaseX 按 1116 取模的相位对不上（L102 Write，回执 L103）。\n这段 gradientStops 在生成截止前没有被后续写者改过，基线 zip 与 L102 一致。\nFeed 页 spec 只给了“linearGradient + onScroll 偏移近似”这一级方向，面板宽和 stop 都由转换者自己推导。\nround-0 判定指出 stop 相对面板宽 1318、末 stop = 1 导致 repeating 失效（repair agent-a596a44bb17b05147 L343/L345）；\nvisual-fixer 加 GRADIENT_PERIOD_FRACTION = 1116/1318，把 5 个 stop 乘以该比例（agent-a1a9b7ceb51db897a L283/L285、L284/L286）。\n\nSnackDetailPage 头部（详情页转换者 agent-af4c9e0a37b581a44）：写前 Read 回执中，页面 spec 写明\n“tornado1 双色线性渐变刷，刷子原点在 0↔1000dp 区间 50s 线性往复平移（TileMode.Mirror 镜像平铺），再叠 40dp blur”，\n决策表给出“linearGradient + 属性动画（animateTo 循环平移起始点）近似”（L22/L24）；\nSnackDetail.kt 回执给出 start = Offset(o, o)、end = Offset(o + 400f, o + 400f)、TileMode.Mirror 和 .blur(40.dp)（L27/L30）。\n这些输入已经足够说明要做的是一条对角平移、镜像平铺的双色渐变。\n转换者 L101 思考认定“ArkUI linearGradient 没有 tile mode，repeating 只能重复不能镜像”，\nL107 又认定 linearGradient 没有 start/end，于是改为“animate the angle”：angle 135°→495° 50s 往复旋转，\n并写下“Blur 40: .blur(40)”，没有核对 blur 参数单位。L114/L115 把它登记为 P-S5-005（TileMode.Mirror 无对应），\nL138 Write（回执 L139）写出 angle 动画、两色 0/1 stop 和 .blur(40)。\n双色 Mirror 其实可以写成 A→B→A 的回文 stop 加 repeating，再把比显示区大一个周期的面板平移；\n同一生成运行中 Feed 转换者 07:18 就在 L93 推出了这个组合，但 P-S5-005 之后没有人复核：\n主会话派 Slice 5 时直接写“P-S5-005 无限渐变 135↔495 50s 往复近似——保留”（f83745cd L2271），\nSlice 5 worker agent-a4b26313545b92628 按指令保留（L51、L79），L83 重写整文件时加上“不可再逼近的最终近似”；\ncloser agent-af4ef2fa79f6dbad0 只把 FWD-REF 标记改成 [as-built 近似]（L150）。这些后续写者都没有改变本项内容。\n第一天修复查 SDK 类型注释，blur 没写单位（repair L911/L917），patch_detail.py 改成回文 repeating 渐变面板、\n比 Header 大一个 800px 相位周期、沿对角 20vp/s 平移，外层 Stack clip 避免模糊边缘淡出（正文 L922，运行 L931/L932）；\n截图比对认为模糊偏弱、按 px 解释，再改为 blur(vp2px(40))（L943/L944、L950）。\n",
+  "recommendations": [
+    "界面实现时，用 ArkUI linearGradient 复现 Compose 端点渐变：先按源端点距离算出图案周期（本例精选卡 6 × 186 = 1116vp），stop 位置写成“周期 / 该组件渐变线长”的比例；面板为覆盖而加宽时 stop 要按比例缩小，末 stop < 1 时 repeating 才会平铺。写完用“末 stop × 面板长度 = 周期”核一遍，并和相位取模的周期保持一致。",
+    "源端是 TileMode.Mirror 时，把颜色写成首尾同色的回文 stop（双色 A、B 写成 A→B→A）再开 repeating: true，即可得到镜像平铺；端点平移用比显示区大一个相位周期的面板 position/translate 加外层 clip 实现。登记“无等价/降级”之前先试这组做法，不要把平移动效换成转角动画之类的另一种效果。",
+    "Compose Modifier.blur(40.dp) 的半径带 dp 单位，ArkUI blur(value) 的类型注释不写单位；照搬数字前先确认单位（本次修复经截图比对按 px 处理，写成 vp2px(40)）。Compose 默认 BlurredEdgeTreatment.Rectangle 边缘不淡出，ArkUI 侧让模糊层大于显示区，再由外层 clip 裁掉。",
+    "派发二次审视或 slice 工单时，对已登记的 retained 近似项不要在派工里预写“保留”；要求执行者对照同工程已有实现（如 FeedPage 的回文 repeating 渐变）复核可行性后再裁决。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-jetnack924/entry/src/main/ets/pages/FeedPage.ets",
+        "since": "2026-09-24T12:35:18.136Z",
+        "at": "2026-09-25T09:28:22.184Z"
+      },
+      "summary": "Feed 转换者读到 Snacks.kt 的 6 卡宽渐变与 Gradient.kt 的 Mirror 端点语义，并在 L93 正确推出“回文 + repeating 每 1116 平铺”；\nL102 Write 却把 stop 按 0..1 铺在 1318vp 的面板上，repeating 失效，周期拉长约 18%。该片段原样保留到返修前，\nround-0 visual-fixer 用 1116/1318 缩放 5 个 stop 修正。\n",
+      "recommendations": [
+        "界面实现时，面板宽和渐变周期不同，stop 位置按“周期 / 面板渐变线长”缩放，并核对末 stop < 1、repeating 确实平铺。"
+      ],
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-jetnack924/spec/baseline/ui/page_0002_Feed.md",
+          "at": "2026-09-24T07:06:22.179Z",
+          "reason": "正常输入：Read 回执给出 Highlight 卡上部渐变块“offsetGradientBackground 按 6 张卡宽度取色 + 随横向滚动 1/3 速度视差偏移”，决策表允许“linearGradient + onScroll 偏移近似”（agent-ad4df3005be176112.jsonl L14/L15）。spec 只给方向，没有规定面板宽和 stop。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/demo-Jetsnack-android/app/src/main/java/com/example/jetsnack/ui/components/Snacks.kt",
+          "at": "2026-09-24T07:06:55.967Z",
+          "reason": "正常输入：Read 回执给出 HighlightCardWidth = 170.dp、HighlightCardPadding = 16.dp，offsetGradientBackground(width = 6 * cardWidthWithPaddingPx, offset = index * cardWidthWithPaddingPx - scroll/3)（同转录 L28/L30，源码 L350-L361）。据此可确定渐变周期为 6 × 186 = 1116。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/demo-Jetsnack-android/app/src/main/java/com/example/jetsnack/ui/components/Gradient.kt",
+          "at": "2026-09-24T07:17:13.988Z",
+          "reason": "正常输入：Bash 读取回执给出 offsetGradientBackground = Brush.horizontalGradient(colors, startX = -offset, endX = width - offset, tileMode = TileMode.Mirror)（同转录 L91/L92）。端点距离即 width，Mirror 平铺语义明确。"
+        },
+        {
+          "key": "agent-ad4df3005be176112.jsonl",
+          "at": "2026-09-24T07:29:46.396Z",
+          "reason": "偏差输出：L93 思考已写出“回文 stops + repeating 即 Mirror，图案每 1116 平铺”，L96 为覆盖卡宽把面板定为 GRADIENT_PERIOD + 170 + 32 = 1318；L102 Write 的 gradientStops 仍返回 [a,0],[b,0.25],[c,0.5],[b,0.75],[a,1]，挂在 width(GRADIENT_PANEL_WIDTH) 的 linearGradient({direction: Right, repeating: true}) 上，末 stop = 1 使 repeating 不生效，实际周期 1318（同转录 L93、L96、L102/L103）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "Feed 转换者在 components 目录执行 grep -v 注释 Gradient.kt | sed -n '1,120p'，回执返回 offsetGradientBackground 的 horizontalGradient(startX = -offset, endX = width - offset, tileMode = TileMode.Mirror)；紧接的 L93 思考据此推出 Mirror 与 1116 周期。",
+          "evidence": [
+            {
+              "source": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-ad4df3005be176112.jsonl",
+              "line": 91
+            },
+            {
+              "source": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-ad4df3005be176112.jsonl",
+              "line": 92
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-jetnack924/entry/src/main/ets/pages/SnackDetailPage.ets",
+        "since": "2026-09-24T12:35:18.136Z",
+        "at": "2026-09-25T09:28:22.184Z"
+      },
+      "summary": "详情页转换者已收到 spec 的“刷子原点 0↔1000dp 往复平移 + TileMode.Mirror + 40dp blur”和决策“animateTo 循环平移起始点”，\n以及 SnackDetail.kt 的 start/end 端点、400px 刷长、blur(40.dp)。它认定 ArkUI 无 Mirror、无端点，改写成 angle 135°→495° 往复旋转，\nblur 直接写 40 未换单位，并登记为 P-S5-005。之后 Slice 5 派工预写“保留”，重写者和 closer 均未改变该片段。\n第一天修复换成回文 repeating 面板对角平移 + clip，blur 改为 vp2px(40)。\n",
+      "recommendations": [
+        "界面实现时，Mirror 端点渐变用“回文 stop + repeating + 大一个周期的面板平移 + 外层 clip”实现；blur 半径先确认单位（本次按 px，写 vp2px(40)）。",
+        "二次审视 retained 近似项时，派工不预写结论，要求复核同工程已有的可行做法。"
+      ],
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-jetnack924/spec/baseline/ui/page_0006_SnackDetail.md",
+          "at": "2026-09-24T06:17:28.119Z",
+          "reason": "正常输入：Read 回执写明 Header 为 280dp 渐变 Spacer，tornado1 双色线性渐变刷，刷子原点由 rememberInfiniteTransition 在 0↔1000dp 区间 50s 线性往复平移（TileMode.Mirror 镜像平铺），再叠 40dp blur；决策表为“linearGradient + 属性动画（animateTo 循环平移起始点）近似”（agent-af4c9e0a37b581a44.jsonl L22/L24）。要求平移、镜像和 dp 单位都已给出。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/demo-Jetsnack-android/app/src/main/java/com/example/jetsnack/ui/snackdetail/SnackDetail.kt",
+          "at": "2026-09-24T06:17:37.760Z",
+          "reason": "正常输入：Read 回执给出 Header 的 animateFloat(0 → 1000.dp.toPx(), tween 50000 Linear, Reverse)，Brush.linearGradient(tornado1, start = Offset(offset, offset), end = Offset(offset + 400f, offset + 400f), tileMode = TileMode.Mirror)，以及 .blur(40.dp)（同转录 L27/L30，源码 L201-L244）。"
+        },
+        {
+          "key": "agent-af4c9e0a37b581a44.jsonl",
+          "at": "2026-09-24T06:38:22.372Z",
+          "reason": "偏差输出：L101 思考认定“ArkUI linearGradient has no tile mode; repeating 只能重复不能镜像”，L107 认定无 start/end 后改为“animate the angle”，并写“Blur 40: .blur(40)”；L114/L115 登记 P-S5-005“TileMode.Mirror 无对应”。L138 Write 写出 @Local headerGradientAngle = 135、animateTo 50s Alternate 到 495、两色 0/1 stop 的 linearGradient({angle}) 和 .blur(40)（同转录 L101、L107、L114/L115、L138/L139）。平移变成了旋转，dp 半径未换算。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-f4f67940ef03672d639c",
+  "metadata": {
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3-flash"
+      ],
+      "client_versions": [
+        "2.1.281",
+        "2.1.282"
+      ]
+    },
+    "source_set_id": "sources-02e0d2c9b93b47169df1",
+    "environment": [
+      {
+        "name": "android.compile_sdk",
+        "value": "36",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-jetnack924",
+        "at": "2026-09-24T04:41:39.758Z",
+        "ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-aa8e920d18784dcc5.jsonl:L41",
+        "request_ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-aa8e920d18784dcc5.jsonl:L39",
+        "phase": "generation"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "36",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-jetnack924",
+        "at": "2026-09-24T04:41:39.758Z",
+        "ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-aa8e920d18784dcc5.jsonl:L41",
+        "request_ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-aa8e920d18784dcc5.jsonl:L39",
+        "phase": "generation"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "23",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-jetnack924",
+        "at": "2026-09-24T04:41:39.758Z",
+        "ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-aa8e920d18784dcc5.jsonl:L41",
+        "request_ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-aa8e920d18784dcc5.jsonl:L39",
+        "phase": "generation"
+      },
+      {
+        "name": "toolchain.kotlin",
+        "value": "2.3.21",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-jetnack924",
+        "at": "2026-09-24T04:41:39.758Z",
+        "ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-aa8e920d18784dcc5.jsonl:L41",
+        "request_ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-aa8e920d18784dcc5.jsonl:L39",
+        "phase": "generation"
+      },
+      {
+        "name": "toolchain.agp",
+        "value": "9.1.0",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-jetnack924",
+        "at": "2026-09-24T04:41:39.758Z",
+        "ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-aa8e920d18784dcc5.jsonl:L41",
+        "request_ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-aa8e920d18784dcc5.jsonl:L39",
+        "phase": "generation"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.05.00",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-jetnack924",
+        "at": "2026-09-24T04:41:39.758Z",
+        "ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-aa8e920d18784dcc5.jsonl:L41",
+        "request_ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-aa8e920d18784dcc5.jsonl:L39",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-jetnack924",
+        "at": "2026-09-24T04:51:03.791Z",
+        "ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa.jsonl:L200",
+        "request_ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa.jsonl:L199",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-jetnack924",
+        "at": "2026-09-24T04:51:03.791Z",
+        "ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa.jsonl:L200",
+        "request_ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa.jsonl:L199",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-jetnack924\\entry\\src\\main\\ets",
+        "at": "2026-09-24T14:05:15.353Z",
+        "ref": "repair/5072ba6e-d20d-40e9-9730-811760f61591/subagents/agent-aee6e31ae09e2eb3e.jsonl:L118",
+        "request_ref": "repair/5072ba6e-d20d-40e9-9730-811760f61591/subagents/agent-aee6e31ae09e2eb3e.jsonl:L117",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-jetnack924\\entry\\src\\main\\ets",
+        "at": "2026-09-24T14:05:15.353Z",
+        "ref": "repair/5072ba6e-d20d-40e9-9730-811760f61591/subagents/agent-aee6e31ae09e2eb3e.jsonl:L118",
+        "request_ref": "repair/5072ba6e-d20d-40e9-9730-811760f61591/subagents/agent-aee6e31ae09e2eb3e.jsonl:L117",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.8.2",
+    "migration": {
+      "id": "f83745cd-1ce0-46ce-acf5-5a32e07242fa",
+      "project": "Jetsnack",
+      "root_session_ids": [
+        "5072ba6e-d20d-40e9-9730-811760f61591",
+        "f83745cd-1ce0-46ce-acf5-5a32e07242fa"
+      ],
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3-flash"
+      ]
+    }
+  },
+  "revision": "0c84d1476bf96ef042d71bcce5b94c7ae01ad2cf21e2004e85cd794b9ed5ca63"
+}

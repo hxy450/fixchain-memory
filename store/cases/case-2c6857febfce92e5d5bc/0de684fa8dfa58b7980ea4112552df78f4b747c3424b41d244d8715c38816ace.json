@@ -1,0 +1,539 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-2c6857febfce92e5d5bc",
+  "created_at": "2026-09-25T12:24:27.785646+00:00",
+  "migration_key": "C:\\Users\\hongy\\projects\\_migloop-jetnack924-memory-20260925\\materials",
+  "title": "深色模式只落了切换函数：宿主未接线、状态不可观察、颜色构造期缓存、深色资源漏键",
+  "when": "执行编排拆分主题令牌任务并分派入口接线时；主题层实现深浅色切换状态时；组件与页面读取主题色、追加颜色资源时",
+  "description": "源端 Compose 的 JetsnackTheme(darkTheme = isSystemInDarkTheme()) 经 CompositionLocal 下发 Light/Dark 两套 JetsnackColors，组件在组合期读取 JetsnackTheme.colors；目标端同时用模块级 useJetsnackColors()/syncJetsnackColorMode() 与 $r 颜色资源（base 与 dark 限定目录）实现深浅色，由入口 EntryAbility 读取系统 colorMode。",
+  "summary": "规划与派工：base-plan 的 Base-6 行写明 JetsnackTheme\"深浅双主题跟随系统\"（主会话 L1048/L1049），决策 D-006 也批准深色主题迁移（主会话 L776/L778）。\n主会话拆出 Base-6a 时（L1893）要求\"⑤ 主题切换：按系统深浅返回对应套（Configuration 常量方式）\"，同时限定\"产出恰 2 个文件\"，验收写\"纯常量文件无装饰器需求\"，没有指定入口由谁调用同步函数。\n\n主题层：Base-6a（agent-a205396b57f0f4166）读到 Theme.kt（L25/L26）：按 isSystemInDarkTheme() 选套，经 CompositionLocal 下发，组件在组合期读取，系统深浅变化会触发重组。\nL45 写出的 JetsnackTheme.ets 用模块级 `let jetsnackIsDarkTheme = false` 加 syncJetsnackColorMode()，这个状态不被 UI 观察；\n注释只写\"由宿主 EntryAbility 在 onCreate / onConfigurationUpdate 中调用\"，用法示例是 `const colors = useJetsnackColors()`。\nL59 它把 EntryAbility 接线归给后续段，L61 回报\"未接线前 useJetsnackColors() 固定返回 Light 套\"，没有提状态不可观察。\n\n入口接线：主会话 L1907 收到这条回报，L1909 只记\"Base-6a DONE fast\"，L1911 派 Base-6b 时没有提接线。\nF001 派工（L2189）把 EntryAbility.ets 划给 Slice 1，只要求 onCreate 暂存 want.uri 和核对沉浸式。\nSlice 1 worker（agent-ad4cdd5219c627fa0）读到 F001-AC02\"进程冷启动执行一次主题+导航+底栏初始化，标:EntryAbility.onCreate\"（L26/L27）和 base-contracts 里的 syncJetsnackColorMode 导出名（L30/L31），\nL77 只把 AC02 理解成 tab 状态保持，L109 在 onCreate 的 setColorMode 之后只加了 want.uri 暂存。\n生成结束时全工程没有任何地方调用 syncJetsnackColorMode（repair L1526、L1530），用 useJetsnackColors() 的组件在深色下仍是浅色。\n\n组件缓存：Base-6b（agent-af242dc74bb7c022c）读到的 Kotlin 源都在组合期读取 JetsnackTheme.colors（Filters.kt 106–115 行、GradientTintedIconButton.kt 48–69 行、QuantitySelector.kt 47/68 行），\n产出却在字段初始化器或 @Param 默认值里取一次（FilterChip L112、GradientTintedIconButton L119、QuantitySelector L148）。\nFilterSheet 转换器（agent-a52154ab6ac5bacf9）读到 FilterChip.ets 与主题注释（L40/L41），为了深色正确改用 useJetsnackColors()（L54/L60），仍写成 `private colors = useJetsnackColors()`（L84）。\n这种构造期快照即使主题状态可观察也不会重绘。\n\n深色资源：Feed 转换器（agent-ad4df3005be176112）读到 Theme.kt 的 DarkColorPalette（L56/L58：brandSecondary=Ocean2，gradient6_1/6_2 有深色停靠点），\nL98 只在 base color.json 追加 jetsnack_brand_secondary 与 g61/g62 共 7 个浅色键，把深色覆盖推给\"Base-6\"（L89，回执 L138）；\nBase-6 两段派工都不含资源文件，主会话 L1928 收到回执后也没有再派，这 7 个键一直没有深色值。\n该转换器和主会话都没有读写 dark/element/color.json，所以这条只留在文字里，图中不画。\ndark 的 start_window_background 另有来源：SnackDetail 转换器（agent-af4c9e0a37b581a44）只列了 base 目录（L92/L93），\nL120 用 Write 整体覆盖已存在的 dark/element/color.json（回执 L121 为 \"has been updated\"），删掉了模板里的 start_window_background（#000000，Stage 0 L69 读到），\n与提示词中的 append-only 纪律（\"never … delete existing entries\"，L12）相违；深色启动窗因此回落到 base 的 #FFFFFF。\n\n最终修改：patch_dark.py（repair 正文 L1555，执行 L1557/L1563）把深浅状态改为 @ObservedV2/@Trace isDark，EntryAbility 冷启动与 onConfigurationUpdate 调 syncJetsnackColorMode；\npatch_reactive.py（正文 L1618，执行 L1620/L1626）把四个文件的构造期颜色改为渲染期 getter；\nL1596/L1597 在 dark 补 7 个键，L1724/L1730 设 start_window_background（base #FFFAFAFA、dark #FF303030）。\n",
+  "recommendations": [
+    "执行编排：子任务回报某个导出 API 需要宿主调用、未接线前默认值错误时，当轮把它写进拥有该宿主文件的切片派工，并写明调用点；本例应在 Slice 1（F001）派工中要求 EntryAbility 的 onCreate 与 onConfigurationUpdate 调用 syncJetsnackColorMode。",
+    "执行编排：拆分'深浅主题跟随系统'这类令牌任务时，不要把含运行期切换的主题文件标成'纯常量、无装饰器需求'；派工写清两点：深浅状态必须可观察（V2 用 @ObservedV2 + @Trace 或 AppStorageV2），入口由谁读取系统 colorMode。",
+    "主题层实现：Compose 用 isSystemInDarkTheme() + CompositionLocal 时，把深浅状态放进 @ObservedV2 类的 @Trace 字段，导出注释要求消费者在 build() 或 get 访问器中调用 useJetsnackColors()。最小检查：grep 全工程，确认 syncJetsnackColorMode 在 onCreate 和 onConfigurationUpdate 各有一处调用。",
+    "组件与页面实现：源码在组合期读 JetsnackTheme.colors 时，ArkTS 侧在 build() 或 get 访问器里读 useJetsnackColors()，不写进字段初始化器或 @Param 默认值；颜色类 @Param 默认值设为 undefined，在 getter 中回落到主题色。",
+    "页面转换追加颜色资源：为主题色追加 base 键时，同一次按 Theme.kt 的 DarkColorPalette 写 dark/element/color.json 的同名键；写前列出 resources/dark 目录，文件已存在就先 Read 再只追加，不用 Write 整体覆盖。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-jetnack924/entry/src/main/ets/theme/JetsnackTheme.ets",
+        "since": "2026-09-24T12:35:18.136Z",
+        "at": "2026-09-25T09:28:22.184Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-jetnack924/spec/baseline/plans/base-plan.md",
+          "at": "2026-09-24T06:21:38.739Z",
+          "reason": "正常输入：主会话 Read base-plan（f83745cd L1048/L1049），Base-6 行 scope 写'JetsnackTheme 设计令牌（……深浅双主题跟随系统）'，要求主题随系统深浅切换。"
+        },
+        {
+          "key": "f83745cd-1ce0-46ce-acf5-5a32e07242fa.jsonl",
+          "at": "2026-09-24T07:21:05.598Z",
+          "reason": "Base-6a 派工（L1893，回执 L1894）保留了'⑤ useJetsnackColors 按系统深浅返回对应套'，同时限定产出恰 2 个文件、验收写'纯常量文件无装饰器需求'，既没有要求状态可观察，也没有指定入口由谁同步系统 colorMode。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/demo-Jetsnack-android/app/src/main/java/com/example/jetsnack/ui/theme/Theme.kt",
+          "at": "2026-09-24T07:21:23.846Z",
+          "reason": "正常输入：Base-6a Read 回执（agent-a205396b57f0f4166 L25/L26）：JetsnackTheme(darkTheme = isSystemInDarkTheme()) 选 Light/Dark 套，ProvideJetsnackColors 经 CompositionLocal 下发，JetsnackTheme.colors 在组合期读取，系统深浅变化会重组。"
+        },
+        {
+          "key": "agent-a205396b57f0f4166.jsonl",
+          "at": "2026-09-24T07:25:40.560Z",
+          "reason": "L45 Write（回执 L46）写出 `let jetsnackIsDarkTheme: boolean = false`、syncJetsnackColorMode 赋值和 useJetsnackColors 三元返回，普通模块变量不被 UI 观察；注释只要求宿主 EntryAbility 调用，用法示例为 `const colors = useJetsnackColors()`。L59 把接线归后续段，L61 回报'未接线前固定返回 Light 套'，没有提状态不可观察。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-jetnack924/entry/src/main/ets/entryability/EntryAbility.ets",
+        "since": "2026-09-24T12:35:18.136Z",
+        "at": "2026-09-25T09:28:22.184Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-jetnack924/spec/baseline/plans/base-plan.md",
+          "at": "2026-09-24T06:21:38.739Z",
+          "reason": "正常输入：主会话 Read base-plan（f83745cd L1048/L1049），Base-6 行要求 JetsnackTheme'深浅双主题跟随系统'。"
+        },
+        {
+          "key": "f83745cd-1ce0-46ce-acf5-5a32e07242fa.jsonl",
+          "at": "2026-09-24T08:46:22.127Z",
+          "reason": "L1907 收到 Base-6a 回报'EntryAbility 侧调用接线归属后续段（Base-6b+）；未接线前 useJetsnackColors() 固定返回 Light 套'；L1909 只记完成，L1911 派 Base-6b 未提接线。L2189 F001 派工（回执 L2190）把 EntryAbility.ets 划入 Slice 1，却只要求 onCreate 暂存 want.uri 与核对沉浸式，没有列主题同步。",
+          "problem": true
+        },
+        {
+          "key": "agent-ad4cdd5219c627fa0.jsonl",
+          "at": "2026-09-24T09:01:56.542Z",
+          "reason": "读到 F001-AC02'进程冷启动执行一次主题+导航+底栏初始化，标:EntryAbility.onCreate'（L26/L27）和 base-contracts 中的 syncJetsnackColorMode 导出名（L30/L31）；L77 只把 AC02 当成 tab 状态保持，L109 Edit 在 setColorMode(COLOR_MODE_NOT_SET) 之后只加 want.uri 暂存，没有调用主题同步。本节点确认派工缺项传到目标。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-jetnack924/entry/src/main/ets/components/common/FilterChip.ets",
+        "since": "2026-09-24T12:35:18.136Z",
+        "at": "2026-09-25T09:28:22.184Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/demo-Jetsnack-android/app/src/main/java/com/example/jetsnack/ui/theme/Theme.kt",
+          "at": "2026-09-24T07:21:23.846Z",
+          "reason": "正常输入：Base-6a Read 回执（agent-a205396b57f0f4166 L25/L26），主题按系统深浅选套并在组合期下发。"
+        },
+        {
+          "key": "agent-a205396b57f0f4166.jsonl",
+          "at": "2026-09-24T07:25:40.560Z",
+          "reason": "L45 Write 的主题契约：深浅状态为普通 let，用法示例 `const colors = useJetsnackColors()`，没有要求在渲染期读取。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-jetnack924/entry/src/main/ets/theme/JetsnackTheme.ets",
+          "at": "2026-09-24T07:28:08.071Z",
+          "reason": "交付桥梁：Base-6b Read 回执（agent-af242dc74bb7c022c L25/L28）含上述普通 let 状态与快照式用法示例。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/demo-Jetsnack-android/app/src/main/java/com/example/jetsnack/ui/components/Filters.kt",
+          "at": "2026-09-24T07:33:16.589Z",
+          "reason": "正常输入：Base-6b Read 回执（L93/L94），FilterChip 在组合期读 JetsnackTheme.colors.brandSecondary / uiBackground / interactiveSecondary / textSecondary（106–115 行）。"
+        },
+        {
+          "key": "agent-af242dc74bb7c022c.jsonl",
+          "at": "2026-09-24T07:34:58.023Z",
+          "reason": "L112 Write（回执 L113）写出 `private chipColors: JetsnackColorsLite = { brandSecondary: useJetsnackColors().brandSecondary, … }`，字段初始化器在构造时只取一次；L110 思考只核对 ArkTS 语法，没有考虑深浅切换。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 5
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-jetnack924/entry/src/main/ets/components/common/GradientTintedIconButton.ets",
+        "since": "2026-09-24T12:35:18.136Z",
+        "at": "2026-09-25T09:28:22.184Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/demo-Jetsnack-android/app/src/main/java/com/example/jetsnack/ui/theme/Theme.kt",
+          "at": "2026-09-24T07:21:23.846Z",
+          "reason": "正常输入：Base-6a Read 回执（agent-a205396b57f0f4166 L25/L26），主题按系统深浅选套并在组合期下发。"
+        },
+        {
+          "key": "agent-a205396b57f0f4166.jsonl",
+          "at": "2026-09-24T07:25:40.560Z",
+          "reason": "L45 Write 的主题契约：深浅状态为普通 let，用法示例 `const colors = useJetsnackColors()`。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-jetnack924/entry/src/main/ets/theme/JetsnackTheme.ets",
+          "at": "2026-09-24T07:28:08.071Z",
+          "reason": "交付桥梁：Base-6b Read 回执（agent-af242dc74bb7c022c L25/L28）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/demo-Jetsnack-android/app/src/main/java/com/example/jetsnack/ui/components/GradientTintedIconButton.kt",
+          "at": "2026-09-24T07:35:07.311Z",
+          "reason": "正常输入：Base-6b Read 回执（L116/L117），colors 默认参 = JetsnackTheme.colors.interactiveSecondary（48 行，每次组合求值），背景、isDark 混合模式与按压 tint 都在组合期读取（55–69 行）。"
+        },
+        {
+          "key": "agent-af242dc74bb7c022c.jsonl",
+          "at": "2026-09-24T07:35:59.971Z",
+          "reason": "L119 Write（回执 L120）写出 `@Param colors: string[] = useJetsnackColors().interactiveSecondary`，以及 uiBackground / borderColors / textSecondary 三个 private 字段初始化器，均在构造期取值。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 5
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-jetnack924/entry/src/main/ets/components/common/QuantitySelector.ets",
+        "since": "2026-09-24T12:35:18.136Z",
+        "at": "2026-09-25T09:28:22.184Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/demo-Jetsnack-android/app/src/main/java/com/example/jetsnack/ui/theme/Theme.kt",
+          "at": "2026-09-24T07:21:23.846Z",
+          "reason": "正常输入：Base-6a Read 回执（agent-a205396b57f0f4166 L25/L26），主题按系统深浅选套并在组合期下发。"
+        },
+        {
+          "key": "agent-a205396b57f0f4166.jsonl",
+          "at": "2026-09-24T07:25:40.560Z",
+          "reason": "L45 Write 的主题契约：深浅状态为普通 let，用法示例 `const colors = useJetsnackColors()`。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-jetnack924/entry/src/main/ets/theme/JetsnackTheme.ets",
+          "at": "2026-09-24T07:28:08.071Z",
+          "reason": "交付桥梁：Base-6b Read 回执（agent-af242dc74bb7c022c L25/L28）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/demo-Jetsnack-android/app/src/main/java/com/example/jetsnack/ui/components/QuantitySelector.kt",
+          "at": "2026-09-24T07:37:47.875Z",
+          "reason": "正常输入：Base-6b Read 回执（L140/L141），Qty 标签与数量文字在组合期读 JetsnackTheme.colors.textSecondary / textPrimary（47、68 行）。"
+        },
+        {
+          "key": "agent-af242dc74bb7c022c.jsonl",
+          "at": "2026-09-24T07:38:36.324Z",
+          "reason": "L148 Write（回执 L149）写出 `private textPrimary: string = useJetsnackColors().textPrimary` 与 textSecondary 同式字段，构造期取值。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 5
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-jetnack924/entry/src/main/ets/pages/FilterSheet.ets",
+        "since": "2026-09-24T12:35:18.136Z",
+        "at": "2026-09-25T09:28:22.184Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/demo-Jetsnack-android/app/src/main/java/com/example/jetsnack/ui/theme/Theme.kt",
+          "at": "2026-09-24T07:21:23.846Z",
+          "reason": "正常输入：Base-6a Read 回执（agent-a205396b57f0f4166 L25/L26），主题按系统深浅选套并在组合期下发。"
+        },
+        {
+          "key": "agent-a205396b57f0f4166.jsonl",
+          "at": "2026-09-24T07:25:40.560Z",
+          "reason": "L45 Write 的主题契约：深浅状态为普通 let，用法示例 `const colors = useJetsnackColors()`。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-jetnack924/entry/src/main/ets/theme/JetsnackTheme.ets",
+          "at": "2026-09-24T07:35:23.907Z",
+          "reason": "交付桥梁：FilterSheet 转换器 Read 回执（agent-a52154ab6ac5bacf9 L39/L41）含 syncJetsnackColorMode 注释与 `const colors = useJetsnackColors()` 用法。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/demo-Jetsnack-android/app/src/main/java/com/example/jetsnack/ui/components/Filters.kt",
+          "at": "2026-09-24T07:33:16.589Z",
+          "reason": "正常输入：Base-6b Read 回执（agent-af242dc74bb7c022c L93/L94），FilterChip 在组合期读取主题色。"
+        },
+        {
+          "key": "agent-af242dc74bb7c022c.jsonl",
+          "at": "2026-09-24T07:34:58.023Z",
+          "reason": "L112 Write 把 FilterChip 的主题色写进字段初始化器 chipColors，构造期取一次。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-jetnack924/entry/src/main/ets/components/common/FilterChip.ets",
+          "at": "2026-09-24T07:35:23.903Z",
+          "reason": "交付桥梁：FilterSheet 转换器 Read 回执（L38/L40）第 31–34 行即 chipColors 字段初始化器。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/demo-Jetsnack-android/app/src/main/java/com/example/jetsnack/ui/home/FilterScreen.kt",
+          "at": "2026-09-24T07:35:03.597Z",
+          "reason": "正常输入：Read 回执（L21/L23），FilterScreen 在组合期读 JetsnackTheme.colors.uiFloated / uiBackground / brand / iconInteractive（125、161、249、263–265 行）。"
+        },
+        {
+          "key": "agent-a52154ab6ac5bacf9.jsonl",
+          "at": "2026-09-24T07:49:10.809Z",
+          "reason": "L54/L60 为了深色正确决定沿用 FilterChip.ets 的 useJetsnackColors() 写法，L84 Write 写出 `private colors: JetsnackColors = useJetsnackColors()`，构造期快照。本节点确认该写法从组件库传到页面。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 8
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": 6
+        },
+        {
+          "from": 6,
+          "to": 8
+        },
+        {
+          "from": 7,
+          "to": 8
+        },
+        {
+          "from": 8,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-jetnack924/entry/src/main/resources/dark/element/color.json",
+        "since": "2026-09-24T12:35:18.136Z",
+        "at": "2026-09-25T09:28:22.184Z"
+      },
+      "nodes": [
+        {
+          "key": "agent-af4c9e0a37b581a44.jsonl",
+          "at": "2026-09-24T06:35:17.010Z",
+          "reason": "提示词要求共享资源 JSON 先 Read 最新文件、只追加缺失键、不删除既有条目（L12）。它只列了 resources/base（L92/L93），L112 认定 dark 目录需'create'，L120 Write 以 13 个 jetsnack_* 键整体覆盖已存在的 dark/element/color.json（回执 L121 为 has been updated），模板里的 start_window_background（#000000，Stage 0 L69 读到）被删。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [
+    {
+      "key": "C:/Users/hongy/projects/transfer-app-jetnack924/entry/src/main/resources/base/element/color.json",
+      "reason": "已确认修复把 start_window_background 从模板值 #FFFFFF 改为 Android Material 浅色窗口背景 #FFFAFAFA（repair L1723/L1724/L1730）。Stage 0（agent-a513c979f2d41457a）读到 values/themes.xml 父主题 Theme.Material.Light.NoActionBar（L39/L41），把 themes.xml 记为不可映射（L91），保留模板键（L72/L82）。源码没有 #FAFAFA 字面值，派工与 skill 里也未见 windowBackground 到 start_window_background 的映射要求，尚缺'正确输入已给出'的可核依据，暂不归因。"
+    }
+  ],
+  "job": "issue-2c6857febfce92e5d5bc",
+  "metadata": {
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3-flash"
+      ],
+      "client_versions": [
+        "2.1.281",
+        "2.1.282"
+      ]
+    },
+    "source_set_id": "sources-02e0d2c9b93b47169df1",
+    "environment": [
+      {
+        "name": "android.compile_sdk",
+        "value": "36",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-jetnack924",
+        "at": "2026-09-24T04:41:39.758Z",
+        "ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-aa8e920d18784dcc5.jsonl:L41",
+        "request_ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-aa8e920d18784dcc5.jsonl:L39",
+        "phase": "generation"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "36",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-jetnack924",
+        "at": "2026-09-24T04:41:39.758Z",
+        "ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-aa8e920d18784dcc5.jsonl:L41",
+        "request_ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-aa8e920d18784dcc5.jsonl:L39",
+        "phase": "generation"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "23",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-jetnack924",
+        "at": "2026-09-24T04:41:39.758Z",
+        "ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-aa8e920d18784dcc5.jsonl:L41",
+        "request_ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-aa8e920d18784dcc5.jsonl:L39",
+        "phase": "generation"
+      },
+      {
+        "name": "toolchain.kotlin",
+        "value": "2.3.21",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-jetnack924",
+        "at": "2026-09-24T04:41:39.758Z",
+        "ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-aa8e920d18784dcc5.jsonl:L41",
+        "request_ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-aa8e920d18784dcc5.jsonl:L39",
+        "phase": "generation"
+      },
+      {
+        "name": "toolchain.agp",
+        "value": "9.1.0",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-jetnack924",
+        "at": "2026-09-24T04:41:39.758Z",
+        "ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-aa8e920d18784dcc5.jsonl:L41",
+        "request_ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-aa8e920d18784dcc5.jsonl:L39",
+        "phase": "generation"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.05.00",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-jetnack924",
+        "at": "2026-09-24T04:41:39.758Z",
+        "ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-aa8e920d18784dcc5.jsonl:L41",
+        "request_ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-aa8e920d18784dcc5.jsonl:L39",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-jetnack924",
+        "at": "2026-09-24T04:51:03.791Z",
+        "ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa.jsonl:L200",
+        "request_ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa.jsonl:L199",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-jetnack924",
+        "at": "2026-09-24T04:51:03.791Z",
+        "ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa.jsonl:L200",
+        "request_ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa.jsonl:L199",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-jetnack924\\entry\\src\\main\\ets",
+        "at": "2026-09-24T14:05:15.353Z",
+        "ref": "repair/5072ba6e-d20d-40e9-9730-811760f61591/subagents/agent-aee6e31ae09e2eb3e.jsonl:L118",
+        "request_ref": "repair/5072ba6e-d20d-40e9-9730-811760f61591/subagents/agent-aee6e31ae09e2eb3e.jsonl:L117",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-jetnack924\\entry\\src\\main\\ets",
+        "at": "2026-09-24T14:05:15.353Z",
+        "ref": "repair/5072ba6e-d20d-40e9-9730-811760f61591/subagents/agent-aee6e31ae09e2eb3e.jsonl:L118",
+        "request_ref": "repair/5072ba6e-d20d-40e9-9730-811760f61591/subagents/agent-aee6e31ae09e2eb3e.jsonl:L117",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.8.2",
+    "migration": {
+      "id": "f83745cd-1ce0-46ce-acf5-5a32e07242fa",
+      "project": "Jetsnack",
+      "root_session_ids": [
+        "5072ba6e-d20d-40e9-9730-811760f61591",
+        "f83745cd-1ce0-46ce-acf5-5a32e07242fa"
+      ],
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3-flash"
+      ]
+    }
+  },
+  "revision": "0de684fa8dfa58b7980ea4112552df78f4b747c3424b41d244d8715c38816ace"
+}

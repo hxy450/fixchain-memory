@@ -1,6 +1,6 @@
 # app
 
-应用级入口与横切约定：入口 Ability 的初始化、平台级守护与 skills 声明，冷启动链路、启动去向与首屏就绪（含首页启动弹窗的数据源与守卫），账号退出与游客重建的本地清理，多模块（壳 HAP + HAR）的构建常量、跨模块导入与资源归属，Flutter 混合工程的原生桥接与 pub 插件替代，日志写法、应用身份、设置项、平台能力与厂商 SDK 选型（含蓝牙、常驻通知）、地图与定位 SDK 接入，以及媒体保存/导入，以及资源批量转换（values 转 element JSON、drawable 转 media）的输出格式与命名
+应用级入口与横切约定：入口 Ability 的初始化、平台级守护与 skills 声明，冷启动链路、启动去向与首屏就绪（含首页启动弹窗的数据源与守卫），账号退出与游客重建的本地清理，多模块（壳 HAP + HAR）的构建常量、跨模块导入与资源归属，Flutter 混合工程的原生桥接与 pub 插件替代，日志写法、应用身份、设置项、平台能力与厂商 SDK 选型（含蓝牙、常驻通知）、地图与定位 SDK 接入，服务卡片的尺寸取得与 form_config 配置，以及媒体保存/导入，以及资源批量转换（values 转 element JSON、drawable 转 media）的输出格式与命名
 
 [上一级](../index.md)
 
@@ -9,6 +9,7 @@
 - [account](account/index.md) — 账号会话：退出登录、账号注销与游客重建时要清理的本地状态、清理顺序（停同步、清表、广播）与计划验收
 - [bluetooth](bluetooth/index.md) — 蓝牙能力：适配器开关状态的真值、门控与初始加载，分协议连接状态的聚合与成功判定，应用内开关蓝牙的方式，扫描等同步接口的抛错收敛与失败态
 - [entry](entry/index.md) — 入口 Ability（onCreate/onDestroy）：基础设施的显式初始化时机、需要补上的平台级守护，以及 module.json5 中入口 Ability 的 skills（深链）声明
+- [form](form/index.md) — 服务卡片：卡片页可用的事件与写法限制（@form 标注、V1 卡片页的派生值）、由 FormExtensionAbility 取实际尺寸并派生布局档位，以及 form_config 规格、缩放与刷新从源 appwidget-provider 换算
 - [hybrid](hybrid/index.md) — Flutter 与原生混合工程：MethodChannel handler 的方法集合、flutter_boost 宿主页的事件通道、原生路由分流，以及 Flutter pub 插件在 OHOS 上的替代与本地兼容层
 - [identity](identity/index.md) — 应用身份字段从 Android 迁到 AppScope 与入口模块：显示名及其 label 资源、bundleName/vendor、版本号的读取，以及应用级图标引用与 AppScope 图标资源
 - [logging](logging/index.md) — 日志：日志 API 选择与工程内的日志约定，按源端日志调用边界规划日志点与验收，诊断日志上传的打包内容与协议约束

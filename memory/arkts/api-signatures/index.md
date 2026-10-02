@@ -1,6 +1,6 @@
 # arkts/api-signatures
 
-调用 ArkUI 组件属性方法或 SDK 接口时的参数类型、重载匹配与必填参数，成员名、所属类型与返回可空性的声明核对：@BuilderParam 传入 builder 的写法与 this 绑定，intl 格式化等接口不能省略的参数
+调用 ArkUI 组件属性方法或 SDK 接口时的参数类型、重载匹配与必填参数，成员名、所属类型与返回可空性的声明核对，依赖单位、默认行为与作用范围时读到字段注释而不以签名推定等价：@BuilderParam 槽内容的写法（箭头闭包只调用 @Builder、this 绑定），intl 格式化等接口不能省略的参数
 
 [上一级](../index.md)
 
@@ -20,6 +20,10 @@
   - 时机：规格提取阶段定义页面派生状态的类型，或页面实现阶段把派生状态接到 ArkUI 组件属性方法时；批量横切改动中把其他页面的修饰链模板复用到本文件时
   - 情境：源端文本属性（如 contentDescription）的值一部分来自字符串资源、一部分来自运行时拼出的字符串，迁移时准备用一个派生状态（getter / @Computed）同时承载 Resource 与 string，再传给属性方法（如 accessibilityText）。也包括数据类字段为方便声明成 ResourceStr（实际各分支都赋 $r() 资源），再把字段传给 accessibilityText 一类只有分开 string/Resource 重载的属性方法；以及跨文件复用修饰链时，参照页面的字段是 Resource，本文件对应字段却声明为 ResourceStr。
   - 例外：目标方法在当前 SDK 声明中有参数类型覆盖整个联合的重载（例如参数声明为 ResourceStr），此时可直接传入
-- [向子组件 @BuilderParam 传页面自己的 @Builder 时用箭头闭包或尾随闭包，不传 this.xxx 方法引用](lesson-7d643db6ab406ae64c77.lesson.md)
-  - 时机：界面实现或编译修复阶段，把页面 @Builder 内容交给自定义容器组件（Scaffold、Card、下拉刷新一类）的 @BuilderParam，或把原本内联在系统容器尾随闭包里的内容改交给新封装的公共组件，或为消除尾随闭包编译错误改写传参方式时
-  - 情境：目标自定义组件声明了一个或多个 @BuilderParam（如 content、topBar），页面要把自己的 @Builder 方法作为内容传入；该 builder 内部用 this 读取页面状态（如列表数据）或调用其他 builder，名字可能与子组件的 @BuilderParam 相同（如 content）。组件有多个 @BuilderParam 时尾随闭包会报 10905102，需要改成命名参数。仓内可能已有 content: this.XxxBuilder 直传的先例。
+- [依赖 API 的单位、默认行为或作用范围时读到字段注释与语义说明，不以签名存在推定等价](lesson-f5cf8413ebea57f3b415.lesson.md)
+  - 时机：规格提取、实现或接线阶段，准备依赖某个 API 的单位、默认行为、作用范围或字段含义写映射契约或代码时
+  - 情境：当前疑点涉及数值单位（px 还是 vp）、默认是否占位、对子节点的作用、单行与多行的排版语义等；查询只返回同名签名、字段声明行或接口前言，或 grep 过滤掉了紧邻的注释行。
+  - 例外：当前输入已有适用版本下的明确规则或已成立实现时，直接复用，无需重复查证或补写证明材料。
+- [向 @BuilderParam 槽传内容时用箭头闭包只调用 @Builder：不传 this.xxx 方法引用，也不在闭包里直接实例化自定义组件](lesson-7d643db6ab406ae64c77.lesson.md)
+  - 时机：界面实现、收敛改写或编译修复阶段，把页面 @Builder 内容或自定义组件交给自定义容器组件（Scaffold、Card、Surface、下拉刷新一类）的 @BuilderParam，或把原本内联在系统容器尾随闭包里的内容改交给新封装的公共组件，或为消除尾随闭包编译错误改写传参方式时
+  - 情境：目标自定义组件声明了一个或多个 @BuilderParam（如 content、topBar），页面要把自己的 @Builder 方法作为内容传入；该 builder 内部用 this 读取页面状态（如列表数据）或调用其他 builder，名字可能与子组件的 @BuilderParam 相同（如 content）。组件有多个 @BuilderParam 时尾随闭包会报 10905102，需要改成命名参数。仓内可能已有 content: this.XxxBuilder 直传的先例。也包括槽内容本身含自定义组件，如共享容器层层嵌套时把中间层组件直接写在 content: () =&gt; { Inner({...}) } 里，而工程已有 content: () =&gt; { this.xxx() } 的范例。

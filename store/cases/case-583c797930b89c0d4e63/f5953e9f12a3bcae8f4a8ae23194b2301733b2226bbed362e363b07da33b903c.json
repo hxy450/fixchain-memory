@@ -1,0 +1,218 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-583c797930b89c0d4e63",
+  "created_at": "2026-09-25T12:33:35.735775+00:00",
+  "migration_key": "C:\\Users\\hongy\\projects\\_migloop-jetnack924-memory-20260925\\materials",
+  "title": "渐变着色图标按钮：已知 ArkUI 有 blendMode 仍降级为单色，尺寸放大到 40vp，描边减到 1vp",
+  "when": "界面实现阶段，把 Compose 自定义绘制 Modifier（渐变着色、渐变描边）组件转写为 ArkUI，确定图标着色方式、按钮尺寸和描边宽度时",
+  "description": "源组件用 drawWithContent + drawRect(Brush.linearGradient, BlendMode) 给 Icon 叠渐变着色，按深浅主题在 Plus/Darken 间切换；外层 Surface 不设尺寸，由 24dp Icon 撑开；描边来自同目录 Modifier 扩展，宽度取其默认参数。目标 ArkUI 有 blendMode/BlendApplyType 和 linearGradient，但 border 不支持渐变。",
+  "summary": "写前实际收到：Base-6b 公共组件 worker（agent-af242dc74bb7c022c）的派工（L1）只写了\"GradientTintedIconButton.ets ← GradientTintedIconButton.kt（径向/对角渐变描边圆按钮 + icon）\"，没有给尺寸。\n它在 L116/L117 读到源码：Icon 用 diagonalGradientTint(colors, blendMode = isDark ? Darken : Plus) 着色，按压态 tint 换成 textSecondary 双色；\nSurface 只加 clickable/clip/border/background，不设尺寸，Icon 默认 24dp；描边来自 fadeInDiagonalGradientBorder，调用时没传 borderSize。\nL118 思考里它自己写了\"ArkUI supports .blendMode(BlendMode.PLUS / DARKEN)\"，也写了\"Icon default 24dp\"\"Parent size given by caller (modifier)\"。\n接着它以\"blendMode 叠色复杂\"为由，改为\"取渐变首色做 fillColor\"。\nL119 Write（回执 L120）落下三处偏差：`.fillColor(this.pressed ? this.textSecondary : this.colors[0])`，图标变成饱和青单色，不再是 textSecondary 叠渐变；\n外层 `.width/.height(this.iconSize + 16)`，也就是 40×40，思考里没有说明 +16 的来源；描边用 `.padding(1)` 露出 1vp 环。\nL121 思考又写了一句\"BlendMode unused — fine, noted in comment\"。\n写完后它在 L123/L124 读到 Gradient.kt：diagonalGradientTint = drawContent 后 drawRect(linearGradient, blendMode)，fadeInDiagonalGradientBorder 的 borderSize 默认 2.dp；\nL140/L141 又读到 QuantitySelector.kt，两个调用点只传 Modifier.align。之后 L189 Edit（回执 L190）重写了内层 Stack，原样保留 fillColor(colors[0])。\n尺寸行和描边行在 07:38–07:48 的几次 Edit 中都没有改。此后生成期对该文件只有 agent-a53fd231ae3cada57 L255 改了 accessibilityText 的类型转换，与本问题无关。\n所以偏差出在实现环节：源码输入已足以确定着色方式和尺寸，ring 宽度在 Gradient.kt 读入后也已可知。\n规格和派工都没有给出 40vp；Slice 5 页内的内联副本还写成了 24×24。转录里看不出 worker 是否把 Material IconButton 的容器尺寸套了进来，所以只归因为\"无输入依据的尺寸\"。\n\nP-S5-007 的来历：Slice 5 SnackDetail 转换器（agent-af4c9e0a37b581a44）在 06:34:59 登记了这一项（L114/L115），位置是 SnackDetailPage#gradientRingButton，只针对页内的内联副本。\n登记理由是\"ArkUI border 不支持渐变、Icon 无渐变着色\"。它在 L101 思考里直接决定降级，转录中没有看到查 SDK BlendMode 的动作。\nBase-6b 没有读 registry，也没有读 SnackDetailPage，它读的只有主题令牌、models、formatPrice、media 列表和 Kotlin 源。所以这次登记没有传到按钮实现者，两处降级是各自独立做出的。\n\"无 ArkUI 等价\"这句话是后来加的：主会话 L2271 派 Slice 5 Step 3a 时写了\"P-S5-007 渐变描边环降级——保留\"；\nagent-a4b26313545b92628 在 L57 读了公共按钮，按其\"SVG fillColor 无渐变刷\"的注释，于 L87/L88 把登记改成 retained，并写上\"无 ArkUI 等价\"。\n这是目标文件写成之后下游的背书，不是目标偏差的来源，所以没有画进图。\n\n最终修改：repair 第一天，主会话 L600 实测到 HMOS 40×40、Android 24×24。patch_comp.py（正文 L662，执行 L664/L670）把按钮改成 iconSize（24），并在圆内侧画 RING_WIDTH = 2 的环。\nround-0 判定（agent-a596a44bb17b05147 L349/L350、L355/L357）发现数量图标是饱和青，Android 是淡蓝到淡紫。\nfixer（agent-a1a9b7ceb51db897a）在 L321–L329 查了 SDK common.d.ts，确认 BlendMode 有 PLUS=13、DARKEN=17。\n随后 L338–L343 改成：内圆 OFFSCREEN 隔离层里，Icon 按 fillColor(textSecondary) 绘制，上面叠一层 135° 渐变，`.blendMode(isDark ? DARKEN : PLUS, BlendApplyType.FAST)`。\n主会话 L4795/L4796 把 P-S5-007 改为 resolved，并注明原先\"无 ArkUI 等价\"的判断不成立。最终报告 L4815 说明深色 DARKEN 分支没有截图核验。\n同一文件第一天还改了深色 getter（patch_reactive.py，L1618/L1620/L1626），那部分归深色模式问题卡，本卡不再归因。\n",
+  "recommendations": [
+    "界面实现阶段：源组件用 drawWithContent/drawRect(brush, blendMode) 给图标着色时，先在 SDK common.d.ts 里查 BlendMode 和 BlendApplyType。查到对应模式就这样复刻：图标按原内容色绘制，上面叠同尺寸渐变层并设 .blendMode(PLUS 或 DARKEN)，外层用 OFFSCREEN 隔离并裁圆。不要用 fillColor 取渐变首色来代替。已经确认 API 存在，就不能再以'复杂'为理由降级。",
+    "界面实现阶段：组件源码调用同目录的 Modifier 扩展（本例的 fadeInDiagonalGradientBorder、diagonalGradientTint 在 Gradient.kt）时，写组件前先读扩展定义，取出默认参数（borderSize = 2.dp）和绘制顺序。若写完才读到定义，回头核对已写组件里的对应值。",
+    "界面实现阶段：Compose 的 Surface/Box 没设尺寸时，按钮尺寸就是内容尺寸（Icon 默认 24dp），不要自行加 16 或套用 IconButton 的 40/48dp。最小检查：grep 调用方传入的 modifier（本例 QuantitySelector.kt 只传 align），把它和 ArkUI 的 .width/.height 对照。",
+    "页面转换和降级登记阶段：登记'无 ArkUI 等价'前，先在 SDK .d.ts 里 grep 相应的枚举或方法，把查询结论写进登记。后续做'保留'裁决时复核同一条证据，不要照搬组件注释里的降级理由。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-jetnack924/entry/src/main/ets/components/common/GradientTintedIconButton.ets",
+        "since": "2026-09-24T12:35:18.136Z",
+        "at": "2026-09-25T09:28:22.184Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/demo-Jetsnack-android/app/src/main/java/com/example/jetsnack/ui/components/GradientTintedIconButton.kt",
+          "at": "2026-09-24T07:35:07.311Z",
+          "reason": "正常输入：Base-6b 的 Read 回执（agent-af242dc74bb7c022c L116/L117）写明 Icon 用 diagonalGradientTint(colors, blendMode = isDark ? Darken : Plus) 着色，按压态 tint 为 textSecondary 双色（64–78 行）；Surface 只加 clickable/clip/border/background，不设尺寸（79–96 行）。这些足以确定图标要叠渐变混合、按钮尺寸由 24dp Icon 决定。"
+        },
+        {
+          "key": "agent-af242dc74bb7c022c.jsonl",
+          "at": "2026-09-24T07:35:59.971Z",
+          "reason": "L118 思考已写'ArkUI supports .blendMode(BlendMode.PLUS / DARKEN)'和'Icon default 24dp'，但 L119 Write（回执 L120）仍把图标写成 fillColor(colors[0]) 单色，外层写成 iconSize + 16（40vp），描边写成 padding(1)（1vp）。L121 又记'BlendMode unused — fine'。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/demo-Jetsnack-android/app/src/main/java/com/example/jetsnack/ui/components/Gradient.kt",
+          "at": "2026-09-24T07:36:14.403Z",
+          "reason": "正常输入：同一 worker 在首写后读到 Gradient.kt（L123/L124）。diagonalGradientTint 是先 drawContent 再 drawRect(Brush.linearGradient, blendMode)（35–41 行），fadeInDiagonalGradientBorder 的 borderSize 默认 2.dp（71 行）。"
+        },
+        {
+          "key": "agent-af242dc74bb7c022c.jsonl",
+          "at": "2026-09-24T07:44:40.337Z",
+          "reason": "已经读到两份源码之后，L189 Edit（回执 L190）重写了内层 Stack，原样保留 `.fillColor(this.pressed ? this.textSecondary : this.colors[0])`，没有补上渐变混合层。1vp 环和 40vp 尺寸在这次以及 07:48 的两次 Edit（L229/L231）中都没有改。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        },
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-583c797930b89c0d4e63",
+  "metadata": {
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3-flash"
+      ],
+      "client_versions": [
+        "2.1.281",
+        "2.1.282"
+      ]
+    },
+    "source_set_id": "sources-02e0d2c9b93b47169df1",
+    "environment": [
+      {
+        "name": "android.compile_sdk",
+        "value": "36",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-jetnack924",
+        "at": "2026-09-24T04:41:39.758Z",
+        "ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-aa8e920d18784dcc5.jsonl:L41",
+        "request_ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-aa8e920d18784dcc5.jsonl:L39",
+        "phase": "generation"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "36",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-jetnack924",
+        "at": "2026-09-24T04:41:39.758Z",
+        "ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-aa8e920d18784dcc5.jsonl:L41",
+        "request_ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-aa8e920d18784dcc5.jsonl:L39",
+        "phase": "generation"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "23",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-jetnack924",
+        "at": "2026-09-24T04:41:39.758Z",
+        "ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-aa8e920d18784dcc5.jsonl:L41",
+        "request_ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-aa8e920d18784dcc5.jsonl:L39",
+        "phase": "generation"
+      },
+      {
+        "name": "toolchain.kotlin",
+        "value": "2.3.21",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-jetnack924",
+        "at": "2026-09-24T04:41:39.758Z",
+        "ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-aa8e920d18784dcc5.jsonl:L41",
+        "request_ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-aa8e920d18784dcc5.jsonl:L39",
+        "phase": "generation"
+      },
+      {
+        "name": "toolchain.agp",
+        "value": "9.1.0",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-jetnack924",
+        "at": "2026-09-24T04:41:39.758Z",
+        "ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-aa8e920d18784dcc5.jsonl:L41",
+        "request_ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-aa8e920d18784dcc5.jsonl:L39",
+        "phase": "generation"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.05.00",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-jetnack924",
+        "at": "2026-09-24T04:41:39.758Z",
+        "ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-aa8e920d18784dcc5.jsonl:L41",
+        "request_ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa/subagents/agent-aa8e920d18784dcc5.jsonl:L39",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-jetnack924",
+        "at": "2026-09-24T04:51:03.791Z",
+        "ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa.jsonl:L200",
+        "request_ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa.jsonl:L199",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-jetnack924",
+        "at": "2026-09-24T04:51:03.791Z",
+        "ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa.jsonl:L200",
+        "request_ref": "generation/f83745cd-1ce0-46ce-acf5-5a32e07242fa.jsonl:L199",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-jetnack924\\entry\\src\\main\\ets",
+        "at": "2026-09-24T14:05:15.353Z",
+        "ref": "repair/5072ba6e-d20d-40e9-9730-811760f61591/subagents/agent-aee6e31ae09e2eb3e.jsonl:L118",
+        "request_ref": "repair/5072ba6e-d20d-40e9-9730-811760f61591/subagents/agent-aee6e31ae09e2eb3e.jsonl:L117",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-jetnack924\\entry\\src\\main\\ets",
+        "at": "2026-09-24T14:05:15.353Z",
+        "ref": "repair/5072ba6e-d20d-40e9-9730-811760f61591/subagents/agent-aee6e31ae09e2eb3e.jsonl:L118",
+        "request_ref": "repair/5072ba6e-d20d-40e9-9730-811760f61591/subagents/agent-aee6e31ae09e2eb3e.jsonl:L117",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.8.2",
+    "migration": {
+      "id": "f83745cd-1ce0-46ce-acf5-5a32e07242fa",
+      "project": "Jetsnack",
+      "root_session_ids": [
+        "5072ba6e-d20d-40e9-9730-811760f61591",
+        "f83745cd-1ce0-46ce-acf5-5a32e07242fa"
+      ],
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3-flash"
+      ]
+    }
+  },
+  "revision": "f5953e9f12a3bcae8f4a8ae23194b2301733b2226bbed362e363b07da33b903c"
+}
