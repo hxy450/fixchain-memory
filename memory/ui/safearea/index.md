@@ -1,6 +1,6 @@
 # ui/safearea
 
-沉浸式安全区：全屏布局下前景避让与 expandSafeArea 的区别，避让区测量与 px/vp 换算（状态栏、导航指示条），系统栏图标深浅，路由页内容原点与顶部 inset 的消费位置，Compose Scaffold innerPadding 的顶部 inset 由宿主还是子页消费，向子页与页内浮层下发的状态栏高度参数，Tab 宿主按各 Tab 沉浸设置处理顶部安全区，全屏页底部按钮、按键区与贴底弹层的避让及承载层，逐页落实前景避让
+沉浸式安全区：全屏布局下前景避让与 expandSafeArea 的区别，避让区测量与 px/vp 换算（状态栏、导航指示条），系统栏图标深浅，路由页内容原点与顶部 inset 的消费位置，Compose Scaffold innerPadding 的顶部 inset 由宿主还是子页消费，向子页与页内浮层下发的状态栏高度参数，Tab 宿主按各 Tab 沉浸设置处理顶部安全区（含嵌入页状态栏占位的背景延伸与前景避让分层），全屏页底部按钮、按键区与贴底弹层的避让及承载层，逐页落实前景避让
 
 [上一级](../index.md)
 
@@ -10,9 +10,9 @@
   - 时机：规格提取与界面实现阶段，把 Compose Scaffold 的 content padding 与 consumeWindowInsets 拆成宿主壳与各子页（含页内浮层）的顶部避让分工时
   - 情境：源端 Scaffold 不传 topBar、未覆写 contentWindowInsets（默认含状态栏），把 Modifier.padding(innerPadding).consumeWindowInsets(innerPadding) 交给嵌套内容；子页自身可能没有 statusBarsPadding，也可能另写 statusBarsPadding 或 windowInsetsTopHeight(statusBars + N)；目标端全屏窗口，由宿主 padding 或向子页下发状态栏高度来避让。
   - 例外：Scaffold 传了 topBar 或覆写了 contentWindowInsets 时，innerPadding 顶部不再等于状态栏高，按实际来源推导
-- [Tab 宿主按各 Tab 源 Fragment 的沉浸设置分别处理顶部安全区，Activity 只加在底栏的 padding 只加到 tabBar](lesson-48e9408812c28e934db8.lesson.md)
-  - 时机：界面实现与规格阶段，实现 MainActivity/Tab 宿主的内容区内边距，以及转换作为 Tab 子组件的 Fragment 的顶部布局时
-  - 情境：Android MainActivity 只给底栏容器加内边距，ViewPager 全宽；部分 Tab 的 Fragment 调用 ImmersionBar.titleBarMarginTop/fitsSystemWindows 让头图延伸到状态栏，其余 Tab 不沉浸；目标宿主可能给整个 Tabs 统一加顶部安全区和左右 padding，页面规格按 page_type（sub_component）自动标记“无需沉浸”。
+- [Tab 宿主不给承载全部 Tab 的内容区统一加顶部安全区：按各 Tab 源 Fragment 的状态栏处理分别落实，背景延伸的 Tab 只让前景避让；只加在底栏的 padding 只加到 tabBar](lesson-48e9408812c28e934db8.lesson.md)
+  - 时机：规格与界面实现阶段，实现 MainActivity/Tab 宿主的内容区内边距、为作为 Tab 子组件的 Fragment 写安全区分工或转换其顶部布局时
+  - 情境：Android 主 Activity 以 ViewPager/Tab 承载多个 Fragment，主题 windowTranslucentStatus 或 ImmersionBar 让状态栏透明；各 Fragment 自行决定是否为状态栏让位：有的头图直接铺到状态栏下（未设 statusBarView，或用 titleBarMarginTop/fitsSystemWindows），有的在顶对父容器的背景上放一个由 statusBarView 撑成状态栏高度的占位 View（如 v_status_bar），只把前景内容约束在占位之下；MainActivity 的内边距可能只加在底栏容器上。目标用单个宿主页承载各 Tab，可能给承载全部 Tab 槽位的容器统一加顶部 windowTopPadding 和左右 padding；页面规格按 page_type（sub_component）标“无需沉浸”，或把页内占位概括成“安全区由宿主统一处理”。
 - [getWindowAvoidArea 与 windowRect 的数值是 px：写入供 padding 消费的窗口模型前先 px2vp](lesson-cf111aadb8804649b578.lesson.md)
   - 时机：沉浸式安全区实现阶段，在 EntryAbility 或窗口服务里把避让区、窗口尺寸写进共享窗口模型时
   - 情境：目标用 setWindowLayoutFullScreen(true) 全屏，EntryAbility 通过 getWindowAvoidArea 取状态栏、导航条高度，通过 getWindowProperties().windowRect 取窗口尺寸，写入 AppStorageV2 共享的窗口模型；各页把这些值直接放进 .padding()/.height()，按 vp 解释。

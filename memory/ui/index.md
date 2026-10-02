@@ -16,7 +16,7 @@
 - [list](list/index.md) — 列表与宫格：多类型 Adapter 页面的 item 布局与绑定分支（默认态、文案模板、附属子卡），分页加载的并发门闩与刷新互斥，多列 Grid 中占位与跨列项的排布，列表项主副行与空值回退，多组列表的数据源绑定与级联选择，列表项滑动操作（swipeAction）的挂载位置，LazyForEach 改 Repeat.virtualScroll 时的项高度与数据切换核对，按列表区分的排序器
 - [navigation](navigation/index.md) — 页面导航：先确定宿主和注册方式，再处理参数与跳转契约，或返回键与栈变更。
 - [pager](pager/index.md) — 分页与标签容器：ViewPager/ViewPager2 到 Swiper 的页数与手势（禁滑方式）、初始页定位、自绘 tab 与分页的双向联动，自绘日历的翻页容器以及相邻页数据的合并提交与查询范围
-- [safearea](safearea/index.md) — 沉浸式安全区：全屏布局下前景避让与 expandSafeArea 的区别，避让区测量与 px/vp 换算（状态栏、导航指示条），系统栏图标深浅，路由页内容原点与顶部 inset 的消费位置，Compose Scaffold innerPadding 的顶部 inset 由宿主还是子页消费，向子页与页内浮层下发的状态栏高度参数，Tab 宿主按各 Tab 沉浸设置处理顶部安全区，全屏页底部按钮、按键区与贴底弹层的避让及承载层，逐页落实前景避让
+- [safearea](safearea/index.md) — 沉浸式安全区：全屏布局下前景避让与 expandSafeArea 的区别，避让区测量与 px/vp 换算（状态栏、导航指示条），系统栏图标深浅，路由页内容原点与顶部 inset 的消费位置，Compose Scaffold innerPadding 的顶部 inset 由宿主还是子页消费，向子页与页内浮层下发的状态栏高度参数，Tab 宿主按各 Tab 沉浸设置处理顶部安全区（含嵌入页状态栏占位的背景延伸与前景避让分层），全屏页底部按钮、按键区与贴底弹层的避让及承载层，逐页落实前景避让
 - [state](state/index.md) — ArkUI V2 状态刷新与订阅：@Builder 参数（含异步重赋值的数组与对象）、复用开关组件的事件值、页面与共享模型的绑定、共享状态 key 的命名、按状态显隐、事件驱动的重新加载、生命周期回调迁入 ViewModel 时的成对状态、单例 ViewModel 的取消语义与页面加载入口单飞、ForEach 键与子组件刷新、变更信号与 @Monitor 数组路径的配套、可观察字段的判定、监听的注册与释放、乐观更新与访问器兜底，多个 ViewModel 实例间的跨页面状态（拆单例、弹窗与宿主），稳定列表键与可观察实例原位更新，Repeat 条目的传参，离开组合即销毁的复位与框架会恢复的界面状态
 - [text](text/index.md) — 文本展示与排版：源端对展示文本的加工（富文本、链接识别与点击）到 ArkUI Text/StyledString 的转换，Compose 行高到单行文本盒与多行行距的映射，多行末行省略的截断粒度，静态说明页的逐字文案与图文结构，Tab、页面标题、设置行等可见文案的逐字取值，以及字符串资源生成哪些语言限定目录
 - [theme](theme/index.md) — 主题、语义色、排版样式、控件默认样式与 style 继承属性（圆角、高度、渐变、字号）的迁移：宿主、foundation 组件与依赖库隐式提供的外观，Material3 库组件的默认几何与内部留白，深浅主题状态的可观察与渲染期取色、深色资源键的同步追加，多字重字体的注册，被引用 drawable 的取值，Compose Brush 渐变背景，视觉属性逐项取自源布局与适配器，颜色约束的写法，以及按色值与字号选择资源键

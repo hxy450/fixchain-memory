@@ -16,7 +16,7 @@
 - [map](map/index.md) — 地图与定位 SDK 接入（如高德鸿蒙 SDK）：各产品单例的隐私与 Key 初始化、查询参数契约、定位权限组的声明、申请与判定、逆地理编码补行政区名、定位结果到相机与坐标系转换、原生地图组件在 Tab 页中的生命周期与触摸分工
 - [media](media/index.md) — 媒体与文件的用户可见性：SaveButton 安全控件的样式与授权时序、picker 导入导出、沙箱产物的导出、本地文件的播放 URI，以及按序浏览媒体时后续项的图片预取
 - [modules](modules/index.md) — 多模块工程（products 壳 HAP + features/components HAR）的边界：构建模式常量的来源、跨模块导入方式、页面迁入或移动时资源闭包的归属与按模块校验，按页面归属规划业务模块边界（不按功能编号或历史包名）
-- [platform](platform/index.md) — 系统平台能力（后台任务与扩展能力承载类、module.json5 extensionAbilities 的 type 登记，通知与常驻通知的订阅归属、画中画回退、动态取色、地图承载，打开系统设置的显式 Want）的实现、替代与降级，厂商 SDK 鸿蒙版本的查询与选型，以及后台计时的恢复和退出清理
+- [platform](platform/index.md) — 系统平台能力（后台任务与扩展能力承载类、module.json5 extensionAbilities 的 type 登记，通知与常驻通知的订阅归属、画中画回退、动态取色、地图承载，打开系统设置的显式 Want）的实现、替代与降级，激励广告等能力门禁在能力不可用时的入口放行，厂商 SDK 鸿蒙版本的查询与选型，以及后台计时的恢复和退出清理
 - [resources](resources/index.md) — 资源批量转换：Android values 转 element JSON（颜色值形态、数组项结构、引用写法）与 drawable 转 media（反编译 APK 的内联片段、资源文件名合法性），以及宣布资源阶段完成前的产物校验
 - [settings](settings/index.md) — 设置项迁移：偏好键与默认值之外，每个开关的运行期消费方与应用入口；设置保存的副作用（远端、本地缓存、刷新事件）与切换即持久化界面状态的恢复
 - [startup](startup/index.md) — 冷启动链路：闪屏路由与启动去向（固定进主页与按需登录的分工）、各去向页的初始化请求、登录态组合在哪里处理、首屏等待异步装配完成的就绪门，首启尚无已选项时的状态，加载页的可见时长，以及首页启动弹窗按源函数的接口与显示守卫

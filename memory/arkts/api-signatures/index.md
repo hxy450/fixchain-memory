@@ -26,4 +26,4 @@
   - 例外：当前输入已有适用版本下的明确规则或已成立实现时，直接复用，无需重复查证或补写证明材料。
 - [向 @BuilderParam 槽传内容时用箭头闭包只调用 @Builder：不传 this.xxx 方法引用，也不在闭包里直接实例化自定义组件](lesson-7d643db6ab406ae64c77.lesson.md)
   - 时机：界面实现、收敛改写或编译修复阶段，把页面 @Builder 内容或自定义组件交给自定义容器组件（Scaffold、Card、Surface、下拉刷新一类）的 @BuilderParam，或把原本内联在系统容器尾随闭包里的内容改交给新封装的公共组件，或为消除尾随闭包编译错误改写传参方式时
-  - 情境：目标自定义组件声明了一个或多个 @BuilderParam（如 content、topBar），页面要把自己的 @Builder 方法作为内容传入；该 builder 内部用 this 读取页面状态（如列表数据）或调用其他 builder，名字可能与子组件的 @BuilderParam 相同（如 content）。组件有多个 @BuilderParam 时尾随闭包会报 10905102，需要改成命名参数。仓内可能已有 content: this.XxxBuilder 直传的先例。也包括槽内容本身含自定义组件，如共享容器层层嵌套时把中间层组件直接写在 content: () =&gt; { Inner({...}) } 里，而工程已有 content: () =&gt; { this.xxx() } 的范例。
+  - 情境：目标自定义组件声明了一个或多个 @BuilderParam（如 content、topBar），页面要把自己的 @Builder 方法作为内容传入；该 builder 内部用 this 读取页面状态（如列表数据、弹窗变体）或调用其他 builder（如通用弹窗容器 contentBuilder 接收的、按变体分派内容的 builder），名字可能与子组件的 @BuilderParam 相同（如 content）。组件有多个 @BuilderParam 时尾随闭包会报 10905102，需要改成命名参数。仓内可能已有 content: this.XxxBuilder 直传的先例。也包括槽内容本身含自定义组件，如共享容器层层嵌套时把中间层组件直接写在 content: () =&gt; { Inner({...}) } 里，而工程已有 content: () =&gt; { this.xxx() } 的范例。
