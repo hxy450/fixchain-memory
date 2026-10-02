@@ -1,0 +1,146 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-4e62f44d9277d6762dda",
+  "created_at": "2026-10-02T19:15:57.770394+00:00",
+  "migration_key": "fac5eaa9-b1e9-4607-b90e-dadb4e885f36",
+  "title": "把启动门闩的定时兜底随无对等API的采集通道一并悬置，冷启等待事件无人发布",
+  "when": "功能实现阶段，为无对等平台API的采集通道登记延迟占位、划定哪些源端逻辑先行移植时",
+  "description": "源端启动链在缓存为空时等待某个就绪事件（如OaidResultEvent）才继续；该事件的生产者既有依赖平台SDK的采集源，又有与采集结果无关的定时兜底（如Observable.timer(10s)后无条件post事件）；目标平台的采集API尚未确认，需要FWD-REF或延迟域占位。",
+  "summary": "Slice 1 实现者 a82cef586e6a4cdeb 写 AppShellService 前，已读到 F001 规格 AC42：\n\"三源回调汇聚去重 → 计数 3 次或 10s 兜底 → 上送 /app/upOaid + 写 oaid 偏好 + 发 OaidResultEvent 就绪标志\"\n（a82cef586e6a4cdeb.jsonl:L27、L30），也读到 BoxApplication.kt 原文：getOaid 缓存未命中时先起\nObservable.timer(10, SECONDS)，到时 !uploadOaidFlag 即 uploadOaid()，而 uploadOaid 末尾无条件\nEventBus.post(OaidResultEvent())（同转录 L89-L90，源码 :255-260、:339-382）。这些输入正确且足够说明：\n放行冷启门闩只需定时器和事件发布，并不依赖 OAID 采集 API。\n实现者写前推理却认定\"cache miss → HMOS 无 OAID 采集通道 → 无超时兜底也发不了事件\"（L198），\n自行发号 P-S1-104，把三源采集、10s 兜底、/app/upOaid 上送和 OaidResultEvent 发布整体悬置。\nWrite 生成的 getOaid 缓存未命中分支只有 FWD-REF 注释、没有代码，注释还声称冷启 initUser 挂起后由\nMainPage.onResume 未登录分支兜底，\"与 Android『oaid 为空则等事件』的等待语义等价\"（L230-L231）；\n随后登记的 registry 行同样把\"10s 兜底\"列为悬置内容（L246）。规格并未要求悬置兜底，P-S1-104 由实现者首次引入。\nSplashPage 消费端照源等待 OaidResultEvent，而全仓没有发布者，也没有 KEY_OAID 写入者，\n每次冷启只能等 15s progressLoad 走完才 gotoHome。group-closer af9e909e8f153df2a 只把该 FWD-REF\n改标为集成期（af9e909e8f153df2a.jsonl:L224），空分支一直保留到生成结束；ECAT iter1 判别器将其列为工作清单 #14\n（7e49e8dd-9559-4bed-9f6d-0e98e41652c6.jsonl:L420）。\n修复者在 getOaid 缓存未命中分支恢复 OAID_FALLBACK_TIMEOUT_MS=10000 定时器，新增 uploadOaid()：\n置单次锁、清定时器、hilog.warn，并 postEventBus(new OaidResultEvent())（a3a6440cfbe695896.jsonl:L54-L65、L84）。\n该兜底在观察截止时保留；iter2/iter5 又在其上接入真实 OAID 采集。偏差位于\"输入已给出与采集无关的兜底 →\n实现者划定延迟范围\"这一环。\n",
+  "recommendations": [
+    "为采集通道登记延迟占位前，把生产者拆成'采集源'和'门闩放行'两部分：只延迟确实缺 API 的采集源；源端与平台无关的定时兜底（如 10s timer → 无条件 post 就绪事件）按原时长照常移植。",
+    "写 FWD-REF 或延迟域占位时，列出该事件/缓存键的全部等待方，逐一确认占位期间仍有发布者或超时放行；声称'与源等待语义等价'前，先核对源端等待的实际上限。",
+    "最小检查：grep 就绪事件的 post/emit 调用点和缓存键的写入点；若有消费者在等待而生产者为 0，不以占位收尾。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/private/tmp/testAIPPT2/entry/src/main/ets/services/AppShellService.ets",
+        "since": "2026-09-19T05:23:13.192Z",
+        "at": "2026-09-19T15:38:59.780Z"
+      },
+      "nodes": [
+        {
+          "key": "/private/tmp/testAIPPT2/spec/baseline/features/F001-app-shell.md",
+          "at": "2026-09-19T00:01:24.283Z",
+          "reason": "正常输入：实现者 Read 回执含 F001-AC42：三源汇聚 → 计数 3 次或 10s 兜底 → 上送 + 写 oaid 偏好 + 发 OaidResultEvent 就绪标志；同文启动流程写明 OAID 为空时等待该事件后再 initUser。兜底是验收项之一，足以要求移植定时放行（a82cef586e6a4cdeb.jsonl:L27、L30）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/fengyis/AIPPT/app/src/main/java/cn/sanfate/pub/platform/BoxApplication.kt",
+          "at": "2026-09-19T00:06:56.221Z",
+          "reason": "正常输入：实现者 Read 回执给出 getOaid 缓存未命中分支的 Observable.timer(10, SECONDS) → !uploadOaidFlag 时 uploadOaid()，uploadOaid 末尾无条件 EventBus.post(OaidResultEvent())；放行与采集结果无关（a82cef586e6a4cdeb.jsonl:L89-L90）。"
+        },
+        {
+          "key": "a82cef586e6a4cdeb.jsonl",
+          "at": "2026-09-19T00:20:03.585Z",
+          "reason": "实现者已收到上述规格和源码，写前推理认定'无采集通道则无超时兜底也发不了事件'（L198），并自发号 P-S1-104。Write 生成的 getOaid 缓存未命中分支只有 FWD-REF 注释，把 10s 兜底和事件发布一并悬置，还声称与 Android 等待语义等价；这使冷启门闩没有任何生产者（同转录 L230-L231，registry 登记见 L246）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/private/tmp/testAIPPT2/entry/src/main/ets/pages/SplashPage.ets",
+      "reason": "修复只在冷启 OAID 判断处补了消费者说明注释（a3a6440cfbe695896.jsonl:L68-L69），没有改代码。消费端'缓存为空则等 OaidResultEvent'与 Android SplashActivity 的等待语义一致，缺陷在生产侧缺少发布者，已由本卡 AppShellService 图归因，因此不单独成链。"
+    },
+    {
+      "key": "/private/tmp/testAIPPT2/entry/src/main/ets/pages/EntryPage.ets",
+      "reason": "修复把头注释里过时的'SplashPage.gotoHome 现用 HomePage 字面名（P-S1-022 待校准）'改成实际状态（a3a6440cfbe695896.jsonl:L71-L72），只改注释。该注释由主线程在入口装配时写入（2ce43a97-0e6a-4a0f-a9b6-a5aac5a90177.jsonl:L5250），当时属实；P-S1-022 后来在 SplashPage 收口，但注释没有同步。这是同一派工里附带的另一类问题（占位收口后跨文件注释未同步），与 OAID 门闩机制无关，本卡不追其交接链。"
+    }
+  ],
+  "job": "issue-4e62f44d9277d6762dda",
+  "metadata": {
+    "migration": {
+      "project": "DeepAI全能PPT",
+      "server_session_id": "fac5eaa9-b1e9-4607-b90e-dadb4e885f36"
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "c8284269-4179-4eb8-8fec-f36d62f9293e"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "GLM-5.3-Flash",
+        "claude-fable-5-1"
+      ],
+      "client_versions": [
+        "2.1.247",
+        "2.1.278"
+      ]
+    },
+    "source_set_id": "sources-ef87c31e31b2c26de3b2",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/private/tmp/testAIPPT2",
+        "at": "2026-09-18T15:57:46.578Z",
+        "ref": "2ce43a97-0e6a-4a0f-a9b6-a5aac5a90177.jsonl:L1942",
+        "request_ref": "2ce43a97-0e6a-4a0f-a9b6-a5aac5a90177.jsonl:L1940",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/private/tmp/testAIPPT2",
+        "at": "2026-09-18T15:57:46.578Z",
+        "ref": "2ce43a97-0e6a-4a0f-a9b6-a5aac5a90177.jsonl:L1942",
+        "request_ref": "2ce43a97-0e6a-4a0f-a9b6-a5aac5a90177.jsonl:L1940",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.0.1(21)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/private/tmp/testAIPPT2",
+        "at": "2026-09-19T11:26:45.988Z",
+        "ref": "7e49e8dd-9559-4bed-9f6d-0e98e41652c6.jsonl:L434",
+        "request_ref": "7e49e8dd-9559-4bed-9f6d-0e98e41652c6.jsonl:L429",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.0.1(21)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/private/tmp/testAIPPT2",
+        "at": "2026-09-19T15:38:26.603Z",
+        "ref": "eb0d3903-1f96-4816-9e18-bef3d88833f1.jsonl:L339",
+        "request_ref": "eb0d3903-1f96-4816-9e18-bef3d88833f1.jsonl:L337",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.4"
+  },
+  "revision": "17babc234bcf6f94a56eab48f21ba0c942683988b5acd150dbccf968c8eae89b"
+}

@@ -1,0 +1,145 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-5c6be3ec08184086fd79",
+  "created_at": "2026-10-02T19:23:35.275696+00:00",
+  "migration_key": "fac5eaa9-b1e9-4607-b90e-dadb4e885f36",
+  "title": "未核验平台 API 就把 OAID 采集记为「鸿蒙无对等 API」延迟占位",
+  "when": "服务层实现阶段，判断源端设备标识（OAID）采集在鸿蒙能否实现、决定写真实采集还是登记延迟占位时",
+  "description": "源端通过 MSA MiitHelper/厂商通道采集 OAID，写缓存、上送归因接口并发布就绪事件；规格验收项要求目标服务承接这条链，且未把 OAID 列入无等价裁剪项，鸿蒙侧需改用系统标识 API。",
+  "summary": "写前实现者 a82cef586e6a4cdeb 读到的 F001 规格已把 OAID 列为必须实现的行为：AC41/AC42 要求在\nAppShellService 中按三源汇聚、计数或 10s 兜底采集 OAID，写 oaid 偏好、上送 /app/upOaid、发布\nOaidResultEvent；AC57 要求 uploadOaid 上报；接口表注明 OAID 拒绝授权时返回全 0。HARD-DIV 裁决只裁剪\n设备指纹检测项（PD-C6-F001-02）和 applog/umeng 统计 SDK（PD-C8-F001-03），没有把 OAID 判为无等价\n（a82cef586e6a4cdeb.jsonl:L27-L30）。这些输入足以要求实现采集，并在写前核实目标 API。\n实现者在思考中已经想到 @kit.AdsKit 的 identifier.getOAID，也提到 API 不确定时应使用\narkts-knowledge-verifier（L146）。实际却只 grep 了 decision-ledger，结果为空（L170-L171），\n没有查本地 SDK d.ts，也没有读 api-inventory，就以「没有把握的 API 不能写」为由决定延迟（L198）。\n它在 AppShellService.getOaid 的缓存未命中分支写成「HMOS 侧无对等 API 直采路径，待平台标识域 API\n核验后接通」，没有采集，没有上送，也没有发布事件（L230-L231），随后登记 P-S1-104（L246）。\n偏差位于规格到实现之间的平台 API 核验环节。\n之后，group-closer 只把 P-S1-104 的 resolve_by 改为「集成期」（af9e909e8f153df2a.jsonl:L223-L224），\nECAT iter1 只补了 10s 兜底定时器，注释仍写「采集通道悬置（P-S1-104）」（a3a6440cfbe695896.jsonl:L57-L58）；两者都沿用了「无对等 API」的前提。\nECAT iter2 的生成器对本地 SDK 执行 ls 后，即找到 @ohos.identifier.oaid.d.ts\n（7e49e8dd-9559-4bed-9f6d-0e98e41652c6.jsonl:L660-L669）。修复者新建 MiitHelper，并在 AppShellService\n中接入生产者和 /app/upOaid 上送（ad8e9afd29d69b6f9.jsonl:L54-L84、L126-L145）。\nAPP_TRACKING_CONSENT 是鸿蒙 getOAID 的平台前置条件：d.ts:29-30 说明未授权时返回全零串，Android MSA\n没有对应的运行期授权。生成期没有调用 getOAID，所以 module.json5 未声明该权限是上述延迟的连带结果，\n不是另一处独立的生成偏差。iter2 修复者读 d.ts 后披露了这一缺口（module.json5 不在其写域，L28-L43、L90）；\n协调者将其记为 DECISION-GAP-ECAT-IT2-01，原因是同意时机在 Android 没有对应行为（7e49e8dd L1053）。\niter5 按判别器选定的方案 (a) 补齐权限声明、双语 reason、协议门后的检查与申请，以及全零告警\n（a5a6b4ed2eb24ba9e.jsonl:L49-L113）。这部分属于修复中新增的平台要求，本卡不另画链。\n",
+  "recommendations": [
+    "实现阶段，如果规格要求采集或上送某个平台标识（如 OAID），且未把它列为无等价裁剪项，先在本地 SDK 的 ets/api 和 kits 中检索候选模块（如 @ohos.identifier.oaid.d.ts、@kit.AdsKit 的 identifier），或用知识核验 skill 核实，再写真实采集；检索后确实无果才登记延迟占位，并在占位中写明检索范围和结果。",
+    "接入 identifier.getOAID 时同批完成平台前置：在 module.json5 声明 ohos.permission.APP_TRACKING_CONSENT（user_grant，base/en_US reason + usedScene），在隐私协议同意门之后 checkAccessToken/requestPermissionsFromUser，再采集；把返回的全零串视为未授权并保留超时兜底。派工时把 module.json5 和字符串资源一起划入写域。",
+    "收尾或复审阶段遇到「鸿蒙无对等 API」类延迟占位时，先用 SDK d.ts 检索复核前提；不要只改 resolve_by 或补兜底，让未核结论继续保留。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/private/tmp/testAIPPT2/entry/src/main/ets/services/AppShellService.ets",
+        "since": "2026-09-19T05:23:13.192Z",
+        "at": "2026-09-19T15:38:59.780Z"
+      },
+      "nodes": [
+        {
+          "key": "/private/tmp/testAIPPT2/spec/baseline/features/F001-app-shell.md",
+          "at": "2026-09-19T00:01:24.283Z",
+          "reason": "正常输入：Read 回执给出 AC41/AC42：在 AppShellService.collectOaid 实现 OAID 采集→写 oaid 偏好→上送 /app/upOaid→发 OaidResultEvent；AC57 要求 uploadOaid 上报；接口表写明 OAID 拒绝授权返全 0。HARD-DIV 只裁剪指纹检测项和 applog/umeng，没有把 OAID 列为无等价，足以要求实现并核实目标 API（a82cef586e6a4cdeb.jsonl:L27、L30）。"
+        },
+        {
+          "key": "a82cef586e6a4cdeb.jsonl",
+          "at": "2026-09-19T00:20:03.585Z",
+          "reason": "思考中已想到 @kit.AdsKit identifier.getOAID，并提到应使用 knowledge-verifier（L146）。实际只 grep 了 decision-ledger（L170-L171），未查 SDK，便决定「没有把握的 API 不能写」（L198）。Write 在 getOaid 缓存未命中分支写入「HMOS 侧无对等 API 直采路径」注释，不采集、不上送、不发事件（L230-L231），随后登记 P-S1-104（L246）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/private/tmp/testAIPPT2/entry/src/main/ets/MiitHelper.ets",
+      "reason": "ECAT iter2 新建的采集器（ad8e9afd29d69b6f9.jsonl:L54），生成期没有写入历史可连。生成期缺少它，与 AppShellService 分支是同一偏差（实现者以未核实的「无对等 API」登记延迟），已在上图归因；iter5 对它的改动属于下述 APP_TRACKING_CONSENT 修复中新增要求。"
+    },
+    {
+      "key": "/private/tmp/testAIPPT2/entry/src/main/module.json5",
+      "reason": "APP_TRACKING_CONSENT 是采用 identifier.getOAID 后才出现的鸿蒙平台前置条件，Android MSA 无对应要求。生成期没有调用 getOAID，因此没有需要声明该权限的写者。iter2 修复者读 d.ts 后披露缺口，协调者记为 DECISION-GAP-ECAT-IT2-01，iter5 补齐（a5a6b4ed2eb24ba9e.jsonl:L60-L96）。属修复中新增要求，没有可归因的生成期偏差写入。"
+    },
+    {
+      "key": "/private/tmp/testAIPPT2/entry/src/main/resources/base/element/string.json",
+      "reason": "仅为 APP_TRACKING_CONSENT 的 user_grant reason 新增 permission_app_tracking_consent_reason；与 module.json5 同属修复中新增的平台要求，没有生成期偏差来源。"
+    },
+    {
+      "key": "/private/tmp/testAIPPT2/entry/src/main/resources/en_US/element/string.json",
+      "reason": "同 base/string.json：为跟踪授权 reason 补英文键，属修复中新增的平台要求，没有生成期偏差来源。"
+    }
+  ],
+  "job": "issue-5c6be3ec08184086fd79",
+  "metadata": {
+    "migration": {
+      "project": "DeepAI全能PPT",
+      "server_session_id": "fac5eaa9-b1e9-4607-b90e-dadb4e885f36"
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "c8284269-4179-4eb8-8fec-f36d62f9293e"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "GLM-5.3-Flash",
+        "claude-fable-5-1"
+      ],
+      "client_versions": [
+        "2.1.247",
+        "2.1.278"
+      ]
+    },
+    "source_set_id": "sources-ef87c31e31b2c26de3b2",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/private/tmp/testAIPPT2",
+        "at": "2026-09-18T15:57:46.578Z",
+        "ref": "2ce43a97-0e6a-4a0f-a9b6-a5aac5a90177.jsonl:L1942",
+        "request_ref": "2ce43a97-0e6a-4a0f-a9b6-a5aac5a90177.jsonl:L1940",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/private/tmp/testAIPPT2",
+        "at": "2026-09-18T15:57:46.578Z",
+        "ref": "2ce43a97-0e6a-4a0f-a9b6-a5aac5a90177.jsonl:L1942",
+        "request_ref": "2ce43a97-0e6a-4a0f-a9b6-a5aac5a90177.jsonl:L1940",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.0.1(21)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/private/tmp/testAIPPT2",
+        "at": "2026-09-19T11:26:45.988Z",
+        "ref": "7e49e8dd-9559-4bed-9f6d-0e98e41652c6.jsonl:L434",
+        "request_ref": "7e49e8dd-9559-4bed-9f6d-0e98e41652c6.jsonl:L429",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.0.1(21)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/private/tmp/testAIPPT2",
+        "at": "2026-09-19T15:38:26.603Z",
+        "ref": "eb0d3903-1f96-4816-9e18-bef3d88833f1.jsonl:L339",
+        "request_ref": "eb0d3903-1f96-4816-9e18-bef3d88833f1.jsonl:L337",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.4"
+  },
+  "revision": "c810aaf2a57238a08e8f5f345b00a2df05d06d9887d763dc1d4de5f56ff633f0"
+}

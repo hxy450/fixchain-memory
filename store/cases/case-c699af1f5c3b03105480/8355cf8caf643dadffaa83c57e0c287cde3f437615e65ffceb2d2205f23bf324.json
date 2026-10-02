@@ -1,0 +1,266 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-c699af1f5c3b03105480",
+  "created_at": "2026-10-02T19:16:17.361253+00:00",
+  "migration_key": "fac5eaa9-b1e9-4607-b90e-dadb4e885f36",
+  "title": "外部入口接线断开：宿主导航守卫用栈成员检查代替注册校验，快捷方式入口未移交承接者",
+  "when": "入口接线阶段，为推送/快捷方式等外部 want 编写宿主导航执行器守卫，并为只能经外部入口进入的页面安排入口声明与 want 分发的承接者时",
+  "description": "源端目标页只经外部 Intent 进入（桌面快捷方式、本地通知、推送深链），鸿蒙侧由单一 EntryAbility + Navigation pageMap 承载，want 经路由器冷启暂存/热启直跳后 pushPathByName 入栈；规格把入口配置裁定为 module.json5 shortcuts 等静态声明，且这些文件不在页面/切片 worker 的写域内。",
+  "summary": "本问题有两条成因，共同使快捷方式/通知入口在生成结束时不可达。\n一、守卫语义偏离（MainPage、SplashPage）：Slice 11 worker 写前读到的 F011 规格把 Android\nIntentUtils.isIntentAvailable 映射为“路由表命中页注册态校验（NavDestination 注册表）”，AC09 只要求\n目标不可用或路由未命中时不跳转，AC10/AC11 要求冷启暂存后由宿主分发、热启直跳到目标页\n（acd040be473cf5549.jsonl:L31；源码 PushDetailActivity.kt:92-97 见 L41）。它在 slice_11_brief.md 的\ncross_slice 草稿 1/2 中却把守卫写成 navPathStack.getAllPathName().indexOf(pageName) < 0 → return false，\n注释仍称“isIntentAvailable 等价：pageMap 未注册页不分发”（L141）。这是栈成员检查而非注册检查：\n冷启首跳和热启直跳的目标本就不在栈里，ShortCutPage/PushDetailPage 都会被静默拒绝。\nG4 group-closer 读入该 brief（a71c8d1622d95f785.jsonl:L20）后按草稿原样写入 SplashPage.onReady\n（L83-L84）和 MainPage.aboutToAppear（L89-L90），这一守卫保留到生成结束。ECAT g-base 先把 SplashPage\n守卫改为 pageName === '' 才拒绝（aa62bc48f2fd0d279.jsonl:L99），生成器随后对 MainPage 做了同样修改\n（7e49e8dd…jsonl:L335-L337）；因此观察截止时两处守卫的修复时间不同。\n二、快捷方式入口没有承接者（ShortCutPage 及入口配置）：页面转换器 a294a63659e86d2d9 收到的 page_0013 规格\n已列出“桌面快捷方式入口（外部 intent，携带 shortId）/本地通知点击 → 本页（入口）”，并说明桌面快捷方式\n由鸿蒙侧 shortcuts 配置承担（L12）。它写出 ShortCutPage 时把\n“鸿蒙侧由基座（EntryAbility want 解析域）pushPathByName('ShortCutPage', new ShortCutLaunchParam()) 进入”\n写成既成事实注释（L71），却只为页内 3 个桩登记了 P-S1-101..103，入口接线没有登记 forward-ref/handoff\n（L81）。Slice 1 worker a82cef586e6a4cdeb 随后读到 F001 规格：AC53 和 PD-C6-F001-01 明确要求“入口配置归系统\nshortcuts 配置（module.json5，grill #2 裁决）”（L30，L138 再读）。它也读到了 ShortCutPage 的上述声明（L49），\n推理中承认“EntryAbility only pushes SplashPage on cold start”（L288）。按派工纪律，跨文件接线应只列入\ncross_slice_edits 草稿；但它最终的 5 条草稿涉及 EntryAbility，却没有一条覆盖 module.json5 shortcuts 声明\n或 want→ShortCutPage 分发（L458），ShortCutPage 的声明也被原样保留（L284-L290）。它的切片账本\nslice-01-f001.md integration_points 本身也未列入口接线（L23），说明 AC53 的入口配置在“规格 → 切片账本”\n这一步已被漏掉，worker 又未按规格补交。此后 G1 closer 只收到这 5 条草稿；G4 closer 把 EntryAbility 接到\nPushRouter.handleWant 时，只拿到推送深链的草稿 5。生成结束时 module.json5 没有 shortcuts，PushRouter\n没有快捷方式分支，ShortCutPage 只接受 ShortCutLaunchParam 实例。\nECAT 修复新建 shortcuts_config.json 并在 EntryAbility metadata 中引用；PushRouter.handleWant 前置快捷方式分支，\n复用冷启 stash/热启 dispatch；ShortCutPage.onReady 兼容 Map 参数，并把第 21 行注释改为真实路由链\n（a524b2dda03163923.jsonl:L71-L87；aa62bc48f2fd0d279.jsonl:L76-L105）。\n",
+  "recommendations": [
+    "实现宿主导航执行器守卫时，把源端“目标可用”（isIntentAvailable）翻译成“目标已注册/路由命中”的检查，例如 pageMap 注册名集合或 pageName 非空；不要用 navPathStack.getAllPathName() 等栈成员检查。写完后按冷启（栈里只有 Splash）和热启（栈里只有 Main）各推演一次：首跳到 ShortCutPage/PushDetailPage 是否能够入栈。",
+    "写跨切片草稿时，若草稿注释的意图（如“未注册页不分发”）与表达式实际检查的对象不同，应以规格映射行为准修正表达式；草稿会被 closer 原样复制到多个宿主，偏差也会随之复制。",
+    "页面只能经外部入口进入时，切片 worker 应把规格中的入口声明（如 module.json5 shortcuts/skills）、EntryAbility onCreate/onNewWant 的 want 分支、want 参数键（shortId、notification_onclick_channel）以及目标页参数形态，作为 cross_slice_edits 草稿或已登记的 forward-ref 交出。不要只在页面注释里声称“由基座解析进入”。",
+    "规格中带裁决的入口配置 AC（如 F001-AC53）提升到切片账本时，应进入 integration_points/wires，指定写者；closer 验收外部入口页时，应沿“入口声明 → EntryAbility → 路由分支 → pushPathByName”逐段 grep 核实代码存在，并排除注释命中。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/private/tmp/testAIPPT2/entry/src/main/ets/pages/MainPage.ets",
+        "since": "2026-09-19T05:23:13.192Z",
+        "at": "2026-09-19T15:38:59.780Z"
+      },
+      "nodes": [
+        {
+          "key": "/private/tmp/testAIPPT2/spec/baseline/features/F011-push-route.md",
+          "at": "2026-09-19T04:46:41.246Z",
+          "reason": "正常输入：Slice 11 worker 的 Read 回执给出实现映射：isIntentAvailable 对应“路由表命中页注册态校验（NavDestination 注册表/abilityManager）”。AC09 要求目标不可用或路由未命中时不跳转，AC10/AC11 要求冷启暂存后由宿主分发、热启直跳到目标页；这足以说明守卫应检查注册态，而不是栈成员（acd040be473cf5549.jsonl:L29、L31）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/fengyis/AIPPT/push/src/main/java/page/PushDetailActivity.kt",
+          "at": "2026-09-19T04:46:55.799Z",
+          "reason": "正常输入：源码 :92-97 对构造出的目标 Intent 调用 IntentUtils.isIntentAvailable，判断它能否被解析启动，与当前 Activity 栈中是否已有该页无关；热启分支直接 startActivity 目标页（acd040be473cf5549.jsonl:L39、L41）。"
+        },
+        {
+          "key": "acd040be473cf5549.jsonl",
+          "at": "2026-09-19T05:00:36.402Z",
+          "reason": "偏差起点：读到上述规格和源码后，Write 写出 slice_11_brief.md。cross_slice 草稿 1（SplashPage）和草稿 2（MainPage）的 bindNavigator 守卫都写成 getAllPathName().indexOf(pageName) < 0 → return false，草稿 1 注释仍称“isIntentAvailable 等价：pageMap 未注册页不分发（AC09）”。注册校验被写成栈成员检查，冷启首跳和热启直跳的目标都会被拒绝（同转录 L141-L142）。",
+          "problem": true
+        },
+        {
+          "key": "/private/tmp/testAIPPT2/spec/execution/briefs/slice_11_brief.md",
+          "at": "2026-09-19T05:02:31.991Z",
+          "reason": "交付桥梁：G4 group-closer 的 Read 回执中仍包含草稿 1/2 的 getAllPathName 守卫原文（a71c8d1622d95f785.jsonl:L18、L20）。"
+        },
+        {
+          "key": "a71c8d1622d95f785.jsonl",
+          "at": "2026-09-19T05:04:57.863Z",
+          "reason": "传递者：派工要求 closer 亲手落实 Slice 11 草稿 1-5。它按草稿 2 在 MainPage.aboutToAppear 尾部写入 bindNavigator 及同一栈成员守卫（同转录 L89-L90），注释称其用于“F011-AC11 热启直跳宿主”；这个守卫正好会拒绝热启直跳。本链确认的是传递，不另推定其独立失职。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/private/tmp/testAIPPT2/entry/src/main/ets/pages/SplashPage.ets",
+        "since": "2026-09-19T05:23:13.192Z",
+        "at": "2026-09-19T15:38:59.780Z"
+      },
+      "nodes": [
+        {
+          "key": "/private/tmp/testAIPPT2/spec/baseline/features/F011-push-route.md",
+          "at": "2026-09-19T04:46:41.246Z",
+          "reason": "正常输入：同 MainPage 图。isIntentAvailable 映射为注册态校验，AC10 要求冷启暂存由 Splash 宿主消费后分发到目标页（acd040be473cf5549.jsonl:L31）。"
+        },
+        {
+          "key": "acd040be473cf5549.jsonl",
+          "at": "2026-09-19T05:00:36.402Z",
+          "reason": "偏差起点：brief 草稿 1 让 SplashPage.onReady 先 bindNavigator 再 consumePending→dispatchTarget，但执行器守卫是 getAllPathName 栈成员检查。此时栈中只有 SplashPage，冷启暂存的目标必然被拒（同转录 L141）。",
+          "problem": true
+        },
+        {
+          "key": "/private/tmp/testAIPPT2/spec/execution/briefs/slice_11_brief.md",
+          "at": "2026-09-19T05:02:31.991Z",
+          "reason": "交付桥梁：closer 读回执中的草稿 1 原文含该守卫（a71c8d1622d95f785.jsonl:L20）。"
+        },
+        {
+          "key": "a71c8d1622d95f785.jsonl",
+          "at": "2026-09-19T05:04:57.863Z",
+          "reason": "传递者：按草稿 1 在 SplashPage.onReady 的 P-S1-026 处写入 bindNavigator + consumePending，守卫原样照抄（同转录 L83-L84）。ECAT g-base 改为 pageName === '' 时，注释指出原守卫会把冷启暂存的 ShortCutPage/PushDetailPage 误判为不可用（aa62bc48f2fd0d279.jsonl:L99）。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/private/tmp/testAIPPT2/entry/src/main/ets/pages/ShortCutPage.ets",
+        "since": "2026-09-19T05:23:13.192Z",
+        "at": "2026-09-19T15:38:59.780Z"
+      },
+      "nodes": [
+        {
+          "key": "/private/tmp/testAIPPT2/spec/baseline/ui/page_0013_ShortCutActivity.md",
+          "at": "2026-09-18T20:22:08.742Z",
+          "reason": "正常输入：转换器的 Read 回执显示，导航关系把“桌面快捷方式入口（外部 intent，携带 shortId）”和“本地通知点击（notification_onclick_channel==1）”列为本页入口。转换决策写明 createShortCut 不迁移，桌面快捷方式由鸿蒙侧 shortcuts 配置承担（a294a63659e86d2d9.jsonl:L11-L12）。这足以说明入口需要独立的配置与分发承接。"
+        },
+        {
+          "key": "a294a63659e86d2d9.jsonl",
+          "at": "2026-09-18T20:27:53.141Z",
+          "reason": "偏差起点一：Write 生成 ShortCutPage，头注释把尚无人负责的跨文件入口写成既成事实：“鸿蒙侧由基座（EntryAbility want 解析域）pushPathByName('ShortCutPage', new ShortCutLaunchParam()) 进入”，并只按 ShortCutLaunchParam 实例读取参数（同转录 L71-L72）。它随后只为页内桩登记 P-S1-101..103，入口接线没有 forward-ref/handoff 登记（L81）。",
+          "problem": true
+        },
+        {
+          "key": "/private/tmp/testAIPPT2/spec/baseline/features/F001-app-shell.md",
+          "at": "2026-09-19T00:01:24.283Z",
+          "reason": "正常输入：Slice 1 worker 按派工 MUST 精读 F001。回执含 AC53“入口配置由 module.json5 shortcuts 承担（grill 裁决）”及 PD-C6-F001-01 替代路径“入口配置归系统 shortcuts 配置（module.json5，grill #2 裁决）”，L137-L138 又再次读取该段（a82cef586e6a4cdeb.jsonl:L27、L30）。"
+        },
+        {
+          "key": "a82cef586e6a4cdeb.jsonl",
+          "at": "2026-09-19T00:35:27.186Z",
+          "reason": "偏差起点二：它读到了 AC53，也读到 ShortCutPage 的“由基座 want 解析进入”声明（L48-L49），推理中承认 EntryAbility 冷启只 push SplashPage（L288）。它在 L284-L290 编辑 ShortCutPage、收口 P-S1-101..103，原声明保留；最终报告的 cross_slice_edits 共 5 条且含 EntryAbility 项，却没有 module.json5 shortcuts 声明或 want→ShortCutPage 分发的移交（L458）。module.json5 与 EntryAbility 都不在它的写域内，所以这项要求就此没有承接者。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/private/tmp/testAIPPT2/entry/src/main/ets/services/PushRouter.ets",
+      "reason": "修复已确认：aa62bc48f2fd0d279.jsonl:L76-L96 在 handleWant 前置快捷方式分支并抽出 dispatchOrStash。生成期写者 acd040be473cf5549（L114 Write）只收到 F011 推送深链输入，其转录中没有 ShortCut/shortId/notification_onclick 字样；G4 closer 收到的草稿 5 也只覆盖推送。成因应归 ShortCutPage 图中“快捷方式入口未移交”，但未找到该要求交付给 PushRouter 写者的实际交接，因此不画虚构直连。"
+    },
+    {
+      "key": "/private/tmp/testAIPPT2/entry/src/main/module.json5",
+      "reason": "修复已确认：a524b2dda03163923.jsonl:L75-L78、L87 在 EntryAbility metadata 中增加 ohos.ability.shortcuts。生成期三次写入（a852cd8ab5bc28b6a、a5d4228eb06ecb953 的权限，a71c8d1622d95f785 的推送深链 skills）都没有收到 shortcuts 要求。F001-AC53/PD-C6-F001-01 的要求止于 Slice 1 worker，未交到任何 module.json5 写者；成因同 ShortCutPage 图的偏差起点二，缺少可画的写入交接。"
+    },
+    {
+      "key": "/private/tmp/testAIPPT2/entry/src/main/resources/base/profile/shortcuts_config.json",
+      "reason": "生成期不存在、无写者；该文件由 a524b2dda03163923.jsonl:L71-L72 新建。缺失原因同 module.json5：入口配置要求未交付到任何写者，没有历史写入可作为图的终点。"
+    }
+  ],
+  "job": "issue-c699af1f5c3b03105480",
+  "metadata": {
+    "migration": {
+      "project": "DeepAI全能PPT",
+      "server_session_id": "fac5eaa9-b1e9-4607-b90e-dadb4e885f36"
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "c8284269-4179-4eb8-8fec-f36d62f9293e"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "GLM-5.3-Flash",
+        "claude-fable-5-1"
+      ],
+      "client_versions": [
+        "2.1.247",
+        "2.1.278"
+      ]
+    },
+    "source_set_id": "sources-ef87c31e31b2c26de3b2",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/private/tmp/testAIPPT2",
+        "at": "2026-09-18T15:57:46.578Z",
+        "ref": "2ce43a97-0e6a-4a0f-a9b6-a5aac5a90177.jsonl:L1942",
+        "request_ref": "2ce43a97-0e6a-4a0f-a9b6-a5aac5a90177.jsonl:L1940",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/private/tmp/testAIPPT2",
+        "at": "2026-09-18T15:57:46.578Z",
+        "ref": "2ce43a97-0e6a-4a0f-a9b6-a5aac5a90177.jsonl:L1942",
+        "request_ref": "2ce43a97-0e6a-4a0f-a9b6-a5aac5a90177.jsonl:L1940",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.0.1(21)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/private/tmp/testAIPPT2",
+        "at": "2026-09-19T11:26:45.988Z",
+        "ref": "7e49e8dd-9559-4bed-9f6d-0e98e41652c6.jsonl:L434",
+        "request_ref": "7e49e8dd-9559-4bed-9f6d-0e98e41652c6.jsonl:L429",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.0.1(21)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/private/tmp/testAIPPT2",
+        "at": "2026-09-19T15:38:26.603Z",
+        "ref": "eb0d3903-1f96-4816-9e18-bef3d88833f1.jsonl:L339",
+        "request_ref": "eb0d3903-1f96-4816-9e18-bef3d88833f1.jsonl:L337",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.4"
+  },
+  "revision": "8355cf8caf643dadffaa83c57e0c287cde3f437615e65ffceb2d2205f23bf324"
+}

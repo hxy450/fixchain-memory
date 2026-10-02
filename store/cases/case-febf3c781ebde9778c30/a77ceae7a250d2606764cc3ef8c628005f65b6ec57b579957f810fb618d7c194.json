@@ -1,0 +1,291 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-febf3c781ebde9778c30",
+  "created_at": "2026-10-02T19:25:04.675085+00:00",
+  "migration_key": "fac5eaa9-b1e9-4607-b90e-dadb4e885f36",
+  "title": "未查证就判定鸿蒙没有微信 OpenSDK，登录和支付链路只留占位，支付回调类型常量凭记忆写错",
+  "when": "规格提取和计划阶段，判断三方 SDK（微信登录/支付）在鸿蒙侧是否可用，并决定真正接入还是登记占位时",
+  "description": "Android 源用微信 OpenSDK 完成登录与支付：WXAPI.sendReq/handleIntent，WXEntryActivity/WXPayEntryActivity 回调，ConstantsAPI 类型常量。目标工程的 skill 映射表已把微信登录、微信支付分别绑定到 arkts-login、arkts-payment，鸿蒙侧可通过 ohpm 的 @tencent/wechat_open_sdk 接入。",
+  "summary": "写前已有的正确输入：a2h-plan Step 4.1 规定每个 SDK 先查 skill-binding-rules，命中就追加 suggested_skills、不登记 registry；\n映射表把“微信支付→arkts-payment、微信登录→arkts-login”列为命中项。F004 账本 PD-C-WXPAY-F004-01 批准的是\n“鸿蒙版微信 OpenSDK 直连为正选，H5 收银台降级”，可用性留到 grill #2 确认。\n更早在 spec 阶段，page_0023 写者没有查 ohpm 或厂商适配，就写下“鸿蒙端无微信 OpenSDK 官方适配，回调链路不可复刻”；\n它预载的 arkts-library-migration 恰好把“微信 SDK → Skip”列为错误做法。\nplan 阶段，主线程没有查表，在派工内核中直接裁定“HMOS 版 OpenSDK 待入仓 → kind=thirdparty-sdk”。\nplan 子代理读到映射表后仍照抄，登记了 P-S9-001（PayService#createWxOrder）和 P-S2-001。\ngrill #2 把查证推到 execute；execute 派工要求按 P-S9-001 落 marker、禁止自造，并划定单写者边界。\n结果：converter 把 WXCallbackPage 的 sendReq、handleIntent 写成 FWD-REF 空实现；Slice 9 worker 虽载入了\narkts-payment（@tencent/wechat_open_sdk、querySchemes weixin、EntryAbility onCreate/onNewWant 调 handleWant），\n仍在 PayService.createWxOrder 写 PLACEHOLDER。oh-package 依赖、module.json5 querySchemes 和 EntryAbility 回调路由\n一直没有写者负责。同一 worker 补支付分支时又凭记忆写 WX_TYPE_PAY_BY_WX = 3，实际 SDK 值是 5，支付回调会被静默丢弃。\nECAT iter0 判别器发现这些占位和死通道（60a9f2a0…jsonl:L138），iter1/iter2 修复：依赖改为本地 HAR wechat_open_sdk-1.0.16，\n实装 createWXAPI/sendReq/handleWant 及 onResp 分派（type 1 授权 / type 5 支付）；PayService 去掉占位；\nEntryAbility 通过 routeWant 先把 Want 交给微信回调；module.json5 增加 querySchemes weixin/wxopensdk\n（ada51cd8034d45d89.jsonl:L79-L139）。\n",
+  "recommendations": [
+    "规格提取阶段：对闭源三方 SDK 写“鸿蒙无等价”之前，先按 arkts-library-migration 查 ohpm（如 @tencent/wechat_open_sdk）和厂商鸿蒙版状态，把查询结果写进 spec；没有查证时只能标“待确认”，不能写成转换决策。",
+    "计划阶段：每个 SDK 都按 skill-binding-rules 查表。微信登录/支付命中 arkts-login/arkts-payment 时不登记 thirdparty-sdk，而是把 oh-package 依赖、module.json5 querySchemes、EntryAbility onCreate/onNewWant 的 handleWant 与回调分派列为有明确写者的 Slice 任务。派工内核与规则冲突时报 kernel_conflicts，不要照抄。",
+    "执行阶段：载入的 domain skill 说明 SDK 可从 ohpm 获取，而 registry 写着“待入仓”占位时，在返回信封中报告冲突，交编排者改判，不要默认保留占位。",
+    "实现阶段：SDK 回调类型等常量不能凭记忆写数值。从已安装 SDK 的声明读取（如 Command.kCommandPay），或按 skill 用 instanceof PayResp/SendAuthResp 区分；无法核实时显式标注待核。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/private/tmp/testAIPPT2/entry/src/main/ets/pay/domain/PayService.ets",
+        "since": "2026-09-19T05:23:13.192Z",
+        "at": "2026-09-19T15:38:59.780Z"
+      },
+      "summary": "主线程在 plan 阶段已读 a2h-plan Step 4.1（先查 skill-binding-rules，命中即零 registry），\n但派工 P1-C 时在“三方 SDK 分类参考”表里直接写“HMOS 版 OpenSDK 待入仓 → registry kind=thirdparty-sdk”，\n并说明这是 ledger 已批的裁决、用于避免误登记。实际上 ledger 只批了“OpenSDK 直连正选”。\nplan 子代理读到映射表“微信支付→arkts-payment”，对讯飞按表判定了未命中，对微信却照抄内核，\n登记 P-S9-001 并报 kernel_conflicts: []。\nSlice 9 worker 读 registry 后按派工要求落 marker：PayService.createWxOrder 注释写 PLACEHOLDER [P-S9-001]，\n把 handleWant、onResp、sendReq 都推到“入仓后回灌”。这段占位一直保留到 iter2 修复删除（ada51cd8034d45d89.jsonl:L115-L116）。\n",
+      "recommendations": [
+        "计划阶段：派工内核给出 SDK 分类前，先按 skill-binding-rules 查表并核 ohpm 包是否存在。命中已有支付/登录 skill 的 SDK 列为实接任务，同时分配依赖声明、querySchemes、EntryAbility 回调路由的写者。",
+        "执行阶段：worker 发现 suggested skill 与 registry 占位互相矛盾时，在信封中上报冲突并给出所需的跨文件改动，不要只落 marker。"
+      ],
+      "nodes": [
+        {
+          "key": "/private/tmp/testAIPPT2/.claude/skills/a2h-plan/SKILL.md",
+          "at": "2026-09-18T16:44:26.754Z",
+          "reason": "正常输入：主线程 Read 回执（2ce43a97-0e6a-4a0f-a9b6-a5aac5a90177.jsonl:L2661、L2666）中，Step 4.1 规定逐个 SDK 按序检查：判据0 只把 ledger 已批的“原生/自建替代”归 owned；判据1 按 skill-binding-rules 查表，命中则追加 suggested_skills、零 registry；未命中才登记 thirdparty-sdk。这足以要求先查表，再决定是否占位。"
+        },
+        {
+          "key": "2ce43a97-0e6a-4a0f-a9b6-a5aac5a90177:main",
+          "at": "2026-09-18T16:53:12.959Z",
+          "reason": "已读上述 Step 4.1。ledger PD-C-WXPAY-F004-01 批的是“OpenSDK 直连正选 + H5 收银台降级”，可用性待 grill #2 确认（同转录 L2030、L2088）。主线程既没读 skill-binding-rules，也没查 ohpm，派工 P1-C 时在“三方 SDK 分类参考”表中写下“HMOS 版 OpenSDK 待入仓 → registry kind=thirdparty-sdk trigger=`微信 OpenSDK(HMOS) 入仓`（S2/S9 各一条）”，并称其为 ledger 已批裁决（同转录 L2751，派发回执 L2756）。这样把“可用性待确认”改写成了“SDK 缺失占位”，偏离了 Step 4.1 的查表流程。",
+          "problem": true
+        },
+        {
+          "key": "/private/tmp/testAIPPT2/.claude/skills/a2h-plan/references/skill-binding-rules.md",
+          "at": "2026-09-18T16:53:25.128Z",
+          "reason": "正常输入：plan 子代理 Read 回执（a9e9608db4a45ddad.jsonl:L10-L11）。第9行规定 SDK 命中“典型 Android 厂商 SDK”列时追加 suggested_skills、不登记 placeholder-registry；第35、36行把微信登录绑定 arkts-login、微信支付绑定 arkts-payment。这足以判定微信不该登记 thirdparty-sdk。"
+        },
+        {
+          "key": "a9e9608db4a45ddad.jsonl",
+          "at": "2026-09-18T17:10:25.647Z",
+          "reason": "同时收到主线程的内核分类和上述映射表。对讯飞按表判定未命中（同转录 L43），对微信直接照抄内核：slice-09 Step 3b/3c 写了 suggested_skills+: arkts-payment，同时又 Write registry 登记 P-S9-001 PayService.ets#createWxOrder trigger=微信 OpenSDK(HMOS) 入仓 kind=thirdparty-sdk（L93-L94）。两者矛盾，返回信封却报 kernel_conflicts: []（L98-L99）。本链把它记为传递环节。"
+        },
+        {
+          "key": "/private/tmp/testAIPPT2/spec/placeholder-registry.md",
+          "at": "2026-09-19T03:33:59.902Z",
+          "reason": "交付桥梁：Slice 9 worker 的 Bash grep（a45e6645e6ccc9e74.jsonl:L51-L52）和 Read（L54-L55）回执都含 P-S9-001 … 微信 OpenSDK(HMOS) 入仓 | registered | thirdparty-sdk 一行；派工还要求按该 trigger 口径落 marker、禁止自造（L1）。"
+        },
+        {
+          "key": "/private/tmp/testAIPPT2/.claude/skills/arkts-payment/SKILL.md",
+          "at": "2026-09-19T03:39:19.509Z",
+          "reason": "执行期可见的正确信息：worker 调 Skill 载入（a45e6645e6ccc9e74.jsonl:L226-L228）。内容覆盖 @tencent/wechat_open_sdk 的调起、回调与模块配置，要求集成前到 ohpm.openharmony.cn 取版本，清单中列出 querySchemes 含 weixin、EntryAbility onCreate/onNewWant 都调 WXApi.handleWant。"
+        },
+        {
+          "key": "a45e6645e6ccc9e74.jsonl",
+          "at": "2026-09-19T03:49:18.179Z",
+          "reason": "沿用 registry：L229 判定 SDK 不在工程、必须按 P-S9-001 落 marker，L252 写道“it's an ohpm SDK … the placeholder stands”。随后 Write PayService，在 createWxOrder 注释写 PLACEHOLDER: [P-S9-001] trigger=微信 OpenSDK(HMOS) 入仓，并把 handleWant、onResp、sendReq 一并列为入仓后回灌（L302-L303）。该 worker 受单写者边界限制，没有改 EntryAbility/module.json5，信封仍报 P-S9-001 为 SDK 未入仓（L601）。本链确认它传递了占位，不另推定其独立失职。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": 7
+        },
+        {
+          "from": 6,
+          "to": 7,
+          "force": true,
+          "reason": "worker 用 Skill 工具载入 arkts-payment（L226 调用、L227 回执），L228 注入的 SKILL.md 正文覆盖 @tencent/wechat_open_sdk 调起/回调/模块配置、到 ohpm 取版本，以及 querySchemes 与 EntryAbility handleWant 清单，早于 03:49 写 PayService。这支持 worker 写前已能看到 SDK 可得及接入步骤。",
+          "evidence": [
+            {
+              "source": "a45e6645e6ccc9e74.jsonl",
+              "line": 226
+            },
+            {
+              "source": "a45e6645e6ccc9e74.jsonl",
+              "line": 228
+            }
+          ]
+        },
+        {
+          "from": 7,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/private/tmp/testAIPPT2/entry/src/main/ets/pages/WXCallbackPage.ets",
+        "since": "2026-09-19T05:23:13.192Z",
+        "at": "2026-09-19T15:38:59.780Z"
+      },
+      "summary": "本文件有两个起点。\n其一，spec 阶段 page_0023 写者没有查 ohpm 或厂商适配，就在页面 spec 的转换决策里写“鸿蒙端无微信 OpenSDK 官方适配，\n回调链路本身不可复刻，仅保留状态接口”。converter 读到这份 spec，派工里也写着“OpenSDK(HMOS) 等价物未入仓”，\n于是把 authorize/pay 的 sendReq 和 handleIntent 意图解析写成 FWD-REF 注释空实现。iter0 判别器把它们认定为死通道。\n其二，Slice 9 worker 补支付分支时，源码只给出 ConstantsAPI.COMMAND_PAY_BY_WX 符号，arkts-payment 要求用 instanceof 区分\nPayResp/SendAuthResp；worker 却凭记忆写下 WX_TYPE_PAY_BY_WX = 3，并注释“SDK ConstantsAPI 同值 3”。\niter2 修复改为 5（鸿蒙 Command.kCommandPay），并以 createWXAPI/sendReq/handleWant 实装发送和回调链\n（ada51cd8034d45d89.jsonl:L79-L139）。\n",
+      "recommendations": [
+        "规格提取阶段：把三方 SDK 判为“无鸿蒙等价”之前，先查 ohpm/厂商鸿蒙版并在 spec 中留下查询依据；没有依据时写“待确认”，不要把回调链路定性为不可复刻。",
+        "实现阶段：SDK 回调类型常量从已安装 SDK 的声明读取，或按 skill 用 instanceof 区分响应类型；无法核实时不要写“SDK 同值”之类的断言。"
+      ],
+      "nodes": [
+        {
+          "key": "aea474836a4053c65.jsonl",
+          "at": "2026-09-18T10:29:14.932Z",
+          "reason": "spec 阶段 page_0023 写者在 L73 thinking 中自行认定“鸿蒙端无微信 SDK 等价 → spec 里写明”，没有做 ohpm 或厂商查询。它预载的 arkts-library-migration（L9）明确把“微信 SDK → Skip”列为错误3，要求先查厂商适配状态。随后 Write page_0023 spec，把“鸿蒙端无微信 OpenSDK 官方适配，回调链路本身不可复刻，仅保留状态接口”写成转换决策（L102-L103）。派工 L1 并未要求这一结论。",
+          "problem": true
+        },
+        {
+          "key": "/private/tmp/testAIPPT2/spec/baseline/ui/page_0023_WXCallbackActivity.md",
+          "at": "2026-09-18T19:55:00.816Z",
+          "reason": "交付桥梁：converter Read 回执（a3b0dc00ccbadd94a.jsonl:L10-L11）包含上述“无微信 OpenSDK 官方适配、回调链路不可复刻”的决策；该 spec 在 10:29 写入后、此次读取前没有被改写。"
+        },
+        {
+          "key": "a3b0dc00ccbadd94a.jsonl",
+          "at": "2026-09-18T20:03:55.266Z",
+          "reason": "收到上述 spec，同时派工称“微信 OpenSDK(HMOS) 等价物未入仓，SDK 依赖点 FWD-REF”（L1）。Write WXCallbackPage 时文件头写“鸿蒙端无微信 OpenSDK 官方适配（三方闭源 SDK）”，handleIntent、authorize、pay 的 sendReq 都只留 FWD-REF 注释、不调用 SDK（L54-L55）。这些空实现保留到 iter0 判别器发现（7e49e8dd-9559-4bed-9f6d-0e98e41652c6.jsonl:L3）。本链确认它传递了偏差。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/fengyis/AIPPT/pay/src/main/java/cn/sanfate/pub/loginpay/wechat/BaseWXPayEntryActivity.java",
+          "at": "2026-09-19T03:35:18.915Z",
+          "reason": "正常输入：worker Read 回执（a45e6645e6ccc9e74.jsonl:L124-L125）只有 resp.getType() == ConstantsAPI.COMMAND_PAY_BY_WX 的符号比较，没有数值；源码不支持写死任何具体常量。"
+        },
+        {
+          "key": "/private/tmp/testAIPPT2/.claude/skills/arkts-payment/SKILL.md",
+          "at": "2026-09-19T03:39:19.509Z",
+          "reason": "正常输入：Skill 载入回执（a45e6645e6ccc9e74.jsonl:L226-L228）陷阱清单第15条写明“Login + Pay 共用 wxopensdk 回调 — 必须 instanceof 区分 PayResp/SendAuthResp”，给出了不依赖记忆数值的判别方式。"
+        },
+        {
+          "key": "a45e6645e6ccc9e74.jsonl",
+          "at": "2026-09-19T04:06:14.870Z",
+          "reason": "L257 thinking 凭记忆写“Let me recall … COMMAND_PAY_BY_WX = 3”，没有核对 SDK 声明，也没改用 instanceof。L493-L494 Edit 写入 WX_TYPE_PAY_BY_WX: number = 3，注释“SDK ConstantsAPI 同值 3”，dispatchOnResp 按它分流支付回调。真实 SDK 中 Android ConstantsAPI.COMMAND_PAY_BY_WX 与鸿蒙 Command.kCommandPay 都是 5（修复见 ada51cd8034d45d89.jsonl:L82-L83，发现见 7e49e8dd-9559-4bed-9f6d-0e98e41652c6.jsonl:L1093）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        },
+        {
+          "from": 4,
+          "to": 6
+        },
+        {
+          "from": 5,
+          "to": 6,
+          "force": true,
+          "reason": "worker 用 Skill 工具载入 arkts-payment（L226 调用、L227 回执），L228 注入的 SKILL.md 正文含陷阱第15条“Login + Pay 共用 wxopensdk 回调 — 必须 instanceof 区分 PayResp/SendAuthResp”，早于 04:06 写入类型常量。这支持 worker 写前已收到该判别方式。",
+          "evidence": [
+            {
+              "source": "a45e6645e6ccc9e74.jsonl",
+              "line": 226
+            },
+            {
+              "source": "a45e6645e6ccc9e74.jsonl",
+              "line": 228
+            }
+          ]
+        },
+        {
+          "from": 6,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "未核到 plan 主线程在 L2751 之前是否有 ohpm 查询或网络受限的材料支持“HMOS 版 OpenSDK 待入仓”。ECAT 修复时 ohpm CDN 因 TLS 被阻断，才改用本地 HAR；生成期是否同样无法在线安装，没有记录。"
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/private/tmp/testAIPPT2/entry/oh-package.json5",
+      "reason": "已确认修复：iter0 先声明 1.0.23（a38032d6a6cd62001.jsonl:L50-L51），iter1 改为本地 HAR file:./libs/wechat_open_sdk-1.0.16.har（a266d6b47b692d169.jsonl:L151-L152），iter2 由主线程完成链接（7e49e8dd…jsonl:L669-L683）。生成期没有写者收到声明 @tencent/wechat_open_sdk 依赖的要求：P-S9-001 把 SDK 入仓整体延后，缺失源自图1的占位裁决，但该文件没有可绑定的偏差写入。"
+    },
+    {
+      "key": "/private/tmp/testAIPPT2/entry/src/main/ets/entryability/EntryAbility.ets",
+      "reason": "已确认修复：增加 routeWant，先把 Want 交 WxCallbackDispatcher.handleWxWant，再落 PushRouter（ada51cd8034d45d89.jsonl:L110-L113）。生成期写者（主线程 L5256-L5286、af9e909e8f153df2a、a71c8d1622d95f785）只做推送/快捷方式接线，没有收到 WXApi.handleWant 要求；Slice 9 worker 知道需要 handleWant，但受单写者边界限制，只在 PayService 注释中延后。这是同一占位裁决留下的遗漏，没有直接偏差写入可绑定。"
+    },
+    {
+      "key": "/private/tmp/testAIPPT2/entry/src/main/module.json5",
+      "reason": "已确认修复：增加 querySchemes [\"weixin\", \"wxopensdk\"]（ada51cd8034d45d89.jsonl:L117-L118）。生成期各写者都没有收到声明微信 querySchemes 的要求（生成期材料中没有 querySchemes 写入或派工）；该要求只出现在 Slice 9 worker 载入的 arkts-payment 清单里，而 module.json5 不在它的写权内。这是同一占位裁决留下的遗漏，没有直接偏差写入可绑定。"
+    }
+  ],
+  "job": "issue-febf3c781ebde9778c30",
+  "metadata": {
+    "migration": {
+      "project": "DeepAI全能PPT",
+      "server_session_id": "fac5eaa9-b1e9-4607-b90e-dadb4e885f36"
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "c8284269-4179-4eb8-8fec-f36d62f9293e"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "GLM-5.3-Flash",
+        "claude-fable-5-1"
+      ],
+      "client_versions": [
+        "2.1.247",
+        "2.1.278"
+      ]
+    },
+    "source_set_id": "sources-ef87c31e31b2c26de3b2",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/private/tmp/testAIPPT2",
+        "at": "2026-09-18T15:57:46.578Z",
+        "ref": "2ce43a97-0e6a-4a0f-a9b6-a5aac5a90177.jsonl:L1942",
+        "request_ref": "2ce43a97-0e6a-4a0f-a9b6-a5aac5a90177.jsonl:L1940",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/private/tmp/testAIPPT2",
+        "at": "2026-09-18T15:57:46.578Z",
+        "ref": "2ce43a97-0e6a-4a0f-a9b6-a5aac5a90177.jsonl:L1942",
+        "request_ref": "2ce43a97-0e6a-4a0f-a9b6-a5aac5a90177.jsonl:L1940",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.0.1(21)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/private/tmp/testAIPPT2",
+        "at": "2026-09-19T11:26:45.988Z",
+        "ref": "7e49e8dd-9559-4bed-9f6d-0e98e41652c6.jsonl:L434",
+        "request_ref": "7e49e8dd-9559-4bed-9f6d-0e98e41652c6.jsonl:L429",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.0.1(21)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/private/tmp/testAIPPT2",
+        "at": "2026-09-19T15:38:26.603Z",
+        "ref": "eb0d3903-1f96-4816-9e18-bef3d88833f1.jsonl:L339",
+        "request_ref": "eb0d3903-1f96-4816-9e18-bef3d88833f1.jsonl:L337",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.4"
+  },
+  "revision": "a77ceae7a250d2606764cc3ef8c628005f65b6ec57b579957f810fb618d7c194"
+}

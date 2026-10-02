@@ -1,0 +1,166 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-c234d95411230bdbffda",
+  "created_at": "2026-10-02T19:23:18.334566+00:00",
+  "migration_key": "fac5eaa9-b1e9-4607-b90e-dadb4e885f36",
+  "title": "Application 中注册的网络切换广播接收器未写入规格，蜂窝→Wi‑Fi 安全检测触发入口在实现中丢失",
+  "when": "规格提取阶段，把源端 Application 初始化里注册的广播接收器、系统监听等隐式触发入口写入 feature 规格（锚点、数据流、服务层、验收标准）时",
+  "description": "Android 源在 Application.initThridSdk 等初始化链注册 BroadcastReceiver（如 CONNECTIVITY_ACTION），接收器本体按前后网络类型判断后调用业务检测或上报，并传入专用触发来源常量；上游契约文档已点名该接收器，但它不在 feature 锚点内；目标为 HarmonyOS ArkTS，需要用 @ohos.net.connection 等价实现监听。",
+  "summary": "规格作者 ac0020dad06422e67 写 F001 前实际读到两份正确输入：cross-module-contracts.md 第78行写明\nNetworkConnectChangedReceiver 是网络切换监听，会触发 SafeDeviceUtils.runChenck 安全校验，\nHarmonyOS 对应 connection.createNetConnection（ac0020dad06422e67.jsonl:L32、L35）；BoxApplication.kt 的\ninitThridSdk 在 :238-239 调用 registerConnectChangeReceiver()，:526-534 先给 lastNetwordType 赋初值再注册接收器。\n作者在 L125 的思考里也把这一步列入 initThridSdk（L123-L125）。\n但 L222 写出的 F001 中，android_source_anchors 没有接收器文件，数据流只有 LAUNCH(appLaunchCheck) 和\nGO_HOME(initUser 成功) 两个 runChenck 入口，服务层和 AC41 initThridSdk 都没有网络监听；全程也没有对它作出迁移或裁剪决定。\nlint 报 SAFE_CHECK_SOURCE_* 常量未覆盖后，作者只补了 AC55 取值域「四触发场景分别传对应值上送」（L262、L292），\n仍未写明 MOBILE_2_WIFI 由谁在什么条件下触发。偏差首先出现在源码/契约到 feature 规格这一环。\n随后同一规格阶段的主线程只按引用计数把该接收器归为「平台胶水」，写入 skip-list，没有打开本体核对其中的业务调用\n（2ce43a97-0e6a-4a0f-a9b6-a5aac5a90177.jsonl:L1577-L1582、L1634）。该文件不是实现者的输入，所以只在此记录，不画入图。\nSlice 1 实现者 a82cef586e6a4cdeb 读到的 F001 只有 AC55 提到第三个触发源（a82cef586e6a4cdeb.jsonl:L27、L30）；\n它读到的 BoxApplication 也有 registerConnectChangeReceiver 调用（L89-L90），但没有读接收器本体，\n因此「仅蜂窝族→WIFI 触发」这个条件不在它的输入里。它写出的 SafeDeviceService 只有 SAFE_CHECK_SOURCE_MOBILE_2_WIFI=2\n常量和参数注释，没有任何调用方（L219）。同轮 AppShellService.initThridSdk 把门内其他三方 init 逐项标为无鸿蒙等价，\n却漏掉网络接收器，没有占位也没有决策记录（L230）；返回报告也没有提到这一缺口（L458）。这是规格缺失后，实现阶段又一次漏掉。\n该片段一直保留到 ECAT iter2：判别器指出网络切换观察者缺失（90dbaef3-200d-4c47-881c-7ca2017d2cc6.jsonl:L125），\n生成器派 g-net（7e49e8dd-9559-4bed-9f6d-0e98e41652c6.jsonl:L743）。修复者读接收器本体（acede4e2a43422402.jsonl:L35-L36）后，\n在 SafeDeviceService 中用 connection.createNetConnection 注册 netAvailable/netCapabilitiesChange/netLost 监听，\n注册时给 lastNetClass 赋初值，并且只在上次为蜂窝、本次为 Wi‑Fi 时调用 runChenck(SAFE_CHECK_SOURCE_MOBILE_2_WIFI)\n（acede4e2a43422402.jsonl:L82-L90、L102）。观察截止时修改仍在。\n",
+  "recommendations": [
+    "规格提取时，上游契约或 Application 初始化链点名的广播接收器、系统回调和监听注册，都要读接收器本体；若其中调用业务检测或上报，就把它作为锚点写入 feature，并在数据流、服务层承接方法和 AC 中写明触发条件（本例为注册时记录初始网络类型，仅蜂窝族→Wi‑Fi 时调用 runChenck(MOBILE_2_WIFI)）及目标 API（@ohos.net.connection）。",
+    "为常量取值域补 AC 时，逐个列出每个取值的源端调用方和目标承接位置；某个取值没有承接方时，写明迁移或裁剪决定，不能只写「四触发场景分别传对应值」。",
+    "覆盖检查把被引用但未锚定的文件归为平台胶水或 skip-list 前，先打开本体，确认其中没有业务方法调用。",
+    "实现阶段若 AC 列出多个触发来源，写服务前先对照源码找出各来源的调用点；源码初始化链中有 register*Receiver 等注册调用时，要读被注册类本体后实现等价监听，或登记占位或决策，不能在逐项迁移 init 链时静默略过。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/private/tmp/testAIPPT2/entry/src/main/ets/services/SafeDeviceService.ets",
+        "since": "2026-09-19T05:23:13.192Z",
+        "at": "2026-09-19T15:38:59.780Z"
+      },
+      "nodes": [
+        {
+          "key": "/private/tmp/testAIPPT2/spec/baseline/cross-module-contracts.md",
+          "at": "2026-09-18T11:25:48.545Z",
+          "reason": "正常输入：规格作者 Read 回执第78行写明 NetworkConnectChangedReceiver 是网络切换监听，会触发 SafeDeviceUtils.runChenck 安全校验，HarmonyOS 对应 connection.createNetConnection；足以要求 F001 承接这个触发入口（ac0020dad06422e67.jsonl:L32、L35）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/fengyis/AIPPT/app/src/main/java/cn/sanfate/pub/platform/BoxApplication.kt",
+          "at": "2026-09-18T11:34:47.334Z",
+          "reason": "正常输入：Read 回执显示 initThridSdk 末段 :238-239「注册网络连接状态广播」registerConnectChangeReceiver()，:526-534 先给 HttpUtil.lastNetwordType 赋初值，再注册 CONNECTIVITY_ACTION 接收器；作者在 L125 的思考里把它列入 initThridSdk 步骤（ac0020dad06422e67.jsonl:L123-L125）。"
+        },
+        {
+          "key": "2ce43a97-0e6a-4a0f-a9b6-a5aac5a90177:ac0020dad06422e67",
+          "at": "2026-09-18T12:05:50.643Z",
+          "reason": "已收到上述输入，但 Write F001 时锚点没有接收器文件，数据流只有 LAUNCH/GO_HOME 两个 runChenck 入口，服务层与 AC41 initThridSdk 都没有网络监听，也没有作出迁移或裁剪决定（L222）；lint 报 SAFE_CHECK_SOURCE_* 未覆盖后，只补了 AC55 取值域「四触发场景分别传对应值上送」，仍未写出触发方和触发条件（L262、L292）。源码/契约到规格在此偏离。",
+          "problem": true
+        },
+        {
+          "key": "/private/tmp/testAIPPT2/spec/baseline/features/F001-app-shell.md",
+          "at": "2026-09-19T00:01:24.283Z",
+          "reason": "交付桥梁：Slice 1 实现者的 Read 回执中，F001 数据流仍只有 appLaunchCheck(LAUNCH) 和 initUser 成功后 runChenck(GO_HOME) 两个入口，锚点与服务层都没有网络接收器，只有 AC55 列出 MOBILE_2_WIFI=2 取值域（a82cef586e6a4cdeb.jsonl:L27、L30）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/fengyis/AIPPT/app/src/main/java/cn/sanfate/pub/platform/BoxApplication.kt",
+          "at": "2026-09-19T00:06:56.221Z",
+          "reason": "实现者写前的 Read 回执同样包含 initThridSdk:238-239 registerConnectChangeReceiver() 及 :526-534 定义；它没有读 NetworkConnectChangedReceiver.java 本体，所以单向切换条件不在其输入中（a82cef586e6a4cdeb.jsonl:L89-L90）。"
+        },
+        {
+          "key": "2ce43a97-0e6a-4a0f-a9b6-a5aac5a90177:a82cef586e6a4cdeb",
+          "at": "2026-09-19T00:18:50.878Z",
+          "reason": "收到 AC55「四触发场景」和 registerConnectChangeReceiver 调用后，Write SafeDeviceService 只声明 SAFE_CHECK_SOURCE_MOBILE_2_WIFI=2 常量与参数注释，没有任何调用方或监听（L219）；同轮 AppShellService.initThridSdk 把门内其他 init 逐项标为无鸿蒙等价，却漏掉网络接收器，没有占位或决策（L230）；返回报告也没有提到（L458）。这是输入不完整之下的实现阶段二次漏移。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 6
+        },
+        {
+          "from": 5,
+          "to": 6
+        },
+        {
+          "from": 6,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-c234d95411230bdbffda",
+  "metadata": {
+    "migration": {
+      "project": "DeepAI全能PPT",
+      "server_session_id": "fac5eaa9-b1e9-4607-b90e-dadb4e885f36"
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "c8284269-4179-4eb8-8fec-f36d62f9293e"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "GLM-5.3-Flash",
+        "claude-fable-5-1"
+      ],
+      "client_versions": [
+        "2.1.247",
+        "2.1.278"
+      ]
+    },
+    "source_set_id": "sources-ef87c31e31b2c26de3b2",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/private/tmp/testAIPPT2",
+        "at": "2026-09-18T15:57:46.578Z",
+        "ref": "2ce43a97-0e6a-4a0f-a9b6-a5aac5a90177.jsonl:L1942",
+        "request_ref": "2ce43a97-0e6a-4a0f-a9b6-a5aac5a90177.jsonl:L1940",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/private/tmp/testAIPPT2",
+        "at": "2026-09-18T15:57:46.578Z",
+        "ref": "2ce43a97-0e6a-4a0f-a9b6-a5aac5a90177.jsonl:L1942",
+        "request_ref": "2ce43a97-0e6a-4a0f-a9b6-a5aac5a90177.jsonl:L1940",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.0.1(21)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/private/tmp/testAIPPT2",
+        "at": "2026-09-19T11:26:45.988Z",
+        "ref": "7e49e8dd-9559-4bed-9f6d-0e98e41652c6.jsonl:L434",
+        "request_ref": "7e49e8dd-9559-4bed-9f6d-0e98e41652c6.jsonl:L429",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.0.1(21)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/private/tmp/testAIPPT2",
+        "at": "2026-09-19T15:38:26.603Z",
+        "ref": "eb0d3903-1f96-4816-9e18-bef3d88833f1.jsonl:L339",
+        "request_ref": "eb0d3903-1f96-4816-9e18-bef3d88833f1.jsonl:L337",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.4"
+  },
+  "revision": "e3b3d43443778d8a128ba496cab8800cdbd7f3b8edc2f363eb8c78bf0537ecc3"
+}

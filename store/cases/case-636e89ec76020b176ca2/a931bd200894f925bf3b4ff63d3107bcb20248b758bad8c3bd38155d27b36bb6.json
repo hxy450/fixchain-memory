@@ -1,0 +1,987 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-636e89ec76020b176ca2",
+  "created_at": "2026-10-02T19:41:10.656271+00:00",
+  "migration_key": "fac5eaa9-b1e9-4607-b90e-dadb4e885f36",
+  "title": "业务基类生命周期埋点未逐页落地：转换只迁子类显式埋点，组合式 BasePage 未登记逐页接线",
+  "when": "页面转换与公共基座实现阶段，决定 Android 业务基类的生命周期副作用（页面展示/退出埋点）在每个 ArkUI 页面上的落点与接线责任时",
+  "description": "Android 页面统一继承业务基类（如 BaseBusinessActivity），由基类 onCreate/onDestroy 自动上报 pageShowEvent/pageQuitEvent（含停留时长、返回键归因），子类只重写 getPageName；ArkUI @ComponentV2 struct 不能继承，目标改用需逐页调用的组合式 BasePage/工具类，且页面先于公共基座生成。",
+  "summary": "源端 BaseBusinessActivity 是业务页统一父类：onCreate 记 createTime 并 pageShowEvent(getPageName())，\nonDestroy 按 onBackQuit 归因发 pageQuitEvent（停留整秒），子类只重写 getPageName。C3 写出的 feature-base.md §7.1/§8.2\n已正确记录这一点，并给出鸿蒙映射“页面级埋点改为 BasePage 的 onPageShow/onPageHide 钩子”。\n页面在 Stage 1 先于公共基座转换。派工 anchors 带 BaseBusinessActivity.kt 且转换者确实读了基类的页\n（WebView/AccountInfo 等）登记了生命周期埋点 FWD-REF，后续 slice 据此兑现；会员中心与续订管理的转换者\n同样收到该 anchor，却未打开基类，只登记子类内显式出现的埋点，报告仍称 anchors 读通；另 7 页的派工 anchors\n未含基类，转换者只看到继承声明。这 9 页在 Stage 1 都没有 pageShow/pageQuit，也没有占位。\nBase-6 精读 feature-base §7.1，意识到 ArkUI struct 不能继承、需页面实例化并调用，写出组合式 BasePage，\n并 grep 确认既有页面不消费它；却只向 registry 追加 P-B6-001..006，没有为既有页面登记 BasePage/生命周期埋点接线，\n报告只把 BasePage 列为已建件。主会话随后写的 base-contracts.md 也只把 BasePage 列为“基类/骨架”可用 API，\nStage 3 接线指针不含逐页接线。各 slice worker 只兑现 registry 中的占位：Slice 9 兑现了 RefundProgressPage 的\nP-S9-004 pageShowEvent，却在同轮编辑 MemberCenter/ManageRenew 时未补；只有持 P-S6-107 等占位的 Slice 6\n把 BasePage 接到 WebView/AboutUs/CustomerServiceWeb 三页。\n缺口因此保留到生成结束。ECAT iter6 判别器指出 9 页未接线（7e49e8dd L1461/L1479）后，g-telemetry（a4d11f7f551287ace）\n为 9 页各加 aboutToAppear 记 createTime + pageShowEvent、aboutToDisappear 按 onBackQuit 归因 pageQuitEvent\n（page_onback_btn/page_close_btn，Math.floor 整秒）及 onBackPressed 置位（L221–L305）；会话中断前最后读回\n（L310-L312、L323-L328）每页均有两端调用，此后这 9 页无其他写入，15:05 人工编译只报 BasePage 一处导入错误\n（a8277d1ee9fc9555b.jsonl:L116）。VideoPlayPage 走另一条路径（转换期已登记 FWD-REF，后被按 D-003 死码 retag 未兑现），\n列入未决。\n",
+  "recommendations": [
+    "页面转换阶段：源页面类继承业务基类时（尤其派工 anchors 已列出该基类），先打开基类，把 onCreate/onResume/onPause/onDestroy/onBackPressed 中的副作用逐项落到页面 aboutToAppear/aboutToDisappear/onBackPressed；目标等价物尚未建好时登记 forward-ref，而不是只迁移子类文件里显式出现的埋点。报告“anchors 全部读通”前逐个核对读取记录。",
+    "公共基座阶段：用组合式 BasePage 等替代继承时，列出源端继承该基类的全部页面，与已生成页面是否调用做差集（如源码 grep ': BaseBusinessActivity' 对照目标页 grep 'pageShowEvent|BasePage'）；对未调用的页面逐页登记接线占位（resolve_by 指向所属 slice），并在 as-built 契约里写成“每页必须调用”的义务，不只列为可用 API。",
+    "切片实现阶段：编辑页面时除兑现已登记占位外，按源页面继承链核对基类生命周期行为在目标页是否有对应调用，缺失就补或登记。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/private/tmp/testAIPPT2/entry/src/main/ets/pages/MemberCenterPage.ets",
+        "since": "2026-09-19T05:23:13.192Z",
+        "at": "2026-09-19T15:38:59.780Z"
+      },
+      "nodes": [
+        {
+          "key": "2ce43a97-0e6a-4a0f-a9b6-a5aac5a90177:main",
+          "at": "2026-09-18T18:44:22.545Z",
+          "reason": "正常输入：派工 L4093 的 android_source_anchors 明确列出 BaseBusinessActivity: basic/.../BaseBusinessActivity.kt（回执 L4098），同一 anchor 也在页 spec 头部（a32f9dfad052f76dd.jsonl:L1、L62-L63）。该文件含 onCreate→pageShowEvent、onDestroy→pageQuitEvent；同期 WebViewPage 转换者凭同类 anchor 读到基类并登记了 P-S6-107（adb6e8861e4863078.jsonl:L31-L33、L97）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/fengyis/AIPPT/app/src/main/java/cn/sanfate/pub/platform/page/MemberCenterActivitiy.kt",
+          "at": "2026-09-18T18:45:03.253Z",
+          "reason": "正常输入：Read 回执显示 class MemberCenterActivitiy : BaseBusinessActivity<…>，页面埋点名 getPageName()=\"RechargeActivity\" 由基类消费（a32f9dfad052f76dd.jsonl:L29-L30；spec 溯源 L63）。"
+        },
+        {
+          "key": "2ce43a97-0e6a-4a0f-a9b6-a5aac5a90177:a32f9dfad052f76dd",
+          "at": "2026-09-18T18:59:16.627Z",
+          "reason": "收到上述 anchor 与继承声明，却从未打开 BaseBusinessActivity.kt；Write 出的 MemberCenterPage 只把子类内显式出现的 enterVipEvent/popup*/payAgreementClick/paymentFail 合并登记为 P-S4-011，aboutToAppear/aboutToDisappear 无 pageShowEvent/pageQuitEvent，也未登记基类生命周期埋点占位（L131 思考、L133-L134）；报告却称 16 个 anchors 全部读通（L237）。",
+          "problem": true
+        },
+        {
+          "key": "/private/tmp/testAIPPT2/spec/baseline/feature-base.md",
+          "at": "2026-09-18T23:17:13.158Z",
+          "reason": "正常输入：Base-6 用 sed 读 feature-base §7.1，回执写明 BaseBusinessActivity 为业务页统一父类，onCreate 记 createTime 并 pageShowEvent(getPageName())，onDestroy 按 onBackQuit 归因 pageQuitEvent(停留秒)，并给出鸿蒙映射“页面级埋点改为 BasePage 的 onPageShow/onPageHide 钩子”；§8.2 亦标 page_event 由 BaseBusinessActivity:44/137 自动触发（a1e7d6cd9f382add3.jsonl:L28-L29、L51-L52）。足以说明每个业务页都需要这对埋点。"
+        },
+        {
+          "key": "2ce43a97-0e6a-4a0f-a9b6-a5aac5a90177:a1e7d6cd9f382add3",
+          "at": "2026-09-18T23:51:16.991Z",
+          "reason": "已知 ArkUI struct 不能继承、需页面实例化并调用（同转录 L121 思考），也 grep 确认既有页面对 components/common 只消费 WindowModel（L54-L55、报告 L311“消费方兼容”），并在 registry 中看到 VideoPlayPage 已有 pageShowEvent 占位（L178-L179）。却只写出需页面自行调用的组合式 BasePage（L216-L217），向 registry 只追加 P-B6-001..006（引擎注册/密码门/loading 宿主等，L188-L189），没有为任何既有页面登记 BasePage 或生命周期埋点接线；最终报告仅把 BasePage 列为已建件（L311）。逐页接线义务在此丢失。",
+          "problem": true
+        },
+        {
+          "key": "/private/tmp/testAIPPT2/spec/placeholder-registry.md",
+          "at": "2026-09-19T03:33:59.902Z",
+          "reason": "交付桥梁：Base-6 追加的 P-B6 行（a1e7d6cd9f382add3.jsonl:L188-L189）之后，registry 中没有任何页面级 BasePage/生命周期埋点接线行；该 slice worker 按派工规则查询本 slice 待兑现占位（a45e6645e6ccc9e74.jsonl:L54-L55），队列里没有本页的这项义务。"
+        },
+        {
+          "key": "/private/tmp/testAIPPT2/spec/execution/base-contracts.md",
+          "at": "2026-09-19T03:33:25.416Z",
+          "reason": "并行输入：主会话据 Base 层报告写的 as-built 契约（2ce43a97 L5666），把 BasePage 列为“基类/骨架”可用 API，“Stage 3 接线指针”只汇总已登记占位、不含逐页 BasePage 接线；该 worker 读取于 a45e6645e6ccc9e74.jsonl:L31-L32。它延续了上游缺口，本卡不另推定主会话独立失职。"
+        },
+        {
+          "key": "2ce43a97-0e6a-4a0f-a9b6-a5aac5a90177:a45e6645e6ccc9e74",
+          "at": "2026-09-19T04:12:52.037Z",
+          "reason": "传递：Slice 9 只兑现 registry 中的占位，同轮把 RefundProgressPage 的 P-S9-004 pageShowEvent 落实（L472、L478），但对无占位的 MemberCenterPage 连续编辑（L408–L582）未补生命周期埋点，缺口保留到生成结束。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        },
+        {
+          "from": 4,
+          "to": 5,
+          "force": true,
+          "reason": "Base-6 以 Bash sed -n '346,425p' 读取 feature-base.md §7，回执即 §7.1 BaseBusinessActivity 的 onCreate→pageShowEvent、onDestroy→pageQuitEvent 及“页面级埋点改为 BasePage 钩子”映射；这支持 Base-6 写前已收到该要求。",
+          "evidence": [
+            {
+              "source": "a1e7d6cd9f382add3.jsonl",
+              "line": 28
+            },
+            {
+              "source": "a1e7d6cd9f382add3.jsonl",
+              "line": 29
+            }
+          ]
+        },
+        {
+          "from": 5,
+          "to": 6,
+          "force": true,
+          "reason": "Base-6 以 Bash heredoc 追加（cat >>）写入 placeholder-registry.md，内容仅 P-B6-001..006 六行，回执确认追加完成；这就是 Base-6 交给后续 slice 的待接线队列。",
+          "evidence": [
+            {
+              "source": "a1e7d6cd9f382add3.jsonl",
+              "line": 188
+            },
+            {
+              "source": "a1e7d6cd9f382add3.jsonl",
+              "line": 189
+            }
+          ]
+        },
+        {
+          "from": 6,
+          "to": 8
+        },
+        {
+          "from": 7,
+          "to": 8
+        },
+        {
+          "from": 8,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/private/tmp/testAIPPT2/entry/src/main/ets/pages/ManageRenewPage.ets",
+        "since": "2026-09-19T05:23:13.192Z",
+        "at": "2026-09-19T15:38:59.780Z"
+      },
+      "nodes": [
+        {
+          "key": "2ce43a97-0e6a-4a0f-a9b6-a5aac5a90177:main",
+          "at": "2026-09-18T19:24:47.007Z",
+          "reason": "正常输入：派工 L4459 的 android_source_anchors 列出 BaseBusinessActivity: basic/.../BaseBusinessActivity.kt（回执 L4461；a9a4e40904265dc7a.jsonl:L1，页 spec 头部 L33-L34 同列）。该基类含 onCreate→pageShowEvent、onDestroy→pageQuitEvent。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/fengyis/AIPPT/app/src/main/java/cn/sanfate/pub/platform/page/ManageRenewActivity.kt",
+          "at": "2026-09-18T19:25:10.935Z",
+          "reason": "正常输入：Read 回执显示 class ManageRenewActivity : BaseBusinessActivity<…>，getPageName()=\"RenewSettingActivity\"（a9a4e40904265dc7a.jsonl:L28-L29）。"
+        },
+        {
+          "key": "2ce43a97-0e6a-4a0f-a9b6-a5aac5a90177:a9a4e40904265dc7a",
+          "at": "2026-09-18T19:35:09.722Z",
+          "reason": "收到 anchor 与继承声明，未读取 BaseBusinessActivity.kt；Write 的 ManageRenewPage 无 pageShowEvent/pageQuitEvent，也未登记相应占位（只登记 P-S6-101..104 数据/弹窗接线），报告把“5 个 anchor 全部读通”写成 ManageRenewActivity/RenewManageViewModel/RenewSettingBean/AppTipsDialog/源布局，漏掉基类（L147-L148、L191）。",
+          "problem": true
+        },
+        {
+          "key": "/private/tmp/testAIPPT2/spec/baseline/feature-base.md",
+          "at": "2026-09-18T23:17:13.158Z",
+          "reason": "正常输入：Base-6 用 sed 读 feature-base §7.1，回执写明 BaseBusinessActivity 为业务页统一父类，onCreate 记 createTime 并 pageShowEvent(getPageName())，onDestroy 按 onBackQuit 归因 pageQuitEvent(停留秒)，并给出鸿蒙映射“页面级埋点改为 BasePage 的 onPageShow/onPageHide 钩子”；§8.2 亦标 page_event 由 BaseBusinessActivity:44/137 自动触发（a1e7d6cd9f382add3.jsonl:L28-L29、L51-L52）。足以说明每个业务页都需要这对埋点。"
+        },
+        {
+          "key": "2ce43a97-0e6a-4a0f-a9b6-a5aac5a90177:a1e7d6cd9f382add3",
+          "at": "2026-09-18T23:51:16.991Z",
+          "reason": "已知 ArkUI struct 不能继承、需页面实例化并调用（同转录 L121 思考），也 grep 确认既有页面对 components/common 只消费 WindowModel（L54-L55、报告 L311“消费方兼容”），并在 registry 中看到 VideoPlayPage 已有 pageShowEvent 占位（L178-L179）。却只写出需页面自行调用的组合式 BasePage（L216-L217），向 registry 只追加 P-B6-001..006（引擎注册/密码门/loading 宿主等，L188-L189），没有为任何既有页面登记 BasePage 或生命周期埋点接线；最终报告仅把 BasePage 列为已建件（L311）。逐页接线义务在此丢失。",
+          "problem": true
+        },
+        {
+          "key": "/private/tmp/testAIPPT2/spec/placeholder-registry.md",
+          "at": "2026-09-19T03:33:59.902Z",
+          "reason": "交付桥梁：Base-6 追加的 P-B6 行（a1e7d6cd9f382add3.jsonl:L188-L189）之后，registry 中没有任何页面级 BasePage/生命周期埋点接线行；该 slice worker 按派工规则查询本 slice 待兑现占位（a45e6645e6ccc9e74.jsonl:L54-L55），队列里没有本页的这项义务。"
+        },
+        {
+          "key": "/private/tmp/testAIPPT2/spec/execution/base-contracts.md",
+          "at": "2026-09-19T03:33:25.416Z",
+          "reason": "并行输入：主会话据 Base 层报告写的 as-built 契约（2ce43a97 L5666），把 BasePage 列为“基类/骨架”可用 API，“Stage 3 接线指针”只汇总已登记占位、不含逐页 BasePage 接线；该 worker 读取于 a45e6645e6ccc9e74.jsonl:L31-L32。它延续了上游缺口，本卡不另推定主会话独立失职。"
+        },
+        {
+          "key": "2ce43a97-0e6a-4a0f-a9b6-a5aac5a90177:a45e6645e6ccc9e74",
+          "at": "2026-09-19T04:13:09.503Z",
+          "reason": "传递：Slice 9 同轮兑现 RefundProgressPage 的 P-S9-004 pageShowEvent，却在编辑 ManageRenewPage（L454–L588）时未补生命周期埋点。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        },
+        {
+          "from": 4,
+          "to": 5,
+          "force": true,
+          "reason": "Base-6 以 Bash sed -n '346,425p' 读取 feature-base.md §7，回执即 §7.1 BaseBusinessActivity 的 onCreate→pageShowEvent、onDestroy→pageQuitEvent 及“页面级埋点改为 BasePage 钩子”映射；这支持 Base-6 写前已收到该要求。",
+          "evidence": [
+            {
+              "source": "a1e7d6cd9f382add3.jsonl",
+              "line": 28
+            },
+            {
+              "source": "a1e7d6cd9f382add3.jsonl",
+              "line": 29
+            }
+          ]
+        },
+        {
+          "from": 5,
+          "to": 6,
+          "force": true,
+          "reason": "Base-6 以 Bash heredoc 追加（cat >>）写入 placeholder-registry.md，内容仅 P-B6-001..006 六行，回执确认追加完成；这就是 Base-6 交给后续 slice 的待接线队列。",
+          "evidence": [
+            {
+              "source": "a1e7d6cd9f382add3.jsonl",
+              "line": 188
+            },
+            {
+              "source": "a1e7d6cd9f382add3.jsonl",
+              "line": 189
+            }
+          ]
+        },
+        {
+          "from": 6,
+          "to": 8
+        },
+        {
+          "from": 7,
+          "to": 8
+        },
+        {
+          "from": 8,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/private/tmp/testAIPPT2/entry/src/main/ets/pages/LoginPage.ets",
+        "since": "2026-09-19T05:23:13.192Z",
+        "at": "2026-09-19T15:38:59.780Z"
+      },
+      "nodes": [
+        {
+          "key": "/private/tmp/testAIPPT2/spec/baseline/feature-base.md",
+          "at": "2026-09-18T23:17:13.158Z",
+          "reason": "正常输入：Base-6 用 sed 读 feature-base §7.1，回执写明 BaseBusinessActivity 为业务页统一父类，onCreate 记 createTime 并 pageShowEvent(getPageName())，onDestroy 按 onBackQuit 归因 pageQuitEvent(停留秒)，并给出鸿蒙映射“页面级埋点改为 BasePage 的 onPageShow/onPageHide 钩子”；§8.2 亦标 page_event 由 BaseBusinessActivity:44/137 自动触发（a1e7d6cd9f382add3.jsonl:L28-L29、L51-L52）。足以说明每个业务页都需要这对埋点。"
+        },
+        {
+          "key": "2ce43a97-0e6a-4a0f-a9b6-a5aac5a90177:a1e7d6cd9f382add3",
+          "at": "2026-09-18T23:51:16.991Z",
+          "reason": "已知 ArkUI struct 不能继承、需页面实例化并调用（同转录 L121 思考），也 grep 确认既有页面对 components/common 只消费 WindowModel（L54-L55、报告 L311“消费方兼容”），并在 registry 中看到 VideoPlayPage 已有 pageShowEvent 占位（L178-L179）。却只写出需页面自行调用的组合式 BasePage（L216-L217），向 registry 只追加 P-B6-001..006（引擎注册/密码门/loading 宿主等，L188-L189），没有为任何既有页面登记 BasePage 或生命周期埋点接线；最终报告仅把 BasePage 列为已建件（L311）。逐页接线义务在此丢失。",
+          "problem": true
+        },
+        {
+          "key": "/private/tmp/testAIPPT2/spec/placeholder-registry.md",
+          "at": "2026-09-19T00:01:28.457Z",
+          "reason": "交付桥梁：Base-6 追加的 P-B6 行（a1e7d6cd9f382add3.jsonl:L188-L189）之后，registry 中没有任何页面级 BasePage/生命周期埋点接线行；该 slice worker 按派工规则查询本 slice 待兑现占位（ac0ebd026061aeccf.jsonl:L30-L31），队列里没有本页的这项义务。"
+        },
+        {
+          "key": "/private/tmp/testAIPPT2/spec/execution/base-contracts.md",
+          "at": "2026-09-19T00:01:11.556Z",
+          "reason": "并行输入：主会话据 Base 层报告写的 as-built 契约（2ce43a97 L5666），把 BasePage 列为“基类/骨架”可用 API，“Stage 3 接线指针”只汇总已登记占位、不含逐页 BasePage 接线；该 worker 读取于 ac0ebd026061aeccf.jsonl:L25-L26。它延续了上游缺口，本卡不另推定主会话独立失职。"
+        },
+        {
+          "key": "2ce43a97-0e6a-4a0f-a9b6-a5aac5a90177:ac0ebd026061aeccf",
+          "at": "2026-09-19T00:22:48.248Z",
+          "reason": "传递：Slice 2 读到 base-contracts 与 EventUpload 的 pageShowEvent/pageQuitEvent 签名（L105-L110），按账本把 LoginPage 的 FWD-REF 槽位换成真实调用（L272–L284），未加页面生命周期埋点；该页 Stage 1 转换派工未带基类 anchor，页内本无对应占位。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "Base-6 以 Bash sed -n '346,425p' 读取 feature-base.md §7，回执即 §7.1 BaseBusinessActivity 的 onCreate→pageShowEvent、onDestroy→pageQuitEvent 及“页面级埋点改为 BasePage 钩子”映射；这支持 Base-6 写前已收到该要求。",
+          "evidence": [
+            {
+              "source": "a1e7d6cd9f382add3.jsonl",
+              "line": 28
+            },
+            {
+              "source": "a1e7d6cd9f382add3.jsonl",
+              "line": 29
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "Base-6 以 Bash heredoc 追加（cat >>）写入 placeholder-registry.md，内容仅 P-B6-001..006 六行，回执确认追加完成；这就是 Base-6 交给后续 slice 的待接线队列。",
+          "evidence": [
+            {
+              "source": "a1e7d6cd9f382add3.jsonl",
+              "line": 188
+            },
+            {
+              "source": "a1e7d6cd9f382add3.jsonl",
+              "line": 189
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": 5,
+          "force": true,
+          "reason": "slice worker 用 Bash 在 spec/placeholder-registry.md 上 grep \"resolve_by=Slice 2 \" 与 P-S2 前缀，回执返回本 slice 相关占位行；这是该 worker 确定待兑现接线的实际读取。",
+          "evidence": [
+            {
+              "source": "ac0ebd026061aeccf.jsonl",
+              "line": 30
+            },
+            {
+              "source": "ac0ebd026061aeccf.jsonl",
+              "line": 31
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/private/tmp/testAIPPT2/entry/src/main/ets/pages/SearchPagePage.ets",
+        "since": "2026-09-19T05:23:13.192Z",
+        "at": "2026-09-19T15:38:59.780Z"
+      },
+      "nodes": [
+        {
+          "key": "/private/tmp/testAIPPT2/spec/baseline/feature-base.md",
+          "at": "2026-09-18T23:17:13.158Z",
+          "reason": "正常输入：Base-6 用 sed 读 feature-base §7.1，回执写明 BaseBusinessActivity 为业务页统一父类，onCreate 记 createTime 并 pageShowEvent(getPageName())，onDestroy 按 onBackQuit 归因 pageQuitEvent(停留秒)，并给出鸿蒙映射“页面级埋点改为 BasePage 的 onPageShow/onPageHide 钩子”；§8.2 亦标 page_event 由 BaseBusinessActivity:44/137 自动触发（a1e7d6cd9f382add3.jsonl:L28-L29、L51-L52）。足以说明每个业务页都需要这对埋点。"
+        },
+        {
+          "key": "2ce43a97-0e6a-4a0f-a9b6-a5aac5a90177:a1e7d6cd9f382add3",
+          "at": "2026-09-18T23:51:16.991Z",
+          "reason": "已知 ArkUI struct 不能继承、需页面实例化并调用（同转录 L121 思考），也 grep 确认既有页面对 components/common 只消费 WindowModel（L54-L55、报告 L311“消费方兼容”），并在 registry 中看到 VideoPlayPage 已有 pageShowEvent 占位（L178-L179）。却只写出需页面自行调用的组合式 BasePage（L216-L217），向 registry 只追加 P-B6-001..006（引擎注册/密码门/loading 宿主等，L188-L189），没有为任何既有页面登记 BasePage 或生命周期埋点接线；最终报告仅把 BasePage 列为已建件（L311）。逐页接线义务在此丢失。",
+          "problem": true
+        },
+        {
+          "key": "/private/tmp/testAIPPT2/spec/placeholder-registry.md",
+          "at": "2026-09-19T02:45:15.181Z",
+          "reason": "交付桥梁：Base-6 追加的 P-B6 行（a1e7d6cd9f382add3.jsonl:L188-L189）之后，registry 中没有任何页面级 BasePage/生命周期埋点接线行；该 slice worker 按派工规则查询本 slice 待兑现占位（a2be84aab6248fce3.jsonl:L61-L62），队列里没有本页的这项义务。"
+        },
+        {
+          "key": "/private/tmp/testAIPPT2/spec/execution/base-contracts.md",
+          "at": "2026-09-19T02:44:20.484Z",
+          "reason": "并行输入：主会话据 Base 层报告写的 as-built 契约（2ce43a97 L5666），把 BasePage 列为“基类/骨架”可用 API，“Stage 3 接线指针”只汇总已登记占位、不含逐页 BasePage 接线；该 worker 读取于 a2be84aab6248fce3.jsonl:L29-L30。它延续了上游缺口，本卡不另推定主会话独立失职。"
+        },
+        {
+          "key": "2ce43a97-0e6a-4a0f-a9b6-a5aac5a90177:a2be84aab6248fce3",
+          "at": "2026-09-19T03:05:48.245Z",
+          "reason": "传递：Slice 4 编辑 SearchPagePage（L193–L244）只兑现已登记占位，未加页面生命周期埋点。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "Base-6 以 Bash sed -n '346,425p' 读取 feature-base.md §7，回执即 §7.1 BaseBusinessActivity 的 onCreate→pageShowEvent、onDestroy→pageQuitEvent 及“页面级埋点改为 BasePage 钩子”映射；这支持 Base-6 写前已收到该要求。",
+          "evidence": [
+            {
+              "source": "a1e7d6cd9f382add3.jsonl",
+              "line": 28
+            },
+            {
+              "source": "a1e7d6cd9f382add3.jsonl",
+              "line": 29
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "Base-6 以 Bash heredoc 追加（cat >>）写入 placeholder-registry.md，内容仅 P-B6-001..006 六行，回执确认追加完成；这就是 Base-6 交给后续 slice 的待接线队列。",
+          "evidence": [
+            {
+              "source": "a1e7d6cd9f382add3.jsonl",
+              "line": 188
+            },
+            {
+              "source": "a1e7d6cd9f382add3.jsonl",
+              "line": 189
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": 5,
+          "force": true,
+          "reason": "slice worker 用 Bash 在 spec/placeholder-registry.md 上 grep P-S4-/P-S6-00[23]，回执返回本 slice 相关占位行；这是该 worker 确定待兑现接线的实际读取。",
+          "evidence": [
+            {
+              "source": "a2be84aab6248fce3.jsonl",
+              "line": 61
+            },
+            {
+              "source": "a2be84aab6248fce3.jsonl",
+              "line": 62
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/private/tmp/testAIPPT2/entry/src/main/ets/pages/ChoicePPTTemplatePage.ets",
+        "since": "2026-09-19T05:23:13.192Z",
+        "at": "2026-09-19T15:38:59.780Z"
+      },
+      "nodes": [
+        {
+          "key": "/private/tmp/testAIPPT2/spec/baseline/feature-base.md",
+          "at": "2026-09-18T23:17:13.158Z",
+          "reason": "正常输入：Base-6 用 sed 读 feature-base §7.1，回执写明 BaseBusinessActivity 为业务页统一父类，onCreate 记 createTime 并 pageShowEvent(getPageName())，onDestroy 按 onBackQuit 归因 pageQuitEvent(停留秒)，并给出鸿蒙映射“页面级埋点改为 BasePage 的 onPageShow/onPageHide 钩子”；§8.2 亦标 page_event 由 BaseBusinessActivity:44/137 自动触发（a1e7d6cd9f382add3.jsonl:L28-L29、L51-L52）。足以说明每个业务页都需要这对埋点。"
+        },
+        {
+          "key": "2ce43a97-0e6a-4a0f-a9b6-a5aac5a90177:a1e7d6cd9f382add3",
+          "at": "2026-09-18T23:51:16.991Z",
+          "reason": "已知 ArkUI struct 不能继承、需页面实例化并调用（同转录 L121 思考），也 grep 确认既有页面对 components/common 只消费 WindowModel（L54-L55、报告 L311“消费方兼容”），并在 registry 中看到 VideoPlayPage 已有 pageShowEvent 占位（L178-L179）。却只写出需页面自行调用的组合式 BasePage（L216-L217），向 registry 只追加 P-B6-001..006（引擎注册/密码门/loading 宿主等，L188-L189），没有为任何既有页面登记 BasePage 或生命周期埋点接线；最终报告仅把 BasePage 列为已建件（L311）。逐页接线义务在此丢失。",
+          "problem": true
+        },
+        {
+          "key": "/private/tmp/testAIPPT2/spec/placeholder-registry.md",
+          "at": "2026-09-19T02:45:15.181Z",
+          "reason": "交付桥梁：Base-6 追加的 P-B6 行（a1e7d6cd9f382add3.jsonl:L188-L189）之后，registry 中没有任何页面级 BasePage/生命周期埋点接线行；该 slice worker 按派工规则查询本 slice 待兑现占位（a2be84aab6248fce3.jsonl:L61-L62），队列里没有本页的这项义务。"
+        },
+        {
+          "key": "/private/tmp/testAIPPT2/spec/execution/base-contracts.md",
+          "at": "2026-09-19T02:44:20.484Z",
+          "reason": "并行输入：主会话据 Base 层报告写的 as-built 契约（2ce43a97 L5666），把 BasePage 列为“基类/骨架”可用 API，“Stage 3 接线指针”只汇总已登记占位、不含逐页 BasePage 接线；该 worker 读取于 a2be84aab6248fce3.jsonl:L29-L30。它延续了上游缺口，本卡不另推定主会话独立失职。"
+        },
+        {
+          "key": "2ce43a97-0e6a-4a0f-a9b6-a5aac5a90177:a2be84aab6248fce3",
+          "at": "2026-09-19T03:01:31.730Z",
+          "reason": "传递：Slice 4 重写 ChoicePPTTemplatePage（L186-L187），页面无 pageShowEvent/pageQuitEvent 或 BasePage 调用。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "Base-6 以 Bash sed -n '346,425p' 读取 feature-base.md §7，回执即 §7.1 BaseBusinessActivity 的 onCreate→pageShowEvent、onDestroy→pageQuitEvent 及“页面级埋点改为 BasePage 钩子”映射；这支持 Base-6 写前已收到该要求。",
+          "evidence": [
+            {
+              "source": "a1e7d6cd9f382add3.jsonl",
+              "line": 28
+            },
+            {
+              "source": "a1e7d6cd9f382add3.jsonl",
+              "line": 29
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "Base-6 以 Bash heredoc 追加（cat >>）写入 placeholder-registry.md，内容仅 P-B6-001..006 六行，回执确认追加完成；这就是 Base-6 交给后续 slice 的待接线队列。",
+          "evidence": [
+            {
+              "source": "a1e7d6cd9f382add3.jsonl",
+              "line": 188
+            },
+            {
+              "source": "a1e7d6cd9f382add3.jsonl",
+              "line": 189
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": 5,
+          "force": true,
+          "reason": "slice worker 用 Bash 在 spec/placeholder-registry.md 上 grep P-S4-/P-S6-00[23]，回执返回本 slice 相关占位行；这是该 worker 确定待兑现接线的实际读取。",
+          "evidence": [
+            {
+              "source": "a2be84aab6248fce3.jsonl",
+              "line": 61
+            },
+            {
+              "source": "a2be84aab6248fce3.jsonl",
+              "line": 62
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/private/tmp/testAIPPT2/entry/src/main/ets/pages/FileListPage.ets",
+        "since": "2026-09-19T05:23:13.192Z",
+        "at": "2026-09-19T15:38:59.780Z"
+      },
+      "nodes": [
+        {
+          "key": "/private/tmp/testAIPPT2/spec/baseline/feature-base.md",
+          "at": "2026-09-18T23:17:13.158Z",
+          "reason": "正常输入：Base-6 用 sed 读 feature-base §7.1，回执写明 BaseBusinessActivity 为业务页统一父类，onCreate 记 createTime 并 pageShowEvent(getPageName())，onDestroy 按 onBackQuit 归因 pageQuitEvent(停留秒)，并给出鸿蒙映射“页面级埋点改为 BasePage 的 onPageShow/onPageHide 钩子”；§8.2 亦标 page_event 由 BaseBusinessActivity:44/137 自动触发（a1e7d6cd9f382add3.jsonl:L28-L29、L51-L52）。足以说明每个业务页都需要这对埋点。"
+        },
+        {
+          "key": "2ce43a97-0e6a-4a0f-a9b6-a5aac5a90177:a1e7d6cd9f382add3",
+          "at": "2026-09-18T23:51:16.991Z",
+          "reason": "已知 ArkUI struct 不能继承、需页面实例化并调用（同转录 L121 思考），也 grep 确认既有页面对 components/common 只消费 WindowModel（L54-L55、报告 L311“消费方兼容”），并在 registry 中看到 VideoPlayPage 已有 pageShowEvent 占位（L178-L179）。却只写出需页面自行调用的组合式 BasePage（L216-L217），向 registry 只追加 P-B6-001..006（引擎注册/密码门/loading 宿主等，L188-L189），没有为任何既有页面登记 BasePage 或生命周期埋点接线；最终报告仅把 BasePage 列为已建件（L311）。逐页接线义务在此丢失。",
+          "problem": true
+        },
+        {
+          "key": "/private/tmp/testAIPPT2/spec/placeholder-registry.md",
+          "at": "2026-09-19T02:45:39.367Z",
+          "reason": "交付桥梁：Base-6 追加的 P-B6 行（a1e7d6cd9f382add3.jsonl:L188-L189）之后，registry 中没有任何页面级 BasePage/生命周期埋点接线行；该 slice worker 按派工规则查询本 slice 待兑现占位（a852cd8ab5bc28b6a.jsonl:L61、L64），队列里没有本页的这项义务。"
+        },
+        {
+          "key": "/private/tmp/testAIPPT2/spec/execution/base-contracts.md",
+          "at": "2026-09-19T02:44:31.159Z",
+          "reason": "并行输入：主会话据 Base 层报告写的 as-built 契约（2ce43a97 L5666），把 BasePage 列为“基类/骨架”可用 API，“Stage 3 接线指针”只汇总已登记占位、不含逐页 BasePage 接线；该 worker 读取于 a852cd8ab5bc28b6a.jsonl:L30-L31。它延续了上游缺口，本卡不另推定主会话独立失职。"
+        },
+        {
+          "key": "2ce43a97-0e6a-4a0f-a9b6-a5aac5a90177:a852cd8ab5bc28b6a",
+          "at": "2026-09-19T02:57:56.915Z",
+          "reason": "传递：Slice 5 编辑 FileListPage（L142–L158）只兑现已登记占位，未加页面生命周期埋点。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "Base-6 以 Bash sed -n '346,425p' 读取 feature-base.md §7，回执即 §7.1 BaseBusinessActivity 的 onCreate→pageShowEvent、onDestroy→pageQuitEvent 及“页面级埋点改为 BasePage 钩子”映射；这支持 Base-6 写前已收到该要求。",
+          "evidence": [
+            {
+              "source": "a1e7d6cd9f382add3.jsonl",
+              "line": 28
+            },
+            {
+              "source": "a1e7d6cd9f382add3.jsonl",
+              "line": 29
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "Base-6 以 Bash heredoc 追加（cat >>）写入 placeholder-registry.md，内容仅 P-B6-001..006 六行，回执确认追加完成；这就是 Base-6 交给后续 slice 的待接线队列。",
+          "evidence": [
+            {
+              "source": "a1e7d6cd9f382add3.jsonl",
+              "line": 188
+            },
+            {
+              "source": "a1e7d6cd9f382add3.jsonl",
+              "line": 189
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": 5,
+          "force": true,
+          "reason": "slice worker 用 Bash 在 spec/placeholder-registry.md 上 grep P-S8-00x/P-S1-010/P-S5-00，回执返回本 slice 相关占位行；这是该 worker 确定待兑现接线的实际读取。",
+          "evidence": [
+            {
+              "source": "a852cd8ab5bc28b6a.jsonl",
+              "line": 61
+            },
+            {
+              "source": "a852cd8ab5bc28b6a.jsonl",
+              "line": 64
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/private/tmp/testAIPPT2/entry/src/main/ets/pages/CreateOutLinePage.ets",
+        "since": "2026-09-19T05:23:13.192Z",
+        "at": "2026-09-19T15:38:59.780Z"
+      },
+      "nodes": [
+        {
+          "key": "/private/tmp/testAIPPT2/spec/baseline/feature-base.md",
+          "at": "2026-09-18T23:17:13.158Z",
+          "reason": "正常输入：Base-6 用 sed 读 feature-base §7.1，回执写明 BaseBusinessActivity 为业务页统一父类，onCreate 记 createTime 并 pageShowEvent(getPageName())，onDestroy 按 onBackQuit 归因 pageQuitEvent(停留秒)，并给出鸿蒙映射“页面级埋点改为 BasePage 的 onPageShow/onPageHide 钩子”；§8.2 亦标 page_event 由 BaseBusinessActivity:44/137 自动触发（a1e7d6cd9f382add3.jsonl:L28-L29、L51-L52）。足以说明每个业务页都需要这对埋点。"
+        },
+        {
+          "key": "2ce43a97-0e6a-4a0f-a9b6-a5aac5a90177:a1e7d6cd9f382add3",
+          "at": "2026-09-18T23:51:16.991Z",
+          "reason": "已知 ArkUI struct 不能继承、需页面实例化并调用（同转录 L121 思考），也 grep 确认既有页面对 components/common 只消费 WindowModel（L54-L55、报告 L311“消费方兼容”），并在 registry 中看到 VideoPlayPage 已有 pageShowEvent 占位（L178-L179）。却只写出需页面自行调用的组合式 BasePage（L216-L217），向 registry 只追加 P-B6-001..006（引擎注册/密码门/loading 宿主等，L188-L189），没有为任何既有页面登记 BasePage 或生命周期埋点接线；最终报告仅把 BasePage 列为已建件（L311）。逐页接线义务在此丢失。",
+          "problem": true
+        },
+        {
+          "key": "/private/tmp/testAIPPT2/spec/placeholder-registry.md",
+          "at": "2026-09-19T03:35:45.397Z",
+          "reason": "交付桥梁：Base-6 追加的 P-B6 行（a1e7d6cd9f382add3.jsonl:L188-L189）之后，registry 中没有任何页面级 BasePage/生命周期埋点接线行；该 slice worker 按派工规则查询本 slice 待兑现占位（ac396bb9fb1d27cd4.jsonl:L104-L105），队列里没有本页的这项义务。"
+        },
+        {
+          "key": "/private/tmp/testAIPPT2/spec/execution/base-contracts.md",
+          "at": "2026-09-19T03:33:37.494Z",
+          "reason": "并行输入：主会话据 Base 层报告写的 as-built 契约（2ce43a97 L5666），把 BasePage 列为“基类/骨架”可用 API，“Stage 3 接线指针”只汇总已登记占位、不含逐页 BasePage 接线；该 worker 读取于 ac396bb9fb1d27cd4.jsonl:L30-L31。它延续了上游缺口，本卡不另推定主会话独立失职。"
+        },
+        {
+          "key": "2ce43a97-0e6a-4a0f-a9b6-a5aac5a90177:ac396bb9fb1d27cd4",
+          "at": "2026-09-19T04:01:43.705Z",
+          "reason": "传递：Slice 7 编辑 CreateOutLinePage（L247–L420）只兑现已登记占位，未加页面生命周期埋点。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "Base-6 以 Bash sed -n '346,425p' 读取 feature-base.md §7，回执即 §7.1 BaseBusinessActivity 的 onCreate→pageShowEvent、onDestroy→pageQuitEvent 及“页面级埋点改为 BasePage 钩子”映射；这支持 Base-6 写前已收到该要求。",
+          "evidence": [
+            {
+              "source": "a1e7d6cd9f382add3.jsonl",
+              "line": 28
+            },
+            {
+              "source": "a1e7d6cd9f382add3.jsonl",
+              "line": 29
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "Base-6 以 Bash heredoc 追加（cat >>）写入 placeholder-registry.md，内容仅 P-B6-001..006 六行，回执确认追加完成；这就是 Base-6 交给后续 slice 的待接线队列。",
+          "evidence": [
+            {
+              "source": "a1e7d6cd9f382add3.jsonl",
+              "line": 188
+            },
+            {
+              "source": "a1e7d6cd9f382add3.jsonl",
+              "line": 189
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": 5,
+          "force": true,
+          "reason": "slice worker 用 Bash 在 spec/placeholder-registry.md 上 grep P-S5-/P-S6-001/P-S7-，回执返回本 slice 相关占位行；这是该 worker 确定待兑现接线的实际读取。",
+          "evidence": [
+            {
+              "source": "ac396bb9fb1d27cd4.jsonl",
+              "line": 104
+            },
+            {
+              "source": "ac396bb9fb1d27cd4.jsonl",
+              "line": 105
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/private/tmp/testAIPPT2/entry/src/main/ets/pages/PPTTemplatePreviewPage.ets",
+        "since": "2026-09-19T05:23:13.192Z",
+        "at": "2026-09-19T15:38:59.780Z"
+      },
+      "nodes": [
+        {
+          "key": "/private/tmp/testAIPPT2/spec/baseline/feature-base.md",
+          "at": "2026-09-18T23:17:13.158Z",
+          "reason": "正常输入：Base-6 用 sed 读 feature-base §7.1，回执写明 BaseBusinessActivity 为业务页统一父类，onCreate 记 createTime 并 pageShowEvent(getPageName())，onDestroy 按 onBackQuit 归因 pageQuitEvent(停留秒)，并给出鸿蒙映射“页面级埋点改为 BasePage 的 onPageShow/onPageHide 钩子”；§8.2 亦标 page_event 由 BaseBusinessActivity:44/137 自动触发（a1e7d6cd9f382add3.jsonl:L28-L29、L51-L52）。足以说明每个业务页都需要这对埋点。"
+        },
+        {
+          "key": "2ce43a97-0e6a-4a0f-a9b6-a5aac5a90177:a1e7d6cd9f382add3",
+          "at": "2026-09-18T23:51:16.991Z",
+          "reason": "已知 ArkUI struct 不能继承、需页面实例化并调用（同转录 L121 思考），也 grep 确认既有页面对 components/common 只消费 WindowModel（L54-L55、报告 L311“消费方兼容”），并在 registry 中看到 VideoPlayPage 已有 pageShowEvent 占位（L178-L179）。却只写出需页面自行调用的组合式 BasePage（L216-L217），向 registry 只追加 P-B6-001..006（引擎注册/密码门/loading 宿主等，L188-L189），没有为任何既有页面登记 BasePage 或生命周期埋点接线；最终报告仅把 BasePage 列为已建件（L311）。逐页接线义务在此丢失。",
+          "problem": true
+        },
+        {
+          "key": "/private/tmp/testAIPPT2/spec/placeholder-registry.md",
+          "at": "2026-09-19T03:35:45.397Z",
+          "reason": "交付桥梁：Base-6 追加的 P-B6 行（a1e7d6cd9f382add3.jsonl:L188-L189）之后，registry 中没有任何页面级 BasePage/生命周期埋点接线行；该 slice worker 按派工规则查询本 slice 待兑现占位（ac396bb9fb1d27cd4.jsonl:L104-L105），队列里没有本页的这项义务。"
+        },
+        {
+          "key": "/private/tmp/testAIPPT2/spec/execution/base-contracts.md",
+          "at": "2026-09-19T03:33:37.494Z",
+          "reason": "并行输入：主会话据 Base 层报告写的 as-built 契约（2ce43a97 L5666），把 BasePage 列为“基类/骨架”可用 API，“Stage 3 接线指针”只汇总已登记占位、不含逐页 BasePage 接线；该 worker 读取于 ac396bb9fb1d27cd4.jsonl:L30-L31。它延续了上游缺口，本卡不另推定主会话独立失职。"
+        },
+        {
+          "key": "2ce43a97-0e6a-4a0f-a9b6-a5aac5a90177:ac396bb9fb1d27cd4",
+          "at": "2026-09-19T03:59:36.876Z",
+          "reason": "传递：Slice 7 编辑 PPTTemplatePreviewPage（L302–L389）只兑现已登记占位，未加页面生命周期埋点。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "Base-6 以 Bash sed -n '346,425p' 读取 feature-base.md §7，回执即 §7.1 BaseBusinessActivity 的 onCreate→pageShowEvent、onDestroy→pageQuitEvent 及“页面级埋点改为 BasePage 钩子”映射；这支持 Base-6 写前已收到该要求。",
+          "evidence": [
+            {
+              "source": "a1e7d6cd9f382add3.jsonl",
+              "line": 28
+            },
+            {
+              "source": "a1e7d6cd9f382add3.jsonl",
+              "line": 29
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "Base-6 以 Bash heredoc 追加（cat >>）写入 placeholder-registry.md，内容仅 P-B6-001..006 六行，回执确认追加完成；这就是 Base-6 交给后续 slice 的待接线队列。",
+          "evidence": [
+            {
+              "source": "a1e7d6cd9f382add3.jsonl",
+              "line": 188
+            },
+            {
+              "source": "a1e7d6cd9f382add3.jsonl",
+              "line": 189
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": 5,
+          "force": true,
+          "reason": "slice worker 用 Bash 在 spec/placeholder-registry.md 上 grep P-S5-/P-S6-001/P-S7-，回执返回本 slice 相关占位行；这是该 worker 确定待兑现接线的实际读取。",
+          "evidence": [
+            {
+              "source": "ac396bb9fb1d27cd4.jsonl",
+              "line": 104
+            },
+            {
+              "source": "ac396bb9fb1d27cd4.jsonl",
+              "line": 105
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/private/tmp/testAIPPT2/entry/src/main/ets/pages/PPTFilePage.ets",
+        "since": "2026-09-19T05:23:13.192Z",
+        "at": "2026-09-19T15:38:59.780Z"
+      },
+      "nodes": [
+        {
+          "key": "/private/tmp/testAIPPT2/spec/baseline/feature-base.md",
+          "at": "2026-09-18T23:17:13.158Z",
+          "reason": "正常输入：Base-6 用 sed 读 feature-base §7.1，回执写明 BaseBusinessActivity 为业务页统一父类，onCreate 记 createTime 并 pageShowEvent(getPageName())，onDestroy 按 onBackQuit 归因 pageQuitEvent(停留秒)，并给出鸿蒙映射“页面级埋点改为 BasePage 的 onPageShow/onPageHide 钩子”；§8.2 亦标 page_event 由 BaseBusinessActivity:44/137 自动触发（a1e7d6cd9f382add3.jsonl:L28-L29、L51-L52）。足以说明每个业务页都需要这对埋点。"
+        },
+        {
+          "key": "2ce43a97-0e6a-4a0f-a9b6-a5aac5a90177:a1e7d6cd9f382add3",
+          "at": "2026-09-18T23:51:16.991Z",
+          "reason": "已知 ArkUI struct 不能继承、需页面实例化并调用（同转录 L121 思考），也 grep 确认既有页面对 components/common 只消费 WindowModel（L54-L55、报告 L311“消费方兼容”），并在 registry 中看到 VideoPlayPage 已有 pageShowEvent 占位（L178-L179）。却只写出需页面自行调用的组合式 BasePage（L216-L217），向 registry 只追加 P-B6-001..006（引擎注册/密码门/loading 宿主等，L188-L189），没有为任何既有页面登记 BasePage 或生命周期埋点接线；最终报告仅把 BasePage 列为已建件（L311）。逐页接线义务在此丢失。",
+          "problem": true
+        },
+        {
+          "key": "/private/tmp/testAIPPT2/spec/placeholder-registry.md",
+          "at": "2026-09-19T04:52:01.506Z",
+          "reason": "交付桥梁：Base-6 追加的 P-B6 行（a1e7d6cd9f382add3.jsonl:L188-L189）之后，registry 中没有任何页面级 BasePage/生命周期埋点接线行；该 slice worker 按派工规则查询本 slice 待兑现占位（a8b48d2ac5de63583.jsonl:L114-L115），队列里没有本页的这项义务。"
+        },
+        {
+          "key": "/private/tmp/testAIPPT2/spec/execution/base-contracts.md",
+          "at": "2026-09-19T04:47:11.258Z",
+          "reason": "并行输入：主会话据 Base 层报告写的 as-built 契约（2ce43a97 L5666），把 BasePage 列为“基类/骨架”可用 API，“Stage 3 接线指针”只汇总已登记占位、不含逐页 BasePage 接线；该 worker 读取于 a8b48d2ac5de63583.jsonl:L48-L49。它延续了上游缺口，本卡不另推定主会话独立失职。"
+        },
+        {
+          "key": "2ce43a97-0e6a-4a0f-a9b6-a5aac5a90177:a8b48d2ac5de63583",
+          "at": "2026-09-19T05:00:30.492Z",
+          "reason": "传递：Slice 10 编辑 PPTFilePage（L152–L200）只兑现已登记占位，未加页面生命周期埋点。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "Base-6 以 Bash sed -n '346,425p' 读取 feature-base.md §7，回执即 §7.1 BaseBusinessActivity 的 onCreate→pageShowEvent、onDestroy→pageQuitEvent 及“页面级埋点改为 BasePage 钩子”映射；这支持 Base-6 写前已收到该要求。",
+          "evidence": [
+            {
+              "source": "a1e7d6cd9f382add3.jsonl",
+              "line": 28
+            },
+            {
+              "source": "a1e7d6cd9f382add3.jsonl",
+              "line": 29
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "Base-6 以 Bash heredoc 追加（cat >>）写入 placeholder-registry.md，内容仅 P-B6-001..006 六行，回执确认追加完成；这就是 Base-6 交给后续 slice 的待接线队列。",
+          "evidence": [
+            {
+              "source": "a1e7d6cd9f382add3.jsonl",
+              "line": 188
+            },
+            {
+              "source": "a1e7d6cd9f382add3.jsonl",
+              "line": 189
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": 5,
+          "force": true,
+          "reason": "slice worker 用 Bash 在 spec/placeholder-registry.md 上 grep P-S7-002/003/004 与 P-S10-，回执返回本 slice 相关占位行；这是该 worker 确定待兑现接线的实际读取。",
+          "evidence": [
+            {
+              "source": "a8b48d2ac5de63583.jsonl",
+              "line": 114
+            },
+            {
+              "source": "a8b48d2ac5de63583.jsonl",
+              "line": 115
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": 5,
+          "force": true,
+          "reason": "Slice 10 用 Bash cat 读取 base-contracts.md 全文，回执即 as-built 契约（BasePage 仅列为基类/骨架）；这是该 worker 写前读到的 Base 契约。",
+          "evidence": [
+            {
+              "source": "a8b48d2ac5de63583.jsonl",
+              "line": 48
+            },
+            {
+              "source": "a8b48d2ac5de63583.jsonl",
+              "line": 49
+            }
+          ]
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "7 个页面（Login/SearchPage/FileList/CreateOutLine/ChoicePPTTemplate/PPTTemplatePreview/PPTFile）的转换派工 anchors 未含 BaseBusinessActivity（来自 B2 组1/组3 页 spec 头部，组2 页 spec 则列入），该差异的形成未逐项追溯；这 7 页转换者只读到子类继承声明，本卡不将其列为转换者偏差。"
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/private/tmp/testAIPPT2/entry/src/main/ets/pages/VideoPlayPage.ets",
+      "reason": "已确认修改（ab99437659353b9e6.jsonl:L124-L139 接两端埋点与返回归因）。生成期唯一写者 ac16422ce296e130a 在 EventUpload 未建时按先例写入 FWD-REF P-S12-001/002（L146 规划、L162 Write）并登记 registry（Slice 12 读到的行见 ae50dfb8b3b8cf8fb.jsonl:L50）；未兑现发生在之后：主会话 Slice 12 派工只给“代码在位则 resolved／否则保持 registered 并 retag 死码域披露”两选项（2ce43a97 L6541），worker ae50dfb8b3b8cf8fb 承认 EventTrackService 已建、理论可接，仍判保持 registered（L57、L81），G4 closer a71c8d1622d95f785 按 D-003 retag 保留（L112、L116）。这些环节都未写目标文件，缺少可绑定的写入交接；且 D-003 已裁该页为死码，ECAT iter4 将其列为缺陷是否属新要求未核。"
+    }
+  ],
+  "job": "issue-636e89ec76020b176ca2",
+  "metadata": {
+    "migration": {
+      "project": "DeepAI全能PPT",
+      "server_session_id": "fac5eaa9-b1e9-4607-b90e-dadb4e885f36"
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "c8284269-4179-4eb8-8fec-f36d62f9293e"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "GLM-5.3-Flash",
+        "claude-fable-5-1"
+      ],
+      "client_versions": [
+        "2.1.247",
+        "2.1.278"
+      ]
+    },
+    "source_set_id": "sources-ef87c31e31b2c26de3b2",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/private/tmp/testAIPPT2",
+        "at": "2026-09-18T15:57:46.578Z",
+        "ref": "2ce43a97-0e6a-4a0f-a9b6-a5aac5a90177.jsonl:L1942",
+        "request_ref": "2ce43a97-0e6a-4a0f-a9b6-a5aac5a90177.jsonl:L1940",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/private/tmp/testAIPPT2",
+        "at": "2026-09-18T15:57:46.578Z",
+        "ref": "2ce43a97-0e6a-4a0f-a9b6-a5aac5a90177.jsonl:L1942",
+        "request_ref": "2ce43a97-0e6a-4a0f-a9b6-a5aac5a90177.jsonl:L1940",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.0.1(21)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/private/tmp/testAIPPT2",
+        "at": "2026-09-19T11:26:45.988Z",
+        "ref": "7e49e8dd-9559-4bed-9f6d-0e98e41652c6.jsonl:L434",
+        "request_ref": "7e49e8dd-9559-4bed-9f6d-0e98e41652c6.jsonl:L429",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.0.1(21)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/private/tmp/testAIPPT2",
+        "at": "2026-09-19T15:38:26.603Z",
+        "ref": "eb0d3903-1f96-4816-9e18-bef3d88833f1.jsonl:L339",
+        "request_ref": "eb0d3903-1f96-4816-9e18-bef3d88833f1.jsonl:L337",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.4"
+  },
+  "revision": "a931bd200894f925bf3b4ff63d3107bcb20248b758bad8c3bd38155d27b36bb6"
+}

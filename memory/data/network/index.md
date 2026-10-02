@@ -28,9 +28,9 @@
 - [源端从响应头取 token/refreshToken 时，HTTP 封装把响应头交给调用方，Repository 按源端成功回调取值](lesson-2a4e6af209308c08aaa6.lesson.md)
   - 时机：网络与登录数据层的规格提取和实现阶段，确定登录类接口凭证的取值来源与 HTTP 封装的返回结构时
   - 情境：源端 Retrofit 登录接口返回 Response&lt;BaseResponse&lt;T&gt;&gt;，Repository 在成功回调里用 headers()\["Authorization"\]、headers()\["RefreshToken"\] 写 TokenManager，body 的 data 只含用户信息；目标端 HTTP 封装统一返回解析后的响应体。
-- [源端声明 INTERNET 且目标有网络请求时，在 module.json5 的 requestPermissions 声明 ohos.permission.INTERNET](lesson-faec7be031b7f64752c4.lesson.md)
-  - 时机：网络基础设施实现阶段，新建 HTTP 请求封装并接入页面请求时
-  - 情境：源 AndroidManifest 声明 android.permission.INTERNET；目标新建请求封装与页面调用，module.json5 尚无 requestPermissions。
+- [源端声明 INTERNET（及 ACCESS_NETWORK_STATE）且目标有网络请求时，在 module.json5 声明 ohos.permission.INTERNET（及 GET_NETWORK_INFO），并让这项声明有确定的写者](lesson-faec7be031b7f64752c4.lesson.md)
+  - 时机：迁移计划拆分、网络层实现与接线收尾阶段，确定由哪个任务、何时在 module.json5 声明网络权限时
+  - 情境：源 AndroidManifest 声明 android.permission.INTERNET，可能还有 ACCESS_NETWORK_STATE；目标新建请求封装与页面调用，module.json5 尚无 requestPermissions，或只有其他功能的权限；计划模板按能力段给任务分配输入，网络层任务的写域可能不含 module.json5。
 - [源端拦截器统一注入的请求头逐条迁到 HttpClient 默认头，头名与格式以源码为准，不照模板写 Bearer 前缀](lesson-217e93ef9097efc519f1.lesson.md)
   - 时机：网络基础层实现阶段，写 HttpClient 默认请求头与 Authorization 取值格式时
   - 情境：源端用 OkHttp 拦截器（如 TokenInterceptor）给每个请求加鉴权、语言、平台、地区等头，接口声明上看不到这些头；目标端用 @ohos.net.http 自建 HttpClient，skill 参考模板示范 `Authorization: Bearer ${token}`；API 清单可能只给出拦截器路径和 header_write 一类标签。

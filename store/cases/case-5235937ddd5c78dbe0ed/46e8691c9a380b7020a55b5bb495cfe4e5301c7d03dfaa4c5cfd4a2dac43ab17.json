@@ -1,0 +1,376 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-5235937ddd5c78dbe0ed",
+  "created_at": "2026-10-02T19:17:57.366009+00:00",
+  "migration_key": "fac5eaa9-b1e9-4607-b90e-dadb4e885f36",
+  "title": "源端已确认的设置动作与回前台刷新链被挂成无承接方的前向占位，生成期落空；修复中又按Android命名误用BundleInfo字段",
+  "when": "规格拆分与切片执行阶段，把源端已确认的行为（设置项点击、onResume刷新端点）延后给其他feature/切片或登记前向占位时；以及收尾闭环阶段处置未兑现占位时",
+  "description": "源Fragment/Activity的设置项（清除缓存、版本更新）和回前台刷新链（getUserInfo/getUserConfig）依赖目标工程尚未建立的ViewModel或网络端点；规格把它们写成跨feature对接点或「刷新触发源」，执行中以FWD-REF/占位登记延后，计划里却没有任何切片负责产出。",
+  "summary": "本问题有两类生成遗留和一个修复中新生错误，成因分开叙述。\n\n一、「我的」页清除缓存/版本更新为空桩。F003规格作者a376bdf3f12e9ae0c写前读过MineFragment.kt全文\n（:150 computeCacheSize、:177-184 mineSettingUpdate/ClearCache、:240-247 launchAppDetail，L164-L165），\n写F003时却在范围节把「设置区（关于我们/检查更新/清缓存/意见反馈/售后中心）」整体归给F010/F001\n「AC登记但不展开」，F003→F010对接表只列关于我们/意见反馈/售后中心/客服中心四项（L241）；\nF010、F001规格全程未出现检查更新或清缓存的AC，委托落空。主线程编skip-list时注意到MineViewModel是活码，\n只核了F003的这一句和AC06就判定已承接（2ce43a97…jsonl:L1610-L1617）。\nSlice 8 worker a8e9af1f546828793实际读到F003第51行、slice-08账本仅列四入口（L27-L30），也读到MineFragment\n源码（L42-L43）；它grep计划与工程确认没有任何切片或工件承接checkUpate/cacheSize（L188-L189），\n仍登记P-S8-107/108，指向「HomeViewModel.checkUpate/MineViewModel HMOS等价工件建立后接入」且\nresolve_by写成自身Slice 8 Step 3d（L259），随后写出onClearCache/onCheckUpdate只有FWD-REF注释的空方法（L262）。\nG3收口的回写清单把两条占位retag为「集成期」以免FV-1债务闸报GAP，由主线程代行（2ce43a97…jsonl:L6463、L6500）；FV-1债务闸仍报出group_3_brief依赖从未建立的\nHomeViewModel/MineViewModel（2ce43a97…jsonl:L6676），主线程判为brief表述过时，只把条目改写为\n「内联MineComponent或对应service承接」（L6682、L6717、L6791），未核对MineComponent里仍是空桩。\nECAT iter0判别器列为#23，修复worker a2c80aa03c158295c新建MineCacheService并在MineComponent接入缓存\n大小计算/清理与应用市场详情跳转（a2c80aa03c158295c.jsonl:L101-L102、L148-L160）。\n\n二、回前台刷新链缺getInfo/arrival。F001规格AC34/AC63写明已登录分支按getUserInfo→getUserConfig→getFloatInfo\n发起、getUserConfig实发POST /system/arrival并以hasUserConfig单次门写AppContant.userConfig；slice-01账本把\nMainPage.onResume刷新链划给Slice 1，但把三调用注成「S8/S9/S3刷新触发源」。端点生产方在三份规格间互相指派：\nF002作者ac0020dad06422e67读过apis/user.md里的POST /user/getInfo（调用位置HomeViewModel.kt:35，L47-L48），\n在F002 API表列出该端点却注明「归F003消费」，AuthService目标接口没有getInfo（L228）；F003又写「/user/getInfo归\nF002/F001」。Slice 2 worker ac0ebd026061aeccf按F002接口写AuthService，只建了updateUserInfo刷新面。\nSlice 1 worker a82cef586e6a4cdeb读到F001 AC63和HomeViewModel的hasUserConfig/getUserConfig（L27-L30、L101-L102），\n自己拥有的ConfigService却只建了/app/config（L206），arrival连同整条已登录分支一起留给P-S1-005。\nG1 closer af9e909e8f153df2a读到slice-01账本与HomeActivity.onResume三调用（L13、L76-L77），只接未登录分支，\n把已登录分支的P-S1-005改为resolve_by=Slice 8 Step 3d「HomeViewModel刷新链工件就绪后承接」（L129）；\n而slice-08账本和Slice 8派工都没有这一项，派工还写「refreshOnShown等已收口，禁碰」（a8e9af1f546828793.jsonl:L1）。\nFV-1债务闸把P-S1-005报为GAP（2ce43a97…jsonl:L6676），主线程派a915fe3916ca11657修复，却限定\n「禁新造网络端点——网络域归Base-3/S9契约，缺端点只接已有部分并在信封披露」（L6694）；该worker只接上\nproductFloat，在MainPage注释写明/user/getInfo与/system/arrival未建（a915fe3916ca11657.jsonl:L76），这一状态保留到生成结束。\n修复worker在AuthService新增getInfo()、ConfigService新增arrival()与hasUserConfig门，MainPage按源顺序接线并加启动检查更新\n（a2c80aa03c158295c.jsonl:L105-L118、L135-L145）。\n\n三、修复中新生的BundleInfo.bundleName编译错误。ECAT生成器派g-mine时要求应用市场want「对照本地SDK文档或WebSearch核实」\n（7e49e8dd…jsonl:L183）。修复worker只grep到仓内getBundleInfoForSelf调用行（L78-L79，未出现包名字段访问），\n在AppShellService.checkUpdate写成info.bundleName（L131）；事后在SDK d.ts里只核了getBundleInfoForSelfSync和\nGET_BUNDLE_INFO_DEFAULT（L173-L174），未核BundleInfo字段。iter1编译门报Property 'bundleName' does not exist on type\n'BundleInfo'（7e49e8dd…jsonl:L450-L457），主线程查d.ts后改为info.name（L486-L507、L522-L527）。\n",
+  "recommendations": [
+    "规格拆分时，把源端活行为委托给其他feature前，打开目标feature规格确认已有对应AC或服务接口；端点只出现在API表而不在任何服务接口时，指定唯一生产方（如/user/getInfo由AuthService提供），不要写「归某feature消费」后就结束。",
+    "覆盖审计判定某个活ViewModel已被承接时，逐项对照它的调用面（clearCache/computeCacheSize/checkUpate）找到具体AC，不以范围节的对接点注释代替。",
+    "切片worker登记前向占位前，先确认resolve_by指向账本中实际计划产出该工件的切片；计划无承接、而实现只依赖本地平台API（缓存目录统计与清理、应用市场详情want）或现有HttpGateway端点模式时，在本切片直接实现，不留空方法。",
+    "规格AC已给出端点与门控（如AC63的POST /system/arrival+hasUserConfig）且对应service归本切片时，先在service里建好端点，只把跨切片调用点留给closer接线。",
+    "closer把占位移交给其他切片时，同步写入接收切片的派工清单与账本；收尾闭环遇到registry-gap或deferred-missing-artifact，要打开占位处代码核对是否已有实现，不以retag「集成期」或改写brief措辞消除；规格要求的端点缺失时，在收尾修复中补建，不设「禁新造端点」限制。",
+    "调用平台对象字段前，在SDK d.ts中核对该接口的字段名（BundleInfo的包名字段是name），只核函数签名不足以证明字段存在，也不要按Android packageName/bundleName命名推断。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/private/tmp/testAIPPT2/entry/src/main/ets/components/mine/MineComponent.ets",
+        "since": "2026-09-19T05:23:13.192Z",
+        "at": "2026-09-19T15:38:59.780Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/fengyis/AIPPT/app/src/main/java/cn/sanfate/pub/platform/fragment/MineFragment.kt",
+          "at": "2026-09-18T11:36:52.155Z",
+          "reason": "正常输入：F003作者Read回执给出onResume :150 computeCacheSize、onClick :177-184 mineSettingUpdate→launchAppDetail与mineSettingClearCache→AppLoadDialog+clearCache、:240-247 checkUpate(…,「已经是最新版本」,true)失败toast「未安装市场客户端」（a376bdf3f12e9ae0c.jsonl:L164-L165）。"
+        },
+        {
+          "key": "a376bdf3f12e9ae0c.jsonl",
+          "at": "2026-09-18T11:52:39.657Z",
+          "reason": "已读到上述两个设置动作，Write F003时把设置区整体归给F010/F001「AC登记但不展开」（第51行），F003→F010对接表只留关于我们/意见反馈/售后中心/客服中心四项，F003 AC中没有清缓存点击与检查更新；F010、F001也从未登记，委托落空（同转录L241）。",
+          "problem": true
+        },
+        {
+          "key": "/private/tmp/testAIPPT2/spec/baseline/features/F003-user-account.md",
+          "at": "2026-09-19T03:33:50.033Z",
+          "reason": "交付桥梁：Slice 8 worker的Read回执仍是第51行的F010/F001委托及只含四入口的F010对接表（a8e9af1f546828793.jsonl:L29-L30）。"
+        },
+        {
+          "key": "/private/tmp/testAIPPT2/spec/baseline/plans/slices/slice-08-f003.md",
+          "at": "2026-09-19T03:33:47.457Z",
+          "reason": "账本只把设置区四入口（关于我们/意见反馈/售后中心/客服中心）交给S10工厂，未给检查更新、清除缓存任何承接切片（a8e9af1f546828793.jsonl:L27-L28）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/fengyis/AIPPT/app/src/main/java/cn/sanfate/pub/platform/fragment/MineFragment.kt",
+          "at": "2026-09-19T03:34:05.822Z",
+          "reason": "正常输入：Slice 8 worker自己也读到:150、:177-184、:240-247的完整行为，足以在本地实现缓存统计/清理与应用市场跳转（a8e9af1f546828793.jsonl:L42-L43）。"
+        },
+        {
+          "key": "a8e9af1f546828793.jsonl",
+          "at": "2026-09-19T03:49:15.595Z",
+          "reason": "grep计划与工程确认无任何切片或工件承接checkUpate/cacheSize（L188-L189）后，仍登记P-S8-107/108指向从未计划的「HomeViewModel/MineViewModel HMOS等价工件」，resolve_by写成自身Slice 8 Step 3d（L259）；Write出的onClearCache/onCheckUpdate只有FWD-REF注释（L262）。该片段保留到生成结束，后由修复worker替换。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 6
+        },
+        {
+          "from": 4,
+          "to": 6
+        },
+        {
+          "from": 5,
+          "to": 6
+        },
+        {
+          "from": 6,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/private/tmp/testAIPPT2/entry/src/main/ets/pages/MainPage.ets",
+        "since": "2026-09-19T05:23:13.192Z",
+        "at": "2026-09-19T15:38:59.780Z"
+      },
+      "nodes": [
+        {
+          "key": "/private/tmp/testAIPPT2/spec/baseline/plans/slices/slice-01-f001.md",
+          "at": "2026-09-19T00:36:57.645Z",
+          "reason": "G1 closer读回执：Slice 1 Step 3d范围含MainPage.onResume刷新链，已登录分支为getInfo/getUserConfig/getFloatInfo（注为S8/S9/S3刷新触发源）；刷新链归属在Slice 1（af9e909e8f153df2a.jsonl:L11、L13）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/fengyis/AIPPT/app/src/main/java/com/aipptzhizuozz/bjh/page/HomeActivity.kt",
+          "at": "2026-09-19T00:42:17.645Z",
+          "reason": "正常输入：Bash sed回执给出onResume已登录时homeViewModel.getUserInfo()/getUserConfig()/getFloatInfo()三调用（af9e909e8f153df2a.jsonl:L76-L77）。"
+        },
+        {
+          "key": "af9e909e8f153df2a.jsonl",
+          "at": "2026-09-19T00:46:36.538Z",
+          "reason": "只接未登录initUser分支，Edit把已登录分支写成空else并把P-S1-005改为resolve_by=Slice 8 Step 3d「HomeViewModel刷新链工件（S8/S9/S3触发源）就绪后承接」；Slice 8账本与派工均无此项，刷新链从此无人负责（同转录L129、L463）。",
+          "problem": true
+        },
+        {
+          "key": "2ce43a97-0e6a-4a0f-a9b6-a5aac5a90177:main",
+          "at": "2026-09-19T05:15:00.157Z",
+          "reason": "FV-1债务闸已报P-S1-005的owner终态不再重开（L6676），主线程也核到已登录分支仍为空（L6686），派修复时却限定「禁新造网络端点——网络域归Base-3/S9契约，缺端点只接已有部分」（L6694）；此时已是生成收尾，没有后续阶段会补建/user/getInfo与/system/arrival。",
+          "problem": true
+        },
+        {
+          "key": "a915fe3916ca11657.jsonl",
+          "at": "2026-09-19T05:17:31.902Z",
+          "reason": "按上述限定只接PayService.productFloat，在refreshOnShown注释写明getUserInfo→/user/getInfo、getUserConfig→/system/arrival端点未建（同转录L76）；本链确认这一限定传到目标，该状态保留到生成结束。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "Bash先grep定位HomeActivity.kt路径再sed -n 228,256p，回执首行即该文件路径，随后是onResume已登录分支三调用；这是G1 closer改写P-S1-005前对该源码的真实读取。",
+          "evidence": [
+            {
+              "source": "af9e909e8f153df2a.jsonl",
+              "line": 76
+            },
+            {
+              "source": "af9e909e8f153df2a.jsonl",
+              "line": 77
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target"
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/private/tmp/testAIPPT2/entry/src/main/ets/services/ConfigService.ets",
+        "since": "2026-09-19T05:23:13.192Z",
+        "at": "2026-09-19T15:38:59.780Z"
+      },
+      "nodes": [
+        {
+          "key": "/private/tmp/testAIPPT2/spec/baseline/features/F001-app-shell.md",
+          "at": "2026-09-19T00:01:24.283Z",
+          "reason": "正常输入：Slice 1 worker Read回执含F001-AC63——getUserConfig实发POST /system/arrival，isSuccess置hasUserConfig=true并写AppContant.userConfig，进程内仅发一次（a82cef586e6a4cdeb.jsonl:L27、L30）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/fengyis/AIPPT/app/src/main/java/cn/sanfate/pub/platform/viewmodel/HomeViewModel.kt",
+          "at": "2026-09-19T00:07:27.938Z",
+          "reason": "正常输入：Bash cat回执给出HomeViewModel的hasUserConfig字段与getUserConfig实现（a82cef586e6a4cdeb.jsonl:L101-L102）。"
+        },
+        {
+          "key": "a82cef586e6a4cdeb.jsonl",
+          "at": "2026-09-19T00:17:31.352Z",
+          "reason": "ConfigService归本切片，Write却只建POST /app/config启动配置，未建arrival与hasUserConfig门；getUserConfig随整条已登录分支留给P-S1-005等待「HomeViewModel」（同转录L206、L416）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "Bash for循环cat四个Android锚点源码，其中含HomeViewModel.kt全文，回执给出hasUserConfig与getUserConfig；这是写ConfigService前Slice 1 worker对该文件的真实读取。",
+          "evidence": [
+            {
+              "source": "a82cef586e6a4cdeb.jsonl",
+              "line": 101
+            },
+            {
+              "source": "a82cef586e6a4cdeb.jsonl",
+              "line": 102
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/private/tmp/testAIPPT2/entry/src/main/ets/services/AuthService.ets",
+        "since": "2026-09-19T05:23:13.192Z",
+        "at": "2026-09-19T15:38:59.780Z"
+      },
+      "nodes": [
+        {
+          "key": "/private/tmp/testAIPPT2/spec/baseline/api-inventory/apis/user.md",
+          "at": "2026-09-18T11:26:20.379Z",
+          "reason": "正常输入：Read回执列出POST /user/getInfo（调用位置HomeViewModel.kt:35，空体，响应UserData→updateUserInfo轻量落库）（ac0020dad06422e67.jsonl:L47-L48）。"
+        },
+        {
+          "key": "ac0020dad06422e67.jsonl",
+          "at": "2026-09-18T11:53:08.710Z",
+          "reason": "Write F002时在API表列出/user/getInfo却注「归F003消费」，AuthService目标接口只有initUser/sendSmsCode/bind*/loginOut/deleteAccount等，没有getInfo；同期F003又写「/user/getInfo归F002/F001」，端点生产方在规格间互相指派后落空（同转录L228）。",
+          "problem": true
+        },
+        {
+          "key": "/private/tmp/testAIPPT2/spec/baseline/features/F002-login-auth.md",
+          "at": "2026-09-19T00:01:28.482Z",
+          "reason": "交付桥梁：Slice 2 worker的Read回执仍是不含getInfo的AuthService接口（ac0ebd026061aeccf.jsonl:L29、L32）。"
+        },
+        {
+          "key": "ac0ebd026061aeccf.jsonl",
+          "at": "2026-09-19T00:16:41.722Z",
+          "reason": "按F002接口Write AuthService，只在AuthSession建updateUserInfo「getInfo后轻量刷新」接收面，AuthService没有getInfo端点（同转录L206、L223）；本链确认传递，不另推定其独立失职。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/private/tmp/testAIPPT2/entry/src/main/ets/services/AppShellService.ets",
+        "since": "2026-09-19T05:23:13.192Z",
+        "at": "2026-09-19T15:38:59.780Z"
+      },
+      "summary": "checkUpdate在生成期缺失，与MineComponent图同源（P-S8-107指向的「S1壳域应用市场跳转链」从未计划）。\n本图只归因修复中新生的编译错误：修复worker写checkUpdate时用info.bundleName取包名，iter1编译门报\nBundleInfo无bundleName属性，ECAT生成器主线程改为info.name（7e49e8dd…jsonl:L450-L457、L522-L527）。\n",
+      "recommendations": [
+        "调用平台对象字段前，在SDK d.ts中核对该接口的字段名（BundleInfo的包名字段是name），只核函数签名不足以证明字段存在。"
+      ],
+      "nodes": [
+        {
+          "key": "7e49e8dd-9559-4bed-9f6d-0e98e41652c6.jsonl",
+          "at": "2026-09-19T10:37:20.742Z",
+          "reason": "派工输入：要求isNeedMarket=true时用本应用bundleName拉起AppGallery详情want，并写明「verify the exact want shape against local SDK docs or WebSearch, this is a platform API」（同转录L183；a2c80aa03c158295c.jsonl:L1）。"
+        },
+        {
+          "key": "a2c80aa03c158295c.jsonl",
+          "at": "2026-09-19T10:48:57.618Z",
+          "reason": "只grep到仓内getBundleInfoForSelf调用行（L78-L79，无包名字段访问），Edit AppShellService.checkUpdate写成bundleName = info.bundleName（L131）；事后SDK d.ts只核了getBundleInfoForSelfSync与GET_BUNDLE_INFO_DEFAULT（L173-L174），字段名未核。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/private/tmp/testAIPPT2/entry/src/main/ets/services/MineCacheService.ets",
+      "reason": "修复worker新建的文件（a2c80aa03c158295c.jsonl:L101），生成期无任何写入可绑定；其缺失即清缓存域无承接工件，成因已由MineComponent图覆盖，未单独成图。"
+    }
+  ],
+  "job": "issue-5235937ddd5c78dbe0ed",
+  "metadata": {
+    "migration": {
+      "project": "DeepAI全能PPT",
+      "server_session_id": "fac5eaa9-b1e9-4607-b90e-dadb4e885f36"
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "c8284269-4179-4eb8-8fec-f36d62f9293e"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "GLM-5.3-Flash",
+        "claude-fable-5-1"
+      ],
+      "client_versions": [
+        "2.1.247",
+        "2.1.278"
+      ]
+    },
+    "source_set_id": "sources-ef87c31e31b2c26de3b2",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/private/tmp/testAIPPT2",
+        "at": "2026-09-18T15:57:46.578Z",
+        "ref": "2ce43a97-0e6a-4a0f-a9b6-a5aac5a90177.jsonl:L1942",
+        "request_ref": "2ce43a97-0e6a-4a0f-a9b6-a5aac5a90177.jsonl:L1940",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/private/tmp/testAIPPT2",
+        "at": "2026-09-18T15:57:46.578Z",
+        "ref": "2ce43a97-0e6a-4a0f-a9b6-a5aac5a90177.jsonl:L1942",
+        "request_ref": "2ce43a97-0e6a-4a0f-a9b6-a5aac5a90177.jsonl:L1940",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.0.1(21)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/private/tmp/testAIPPT2",
+        "at": "2026-09-19T11:26:45.988Z",
+        "ref": "7e49e8dd-9559-4bed-9f6d-0e98e41652c6.jsonl:L434",
+        "request_ref": "7e49e8dd-9559-4bed-9f6d-0e98e41652c6.jsonl:L429",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.0.1(21)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/private/tmp/testAIPPT2",
+        "at": "2026-09-19T15:38:26.603Z",
+        "ref": "eb0d3903-1f96-4816-9e18-bef3d88833f1.jsonl:L339",
+        "request_ref": "eb0d3903-1f96-4816-9e18-bef3d88833f1.jsonl:L337",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.4"
+  },
+  "revision": "46e8691c9a380b7020a55b5bb495cfe4e5301c7d03dfaa4c5cfd4a2dac43ab17"
+}

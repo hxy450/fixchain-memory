@@ -9,6 +9,9 @@ ArkTS 严格模式对写法的限制（throw、对象字面量类型、索引签
 - [ArkTS 里给对象字面量写显式 class/interface 类型；去掉 Record 时键已知用具名字段类、键不定用 Map，不改成索引签名](lesson-1696967d1320c7735732.lesson.md)
   - 时机：编码或返修阶段，为一组命名常量、主题令牌、键值集合或事件总线载荷确定类型声明，或按规范替换 Record/Object 时
   - 情境：代码用对象字面量承载间距、圆角等令牌，或用键值集合保存偏好、设置；目标文件可能还没被页面或 Ability 导入，或者并发 worker 被要求不跑全量构建，编译器暂时检查不到这些写法。或调用泛型事件总线 emit&lt;T extends Object&gt;(name, payload)，载荷只作信号、准备直接传 {}。 也包括把查询参数、请求体或路由参数写成内联对象字面量，直接传给声明为 Record&lt;string, string&gt; 或 Object 形参的请求封装与路由方法；在未标返回类型的 map 等回调里 return 对象字面量；用 Array&lt;{...}&gt; 声明 @State 集合元素；按编译报错改写类时写出 TS 风格的 constructor(public x)。
+- [SDK 把观察者或回调类型声明为 class 时不写 implements：用以该类型标注的对象字面量传入](lesson-6e74f064efe2649fc295.lesson.md)
+  - 时机：实现或修复阶段，为 errorManager.on('error') 一类需要观察者对象的系统 API 确定观察者的声明形态时
+  - 情境：要传给 SDK 的观察者或回调参数在 d.ts 中声明为 class（如 application/ErrorObserver.d.ts 的 export default class ErrorObserver），写者按 TS 习惯准备用 class 实现它；生成或修复 worker 可能被要求不自行编译。
 - [catch 中继续抛出时先把异常收窄为 Error，不直接 throw catch 变量](lesson-dbfae443e671c568e14e.lesson.md)
   - 时机：功能实现或修复阶段，在 try/catch 中决定把捕获到的异常继续向上抛出时
   - 情境：ArkTS 严格模式工程中，catch 分支需要把当前任务的异常继续上报（例如过期任务的异常按取消处理、当前任务的异常上报），catch 变量没有 Error 类型保证；写码批次按约束不自行编译，或修改落在组编译之后。
