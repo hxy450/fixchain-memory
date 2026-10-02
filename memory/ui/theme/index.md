@@ -18,15 +18,15 @@
 - [委托 Material3 库的组件，默认外观、几何与内部留白从对应版本的库 Tokens 与源码取值，内部留白按库规则分侧落实](lesson-5a82d62ff7e087616968.lesson.md)
   - 时机：规格提取与界面实现阶段，翻译只显式传入部分参数、其余外观交给 Material3 库默认的组件（Slider、Snackbar、TopAppBar 等），或源码没写 padding、留白由库组件内部布局提供时
   - 情境：源组件只传少数颜色或尺寸，thumb 形状、留隙、刻度、容器高度、内距等来自库默认与 MaterialTheme；TopAppBar 等容器的标题槽、导航与动作槽留白由库内部布局决定，源码本身没有 padding 修饰符；目标组件的内置样式与之不同。
-- [布局引用的 @drawable（progressDrawable、背景 shape、标签背景）先打开取数值：高度、圆角、轨道色、渐变与描边写进规格与实现](lesson-771d1ba1a032b769097a.lesson.md)
+- [布局引用的 @drawable（progressDrawable、背景 shape、标签背景、光标 shape）先打开取数值：高度、圆角、轨道色、渐变、描边与光标宽色写进规格与实现](lesson-771d1ba1a032b769097a.lesson.md)
   - 时机：规格提取与界面实现阶段，为进度条、搜索框、分组标签等引用 drawable 的控件确定高度、圆角、颜色与描边时
-  - 情境：源布局以 progressDrawable=@drawable/xxx、background=@drawable/bg_xxx 引用 layer-list/shape 资源，尺寸、圆角、轨道色、渐变和描边写在被引用文件里；目标工程可能已有名称相近、含义不同的颜色资源。
+  - 情境：源布局以 progressDrawable=@drawable/xxx、background=@drawable/bg_xxx 引用 layer-list/shape 资源，尺寸、圆角、轨道色、渐变和描边写在被引用文件里；目标工程可能已有名称相近、含义不同的颜色资源。也包括 EditText 用 textCursorDrawable 引用 shape 定义光标宽度与颜色，且只设在部分字段上。
 - [引用 style 或抽成共享 @Builder 的控件：先展开共享默认值，再逐实例叠加元素自身的覆写（字号、圆角、间距）；圆角不按半高推，也不照抄相邻控件](lesson-bc5b8558ab086168b462.lesson.md)
   - 时机：界面实现阶段（含返修期重写弹窗或按钮），为通过 style 继承形状、尺寸与渐变的控件确定修饰链时；把重复 XML 元素抽成 @Builder 时
   - 情境：源 XML 控件以 style="@style/X" 继承圆角、高度、渐变等属性，元素本身只覆写部分项；同一或相邻布局里有圆角更大的卡片，或同 style 但显式覆写成胶囊的按钮。或按键等控件以 style 给默认 textSize、单个控件再覆写不同字号；多个同构元素（分组标题）各自带不同的 layout_marginTop。
 - [把 Android 主题、Compose 宿主或依赖库隐式提供的外观写成目标控件的显式样式，取值来自实际提供方](lesson-47785524c7f132ea7efe.lesson.md)
   - 时机：规格提取阶段写控件转换决策，或页面实现阶段写出按钮等控件的修饰链时；为未写 tint/color 的 Compose Icon、Text 着色，翻译未传 textStyle 的 BasicTextField，或迁移 GlanceTheme 等依赖库主题色时
-  - 情境：源布局中的 Button 等控件没有声明 background / backgroundTint / textColor / 圆角，外观来自应用主题（如 Theme.MaterialComponents 的 colorPrimary、colorOnPrimary）；目标工程已迁移同名语义色资源，而 ArkUI 对应组件不设样式时使用平台默认外观。也包括 Compose 的 Icon/Text 未写 tint/color、颜色来自宿主 Surface 的 LocalContentColor，而相邻页面或组件里有显式写 iconPrimary、brand 的图标可供照搬。也包括 foundation 的 BasicTextField 不传 textStyle（默认 TextStyle.Default，不读 Material 排版），以及颜色来自 GlanceTheme 一类依赖库主题、源码与规格里都没有具体色值。
+  - 情境：源布局中的 Button 等控件没有声明 background / backgroundTint / textColor / 圆角，外观来自应用主题（如 Theme.MaterialComponents 的 colorPrimary、colorOnPrimary）；目标工程已迁移同名语义色资源，而 ArkUI 对应组件不设样式时使用平台默认外观。也包括 Compose 的 Icon/Text 未写 tint/color、颜色来自宿主 Surface 的 LocalContentColor，而相邻页面或组件里有显式写 iconPrimary、brand 的图标可供照搬。也包括 foundation 的 BasicTextField 不传 textStyle（默认 TextStyle.Default，不读 Material 排版），以及颜色来自 GlanceTheme 一类依赖库主题、源码与规格里都没有具体色值。也包括 EditText/TextView 未声明 textColor、textSize，取值来自 Activity 主题（如 AppCompat Light 的 textColorPrimary）与 TextView 默认字号。
   - 例外：源控件已在布局或 style 中显式声明样式，此时按显式声明转换；决策记录明确要求目标端采用平台默认外观
 - [按源端实际色值与字号在资源里反查同值键：主题语义色、排版样式先解析到值，不按 accent、primary、title/body 等名称或别页令牌选键](lesson-4e9507a2a793c5583aa8.lesson.md)
   - 时机：界面实现阶段，为按钮、背景、文字与渐变色阶设置颜色资源引用，或为文本绑定字号资源令牌时

@@ -1,0 +1,171 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-9119556fa77cdad8ae20",
+  "created_at": "2026-10-02T21:23:13.632492+00:00",
+  "migration_key": "45084153-8d01-48fe-b3bd-f9258104c53a",
+  "title": "补建无参请求通道时套用默认基址ensureKey门，选省切服后二次握手顶掉会话key致省列表静默空白",
+  "when": "网络通道实现或修复阶段，为新增/改写的请求通道决定是否内置会话密钥前置门（ensureKey）及其握手基址时",
+  "description": "源端某请求重载（如OkGo无参post三参重载）只带头直接发送、由调用方先按特定基址握手取key；目标端AuthManager是全局单槽key缓存，以基址比对决定是否命中，默认基址取可被选省/切服改写的API_SERVER，而调用方使用API_SERVER_FINAL等另一基址。",
+  "summary": "修复会话（1e36e6f6主会话，R6轮）写postNoParams前已实际读到：安卓RequestUtils.post(context,url,what)\n三参重载只取X-IMPF头后OkGo.post(url).headers(headers).execute()，无body，也没有任何取key前置门\n（L2656-L2657，头内容L2669-L2675）；鸿蒙AuthManager.ensureKey(baseUrl?)默认基址为UrlConfig.API_SERVER，\n仅当keyBase与基址相同才命中缓存，否则重新握手并覆写sessionKey/keyBase（L2606-L2607）；\nRegionService.loadProvinces已先以API_SERVER_FINAL握手，同文件applyProvinceServer注释写明\n选省切服会用省服地址覆盖API_SERVER（L2593-L2594）。这些输入足以说明：通道内再以默认基址ensureKey()，\n在API_SERVER被切走后会与调用方的FINAL握手冲突。\n写者在思考中已注意到源重载无门，也设想过默认基址不同会重新握手替换key（L2677），却只读了UrlConfig\n三个基址的静态初值（L2679-L2684），以“三基址同值，新通道加ensureKey门安全”为由（L2686-L2687），\n照搬既有post()通道的写法，在postNoParams开头写入await AuthManager.ensureKey()默认基址门（L2709/L2711）。\n偏差位于“源端通道契约→目标通道实现”这一环：把运行期可变的API_SERVER当作与FINAL恒等的常量，\n并给源端无门的通道加了门。\n该门在干净数据态下缓存命中，R6/R7真机验证（L2876清数据后、h21b）省列表正常；选中江苏/南京市后\nAPI_SERVER被切到省服，再进省页时loadProvinces按FINAL握手，postNoParams内部ensureKey()因基址不同\n再次握手、覆写会话key，响应解密失败后以code=1000、空msg返回，省页只剩标题、无弹窗\n（用户追诉L3056，修复者分析与真机复现L3059-L3065）。修复在L3066删除该门（4行），注释写明本通道不设门、\n由调用方先按正确基址握手；L3144-L3148在已切省服的触发态复验，省列表全量加载。\n034affa8 rebase时保留无门版本。L2912那次1002发生在清数据后的初始态，按会话key时效另行由\nRegionService进页重握手处理，不归入本偏差。RegionService中被替换的post(url,{})加密空参体与缓存key片段\n写于材料起点之前，本卡不归因其生成来源。\n",
+  "recommendations": [
+    "实现源端某个请求重载时，逐项对照它实际做了什么（请求头、body形态、是否取key）；源端无前置门、由调用方先握手的通道，目标通道不要为“与其他通道一致”自行加ensureKey门。",
+    "确需在通道内保证key时，门的基址必须与请求URL或调用方握手基址一致（显式传入API_SERVER_FINAL或由URL推导），不要依赖默认的可变基址；判断两个基址是否相同，要查遍所有赋值点（选省切服、登录后覆盖等），不只看静态初值。",
+    "验证涉及会话key或服务基址的修复时，至少覆盖一次已选省/已切服的持久化状态（选市返回后再次进入省页），不只在清数据后的初始态验证。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "D:\\AIHM\\llpxhm\\entry\\src\\main\\ets\\network\\RequestUtil.ets",
+        "since": "2026-09-20T06:59:52.934Z",
+        "at": "2026-09-24T07:15:02.917Z"
+      },
+      "nodes": [
+        {
+          "key": "/d/AndroidPro/framebase/src/main/java/com/bjta/httputils/RequestUtils.java",
+          "at": "2026-09-20T09:57:14.029Z",
+          "reason": "正常输入：Bash读取回执返回源post(Context,url,what)三参重载，只构造getHttpHeaders(X-IMPF)后OkGo.post(url).headers(headers).execute()，无body、无取key或基址检查；getHttpHeaders仅放X-IMPF。足以确定该通道不应自带握手门（1e36e6f6-145e-4b81-b12a-69f7b6d681af.jsonl:L2656-L2657、L2669-L2675）。"
+        },
+        {
+          "key": "D:/AIHM/llpxhm/entry/src/main/ets/network/AuthManager.ets",
+          "at": "2026-09-20T09:55:36.357Z",
+          "reason": "正常输入：Read回执给出ensureKey(baseUrl?)默认基址为UrlConfig.API_SERVER，hasKey且keyBase===base才命中缓存，否则fetchKeyWithRetry并覆写sessionKey与keyBase；注释写明“基址与缓存不一致时重取”。足以说明以默认基址再调ensureKey会在基址不同时替换调用方刚握的key（同转录L2606-L2607）。"
+        },
+        {
+          "key": "D:/AIHM/llpxhm/entry/src/main/ets/services/RegionService.ets",
+          "at": "2026-09-20T09:54:42.489Z",
+          "reason": "正常输入：Read回执显示loadProvinces已先ensureKey(UrlConfig.API_SERVER_FINAL)再请求provinceList；applyProvinceServer注释写明选省切服以address+/jpv2覆盖API_SERVER/ORIGIN_API_SERVER并按新基址重握手。说明API_SERVER是运行期可变槽，会与FINAL分离（同转录L2593-L2594）。"
+        },
+        {
+          "key": "1e36e6f6-145e-4b81-b12a-69f7b6d681af:main",
+          "at": "2026-09-20T09:59:07.217Z",
+          "reason": "已收到上述输入，并在L2677思考中注意到源重载无门、默认基址不同会重新握手替换key；随后只查UrlConfig三基址的静态初值（L2679-L2684），判定“三基址同值，新通道加ensureKey门安全”（L2686-L2687），Edit在postNoParams开头写入await AuthManager.ensureKey()默认基址门（L2709，回执L2711）。选省切服后该门二次握手覆写key，造成省页静默空白；本分支在此停止上溯。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4,
+          "force": true,
+          "reason": "主会话写postNoParams前，用Bash sed -n '305,326p'读取该文件，回执返回post(Context,url,what)三参重载正文（仅getHttpHeaders后OkGo.post(url).headers(headers).execute()）；随后再以grep+sed读取同文件getHttpHeaders，回执仅放X-IMPF头。这两次真实读取支持写者写前已收到源通道无body、无取key门的契约。",
+          "evidence": [
+            {
+              "source": "1e36e6f6-145e-4b81-b12a-69f7b6d681af.jsonl",
+              "line": 2656
+            },
+            {
+              "source": "1e36e6f6-145e-4b81-b12a-69f7b6d681af.jsonl",
+              "line": 2657
+            },
+            {
+              "source": "1e36e6f6-145e-4b81-b12a-69f7b6d681af.jsonl",
+              "line": 2669
+            },
+            {
+              "source": "1e36e6f6-145e-4b81-b12a-69f7b6d681af.jsonl",
+              "line": 2675
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [
+    {
+      "key": "D:\\AIHM\\llpxhm\\entry\\src\\main\\ets\\services\\RegionService.ets",
+      "reason": "修改已确认：1e36e6f6 L2713/L2715将loadProvinces由RequestUtil.post(url,{})加密空参体改为postNoParams(url)，L2921/L2922在ensureKey(API_SERVER_FINAL)前加AuthManager.invalidate()强制重握手，034affa8 L199合并远端fe66dc5的1002重试并让重试也走postNoParams。被修的post(url,{})与缓存key片段在本池无写入者（材料内对该文件最早的记录是1e36e6f6 L2524、L2590的读取），属材料起点前的生成产物；原始生成转录不在材料中，无法核到生成者及其写前输入。"
+    }
+  ],
+  "job": "issue-9119556fa77cdad8ae20",
+  "metadata": {
+    "migration": {
+      "project": "企业安全培训",
+      "server_session_id": "45084153-8d01-48fe-b3bd-f9258104c53a"
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "e846b4d0-e144-46e7-be7e-3d966f5e9512"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.278",
+        "2.1.280",
+        "2.1.281"
+      ]
+    },
+    "source_set_id": "sources-e985112c85ec734c9dbc",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.0.2(22)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "D:\\AIHM\\llpxhm",
+        "at": "2026-09-20T07:52:40.746Z",
+        "ref": "ae4f3d9241525ddda.jsonl:L14",
+        "request_ref": "ae4f3d9241525ddda.jsonl:L13",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.0.2(22)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "D:\\AIHM\\llpxhm",
+        "at": "2026-09-20T07:52:40.746Z",
+        "ref": "ae4f3d9241525ddda.jsonl:L14",
+        "request_ref": "ae4f3d9241525ddda.jsonl:L13",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.0.2(22)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "D:\\AIHM\\llpxhm\\entry\\src\\main\\ets",
+        "at": "2026-09-21T06:20:15.451Z",
+        "ref": "aab12046f5bd84d65.jsonl:L13",
+        "request_ref": "aab12046f5bd84d65.jsonl:L12",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.0.2(22)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "D:\\AIHM\\llpxhm\\entry\\src\\main\\ets",
+        "at": "2026-09-21T06:20:15.451Z",
+        "ref": "aab12046f5bd84d65.jsonl:L13",
+        "request_ref": "aab12046f5bd84d65.jsonl:L12",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.4"
+  },
+  "revision": "ef607516081f5a90559a9e7cca371c94c154b88d29d6f8e7902cba497107b0b5"
+}

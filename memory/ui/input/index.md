@@ -1,6 +1,6 @@
 # ui/input
 
-输入与选择控件：源端输入约束到 TextInput 等组件属性的转换（含小数输入），格子式密码输入层与获焦，会被子页覆盖再返回的页面里获焦来源的判别，自定义控件 XML 属性的初值，Compose Slider 的 steps 取值，选择列表行的选中标记（条件勾选与 Radio 的取舍），选择器回填的多级字段（省市区）
+输入与选择控件：源端输入约束到 TextInput 等组件属性的转换（含小数输入），格子式密码输入层与获焦，会被子页覆盖再返回的页面里获焦来源的判别，自定义控件 XML 属性的初值，Compose Slider 的 steps 取值，选择列表行的选中标记（条件勾选与 Radio 的取舍），选择器回填的多级字段（省市区），密码显隐图标、清除按钮等 ArkUI 默认装饰的显式关闭，未定制光标外观的取证基准与 caretStyle
 
 [上一级](../index.md)
 
@@ -12,6 +12,10 @@
 - [会被子页覆盖再返回的页面里，TextInput 的获焦回调先判别是否由用户触摸引起再写业务状态](lesson-4c476a62732697c56c22.lesson.md)
   - 时机：界面实现阶段，把 TextInput 的焦点回调接到页面业务状态，且页面常驻 NavBar 或保活容器、会被 pushPath 覆盖时
   - 情境：页面用 focused 之类的业务字段决定显示分支（如建议列表与分类）；从子页系统返回后，框架可能把焦点交还该 TextInput。
+- [按 EditText 对齐 TextInput 时显式关闭源端没有的 ArkUI 默认装饰：Password 的显隐图标、输入时的清除按钮，并核默认高度](lesson-1150c0c721e6dc0dede4.lesson.md)
+  - 时机：界面实现或 1:1 对齐修复阶段，把安卓 EditText（含密码框、数字掩码的验证码框）转换或核对为 ArkUI TextInput，决定要显式覆盖哪些默认外观时
+  - 情境：源输入框是裸 EditText 或其子类，用 android:password、inputType=textPassword/numberPassword 掩码，没有 TextInputLayout passwordToggleEnabled 或自绘显隐按钮，也没有清除按钮；目标用 TextInput，type 为 InputType.Password 或 Normal。
+  - 例外：源端确有可见性切换（passwordToggleEnabled 或自绘眼睛按钮）或清除按钮，此时保留并按源端对齐样式
 - [源码用 selectable 行加条件尾部勾选表示选中时按同一结构实现，不按“单选”语义换成 Radio](lesson-d53223f43ad454261f26.lesson.md)
   - 时机：界面实现阶段，把 Compose 排序、筛选等选择列表行转换为 ArkUI 行组件并确定选中标记时
   - 情境：源端每行是 Row(Modifier.selectable(selected) { ... })，行首图标加文字，选中时才出现尾部 Icon(ic_check, tint = brand)，未选中行不显示任何标记；目标有 ArkUI Radio 等现成单选控件可用。
@@ -22,6 +26,10 @@
 - [源端受控输入框的长度上限用 TextInput.maxLength 实现，不靠 onChange 里拒绝写回](lesson-617ffbd840398cf95efc.lesson.md)
   - 时机：界面实现阶段，把源端输入框的长度上限等输入约束翻译成 ArkUI TextInput 属性与事件时
   - 情境：源端 Compose TextField/OutlinedTextField 以 value = 状态受控，在 onValueChange 中按条件决定是否写回（如 if (it.length &lt;= N) name = it）；目标端用 TextInput({ text: this.x }) 加 onChange 实现同一个输入框。
+- [源端未显式定制的光标外观以用户指定页面的真机取证为基准：不借其他页面代取样，用帧差分定位光标](lesson-fb5a092e750a3101b862.lesson.md)
+  - 时机：界面还原修复阶段，为输入框光标这类源端未显式定制、取决于页面主题或系统渲染的外观选取安卓基准，并写入 caretStyle 时
+  - 情境：源 EditText 没有 textCursorDrawable，外观取决于所在 Activity 的主题和系统渲染；同一应用其他页面已有不同的光标配置；需要真机像素取证；目标为 TextInput 的 caretStyle({ width, color })。
+  - 例外：源端显式设置了 textCursorDrawable，此时打开该 drawable 取宽度与颜色
 - [自定义 View 上的 android:* 属性只有被该类读取才生效：控件初值取运行时生效值](lesson-a6edef3bb44e01a82b72.lesson.md)
   - 时机：界面实现阶段，把源布局中自定义控件的 XML 属性转换为目标组件初始状态时；联调修复判断是否为复刻缺陷时
   - 情境：源布局在继承 View 的自定义控件（非 CheckBox/CompoundButton）上声明 android:checked 等框架属性，该类构造只读取自己的 styleable 属性；目标用状态变量表示勾选或开关的首显状态。
