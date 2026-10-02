@@ -1,6 +1,6 @@
 # Stack 上层全尺寸容器和页面级遮罩会参与命中测试：不处理点击的覆盖层显式 Transparent，贴底内容栏直接锚定而不套全屏壳，条件遮罩与一次性动效层用根 Stack 条件子节点
 
-ID：`lesson-4a4f8d845a204ffa244b` · 版本：3
+ID：`lesson-4a4f8d845a204ffa244b` · 版本：4
 
 [本主题](index.md)
 
@@ -28,7 +28,7 @@ ArkUI 中没有 onClick 的容器同样参与命中测试（HitTestMode.Default 
 - 调整 Stack 对齐、上层几何或新增定位壳后，对被覆盖区域的按钮逐个实际点击（不只看节点 clickable 与 bounds），检查 hilog 有无 Touch test result is empty。
 - 一次性动效层改动后，空闲态用 dumpLayout 确认该节点不存在，再实测点击、横滑与折叠。
 
-来源支持：4 张卡 · 3 次迁移 · 3 个应用
+来源支持：5 张卡 · 4 次迁移 · 4 个应用
 
 ## 来源（按需复核）
 
@@ -40,3 +40,5 @@ ArkUI 中没有 onClick 的容器同样参与命中测试（HitTestMode.Default 
   卡片版本：`8d2a2903f578b837bbe4fbae23c3df7cbdd8897003895ed0d906609949fd4c6d`
 - [case-7d423b2bf98cdaabda82](../../../store/cases/case-7d423b2bf98cdaabda82/8441ff125fb267f472ee908947f3d00c83fcf6594fca7b15991b175092fe51b9.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
   卡片版本：`8441ff125fb267f472ee908947f3d00c83fcf6594fca7b15991b175092fe51b9`
+- [case-9b8bac5680e58daada3a](../../../store/cases/case-9b8bac5680e58daada3a/07783b8487f55d819249fc632337f48a461889504642d293282c1e455ffb6591.json) · 结论：diagnosis, recommendation:1, recommendation:2
+  卡片版本：`07783b8487f55d819249fc632337f48a461889504642d293282c1e455ffb6591`

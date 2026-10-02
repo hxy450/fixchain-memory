@@ -1,6 +1,6 @@
 # Stack 中内容尺寸的子项按 alignContent 定位：子项自身的 .align() 不改变它在父容器中的位置，需要的对齐用满尺寸容器或显式 position
 
-ID：`lesson-92aee54a305ea0bde363` · 版本：4
+ID：`lesson-92aee54a305ea0bde363` · 版本：5
 
 [本主题](index.md)
 
@@ -23,12 +23,14 @@ Stack 按 alignContent 放置未撑满的子节点；Text 的 .align() 只对齐
 3. 按 layout_gravity 单独对齐某个子项（如 end|bottom 的角标）时，在已知 W×H 的容器里写 position({ x: W - 子宽, y: H - 子高 })，或给该子项单独套一个 alignContent 为对应方向的 Stack。
 4. 逐个核对源 Box 子项的 Modifier.align：非默认位置写成 position({ left: 0, bottom: 0 })、markAnchor 等实际属性；规格或报告里的“底部对齐”要落到代码属性上。
 
-来源支持：3 张卡 · 3 次迁移 · 2 个应用
+来源支持：4 张卡 · 4 次迁移 · 3 个应用
 
 ## 来源（按需复核）
 
 - [case-83dafcc0eaba740bd9c0](../../../../store/cases/case-83dafcc0eaba740bd9c0/63799a14d87533825a0449dd85653c66535fbb31296be482c5feada55b5522a6.json) · 结论：diagnosis, recommendation:1
   卡片版本：`63799a14d87533825a0449dd85653c66535fbb31296be482c5feada55b5522a6`
+- [case-9b8bac5680e58daada3a](../../../../store/cases/case-9b8bac5680e58daada3a/07783b8487f55d819249fc632337f48a461889504642d293282c1e455ffb6591.json) · 结论：diagnosis, recommendation:3
+  卡片版本：`07783b8487f55d819249fc632337f48a461889504642d293282c1e455ffb6591`
 - [case-c9cc6663456a2ef02f89](../../../../store/cases/case-c9cc6663456a2ef02f89/ae6747eccb36d26241318b2258e46b0c5b7289bd01e525c168b0fbc5b8ab4ace.json) · 结论：diagnosis, recommendation:1
   卡片版本：`ae6747eccb36d26241318b2258e46b0c5b7289bd01e525c168b0fbc5b8ab4ace`
 - [case-f749e3c70af1100c90d9](../../../../store/cases/case-f749e3c70af1100c90d9/c92c4d7503e18d5c1cc56cd928d3807e84d363082fcb2d1286d1f450b0bbb6c4.json) · 结论：recommendation:3, recommendation:4

@@ -1,0 +1,156 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-866d8ad8095465ee1d2c",
+  "created_at": "2026-10-02T18:20:34.724187+00:00",
+  "migration_key": "fd1f8f66-f61a-4c2f-baa6-1b025bca4761",
+  "title": "安卓经通知交给用户的短信验证码返回值，在规格与实现中被丢弃",
+  "when": "规格/计划与页面实现阶段，迁移安卓通过通知、Toast等平台副通道把接口返回数据交给用户的流程时",
+  "description": "安卓发送短信验证码接口在data中返回测试验证码，客户端只经本地通知展示给用户（后端并不真正发短信）；鸿蒙端本轮不迁移通知权限/通知能力，而登录、注册必须拿到该验证码才能继续。",
+  "summary": "协调者main-01a0bd7c在写F002/F003前已收到三处一致输入：自己读取的RegisterViewModel.kt中，\nsendVerificationCode的onData把smsCode交给NotificationUtil.sendVerificationCodeNotification（main L79/L82）；\n分析子代理回执写明短信登录与注册里“服务端返回的短信码通过系统高优先级通知显示”（main L156）；\nUI规格子代理回执建议不把通知权限设为认证前置，“短信接口成功后以Toast/测试提示承接”（main L430）。\n它写F002/F003 spec时只保留requestSmsCode(): Promise<string>签名与“请求短信码”AC，未写返回码如何呈现给用户（main L422-L424）；\nF002 plan的Platform Decision把通知整体推迟为独立系统能力增量，只要求“API success starts cooldown and provides user-visible feedback”（main L454-L456），\n验证码这一业务数据随通知一起被丢掉。偏差位于把源端副通道映射成鸿蒙承接方式这一环。\n随后它实现SmsLoginPage（main L744-L745）与RegisterPage（main L756-L757），confirmCaptcha只await requestSmsCode后开始倒计时，返回值被丢弃，\n既无通知也无Toast或回填；这些片段保留到返修前（debug代理agent-01a0bde0 L31-L34读回原样）。\n用户报告“现在无法登录，自动回填验证码”（main L999）后，主代理确认接口data返回验证码而页面丢弃（main L1041），\n两页改为返回值非空时写入smsCode（main L1043-L1045）。回填是用户指定的承接方式，与安卓通知不同；\n本卡归因的是“返回值承载的用户必需数据在鸿蒙端没有去向”，不是“未实现通知”本身。\n同批修复的图形验证码字符集（isValidImageCode、InputType.Normal）不归入本偏差：安卓ImageCaptchaDialog的输入过滤只允许4位数字\n（分析子代理agent-01a0bd85 L100/L107回执），分析回执与F002 spec也写4位数字，生成输出与输入一致；\n修复依据的是ValidationUtil.isValidImageCode（agent-01a0bde0 L64-L67），已读源码中未见其调用点，材料中没有服务端图形码含字母的证据。\n",
+  "recommendations": [
+    "规格/计划阶段，逐个检查源端对接口返回值的消费（onData/回调）；若数据只经通知、Toast等平台能力交给用户，就把“该数据如何呈现给用户”写进AC。推迟平台能力时，同时写明替代承接（如Toast显示验证码、回填输入框）。",
+    "实现阶段，调用返回非void的接口（如Promise<string>的requestSmsCode）时，确认返回值有去向；准备丢弃前回查源端onData的用途。",
+    "验收时用真实后端走一次“获取验证码→登录/注册”，确认用户不看日志也能拿到验证码；只编译通过、只验证到页面跳转不足以覆盖此路径。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/gongweicheng/DevEcoStudioProjects/ad-har7/harmonyD/entry/src/main/ets/pages/SmsLoginPage.ets",
+        "since": "2026-09-17T10:30:50.051Z",
+        "at": "2026-09-24T04:01:55.759Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/gongweicheng/DevEcoStudioProjects/ad-har7/CoolMallKotlin-android/feature/auth/src/main/java/com/joker/coolmall/feature/auth/viewmodel/RegisterViewModel.kt",
+          "at": "2026-09-20T06:35:58.404Z",
+          "reason": "正常输入：协调者用nl -ba读取注册ViewModel，回执207-228行显示sendVerificationCode成功后onData { smsCode -> NotificationUtil.sendVerificationCodeNotification(code = smsCode) }（main L79、L81-L82）。短信登录与注册共用同一获取验证码逻辑：协调者未直接读SmsLoginViewModel，但分析子代理回执（main L156）写明短信登录同样“服务端返回的短信码通过系统高优先级通知显示”，UI规格子代理回执（main L430）建议以Toast/测试提示承接。返回码是交给用户的验证码，不是可丢弃的发送回执。"
+        },
+        {
+          "key": "main-01a0bd7c-3b9b-74f1-826e-6662ecd0610d.jsonl",
+          "at": "2026-09-20T07:42:46.375Z",
+          "reason": "收到上述输入后，先在F002 spec只写requestSmsCode(): Promise<string>与请求AC、不写返回码如何呈现（L422-L424），F002 plan把通知推迟并改写为泛化的user-visible feedback（L454-L456）；随后apply_patch写SmsLoginPage，confirmCaptcha仅await AuthService.requestSmsCode(...)后设countdown=60，返回值丢弃，无通知/Toast/回填（L744-L745）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "协调者在main转录L79调用exec，命令链末段nl -ba ../CoolMallKotlin-android/feature/auth/src/main/java/com/joker/coolmall/feature/auth/viewmodel/RegisterViewModel.kt | sed -n '1,420p'（工作目录harmonyD，即该绝对路径）；L81 CommandExecution与L82输出回执包含“-- register vm --”及207-228行sendVerificationCode→NotificationUtil.sendVerificationCodeNotification(code = smsCode)。这是协调者写SmsLoginPage前对共用获取验证码逻辑的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/e9545abd-8b39-4c0e-8c5d-4da6b03bd901/epoch-1/sessions/main-01a0bd7c-3b9b-74f1-826e-6662ecd0610d.jsonl",
+              "line": 79
+            },
+            {
+              "source": "runs/e9545abd-8b39-4c0e-8c5d-4da6b03bd901/epoch-1/sessions/main-01a0bd7c-3b9b-74f1-826e-6662ecd0610d.jsonl",
+              "line": 81
+            },
+            {
+              "source": "runs/e9545abd-8b39-4c0e-8c5d-4da6b03bd901/epoch-1/sessions/main-01a0bd7c-3b9b-74f1-826e-6662ecd0610d.jsonl",
+              "line": 82
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/gongweicheng/DevEcoStudioProjects/ad-har7/harmonyD/entry/src/main/ets/pages/RegisterPage.ets",
+        "since": "2026-09-17T10:30:50.051Z",
+        "at": "2026-09-24T04:01:55.759Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/gongweicheng/DevEcoStudioProjects/ad-har7/CoolMallKotlin-android/feature/auth/src/main/java/com/joker/coolmall/feature/auth/viewmodel/RegisterViewModel.kt",
+          "at": "2026-09-20T06:35:58.404Z",
+          "reason": "正常输入：协调者用nl -ba读取注册ViewModel，回执207-228行显示sendVerificationCode成功后onData { smsCode -> NotificationUtil.sendVerificationCodeNotification(code = smsCode) }（main L79、L81-L82）；分析子代理回执的注册轨迹第4步也写明服务端短信码以系统通知显示（main L156）。返回码是交给用户的验证码，不是可丢弃的发送回执。"
+        },
+        {
+          "key": "main-01a0bd7c-3b9b-74f1-826e-6662ecd0610d.jsonl",
+          "at": "2026-09-20T07:44:37.510Z",
+          "reason": "F003 spec同样只写requestSmsCode(): Promise<string>和请求顺序AC（L422-L424），并沿用F002 plan对通知的推迟决定（L454-L456）；apply_patch写RegisterPage时confirmCaptcha为try { await AuthService.requestSmsCode(...); this.showCaptcha = false; this.countdown = 60; ... }，返回值丢弃，用户拿不到验证码（L756-L757）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "协调者在main转录L79调用exec，命令链末段nl -ba ../CoolMallKotlin-android/feature/auth/src/main/java/com/joker/coolmall/feature/auth/viewmodel/RegisterViewModel.kt | sed -n '1,420p'（工作目录harmonyD，即该绝对路径）；L81 CommandExecution与L82输出回执包含“-- register vm --”及207-228行sendVerificationCode→NotificationUtil.sendVerificationCodeNotification(code = smsCode)。这是协调者写RegisterPage前对该源码的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/e9545abd-8b39-4c0e-8c5d-4da6b03bd901/epoch-1/sessions/main-01a0bd7c-3b9b-74f1-826e-6662ecd0610d.jsonl",
+              "line": 79
+            },
+            {
+              "source": "runs/e9545abd-8b39-4c0e-8c5d-4da6b03bd901/epoch-1/sessions/main-01a0bd7c-3b9b-74f1-826e-6662ecd0610d.jsonl",
+              "line": 81
+            },
+            {
+              "source": "runs/e9545abd-8b39-4c0e-8c5d-4da6b03bd901/epoch-1/sessions/main-01a0bd7c-3b9b-74f1-826e-6662ecd0610d.jsonl",
+              "line": 82
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/gongweicheng/DevEcoStudioProjects/ad-har7/harmonyD/entry/src/main/ets/common/AuthValidation.ets",
+      "reason": "已确认修复新增isValidImageCode(/^[A-Za-z0-9]{4}$/)并删除重复定义，两页图形码输入改InputType.Normal（agent-01a0bde0 L100-L101、L127-L128；main L1122-L1123）。但生成期写者agent-01a0bda6建isValidCode(4位数字)、页面用它校验图形码，与实际输入一致：安卓ImageCaptchaDialog输入过滤只允许4位数字，分析回执与F002 spec也写4位数字。修复依据的是已读源码中未见调用点的ValidationUtil.isValidImageCode，材料中无服务端图形码含字母或因此登录失败的证据，故不判为生成偏差，未画链。"
+    }
+  ],
+  "job": "issue-866d8ad8095465ee1d2c",
+  "metadata": {
+    "migration": {
+      "project": "青商城",
+      "server_session_id": "fd1f8f66-f61a-4c2f-baa6-1b025bca4761"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "codex-auto-review",
+        "gpt-5.6-sol",
+        "gpt-5.6-terra",
+        "mimo-v2.5-pro"
+      ],
+      "providers": [
+        "OpenAI",
+        "custom"
+      ],
+      "client_versions": [
+        "0.153.0",
+        "0.153.4",
+        "0.155.1"
+      ]
+    },
+    "source_set_id": "sources-a628ef41c3cbab461876",
+    "card_tool_version": "0.10.4",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "59e04db4-617e-41c3-878c-4d91d52a03bd"
+      ]
+    }
+  },
+  "revision": "9ea78525b9da1ac65bbac45f520cddc67aecf405880b5ab389c3fc7ace9172b3"
+}

@@ -1,6 +1,6 @@
 # ui/input
 
-输入与选择控件：源端输入约束到 TextInput 等组件属性的转换（含小数输入），格子式密码输入层与获焦，会被子页覆盖再返回的页面里获焦来源的判别，自定义控件 XML 属性的初值，Compose Slider 的 steps 取值，选择列表行的选中标记（条件勾选与 Radio 的取舍）
+输入与选择控件：源端输入约束到 TextInput 等组件属性的转换（含小数输入），格子式密码输入层与获焦，会被子页覆盖再返回的页面里获焦来源的判别，自定义控件 XML 属性的初值，Compose Slider 的 steps 取值，选择列表行的选中标记（条件勾选与 Radio 的取舍），选择器回填的多级字段（省市区）
 
 [上一级](../index.md)
 
@@ -16,6 +16,9 @@
   - 时机：界面实现阶段，把 Compose 排序、筛选等选择列表行转换为 ArkUI 行组件并确定选中标记时
   - 情境：源端每行是 Row(Modifier.selectable(selected) { ... })，行首图标加文字，选中时才出现尾部 Icon(ic_check, tint = brand)，未选中行不显示任何标记；目标有 ArkUI Radio 等现成单选控件可用。
   - 例外：源码本身使用 RadioButton/Radio 控件
+- [源端以只读字段加选择器一次回填的多级值（省市区等），目标实现选择流程并一次写入各级字段，不退化成并列自由输入](lesson-b845647090bfeac053ed.lesson.md)
+  - 时机：界面实现阶段，迁移表单中由选择器回填的地区等字段，确定输入方式与写回方式时
+  - 情境：源端表单字段是只读文本框，点击覆盖层打开级联选择弹窗，选中后通过回调把省、市、区等多级值一次写回模型；目标准备用多个 TextInput 分别绑定。
 - [源端受控输入框的长度上限用 TextInput.maxLength 实现，不靠 onChange 里拒绝写回](lesson-617ffbd840398cf95efc.lesson.md)
   - 时机：界面实现阶段，把源端输入框的长度上限等输入约束翻译成 ArkUI TextInput 属性与事件时
   - 情境：源端 Compose TextField/OutlinedTextField 以 value = 状态受控，在 onValueChange 中按条件决定是否写回（如 if (it.length &lt;= N) name = it）；目标端用 TextInput({ text: this.x }) 加 onChange 实现同一个输入框。

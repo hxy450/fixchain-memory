@@ -31,9 +31,9 @@ ArkUI V2 状态刷新与订阅：@Builder 参数（含异步重赋值的数组�
 - [源端用带兜底的访问器取显示值时，目标调用已移植的等价访问器，不改读原始字段再自拟兜底](lesson-1fa08bf929cfced0ff34.lesson.md)
   - 时机：功能接线阶段，把源端刷新函数里的显示赋值（如 text = Manager.getX()）翻译成目标组件状态，或把登录判定与用户名显示映射成身份文案表达式时
   - 情境：源端在某一分支调用带空值兜底的访问器（如已登录但昵称为空时返回“用户{id}”或默认昵称），另一分支才显示“未登录”等占位文案；登录判定来自 token/session。目标侧会话或仓库层保留原始字段（昵称可为空），可能已移植同名兜底方法，组件状态是普通字段，工程里有现成的未登录占位字符串资源。也包括源端经工具类把数值码映射为显示文案（天气码、空气质量、风向）的情形。
-- [源页面由事件订阅或结果回调触发的重新加载要迁成订阅；Navigation 根页或 Tab 内容在子页返回时不会再走 aboutToAppear](lesson-b3bb0bc33f4caded78a2.lesson.md)
+- [源页面由事件订阅或结果回调触发的重新加载要迁成订阅；Navigation 根页、Tab 内容或经 router 返回的 @Entry 页在子页返回时不会再走 aboutToAppear](lesson-b3bb0bc33f4caded78a2.lesson.md)
   - 时机：ViewModel 与页面接线阶段，决定目标页由哪些入口触发数据重新加载时；流程闭环阶段从该页新增 push 子流程时
-  - 情境：源 Fragment 用 EventBus @Subscribe（登录成功、记录变化等）和 ActivityResult 回调重拉数据；目标页是 Navigation 下常驻的根内容或 Tab 页，登录、详情等子页用 pushPathByName 覆盖后 pop 返回；工程已有会话状态与应用事件总线。
+  - 情境：源 Fragment 用 EventBus @Subscribe（登录成功、记录变化等）和 ActivityResult 回调重拉数据；目标页是 Navigation 下常驻的根内容或 Tab 页，登录、详情等子页用 pushPathByName 覆盖后 pop 返回；工程已有会话状态与应用事件总线。 也包括列表页经 router.pushUrl 打开新增/编辑页，对方保存后 router.back 返回，列表数据只在 aboutToAppear 拉取。
 - [用 @Monitor 监听数组路径代替 collect 时，生产方按源端以新数组重新赋值发出变更](lesson-0cc7ae4eec0a59086202.lesson.md)
   - 时机：状态模型与 ViewModel 实现阶段，把 StateFlow/Flow 的列表或消息队列迁成 @Trace 数组，并由消费方用 @Monitor 监听数组属性路径时
   - 情境：源端以 StateFlow.update { list + item } 一类写法每次发射新列表；目标生产方准备原位 push（出队却重新赋值），消费方以 @Monitor('model.items') 一类路径模拟 collect。

@@ -1,6 +1,6 @@
 # 规格需要的值在上游清单或数据源里取不到时，回源码补全或标“待核”，不用端点计数、枚举举例或自拟值收口
 
-ID：`lesson-77ca67f164d77ec63cda` · 版本：1
+ID：`lesson-77ca67f164d77ec63cda` · 版本：2
 
 [本主题](index.md)
 
@@ -10,7 +10,7 @@ ID：`lesson-77ca67f164d77ec63cda` · 版本：1
 
 ## 适用情境
 
-规格模板要求某小节取自上游工具的最终产物（如 api-inventory.json 的 auth_model、common.md），该产物没有落盘，只剩中间文件（如 raw_apis.json）；中间文件只给出键名、标签或计数，没有 host、请求头、错误码等具体值。
+规格模板要求某小节取自上游工具的最终产物（如 api-inventory.json 的 auth_model、common.md），该产物没有落盘，只剩中间文件（如 raw_apis.json）；中间文件只给出键名、标签或计数，没有 host、请求头、错误码等具体值。 也包括 skill 要求先跑 API 清单提取，子代理派发失败后清单从未运行，后续计划的网络层只有一句概述，下游据此自拟基址与路径。
 
 ## 原因
 
@@ -22,7 +22,7 @@ ID：`lesson-77ca67f164d77ec63cda` · 版本：1
 2. 中间文件只给出指针（拦截器路径加 header_write 标签、地址键名、枚举名）时，沿指针读源码，把具体值（头名与格式、各环境 host、码与动作）写进规格；读不到就写“未解析，待核”并注明源文件。
 3. 规格写“见某数据源”之前，确认该数据源确实含这些值；查不到就写未核和源码位置，不保留推断值。
 
-来源支持：4 张卡 · 1 次迁移 · 1 个应用
+来源支持：5 张卡 · 2 次迁移 · 2 个应用
 
 ## 来源（按需复核）
 
@@ -30,6 +30,8 @@ ID：`lesson-77ca67f164d77ec63cda` · 版本：1
   卡片版本：`7901de8f36fd97f41e540052b94a4d9fdf875fa7e6f69b23452e8f15f8fc467b`
 - [case-69bfbfee5841bf8c60cf](../../../store/cases/case-69bfbfee5841bf8c60cf/2798032985b4b2364eb1764bb0a269cda08617887fbebf8f07e1a8d025e06f7f.json) · 结论：diagnosis, recommendation:1
   卡片版本：`2798032985b4b2364eb1764bb0a269cda08617887fbebf8f07e1a8d025e06f7f`
+- [case-6be1461999c00a7fe781](../../../store/cases/case-6be1461999c00a7fe781/6d6fafe3319ae7f96ea8861f32e80ef334e2e1fb9a7eaa64e3951c3b097c33d7.json) · 结论：diagnosis, recommendation:1
+  卡片版本：`6d6fafe3319ae7f96ea8861f32e80ef334e2e1fb9a7eaa64e3951c3b097c33d7`
 - [case-7478183bbcfea10865d1](../../../store/cases/case-7478183bbcfea10865d1/6a67c10c5843039d9605d2674ad05a8fd93aeb449ce5b1925b68e23389947a5d.json) · 结论：diagnosis, recommendation:2
   卡片版本：`6a67c10c5843039d9605d2674ad05a8fd93aeb449ce5b1925b68e23389947a5d`
 - [case-b000698af8cbbc664b87](../../../store/cases/case-b000698af8cbbc664b87/acc888ff43f4b5d71e80aba0739c35c15dd80e7fa4ad95bf37aeb8acebfc619b.json) · 结论：diagnosis, recommendation:1

@@ -1,6 +1,6 @@
 # arkts
 
-ArkTS 语言与 SDK 接口：类型、签名、V2 组件成员声明、严格模式限制、数值语义与异步错误路径，以及不能编译时的写后自检
+ArkTS 语言与 SDK 接口：类型、签名、V2 组件成员声明、严格模式限制与声明顺序、声明式 UI 语法与容器属性、数值语义与异步错误路径，以及不能编译时的写后自检
 
 [上一级](../index.md)
 
@@ -10,7 +10,8 @@ ArkTS 语言与 SDK 接口：类型、签名、V2 组件成员声明、严格模
 - [async](async/index.md) — 源端同步调用改成 ArkTS 异步（Promise/async）后新增的失败分支、加载态，异步初始化与用户输入的先后顺序，以及仓库方法前置失败分支（未初始化、未授权）的错误通道
 - [decorators](decorators/index.md) — ArkUI V2 自定义组件的成员声明：装饰器是否带括号、@BuilderParam 默认值的写法、状态成员名与组件通用属性方法的冲突
 - [numeric](numeric/index.md) — 数值语义：ArkTS number 与 Kotlin 在除法、零分母与范围钳制上的差异，迁移比值和进度计算时要保留的保护
-- [strict-mode](strict-mode/index.md) — ArkTS 严格模式对写法的限制（throw、对象字面量类型、索引签名、类型收窄等），在不编译的生成批次或未接线文件里容易留到编译门
+- [strict-mode](strict-mode/index.md) — ArkTS 严格模式对写法的限制（throw、对象字面量类型、索引签名、类型收窄等）及类声明顺序（静态初始化器引用后声明的类），在不编译的生成批次或未接线文件里容易留到编译门
+- [ui-syntax](ui-syntax/index.md) — 声明式 UI 语法：build() 与 @Builder 中可写的组件、条件与循环渲染形式（多行、花括号、不加分号），以及 justifyContent 等容器专属属性的适用范围
 
 ## 本级经验
 

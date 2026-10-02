@@ -6,14 +6,14 @@
 
 ## 子主题
 
-- [dialog](dialog/index.md) — 弹窗与半模态：V2 页面可用的弹窗载体、源端真弹窗不以页面叠层充当、sheet 内二级弹窗的层级、从半模态内压入页面时的 SheetMode 与 targetId、按源 Dialog 类型选择呈现形态（路由约束不改变弹窗形态）、弹窗内二级选择器的层级、按源布局还原弹窗内容、源 Dialog 用 setView 注入自定义内容时的承载方式，页内对话框的打开触发点；源端委托共享详情弹窗与分享弹层时复用目标共享组件，依附式弹窗的宿主页归属，自绘底部弹窗改 bindSheet 时的手势门禁（含列表的下拉关闭）
+- [dialog](dialog/index.md) — 弹窗与半模态：V2 页面可用的弹窗载体、源端真弹窗不以页面叠层充当、sheet 内二级弹窗的层级、从半模态内压入页面时的 SheetMode 与 targetId、按源 Dialog 类型选择呈现形态（路由约束不改变弹窗形态）、弹窗内二级选择器的层级、按源布局还原弹窗内容、源 Dialog 用 setView 注入自定义内容时的承载方式，页内对话框的打开触发点；源端委托共享详情弹窗与分享弹层时复用目标共享组件，依附式弹窗的宿主页归属，自绘底部弹窗改 bindSheet 时的手势门禁（含列表的下拉关闭）；多个独立底部弹层的绑定节点，展开后才加载数据的弹层
 - [effects](effects/index.md) — 渲染效果：elevation 阴影写入 ShadowOptions 的 px 换算与共享映射，blur 的单位与边缘，blendMode 混合着色的离屏范围与预混，渐变描边的双层结构，以及 Compose 渐变端点几何到 linearGradient 角度、stop 周期与镜像平铺的换算
-- [feedback](feedback/index.md) — 操作结果反馈：异步结果各分支的提示与去向，多来源页面按区块的失败隔离与缓存降级，Snackbar 一类提示的宿主与渲染，校验失败提示的承载与可见性，多入口 loading 的起链与收口，降级方案的成功引导，按失败类型分派的反馈（权限拒绝的去设置引导）
+- [feedback](feedback/index.md) — 操作结果反馈：异步结果各分支的提示与去向，多来源页面按区块的失败隔离与缓存降级，Snackbar 一类提示的宿主与渲染，校验失败提示的承载与可见性，多入口 loading 的起链与收口，降级方案的成功引导，按失败类型分派的反馈（权限拒绝的去设置引导），只经通知或 Toast 交给用户的接口返回数据的替代去向
 - [graphics](graphics/index.md) — 图标与图形资源：动画矢量的状态帧、Lottie 动画层的接入、被注释的自定义绘制绑定、系统符号替代、资源迁移中的静态化标注，图标固有尺寸与 scaleType（含 vector 转来的 SVG），整屏背景图的缩放方式，自定义图片组件的形状与裁剪（含被父级自定义 Layout 放置时），自绘图表的坐标原点，按使用场景区分的资源变体映射，自绘视图自适应尺寸公式的参照基数
-- [input](input/index.md) — 输入与选择控件：源端输入约束到 TextInput 等组件属性的转换（含小数输入），格子式密码输入层与获焦，会被子页覆盖再返回的页面里获焦来源的判别，自定义控件 XML 属性的初值，Compose Slider 的 steps 取值，选择列表行的选中标记（条件勾选与 Radio 的取舍）
+- [input](input/index.md) — 输入与选择控件：源端输入约束到 TextInput 等组件属性的转换（含小数输入），格子式密码输入层与获焦，会被子页覆盖再返回的页面里获焦来源的判别，自定义控件 XML 属性的初值，Compose Slider 的 steps 取值，选择列表行的选中标记（条件勾选与 Radio 的取舍），选择器回填的多级字段（省市区）
 - [interaction](interaction/index.md) — 点击命中与手势：Stack/弹窗覆盖层对下层点击的影响、hitTestBehavior与防穿透、事件绑定和点击副作用、侧滑行的手势归属与滑删方向，以及事件触发时的坐标与锚点取值；含状态按钮的内容分支。
 - [layout](layout/index.md) — 页面几何与层级：按约束定位、尺寸与边距、滚动区域、运行时覆盖层选择分支；通用页面结构与视觉修复依据留在本级。
-- [list](list/index.md) — 列表与宫格：多类型 Adapter 页面的 item 布局与绑定分支（默认态、文案模板、附属子卡），分页加载的并发门闩与刷新互斥，多列 Grid 中占位与跨列项的排布，列表项主副行与空值回退，多组列表的数据源绑定与级联选择，列表项滑动操作（swipeAction）的挂载位置，LazyForEach 改 Repeat.virtualScroll 时的项高度与数据切换核对，按列表区分的排序器
+- [list](list/index.md) — 列表与宫格：多类型 Adapter 页面的 item 布局与绑定分支（默认态、文案模板、附属子卡），分页加载的并发门闩与刷新互斥，多列 Grid 中占位与跨列项的排布，列表项主副行与空值回退，多组列表的数据源绑定与级联选择，列表项滑动操作（swipeAction）的挂载位置，LazyForEach 改 Repeat.virtualScroll 时的项高度与数据切换核对，按列表区分的排序器，侧栏分类与右侧分组列表的联动
 - [navigation](navigation/index.md) — 页面导航：先确定宿主和注册方式，再处理参数与跳转契约，或返回键与栈变更。
 - [pager](pager/index.md) — 分页与标签容器：ViewPager/ViewPager2 到 Swiper 的页数与手势（禁滑方式）、初始页定位、自绘 tab 与分页的双向联动，自绘日历的翻页容器以及相邻页数据的合并提交与查询范围
 - [safearea](safearea/index.md) — 沉浸式安全区：全屏布局下前景避让与 expandSafeArea 的区别，避让区测量与 px/vp 换算（状态栏、导航指示条），系统栏图标深浅，路由页内容原点与顶部 inset 的消费位置，Compose Scaffold innerPadding 的顶部 inset 由宿主还是子页消费，向子页与页内浮层下发的状态栏高度参数，Tab 宿主按各 Tab 沉浸设置处理顶部安全区（含嵌入页状态栏占位的背景延伸与前景避让分层），全屏页底部按钮、按键区与贴底弹层的避让及承载层，逐页落实前景避让

@@ -1,6 +1,6 @@
 # data/network
 
-网络层：服务地址与环境、运行配置的构建期注入、URL 拼接、拦截器注入的公共请求头、请求体字段与编码（表单或 JSON）、登录凭证来源与失效踢登，加解密工具的前置返回与异常回退、网关加密传输到 cryptoFramework 的移植，以及多路请求聚合结果的缓存写入与命中，拦截器读取的公共参数（设备标识、当前分组）的生产者
+网络层：服务地址与环境、运行配置的构建期注入、URL 拼接、拦截器注入的公共请求头、请求体字段与编码（表单或 JSON）、登录凭证来源与失效踢登，加解密工具的前置返回与异常回退、网关加密传输到 cryptoFramework 的移植，以及多路请求聚合结果的缓存写入与命中，拦截器读取的公共参数（设备标识、当前分组）的生产者，网络权限声明
 
 [上一级](../index.md)
 
@@ -24,10 +24,13 @@
   - 例外：服务端契约已确认同一端点也接受 JSON（接口文档或抓包证明），且当前决策选择 JSON
 - [服务地址与环境沿地址键名追到源端常量与取址逻辑：分清各接口族的 host，环境枚举与默认环境按源端规则映射](lesson-246252824c631aa6eff5.lesson.md)
   - 时机：规格提取与网络基础设施实现阶段，确定服务地址、环境枚举与默认环境时
-  - 情境：API 清单或规格只给出地址键名（如 SpKey.BASE_URL），没有实际 host；源端按接口族分设多套后端地址（如 Java 旧接口与 Go 新接口），由 DI 模块或环境工具类按构建类型选择环境。
+  - 情境：API 清单或规格只给出地址键名（如 SpKey.BASE_URL），没有实际 host；源端按接口族分设多套后端地址（如 Java 旧接口与 Go 新接口），由 DI 模块或环境工具类按构建类型选择环境。 也包括流程要求的 API 清单没有产出、计划只写“网络层（HTTP 请求封装）”，实现者按应用名拼出基址；源端 BuildConfig.BASE_URL 带上下文路径（如 /app/）。
 - [源端从响应头取 token/refreshToken 时，HTTP 封装把响应头交给调用方，Repository 按源端成功回调取值](lesson-2a4e6af209308c08aaa6.lesson.md)
   - 时机：网络与登录数据层的规格提取和实现阶段，确定登录类接口凭证的取值来源与 HTTP 封装的返回结构时
   - 情境：源端 Retrofit 登录接口返回 Response&lt;BaseResponse&lt;T&gt;&gt;，Repository 在成功回调里用 headers()\["Authorization"\]、headers()\["RefreshToken"\] 写 TokenManager，body 的 data 只含用户信息；目标端 HTTP 封装统一返回解析后的响应体。
+- [源端声明 INTERNET 且目标有网络请求时，在 module.json5 的 requestPermissions 声明 ohos.permission.INTERNET](lesson-faec7be031b7f64752c4.lesson.md)
+  - 时机：网络基础设施实现阶段，新建 HTTP 请求封装并接入页面请求时
+  - 情境：源 AndroidManifest 声明 android.permission.INTERNET；目标新建请求封装与页面调用，module.json5 尚无 requestPermissions。
 - [源端拦截器统一注入的请求头逐条迁到 HttpClient 默认头，头名与格式以源码为准，不照模板写 Bearer 前缀](lesson-217e93ef9097efc519f1.lesson.md)
   - 时机：网络基础层实现阶段，写 HttpClient 默认请求头与 Authorization 取值格式时
   - 情境：源端用 OkHttp 拦截器（如 TokenInterceptor）给每个请求加鉴权、语言、平台、地区等头，接口声明上看不到这些头；目标端用 @ohos.net.http 自建 HttpClient，skill 参考模板示范 `Authorization: Bearer ${token}`；API 清单可能只给出拦截器路径和 header_write 一类标签。

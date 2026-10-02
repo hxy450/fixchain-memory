@@ -1,6 +1,6 @@
 # 沿用已生成页面、兄弟任务的写法或已有解析函数前，回到源码核对该片段的语义
 
-ID：`lesson-e9c6e8ef1b29a6fe9c26` · 版本：8
+ID：`lesson-e9c6e8ef1b29a6fe9c26` · 版本：9
 
 [本主题](index.md)
 
@@ -10,7 +10,7 @@ ID：`lesson-e9c6e8ef1b29a6fe9c26` · 版本：8
 
 ## 适用情境
 
-后写的 worker 同时读到源码与先前 agent 已生成的目标代码片段（@Builder 控件、输入弹窗、弹窗承载方式、列表键函数、顶栏折叠、图标控件行、安全控件样式、全屏遮罩、onReady 取栈写法、共享状态 key、登录结果解析函数等），准备当作项目约定直接沿用。或对齐任务在一个与源端结构不同的既有页面上进行，写者已读到源布局 XML。
+后写的 worker 同时读到源码与先前 agent 已生成的目标代码片段（@Builder 控件、输入弹窗、弹窗承载方式、列表键函数、顶栏折叠、图标控件行、安全控件样式、全屏遮罩、onReady 取栈写法、共享状态 key、登录结果解析函数等），准备当作项目约定直接沿用。或对齐任务在一个与源端结构不同的既有页面上进行，写者已读到源布局 XML。 也包括后一批执行代理把同批尚未验收的兄弟页（如只回显接口 JSON 的页面）当作模板，照同一模式写出更多页面。
 
 ## 原因
 
@@ -23,7 +23,7 @@ ID：`lesson-e9c6e8ef1b29a6fe9c26` · 版本：8
 3. 先例本身没有经过运行验证（弹窗打开路径、真机截图）时，不以“先例能用”推断可运行；某处写法被修复后，搜索同一写法的其他页面一并核对。
 4. 对齐既有页面时先按源 XML 列组件清单（背景、标题栏、卡片子项、主按钮文案、页签/ViewPager、空态），与现有组件树逐项比对；源端不存在的区块替换，不在旧骨架上只调尺寸。
 
-来源支持：14 张卡 · 7 次迁移 · 7 个应用
+来源支持：15 张卡 · 8 次迁移 · 8 个应用
 
 ## 来源（按需复核）
 
@@ -43,6 +43,8 @@ ID：`lesson-e9c6e8ef1b29a6fe9c26` · 版本：8
   卡片版本：`686410a72e498ff1fb1d9233686e5ebc690a444c3056d62bc78d50dbcb257140`
 - [case-747484a613e86334516d](../../../store/cases/case-747484a613e86334516d/c17375c37c6410806f89e51707baf458f2a7269ddea6fe33e4ea348696489ff9.json) · 结论：recommendation:4
   卡片版本：`c17375c37c6410806f89e51707baf458f2a7269ddea6fe33e4ea348696489ff9`
+- [case-7825d414bc05105dc41b](../../../store/cases/case-7825d414bc05105dc41b/3c1b1d29d57d0b890df4df71974dce93e548d9e54df40104b4a10e10cdaf3e12.json) · 结论：diagnosis, recommendation:3
+  卡片版本：`3c1b1d29d57d0b890df4df71974dce93e548d9e54df40104b4a10e10cdaf3e12`
 - [case-7bc774bebe74d00dfa24](../../../store/cases/case-7bc774bebe74d00dfa24/9c871169a262da0828e8a64300d27a2cb61b81ca47dfcf4c5c08cadc35d48fa1.json) · 结论：recommendation:3
   卡片版本：`9c871169a262da0828e8a64300d27a2cb61b81ca47dfcf4c5c08cadc35d48fa1`
 - [case-affc8177e24ce9f71b47](../../../store/cases/case-affc8177e24ce9f71b47/f804b4003f34d058922dd2194e93f12bd78d006541c928c92bb6334c33252bae.json) · 结论：recommendation:3
