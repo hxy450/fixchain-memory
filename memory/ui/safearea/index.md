@@ -1,6 +1,6 @@
 # ui/safearea
 
-沉浸式安全区：全屏布局下前景避让与 expandSafeArea 的区别，避让区测量与 px/vp 换算（状态栏、导航指示条），系统栏图标深浅，路由页内容原点与顶部 inset 的消费位置，Compose Scaffold innerPadding 的顶部 inset 由宿主还是子页消费，向子页与页内浮层下发的状态栏高度参数，Tab 宿主按各 Tab 沉浸设置处理顶部安全区（含嵌入页状态栏占位的背景延伸与前景避让分层），全屏页底部按钮、按键区与贴底弹层的避让及承载层，逐页落实前景避让，状态栏实色避让带的承载层（Tabs 宿主包进外层 Column）
+沉浸式安全区：全屏布局下前景避让与 expandSafeArea 的区别，避让区测量与 px/vp 换算（状态栏、导航指示条），系统栏图标深浅，路由页内容原点与顶部 inset 的消费位置，Compose Scaffold innerPadding 的顶部 inset 由宿主还是子页消费，向子页与页内浮层下发的状态栏高度参数，Tab 宿主按各 Tab 沉浸设置处理顶部安全区（含嵌入页状态栏占位的背景延伸与前景避让分层），全屏页底部按钮、按键区与贴底弹层的避让及承载层，逐页落实前景避让，状态栏实色避让带的承载层（Tabs 宿主包进外层 Column），自绘标题栏按源端避让来源接入 topInset（固定高度含内距、顶距与 inset 只取一份）
 
 [上一级](../index.md)
 
@@ -35,3 +35,7 @@
 - [系统栏图标深浅按源端状态栏配置设置，不照搬沉浸式模板的浅色文字默认值](lesson-824031d5fddf81036b54.lesson.md)
   - 时机：沉浸式窗口配置阶段，调用 setWindowSystemBarProperties 设置 statusBarContentColor/navigationBarContentColor 时
   - 情境：目标全屏窗口把系统栏背景设为透明，页面内容延伸到状态栏下；Android 源端 BaseActivity/主题用 ImmersionBar darkMode(true)、windowLightStatusBar 或白色状态栏配深色图标；沉浸式 skill 示意写“透明背景 + 浅色文字”。
+- [自绘标题栏接入顶部安全区前先判定源端由谁避让：根 fitsSystemWindows 时 inset 放外层、工具栏保持源高；工具栏自带固定顶距时顶距与 inset 只取一份并同步高度](lesson-cde4120ab9ad7412b1da.lesson.md)
+  - 时机：界面实现阶段，为全屏页自绘标题栏/工具栏接入顶部系统安全区（topInset）并确定其高度与顶部内距时
+  - 情境：Android 全屏页工具栏为固定 dp 高度，状态栏避让由根布局 fitsSystemWindows=true 承担，或由工具栏自身的固定 paddingTop（如 80dp 高、40dp 顶距，根无 fitsSystemWindows）承担；目标页以窗口模型的 topInset 做前景避让，标题栏写固定 .height()。
+  - 例外：页面内容原点已在状态栏 inset 之下（宿主已消费 inset），此时只补源端顶距的剩余部分，不再给标题栏加 topInset

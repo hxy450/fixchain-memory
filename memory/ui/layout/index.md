@@ -8,7 +8,7 @@
 
 - [constraints](constraints/index.md) — ConstraintLayout/RelativeLayout的锚点、叠放与默认对齐（含 Compose Column/Row 的默认对齐），Compose Box 子项在 Stack 中的定位，基线对齐与逐行内距的 Row 组，及ArkUI容器中的子项定位。
 - [layers](layers/index.md) — 运行时addView、全屏底层与状态覆盖层：确定视图挂在哪里、如何叠放及几何范围；点击命中与事件时坐标属于ui/interaction。
-- [scrolling](scrolling/index.md) — ScrollView/NestedScrollView的滚动范围、LazyRow/横向滚动行的交叉轴尺寸、Lazy 列表 contentPadding 的内容偏移、带高度上限的滚动卡片、连续折叠顶栏与滚动区内跟随等高。
+- [scrolling](scrolling/index.md) — ScrollView/NestedScrollView 与 weight 剩余区列表的滚动范围（固定头部留在外、剩余区空态居中）、LazyRow/横向滚动行的交叉轴尺寸、Lazy 列表 contentPadding 的内容偏移、带高度上限的滚动卡片、连续折叠顶栏与滚动区内跟随等高。
 - [sizing](sizing/index.md) — 宽高、比例、百分比与边距的组合（父尺寸减边距、占剩余空间），Compose 修饰符链顺序与 Row 的测量顺序、固有高度，Material 按钮的布局占位与实绘尺寸，px 域整数布局公式与随进度收放的间距，以及随内容定尺寸的图片、背景和描边，以及非 Row/Column/Flex 父级中 layoutWeight 不生效时的显式尺寸；嵌入满高子组件时的剩余高度分配，居中的 wrap_content 子项组不被拉伸。
 
 ## 本级经验

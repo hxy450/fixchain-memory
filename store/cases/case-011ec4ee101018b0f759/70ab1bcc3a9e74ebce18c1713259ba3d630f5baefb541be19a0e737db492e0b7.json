@@ -1,0 +1,125 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-011ec4ee101018b0f759",
+  "created_at": "2026-10-03T01:33:03.851499+00:00",
+  "migration_key": "06c580ad-cd30-46cf-b230-8682fe3c8a06",
+  "title": "worker仍在运行时主线程按旧观测接管，并行写出重复的模型文件",
+  "when": "多代理迁移编排阶段，派发的codegen worker多次等待超时、决定是否由主线程接管写入其契约产物时",
+  "description": "主线程已中断首个worker并重派同一任务（如Base-1 Models只写models/），新worker仍为running、未返回completed；主线程此前查过目标目录为空，正考虑自己写同一目录的契约文件。",
+  "summary": "主线程写前已多次读取编排规则：a2h-execute SKILL.md 声明“a2h-execute是编排层，不实现任何迁移逻辑”，\nStage 2 的 Base-1 Models 由 a2h-migration-worker 完成；arkts-structural-closure SKILL.md 的join协议写明\n完成的唯一信号是 list_agents 的 completed，不是产物文件的存在；连续超时后先用 list_agents 核对，\n只有句柄消失且从未 completed 才断点重派（上限2次）；“契约产物必须出自承担任务的子代理，\n重派上限后仍产不出→如实报缺并停在未完成态；禁止派发方代写”。主线程自己在 L6284 也声明\n“如果重派仍无产出，我会把 Base-1 标成阻断”。这些输入清楚且足以排除主线程接管写入。\n实际过程：11:27 中断 r1 并重派 base01_models_r2；11:29:31 唯一一次查目录得到“models not yet”（L6308-L6311）；\n11:31:30 list_agents 显示 r2 仍为 running（L6324）；此后只有 11:32:43、11:35:45 两次 wait 超时，\n没有再查目录或 list_agents。worker 已在 11:35:22 写出 Gas/Recipe/Knowledge/Ai/IdentityModels\n五个拆分文件（01a0c3b9-01f9-7a81-bb30-4e6aab4ebee9.jsonl:L85-L86）。主线程在 L6350 以“重派后仍无文件产出”为由，\n于 11:37:55 自己 apply_patch 新建 models/DomainModels.ets（L6353-L6356），与仍在运行的 worker 并行写同一目录，\n产生同名导出重复，NeighborPost 构造参数顺序两版也不同（closer 01a0c3c3-4137-72c3-9829-8f4061a3138b.jsonl:L83、L126）。\n偏差位于编排者“等待超时→是否接管”的决策：它用 8 分钟前的旧目录观测和对“running”的误判代替了写前复核，\n既未中断 r2，也未按协议停在阻断态。worker 发现重复并通知后，主线程于 11:48:46 删除 DomainModels.ets，\n保留五个拆分文件（L6405-L6409）；L6432 的重写因 patch 多操作校验失败未落盘（L6434），\nL6450-L6453 的 rg 显示每个类型只有一处定义，截止时目标文件不存在。\n",
+  "recommendations": [
+    "编排者等待超时时，以 list_agents 的 agent_status 为唯一判断：仍为 running 就继续 wait 或明确 interrupt，不以“目录里还没有文件”认定 worker 无产出。",
+    "任何接管或补写前，在同一时刻复查目标目录（Get-ChildItem models/）与 list_agents，用写前最新观测决策，不沿用数分钟前的旧检查结果。",
+    "遵守“契约产物必须出自承担任务的子代理”：重派未到上限就继续收口，到上限仍无产出就记阻断；确需换写者时先 interrupt 原 worker 并确认停止，避免两个写者并行写同一目录。",
+    "已出现并行产物时，按计划要求选一套（如按职责拆分的五个文件）并删除另一套，再用 rg 核对每个导出只定义一次、构造参数顺序与调用方一致。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "E:/harmony/project/harmony_GasSelect_vest_1/entry/src/main/ets/models/DomainModels.ets",
+        "since": "2026-09-21T08:36:37.303Z",
+        "at": "2026-09-22T03:03:29.422Z"
+      },
+      "nodes": [
+        {
+          "key": "E:/harmony/project/harmony_GasSelect_vest_1/.agents/skills/a2h-execute/SKILL.md",
+          "at": "2026-09-21T06:20:03.758Z",
+          "reason": "正常输入：主线程 Get-Content 读取 a2h-execute SKILL.md，回执含“核心原则：a2h-execute 是编排层，不实现任何迁移逻辑；Stage 2/3 使用 a2h-migration-worker”、§4a 串行派发 Base-1 Models，以及“契约产物必须出自承担任务的子代理…禁止派发方代写”（01a0bdac-106f-78f2-9061-91f3102351af.jsonl:L3920-L3923）。"
+        },
+        {
+          "key": "E:/harmony/project/harmony_GasSelect_vest_1/.agents/skills/arkts-structural-closure/SKILL.md",
+          "at": "2026-09-21T10:29:23.142Z",
+          "reason": "正常输入：写入前最近一次完整读取，回执中join协议①“完成的唯一合法信号=agent_status completed，绝不是产物文件的存在”，②“连续3次超时后调list_agents核对…句柄消失且从未观测到completed→按断点重派，上限2次”，派发纪律“重派上限后仍产不出→如实报缺并停在未完成态”；足以排除主线程在worker仍running时自写模型（01a0bdac-106f-78f2-9061-91f3102351af.jsonl:L5792-L5795）。"
+        },
+        {
+          "key": "01a0bdac-106f-78f2-9061-91f3102351af.jsonl",
+          "at": "2026-09-21T11:38:05.346Z",
+          "reason": "已收到上述规则，并在L6284自述重派仍无产出将标阻断；但11:29:31查目录“models not yet”（L6308-L6311）、11:31:30 list_agents显示r2 running（L6324）后再未复查，于L6350称“重派后仍无文件产出”，L6353-L6356 apply_patch新建DomainModels.ets。此时worker已于11:35:22写出五个拆分模型文件且仍在运行，主线程未中断它，形成并行重复定义。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "主线程exec调用pwsh执行Get-Content .agents/skills/a2h-execute/SKILL.md（与decision-ledger同一命令），回执返回编排层不实现迁移逻辑、Base-1由a2h-migration-worker完成及禁止派发方代写契约产物的条款；支持主线程写前已收到这些规则。",
+          "evidence": [
+            {
+              "source": "01a0bdac-106f-78f2-9061-91f3102351af.jsonl",
+              "line": 3920
+            },
+            {
+              "source": "01a0bdac-106f-78f2-9061-91f3102351af.jsonl",
+              "line": 3921
+            },
+            {
+              "source": "01a0bdac-106f-78f2-9061-91f3102351af.jsonl",
+              "line": 3923
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "主线程exec调用pwsh执行Get-Content .agents/skills/arkts-structural-closure/SKILL.md，回执完整返回join协议①②及派发纪律（completed为唯一完成信号、超时先list_agents核对、重派上限后报缺、禁止派发方代写）；这是写DomainModels前最近一次读取。",
+          "evidence": [
+            {
+              "source": "01a0bdac-106f-78f2-9061-91f3102351af.jsonl",
+              "line": 5792
+            },
+            {
+              "source": "01a0bdac-106f-78f2-9061-91f3102351af.jsonl",
+              "line": 5794
+            },
+            {
+              "source": "01a0bdac-106f-78f2-9061-91f3102351af.jsonl",
+              "line": 5795
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-011ec4ee101018b0f759",
+  "metadata": {
+    "migration": {
+      "project": "掌上燃气管家",
+      "server_session_id": "06c580ad-cd30-46cf-b230-8682fe3c8a06"
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "eff4bc4e-ac07-476f-a9a3-71ff51f3938e"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "gpt-6-astra"
+      ],
+      "providers": [
+        "packycode"
+      ],
+      "client_versions": [
+        "0.154.0-alpha.6.2"
+      ]
+    },
+    "source_set_id": "sources-2f9f407ca4b8e79b35da",
+    "card_tool_version": "0.10.4"
+  },
+  "revision": "70ab1bcc3a9e74ebce18c1713259ba3d630f5baefb541be19a0e737db492e0b7"
+}
