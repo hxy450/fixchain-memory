@@ -1,6 +1,6 @@
 # 图标按源端原始资源与外形落实：检索全部限定词目录，缺失就从 Android 密度目录复制原图；不用文字字形、近名图标、系统符号、二次着色或纯色底替代
 
-ID：`lesson-943544ce27bf04f9faf8` · 版本：2
+ID：`lesson-943544ce27bf04f9faf8` · 版本：3
 
 [本主题](index.md)
 
@@ -29,7 +29,7 @@ ID：`lesson-943544ce27bf04f9faf8` · 版本：2
 
 - 怀疑资源被替换时，用文件大小或哈希比对工程资源与 Android 原图是否一致。
 
-来源支持：4 张卡 · 2 次迁移 · 2 个应用
+来源支持：5 张卡 · 3 次迁移 · 3 个应用
 
 ## 来源（按需复核）
 
@@ -39,5 +39,7 @@ ID：`lesson-943544ce27bf04f9faf8` · 版本：2
   卡片版本：`3b128ce1f45adbd905d0ce25b9396eeee973d527b0b9ccad5c9a72d571e4534f`
 - [case-9394dee6fa8ae478e54c](../../../store/cases/case-9394dee6fa8ae478e54c/8f48c8a73faee7c349509f2ad5bba1c58becb664c51aa5d0652abab5e9df4995.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3, recommendation:4
   卡片版本：`8f48c8a73faee7c349509f2ad5bba1c58becb664c51aa5d0652abab5e9df4995`
+- [case-cdc57384e71fa7c70345](../../../store/cases/case-cdc57384e71fa7c70345/037233e15fe0fb44c8cc98e82060508d223a5a4eed01a1c90f1e7f451bdb00c7.json) · 结论：diagnosis, recommendation:1
+  卡片版本：`037233e15fe0fb44c8cc98e82060508d223a5a4eed01a1c90f1e7f451bdb00c7`
 - [case-d827908975df4e90ae2b](../../../store/cases/case-d827908975df4e90ae2b/3a1473debde2f4a16a58728c1585a9683b0c44be2bd9aaf8fdaf26b2db0fb492.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
   卡片版本：`3a1473debde2f4a16a58728c1585a9683b0c44be2bd9aaf8fdaf26b2db0fb492`

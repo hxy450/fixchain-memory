@@ -1,6 +1,6 @@
 # 源端按使用场景返回不同资源变体时，按取值字段分别映射，不用一个映射覆盖所有场景
 
-ID：`lesson-c65e8e59008a5e31bcad` · 版本：1
+ID：`lesson-c65e8e59008a5e31bcad` · 版本：2
 
 [本主题](index.md)
 
@@ -10,7 +10,7 @@ ID：`lesson-c65e8e59008a5e31bcad` · 版本：1
 
 ## 适用情境
 
-源端一个编码对应多种资源（白色图标、背景图、另一色系图标等），经 iconEx/bgEx/icon2Ex 一类字段分别取用，页面不同位置（顶部、小时卡、选中/非选中、列表）绑定不同字段。
+源端一个编码对应多种资源（白色图标、背景图、另一色系图标等），经 iconEx/bgEx/icon2Ex 一类字段分别取用，页面不同位置（顶部、小时卡、选中/非选中、列表）绑定不同字段。 也包括同一编辑选项在选择列表与主预览取自不同资源族：列表 Holder 用固定 drawable（setBackgroundResource），主预览按组件尺寸加载 cover/<尺寸>/<id>.webp。
 
 ## 原因
 
@@ -19,10 +19,13 @@ ID：`lesson-c65e8e59008a5e31bcad` · 版本：1
 ## 做法
 
 1. 按源端取值字段拆分映射函数（图标、背景、第二套图标各一个），在每个使用处按源端绑定的字段选择。
+2. 按尺寸等条件选资源的规则，只落到源端实际按该条件加载的那一层（如主预览），不扩展到列表缩略图。
 
-来源支持：1 张卡 · 1 次迁移 · 1 个应用
+来源支持：2 张卡 · 2 次迁移 · 2 个应用
 
 ## 来源（按需复核）
 
 - [case-9d7fa754a567e2ecec7e](../../../store/cases/case-9d7fa754a567e2ecec7e/08068dd456a4c32cc1327c39f339215b49dab4ffc8f5a25dc8024b7112ebbd28.json) · 结论：diagnosis, recommendation:3
   卡片版本：`08068dd456a4c32cc1327c39f339215b49dab4ffc8f5a25dc8024b7112ebbd28`
+- [case-be863418bbabb4c9591a](../../../store/cases/case-be863418bbabb4c9591a/a182d6f5e595aa6593e53fc4f1afece909105dfa2d6df1c853072731743d3eef.json) · 结论：diagnosis, recommendation:1
+  卡片版本：`a182d6f5e595aa6593e53fc4f1afece909105dfa2d6df1c853072731743d3eef`

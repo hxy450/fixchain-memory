@@ -33,6 +33,9 @@
 - [自定义 View 上的 android:* 属性只有被该类读取才生效：控件初值取运行时生效值](lesson-a6edef3bb44e01a82b72.lesson.md)
   - 时机：界面实现阶段，把源布局中自定义控件的 XML 属性转换为目标组件初始状态时；联调修复判断是否为复刻缺陷时
   - 情境：源布局在继承 View 的自定义控件（非 CheckBox/CompoundButton）上声明 android:checked 等框架属性，该类构造只读取自己的 styleable 属性；目标用状态变量表示勾选或开关的首显状态。
+- [色板、渐变方案、边框素材这类选项列表按源 Fragment/ViewModel 的数据源迁移，截图只核视觉；调色盘、相册、图库等动作项按源接到对应页面并写回编辑会话](lesson-60c1c37b0703e5d3b8d6.lesson.md)
+  - 时机：界面实现阶段，为编辑页背景色、文字颜色、边框等选择区确定选项列表与点击行为时，尤其任务要求“根据截图转换”时
+  - 情境：Android 选择区由各自 Fragment + ViewModel 以 RecyclerView 列表提供（背景含渐变方案与图片素材、文字为纯色列表、边框为位图素材且首项是调色盘），Fragment 泛型参数或布局 data-binding 指向对应 ViewModel；迁移任务同时给出设备截图作为视觉参考。
 - [透明 TextInput 叠在掩码格上时，输入层铺满格区并显式获焦，多段输入各用独立节点](lesson-90a7888a65eefb3e94b3.lesson.md)
   - 时机：界面实现阶段，把格子式密码框等自定义输入控件转成“透明 TextInput + 掩码格”叠层时
   - 情境：源端弹窗内是固定尺寸的格子式输入控件（如 4 位数字密码），多段流程（设置、再次确认）各弹独立 Dialog 并各带新输入框；目标用页内条件挂载的浮层，透明 TextInput 与掩码 Row 叠放，外层卡片有吞点击的 onClick。

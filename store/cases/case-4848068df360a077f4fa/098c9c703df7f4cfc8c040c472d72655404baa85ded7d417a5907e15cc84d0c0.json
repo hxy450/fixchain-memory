@@ -1,0 +1,169 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-4848068df360a077f4fa",
+  "created_at": "2026-10-03T03:12:32.745975+00:00",
+  "migration_key": "e9368e72-568a-4c6e-9922-70258142693f",
+  "title": "把父组件每次重传Tab数组当成首次装载，横滑后被强制选回第0项",
+  "when": "页面/子组件转换阶段，把源端Tab列表的默认选中与父分页联动翻译成ArkUI V2 @Param/@Monitor/@Event逻辑时",
+  "description": "源端Tab Fragment只在一次性分类数据装载后默认选中首项并回调父ViewPager，翻页时父级仅调用setSelect(position)同步选中；目标用ComponentV2子组件接收@Param items/selectedIndex，并通过@Event回调父Swiper切页，父组件可能在每次渲染时重新映射items数组。",
+  "summary": "Stage1转换NetBgColorTabFragment时，生成者实际读到：Android NetBgColorTabFragment.kt只在initData一次性getCategory后经configDataList调用selectItemBean(0)，\n翻页由NetBgColorPagerFragment.onPageSelected调用tabFragment.setSelect(position)同步，且selectItemBean以“同一bean不再回调”做防重；\n同工程已有的AudioNetTabSection.ets也用selectionInitialized做一次性初始化，onItemsChanged不清标志，初始项取在范围内的selectedIndex\n（01a07b65-10b1-7080-9067-7842d77e42da.jsonl:L190/L199、L215/L222、L270/L274）。生成者自己在L259概括为“首批数据非空时默认选中第0项”，\n并在L307登记P-S1-864“pager changes update the selected tab without duplicate callbacks”。\n同一次Add写出的onItemsChanged却先置selectionInitialized = false，再调用ensureInitialSelection()；后者固定applySelectedIndex(0)并onTabSelected(0)。\n这样，任何一次@Param items引用更新都被当成首次装载，并向父分页回调第0项（L307写入，L308 FileChange回执）。偏差位于源端“一次性默认选中”到ArkTS“每次items更新都重新初始化”的转换。\n该片段原样保留到返修前（修复者读回见01a0a45c-7738-74d0-92fe-d27a0bd900dd.jsonl:L83/L91）。09-15图库接通真实分类后，NetBgColorPagerFragment在@Builder中以\ncategoryItems.map(new NetBgColorTabItem(...))传items，同时传selectedIndex: this.currentItem。于是横滑使currentItem变化并重建数组，Tab又回调0，\n父级setCurrentItem(0)把Swiper拉回首页；用户看到“下一页数据不变、Tab不选中”（01a0a40a-7c86-70c1-8af4-a542f4400629.jsonl:L801）。\nPager这段map接线在09-14已出现（01a09ed6-e437-72f2-be32-70ea09951c76.jsonl:L143为CRLF读取回执），池内未找到其原生写入，应来自池外提交，只作触发条件记录。\neditor_gallery_data（01a0a338-e7d5-7463-92cb-22ecce2b6c00.jsonl:L184）只为该map补了categoryFlag/showItemName参数，没有改Tab组件。因此本问题属于Stage1生成遗留，不是09-15新写入的问题。\n修复者在onItemsChanged里删除ensureInitialSelection()；selectedIndex在范围内时把selectionInitialized保持为true，只同步父级当前索引（01a0a45c…:L180、L194，diff见L231）。\n",
+  "recommendations": [
+    "转换源端“数据装载后默认选中首项并通知父级”时，把它实现成一次性初始化：仅在首个非空数据到达且尚无有效选中时回调；@Param items后续更新只按selectedIndex同步高亮，不重置初始化标志，也不硬编码回调第0项。",
+    "输出前按父组件可能每次渲染都重建数组的情形自检：设selectedIndex=1后替换items引用，确认不会触发onTabSelected(0)；同工程已有同类Tab组件（如AudioNetTabSection的一次性初始化）时，按其写法对齐，不另加重置。",
+    "父子双向同步选中索引时，子组件回调父级前先比较目标索引与当前选中，对齐源端selectItemBean“同一项不重复回调”的防重语义，避免回调回环。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "H:/WIdgetHW2/entry/src/main/ets/pages/NetBgColorTabFragment.ets",
+        "since": "2026-09-09T08:29:55.423Z",
+        "at": "2026-09-18T04:34:56.908Z"
+      },
+      "nodes": [
+        {
+          "key": "E:/android/widgetisland/base/src/main/java/cn/widgetisland/theme/base/fragment/net_bg/NetBgColorTabFragment.kt",
+          "at": "2026-09-07T10:29:24.709Z",
+          "reason": "正常输入：git show 740a1c3回执显示configDataList只在initData一次性getCategory后调用selectItemBean(0)；setSelect(position)只同步，selectItemBean在同一bean时直接返回、不回调。这足以说明默认选中只属于首次装载（01a07b65-10b1-7080-9067-7842d77e42da.jsonl:L190、L199）。"
+        },
+        {
+          "key": "E:/android/widgetisland/base/src/main/java/cn/widgetisland/theme/base/fragment/net_bg/NetBgColorPagerFragment.kt",
+          "at": "2026-09-07T10:34:44.550Z",
+          "reason": "正常输入：回执显示父分页onPageSelected(position)只调用tabFragment.setSelect(position)，Tab的onItemSelect再驱动setCurrentItem；翻页应同步到当前页，不会重新初始化（同转录L270、L274）。"
+        },
+        {
+          "key": "H:/WIdgetHW2/entry/src/main/ets/pages/AudioNetTabSection.ets",
+          "at": "2026-09-07T10:31:33.440Z",
+          "reason": "正常输入：同工程已有同类ArkTS Tab组件，onItemsChanged不清selectionInitialized；ensureInitialSelection只执行一次，初始项优先取在范围内的selectedIndex。这给出了可直接沿用的一次性初始化写法（同转录L215、L222）。"
+        },
+        {
+          "key": "01a07b65-10b1-7080-9067-7842d77e42da.jsonl",
+          "at": "2026-09-07T10:38:06.965Z",
+          "reason": "收到上述输入后，生成者在L259概括为首批数据默认选中第0项。L307的apply_patch却在onItemsChanged中先置selectionInitialized = false，再调ensureInitialSelection()，后者固定applySelectedIndex(0)+onTabSelected(0)。每次items更新都被当成首次装载，违背了它同一补丁登记的“without duplicate callbacks”（L307写入，L308/L309回执）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4,
+          "force": true,
+          "reason": "生成者在E:/android/widgetisland执行git show 740a1c3:base/src/main/java/cn/widgetisland/theme/base/fragment/net_bg/NetBgColorTabFragment.kt，回执返回configDataList→selectItemBean(0)、setSelect及同bean防重；这支持生成者写前已收到一次性默认选中的源端语义。",
+          "evidence": [
+            {
+              "source": "01a07b65-10b1-7080-9067-7842d77e42da.jsonl",
+              "line": 190
+            },
+            {
+              "source": "01a07b65-10b1-7080-9067-7842d77e42da.jsonl",
+              "line": 199
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 4,
+          "force": true,
+          "reason": "生成者git show 740a1c3:base/src/main/java/cn/widgetisland/theme/base/fragment/net_bg/NetBgColorPagerFragment.kt，回执返回onPageSelected→tabFragment.setSelect(position)；这支持生成者写前已知父分页翻页只同步选中。",
+          "evidence": [
+            {
+              "source": "01a07b65-10b1-7080-9067-7842d77e42da.jsonl",
+              "line": 270
+            },
+            {
+              "source": "01a07b65-10b1-7080-9067-7842d77e42da.jsonl",
+              "line": 274
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "生成者以Get-Content -Raw读取entry/src/main/ets/pages/AudioNetTabSection.ets（workdir H:/WIdgetHW2），回执返回onItemsChanged不清selectionInitialized的一次性初始化写法；这支持生成者写前已看到同工程正确模式。",
+          "evidence": [
+            {
+              "source": "01a07b65-10b1-7080-9067-7842d77e42da.jsonl",
+              "line": 215
+            },
+            {
+              "source": "01a07b65-10b1-7080-9067-7842d77e42da.jsonl",
+              "line": 222
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [
+    {
+      "key": "H:/WIdgetHW2/entry/src/main/ets/pages/NetBgColorItemContentFragment.ets",
+      "reason": "已确认修复只在onCategoryChanged开头加入requestRevision += 1（01a0a45c-7738-74d0-92fe-d27a0bd900dd.jsonl:L180、L231）。修改前，Stage1写入的onCategoryChanged已先清空requestedCategoryId，回调也会比对requestedCategoryId（01a07b65-9f5b-7e10-aca6-cfa77cc7c653.jsonl:L337）；editor_gallery_data又让loadItems每次请求都++requestRevision并在回调里比对revision（01a0a338-e7d5-7463-92cb-22ecce2b6c00.jsonl:L225）。分类切换后的晚到响应本来就会被丢弃。每个Swiper页的categoryId固定，不在横滑回跳这条症状路径上；修复者的RED只是对该语句的正则文本断言（01a0a45c…:L162、L172）。因此未核到该目标有导致本问题的生成偏差，这里只记作防御性加固，不制图。"
+    }
+  ],
+  "job": "issue-4848068df360a077f4fa",
+  "metadata": {
+    "migration": {
+      "project": "组件岛Widget Island",
+      "server_session_id": "e9368e72-568a-4c6e-9922-70258142693f"
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "60c0b278-d763-4144-9ffd-78d5340aee5d"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "glm-5.3-flash",
+        "gpt-5.5",
+        "gpt-5.6-sol"
+      ],
+      "providers": [
+        "custom"
+      ],
+      "client_versions": [
+        "0.152.1",
+        "0.154.0"
+      ]
+    },
+    "source_set_id": "sources-f43aae365159aa816371",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "26.0.0",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-09-18T03:21:39.969Z",
+        "ref": "01a0b274-f434-7483-b80b-14d8b50b2357.jsonl:L635",
+        "request_ref": "01a0b274-f434-7483-b80b-14d8b50b2357.jsonl:L632",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-09-18T03:21:39.969Z",
+        "ref": "01a0b274-f434-7483-b80b-14d8b50b2357.jsonl:L635",
+        "request_ref": "01a0b274-f434-7483-b80b-14d8b50b2357.jsonl:L632",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.4"
+  },
+  "revision": "098c9c703df7f4cfc8c040c472d72655404baa85ded7d417a5907e15cc84d0c0"
+}

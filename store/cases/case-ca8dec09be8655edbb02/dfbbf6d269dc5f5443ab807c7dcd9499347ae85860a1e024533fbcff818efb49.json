@@ -1,0 +1,458 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-ca8dec09be8655edbb02",
+  "created_at": "2026-10-03T02:56:31.628586+00:00",
+  "migration_key": "e9368e72-568a-4c6e-9922-70258142693f",
+  "title": "无编译反馈时按资源绑定惯例或兄弟页写法改写 ArkUI 参数，越出 API 26 签名",
+  "when": "界面实现与收口接线阶段，在无法运行 ArkTS 编译时为组件属性、事件回调和依赖对象确定参数类型与写法时",
+  "description": "目标为 HarmonyOS API 26 ArkTS；派工要求颜色/尺寸经 $r 资源绑定，或可参照同批并行生成、尚未编译的兄弟页及 rg 检索到的零散用法；涉及 blur、Swiper.itemSpace、accessibilityText、SymbolGlyph.fontColor、ClickEvent 回调、带方法签名的依赖接口等签名敏感 API，且构建链缺 restool.exe 导致写后无法编译验证。",
+  "summary": "09-11 Stage3 Slice10/F005 页面转换与收口均在\"不得构建\"或构建被 restool.exe 缺失阻断的条件下完成，\n写出的签名敏感代码直到 09-14 首次全量编译（01a09ed1-b387-7511-9083-1852ed43661d.jsonl:L140、L153）才暴露。\n本卡按成因分四类：\n（1）资源绑定惯例越界：convert_theme_detail 写前读到同布局旧页 ThemeTestDetailPage，其中模糊半径是\nnumber 常量 THEME_DETAIL_BACKGROUND_BLUR_RADIUS = 20、Swiper 为 .itemSpace(20)、accessibilityText 分别传 string 或 $r\n（01a08e55-3c37-7572-8572-7fd087ed088d.jsonl:L95、L103）；它沿用了同名比例常量，却按\"颜色、尺寸全部绑定资源\"\n（同转录 L70；源自 worker THEME-BRIEF \"尺寸经 $r('app.float.*')\"，01a08e49-bb4c-7963-853c-11cdd2d4e6a3.jsonl:L415、L428，\n派工正文 L467 加密）把它们写成 .blur($r('app.float.dp_20'))、.itemSpace($r('app.float.dp_20'))，\n并把 accessibilityText 写成 string|Resource 三元（L346-L347）。blur 只收 number、itemSpace 只收 string|number、\naccessibilityText 的 string 与 Resource 是两个独立重载，09-14 均报错。\n（2）向兄弟页传播：convert_theme_creator_detail 首稿已按 ThemeTestDetailPage 写数值（01a08e54-f9ae-7d01-8d2f-d9d48722f91f.jsonl:L246、L277、L338），\n随后 rg 到并发落盘的 ThemeDetailPage 的 $r 写法并读回全文（L342-L352），说\"把 Swiper 间距和模糊半径改成已有 float 资源\"，\n在 L372-L373 把正确数值改坏；同一补丁还为版权徽标加 onClick((event: ClickEvent) => event.stopPropagation())，\n而它写前读到的交互映射参考把 stopPropagation 列在触摸事件节并注明只停止 Touch 事件（L171-L176，因未指定 UTF-8 读取，中文为乱码，\nTouch 与 stopPropagation 仍可辨）。convert_icon_detail 之后 rg stopPropagation()，结果含 ThemeCreatorDetailPage.ets:195，\n随即给自己首稿中正确的无参 onClick 也加上 ClickEvent.stopPropagation（01a08e65-50cb-7e43-b4c2-c9eef7891915.jsonl:L239-L249）。\n（3）对象字面量实现带方法接口：closer 写前读到 hmos-fix-build-errors 的 ArkTS 严格规则（对象字面量须对应显式类/接口，\n01a08e8f-5851-7462-8382-f0483925c7d3.jsonl:L94、L97）及 ThemeFeatureDependencies 只含方法签名（L231-L234），\n仍以箭头函数属性的对象字面量调用 ThemeFeatureRuntime.install（L589-L590）。该 skill 只给\"赋给类型变量\"的修法，\n修复者按这一写法改后同规则仍报错（01a09ed1-b387-7511-9083-1852ed43661d.jsonl:L215、L359），最终改为 implements 接口的具名类（同转录 L372）；输入对\"带方法接口不能由字面量实现\"这一限制存在缺口。\n（4）换组件沿用旧修饰链：f005_worker 按补充审计把 ThemeWidgetSection 的 Text('✓') 换成 SymbolGlyph($r('sys.symbol.checkmark'))，\n保留单值 .fontColor($r('app.color.wi_white'))（01a08f6d-4524-7170-ab91-9e74e3315db3.jsonl:L275-L276）；SymbolGlyph.fontColor 需要 ResourceColor 数组。\n其写前输入仅有已验证符号清单与无修饰器的 SymbolGlyph rg 行（L48、L251-L252），未见数组签名，补充审计消息加密（L133）。\n修复（01a09ed1-b387-7511-9083-1852ed43661d.jsonl:L215-L218）把 blur/itemSpace 改为 20、删去 ClickEvent 参数与 stopPropagation、accessibilityText 改为纯 string 或删除、\nSymbolGlyph 颜色改为数组；L372 把依赖改为显式实现类。HomeSection 枚举改写属于并发中间态误诊，见 unresolved_targets。\n",
+  "recommendations": [
+    "页面转换时，资源绑定纪律只用于签名接受 Resource/Length/ResourceColor 的属性；blur(number)、Swiper.itemSpace(number|string) 这类只收数值的参数保留数值常量，可直接沿用同布局已存在页面的常量（本例 20）。",
+    "无法编译时，对首次使用或照搬的属性、事件方法，落盘前在本机 SDK 的 ets/component 声明文件中 grep 签名：accessibilityText 的 string 与 Resource 是分开重载，先把三元结果统一为 string；ClickEvent 不提供 stopPropagation。",
+    "参考同批并发生成、尚未编译的兄弟页时，不用它覆盖自己与既有页面一致的写法；两者不一致先核签名再决定取舍。",
+    "rg 到 event.stopPropagation() 等零散用法时，同时查看所在回调的事件类型（TouchEvent 与 ClickEvent 不同），不按行文本推断可用于 onClick。",
+    "收口接线实现只含方法签名的依赖接口时，传入 implements 该接口的具名类实例；箭头函数对象字面量直接传参或先赋给类型变量都会触发 arkts-no-untyped-obj-literals。",
+    "把 Text 等组件换成 SymbolGlyph 时，逐个核对沿用的修饰器签名，SymbolGlyph.fontColor 传 ResourceColor 数组。",
+    "在 Windows PowerShell 中读取 skill/参考文档时加 -Encoding UTF8，避免中文限定语（如“只停止 Touch 事件”）变成乱码。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "H:/WIdgetHW2/entry/src/main/ets/pages/ThemeDetailPage.ets",
+        "since": "2026-09-09T08:29:55.423Z",
+        "at": "2026-09-18T04:34:56.908Z"
+      },
+      "nodes": [
+        {
+          "key": "H:/WIdgetHW2/entry/src/main/ets/pages/ThemeTestDetailPage.ets",
+          "at": "2026-09-11T02:40:48.994Z",
+          "reason": "正常输入：converter 读取同布局旧页全文，模糊半径为 number 常量 THEME_DETAIL_BACKGROUND_BLUR_RADIUS = 20 并 .blur(该常量)，Swiper 为 .itemSpace(20)，accessibilityText 分别传 this.themeName 或 $r(...)，足以说明这几个参数应写成何种类型（01a08e55-3c37-7572-8572-7fd087ed088d.jsonl:L95、L103）。"
+        },
+        {
+          "key": "01a08e55-3c37-7572-8572-7fd087ed088d.jsonl",
+          "at": "2026-09-11T02:51:13.509Z",
+          "reason": "L70 复述“主题流水线明确要求颜色、尺寸全部绑定资源”；L346-L347 新建 ThemeDetailPage 时沿用旧页的比例常量，却把模糊半径与 Swiper 间距写成 .blur($r('app.float.dp_20'))、.itemSpace($r('app.float.dp_20'))，并把解锁按钮写成 .accessibilityText(this.adUnlockText.length > 0 ? this.adUnlockText : $r('app.string.look_ad_unlock'))。偏差在于把资源绑定惯例套到只收 number 或分开重载的参数上，未核签名；09-14 编译在 ThemeDetailPage.ets:326、357、705 报错（01a09ed1-b387-7511-9083-1852ed43661d.jsonl:L153），修复 L215 改为 20 与纯 string。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "convert_theme_detail 在 L95 的 exec 中以 Get-Content -Raw 读取该旧页，L97 的 CommandExecution 回执即该命令，L103 返回全文含 blur 数值常量与 .itemSpace(20)；这是生成者写前对该文件的真实读取。",
+          "evidence": [
+            {
+              "source": "01a08e55-3c37-7572-8572-7fd087ed088d.jsonl",
+              "line": 95
+            },
+            {
+              "source": "01a08e55-3c37-7572-8572-7fd087ed088d.jsonl",
+              "line": 97
+            },
+            {
+              "source": "01a08e55-3c37-7572-8572-7fd087ed088d.jsonl",
+              "line": 103
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "H:/WIdgetHW2/entry/src/main/ets/pages/ThemeCreatorDetailPage.ets",
+        "since": "2026-09-09T08:29:55.423Z",
+        "at": "2026-09-18T04:34:56.908Z"
+      },
+      "nodes": [
+        {
+          "key": "H:/WIdgetHW2/entry/src/main/ets/pages/ThemeTestDetailPage.ets",
+          "at": "2026-09-11T02:40:48.994Z",
+          "reason": "convert_theme_detail 写前读到的旧页：blur 用 number 常量 20、.itemSpace(20)（01a08e55-3c37-7572-8572-7fd087ed088d.jsonl:L95、L103）。"
+        },
+        {
+          "key": "01a08e55-3c37-7572-8572-7fd087ed088d.jsonl",
+          "at": "2026-09-11T02:51:13.509Z",
+          "reason": "偏差起点：把上述数值改写成 .blur($r('app.float.dp_20'))、.itemSpace($r('app.float.dp_20')) 写入 ThemeDetailPage（同转录 L346-L347）。",
+          "problem": true
+        },
+        {
+          "key": "H:/WIdgetHW2/entry/src/main/ets/pages/ThemeDetailPage.ets",
+          "at": "2026-09-11T02:52:09.239Z",
+          "reason": "交付桥梁：convert_theme_creator_detail 先 rg '.blur($r|.itemSpace($r' 只命中该文件 124、155 行（01a08e54-f9ae-7d01-8d2f-d9d48722f91f.jsonl:L342-L345），随后 Get-Content 读回全文（L349-L352）。"
+        },
+        {
+          "key": "H:/WIdgetHW2/entry/src/main/ets/pages/ThemeTestDetailPage.ets",
+          "at": "2026-09-11T02:45:45.091Z",
+          "reason": "正常输入：创作者页 converter 自己也读到旧页全文（01a08e54-f9ae-7d01-8d2f-d9d48722f91f.jsonl:L243、L246），L239 的 rg '.blur(' 全工程只有该页的数值常量用法；L276-L277 首稿按它写 CREATOR_THEME_BACKGROUND_BLUR_RADIUS = 20 与 .itemSpace(20)，L338 自检仍为数值。"
+        },
+        {
+          "key": "H:/WIdgetHW2/.agents/skills/android-ui-graph-query/references/android-to-harmonyOS-ui-interaction-mapping-reference.md",
+          "at": "2026-09-11T02:43:26.286Z",
+          "reason": "正常输入：交互映射参考把 stopPropagation() 列在触摸事件节 1.6，注明“stopPropagation 只停止 Touch 事件，不影响手势”；点击事件节 2.1 映射为 onClick(() => {})（同转录 L171-L176；未加 -Encoding UTF8，中文为乱码，Touch 与 stopPropagation 可辨）。"
+        },
+        {
+          "key": "01a08e54-f9ae-7d01-8d2f-d9d48722f91f.jsonl",
+          "at": "2026-09-11T02:53:06.213Z",
+          "reason": "L371 称“对照刚并发落盘的普通 ThemeDetailPage…把 Swiper 间距和模糊半径改成已有 float 资源，并阻止版权徽标点击冒泡”；L372-L373 删除数值常量，改为 .blur($r('app.float.dp_20'))、.itemSpace($r('app.float.dp_20'))，并把 onClick 改成 (event: ClickEvent) => { event.stopPropagation() }。已有正确输入与正确首稿，却以未编译的兄弟页覆盖并把触摸事件方法用于 ClickEvent；09-14 在 ThemeCreatorDetailPage.ets:124、154、195 报错（01a09ed1-b387-7511-9083-1852ed43661d.jsonl:L153），修复 L215 改回 20 并去掉 ClickEvent 参数。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "convert_theme_detail 在 L95 的 exec 中以 Get-Content -Raw 读取该旧页，L97 回执即该命令，L103 返回全文；写前真实读取。",
+          "evidence": [
+            {
+              "source": "01a08e55-3c37-7572-8572-7fd087ed088d.jsonl",
+              "line": 95
+            },
+            {
+              "source": "01a08e55-3c37-7572-8572-7fd087ed088d.jsonl",
+              "line": 97
+            },
+            {
+              "source": "01a08e55-3c37-7572-8572-7fd087ed088d.jsonl",
+              "line": 103
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 6,
+          "force": true,
+          "reason": "创作者页 converter 在 L342-L345 的 rg 只命中 ThemeDetailPage.ets 的 $r 写法后，L349 以 Get-Content -Raw -Encoding utf8 读取该文件，L350 为该命令回执，L352 返回全文；随后 L371-L373 据此改写本页。",
+          "evidence": [
+            {
+              "source": "01a08e54-f9ae-7d01-8d2f-d9d48722f91f.jsonl",
+              "line": 349
+            },
+            {
+              "source": "01a08e54-f9ae-7d01-8d2f-d9d48722f91f.jsonl",
+              "line": 350
+            },
+            {
+              "source": "01a08e54-f9ae-7d01-8d2f-d9d48722f91f.jsonl",
+              "line": 352
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": 6,
+          "force": true,
+          "reason": "创作者页 converter 在 L243 以 Get-Content -Raw -Encoding utf8 读取该旧页，L245 为该命令回执，L246 返回全文；随后 L276-L277 的首稿按其数值写法生成。",
+          "evidence": [
+            {
+              "source": "01a08e54-f9ae-7d01-8d2f-d9d48722f91f.jsonl",
+              "line": 243
+            },
+            {
+              "source": "01a08e54-f9ae-7d01-8d2f-d9d48722f91f.jsonl",
+              "line": 245
+            },
+            {
+              "source": "01a08e54-f9ae-7d01-8d2f-d9d48722f91f.jsonl",
+              "line": 246
+            }
+          ]
+        },
+        {
+          "from": 5,
+          "to": 6,
+          "force": true,
+          "reason": "创作者页 converter 在 L171 的 exec 中以 Get-Content -Raw 依次读取 layout 与 interaction 两份映射参考，L174 为该命令回执，L176 返回输出，正文含 1.6 节 stopPropagation 只停止 Touch 事件的表格行；这是写前对该参考的真实读取。",
+          "evidence": [
+            {
+              "source": "01a08e54-f9ae-7d01-8d2f-d9d48722f91f.jsonl",
+              "line": 171
+            },
+            {
+              "source": "01a08e54-f9ae-7d01-8d2f-d9d48722f91f.jsonl",
+              "line": 174
+            },
+            {
+              "source": "01a08e54-f9ae-7d01-8d2f-d9d48722f91f.jsonl",
+              "line": 176
+            }
+          ]
+        },
+        {
+          "from": 6,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "H:/WIdgetHW2/entry/src/main/ets/pages/IconDetailPage.ets",
+        "since": "2026-09-09T08:29:55.423Z",
+        "at": "2026-09-18T04:34:56.908Z"
+      },
+      "nodes": [
+        {
+          "key": "H:/WIdgetHW2/.agents/skills/android-ui-graph-query/references/android-to-harmonyOS-ui-interaction-mapping-reference.md",
+          "at": "2026-09-11T02:43:26.286Z",
+          "reason": "正常输入：参考注明 stopPropagation 属触摸事件、只停止 Touch 事件（01a08e54-f9ae-7d01-8d2f-d9d48722f91f.jsonl:L171-L176）。"
+        },
+        {
+          "key": "01a08e54-f9ae-7d01-8d2f-d9d48722f91f.jsonl",
+          "at": "2026-09-11T02:53:06.213Z",
+          "reason": "偏差起点：在 ThemeCreatorDetailPage 的版权徽标 onClick 上写入 (event: ClickEvent) => { event.stopPropagation() }（同转录 L372-L373）。",
+          "problem": true
+        },
+        {
+          "key": "H:/WIdgetHW2/entry/src/main/ets/pages/ThemeCreatorDetailPage.ets",
+          "at": "2026-09-11T03:17:51.303Z",
+          "reason": "交付桥梁：convert_icon_detail 在 L239 rg 'stopPropagation()'，L242 返回结果包含 ThemeCreatorDetailPage.ets:195 的 event.stopPropagation()（01a08e65-50cb-7e43-b4c2-c9eef7891915.jsonl:L239、L242），返回行不带回调事件类型。"
+        },
+        {
+          "key": "01a08e65-50cb-7e43-b4c2-c9eef7891915.jsonl",
+          "at": "2026-09-11T03:18:07.150Z",
+          "reason": "首稿版权徽标为无参 .onClick((): void => {...})（同转录 L185）；看到上述 rg 结果后，L246-L247 改为 .onClick((event: ClickEvent): void => { event.stopPropagation() ... })，按无类型的行文本把方法套到 ClickEvent；09-14 在 IconDetailPage.ets:392 报 Property 'stopPropagation' does not exist on type 'ClickEvent'（01a09ed1-b387-7511-9083-1852ed43661d.jsonl:L153），修复 L215 改回无参回调。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "创作者页 converter 在 L171 的 exec 中以 Get-Content -Raw 依次读取 layout 与 interaction 两份映射参考，L174 为该命令回执，L176 返回输出，正文含 1.6 节 stopPropagation 只停止 Touch 事件的表格行；这是写前对该参考的真实读取。",
+          "evidence": [
+            {
+              "source": "01a08e54-f9ae-7d01-8d2f-d9d48722f91f.jsonl",
+              "line": 171
+            },
+            {
+              "source": "01a08e54-f9ae-7d01-8d2f-d9d48722f91f.jsonl",
+              "line": 174
+            },
+            {
+              "source": "01a08e54-f9ae-7d01-8d2f-d9d48722f91f.jsonl",
+              "line": 176
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "convert_icon_detail 在 L239 对 entry/src/main/ets/pages 执行 rg -n 检索 stopPropagation() 调用，L240 为该命令回执，L242 返回的命中行包含 ThemeCreatorDetailPage.ets:195 的 event.stopPropagation()；这次检索读取了该文件中的偏差片段，随后 L246-L247 照此改写。",
+          "evidence": [
+            {
+              "source": "01a08e65-50cb-7e43-b4c2-c9eef7891915.jsonl",
+              "line": 239
+            },
+            {
+              "source": "01a08e65-50cb-7e43-b4c2-c9eef7891915.jsonl",
+              "line": 240
+            },
+            {
+              "source": "01a08e65-50cb-7e43-b4c2-c9eef7891915.jsonl",
+              "line": 242
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "H:/WIdgetHW2/entry/src/main/ets/services/ThemePlatformAdapters.ets",
+        "since": "2026-09-09T08:29:55.423Z",
+        "at": "2026-09-18T04:34:56.908Z"
+      },
+      "nodes": [
+        {
+          "key": "H:/WIdgetHW2/.agents/skills/hmos-fix-build-errors/SKILL.md",
+          "at": "2026-09-11T03:44:00.773Z",
+          "reason": "部分充分的输入：closer 按前置 skill 读取全文，ArkTS 严格规则第 5 条要求对象字面量对应已声明接口，错误表 arkts-no-untyped-obj-literals 的修法是“赋给类型变量”（01a08e8f-5851-7462-8382-f0483925c7d3.jsonl:L94、L97）；未说明只含方法签名的接口不能由字面量实现，此为输入缺口，skill 形成过程不在材料池。"
+        },
+        {
+          "key": "H:/WIdgetHW2/entry/src/main/ets/services/ThemeFeatureRuntime.ets",
+          "at": "2026-09-11T03:48:05.710Z",
+          "reason": "正常输入：closer 读取运行时文件，ThemeFeatureDependencies 只声明 createCatalogStore()、createThemeDetailViewModel() 等方法签名（同转录 L231、L234、L242）。"
+        },
+        {
+          "key": "01a08e8f-5851-7462-8382-f0483925c7d3.jsonl",
+          "at": "2026-09-11T04:01:37.022Z",
+          "reason": "L589-L590 新建 ThemePlatformAdapters，install() 以箭头函数属性的对象字面量调用 ThemeFeatureRuntime.install({ ... })；构建随后被 restool.exe 缺失阻断，未进入 ArkTS 编译（同转录 L982、L1366）。09-14 报 470:33 arkts-no-untyped-obj-literals（01a09ed1-b387-7511-9083-1852ed43661d.jsonl:L140），按 skill 改成类型变量后 471:52 仍报（L359），L372 改为 implements ThemeFeatureDependencies 的 ThemeRuntimeDependencies 类后通过。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "closer 在 L94 以 Get-Content -Raw -Encoding UTF8 读取 hmos-fix-build-errors/SKILL.md，L95 为该命令回执，L97 返回全文，含 ArkTS 严格规则与 arkts-no-untyped-obj-literals 修法表；写前真实读取。",
+          "evidence": [
+            {
+              "source": "01a08e8f-5851-7462-8382-f0483925c7d3.jsonl",
+              "line": 94
+            },
+            {
+              "source": "01a08e8f-5851-7462-8382-f0483925c7d3.jsonl",
+              "line": 95
+            },
+            {
+              "source": "01a08e8f-5851-7462-8382-f0483925c7d3.jsonl",
+              "line": 97
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "closer 在 L231 的 exec 中逐个读取 F005 服务文件，L234 为 Get-Content -Raw -Encoding UTF8 读取 ThemeFeatureRuntime.ets 的回执，L242 返回输出，正文给出只含方法签名的 ThemeFeatureDependencies；写前真实读取。",
+          "evidence": [
+            {
+              "source": "01a08e8f-5851-7462-8382-f0483925c7d3.jsonl",
+              "line": 231
+            },
+            {
+              "source": "01a08e8f-5851-7462-8382-f0483925c7d3.jsonl",
+              "line": 234
+            },
+            {
+              "source": "01a08e8f-5851-7462-8382-f0483925c7d3.jsonl",
+              "line": 242
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "H:/WIdgetHW2/entry/src/main/ets/pages/ThemeWidgetSection.ets",
+        "since": "2026-09-09T08:29:55.423Z",
+        "at": "2026-09-18T04:34:56.908Z"
+      },
+      "nodes": [
+        {
+          "key": "01a08f6d-4524-7170-ab91-9e74e3315db3.jsonl",
+          "at": "2026-09-11T08:01:40.165Z",
+          "reason": "f005_worker 收到加密的补充审计（L133），L137 计划“移除 ThemeWidgetSection 的 Unicode 勾号”；L252 只看了已验证符号与无修饰器的 SymbolGlyph rg 行，L275-L276 把 Text('✓') 换成 SymbolGlyph($r('sys.symbol.checkmark')) 时保留单值 .fontColor($r('app.color.wi_white'))。写前输入未见 SymbolGlyph.fontColor 的数组签名（缺口），偏差是换组件时沿用旧修饰链未核签名；09-14 报 ThemeWidgetSection.ets:158 No overload matches（ResourceColor[]，01a09ed1-b387-7511-9083-1852ed43661d.jsonl:L153），修复 L215 改为 [$r('app.color.wi_white')]。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "convert_theme_detail 与 convert_theme_creator_detail 的派工正文加密，THEME-BRIEF 是否原文透传只能由 worker L415-L428 的生成记录与 converter L70 的复述间接支持。"
+  ],
+  "unresolved_targets": [
+    {
+      "key": "H:/WIdgetHW2/entry/src/main/ets/pages/ThemePreviewPage.ets",
+      "reason": "已核写者 convert_theme_preview（01a08e5d-09a1-7233-9265-f56068b15143.jsonl，09-11T02:53:54 写入 accessibilityText(themeName 或 $r 的三元)），与 ThemeDetailPage 同属 string|Resource 联合传入分开重载；写前读到的参考与旧页只分别传 string 或 $r（L65-L67、L96、L119），未逐项画链。"
+    },
+    {
+      "key": "H:/WIdgetHW2/entry/src/main/ets/pages/CreatorThemeEditPage.ets",
+      "reason": "已核写者 convert_creator_theme_edit（01a08e54-497b-70e2-90b1-af42267c945a.jsonl，09-11T02:50:35 写入 .accessibilityText(actionText)，actionText 为 ResourceStr），同一联合类型机制；未核其写前是否收到 accessibilityText 重载签名。"
+    },
+    {
+      "key": "H:/WIdgetHW2/entry/src/main/ets/pages/ThemeHistoryPage.ets",
+      "reason": "已核写者 convert_theme_history（01a08e64-9eea-7902-a00b-e379672a1b24.jsonl，09-11T03:02:41 写入 .accessibilityText(title)，title 为 ResourceStr），同一联合类型机制；未核其写前输入。"
+    },
+    {
+      "key": "H:/WIdgetHW2/entry/src/main/ets/pages/HomeSection.ets",
+      "reason": "非类型约束生成遗留：并行的 stage3_s04_f001_home_screenshots_r1 于 07:43:57 写入 item.itemKind = HomeAppWidgetListItemKind.* 但尚未补 import（01a09ed6-4a82-7940-a7a3-6b6804b11992.jsonl:L257），修复者 07:44:33 起的编译读到该中间态报 Cannot find name（01a09ed1-b387-7511-9083-1852ed43661d.jsonl:L389），该 worker 07:44:59 自行补上 import（01a09ed6…:L273）；修复者 07:45:25 读文件时 import 已在（L396），仍按“跨模块枚举未被解析”改为 markAsTitle()/markAsPromotion()（L408-L412）。属并发构建读到中间状态后的误诊，不归入本卡类型约束偏差。"
+    },
+    {
+      "key": "H:/WIdgetHW2/entry/src/main/ets/pages/HomeAppWidgetListSection.ets",
+      "reason": "仅为配合 HomeSection 的误诊改写新增 markAsTitle()/markAsPromotion()（01a09ed1-b387-7511-9083-1852ed43661d.jsonl:L409-L412）；枚举定义本身（09-08 由 01a07ef3-f383-71c3-9a73-d77d09d450c4.jsonl 写入）无类型错误，原因同上。"
+    }
+  ],
+  "job": "issue-ca8dec09be8655edbb02",
+  "metadata": {
+    "migration": {
+      "project": "组件岛Widget Island",
+      "server_session_id": "e9368e72-568a-4c6e-9922-70258142693f"
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "60c0b278-d763-4144-9ffd-78d5340aee5d"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "glm-5.3-flash",
+        "gpt-5.5",
+        "gpt-5.6-sol"
+      ],
+      "providers": [
+        "custom"
+      ],
+      "client_versions": [
+        "0.152.1",
+        "0.154.0"
+      ]
+    },
+    "source_set_id": "sources-f43aae365159aa816371",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "26.0.0",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-09-18T03:21:39.969Z",
+        "ref": "01a0b274-f434-7483-b80b-14d8b50b2357.jsonl:L635",
+        "request_ref": "01a0b274-f434-7483-b80b-14d8b50b2357.jsonl:L632",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-09-18T03:21:39.969Z",
+        "ref": "01a0b274-f434-7483-b80b-14d8b50b2357.jsonl:L635",
+        "request_ref": "01a0b274-f434-7483-b80b-14d8b50b2357.jsonl:L632",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.4"
+  },
+  "revision": "dfbbf6d269dc5f5443ab807c7dcd9499347ae85860a1e024533fbcff818efb49"
+}

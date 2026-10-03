@@ -1,6 +1,6 @@
 # Windows PowerShell 5.1 读取 UTF-8 中文规格、账本与源码要显式 -Encoding UTF8；回执出现乱码就当作没读
 
-ID：`lesson-6a3a7f46c8fec282affa` · 版本：2
+ID：`lesson-6a3a7f46c8fec282affa` · 版本：3
 
 [本主题](index.md)
 
@@ -22,7 +22,7 @@ Windows PowerShell 5.1 的 Get-Content/Select-String 默认按系统 ANSI 代码
 2. 回执里出现成片乱码时，把该文件视为未读，用 UTF-8 重读后再据此实现；不要凭可读的 AC 编号、方法名推断条款内容。
 3. 乱码回执里代码看似并入注释行时，先用 UTF-8 重读，或以 analyzer 行号、补丁上下文核对原文件的行结构，再判断代码是否真被注释。
 
-来源支持：4 张卡 · 2 次迁移 · 2 个应用
+来源支持：5 张卡 · 3 次迁移 · 3 个应用
 
 ## 来源（按需复核）
 
@@ -32,5 +32,7 @@ Windows PowerShell 5.1 的 Get-Content/Select-String 默认按系统 ANSI 代码
   卡片版本：`86c57b38cd3897abac8b2c1d68ca50b219ea6c13be75dcd1fd0045e39be6fba6`
 - [case-8c249997059a2524ea7b](../../../store/cases/case-8c249997059a2524ea7b/921750461c1e7e278c419ca26c21b17048d692c94b180c54164c66f94aafa6e6.json) · 结论：recommendation:3
   卡片版本：`921750461c1e7e278c419ca26c21b17048d692c94b180c54164c66f94aafa6e6`
+- [case-ca8dec09be8655edbb02](../../../store/cases/case-ca8dec09be8655edbb02/dfbbf6d269dc5f5443ab807c7dcd9499347ae85860a1e024533fbcff818efb49.json) · 结论：recommendation:7
+  卡片版本：`dfbbf6d269dc5f5443ab807c7dcd9499347ae85860a1e024533fbcff818efb49`
 - [case-fa7bbda457517260efc4](../../../store/cases/case-fa7bbda457517260efc4/58d73cfa31553fee929796eb72c6f37fc2faba952a2e2f334aa420b8f0325b08.json) · 结论：diagnosis, recommendation:5
   卡片版本：`58d73cfa31553fee929796eb72c6f37fc2faba952a2e2f334aa420b8f0325b08`

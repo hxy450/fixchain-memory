@@ -15,6 +15,9 @@
 - [从 bindSheet 半模态里打开的弹窗必须叠在 sheet 之上：不用页内浮层，居中点外可关用模态内自绘遮罩](lesson-009212ca2c691b97d76c.lesson.md)
   - 时机：界面实现阶段，为从底部 sheet 内部触发的二级弹窗（定时、新建输入等）选择承载层时
   - 情境：Android 在 BottomSheetDialog 内再 show 居中 DialogFragment（点外可关）；目标底部弹层用 bindSheet；二级弹窗候选有页内 Stack 条件浮层、bindSheet(CENTER)、bindContentCover 与全局自定义弹窗。
+- [从组件外的共享函数打开自定义弹窗时，用 wrapBuilder + ComponentContent 交给 openCustomDialog(content)：不在 options.builder 闭包里直接调用全局 @Builder](lesson-a3ac761b0d52a6bccb9f.lesson.md)
+  - 时机：界面实现阶段，把路由页改成多个入口复用的自定义弹窗，确定弹窗内容的构建与挂载方式时
+  - 情境：ArkTS V2（@ComponentV2）工程中，把 BottomSheetDialog/DialogFragment 一类弹窗迁成 UIContext.getPromptAction().openCustomDialog，并打算从组件外的导出函数（只持有 UIContext）为多个页面统一打开同一个自定义组件。
 - [会从半模态内压入 Navigation 页的弹层用 SheetMode.EMBEDDED 并传宿主 targetId，不照搬选择器模板的 OVERLAY](lesson-97bf3cf56f55715f7e42.lesson.md)
   - 时机：界面实现或弹窗改造阶段，把页面内弹层改成 bindSheet/openBindSheet 系统半模态、确定 SheetMode 与挂载节点时
   - 情境：弹层内条目会通过 Navigation/NavPathStack 压入新页面（如节日详情、订阅详情），要求跳转时不关闭弹层、新页面盖住弹层、返回后弹层仍在；目标用 UIContext.openBindSheet 或基于它的弹窗库（如 showBindSheet），手头参考的是不从弹层内跳页的选择器类半模态模板。
@@ -37,7 +40,7 @@
   - 例外：源对话框只有标题、正文与按钮，没有自定义视图，此时直接映射 AlertDialog.show
 - [源端 XPopup/DialogFragment 真弹窗（居中、锚点、底部）迁成可关闭的系统弹窗或半模态，不以页面可见性叠层充当](lesson-368c4592e4c7075c1871.lesson.md)
   - 时机：迁移实现、弹窗恢复与宿主接线阶段，为 Android 真弹窗（DialogFragment、XPopup Center/Attach/Bottom 类）确定 ArkUI 承载形态，或为已有弹窗补触发、宿主、去掉路由时
-  - 情境：源端通过 DialogFragment、XPopup CenterPopupView/AttachPopupView 等在当前 Activity 上弹出提示、升级、菜单或锚点气泡，点击遮罩或返回即关闭；目标工程里已有以 @Local visible/visibility 或 if 条件渲染的 Stack + 遮罩叠层，或派工只写“接到现有弹窗”“恢复可关闭的页面内弹层”。也包括源弹窗继承 BottomPopupView 一类底部弹窗基类，计划或决策已写明映射到 showBindSheet/系统半模态，而现有实现是 NavDestination 路由页或由 @Param 可见性驱动、内嵌在宿主页的全屏 Stack（自绘遮罩、PanGesture 下拉关闭、返回信号参数）。
+  - 情境：源端通过 DialogFragment、XPopup CenterPopupView/AttachPopupView 等在当前 Activity 上弹出提示、升级、菜单或锚点气泡，点击遮罩或返回即关闭；目标工程里已有以 @Local visible/visibility 或 if 条件渲染的 Stack + 遮罩叠层，或派工只写“接到现有弹窗”“恢复可关闭的页面内弹层”。也包括源弹窗继承 BottomPopupView 一类底部弹窗基类，计划或决策已写明映射到 showBindSheet/系统半模态，而现有实现是 NavDestination 路由页或由 @Param 可见性驱动、内嵌在宿主页的全屏 Stack（自绘遮罩、PanGesture 下拉关闭、返回信号参数）。 也包括 BottomSheetDialogFragment 被写成标准模式的 NavDestination 路由页，在页内自绘蒙层与底板，调用方随之 pushPathByName。
   - 例外：项目决策明确采用页内浮层，且浮层已实现遮罩点击、返回键与页面离开关闭并只回调一次
 - [源端在当前页 show 的底部弹窗保持叠在宿主页上：“路由统一用某框架”只约束页面跳转，不把弹窗改成路由页](lesson-7ef02de8bbc10734c3d2.lesson.md)
   - 时机：规格提取阶段把 Android Dialog/BottomSheet 的呈现方式映射到 ArkUI 承载方式时；界面实现阶段落实弹窗内的二级日历或选择弹层时

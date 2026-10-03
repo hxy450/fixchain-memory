@@ -43,6 +43,10 @@
   - 时机：规格提取阶段，把自定义 Layout、MeasureScope 里的测量与整数几何公式翻成目标契约时；界面实现阶段，用 onAreaChange、measureText 等返回值驱动这类公式时
   - 情境：源算法在约束或测量结果（Compose constraints、placeable 宽高等整数 px）上做整数除法、.toInt() 截断或取整；目标布局属性和尺寸回调（onAreaChange）使用 vp 等逻辑单位，回调值通常不是整数，measureText 返回 px。
   - 例外：公式本来作用于 Dp 常量（固定间距、固定尺寸），不涉及 constraints 或 placeable 时，按原单位保留
+- [网格里跨列数不同的卡片要同行等高时，用实际列宽与留边推导宽卡比例；组件自身的原生宽高比只用于卡内内容缩放](lesson-4fc212d401ac7b2a4218.lesson.md)
+  - 时机：列表或首页网格的界面实现阶段，为不同尺寸规格（如 2x2、4x2）的卡片确定外框高度或 aspectRatio 时
+  - 情境：源网格按规格分配 span（窄卡占 n 列、宽卡占 2n 列），卡片两侧有固定内边距或网格留边；参考截图里同一行的窄卡与宽卡外框等高；目标用百分比列宽加 aspectRatio 决定卡片高度，手头有组件自身的原生尺寸表（如 334.75×158）。
+  - 例外：源端或参考截图里不同规格的卡片本就按各自原生比例显示、不等高
 - [贴合内容的描边、背景画在由内容定尺寸的节点自身，不用 width/height('100%') 覆盖层；源端描边不改尺寸时注意 .border() 计入测量](lesson-a58ebfe7a4c55b041b14.lesson.md)
   - 时机：界面实现与规格映射阶段，翻译用 fillMaxSize()、matchContentSize 贴合内容的选中指示器、描边或背景，为高度由内容决定的行加铺满的背景层（滑删进度背景等），或把 Compose Modifier.border 这类只绘制、不改测量的修饰符落到 ArkUI 容器上时
   - 情境：源端指示器或背景层以 fillMaxSize、matchContentSize 贴合某个由内容定尺寸的格子；目标准备在 Stack/Row 里叠一层 width/height('100%') 的节点来画描边或背景。也包括列表行里的 Stack 没有确定高度，准备放一层宽高 100% 的背景子节点；或源 border 画在调用方已定尺寸的盒内侧，目标容器自身不设宽高、尺寸由槽内容决定。

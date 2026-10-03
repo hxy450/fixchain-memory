@@ -25,6 +25,9 @@
 - [列表项滑动操作挂在 ListItem 上；把行内容抽成 @Builder 时核对容器专属属性实际接在哪个组件](lesson-feaf8a4a916a022b13a1.lesson.md)
   - 时机：界面实现阶段，把 ItemTouchHelper/SwipeActions 的滑动操作转换为 ListItem.swipeAction，并把行布局抽成 @Builder 时
   - 情境：规格与映射参考要求用 ListItem.swipeAction；行内容抽成 @Builder 方法，LazyForEach/ForEach 里的 ListItem 只调用该 builder。
+- [多 viewType 列表按每类 holder 的根布局与运行时挂入的子视图定卡片外观：某一类专属的背景、圆角、描边不写进各类共用的 Builder](lesson-9de4c7648d23db5d7f86.lesson.md)
+  - 时机：界面实现阶段，为含普通项、推广项等多种 ViewHolder 的列表或网格确定卡片背景、描边与圆角，或参照兄弟页面的卡片实现时；规格准备阶段为列表页登记 item 布局时
+  - 情境：Android 列表同时有多类 holder：普通项的外观来自 holder 运行时 addView/inflate 的组件根视图（如 CardView 的 cardCornerRadius），推广项另有带圆角描边的背景 drawable；目标准备用一个共用 Builder 渲染各类卡片，或照搬兄弟页面已有的“白底 + 描边 + 圆角”卡片。
 - [多类型 Adapter 承载的页面按全部 item 布局和 handleXxx 分支建区块：默认态、文案模板与附属子卡都来自绑定代码](lesson-e17b45a28a8d92ecbd01.lesson.md)
   - 时机：界面实现与返修重建阶段，把主体内容由 RecyclerView 多类型 Adapter 承载的 Android 页面转成 ArkUI 页面、确定各区块结构与背景层级时
   - 情境：源页面布局只有头图与 SwipeRefreshLayout/RecyclerView 外壳，首屏卡片、趋势图、网格等区块分散在 addItemType 登记的 item 布局与 handleXxx/convert 绑定里：默认选中态、setText 拼接的文案模板（如“平均温度X”“N天降温/M天升温”）、按条件 visibility 显示的附属子卡；UI 快照可能是合成的，item 布局清单可能为空。
@@ -44,3 +47,6 @@
 - [迁移列表时连同条目点击回调与数据源的本地变换（shuffled、filter、sort）一起实现，不只迁渲染](lesson-46307bc26d725b4634ca.lesson.md)
   - 时机：页面 UI 转换阶段，迁移 RecyclerView/Adapter 列表的条目点击与数据源初始化时
   - 情境：源 Fragment 经 adapter 的点击回调或 addOnItemTouchListener 把条目内容回填到输入框等；列表数据来自 ViewModel 对本地静态种子做 shuffled() 等纯本地变换；目标的对应 ViewModel 尚未建立。
+- [配置驱动的编辑项列表按源工厂表逐项分派：每个 type 接专属页面、按配置顺序在同一列表内渲染，未匹配类型空渲染；不压成通用控件、不移到列表外，也不用过滤条件静默去掉某类](lesson-71f8a80418dbc2c442ce.lesson.md)
+  - 时机：界面实现与对齐阶段，为按配置（如 editorConfig）生成的编辑区确定每项的承载组件、顺序与间距，或增删列表的过滤条件时
+  - 情境：源端编辑 Fragment 遍历配置，经工厂把每一项（含外观类 bg/textColor/border 与 photo、text 等）各自创建为对应 Fragment，按顺序加入同一个无间距容器，未匹配类型落到空 Fragment；目标工程已有大量逐类型专页，另有页内文本编辑器、通用控件骨架或子模块选择等替代入口。

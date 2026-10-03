@@ -21,7 +21,10 @@
   - 情境：资源迁移把 drawable-xhdpi 等位图直接复制到 resources/xldpi/media 一类限定词目录，不在 base/media；构建日志对这些图只报“does not have a base resource”警告；工程里还有外观相近的通用图标（如生活指数图标）。 也包括规格或布局已给出原始 drawable 名，目标 media 却只有其他模块的同类近名图标（如带 1/2 后缀的阅读器图标），现有代码用 SymbolGlyph 或 Unicode 字形占位，或工程 skill 要求图标优先用已验证的系统 symbol；以及源端用粗体文字字符（“-”“+”）充当按钮图形。
 - [图标按资源固有 dp 显示、触摸盒放在外层：centerInside、wrap_content 或未设尺寸的图片不设成盒子尺寸再 Contain，同一 Image 上后写的槽位宽高会覆盖图标尺寸](lesson-bdc493f5950835f9bfcc.lesson.md)
   - 时机：界面实现阶段，把 ImageButton/ImageView 的固定触摸盒与 scaleType、或 wrap_content/drawableLeft 图标翻译成 ArkUI Image 尺寸时；复用已完成页面的控件行时；为不设尺寸的 Compose Image(painterResource) 确定目标尺寸时；把工具栏的文字或系统符号按钮替换为位图 Image，确定图标显示尺寸与点击热区时
-  - 情境：源图标按钮是固定 dp 盒加 scaleType=centerInside，或图标以 wrap_content、TextView drawableLeft/Start 显示，渲染尺寸取决于资源像素与密度目录；映射参考把 centerInside 对到 ImageFit.Contain。也包括 Compose Image(painterResource(vector drawable)) 不设尺寸、按 drawable 声明的 dp 固有尺寸与 ContentScale.Fit 显示，目标 SVG 由 vector drawable 转来。 也包括工具栏按钮原本在组件上链式设置点击区宽高（如 .width(40).height(48)），替换成位图后又在同一 Image 前面写图标宽高；源图标在 drawable-xxhdpi，目标资源放在不分密度的 base/media。
+  - 情境：源图标按钮是固定 dp 盒加 scaleType=centerInside，或图标以 wrap_content、TextView drawableLeft/Start 显示，渲染尺寸取决于资源像素与密度目录；映射参考把 centerInside 对到 ImageFit.Contain。也包括 Compose Image(painterResource(vector drawable)) 不设尺寸、按 drawable 声明的 dp 固有尺寸与 ContentScale.Fit 显示，目标 SVG 由 vector drawable 转来。 也包括工具栏按钮原本在组件上链式设置点击区宽高（如 .width(40).height(48)），替换成位图后又在同一 Image 前面写图标宽高；源图标在 drawable-xxhdpi，目标资源放在不分密度的 base/media。 也包括多个列表页共用的推广卡片里，角标 ImageView 为 wrap_content 加 centerInside，位图在 drawable-xxhdpi，媒体留给后续批次拷贝。
+- [无来源、无数据的兜底预览不添加源端没有的装饰：边框、选中态等可选视觉属性在未选择时不由兜底层伪造](lesson-c8909c3cb5f925913407.lesson.md)
+  - 时机：界面实现或返修阶段，为编辑页、详情页的预览补无预览源、无数据时的兜底态时
+  - 情境：源端预览容器本身是空容器，由运行时填入组件视图；可选视觉属性（如边框）默认未选择，选择后才绘制；目标要为没有预览源的状态写占位，并在其上叠加真实的选中层。
 - [根背景是按产品 flavor 覆盖的 layer-list 时按生效版本逐层落成组件；位图暂缺也保留 Image 引用并申报，不降成纯色底](lesson-0da8733ee0a6c52924da.lesson.md)
   - 时机：页面界面转换阶段，迁移根布局的背景 drawable，尤其所需位图尚未进入目标 media 时
   - 情境：源页面根背景是 layer-list（纯色底、全屏位图、定位的品牌图），main 与产品 flavor 的 sourceSet 各有一份，flavor 版覆盖 main；规格要求 Stack 加全屏 Image 背景；目标工程缺失的资源由后续批次统一补源，转换期不编译。
@@ -36,7 +39,7 @@
   - 情境：源 Adapter 对自定义 View 的数据绑定整段被注释，只剩 XML 中的静态属性（颜色、点色、尺寸）；ViewModel 仍计算着可能用于绑定的值（如 maxTop/minTop）；决策账本规定注释和死代码不迁移。
 - [源端按使用场景返回不同资源变体时，按取值字段分别映射，不用一个映射覆盖所有场景](lesson-c65e8e59008a5e31bcad.lesson.md)
   - 时机：界面实现与返修阶段，把源端“编码 → 资源”的映射函数（如天气编码到图标）迁移为 $r 资源映射，并为各使用处选择资源时
-  - 情境：源端一个编码对应多种资源（白色图标、背景图、另一色系图标等），经 iconEx/bgEx/icon2Ex 一类字段分别取用，页面不同位置（顶部、小时卡、选中/非选中、列表）绑定不同字段。
+  - 情境：源端一个编码对应多种资源（白色图标、背景图、另一色系图标等），经 iconEx/bgEx/icon2Ex 一类字段分别取用，页面不同位置（顶部、小时卡、选中/非选中、列表）绑定不同字段。 也包括同一编辑选项在选择列表与主预览取自不同资源族：列表 Holder 用固定 drawable（setBackgroundResource），主预览按组件尺寸加载 cover/&lt;尺寸&gt;/&lt;id&gt;.webp。
 - [移植自适应尺寸公式时把参照基数（如按 6 周计算的参考格高）写成独立常量，不用当前布局的实际值替换](lesson-f395cbdf6742a7f4c761.lesson.md)
   - 时机：界面实现阶段，把源端自绘视图的自适应行高、字号等公式移植到目标 Canvas 时
   - 情境：源端在自动行高模式下用固定参考值（如 6 周月份的格高）反推每格事件区高度并保证最少可见行数；目标按当月实际周数（5 或 6 周）平分格高，同一行高在 5 周月份应多显示行。

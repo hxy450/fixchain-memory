@@ -1,0 +1,152 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-d465b188d96e33a7ffad",
+  "created_at": "2026-10-03T04:28:59.357849+00:00",
+  "migration_key": "e9368e72-568a-4c6e-9922-70258142693f",
+  "title": "把持久化背景接到权限未接通的自建相册页，并直接保存其缓存产物 URI",
+  "when": "组件编辑器实现阶段，为“相册选一张图作背景/持久配置”接选择器并保存选择结果时",
+  "description": "Android 端单图选择走自建相册 Activity（startPhotoSelectActivity），把应用自己产出的文件路径写进保存配置；鸿蒙端已有自建 PhotoSelectPage，依赖 photoAccessHelper 全量相册查询且带未完成的权限/相册绑定 TODO，选出的图片要作为背景等持久配置在之后反复读取。",
+  "summary": "flexible_editor_ui 子代理（01a0a7d7-1f74，09-16 “所有的灵活组件的类型都完善”）写前读到两份输入：\nAndroid AppWidgetEditorBgColorFragment 的相册分支调用 startPhotoSelectActivity(1, true, width, height)，\n再由 PhotoCropEvent 把裁剪产出的文件路径 mCropFilePathList[0] 写进 PIC.url（L153/L161）；\n鸿蒙 PhotoSelectPage 文件头写着 TODO P-S1-UNC-658：live album、selection、loading、permission、preview 状态尚未绑定 PlatformServicesStore（L101/L108）。\n它仍按“背景、文字颜色、边框和图库会接回现有选择器”（L75）去接 09-14 截图转换者留下的空壳 onBackgroundSourceRequested：\nneedCrop 改为 false，向 PhotoEditorResultRegistry 注册回调，令 option.url = result.artifact.uri.value 后 writeAppearance 持久化（L289/L294），\n02:11 又把选项 id 改成 PIC（L1327）。它没有读 PhotoSelectPage.onPhotoSelected、PhotoInputService 或 module.json5，也没有在设备上走一遍选择；\n收口回执（L1752）列出的 partial 项不含相册背景。偏差位于“复用现有选择页作持久配置的依赖”这一实现环节。\n修复方随后核到：PhotoSelectPage 靠 PhotoAccessHelper.getAlbums 全量查询相册，module.json5 未声明 READ_IMAGEVIDEO，\nPlatformPermissionService 对图片类能力返回空权限（01a0a334-68c1-7491-82c4-8128da5dcd9b.jsonl:L6850、L6857）；\n选中结果被 materialize 到 cacheDir/photo-input，异常被空 catch 吞掉后页面只回到空态（01a0a8db-bf22-7ef3-ad9c-a3d782a870ba.jsonl:L99）。\n修复方据此判定背景“相册”选不到图或选后不回填，且即使成功，持久配置里存的也只是缓存副本（同转录 L302；01a0a334 L7014）。\n修复把该入口改为 photoAccessHelper.PhotoViewPicker 单图选择，PhotoInputService 新增 materializePersistent，复制到 filesDir/photo-input 并校验非空后再写 PIC.url；\n取消保留原背景，失败写 errorMessage（01a0a8db L355-L356、L377-L379、L430-L431）。09-18 真机复现时“相册已拉起系统选择器”“相册回填正常”\n（01a0ae91-9708-7733-9e8a-a7ab63e4ef5a.jsonl:L543、L644）。\nPhotoSelectPage 的全量相册查询、空 catch 以及 PhotoInputService 的 cacheDir 输出都来自材料外提交（池内对 PhotoInputService 没有原生写入），原写者的输入无法核对，列为未决。\n",
+  "recommendations": [
+    "实现阶段要接“从相册选一张图作背景或其他持久配置”时，鸿蒙端优先用 photoAccessHelper.PhotoViewPicker（maxSelectNumber=1、MIMEType=IMAGE_TYPE），它不需要媒体读权限；不要让这个入口经过依赖 getAlbums 全量查询的自建相册页。必须复用自建页时，先确认 module.json5 已声明对应媒体权限、运行时确实能拿到授权，且页面上没有未完成的权限/相册绑定 TODO。",
+    "选择结果要写进会被保存、之后重新读取的配置（如 PIC.url）之前，先复制到 context.filesDir 下的应用目录，校验文件非空后再写 file:// 路径；不要保存 Picker 返回的临时授权 URI，也不要保存 cacheDir 里的中间副本。",
+    "复用现有选择页或服务作依赖前，先读它产出结果的那段代码（如 onPhotoSelected、materialize 的输出目录）和异常分支；取消时保留旧值，失败时给出可见错误，不留空 catch；收口前在设备上走一遍“选图→预览回填”，做不到就把该入口列为 partial。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "H:/WIdgetHW2/entry/src/main/ets/pages/AppWidgetEditorActivityPage.ets",
+        "since": "2026-09-09T08:29:55.423Z",
+        "at": "2026-09-18T04:34:56.908Z"
+      },
+      "nodes": [
+        {
+          "key": "H:/WIdgetHW2/entry/src/main/ets/pages/PhotoSelectPage.ets",
+          "at": "2026-09-16T01:33:13.984Z",
+          "reason": "正常输入：Get-Content 读取 PhotoSelectPage 前 120 行，回执含 TODO P-S1-UNC-658「bind live album, selection, loading, permission and preview state to PlatformServicesStore」以及 showAllPhotoPermission、catalogAlbums 等本地状态。这足以说明该页的相册列表与权限链路尚未接通，不能当作已验证可用的背景选择器（01a0a7d7-1f74-7c00-8f7d-d9c4db942e90.jsonl:L101、L108）。"
+        },
+        {
+          "key": "H:/WIdgetHW2/android/widget_editor/src/main/kotlin/cn/widgetisland/theme/appwidget/editor/fragment/bg_color/AppWidgetEditorBgColorFragment.kt",
+          "at": "2026-09-16T01:34:25.281Z",
+          "reason": "正常输入：读取 Android 背景颜色 Fragment，回执显示 isPic() 分支调用 startPhotoSelectActivity(mContext, 1, true, width, height, toString())，onMessageEvent(PhotoCropEvent) 再把 mCropFilePathList[0] 写进 PIC 背景的 url。也就是说，保存的是应用自己裁剪产出的文件路径，不是一个临时选择句柄（同转录 L153、L161）。"
+        },
+        {
+          "key": "01a0a7d7-1f74-7c00-8f7d-d9c4db942e90",
+          "at": "2026-09-16T01:39:44.421Z",
+          "reason": "已读到上述两份输入，apply_patch 却把 onBackgroundSourceRequested 接成：仍 push 自建 PhotoSelectPage，needCrop 由 true 改为 false，注册 PhotoEditorResultRegistry 回调，令 option.url = result.artifact.uri.value 并 writeAppearance 持久化（同转录 L289、L294）。写前没有查该 artifact 落在哪个目录，也没有查相册页的权限是否可用；后续 L1327 只把选项 id 改成 PIC，L1752 收口时未把相册背景列为 partial，也未做设备验证。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "exec 调用 Get-Content -Encoding UTF8 entry/src/main/ets/pages/PhotoSelectPage.ets | Select-Object -First 120，回执返回该页头部与 TODO P-S1-UNC-658；这是写入背景回调前对该选择页的真实读取。",
+          "evidence": [
+            {
+              "source": "01a0a7d7-1f74-7c00-8f7d-d9c4db942e90.jsonl",
+              "line": 101
+            },
+            {
+              "source": "01a0a7d7-1f74-7c00-8f7d-d9c4db942e90.jsonl",
+              "line": 108
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "exec 在工作目录 H:/WIdgetHW2 下调用 Get-Content -Encoding UTF8 android/widget_editor/.../bg_color/AppWidgetEditorBgColorFragment.kt | Select-Object -First 200，回执返回 startPhotoSelectActivity(1, true, ...) 与 PhotoCropEvent 写 PIC.url 的源码；这是写前对 Android 真值的读取。",
+          "evidence": [
+            {
+              "source": "01a0a7d7-1f74-7c00-8f7d-d9c4db942e90.jsonl",
+              "line": 153
+            },
+            {
+              "source": "01a0a7d7-1f74-7c00-8f7d-d9c4db942e90.jsonl",
+              "line": 161
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "修复前没有在真机上复现原问题：用户看到的究竟是相册列表为空，还是选后不回填，只有修复方的静态分析（01a0a8db L302；01a0a334 L6862、L7014）；修复后真机回填正常。",
+    "flexible_editor_ui 的派工及父代理后续消息都是加密内容，无法核对父代理是否明确要求复用 PhotoSelectPage。"
+  ],
+  "unresolved_targets": [
+    {
+      "key": "H:/WIdgetHW2/entry/src/main/ets/services/photo/PhotoInputService.ets",
+      "reason": "修复已确认：新增 createPersistentMaterializationOutput/materializePersistent，把选择结果复制到 filesDir/photo-input 并校验非空（01a0a8db L355-L356、L377-L379、L430-L431）。修复前该文件在材料池内没有任何原生写入（index blame native_operations_in_scope=0），只提供 cacheDir/photo-input 的 createMaterializationOutput；它与 PhotoSelectPage 的 getAlbums 目录查询都由材料外提交生成，写前输入不可得。本卡只归因消费方把缓存产物当持久背景这一环。"
+    }
+  ],
+  "job": "issue-d465b188d96e33a7ffad",
+  "metadata": {
+    "migration": {
+      "project": "组件岛Widget Island",
+      "server_session_id": "e9368e72-568a-4c6e-9922-70258142693f"
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "60c0b278-d763-4144-9ffd-78d5340aee5d"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "glm-5.3-flash",
+        "gpt-5.5",
+        "gpt-5.6-sol"
+      ],
+      "providers": [
+        "custom"
+      ],
+      "client_versions": [
+        "0.152.1",
+        "0.154.0"
+      ]
+    },
+    "source_set_id": "sources-f43aae365159aa816371",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "26.0.0",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-09-18T03:21:39.969Z",
+        "ref": "01a0b274-f434-7483-b80b-14d8b50b2357.jsonl:L635",
+        "request_ref": "01a0b274-f434-7483-b80b-14d8b50b2357.jsonl:L632",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-09-18T03:21:39.969Z",
+        "ref": "01a0b274-f434-7483-b80b-14d8b50b2357.jsonl:L635",
+        "request_ref": "01a0b274-f434-7483-b80b-14d8b50b2357.jsonl:L632",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.4"
+  },
+  "revision": "d87e9d7a3a5b06822a636cbc0dacb4092ee9f0cf5055f2c05f8cd32373e25253"
+}

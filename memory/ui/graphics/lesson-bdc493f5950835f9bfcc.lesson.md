@@ -1,6 +1,6 @@
 # 图标按资源固有 dp 显示、触摸盒放在外层：centerInside、wrap_content 或未设尺寸的图片不设成盒子尺寸再 Contain，同一 Image 上后写的槽位宽高会覆盖图标尺寸
 
-ID：`lesson-bdc493f5950835f9bfcc` · 版本：5
+ID：`lesson-bdc493f5950835f9bfcc` · 版本：6
 
 [本主题](index.md)
 
@@ -10,7 +10,7 @@ ID：`lesson-bdc493f5950835f9bfcc` · 版本：5
 
 ## 适用情境
 
-源图标按钮是固定 dp 盒加 scaleType=centerInside，或图标以 wrap_content、TextView drawableLeft/Start 显示，渲染尺寸取决于资源像素与密度目录；映射参考把 centerInside 对到 ImageFit.Contain。也包括 Compose Image(painterResource(vector drawable)) 不设尺寸、按 drawable 声明的 dp 固有尺寸与 ContentScale.Fit 显示，目标 SVG 由 vector drawable 转来。 也包括工具栏按钮原本在组件上链式设置点击区宽高（如 .width(40).height(48)），替换成位图后又在同一 Image 前面写图标宽高；源图标在 drawable-xxhdpi，目标资源放在不分密度的 base/media。
+源图标按钮是固定 dp 盒加 scaleType=centerInside，或图标以 wrap_content、TextView drawableLeft/Start 显示，渲染尺寸取决于资源像素与密度目录；映射参考把 centerInside 对到 ImageFit.Contain。也包括 Compose Image(painterResource(vector drawable)) 不设尺寸、按 drawable 声明的 dp 固有尺寸与 ContentScale.Fit 显示，目标 SVG 由 vector drawable 转来。 也包括工具栏按钮原本在组件上链式设置点击区宽高（如 .width(40).height(48)），替换成位图后又在同一 Image 前面写图标宽高；源图标在 drawable-xxhdpi，目标资源放在不分密度的 base/media。 也包括多个列表页共用的推广卡片里，角标 ImageView 为 wrap_content 加 centerInside，位图在 drawable-xxhdpi，媒体留给后续批次拷贝。
 
 ## 原因
 
@@ -23,12 +23,13 @@ centerInside 只缩不放，小于盒子的图标按固有尺寸居中；Contain
 3. wrap_content 或 drawableLeft 图标同样取资源固有 dp；输入里没有资源尺寸时先读取图片尺寸，不用经验值占位；源端图片另带 padding 时，按固有比例定宽高后再加 padding，不用固定正方形框再叠 padding 压缩可视图形。仓内同族页面已有的图标尺寸本身也是迁移产物，不能代替对源资源的换算。
 4. 资源是 vector drawable 转来的 SVG 时，固有尺寸取源 drawable 的 android:width/height（dp），不再除密度；源端按 Fit 显示、可能随父宽缩小时写 width('100%') + constraintSize({ maxWidth: 固有宽 }) + aspectRatio(固有宽/固有高)。
 5. 把文字或符号按钮换成位图时，点击槽宽高放在外层 Stack/Row，Image 只设图标尺寸，不在同一 Image 修饰链里先写图标尺寸、再保留原槽位宽高。xxhdpi 资源按 px/3 换算（72×72px → 24×24vp，74×72px → 约 25×24vp），换资源后重新核对；槽宽取源布局的承载区宽度，与图标绘制尺寸分开核对。
+6. 媒体留给后续批次拷贝时，尺寸仍在本页按源资源像素写定，或登记成可机械校验的交接，不只记“待资源 sweep”。
 
 ## 可选检查
 
 - dumpLayout 读取图标 bounds 除以屏幕密度，与 Android 固有 dp 逐项对比。
 
-来源支持：6 张卡 · 5 次迁移 · 5 个应用
+来源支持：7 张卡 · 6 次迁移 · 6 个应用
 
 ## 来源（按需复核）
 
@@ -38,6 +39,8 @@ centerInside 只缩不放，小于盒子的图标按固有尺寸居中；Contain
   卡片版本：`3f3463ed3d961b5111a1ac32e6c7a95587c06d7746f3ab9a54fe09afe015fd8a`
 - [case-9d7fa754a567e2ecec7e](../../../store/cases/case-9d7fa754a567e2ecec7e/08068dd456a4c32cc1327c39f339215b49dab4ffc8f5a25dc8024b7112ebbd28.json) · 结论：recommendation:4
   卡片版本：`08068dd456a4c32cc1327c39f339215b49dab4ffc8f5a25dc8024b7112ebbd28`
+- [case-ae26f8358584821ce4d4](../../../store/cases/case-ae26f8358584821ce4d4/739279181a7edf61aaddc81bc6550a650a12740e302f5bf7fdd385d674e76364.json) · 结论：diagnosis, recommendation:1, recommendation:2
+  卡片版本：`739279181a7edf61aaddc81bc6550a650a12740e302f5bf7fdd385d674e76364`
 - [case-b911ada02f4ec55d7d14](../../../store/cases/case-b911ada02f4ec55d7d14/fe131fcb00a86b1a6fedf2b0291f225bf231772f1bfc5b5af79e9d0729a16325.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
   卡片版本：`fe131fcb00a86b1a6fedf2b0291f225bf231772f1bfc5b5af79e9d0729a16325`
 - [case-d54a9506e30031090325](../../../store/cases/case-d54a9506e30031090325/86a488ddb6c31e5655996133c63edcc32569e729e74e510755e2f806ac20fae1.json) · 结论：diagnosis

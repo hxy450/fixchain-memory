@@ -48,7 +48,7 @@ ArkUI V2 状态刷新与订阅：@Builder 参数（含异步重赋值的数组�
   - 情境：源端 Fragment 按登录态等状态对多个控件 setVisibility（如登录后隐藏用户名、显示签到区），部分 setText 被注释；目标 ArkTS 按状态条件渲染；工程可能有显隐或绑定检查器报告源控件丢失。
 - [随状态变化的控件参数不作 @Builder 值参，改为内联读取状态或用 @ComponentV2 子组件的 @Param](lesson-8d2979542fa2cd65150c.lesson.md)
   - 时机：界面实现阶段（页面转换与公共组件抽取），为源端带状态参数的子控件或多个同构开关行选择 ArkUI 复用写法时；把 LazyForEach 改写为 Repeat、拆出条目 @Builder 时
-  - 情境：源端 Compose 子 Composable 以当前状态算出的值作参数（如 enabled = count &gt; 1、颜色随选中态变化），或 Android 页面有多个同构的开关行、各自持有状态；目标 ArkUI 组件需要在状态变化后刷新 enabled、颜色、开关图标等属性，准备把子控件或开关行抽成共享的 @Builder 方法。也包括用多参数 @Builder 渲染会被异步重新赋值的数组或对象（搜索结果、定位城市卡）的情形。也包括把 LazyForEach 改为 Repeat 时，each 回调写成 this.Row(ri.item)，把 RepeatItem.item 按值传给 @Builder。
+  - 情境：源端 Compose 子 Composable 以当前状态算出的值作参数（如 enabled = count &gt; 1、颜色随选中态变化），或 Android 页面有多个同构的开关行、各自持有状态；目标 ArkUI 组件需要在状态变化后刷新 enabled、颜色、开关图标等属性，准备把子控件或开关行抽成共享的 @Builder 方法。也包括用多参数 @Builder 渲染会被异步重新赋值的数组或对象（搜索结果、定位城市卡）的情形。也包括把 LazyForEach 改为 Repeat 时，each 回调写成 this.Row(ri.item)，把 RepeatItem.item 按值传给 @Builder。 也包括页面转换为子页面嵌入点写只含前向引用的空 @Builder 槽位，并把异步加载的分类数组与选中索引作为位置值参传入。
   - 例外：传入 @Builder 的只有文案、尺寸等在该组件生命周期内不随状态变化的值
 - [页面向单例仓库或偏好注册监听时，把回调或句柄存成字段，在 aboutToDisappear 用同一引用移除](lesson-14b7f4090b7b83873b22.lesson.md)
   - 时机：功能接线阶段，在页面 aboutToAppear 里向应用级单例仓库、数据库或偏好注册数据监听时

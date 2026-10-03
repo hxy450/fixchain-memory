@@ -21,6 +21,9 @@
 - [弹窗防穿透的 Block 只放在无子控件的遮罩层，内容面板与根容器保持 Default；改真弹窗 API 后删掉自绘防穿透](lesson-cf018b76af68b4c00895.lesson.md)
   - 时机：弹窗或浮层实现与改造阶段，为遮罩、内容面板、根容器设置 hitTestBehavior，或把页面内浮层迁到 showCustomDialog/showBindSheet、openCustomDialog 等真弹窗时
   - 情境：弹窗或底部面板采用“根 Stack + 遮罩 + 内容面板”结构，在根或内容面板上写 hitTestBehavior(HitTestMode.Block)（含 visible ? Block : None）防止点击穿透；面板内有按钮、checkbox、列表项等要响应点击的子控件。也包括源端用全屏空 clickable 拦截层防穿透、遮罩点击关闭、居中卡片阻止冒泡，目标在包住遮罩、卡片、滑杆与滚动区的弹层根 Stack 上写 Block。
+- [接入已有专页时逐项兑现它的 @Event 回调契约：要求回传会话或结果的回调给出真实值或交父页分派，不用空值短路专页自带的导航](lesson-c061106fa1d809e518da.lesson.md)
+  - 时机：界面实现阶段，把源端编辑项 Fragment 对应的现有 ArkTS 专页接入容器、实现专页回调时
+  - 情境：源端工厂把同类数据的不同 type 映射到不同 Fragment（如 photo 进照片编辑页，photo_select/photoPicker 进图片选择）；目标已有专页经 @Event（如 requestPhotoEditorSession(key, onReady)）把会话与导航交给父容器，父容器里已有一个可复用的通用入口。
 - [源端在触发瞬间读取锚点窗口位置时，目标在点击回调里取本次手势坐标或即时查询，onAreaChange 缓存只作兜底；锚点取源端传入的同一元素](lesson-963bf871aa4e910a8fc8.lesson.md)
   - 时机：界面实现与修复阶段，为从点击处发出的动效或气泡（完成彩纸、锚点提示）确定起点坐标与锚点元素时
   - 情境：源端在动效或弹窗被调用时用 getLocationInWindow 读取传入锚点 View 的当下窗口中心；目标列表项存在 translate 平移、LazyForEach/Repeat 节点复用或弹层内滚动，写者准备用 onAreaChange 缓存控件位置。
