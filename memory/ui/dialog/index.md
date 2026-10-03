@@ -1,6 +1,6 @@
 # ui/dialog
 
-弹窗与半模态：V2 页面可用的弹窗载体、源端真弹窗不以页面叠层充当、sheet 内二级弹窗的层级、从半模态内压入页面时的 SheetMode 与 targetId、按源 Dialog 类型选择呈现形态（路由约束不改变弹窗形态）、弹窗内二级选择器的层级、按源布局还原弹窗内容、源 Dialog 用 setView 注入自定义内容时的承载方式，页内对话框的打开触发点；源端委托共享详情弹窗与分享弹层时复用目标共享组件，依附式弹窗的宿主页归属，自绘底部弹窗改 bindSheet 时的手势门禁（含列表的下拉关闭）；多个独立底部弹层的绑定节点，展开后才加载数据的弹层；页内覆层承载 Activity 级 Dialog 时的挂载层级与按钮行定高
+弹窗与半模态：V2 页面可用的弹窗载体、源端真弹窗不以页面叠层充当、sheet 内二级弹窗的层级、从半模态内压入页面时的 SheetMode 与 targetId、按源 Dialog 类型选择呈现形态（路由约束不改变弹窗形态）、弹窗内二级选择器的层级、按源布局还原弹窗内容、源 Dialog 用 setView 注入自定义内容时的承载方式，页内对话框的打开触发点；源端委托共享详情弹窗与分享弹层时复用目标共享组件，依附式弹窗的宿主页归属，自绘底部弹窗改 bindSheet 时的手势门禁（含列表的下拉关闭）；多个独立底部弹层的绑定节点，展开后才加载数据的弹层；页内覆层承载 Activity 级 Dialog 时的挂载层级与按钮行定高；锚定下拉（PopupWindow showAsDropDown）的弹出容器，同页多个工具面板逐个选择形态
 
 [上一级](../index.md)
 
@@ -9,6 +9,9 @@
 - [@ComponentV2 页面的弹窗不用 CustomDialogController 承载 V2 组件，改用状态驱动浮层、半模态或 openCustomDialog](lesson-3f3e1ff0a4d0e0299bda.lesson.md)
   - 时机：界面实现阶段，为 @ComponentV2 页面选择弹窗承载方式、编写弹窗子组件时（含参照工程内已有弹窗写法时）
   - 情境：项目要求页面与子组件都用 @ComponentV2、不混用 V1；需要把 Android Dialog/DialogFragment 一类居中或底部弹窗迁成 ArkUI；规格可能写着 CustomDialog、@CustomDialog 或 bindSheet。
+- [PopupWindow 以 showAsDropDown 锚定弹出的自定义下拉，用锚点弹出按源布局还原：不换成原生 Select、系统菜单或整页筛选视图](lesson-666a746081ba1e447322.lesson.md)
+  - 时机：界面实现阶段，为筛选栏、排序栏等下拉选项选择 ArkUI 弹出容器、呈现位置与菜单样式时
+  - 情境：源端点击筛选项后用 PopupWindow 加载自定义布局（固定宽度、固定行高、箭头图、勾选图标），以 showAsDropDown 锚定在触发器或置顶筛选栏下方原位展开；同页可能另有整屏的“更多筛选”面板；目标有现成的 Select 组件或已写好的整页筛选组件可用。
 - [从 bindSheet 半模态里打开的弹窗必须叠在 sheet 之上：不用页内浮层，居中点外可关用模态内自绘遮罩](lesson-009212ca2c691b97d76c.lesson.md)
   - 时机：界面实现阶段，为从底部 sheet 内部触发的二级弹窗（定时、新建输入等）选择承载层时
   - 情境：Android 在 BottomSheetDialog 内再 show 居中 DialogFragment（点外可关）；目标底部弹层用 bindSheet；二级弹窗候选有页内 Stack 条件浮层、bindSheet(CENTER)、bindContentCover 与全局自定义弹窗。
@@ -22,9 +25,9 @@
 - [多个相互独立的底部弹层不在同一组件上链式 bindSheet：分别挂到不同节点，或用一个 bindSheet 按类型切换内容](lesson-b661a3a6a4c0a1e2a3c9.lesson.md)
   - 时机：界面实现阶段，把源页面并列的多个底部弹窗映射为 ArkUI bindSheet、安排绑定节点时；修复“点击后弹层不出现”时
   - 情境：源页面并列存在两个及以上由各自 visible 状态控制的底部弹窗（如规格选择与优惠券）；目标页面用 @Local 状态加 bindSheet 实现，并把它们写在同一个容器的修饰链上。
-- [按源 Dialog 类型选呈现形态：居中 CustomDialog 用居中卡片，BottomSheetDialog 才用 bindSheet；定长密码框输满即校验](lesson-21db515a505be4845497.lesson.md)
-  - 时机：页面接线与界面实现阶段，为源端 DialogHelper 一类函数弹出的确认或输入弹窗选择承载形态与校验触发方式时
-  - 情境：源端经 CustomDialog/AlertDialog 加自定义布局弹出居中卡片，卡内可能有定长格子密码框（输满即比对、失败提示），根视图点击关闭；目标公共弹窗封装只有确认/提示类，带输入的弹窗需要在页面内自建。
+- [按源弹层类型逐个选呈现形态：居中 CustomDialog 用居中卡片，底部面板才用 bindSheet，锚定菜单按锚点弹出；形态不同的面板不共用一个弹窗；定长密码框输满即校验](lesson-21db515a505be4845497.lesson.md)
+  - 时机：页面接线与界面实现阶段，为源端 DialogHelper 一类函数弹出的确认或输入弹窗选择承载形态与校验触发方式时；对齐同页多个工具面板（如阅读页的设置、更多、发弹幕）的容器、锚点与交互步骤时
+  - 情境：源端经 CustomDialog/AlertDialog 加自定义布局弹出居中卡片，卡内可能有定长格子密码框（输满即比对、失败提示），根视图点击关闭；目标公共弹窗封装只有确认/提示类，带输入的弹窗需要在页面内自建。 也包括源端同页多个工具面板容器各不相同（底部 PopupWindow 面板、锚定在标题栏右上角带箭头的弹出菜单、先编辑再在内容上拖动定位的多步弹层），目标现有实现用一个固定高度、带拖动条与关闭按钮的 bindSheet 承载全部面板。
 - [源弹窗按它实际加载的布局 XML 与函数全文逐控件还原，不以行为代码、相邻弹窗外壳或通用确认弹窗代替](lesson-1f366fe4ccdc917ce0fc.lesson.md)
   - 时机：界面转换与接线阶段，为源端弹窗编写或补建 ArkUI 弹窗内容（包括解接线标记时顺带新建弹窗、补齐流程闭环时新建弹窗、考虑复用通用弹窗）时
   - 情境：源弹窗由 ViewBinding/inflate 或工具类加载独立布局（DialogXxxBinding.inflate、R.layout.xxx），含标题、关闭图标、专用图标、说明文字、输入框、单个或多个按钮及容器级 margin；目标工程已有“标题 + 确定/取消”的通用确认弹窗或相邻弹窗写法可参照，或只拿到“展示、复制、关闭”一类功能描述。也包括源确认区是带形状背景、可点击的复合容器（勾选控件＋主文案＋小字号次文案），目标准备复用只收单个文字 label 的主题按钮 builder，或用一个共享弹窗组件承载普通、严格等多个变体。

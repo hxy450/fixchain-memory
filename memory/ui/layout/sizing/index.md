@@ -1,6 +1,6 @@
 # ui/layout/sizing
 
-宽高、比例、百分比与边距的组合（父尺寸减边距、占剩余空间），Compose 修饰符链顺序与 Row 的测量顺序、固有高度，Material 按钮的布局占位与实绘尺寸，px 域整数布局公式与随进度收放的间距，以及随内容定尺寸的图片、背景和描边，以及非 Row/Column/Flex 父级中 layoutWeight 不生效时的显式尺寸。
+宽高、比例、百分比与边距的组合（父尺寸减边距、占剩余空间），Compose 修饰符链顺序与 Row 的测量顺序、固有高度，Material 按钮的布局占位与实绘尺寸，px 域整数布局公式与随进度收放的间距，以及随内容定尺寸的图片、背景和描边，以及非 Row/Column/Flex 父级中 layoutWeight 不生效时的显式尺寸；嵌入满高子组件时的剩余高度分配，居中的 wrap_content 子项组不被拉伸。
 
 [上一级](../index.md)
 
@@ -13,6 +13,9 @@
   - 时机：规格提取或页面转换阶段，解释 Compose Row 的可见元素和横向空间分配时
   - 情境：有限宽度的 Row 中，无 weight 子项使用 fillMaxWidth()，后面还有兄弟（按钮、文字）；规格或派工可能用“近乎不可见、按源码保留”描述该兄弟，实现者准备把该子项换成 layoutWeight(1)。
   - 例外：fillMaxWidth 带比例、主轴约束无上限或子项使用 weight 时，按当前分配规则处理，不套“占满剩余宽度”。；后续子项含 requiredWidth/requiredSize、无界 wrapContent 或自定义测量/绘制时，零宽约束仍不足以判断实际是否绘制。
+- [LinearLayout 以 gravity=center 摆放的 wrap_content 子项组转成 Row 时保留居中与按内容定宽，不给中间输入框 layoutWeight(1) 拉满](lesson-02b2fcd7d157d97f95c8.lesson.md)
+  - 时机：界面实现阶段，把数量步进器（减号、数量框、加号）一类居中的 wrap_content 子项组翻译成 ArkUI Row 时
+  - 情境：源端 LinearLayout 设 gravity=center 与固定外边距，子项是 wrap_content 的按钮与 EditText；控件可能叠在带装饰的背景图（票券存根、竖虚线）上。
 - [Row(height(IntrinsicSize.Min)) 先算出固有高度写成显式高度，再让子项按百分比撑满并保留源偏移](lesson-cb1a12afca61db08ed9a.lesson.md)
   - 时机：页面转换阶段，遇到 Row(height(IntrinsicSize.Min)) 且子项 fillMaxHeight、带 padding(top) 等偏移时
   - 情境：源 Row 以固有最小高度定高，高度由最高的子项（如按钮的最小触控尺寸）决定；子项用 fillMaxHeight 并在内部偏移；目标端没有固有尺寸测量，迁移陷阱表提示不定高父级下的百分比子项会撑满。
@@ -20,8 +23,8 @@
   - 时机：界面实现阶段，把 layout_marginStart/End 一类方向相关边距写成 ArkUI margin 时；维护映射参考的边距示例时
   - 情境：源布局用 marginEnd/marginStart（常与 marginBottom 等写在同一控件上）；映射参考把它对到 .margin({ end }) 并给出纯数字示例。
 - [“父尺寸减边距”或“扣除兄弟后的剩余空间”不写成 '100%'：match_parent/0dp 加同轴 margin 改用容器 padding 或 calc，Column 中占剩余高度的内容区用 layoutWeight(1)，等权重兄弟的间距改用 space](lesson-75f4743dff663f50966b.lesson.md)
-  - 时机：界面实现阶段，把 match_parent 或两侧约束 0dp 且带同轴 margin 的视图、或带 margin 的等权重兄弟翻译成 ArkUI 尺寸与间距时；按要求调整左右边距时；为 Compose Column 中排在搜索栏、分隔线等固定高度节点之后、占满剩余高度的内容区确定高度时
-  - 情境：源元素 match_parent（或约束到父两侧的 0dp）同时设 layout_marginHorizontal/Start/End 或 marginTop/Bottom；或水平 LinearLayout 中等权重（0dp + weight）的子项以 marginStart 作间距；目标用 width/height('100%') 或 layoutWeight。也包括 Compose Column 里内容区排在固定高度兄弟之后，靠 fillMaxSize、weight 或 Lazy 列表默认行为占满剩余高度，可能有空结果、加载、结果等多个状态分支。
+  - 时机：界面实现阶段，把 match_parent 或两侧约束 0dp 且带同轴 margin 的视图、或带 margin 的等权重兄弟翻译成 ArkUI 尺寸与间距时；按要求调整左右边距时；为 Compose Column 中排在搜索栏、分隔线等固定高度节点之后、占满剩余高度的内容区确定高度时；宿主页在固定标题栏下嵌入根节点为 height('100%') 的面板或弹层组件时
+  - 情境：源元素 match_parent（或约束到父两侧的 0dp）同时设 layout_marginHorizontal/Start/End 或 marginTop/Bottom；或水平 LinearLayout 中等权重（0dp + weight）的子项以 marginStart 作间距；目标用 width/height('100%') 或 layoutWeight。也包括 Compose Column 里内容区排在固定高度兄弟之后，靠 fillMaxSize、weight 或 Lazy 列表默认行为占满剩余高度，可能有空结果、加载、结果等多个状态分支。 也包括宿主页 Column 顶部有固定高度标题栏，下方直接放根节点 height('100%')、自带标题行与底部按钮栏的筛选面板；对应 Android 以 MATCH_PARENT 的 PopupWindow showAsDropDown(标题栏) 弹出，只占锚点以下的高度。
 - [区分 Material 按钮的布局占位、背景实绘与触控范围：不只凭调用处 size 定背景，也不给内容撑开的容器补最小尺寸](lesson-b73a1ac8908f74856a02.lesson.md)
   - 时机：规格提取或界面实现阶段，确定 Material 按钮及包装容器的尺寸与位置时
   - 情境：源组件含 size/background 与库内部的最小交互尺寸规则（如 IconButton 在调用方 .size(x) 之内再套 minimumInteractiveComponentSize），或只是由内容撑开的 Surface/Box（如图标撑开的圆钮）；ui 快照由源码合成、bounds 为空时，调用处 size 数值最容易被当成实绘尺寸。

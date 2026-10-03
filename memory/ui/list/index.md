@@ -1,6 +1,6 @@
 # ui/list
 
-列表与宫格：多类型 Adapter 页面的 item 布局与绑定分支（默认态、文案模板、附属子卡），分页加载的并发门闩与刷新互斥，多列 Grid 中占位与跨列项的排布，列表项主副行与空值回退，多组列表的数据源绑定与级联选择，列表项滑动操作（swipeAction）的挂载位置，LazyForEach 改 Repeat.virtualScroll 时的项高度与数据切换核对，按列表区分的排序器，侧栏分类与右侧分组列表的联动，条目点击回调与数据源本地变换（shuffled 等）随列表迁移，ExpandableListView 组头的默认交互与展开状态
+列表与宫格：多类型 Adapter 页面的 item 布局与绑定分支（默认态、文案模板、附属子卡），分页加载的并发门闩与刷新互斥，多列 Grid 中占位与跨列项的排布，列表项主副行与空值回退，多组列表的数据源绑定与级联选择，列表项滑动操作（swipeAction）的挂载位置，LazyForEach 改 Repeat.virtualScroll 时的项高度与数据切换核对，按列表区分的排序器，侧栏分类与右侧分组列表的联动，条目点击回调与数据源本地变换（shuffled 等）随列表迁移，ExpandableListView 组头的默认交互与展开状态，异步分页列表新增批量修补时的代次保护与行内远端提交的在途锁
 
 [上一级](../index.md)
 
@@ -28,6 +28,9 @@
 - [多类型 Adapter 承载的页面按全部 item 布局和 handleXxx 分支建区块：默认态、文案模板与附属子卡都来自绑定代码](lesson-e17b45a28a8d92ecbd01.lesson.md)
   - 时机：界面实现与返修重建阶段，把主体内容由 RecyclerView 多类型 Adapter 承载的 Android 页面转成 ArkUI 页面、确定各区块结构与背景层级时
   - 情境：源页面布局只有头图与 SwipeRefreshLayout/RecyclerView 外壳，首屏卡片、趋势图、网格等区块分散在 addItemType 登记的 item 布局与 handleXxx/convert 绑定里：默认选中态、setText 拼接的文案模板（如“平均温度X”“N天降温/M天升温”）、按条件 visibility 显示的附属子卡；UI 快照可能是合成的，item 布局清单可能为空。
+- [异步分页列表新增批量异步修补时按列表代次丢弃过期结果、按 ID 修补当前列表；行内远端提交按条目维护在途集合](lesson-4cfd4cbcecfb3de96037.lesson.md)
+  - 时机：列表页实现阶段，为触底分页、下拉刷新的列表新增返回后状态同步，或接入逐行远端提交按钮（加入书架、收藏）时
+  - 情境：列表由分页回调异步追加、下拉刷新整体替换；返回页面时要逐条 await 本地查询来刷新行内标记；每行还有调用远端接口的提交按钮；页面已有请求序号或 busy 锁保护了部分入口。
 - [恒空的广告或占位不在多列 Grid 里生成通栏项](lesson-2bd2620e5d1ef4bb17b4.lesson.md)
   - 时机：界面实现阶段，把含广告跨列的 RecyclerView 多类型网格转成 ArkUI Grid，决定 no-op 占位是否生成 GridItem 与跨列配置时；规格把广告定为 no-op 时
   - 情境：源端 GridLayoutManager 多列，spanSizeLookup 让广告项跨满一行，广告按固定间隔插入（可能紧跟奇数个内容项）；目标端广告是恒空的桩（零高容器）。

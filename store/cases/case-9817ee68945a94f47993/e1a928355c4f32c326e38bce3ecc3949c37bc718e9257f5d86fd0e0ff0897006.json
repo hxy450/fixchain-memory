@@ -1,0 +1,122 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-9817ee68945a94f47993",
+  "created_at": "2026-10-03T00:41:25.952850+00:00",
+  "migration_key": "706da6de-0edd-425e-9cfa-4741897a5a3f",
+  "title": "把上一请求的微信迟到回调当成当前会话失败",
+  "when": "第三方登录实现阶段，编写授权回调的请求归属判断与失败处理时",
+  "description": "登录服务同一时刻只保留一个待处理授权会话，每次请求生成随机state并随SDK请求发出；用户取消、超时或离开后可以重新发起，上一请求的SDK回调仍可能在新会话等待期间到达。",
+  "summary": "生成者（/root/login3_sdk_impl_20260928，转录01a0e601）写前在L43→L46读到两份输入：\nTPL-001-spec-plan.md的TPL-AC5要求“失败/取消/拒绝/错误state/重复回调/迟到回调不换账号；忙碌时不能重复授权，结束后可重试”；\nhmos-sdk-audit.md要求微信“自己设置并验证state”，并写明“用户明确离开登录流程或新授权开始时，旧回调必须失效”，\n最小验证要覆盖“state错配拒绝、离开页面后的迟到回调”。这些要求已足以说明：新请求开始后，旧请求的回调不得再产生任何效果。\nL114新建ThirdPartyLoginService时，每次请求生成session.state并写入SendAuthReq；但receiveWechatResponse只检查是否存在当前微信会话及命令类型，\n随后把响应交给validateWechatResponse。该函数将state不一致与错误码、空code同样抛出INVALID_RESPONSE，catch后fail(session)结束当前会话。\n因此，上一请求的取消或成功回调若在新请求等待期间到达，会把新请求判为无效响应。实现把state当成响应内容的校验项，没有先用它判断回调是否属于当前请求。\n偏差位于已有正确规格到实现的环节。\n同一生成者在L231复审时只把QQ scope改成get_user_info，微信回调分支未改；主线程随后的契约检查也只断言validateWechatResponse会拒绝stale state，\n没有覆盖“新会话等待期间收到旧state回调”的时序。09-28正式签名验证轮，主会话发现迟到回调可能打断新请求（01a0bcd4 L24723）。\n修复代理在receiveWechatResponse中先比较authResponse.state !== session.state，不一致时直接return，再进入原有校验\n（01a0e695 L81-L84，注释为delayed response belongs to a previous request; it must not finish the new one）。\n09-29微信换码改动增加了wechatResponseConsumed，同时保留了这条早退（01a0ead8 L250）。\n",
+  "recommendations": [
+    "实现单会话授权回调时，先用state或requestId判断回调是否属于当前待处理请求：不匹配就忽略并让当前会话继续等待；匹配后才根据错误码和code判定成功、取消或失败。",
+    "规格写“旧回调必须失效”“state错配拒绝”时，含义是该回调不得产生任何效果：不登录、不判失败、不释放busy，不能落实为结束当前会话。",
+    "补充时序用例：发起请求A→取消或超时→发起请求B→投递A的回调，断言B仍在等待；再投递B的回调，断言B按自身结果完成。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "D:/HMS/CWM/cwm/src/main/ets/common/utils/ThirdPartyLoginService.ets",
+        "since": null,
+        "at": "2026-09-30T03:40:34.392Z"
+      },
+      "nodes": [
+        {
+          "key": "D:/HMS/CWM/spec/incremental-migration-20260928/thirdparty-login/TPL-001-spec-plan.md",
+          "at": "2026-09-28T03:15:52.682Z",
+          "reason": "正常输入：生成者Get-Content读回TPL-AC5，要求失败/取消/拒绝/错误state/重复回调/迟到回调均不换账号，且结束后可以重试；TPL-AC6要求拒绝无法验证的旧回调并允许重新发起（01a0e601 L43、L46）。"
+        },
+        {
+          "key": "D:/HMS/CWM/spec/incremental-migration-20260928/thirdparty-login/hmos-sdk-audit.md",
+          "at": "2026-09-28T03:15:52.682Z",
+          "reason": "正常输入：同一次读取返回审计稿，要求微信自行设置并验证state，并写明“新授权开始时，旧回调必须失效”；最小验证还需覆盖state错配拒绝和迟到回调。这足以要求旧请求回调不影响新会话（01a0e601 L43、L46）。"
+        },
+        {
+          "key": "01a0e601-1d63-7a23-a35e-059f2b427d59",
+          "at": "2026-09-28T03:18:38.182Z",
+          "reason": "已收到上述输入后，apply_patch新建ThirdPartyLoginService。receiveWechatResponse未先比较state，就调用validateWechatResponse；state不一致时抛INVALID_RESPONSE，再由fail(session)结束当前会话，旧回调因此能终止新请求（同转录L114、L117）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "生成者在写服务前用exec_command执行Get-Content -Raw读取TPL-001-spec-plan.md等四份文件，回执原文含TPL-AC5、TPL-AC6；这次读取由生成者自身发起，并早于L114写入。",
+          "evidence": [
+            {
+              "source": "01a0e601-1d63-7a23-a35e-059f2b427d59.jsonl",
+              "line": 43
+            },
+            {
+              "source": "01a0e601-1d63-7a23-a35e-059f2b427d59.jsonl",
+              "line": 46
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "同一exec_command也读取了hmos-sdk-audit.md，回执包含微信state校验、“新授权开始时，旧回调必须失效”及最小验证清单，同样早于L114写入。",
+          "evidence": [
+            {
+              "source": "01a0e601-1d63-7a23-a35e-059f2b427d59.jsonl",
+              "line": 43
+            },
+            {
+              "source": "01a0e601-1d63-7a23-a35e-059f2b427d59.jsonl",
+              "line": 46
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "生成者收到的派工消息及后续/root消息正文已加密，无法确认其中是否另有迟到回调的说明；本卡依据其写前显式读取的规格与审计文件归因。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-9817ee68945a94f47993",
+  "metadata": {
+    "migration": {
+      "project": "刺猬猫阅读",
+      "server_session_id": "706da6de-0edd-425e-9cfa-4741897a5a3f"
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "04ca88f2-7121-4ae3-9618-5ce4661aaef4"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "gpt-5.6-sol",
+        "gpt-6-astra",
+        "gpt-6-luna",
+        "gpt-6-sol"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.155.0-alpha.9.2"
+      ]
+    },
+    "source_set_id": "sources-358bf10a4f45835a4a65",
+    "card_tool_version": "0.10.4"
+  },
+  "revision": "e1a928355c4f32c326e38bce3ecc3949c37bc718e9257f5d86fd0e0ff0897006"
+}

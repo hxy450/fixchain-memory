@@ -1,0 +1,136 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-7a220ef3945d95389ab4",
+  "created_at": "2026-10-03T00:24:04.012348+00:00",
+  "migration_key": "706da6de-0edd-425e-9cfa-4741897a5a3f",
+  "title": "分页列表的返回刷新以旧快照整体回写，逐项加架缺少在途锁",
+  "when": "列表页实现阶段，为异步分页列表新增返回后状态同步，并接入逐行远端提交按钮时",
+  "description": "目标页面的书目列表由触底分页异步追加、下拉刷新整体替换；返回页面时需逐本await本地数据库查询（如ShelfBookDao.isInshelf）来刷新“已加入书架”标记，列表每行还有调用远端接口的“加入书架”按钮。",
+  "summary": "Volta写前实际读到：Android TagDetailActivity 的 getList 成功回调对 dataList 下拉时 clear、分页时追加，onResume 只记录计时，没有返回时整表刷新\n（01a0cd7d-2815-7401-ad95-010bb12d8330.jsonl:L132/L138、L142/L149）；MoreBookListAdapter1 加架成功后只把当前 bean 的 is_inshelf 置 1 再 notifyDataSetChanged（L221/L225）；\n项目 ShelfBookDao.isInshelf 是逐本 Promise 查询（L234/L240）。这些输入足以说明列表会被分页异步改写，加架状态应按书逐项修补。\n本次输出（L332 Add File SortTagDetailPage.ets，09:06:21Z）自行在 onPageShow 新增 refreshShelfFlags：先 current = this.bookList.slice()，逐本 await isInshelf，\n循环结束后 this.bookList = current 整体回写。同一文件的 loadBooks 已用 requestSerial 丢弃过期回调，这个新增异步入口却没有同类保护；\n等待期间若触底追加了下一页或下拉替换了列表，旧快照就会覆盖已加载分页。同一次输出的 addToShelf 只在 is_inshelf===1 时返回，请求在途时可重复提交；\n同文件关注按钮已有 favoriteBusy 锁，加架按钮未沿用（Android 源同样未显式加锁，此项是续验代码核查发现，未见实测重复请求）。\n两处片段在 L374～L466 的后续生成修改中未变，09-23 交付后续验时由主会话核查发现（01a0bcd4-2be8-7cc0-8312-a120ffeb885b.jsonl:L11303）。\nVolta 修复为：refreshShelfFlags 记录 requestSerial、列表被替换即退出，只经 markCurrentBookInShelf 按 book_id 修补当前列表；加架增加 addingBookIds 在途锁、\n“加入中…”状态和失败释放，列表 key 纳入 adding 状态（01a0cd7d L599、L659）。\n“本地保存失败”另有成因：生成代码沿用 BookdetailPage 既有的 ShelfBookDao.insertBook（L208、L240），其底层 DbUtil1.insert 依赖 Preferences 表名键判断表是否存在，\n属迁移前既有封装缺陷；修复新增 ShelfBookDao.insertBookIfAbsent 直接用已初始化 RdbStore 插入（L638、L733），页面改调该方法并以 pendingShelfSaves 在返回时重试。\n本卡不把该分支归因为生成偏差。\n",
+  "recommendations": [
+    "为异步分页列表新增返回刷新等批量异步查询时，不在await前复制整张列表、结束后整体赋回；先记录列表代次（如沿用页面的requestSerial），代次变化即放弃，命中项只按ID修补当前列表。",
+    "页面已有请求序号或busy锁时，逐一核对每个新增异步入口是否需要同类保护：分页与刷新回调、onPageShow返回刷新、逐行提交按钮。",
+    "列表行的远端提交按钮（如加入书架）按条目ID维护在途集合：发请求前检查并加入，成功和失败都释放；在途期间显示加载态、不再发请求，并让列表key包含该状态以触发重绘。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "D:/HMS/CWM/cwm/src/main/ets/pages/main/find/category/SortTagDetailPage.ets",
+        "since": null,
+        "at": "2026-09-30T03:40:34.392Z"
+      },
+      "nodes": [
+        {
+          "key": "D:/ciweimao/Novel/src/main/java/com/kuangxiangciweimao/novel/activity/search/tag/TagDetailActivity.java",
+          "at": "2026-09-23T09:02:08.797Z",
+          "reason": "正常输入：git show HEAD 分段读取回执给出 doPullDownRefresh/doScrollUpRefresh 与 getList 成功回调：下拉时 dataList.clear，分页时逐本追加后 notifyDataSetChanged；同批前段读取（L132/L138）显示 onResume 只记录计时、不刷新列表。足以说明列表会被分页异步改写，源端没有返回时整表回写（01a0cd7d-2815-7401-ad95-010bb12d8330.jsonl:L142、L149）。"
+        },
+        {
+          "key": "D:/HMS/CWM/cwm/src/main/ets/dao/ShelfBookDao.ets",
+          "at": "2026-09-23T09:03:12.944Z",
+          "reason": "正常输入：Get-Content 回执显示 isInshelf 为逐本 Promise 查询，insertBook 以 DbUtil1.insert 不回传结果；据此逐本刷新需多次 await，期间列表可能已变化（01a0cd7d-2815-7401-ad95-010bb12d8330.jsonl:L234、L240）。"
+        },
+        {
+          "key": "01a0cd7d-2815-7401-ad95-010bb12d8330.jsonl",
+          "at": "2026-09-23T09:06:22.121Z",
+          "reason": "已收到上述输入及 MoreBookListAdapter1 只改当前 bean 的加架流程（L221/L225），Add File 却新增 onPageShow→refreshShelfFlags：await 前复制 bookList、循环后 this.bookList = current 整体回写，未像同文件 loadBooks 那样用 requestSerial 丢弃过期结果；addToShelf 也无在途锁，而同一输出的 toggleFavorite 有 favoriteBusy。偏差位于实现阶段的异步状态处理（同转录 L332、L335）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "Volta 在 exec 脚本中以 git show HEAD 读取 TagDetailActivity.java：首段 300 行回执含 onResume 仅记录计时，Skip 300 分段回执含 doPullDownRefresh/doScrollUpRefresh 与 getList 的 clear/追加逻辑；这支持生成者写前已收到分页异步改写列表、源端无返回整表刷新的输入。",
+          "evidence": [
+            {
+              "source": "01a0cd7d-2815-7401-ad95-010bb12d8330.jsonl",
+              "line": 137
+            },
+            {
+              "source": "01a0cd7d-2815-7401-ad95-010bb12d8330.jsonl",
+              "line": 138
+            },
+            {
+              "source": "01a0cd7d-2815-7401-ad95-010bb12d8330.jsonl",
+              "line": 144
+            },
+            {
+              "source": "01a0cd7d-2815-7401-ad95-010bb12d8330.jsonl",
+              "line": 149
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "Volta 在 exec 脚本中以 Get-Content -Raw 读取 ShelfBookDao.ets（管道 Select-Object 致解析为 unknown），回执给出 isInshelf 逐本 Promise 查询与 insertBook 实现；这支持生成者写前已知逐本刷新需多次 await。",
+          "evidence": [
+            {
+              "source": "01a0cd7d-2815-7401-ad95-010bb12d8330.jsonl",
+              "line": 238
+            },
+            {
+              "source": "01a0cd7d-2815-7401-ad95-010bb12d8330.jsonl",
+              "line": 240
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "主会话派给Volta的任务消息（01a0cd7d L22、L27、L29、L31、L98、L165、L199、L276）均为加密内容，无法核对派工是否明确要求返回刷新或加架防重；本卡依据Volta实际读到的源码与项目代码判断。",
+    "重复提交为代码核查推断，材料中未见实测重复请求；ArkTS BaseTask 自带可点外部关闭的加载框，可能部分缓解。"
+  ],
+  "unresolved_targets": [
+    {
+      "key": "D:/HMS/CWM/cwm/src/main/ets/dao/ShelfBookDao.ets",
+      "reason": "已确认修改：新增 insertBookIfAbsent（01a0cd7d L638、L733）。成因是迁移前既有 DbUtil1.insert 依赖 Preferences 表名缓存误判表不存在；材料中 insertBook 与 DbUtil1 没有生成期写入（ShelfBookDao 此前只被 01a0cc79 改过 getShelfBookList 排序与 deleteBookFromShelf），Volta 生成时未写该文件，只沿用 BookdetailPage 现有 insertBook 调用。属于既有代码缺陷，不画生成偏差链。"
+    }
+  ],
+  "job": "issue-7a220ef3945d95389ab4",
+  "metadata": {
+    "migration": {
+      "project": "刺猬猫阅读",
+      "server_session_id": "706da6de-0edd-425e-9cfa-4741897a5a3f"
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "04ca88f2-7121-4ae3-9618-5ce4661aaef4"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "gpt-5.6-sol",
+        "gpt-6-astra",
+        "gpt-6-luna",
+        "gpt-6-sol"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.155.0-alpha.9.2"
+      ]
+    },
+    "source_set_id": "sources-358bf10a4f45835a4a65",
+    "card_tool_version": "0.10.4"
+  },
+  "revision": "309a7b030d949fbb93f7f9c4a87ef314e7c90658eb5b8a00c9ce2ff2d94ca3eb"
+}
