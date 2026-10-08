@@ -1,0 +1,38 @@
+# 源端 Adapter 中被注释掉的数据绑定视为未启用行为：按 XML 的静态属性实现，不据注释代码或 ViewModel 重建动态效果
+
+ID：`lesson-cd87ec49e06af8e6459a` · 版本：4 · 阶段：execute · 主题：[ui/graphics/drawing](index.md)
+
+概要：Adapter 注释掉的绑定按未启用，只按 XML 静态属性
+
+信号：`Adapter`, `onBindViewHolder`, `maxTop`, `minTop`, `ViewModel`, `RecyclerView`
+
+## 何时使用
+
+界面实现阶段，转换 item 布局中的自定义绘制 View（曲线、进度、图表）并决定其数据绑定时
+
+## 适用情境
+
+源 Adapter 对自定义 View 的数据绑定整段被注释，只剩 XML 中的静态属性（颜色、点色、尺寸）；ViewModel 仍计算着可能用于绑定的值（如 maxTop/minTop）；决策账本规定注释和死代码不迁移。
+
+## 原因
+
+按注释掉的逻辑或 ViewModel 的中间值重建动态效果，会画出源端从未显示的内容（如随温度起伏的彩色折线），颜色和位置也与源端静态外观不符。来源中生成者读到绑定被注释、XML 给出黄色水平线与点色，仍用逐小时温度画了另一颜色的动态折线，报告称“使用真实温度动态计算坐标”。
+
+## 做法
+
+1. Adapter 中被注释的数据绑定按未启用处理，只按 XML 静态属性实现该 View（颜色、点色、固定位置）；需要启用时作为新需求或决策差异登记。
+
+## 同源经验
+
+由相同来源卡提炼的其他经验，按共享卡数排序；不是依赖关系。
+
+- [Tab 宿主不统一加顶部安全区，按子页源处理分别避让](../../layout/safearea/lesson-48e9408812c28e934db8.lesson.md)（共享 1 张卡）
+- [多模块同名布局按页面类模块与 Binding 类解析](../../../process/secondary-over-source/lesson-d75ddb53d6609b35d025.lesson.md)（共享 1 张卡）
+- [视觉属性逐项取自源布局、item 布局与适配器分支，不近似](../../theme/sources/lesson-e4e65a99e545871f96ae.lesson.md)（共享 1 张卡）
+
+来源支持：1 张卡 · 1 次迁移 · 1 个应用
+
+## 来源（按需复核）
+
+- [case-04bf2dcacf8602ede15e](../../../../../store/cases/case-04bf2dcacf8602ede15e/95388b5ab0f358b54e3e053c35b894dc84c7381770953fd5dbb5bf134d06c234.json) · 结论：diagnosis, rec-55c7c6d98e
+  卡片版本：`95388b5ab0f358b54e3e053c35b894dc84c7381770953fd5dbb5bf134d06c234`

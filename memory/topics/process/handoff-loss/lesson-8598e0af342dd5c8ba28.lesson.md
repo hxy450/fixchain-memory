@@ -1,0 +1,55 @@
+# 派工的必读清单、阅读顺序与对接清单要覆盖任务依赖的语义来源，附加提速要求时也保留
+
+ID：`lesson-8598e0af342dd5c8ba28` · 版本：5 · 阶段：plan/converge · 主题：[process/handoff-loss](index.md)
+
+概要：派工必读清单覆盖语义来源，提速要求下也保留
+
+信号：`Modifier`, `.shadow(`, `hitTest`, `Screen`, `ViewModel`, `Service`
+
+## 何时使用
+
+执行编排阶段，给页面转换、公共组件或收敛替换任务写派工，附加“效率纪律”、规定逐项“读源→立即写”的顺序，或列出要换成共享原语的对接点时；派发“对比源端还原某功能或页面”的实现、修复任务时
+
+## 适用情境
+
+派工为提速限制阅读范围，或按组件清单规定阅读顺序；被写的组件依赖同目录的 Modifier 扩展、交互映射参考中的 API 语义表等外部定义；收敛任务要把页面私有写法替换成映射文档里的共享原语（阴影、排版、颜色映射函数等），并允许整文件重写。 也包括并行派发对比与实现子代理，派工没写源工程路径与对应 Screen/ViewModel/Service，实现者未读源界面就写页面。
+
+## 原因
+
+被限制阅读的实现者会跳过 API 语义参考、凭记忆定稿；被依赖的源排在消费组件之后读，写组件时拿不到默认参数（如描边宽度），读到后也未必回头修正。对接清单只点名部分共享原语时，未点名的私有写法会在整文件重写中原样保留，即使执行者读到了映射文档的对应小节。
+
+## 做法
+
+1. 附加效率要求时，仍把与本任务交互、布局相关的语义参考（如命中测试控制表）列为必读。
+2. 把被依赖的 Modifier 扩展等源文件排在消费它的组件之前，或要求随组件一起读取；允许后读时，要求读到后回查已写组件。
+3. 派发收敛替换任务时，逐条列出映射文档里的全部共享原语及其对接点，要求执行者对读到的映射小节逐项对账、替换完成后再整文件重写。
+4. 派发对比源端还原类任务时，派工写明源工程路径和该功能的 Screen/ViewModel/Service 文件，要求实现者写前自行读取；需要并行时先完成页面级行为对比（列表层级、模式状态、按钮可用条件），或把对比结论列为实现者的必读输入。
+
+## 可选检查
+
+- 收敛后有疑问时，检索原生属性（如 .shadow(）确认只剩共享函数调用。
+
+## 同源经验
+
+由相同来源卡提炼的其他经验，按共享卡数排序；不是依赖关系。
+
+- [写页前读源 ViewModel/Service 列行为清单](../secondary-over-source/lesson-1997518f92b444368073.lesson.md)（共享 2 张卡）
+- [推进阶段前核对约定产物与放行门，待接事项落负责方](lesson-5754b7be28238f1bdf57.lesson.md)（共享 2 张卡）
+- [功能对齐以代码落点为准，空回调不算实现](../claimed-without-receipt/lesson-9147be4d87153de9c5b6.lesson.md)（共享 2 张卡）
+- [依赖 API 单位或默认行为时读声明紧邻注释](../../arkts/api-signatures/lesson-f5cf8413ebea57f3b415.lesson.md)（共享 2 张卡）
+- [渐变端点几何换算成 linearGradient 角度与色标](../../ui/theme/effects/lesson-4ce3a1c186651285f362.lesson.md)（共享 1 张卡）
+
+来源支持：5 张卡 · 3 次迁移 · 2 个应用
+
+## 来源（按需复核）
+
+- [case-30d42aa2ba7c8354db17](../../../../store/cases/case-30d42aa2ba7c8354db17/caedcf037b4f51f56e370b09f5e18559d3a5abf76c513a88e701ad9ca342fe0f.json) · 结论：rec-2c7bd037bc
+  卡片版本：`caedcf037b4f51f56e370b09f5e18559d3a5abf76c513a88e701ad9ca342fe0f`
+- [case-38718a95ad1839df7084](../../../../store/cases/case-38718a95ad1839df7084/00eab77c139e8c3d0a58417a8df36dbebf5d067235aec37097d8ddd12e5bd8cd.json) · 结论：rec-5de9c02ecc
+  卡片版本：`00eab77c139e8c3d0a58417a8df36dbebf5d067235aec37097d8ddd12e5bd8cd`
+- [case-40c445e1fb0a99ce0a72](../../../../store/cases/case-40c445e1fb0a99ce0a72/2243b17f2f740e65ee1727d642a6aca74ef48f8bc924a7f9ccdcf12c9198d74b.json) · 结论：rec-471ea0fa1e
+  卡片版本：`2243b17f2f740e65ee1727d642a6aca74ef48f8bc924a7f9ccdcf12c9198d74b`
+- [case-75329cae60986f74dc43](../../../../store/cases/case-75329cae60986f74dc43/03422478523b463e70feeccf65d3a54f73c2cf4463d4df454e234046c3cc04f1.json) · 结论：rec-02459e8c0d
+  卡片版本：`03422478523b463e70feeccf65d3a54f73c2cf4463d4df454e234046c3cc04f1`
+- [case-c9559ed21540c28d4b53](../../../../store/cases/case-c9559ed21540c28d4b53/79b4b26281e8d84401d25d862bdfd3bfea5d707c4a3e7c212b65fae1895abe56.json) · 结论：rec-ac73b1d4e5
+  卡片版本：`79b4b26281e8d84401d25d862bdfd3bfea5d707c4a3e7c212b65fae1895abe56`

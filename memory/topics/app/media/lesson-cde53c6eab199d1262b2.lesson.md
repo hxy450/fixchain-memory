@@ -1,0 +1,35 @@
+# 源端推进后主动预取后续图片时，目标用图片解码真实预取并限定缓存，不以 Image 组件缓存替代或只在差异清单里注销
+
+ID：`lesson-cde53c6eab199d1262b2` · 版本：4 · 阶段：execute · 主题：[app/media](index.md)
+
+概要：源端主动预取后续图片时用图片解码真实预取并限缓存
+
+信号：`image.createImageSource`, `createPixelMap`, `PixelMap.release`, `imageLoader.enqueue`, `Coil`, `ImageRequest`, `Image`
+
+## 何时使用
+
+ViewModel 或页面逻辑迁移阶段，处理源端图片预加载、缓存预热等性能行为，决定实现、平台替代还是登记缺口时
+
+## 适用情境
+
+源端 ViewModel 在加载或每次推进后按规则挑出后续若干项（如跳过已处理、已跳过项和视频）并主动预取（如 Coil imageLoader.enqueue），规格含对应的性能验收项；目标页面只用 Image 组件按需显示当前项，没有独立的预加载服务。
+
+## 例外与边界
+
+- 已有批准的决策放弃该性能行为，并在迁移报告或占位登记中留有记录
+
+## 原因
+
+Image 组件缓存只作用于已经渲染过的图片，源端预取的是尚未显示的后续项，两者不等价；在差异清单写“由组件承担”既没有实现，也没有留下可追踪的占位，缺口直到验收才暴露。来源中实现者读到了验收项与源端预取函数，仍以“无对等低层 API、组件缓存承担”为由省略。
+
+## 做法
+
+1. 按源端规则在推进后选出后续 N 项（N 与跳过条件取当前源码），用 image.createImageSource(uri).createPixelMap() 一类解码接口预取到内存缓存；给缓存设上限并 release 被淘汰的 PixelMap，解码失败不阻断主流程。
+2. 写“无对等 API”前先查当前 SDK 的图片解码与缩略图接口；确实不能实现时按工程约定登记占位或决策，让对应验收项仍能被追踪，不只写在差异清单里。
+
+来源支持：1 张卡 · 1 次迁移 · 1 个应用
+
+## 来源（按需复核）
+
+- [case-d9fc3c9129fee3f38c91](../../../../store/cases/case-d9fc3c9129fee3f38c91/e59cc13b105334857fde72d014dceae630889a4a34e5a42ded01c5c4d92f765e.json) · 结论：diagnosis, rec-b25f0fe3b7, rec-d3a9ea3e97, rec-1046b51138
+  卡片版本：`e59cc13b105334857fde72d014dceae630889a4a34e5a42ded01c5c4d92f765e`

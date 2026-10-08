@@ -1,5 +1,7 @@
 # 当前经验入口
 
-[打开分层 memory](memory/index.md)
+[打开根索引](memory/index.md) · [catalog.jsonl](memory/catalog.jsonl) · [signals.json](memory/signals.json)
 
-发布版本：`a34ba7c9b435c5d5a3c72865fce6f0f7e1d862e833d73685b4cd4cf8c038434c`
+发布版本：`6c97badfbd8b82faa74dad78b8c543ccccaebdea04d8c4142bf3d406d726d2c3`
+
+召回三步：写下阶段、输入符号、领域猜测 → 用 catalog / signals 或领域、阶段入口取候选 → 只读 3 到 5 条正文（catalog 的 path 列）。

@@ -1,0 +1,49 @@
+# Stack 中内容尺寸的子项按 alignContent 定位：子项自身的 .align() 不改变它在父容器中的位置，需要的对齐用满尺寸容器或显式 position
+
+ID：`lesson-92aee54a305ea0bde363` · 版本：8 · 阶段：execute/repair · 主题：[ui/layout/constraints](index.md)
+
+概要：Stack 子项 .align() 无效，对齐用满高容器
+
+信号：`.align(`, `alignContent`, `Alignment.TopStart`, `layout_gravity`, `placeRelative`, `Modifier.align`, `height('100%')`
+
+## 何时使用
+
+界面转换与巡检修复阶段，把 Compose 自定义 Layout 或 Box 中的文字改写为 ArkUI Stack 子节点并确定纵向位置时；修复或编译清理删除 height('100%')、.align() 等居中手段时；把 FrameLayout 中按 layout_gravity 叠放的角标、重叠头像翻译成 Stack 时；把 Compose Box 中以 Modifier.align(BottomCenter 等) 定位的子项翻成 Stack 子节点时
+
+## 适用情境
+
+源端自定义 Layout 用 placeRelative(x, (maxHeight - height) / 2) 把定宽文字纵向居中，或 Box 中文字按居中对齐放置；目标用 Stack({ alignContent: Alignment.TopStart }) 同时容纳文字与图片等对齐需求不同的子项。也包括源端固定尺寸 FrameLayout 中的小角标以 layout_gravity=end|bottom 贴右下，目标写成 Stack({ alignContent: Alignment.TopStart }) 并只给角标加 .align(Alignment.BottomEnd)。也包括源 Box 中部分子项用 Modifier.align 放到非默认位置（如贴底的购买栏），目标 Stack 设了统一的 alignContent(TopStart)，规格写着“底部对齐”。
+
+## 原因
+
+Stack 按 alignContent 放置未撑满的子节点；Text 的 .align() 只对齐文字在自身框内的位置，内容高的 Text 在 TopStart 的 Stack 里仍落在左上角，ArkUI Alignment 也没有 Compose 的 CenterStart。来源中巡检修复者为裁剪图片把 Row 改成 TopStart 的 Stack，删去 Text 的满高后改写 .align(Alignment.CenterStart) 并自称已居中；编译修复把它改成 Alignment.Start，随后又被删除，分类卡文字一直贴左上。另一应用的成员头像角标照此写成子项 .align(BottomEnd)，角标仍在左上；该片段后来被抽进共享组件继续沿用，直到改成 position 才贴到右下。
+
+## 做法
+
+1. 同一 Stack 中各子项对齐需求不同时，给文字包一个满高容器：Column().width(源端比例).height('100%').justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Start)，或给子项按源公式单独 position/offset。
+2. 删除 height('100%')、.align() 等手段前，确认替代约束仍实现原来的纵向位置；枚举名以 ArkUI SDK 为准，不照搬 Compose 的 Alignment 名称。
+3. 按 layout_gravity 单独对齐某个子项（如 end|bottom 的角标）时，在已知 W×H 的容器里写 position({ x: W - 子宽, y: H - 子高 })，或给该子项单独套一个 alignContent 为对应方向的 Stack。
+4. 逐个核对源 Box 子项的 Modifier.align：非默认位置写成 position({ left: 0, bottom: 0 })、markAnchor 等实际属性；规格或报告里的“底部对齐”要落到代码属性上。
+
+## 同源经验
+
+由相同来源卡提炼的其他经验，按共享卡数排序；不是依赖关系。
+
+- [纵向容器默认起始对齐与贴顶在目标显式写出](lesson-08b9064f678f1635e647.lesson.md)（共享 2 张卡）
+- [fillMaxWidth 先占满剩余宽，后续兄弟按实得宽判断](../sizing/lesson-45f77b3088fa69398f9e.lesson.md)（共享 1 张卡）
+- [不处理点击的全尺寸覆盖层显式设 Transparent 命中](../../interaction/hit-testing/lesson-4a4f8d845a204ffa244b.lesson.md)（共享 1 张卡）
+- [M3 组件默认几何与留白从库 Tokens 分侧取值](../../theme/sources/lesson-5a82d62ff7e087616968.lesson.md)（共享 1 张卡）
+- [基线对齐用 Row 居中近似，内距逐行复制，标签靠右对齐](lesson-c4990fef246323ffda03.lesson.md)（共享 1 张卡）
+
+来源支持：4 张卡 · 4 次迁移 · 3 个应用
+
+## 来源（按需复核）
+
+- [case-83dafcc0eaba740bd9c0](../../../../../store/cases/case-83dafcc0eaba740bd9c0/63799a14d87533825a0449dd85653c66535fbb31296be482c5feada55b5522a6.json) · 结论：diagnosis, rec-4385e27faa
+  卡片版本：`63799a14d87533825a0449dd85653c66535fbb31296be482c5feada55b5522a6`
+- [case-9b8bac5680e58daada3a](../../../../../store/cases/case-9b8bac5680e58daada3a/07783b8487f55d819249fc632337f48a461889504642d293282c1e455ffb6591.json) · 结论：diagnosis, rec-5605744c14
+  卡片版本：`07783b8487f55d819249fc632337f48a461889504642d293282c1e455ffb6591`
+- [case-c9cc6663456a2ef02f89](../../../../../store/cases/case-c9cc6663456a2ef02f89/ae6747eccb36d26241318b2258e46b0c5b7289bd01e525c168b0fbc5b8ab4ace.json) · 结论：diagnosis, rec-b1fe11a5f3
+  卡片版本：`ae6747eccb36d26241318b2258e46b0c5b7289bd01e525c168b0fbc5b8ab4ace`
+- [case-f749e3c70af1100c90d9](../../../../../store/cases/case-f749e3c70af1100c90d9/c92c4d7503e18d5c1cc56cd928d3807e84d363082fcb2d1286d1f450b0bbb6c4.json) · 结论：rec-0eb2ea9520, rec-0690257b3b
+  卡片版本：`c92c4d7503e18d5c1cc56cd928d3807e84d363082fcb2d1286d1f450b0bbb6c4`

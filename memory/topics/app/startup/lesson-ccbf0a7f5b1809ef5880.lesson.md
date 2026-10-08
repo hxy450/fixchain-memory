@@ -1,0 +1,38 @@
+# 首屏依赖异步装配的服务时，用可等待、失败可复位的就绪门，await 后再计算路由；读到空服务不静默沿用默认路由
+
+ID：`lesson-ccbf0a7f5b1809ef5880` · 版本：4 · 阶段：execute · 主题：[app/startup](index.md)
+
+概要：首屏依赖异步装配服务时用可复位就绪门await后路由
+
+信号：`EntryAbility.onCreate`, `loadContent`, `onReady`, `Promise`, `NavPathStack`, `aboutToAppear`, `ViewModel`
+
+## 何时使用
+
+入口装配与启动链路接线阶段，把启动服务改为由 EntryAbility 异步装配到组装根、首屏从组装根取依赖并决定下一页时
+
+## 适用情境
+
+EntryAbility.onCreate 以不等待的方式启动异步装配（先 await 数据库等初始化再写服务槽），随即 loadContent 入口页；首屏在 onReady 同步读取服务槽并按启动决策路由；启动 ViewModel 有指向首屏自身的默认路由。
+
+## 原因
+
+首屏渲染可能早于装配完成；读到空槽静默返回并沿用默认路由，结果把首屏再推一遍，表现为进度到头仍停在启动页，且没有任何错误输出。来源中收尾者读到了不等待的装配、先 await 数据库再发布服务、默认路由指向启动页，以及“从组装根取依赖、不得静默吞错”的契约，仍把服务改成异步写入的可空槽，并在为空时静默返回。
+
+## 做法
+
+1. 组装根提供幂等的就绪门（缓存同一个 Promise，失败时复位以便重试），EntryAbility 与首屏共用；首屏 await 它之后再读服务、计算路由。
+2. 装配时先发布路由决策所需的服务，数据库等与路由无关的慢初始化放在其后。
+3. 路由决策仍等于当前首屏或服务为空时按失败处理：显示可重试的错误并记录日志，不静默返回。
+
+## 同源经验
+
+由相同来源卡提炼的其他经验，按共享卡数排序；不是依赖关系。
+
+- [NavDestination 首屏只注册并压栈不作根内容](../../ui/navigation/hosts/lesson-8953e390416a80d7dd8c.lesson.md)（共享 1 张卡）
+
+来源支持：1 张卡 · 1 次迁移 · 1 个应用
+
+## 来源（按需复核）
+
+- [case-5fcc464cf9b9cd1034f1](../../../../store/cases/case-5fcc464cf9b9cd1034f1/5731c96e6de78b4e563facc594dbf9753ef8665bb26d0dbae0ec029e58adc7d5.json) · 结论：diagnosis, rec-00518aec5f, rec-4513f14039
+  卡片版本：`5731c96e6de78b4e563facc594dbf9753ef8665bb26d0dbae0ec029e58adc7d5`
