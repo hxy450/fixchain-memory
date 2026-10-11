@@ -1,0 +1,191 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-37177617eaf19edf532c",
+  "created_at": "2026-10-07T04:26:50.791250+00:00",
+  "migration_key": "antennapod-glm53-3c838ae1-111b-475a-a085-e9464ec2fde4",
+  "title": "构建开关二选一的新旧播放服务被写成行为并集，换集/跳过/续播收尾沿用已停用的 LocalPSMP 语义",
+  "when": "规格提取阶段，源码中同一能力由构建开关在新旧两套实现间二选一时，确定行为规格以哪套实现为准",
+  "description": "Android 源码同一能力并存两套实现（如 legacy PlaybackService/LocalPSMP 与 Media3PlaybackService），由 BuildConfig/gradle 开关（USE_MEDIA3_PLAYBACK_SERVICE、manifestPlaceholders）择一启用；两者在手动换集是否收尾上一集、显式跳过是否标记已播、暂停续播是否回退、片尾跳过如何收尾等路径上行为不同，而目标端只建一套播放引擎。",
+  "summary": "写前，F005 规格作者（c4-01，agent-a0a8e2a50e2f89e98）实际读到：cross-module-contracts.md 写明\nPlaybackServiceStarter 按 BuildConfig.USE_MEDIA3_PLAYBACK_SERVICE“二选一”（L35-L36）；legacy\nPlaybackService.onCreate 在该开关为真时直接抛出“Media3PlaybackService should be used instead of\nPlaybackService”（L54-L55，源码 :241-243）；并整读 Media3PlaybackService.java（L73-L74）：play() 在\n!playWhenReady 时按 RewindAfterPauseUtils 回退（:128-144），seekToNextMediaItem→startNextInQueue（:165-169），\n只有 STATE_ENDED→onPlaybackEnd 才标记已播/出队（:256-259、:505-532），片尾跳过为 seekTo(duration)（:397-398）。\n这些已足以确认两套服务互斥、需先取启用的一套；开关值在 common.gradle:15 为 true，analyzer 也已写入\nspec/ref/antennapod_spec.md:296 及 §11.3“后者默认启用”，但该文件不在 c4-01 必读输入中，规格作者未读\ncommon.gradle 也未读 ref。规格作者却在 F005 基线写下“两路径的行为断言取并集”，并把冲突路径按 legacy\nLocalPSMP/PlaybackServiceMediaPlayer 写成 AC：AC04 换曲时对旧曲 onPostPlayback(ended=false, skipped=false,\nplayingNext=true)；AC13 仅 PREPARED 回退；AC23/AC36 用户跳过走 endPlayback(false,true,true,true) 且首 1000ms 忽略；\n再与 AC145“ended=false 且 almostEnded 仍按播完处理”组合，即得“切集时距结尾 ≤30s 的上一集被标记已播并出队”。\n偏差首先出现在源码→规格这一环（L245、L249、L257 分片写入，L261 拼入 F005）。C4.5 交叉验证随后读到 ref 中的\n开关值（agent-a323abe5c303eb788 L37）和 F005（L68），未对该并集提出纠正。\nSlice 6 实现者（agent-a3a307bca64776d79）读到该规格（L29-L30），推理中虽提到 Media3 为默认启用路径（L212），\n却只在媒体会话回调上取 Media3；PlaybackService.ets 的整文件 Write（L287）按 AC04/AC13/AC36 写出\nplayMediaObjectInternal 换集 onPostPlayback、PREPARED-only 回退、SKIP_FIRST_SECOND_MS + endPlayback(false,true,true,true)，\n并让 skipEndingIfNecessary 走 legacy 的 autoSkipped + skip()（AC155 本身同时写了 seekTo(duration) 与 autoSkipped 标记）。\n同一次写入中，它把 AC144（Media3 startNextInQueue）的“currentPlayable 切换”写成先赋 this.playable = nextMedia、\n再调用 LocalPSMP 式 playMediaObject，使 AC03“同集且 PLAYING 即忽略”的守卫拿下一集与自身比较：在播中跳下一集被吞，\n旧音频位置记到下一集。该片段生成期已存在（通知栏下一集同走此路径），修复把 skip() 改为 startNextInQueue 后由\nround0e 复测暴露为 N12。后续编译门/组收尾只做类型与接线修正，未改这些片段，原样保留到 d16b3d0。\n用户 2026-10-06 决定对齐 Media3（repair L17559）。修复删除换集 onPostPlayback 与 SKIP_FIRST_SECOND_MS，\nskip()=startNextInQueue，skipEndingIfNecessary 改为 endPlayback(true,false,true,true)，resume() 对 PAUSED 同样回退\n（L17682-L17698）；并改为由 playMediaObject 切换 currentPlayable（L17886-L17888）。以上均为最终保留。\n",
+  "recommendations": [
+    "规格提取阶段：遇到 BuildConfig/gradle 开关二选一的实现时，先在 common.gradle/build.gradle 的 buildConfigField 与 manifestPlaceholders 查出当前构建取值（本例 USE_MEDIA3_PLAYBACK_SERVICE=true、oldServiceEnabled=false），以启用的实现作为行为基准；停用实现只作对照，不把两者的行为断言取并集。",
+    "规格提取阶段：对两套实现行为冲突的路径逐条标明来源实现，至少核对手动换集是否收尾上一集、显式跳过是否标记已播/出队、暂停后续播是否回退、片尾跳过如何收尾；需要偏离启用实现时铸 PD 决策，不默认取并集。",
+    "规格交叉验证阶段：将 ref 中已记录的构建事实（如“Media3PlaybackService 默认启用”）与 feature 中“二选一/取并集”表述对照，发现规格引用了停用实现的 AC 即报告。",
+    "实现阶段：把一种实现的切换步骤（Media3 直接改 currentPlayable）接到另一种实现的入口（LocalPSMP playMediaObject 以当前 playable 判同集忽略）时，检查入口守卫所读状态是否已被提前改写；由入口统一切换当前媒体，再验证在播中跳下一集确实换集且旧位置记在旧集。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/services/PlaybackService.ets",
+        "since": "2026-10-03T04:49:05.918Z",
+        "at": "2026-10-06T17:26:02.113Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/spec/baseline/cross-module-contracts.md",
+          "at": "2026-09-30T16:20:47.659Z",
+          "reason": "正常输入：规格作者 Read 回执中 app→playback-service 边写明 media3 开关 BuildConfig.USE_MEDIA3_PLAYBACK_SERVICE 二选一路径（PlaybackServiceStarter.java:44-67），说明两套服务是互斥择一而非叠加（agent-a0a8e2a50e2f89e98.jsonl:L35-L36）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/AntennaPod-develop/playback/service/src/main/java/de/danoeh/antennapod/playback/service/PlaybackService.java",
+          "at": "2026-09-30T16:21:28.233Z",
+          "reason": "正常输入：Read 回执含 onCreate :241-243，开关为真时抛 IllegalStateException(\"Media3PlaybackService should be used instead of PlaybackService\")，表明 legacy 服务是开关启用时不应运行的一套（agent-a0a8e2a50e2f89e98.jsonl:L54-L55）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/AntennaPod-develop/playback/service/src/main/java/de/danoeh/antennapod/playback/service/Media3PlaybackService.java",
+          "at": "2026-09-30T16:21:51.560Z",
+          "reason": "正常输入：整文件 Read 回执给出 Media3 的收尾语义——play() 在 !playWhenReady 时回退（:128-144）、seekToNextMediaItem→startNextInQueue（:165-169）、仅 STATE_ENDED→onPlaybackEnd 标记已播/出队（:256-259、:505-532）、片尾跳过 seekTo(duration)（:397-398）；足以写出换集/跳过/续播的正确 AC（agent-a0a8e2a50e2f89e98.jsonl:L73-L74）。"
+        },
+        {
+          "key": "agent-a0a8e2a50e2f89e98.jsonl",
+          "at": "2026-09-30T16:45:18.077Z",
+          "reason": "规格偏差起点：读到上述互斥证据与 Media3 全文后，未查开关值，在 F005 写下“两路径的行为断言取并集”，并把冲突路径写成 legacy AC04 换曲 onPostPlayback(false,false,true)、AC13 仅 PREPARED 回退、AC23/AC36 用户跳过 endPlayback(false,true,…) 且首 1000ms 忽略，配合 AC145 almostEnded 视同播完（分片 Write L245、L249、L257，L261-L262 拼入 F005-playback-audio.md）。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/spec/baseline/features/F005-playback-audio.md",
+          "at": "2026-10-02T15:04:58.345Z",
+          "reason": "交付桥梁：Slice 6 实现者 Read 回执仍含 :108 的“取并集”基线以及 AC03、AC04、AC13、AC23、AC36、AC144、AC145、AC155 原文（agent-a3a307bca64776d79.jsonl:L29-L30）。"
+        },
+        {
+          "key": "agent-a3a307bca64776d79.jsonl",
+          "at": "2026-10-02T15:39:17.311Z",
+          "reason": "按规格传递并另有实现偏差：整文件 Write（L287）按 AC04/AC13/AC36 写出换集 onPostPlayback、PREPARED-only 回退、SKIP_FIRST_SECOND_MS+endPlayback(false,true,true,true)，skipEndingIfNecessary 走 autoSkipped+skip()，这部分是沿用错误规格；同次写入在 startNextInQueueForItem 先赋 this.playable = nextMedia 再调 playMediaObject，使自身同文件实现的 AC03 同集在播即忽略守卫吞掉在播中的跳集并把旧位置记到下一集（N12），这一处是实现者把 AC144 与 AC03 拼接时自行偏离（推理中亦认 Media3 为默认路径，L212）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": 6
+        },
+        {
+          "from": 6,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-37177617eaf19edf532c",
+  "metadata": {
+    "migration": {
+      "id": "antennapod-glm53-3c838ae1-111b-475a-a085-e9464ec2fde4",
+      "project": "AntennaPod"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.285",
+        "2.1.286",
+        "2.1.287",
+        "2.1.288",
+        "2.1.289"
+      ]
+    },
+    "source_set_id": "sources-5f9a4b68d8866c1b1233",
+    "environment": [
+      {
+        "name": "toolchain.kotlin",
+        "value": "2.3.20",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-09-30T15:43:45.309Z",
+        "ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a3da0f444ffe5d81f.jsonl:L27",
+        "request_ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a3da0f444ffe5d81f.jsonl:L25",
+        "phase": "generation"
+      },
+      {
+        "name": "toolchain.agp",
+        "value": "8.11.0",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-09-30T15:43:45.309Z",
+        "ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a3da0f444ffe5d81f.jsonl:L27",
+        "request_ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a3da0f444ffe5d81f.jsonl:L25",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-09-30T17:34:05.597Z",
+        "ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a5c631d1e662fac13.jsonl:L54",
+        "request_ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a5c631d1e662fac13.jsonl:L53",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-09-30T17:34:05.597Z",
+        "ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a5c631d1e662fac13.jsonl:L54",
+        "request_ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a5c631d1e662fac13.jsonl:L53",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.0.2(22)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-10-04T16:26:51.075Z",
+        "ref": "repair/ae3bb09d-1f58-48a4-91c8-85a20fd96fc1.jsonl:L215",
+        "request_ref": "repair/ae3bb09d-1f58-48a4-91c8-85a20fd96fc1.jsonl:L214",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.0.1(21)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-10-04T16:26:51.075Z",
+        "ref": "repair/ae3bb09d-1f58-48a4-91c8-85a20fd96fc1.jsonl:L215",
+        "request_ref": "repair/ae3bb09d-1f58-48a4-91c8-85a20fd96fc1.jsonl:L214",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.4",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "040e09cc-8de1-45ba-bc4b-5202da7f9c23"
+      ]
+    }
+  },
+  "revision": "ae8827db4c016f93d4e80a6d6e7efdc36258af5fe1c6e1c8c8a2eedf85141cf5"
+}

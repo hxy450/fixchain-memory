@@ -1,17 +1,20 @@
 # ui/interaction
 
-点击命中与手势：Stack/弹窗覆盖层对下层点击的影响、hitTestBehavior与防穿透、事件绑定和点击副作用、侧滑行的手势归属与滑删方向，以及事件触发时的坐标与锚点取值；含状态按钮的内容分支；源端监听回调被注释（死按钮）时的迁移与审计。
+点击命中与手势：Stack/弹窗覆盖层对下层点击的影响（含按钮上叠的进度环）、hitTestBehavior与防穿透、事件绑定和点击副作用、侧滑行的手势归属与滑删方向，以及事件触发时的坐标与锚点取值；含状态按钮的内容分支；源端监听回调被注释（死按钮）时的迁移与审计；根级硬件键盘快捷键与聚焦输入框的事件归属，Activity 级按键回调的挂载节点；源端只跟随首指的触控分支对 ArkUI 逐指派发的过滤。
 
 [上一级](../index.md)
 
 ## 本级经验
 
+- [Activity 级 onKeyDown 映射到页面根节点（NavDestination 或 @Entry 根）的 onKeyEvent，不挂在需先获焦的子组件上](lesson-80e1d2c095a3698a7156.lesson.md)
+  - 时机：页面实现与输入接线阶段，为源端 Activity 级硬件按键回调（onKeyDown、dispatchKeyEvent）选择 ArkUI onKeyEvent 的挂载节点时；接收“焦点获取归本任务”一类移交时
+  - 情境：安卓源在 Activity 上覆写 onKeyDown 或 dispatchKeyEvent 处理方向键、MENU 等，不依赖某个 View 持有焦点；目标页面是 Navigation 下的 NavDestination 或 @Entry 页，交互由内部 Canvas 或自绘子组件承载。
 - [Button 内按状态切换图标时写成一个 if/else 或单个 Image 按状态选资源，不写两个互斥的独立 if](lesson-ed5556325b6d8f510e2f.lesson.md)
   - 时机：界面实现阶段，为播放/暂停一类两态按钮编写 Button 的子内容时
   - 情境：源端按钮按状态切换图标，目标用 Button() { ... } 包裹图标，准备按两个状态分别写条件分支。
 - [Stack 上层全尺寸容器和页面级遮罩会参与命中测试：不处理点击的覆盖层显式 Transparent，贴底内容栏直接锚定而不套全屏壳，条件遮罩与一次性动效层用根 Stack 条件子节点](lesson-4a4f8d845a204ffa244b.lesson.md)
   - 时机：界面实现与巡检修复阶段，把 FrameLayout 或 Compose Box 叠放层转成 ArkUI Stack、确定各层 hitTestBehavior 与贴底栏的定位方式时；为页面加保存中、引导等全屏遮罩时；实现彩纸等一次性全屏动效的覆盖层时
-  - 情境：源 FrameLayout 中较晚声明、z 序更高的 match_parent 容器本身不可点击却覆盖下方按钮（Android 非 clickable 视图不消费触摸）；目标对应子层是 width/height('100%') 的容器；或页面要在带安全区 padding 的根容器上加全屏遮罩。也包括源 Compose Box 中返回按钮等可点击覆盖层之后，还有以 Modifier.align(Alignment.BottomCenter) 贴底、按内容定高的底栏，目标 Stack 的 alignContent 改为 TopStart 后需要另找贴底方式。也包括源端在触发瞬间向窗口根视图添加全屏、不可点击的动效层并在播完后移除，目标改成常驻挂载、带 zIndex 的全屏自定义组件，只给内部 Canvas 设 HitTestMode.None。
+  - 情境：源 FrameLayout 中较晚声明、z 序更高的 match_parent 容器本身不可点击却覆盖下方按钮（Android 非 clickable 视图不消费触摸）；目标对应子层是 width/height('100%') 的容器；或页面要在带安全区 padding 的根容器上加全屏遮罩。也包括源 Compose Box 中返回按钮等可点击覆盖层之后，还有以 Modifier.align(Alignment.BottomCenter) 贴底、按内容定高的底栏，目标 Stack 的 alignContent 改为 TopStart 后需要另找贴底方式。也包括源端在触发瞬间向窗口根视图添加全屏、不可点击的动效层并在播完后移除，目标改成常驻挂载、带 zIndex 的全屏自定义组件，只给内部 Canvas 设 HitTestMode.None。也包括按钮之上叠有同尺寸、不可点击的自绘进度环或加载圈（源端触摸落到下层按钮），目标 Stack 保留 z 序而点击只挂在最底层图片上。
 - [SwipeToDismissBox 的滑删方向按物理手势和 offset 符号写明，不凭枚举名加“左滑/右滑”注释](lesson-7f5eba1b969bddfb34dc.lesson.md)
   - 时机：规格提取与界面实现阶段，转写 Material3 SwipeToDismissBox 的滑删方向、在列表行内自定义滑删手势时
   - 情境：源端用 enableDismissFromStartToEnd、EndToStart 等枚举描述方向，背景对齐方向与之配合；目标在列表行内用 Stack + PanGesture 一类写法自定义滑删。
@@ -24,6 +27,13 @@
 - [接入已有专页时逐项兑现它的 @Event 回调契约：要求回传会话或结果的回调给出真实值或交父页分派，不用空值短路专页自带的导航](lesson-c061106fa1d809e518da.lesson.md)
   - 时机：界面实现阶段，把源端编辑项 Fragment 对应的现有 ArkTS 专页接入容器、实现专页回调时
   - 情境：源端工厂把同类数据的不同 type 映射到不同 Fragment（如 photo 进照片编辑页，photo_select/photoPicker 进图片选择）；目标已有专页经 @Event（如 requestPhotoEditorSession(key, onReady)）把会话与导航交给父容器，父容器里已有一个可复用的通用入口。
+- [根级键盘快捷键不假定聚焦的输入框会吞掉全部按键事件](lesson-a10cde3d336eee4eebe7.lesson.md)
+  - 时机：实现根级硬件键盘快捷键（媒体控制、导航），并要求输入框聚焦时放行时
+  - 情境：源 onKeyUp 在当前焦点为 EditText 时放行；目标在入口页根组件 onKeyEvent 统一处理按键。
+- [源端 onTouch 用未掩码的 getAction 只跟随首指时，过滤 ArkUI 逐指派发的 Down/Up：非首指按下、非末指抬起不进状态机，Move 取 touches\[0\]](lesson-68023ac5f088c72a775a.lesson.md)
+  - 时机：输入控制的规格提取与实现阶段，把 Android onTouch 的 MotionEvent 动作分支和坐标读取映射为 ArkUI onTouch 的 TouchType 分支与触点来源时
+  - 情境：源端 OnTouchListener 用未掩码的 event.getAction() 只匹配 ACTION_DOWN/MOVE/UP，以无索引的 getX()/getY()（指针索引 0）读坐标，附加手指的 POINTER_DOWN/UP 不进入任何分支；目标 ArkUI .onTouch 对每根手指都派发 TouchType.Down/Up，TouchEvent 同时提供 touches（在屏触点）与 changedTouches（本次变化的触点）。
+  - 例外：源端用 getActionMasked() 处理 POINTER_DOWN/UP，或按 pointerId 跟踪多指时，按源端的多指语义逐指映射
 - [源端在触发瞬间读取锚点窗口位置时，目标在点击回调里取本次手势坐标或即时查询，onAreaChange 缓存只作兜底；锚点取源端传入的同一元素](lesson-963bf871aa4e910a8fc8.lesson.md)
   - 时机：界面实现与修复阶段，为从点击处发出的动效或气泡（完成彩纸、锚点提示）确定起点坐标与锚点元素时
   - 情境：源端在动效或弹窗被调用时用 getLocationInWindow 读取传入锚点 View 的当下窗口中心；目标列表项存在 translate 平移、LazyForEach/Repeat 节点复用或弹层内滚动，写者准备用 onAreaChange 缓存控件位置。

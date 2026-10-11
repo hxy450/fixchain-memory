@@ -1,11 +1,17 @@
 # arkts/async
 
-源端同步调用改成 ArkTS 异步（Promise/async）后新增的失败分支、加载态，异步初始化与用户输入的先后顺序，以及仓库方法前置失败分支（未初始化、未授权）的错误通道
+源端同步调用改成 ArkTS 异步（Promise/async）后新增的失败分支、加载态，异步初始化与用户输入的先后顺序，单线程执行器改成 Promise 串行队列后的重入，仓库方法前置失败分支（未初始化、未授权）的错误通道，以及 Kit API catch 值（BusinessError）的取消息与按错误码分类
 
 [上一级](../index.md)
 
 ## 本级经验
 
+- [Kit API 的 catch 值按 BusinessError 取 message 与 code，网络失败按错误码映射源错误类型](lesson-b19162077a2ab886d809.lesson.md)
+  - 时机：规格提取与服务实现阶段，迁移源端按异常类型分类、以 getMessage() 记录详情的 catch 分支时
+  - 情境：目标 catch 到的是网络、文件、数据库等 Kit API 抛出或拒绝的 BusinessError（含 code、message 的普通对象，不是 Error 实例）；源端按 IllegalArgumentException、SocketTimeoutException、UnknownHostException 等异常类型分支；@ohos.net.http 的失败码为 2300000 加 libcurl 码。
+- [单线程写执行器改为 Promise 串行队列时，为重入调用提供不经队列的内部版本](lesson-cdc6de4ebcdeeadc287c.lesson.md)
+  - 时机：数据层实现阶段，把源端单线程 Executor（调用方已在执行线程即同步内联）移植为异步串行队列时
+  - 情境：源端写方法在已处于执行线程时直接内联执行嵌套调用（如按线程名判断后 runnable.run()）；目标队列任务体内会再调用同类公开写方法。
 - [同步读取改成异步 initialize 后，失败分支要复位状态并让页面离开加载态](lesson-338f11844f0010e46bc3.lesson.md)
   - 时机：功能实现阶段（ViewModel 与页面接线），把源端同步读取的设置或数据改成异步加载，并给页面加“加载完成前不显示或不可交互”的门时
   - 情境：源端在首帧前用 SharedPreferences 等同步接口读取（缺键用默认值），界面没有加载态或失败态；目标端改为 async 读取，ViewModel 暴露返回 Promise 的 initialize()，页面在 aboutToAppear 中调用，并用“已加载”标志在 LoadingProgress 与正式内容之间切换。

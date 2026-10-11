@@ -1,6 +1,6 @@
 # Stack 上层全尺寸容器和页面级遮罩会参与命中测试：不处理点击的覆盖层显式 Transparent，贴底内容栏直接锚定而不套全屏壳，条件遮罩与一次性动效层用根 Stack 条件子节点
 
-ID：`lesson-4a4f8d845a204ffa244b` · 版本：4
+ID：`lesson-4a4f8d845a204ffa244b` · 版本：5
 
 [本主题](index.md)
 
@@ -10,7 +10,7 @@ ID：`lesson-4a4f8d845a204ffa244b` · 版本：4
 
 ## 适用情境
 
-源 FrameLayout 中较晚声明、z 序更高的 match_parent 容器本身不可点击却覆盖下方按钮（Android 非 clickable 视图不消费触摸）；目标对应子层是 width/height('100%') 的容器；或页面要在带安全区 padding 的根容器上加全屏遮罩。也包括源 Compose Box 中返回按钮等可点击覆盖层之后，还有以 Modifier.align(Alignment.BottomCenter) 贴底、按内容定高的底栏，目标 Stack 的 alignContent 改为 TopStart 后需要另找贴底方式。也包括源端在触发瞬间向窗口根视图添加全屏、不可点击的动效层并在播完后移除，目标改成常驻挂载、带 zIndex 的全屏自定义组件，只给内部 Canvas 设 HitTestMode.None。
+源 FrameLayout 中较晚声明、z 序更高的 match_parent 容器本身不可点击却覆盖下方按钮（Android 非 clickable 视图不消费触摸）；目标对应子层是 width/height('100%') 的容器；或页面要在带安全区 padding 的根容器上加全屏遮罩。也包括源 Compose Box 中返回按钮等可点击覆盖层之后，还有以 Modifier.align(Alignment.BottomCenter) 贴底、按内容定高的底栏，目标 Stack 的 alignContent 改为 TopStart 后需要另找贴底方式。也包括源端在触发瞬间向窗口根视图添加全屏、不可点击的动效层并在播完后移除，目标改成常驻挂载、带 zIndex 的全屏自定义组件，只给内部 Canvas 设 HitTestMode.None。也包括按钮之上叠有同尺寸、不可点击的自绘进度环或加载圈（源端触摸落到下层按钮），目标 Stack 保留 z 序而点击只挂在最底层图片上。
 
 ## 原因
 
@@ -22,13 +22,14 @@ ArkUI 中没有 onClick 的容器同样参与命中测试（HitTestMode.Default 
 2. 源端按内容定高、align(BottomCenter) 贴底的底栏，在 Stack 中保持自身尺寸并直接锚到底部（position 的 bottom 边或 RelativeContainer 的对齐规则），不用满屏 Column + Blank 作定位壳；确需全屏壳时给壳设 Transparent，或让可点击的覆盖控件最后声明、提高 zIndex。
 3. 页面级全屏遮罩用无 padding 的根 Stack 条件子节点实现（条件为假时不产生节点），不在带 padding 的容器上用 .overlay() 挂条件 builder；复用同仓遮罩时连同挂载层级一起复用。
 4. 一次性全屏动效（彩纸、提示动画）按源端生命周期只在播放期间条件渲染，结束或取消回调里移除；不要让全屏组件常驻，只靠内部子节点的 HitTestMode.None 放行。
+5. 按钮上叠的进度环、加载层同样逐个决定命中：纯展示节点设 Transparent，或把 onClick 挂在整个 Stack 容器上，不只挂在最底层图片。
 
 ## 可选检查
 
 - 调整 Stack 对齐、上层几何或新增定位壳后，对被覆盖区域的按钮逐个实际点击（不只看节点 clickable 与 bounds），检查 hilog 有无 Touch test result is empty。
 - 一次性动效层改动后，空闲态用 dumpLayout 确认该节点不存在，再实测点击、横滑与折叠。
 
-来源支持：5 张卡 · 4 次迁移 · 4 个应用
+来源支持：6 张卡 · 5 次迁移 · 5 个应用
 
 ## 来源（按需复核）
 
@@ -40,5 +41,7 @@ ArkUI 中没有 onClick 的容器同样参与命中测试（HitTestMode.Default 
   卡片版本：`8d2a2903f578b837bbe4fbae23c3df7cbdd8897003895ed0d906609949fd4c6d`
 - [case-7d423b2bf98cdaabda82](../../../store/cases/case-7d423b2bf98cdaabda82/8441ff125fb267f472ee908947f3d00c83fcf6594fca7b15991b175092fe51b9.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
   卡片版本：`8441ff125fb267f472ee908947f3d00c83fcf6594fca7b15991b175092fe51b9`
+- [case-8809177953953374a01e](../../../store/cases/case-8809177953953374a01e/0f0a55473275f4a825fd345992d4bfd1b18db95262ea8d48b11572f0c0dfc81f.json) · 结论：recommendation:1, recommendation:2
+  卡片版本：`0f0a55473275f4a825fd345992d4bfd1b18db95262ea8d48b11572f0c0dfc81f`
 - [case-9b8bac5680e58daada3a](../../../store/cases/case-9b8bac5680e58daada3a/07783b8487f55d819249fc632337f48a461889504642d293282c1e455ffb6591.json) · 结论：diagnosis, recommendation:1, recommendation:2
   卡片版本：`07783b8487f55d819249fc632337f48a461889504642d293282c1e455ffb6591`

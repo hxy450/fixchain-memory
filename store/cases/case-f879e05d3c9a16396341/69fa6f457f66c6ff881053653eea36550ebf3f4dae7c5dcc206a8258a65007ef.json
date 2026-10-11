@@ -1,0 +1,305 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-f879e05d3c9a16396341",
+  "created_at": "2026-10-10T07:02:33.943445+00:00",
+  "migration_key": "game2048-glm53-d90de388-a6d4-4f09-8cd2-28dfc31c5901",
+  "title": "把 onSaveInstanceState/hasState 只当作进程回收恢复，漏掉未声明 configChanges 时的配置变化重建",
+  "when": "规格提取阶段，把安卓 Activity 生命周期回调与清单属性映射为目标端生命周期契约时；实现阶段接线 UIAbility/页面生命周期与资源文案缓存时",
+  "description": "源 Activity 在 AndroidManifest 中未声明 android:configChanges，并实现了 onSaveInstanceState/savedInstanceState 恢复分支，或在 View 构造、onSizeChanged、绘制时读取资源文案和 firstRun 等一次性状态；目标 HarmonyOS UIAbility 在语言、深浅色、字号、显示大小变化时不会重建，只回调 onConfigurationUpdate 或发出 display 'change'。",
+  "summary": "写前，主会话规格作者已读到 AndroidManifest.xml（MainActivity 只声明 screenOrientation=portrait 与 exported，没有 configChanges）\n和 MainActivity.java（onSaveInstanceState → putBoolean(\"hasState\") + save；onCreate 中 savedInstanceState.hasState → load；\nonPause → save；onResume → load）。这两项足以确定：除被竖屏锁定的旋转外，语言、uiMode、fontScale、densityDpi 等配置变化\n都会销毁并重建 MainActivity——旧实例 save，新 MainView 重新构造（新 InputListener、newGame 中 showHelp = firstRun()），\n随后 load，并按新配置重读文案、重算布局，确认框随旧窗口消失。\n主会话却在 F005 实现映射中把 onSaveInstanceState 标成“进程恢复”，写下“Bundle hasState 机制不迁移（HarmonyOS 冷启即走 load()）”，\nAC04/AC05 只覆盖页面显隐和杀进程冷启（generation 主转录 L324-L326）。偏差位于源码到规格的生命周期映射：配置变化重建这一触发面没有进入规格。\nSlice 5 实现者读到该 F005 后照此接线：GameEnginePersistenceAdapter 只定义 EVENT_SAVE_GAME/EVENT_LOAD_GAME，\nEntryAbility 只在 onForeground/onBackground 发事件，MainPage 只订阅这两个事件，并注释“HarmonyOS 无 Bundle hasState，冷启即 load 即进程恢复语义”。\n三个目标文件都没有配置变化路径（agent-adc76c9a85cdc57ce.jsonl L84-L85、L105-L108、L111-L114）。\nMainPage 另有一个独立起点：Slice 3 渲染实现者写文案装配前，自己在思考中写出“Android 配置变化即重建 Activity，切语言需要重建”，\n却以“语言切换通常也会触发尺寸变化”为由，只让 onAreaChange → recomputeGeometry 刷新文案（agent-a6ffdc5db8eb83d2e.jsonl L145、L202-L203）。\n返修在设备上确认，切语言后鸿蒙画布仍是旧语言，帮助文案和确认框也都保留（repair R:L1992-L2019）。\n最终保留的修改是：新增 EVENT_RECREATE_GAME；EntryAbility 用 language/colorMode/fontSizeScale/fontWeightScale/screenDensity/mcc/mnc\n签名判断 onConfigurationUpdate 是否需要发事件，并订阅 display 'change'，密度变化时重测以 vp 存储的安全区再发事件；\nMainPage 的 recreateForConfigurationChange 按安卓时序依次执行：关闭确认框 → save → 新建 InputController → showHelp = consumeFirstRun()、\nrefreshLastTime = true → executeLoad → recomputeGeometry（R:L2024-L2030、R:L2593-L2615；检查点 B3 edf8441、B3-3 0a6e7d8）。\n",
+  "recommendations": [
+    "规格提取阶段：逐个 Activity 读取清单 configChanges。未声明时，把“语言、深浅色、字号、字重、显示大小、mcc/mnc 变化即销毁重建”写成生命周期 AC，并写明重建时序（save → 新 View 构造及一次性状态重置 → load → 重读资源、重算布局，对话框关闭）。不要把 onSaveInstanceState/hasState 只映射为进程回收恢复；screenOrientation 固定只排除旋转这一项。",
+    "规格提取阶段：源 View 在构造、onSizeChanged 或绘制时读取的资源文案、firstRun/showHelp 等状态，标注“随配置重建刷新”，并在目标映射里指定触发入口：UIAbility.onConfigurationUpdate 比较相关字段；显示大小变化另用 display.on('change') 比较 densityPixels。",
+    "实现阶段：需要随配置刷新的缓存不能假设尺寸回调一定会触发。要在 onConfigurationUpdate/display change 中显式通知页面，并按安卓重建时序逐项处理。最小检查：运行中分别切换系统语言、深浅色、字号、显示大小，对照两端画布文案、帮助文案、确认框和状态栏底色带。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-2048-glm5.3/entry/src/main/ets/entryability/EntryAbility.ets",
+        "since": "2026-10-09T18:47:43.289Z",
+        "at": "2026-10-10T04:36:17.957Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/2048-tpcstld-2863bbe/2048/base/src/main/AndroidManifest.xml",
+          "at": "2026-10-09T15:31:31.751Z",
+          "reason": "正常输入：主会话 Bash cat 回执中，MainActivity 只有 screenOrientation=portrait、exported 和 intent-filter，没有 android:configChanges。按安卓默认语义，旋转以外的配置变化都会重建 Activity（generation 主转录 L42、L49）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/2048-tpcstld-2863bbe/2048/base/src/main/java/com/tpcstld/twozerogame/MainActivity.java",
+          "at": "2026-10-09T15:31:45.816Z",
+          "reason": "正常输入：Read 回执给出 onCreate 中 savedInstanceState.getBoolean(\"hasState\") → load()（:44-48）、onSaveInstanceState 中 putBoolean(\"hasState\", true) + save()（:77-81），以及 onPause/onResume 的 save/load。结合上述清单，足以判断配置变化重建会走 save → 新 View → load 的路径（generation 主转录 L56、L58）。"
+        },
+        {
+          "key": "d90de388-a6d4-4f09-8cd2-28dfc31c5901:main",
+          "at": "2026-10-09T15:43:50.598Z",
+          "reason": "规格作者（generated_by: main-inline）读到上述输入后，Write F005：实现映射把 onSaveInstanceState 定为“进程恢复”，写“Bundle hasState 机制不迁移（HarmonyOS 冷启即走 load()）”，AC04/AC05 只写页面显隐和杀进程冷启，没有配置变化重建的触发面和时序。偏差起点在此（generation 主转录 L324-L326）。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-2048-glm5.3/spec/baseline/features/F005-persistence-lifecycle.md",
+          "at": "2026-10-09T17:27:47.426Z",
+          "reason": "交付桥梁：Slice 5 实现者的 Read 回执中仍是同一映射行（L40 “onSaveInstanceState(Bundle) 进程恢复……冷启即走 load()”）以及 AC04/AC05 的进程冷启表述（agent-adc76c9a85cdc57ce.jsonl L27、L30）。"
+        },
+        {
+          "key": "d90de388-a6d4-4f09-8cd2-28dfc31c5901:adc76c9a85cdc57ce",
+          "at": "2026-10-09T17:36:16.791Z",
+          "reason": "实际读到 F005 后，Edit EntryAbility 只在 onForeground/onBackground 中 emit EVENT_LOAD_GAME/EVENT_SAVE_GAME（注释对齐 onResume/onPause），没有 onConfigurationUpdate；冷启链注释为“HarmonyOS 无 Bundle hasState，冷启即 load 即进程恢复语义”。本链确认的是规格偏差的传递，不另推定其独立失职（同转录 L111-L114）。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "主会话 Bash 进入安卓源码根目录并 cat base/src/main/AndroidManifest.xml，同一 tool_use_id 的回执返回 MainActivity 的 activity 节点（仅 screenOrientation=portrait、exported，无 configChanges）；规格作者在写 F005 前已读到该清单。",
+          "evidence": [
+            {
+              "source": "generation/d90de388-a6d4-4f09-8cd2-28dfc31c5901.jsonl",
+              "line": 42
+            },
+            {
+              "source": "generation/d90de388-a6d4-4f09-8cd2-28dfc31c5901.jsonl",
+              "line": 49
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-2048-glm5.3/entry/src/main/ets/data/GameEnginePersistenceAdapter.ets",
+        "since": "2026-10-09T18:47:43.289Z",
+        "at": "2026-10-10T04:36:17.957Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/2048-tpcstld-2863bbe/2048/base/src/main/AndroidManifest.xml",
+          "at": "2026-10-09T15:31:31.751Z",
+          "reason": "正常输入：MainActivity 没有 android:configChanges，只锁定竖屏；旋转以外的配置变化都会重建 Activity（generation 主转录 L42、L49）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/2048-tpcstld-2863bbe/2048/base/src/main/java/com/tpcstld/twozerogame/MainActivity.java",
+          "at": "2026-10-09T15:31:45.816Z",
+          "reason": "正常输入：onSaveInstanceState → hasState + save、onCreate(hasState) → load 的重建恢复分支（generation 主转录 L56、L58）。"
+        },
+        {
+          "key": "d90de388-a6d4-4f09-8cd2-28dfc31c5901:main",
+          "at": "2026-10-09T15:43:50.598Z",
+          "reason": "F005 把 hasState 分支只映射为进程回收后的冷启 load，生命周期事件面只剩显隐/前后台，漏掉配置变化重建（generation 主转录 L324-L326）。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-2048-glm5.3/spec/baseline/features/F005-persistence-lifecycle.md",
+          "at": "2026-10-09T17:27:47.426Z",
+          "reason": "交付桥梁：Slice 5 写前读取的 F005 仍是上述映射和 AC04/AC05（agent-adc76c9a85cdc57ce.jsonl L27、L30）。"
+        },
+        {
+          "key": "d90de388-a6d4-4f09-8cd2-28dfc31c5901:adc76c9a85cdc57ce",
+          "at": "2026-10-09T17:35:11.332Z",
+          "reason": "按 F005 写出适配器，事件常量只有 EVENT_SAVE_GAME（onBackground → save，对齐 onPause）和 EVENT_LOAD_GAME（onForeground → load，对齐 onResume）；返修需要补的 EVENT_RECREATE_GAME 在规格中没有对应项（同转录 L84-L85）。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "主会话 Bash 进入安卓源码根目录并 cat base/src/main/AndroidManifest.xml，同一 tool_use_id 的回执返回 MainActivity 的 activity 节点（仅 screenOrientation=portrait、exported，无 configChanges）；规格作者在写 F005 前已读到该清单。",
+          "evidence": [
+            {
+              "source": "generation/d90de388-a6d4-4f09-8cd2-28dfc31c5901.jsonl",
+              "line": 42
+            },
+            {
+              "source": "generation/d90de388-a6d4-4f09-8cd2-28dfc31c5901.jsonl",
+              "line": 49
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-2048-glm5.3/entry/src/main/ets/pages/MainPage.ets",
+        "since": "2026-10-09T18:47:43.289Z",
+        "at": "2026-10-10T04:36:17.957Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/2048-tpcstld-2863bbe/2048/base/src/main/AndroidManifest.xml",
+          "at": "2026-10-09T15:31:31.751Z",
+          "reason": "正常输入：MainActivity 没有 android:configChanges，只锁定竖屏（generation 主转录 L42、L49）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/2048-tpcstld-2863bbe/2048/base/src/main/java/com/tpcstld/twozerogame/MainActivity.java",
+          "at": "2026-10-09T15:31:45.816Z",
+          "reason": "正常输入：onSaveInstanceState/hasState 与 onCreate → load 的重建恢复分支（generation 主转录 L56、L58）。"
+        },
+        {
+          "key": "d90de388-a6d4-4f09-8cd2-28dfc31c5901:main",
+          "at": "2026-10-09T15:43:50.598Z",
+          "reason": "F005 只把页面显隐与杀进程冷启列为 load/save 触发面，没有配置变化重建的页面时序（关闭对话框、showHelp 重置、重读文案和布局）（generation 主转录 L324-L326）。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-2048-glm5.3/spec/baseline/features/F005-persistence-lifecycle.md",
+          "at": "2026-10-09T17:27:47.426Z",
+          "reason": "交付桥梁：Slice 5 写前读取的 F005 含上述映射行和 AC04/AC05（agent-adc76c9a85cdc57ce.jsonl L27、L30）。"
+        },
+        {
+          "key": "d90de388-a6d4-4f09-8cd2-28dfc31c5901:adc76c9a85cdc57ce",
+          "at": "2026-10-09T17:36:04.135Z",
+          "reason": "按 F005 Edit MainPage：syncPersistence 只处理 onShown/onHidden 与 EVENT_LOAD_GAME/EVENT_SAVE_GAME 两路，冷启链注释写“HarmonyOS 无 Bundle hasState……冷启即 load 即进程恢复语义”，没有配置变化入口（同转录 L102-L108）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/2048-tpcstld-2863bbe/2048/base/src/main/java/com/tpcstld/twozerogame/MainView.java",
+          "at": "2026-10-09T17:27:23.736Z",
+          "reason": "正常输入：Slice 3 的 Read 回执给出 MainView 构造（:81-100，new InputListener、game.newGame）、onSizeChanged（:142-148），以及绘制/布局时经 getResources().getString 取文案（如 :192、:261、:534-562）。文案和一次性状态都依附于随 Activity 重建的 View 实例（agent-a6ffdc5db8eb83d2e.jsonl L31-L32）。"
+        },
+        {
+          "key": "d90de388-a6d4-4f09-8cd2-28dfc31c5901:a6ffdc5db8eb83d2e",
+          "at": "2026-10-09T17:46:36.121Z",
+          "reason": "该实现者在思考中写明“locale change mid-session would need rebuild — Android rebuilds resources on config change → activity recreate”，随即以“locale changes typically resize anyway”为由，只靠 onAreaChange → recomputeGeometry 传入新文案（L145），并按此 Edit buildRendererTexts/recomputeGeometry（L202-L203）。已知重建语义却没有补配置变化触发，返修实测切语言不会触发尺寸变化。这是 MainPage 的独立实现偏差起点。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "主会话 Bash 进入安卓源码根目录并 cat base/src/main/AndroidManifest.xml，同一 tool_use_id 的回执返回 MainActivity 的 activity 节点（仅 screenOrientation=portrait、exported，无 configChanges）；规格作者在写 F005 前已读到该清单。",
+          "evidence": [
+            {
+              "source": "generation/d90de388-a6d4-4f09-8cd2-28dfc31c5901.jsonl",
+              "line": 42
+            },
+            {
+              "source": "generation/d90de388-a6d4-4f09-8cd2-28dfc31c5901.jsonl",
+              "line": 49
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        },
+        {
+          "from": 6,
+          "to": 7
+        },
+        {
+          "from": 7,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "显示大小变化在鸿蒙只发 display 'change'、不触发 onConfigurationUpdate/windowSizeChange/avoidAreaChange，这是返修插桩确认的平台行为（R:L2602-L2608）。未核到生成期安全区写者（EntryAbility 的 syncWindowModel 来自页面 converter）收到过这一信息；本卡把密度分支归入同一重建语义缺口，未单独归因安全区实现。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-f879e05d3c9a16396341",
+  "metadata": {
+    "migration": {
+      "id": "game2048-glm53-d90de388-a6d4-4f09-8cd2-28dfc31c5901",
+      "project": "2048"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.295",
+        "2.1.296"
+      ]
+    },
+    "source_set_id": "sources-8cc5e9d8f4b3bafc7d31",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-2048-glm5.3",
+        "at": "2026-10-09T15:56:56.310Z",
+        "ref": "generation/d90de388-a6d4-4f09-8cd2-28dfc31c5901.jsonl:L692",
+        "request_ref": "generation/d90de388-a6d4-4f09-8cd2-28dfc31c5901.jsonl:L686",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-2048-glm5.3",
+        "at": "2026-10-09T15:56:56.310Z",
+        "ref": "generation/d90de388-a6d4-4f09-8cd2-28dfc31c5901.jsonl:L692",
+        "request_ref": "generation/d90de388-a6d4-4f09-8cd2-28dfc31c5901.jsonl:L686",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.10.4",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "4566ae59-a9cb-4783-8d98-daad7bff832a"
+      ]
+    }
+  },
+  "revision": "69fa6f457f66c6ff881053653eea36550ebf3f4dae7c5dcc206a8258a65007ef"
+}

@@ -1,0 +1,218 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-b5cceb2aa00d9c09058a",
+  "created_at": "2026-10-07T05:43:22.663350+00:00",
+  "migration_key": "antennapod-glm53-3c838ae1-111b-475a-a085-e9464ec2fde4",
+  "title": "把未核实的 @ohos.xml 回调语义当作已知：START_TAG 先于属性回调，元素 URI 只取 getNamespace",
+  "when": "实现阶段，用 @ohos.xml XmlPullParser 的分离回调重建 namespace-aware SAX 开始事件（本元素属性与命名空间 URI）时",
+  "description": "源端以 SAX(namespaceAware)/XmlPullParser 在 startElement/START_TAG 时读取本元素属性，并按 uri+prefix 分发 itunes、media、Atom 等命名空间；目标改用 tokenValueCallbackFunction 与 attributeWithTagCallbackFunction 两路回调，SDK 声明既未写明两路回调的先后，也未保证 ParseInfo.getNamespace() 会给出元素 URI。",
+  "summary": "写前，Slice 5 worker（agent-a57c4d7c907557f95）读到 F003 规格实现映射首行：SAX(namespaceAware)+XmlPullParser\n→ @ohos.xml 自建 SAX 语义，事件流 {localName, uri, prefix, attrs}，解析器产出与 Android 等价事件序（HARD）；\nAC04/AC05 要求按 uri+prefix 注册命名空间、无前缀元素回落默认命名空间（同转录 L33）。它又用 Bash 查 SDK\n@ohos.xml.d.ts（L373-L383），看到属性只经 attributeWithTagCallbackFunction 上报、ParseInfo 有 getNamespace/getPrefix，\n但声明未写属性回调与 START_TAG token 的先后。思考中它称这是设计的关键问题，并写出“若 token 先于属性，快照为空——退化”，\n随后凭记忆认定“官方示例属性先到”，没有实测（L384）。对 URI 也只假设“每个元素自报 uri，可直接取 getNamespace()”。\n输出因此偏离：source-notes C1（L472）把该不确定项写成“START_TAG token 时快照并清空——两种顺序下行为一致”，\nB1 规定元素 uri 取 ParseInfo.getNamespace()；FeedParser 首写（L488）与整文件重写（L500）都在 START_TAG 立即把\npendingAttrs 快照交给 handleStart 后清空，属性回调只累积键值、未按 tagName 归属，registerNamespace/getHandlingNamespace\n只用元素级 getNamespace() 结果，没有 xmlns 属性回退。偏差位于“平台回调语义 → 解析循环实现”这一环：规格要求开始事件\n带齐本元素属性与 uri，输出却把未核实的顺序和 URI 来源当作已知；所谓防御在 token 先到时会把上一元素的属性交给下一元素。\n该片段保留到 d16b3d0（修复者读回，repair 主会话 L1088-L1089）。修复时订阅后 FeedMedia 为空（L1029-L1039），\nhilog 实测 API 23 为 start enclosure → attr url/length/type → 下一 token（“start duration pending=url,length,type”，\nL1111-L1112）；修复把 START_TAG 挂起到下一 token 或文档结束再 handleStart（L1125-L1126）。visual-fixer pass 1\n针对预览页 itunes:author/duration 缺失，加入由 xmlns/xmlns:p 属性按深度建立的前缀作用域，uri 为空时拆前缀补 uri\n（agent-a1176460b670e556f L710-L711），之后设备复查确认预览显示作者与时长（主会话 L17038）；两处最终保留。\nOpmlReader 一支：Slice 11 worker（agent-a84ef3adc5bc9fbfa）的派工写明“FeedParser 的 SAX 等价实现模式可参考”（L1），\n它读取 FeedParser 头注释与解析循环（L91-L95，含“属性先/后于 token 两种顺序行为一致”）后，在 OpmlReader（L172 写、\nL176 重写）照搬 START_TAG 快照清空 outline 属性的做法并引用 source-notes C1。本链确认的是模式传递，不另推定其独立失职；\n修复同样改为 pendingStartName + flushPendingStart（repair 主会话 L1143-L1149），最终保留。\n",
+  "recommendations": [
+    "实现阶段：平台解析器把开始标签与属性拆成独立回调、SDK 声明又未写先后时，不凭记忆推定顺序；先用最小样例（带 url/length/type 的 enclosure、带 xmlns:itunes 的 channel）打印两路回调的实际次序以及 getName/getPrefix/getNamespace 返回值，再决定事件组装方式。",
+    "无法实测时采用与顺序无关的组装：START_TAG 先挂起，到下一个 token 或文档结束时连同已累积属性一起分发；“START_TAG 时快照后清空”只在属性先到时成立，源码理解笔记中的不确定项应写明待验证条件，不得写成两种顺序行为一致。",
+    "迁移 namespace-aware SAX 时，不只依赖 getNamespace()：把 xmlns 与 xmlns:p 属性按元素深度建作用域栈，uri 为空时按前缀（含名称中的“p:”）解析，END_TAG 时弹出；用 itunes:duration、media:content、Atom 默认命名空间各一条样例断言分发到对应 handler。",
+    "复用先例实现时，把先例里标为不确定项或“防御式设计”的平台假设当作待核项；OPML 等其他 XML 读取器复用同一回调骨架前，先确认先例已实测或已改为顺序无关。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/services/FeedParser.ets",
+        "since": "2026-10-03T04:49:05.918Z",
+        "at": "2026-10-06T17:26:02.113Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/spec/baseline/features/F003-feed-refresh-parse.md",
+          "at": "2026-10-02T15:04:57.993Z",
+          "reason": "正常输入：Read 回执第154行要求 @ohos.xml 自建 SAX 语义、事件流 {localName, uri, prefix, attrs}、与 Android 等价事件序（HARD），AC04/AC05 要求按 uri+prefix 注册与默认命名空间回落；足以要求每个开始事件带齐本元素属性与 uri（agent-a57c4d7c907557f95.jsonl:L30、L33）。"
+        },
+        {
+          "key": "agent-a57c4d7c907557f95.jsonl",
+          "at": "2026-10-02T15:58:33.433Z",
+          "reason": "读到上述规格并查 SDK 声明（未写回调先后，L373-L383）后，思考中承认 token 先到会退化却凭记忆认定属性先到（L384）；source-notes C1 写成两种顺序行为一致（L472），FeedParser 首写 L488、重写 L500 均在 START_TAG 立即快照清空 pendingAttrs，并只以 getNamespace() 取元素 uri。偏差起点在此。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/services/OpmlReader.ets",
+        "since": "2026-10-03T04:49:05.918Z",
+        "at": "2026-10-06T17:26:02.113Z"
+      },
+      "summary": "OpmlReader 的偏差不是独立形成的：Slice 5 worker 在 FeedParser 写下“START_TAG 时快照清空、两种顺序行为一致”的解析骨架；\nSlice 11 worker 按派工把 FeedParser 当作 SAX 等价实现先例，读到该头注释与解析循环（agent-a84ef3adc5bc9fbfa.jsonl:L91-L95），\n在 OpmlReader 照搬 outline 属性快照，并沿用 source-notes C1 的说法（L172、L176）。该片段保留到 d16b3d0，修复期按\nFeedParser 实测顺序同样改为挂起开始标签、到下一个 token 再消费属性（repair 主会话 L1143-L1149）。\n",
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/spec/baseline/features/F003-feed-refresh-parse.md",
+          "at": "2026-10-02T15:04:57.993Z",
+          "reason": "正常输入：同上，规格要求开始事件带 attrs 且与 Android 等价事件序（agent-a57c4d7c907557f95.jsonl:L33）。"
+        },
+        {
+          "key": "agent-a57c4d7c907557f95.jsonl",
+          "at": "2026-10-02T15:58:33.433Z",
+          "reason": "偏差起点：把未核实的回调先后写成“两种顺序行为一致”，FeedParser 在 START_TAG 立即快照清空属性（L384、L472、L488、L500）。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/services/FeedParser.ets",
+          "at": "2026-10-02T18:24:14.108Z",
+          "reason": "交付桥梁：Slice 11 worker 的 Bash 读取回执包含 FeedParser 头注释“属性先/后于 token 两种顺序行为一致”与 START_TAG 立即 handleStart 的解析循环（agent-a84ef3adc5bc9fbfa.jsonl:L91-L95）。"
+        },
+        {
+          "key": "agent-a84ef3adc5bc9fbfa.jsonl",
+          "at": "2026-10-02T19:04:45.776Z",
+          "reason": "派工指定 FeedParser 的 SAX 等价模式可参考（L1）；读到上述先例后，Write 写出“属性可能先于 START_TAG token 到达（source-notes C1）：累积 → START_TAG 快照清空”的 OpmlReader 循环（L172、L176），把同一假设传到目标。本链确认传递。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "Slice 11 worker 在 entry/src/main/ets 下用 Bash 先 sed -n '1,60p' 读 FeedParser 头注释（L91-L92），再 sed -n '1320,1400p' services/FeedParser.ets 读解析循环（L94-L95）；回执包含“两种顺序行为一致”的声明与 START_TAG 立即 handleStart 的循环，支持它写 OpmlReader 前已收到该先例。",
+          "evidence": [
+            {
+              "source": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a84ef3adc5bc9fbfa.jsonl",
+              "line": 94
+            },
+            {
+              "source": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a84ef3adc5bc9fbfa.jsonl",
+              "line": 95
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "未直接观测 ignoreNameSpace:false 时 getNamespace() 的返回值：修复期 hilog 只打印事件顺序与 localName；xmlns 回退由 pass 1 依据 itunes 字段缺失补入，fixer 自注需真机复验，后续设备复查确认作者与时长恢复显示。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-b5cceb2aa00d9c09058a",
+  "metadata": {
+    "migration": {
+      "id": "antennapod-glm53-3c838ae1-111b-475a-a085-e9464ec2fde4",
+      "project": "AntennaPod"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.285",
+        "2.1.286",
+        "2.1.287",
+        "2.1.288",
+        "2.1.289"
+      ]
+    },
+    "source_set_id": "sources-5f9a4b68d8866c1b1233",
+    "environment": [
+      {
+        "name": "toolchain.kotlin",
+        "value": "2.3.20",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-09-30T15:43:45.309Z",
+        "ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a3da0f444ffe5d81f.jsonl:L27",
+        "request_ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a3da0f444ffe5d81f.jsonl:L25",
+        "phase": "generation"
+      },
+      {
+        "name": "toolchain.agp",
+        "value": "8.11.0",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-09-30T15:43:45.309Z",
+        "ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a3da0f444ffe5d81f.jsonl:L27",
+        "request_ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a3da0f444ffe5d81f.jsonl:L25",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-09-30T17:34:05.597Z",
+        "ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a5c631d1e662fac13.jsonl:L54",
+        "request_ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a5c631d1e662fac13.jsonl:L53",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-09-30T17:34:05.597Z",
+        "ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a5c631d1e662fac13.jsonl:L54",
+        "request_ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a5c631d1e662fac13.jsonl:L53",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.0.2(22)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-10-04T16:26:51.075Z",
+        "ref": "repair/ae3bb09d-1f58-48a4-91c8-85a20fd96fc1.jsonl:L215",
+        "request_ref": "repair/ae3bb09d-1f58-48a4-91c8-85a20fd96fc1.jsonl:L214",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.0.1(21)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-10-04T16:26:51.075Z",
+        "ref": "repair/ae3bb09d-1f58-48a4-91c8-85a20fd96fc1.jsonl:L215",
+        "request_ref": "repair/ae3bb09d-1f58-48a4-91c8-85a20fd96fc1.jsonl:L214",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.4",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "040e09cc-8de1-45ba-bc4b-5202da7f9c23"
+      ]
+    }
+  },
+  "revision": "4a5b768fc91e1626772278892e1df919da88d742482acc9977b4ebc4b3b94418"
+}

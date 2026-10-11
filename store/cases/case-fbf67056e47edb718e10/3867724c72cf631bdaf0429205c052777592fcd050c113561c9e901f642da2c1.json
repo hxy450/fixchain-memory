@@ -1,0 +1,124 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-fbf67056e47edb718e10",
+  "created_at": "2026-10-10T07:01:51.814222+00:00",
+  "migration_key": "game2048-glm53-d90de388-a6d4-4f09-8cd2-28dfc31c5901",
+  "title": "把预烘焙背景位图改成 Canvas 每帧矢量重绘却不清屏，静态文字逐帧叠画变粗",
+  "when": "渲染实现阶段，把源端一次性烘焙的背景位图改为 ArkUI Canvas 每帧矢量重绘、确定每帧起始画面状态时",
+  "description": "源端自定义 View 用 setBackgroundColor 设背景，onDraw 先 drawBitmap 一张只烘焙一次的透明背景位图（标题、说明等抗锯齿文字只栅格化一次），再叠加动态层；目标端用 ArkUI Canvas 的 CanvasRenderingContext2D 在同一画布上反复 render()，其位图跨帧保留。",
+  "summary": "Slice 3 渲染 worker（agent-a6ffdc5db8eb83d2e）写前已收到足够输入：F003 规格把标题、图标底、棋盘框、16 格底、\n首启说明列为“静态背景层（onSizeChanged 预渲染一次）”，render() 为“一帧完整绘制”，并允许用“直接每帧矢量重绘”\n替代位图缓存，前提是“行为等价”（L26 规格第26-27、33、43-44行）；MainView.java 构造器\nsetBackgroundColor(R.color.background)（第92行），onDraw 开头注释“Reset the transparency of the screen”后\ndrawBitmap(background)（第110-112行），createBackgroundBitmap 把标题等烘焙进 ARGB_8888 位图（第433-443行）——\n即 Android 每次 draw 先绘 View 背景色，标题文字只栅格化一次（L32）；MainPage 的 Canvas 已设\nbackgroundColor($r('app.color.background'))（L52 第357行）。\nworker 选择每帧矢量路径后，在 L141 推理中明确提出“每帧是否先 clearRect”，却以“Android View canvas 在两次\ninvalidate 之间也不清空”“每帧不透明重绘已覆盖全部动态区域”为由放弃（“OK skip clearRect, matching source exactly”）。\n这把源端“背景色每帧重绘 + 位图一次性烘焙”误读成“同一画布反复叠画”，覆盖分析也只看不透明色块，忽视标题、说明、\nendless 标签等直接画在透明画布上的抗锯齿文字会逐帧累积 alpha。L151 Write 的 render() 开头直接\ndrawBackgroundLayer，其中 drawHeader 每帧 fillText 叠到上一帧位图上；之后的生成写入未改此处，生成检查点 dc92e69 的\nGameRenderer.ets render()（第303-311行）同样无清屏。偏差位于“已收到源端一次绘制语义与等价要求”到“目标帧起始状态实现”这一环。\n返修 X3（9a7e3a0，FINAL 保留）测得 6 次滑动后标题区抗锯齿边缘像素 1309→525，于 render() 开头加\nctx.clearRect(0, 0, ctx.width, ctx.height)，露出 Canvas 组件 #faf8ef 背景，修复后同序列像素统计不变\n（repair c746b830 L956-L985）。\n",
+  "recommendations": [
+    "把源端“一次性烘焙位图 + 每帧 drawBitmap”改为每帧矢量重绘时，先确定每帧起始画面：ArkUI CanvasRenderingContext2D 位图跨帧保留，render() 开头 clearRect(0, 0, ctx.width, ctx.height)（或整幅填背景色），再按源顺序绘制；由 Canvas 组件 backgroundColor 承担 View setBackgroundColor。",
+    "判断能否省略清屏时，不只核对不透明色块是否覆盖动态区；凡在透明区域重复 fillText 或描边的抗锯齿内容（标题、说明、标签）都会逐帧累积，等价性按“每帧是否从空白开始”判定，而不是按“同位置重画”判定。",
+    "最小检查：静止画面连续触发多次 render()（或滑动若干次）后，对比静态文字区域截图的边缘像素数，应保持不变。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-2048-glm5.3/entry/src/main/ets/view/GameRenderer.ets",
+        "since": "2026-10-09T18:47:43.289Z",
+        "at": "2026-10-10T04:36:17.957Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-2048-glm5.3/spec/baseline/features/F003-rendering-animation.md",
+          "at": "2026-10-09T17:27:13.528Z",
+          "reason": "正常输入：Read 回执给出“静态背景层（onSizeChanged 预渲染一次：标题/计分框底/图标/棋盘框/16 格底/首启说明）”、render()“一帧完整绘制”，实现映射允许“直接每帧矢量重绘”但要求“行为等价”；足以说明标题只绘制一次、改成逐帧重绘须保证每帧画面等价（agent-a6ffdc5db8eb83d2e.jsonl:L25-L26）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/2048-tpcstld-2863bbe/2048/base/src/main/java/com/tpcstld/twozerogame/MainView.java",
+          "at": "2026-10-09T17:27:23.736Z",
+          "reason": "正常输入：Read 回执返回构造器 setBackgroundColor(R.color.background)（第92行）、onDraw 开头“Reset the transparency of the screen”后 drawBitmap(background)（第110-112行）及 createBackgroundBitmap 一次性烘焙标题等（第433-443行）；源端每帧先有背景色，标题文字不重复叠画（agent-a6ffdc5db8eb83d2e.jsonl:L31-L32）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-2048-glm5.3/entry/src/main/ets/pages/MainPage.ets",
+          "at": "2026-10-09T17:27:47.034Z",
+          "reason": "正常输入：Read 回执显示 Canvas(this.renderContext) 已设 .backgroundColor($r('app.color.background'))（第357行），清屏后即露出与 View 背景色相同的底色，清屏无副作用（agent-a6ffdc5db8eb83d2e.jsonl:L47、L52）。"
+        },
+        {
+          "key": "agent-a6ffdc5db8eb83d2e.jsonl",
+          "at": "2026-10-09T17:41:29.105Z",
+          "reason": "Slice 3 渲染 worker：L141 推理中提出每帧 clearRect，却以“Android View canvas 两次 invalidate 间不清空、不透明重绘已覆盖动态区”为由放弃；L151 Write 的 render() 开头直接 drawBackgroundLayer，drawHeader 每帧把抗锯齿标题叠画在保留的上一帧位图上，偏离源端背景色重绘、文字只烘焙一次的语义（同转录 L141、L151-L152）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-fbf67056e47edb718e10",
+  "metadata": {
+    "migration": {
+      "id": "game2048-glm53-d90de388-a6d4-4f09-8cd2-28dfc31c5901",
+      "project": "2048"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.295",
+        "2.1.296"
+      ]
+    },
+    "source_set_id": "sources-8cc5e9d8f4b3bafc7d31",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-2048-glm5.3",
+        "at": "2026-10-09T15:56:56.310Z",
+        "ref": "generation/d90de388-a6d4-4f09-8cd2-28dfc31c5901.jsonl:L692",
+        "request_ref": "generation/d90de388-a6d4-4f09-8cd2-28dfc31c5901.jsonl:L686",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-2048-glm5.3",
+        "at": "2026-10-09T15:56:56.310Z",
+        "ref": "generation/d90de388-a6d4-4f09-8cd2-28dfc31c5901.jsonl:L692",
+        "request_ref": "generation/d90de388-a6d4-4f09-8cd2-28dfc31c5901.jsonl:L686",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.10.4",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "4566ae59-a9cb-4783-8d98-daad7bff832a"
+      ]
+    }
+  },
+  "revision": "3867724c72cf631bdaf0429205c052777592fcd050c113561c9e901f642da2c1"
+}

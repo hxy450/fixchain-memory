@@ -1,6 +1,6 @@
 # app/entry
 
-入口 Ability（onCreate/onDestroy）：基础设施的显式初始化时机、需要补上的平台级守护，以及 module.json5 中入口 Ability 的 skills（深链）声明、桌面快捷方式（shortcuts）声明与外部 Want 的入口分支
+入口 Ability 与应用级配置：onCreate/onDestroy 中基础设施的显式初始化时机、需要补上的平台级守护，系统配置变化（源 Activity 未声明 configChanges 时的重建语义）在 onConfigurationUpdate 中的承接与跟随系统字号的 configuration，以及 module.json5 中入口 Ability 的 skills（深链、App Links 的 domainVerify）声明、桌面快捷方式（shortcuts）声明与外部 Want 的入口分支
 
 [上一级](../index.md)
 
@@ -16,9 +16,15 @@
 - [只经桌面快捷方式或通知点击进入的页面：module.json5 快捷方式声明、EntryAbility 的 Want 分支与目标页参数都要有确定写者](lesson-c46f182cf1d01a97e05f.lesson.md)
   - 时机：规格拆分、切片实现与入口接线阶段，迁移源端只由外部 Intent（桌面快捷方式、本地通知点击）进入的页面时
   - 情境：源端页面由静态或动态 shortcut、通知 PendingIntent 携带 extras（如 shortId、通知渠道）进入；目标规格把入口配置定为 module.json5 静态声明；页面与切片 worker 的写域不含 module.json5 和 EntryAbility。
+- [源 Activity 未声明 configChanges 时，语言、深浅色、字号、显示大小变化会重建它：目标 UIAbility 不重建，在 onConfigurationUpdate 与 display 变化中按源端重建时序显式刷新](lesson-94715d0df4c03a8fb5a5.lesson.md)
+  - 时机：规格提取阶段把 Activity 生命周期回调与 Manifest 属性映射为目标生命周期契约时；实现阶段接线 UIAbility、页面生命周期，以及资源文案与一次性状态的缓存时
+  - 情境：源 Activity 在 AndroidManifest 中未声明 android:configChanges，实现了 onSaveInstanceState/savedInstanceState 恢复分支，或在 View 构造、onSizeChanged、绘制时读取资源文案与 firstRun 等一次性状态；目标 HarmonyOS UIAbility 在语言、深浅色、字号、显示大小变化时不重建，只回调 onConfigurationUpdate 或发出 display 'change'。
 - [源端靠依赖注入或全局静态工具就绪的基础设施改成需显式 init 的封装后，在入口 onCreate 最早处调用，并确认启动期读写都晚于初始化](lesson-8a881c2e07f80f83447c.lesson.md)
   - 时机：网络、键值存储等基础设施实现与入口接线阶段：新建必须先 init 才能用的封装，或改写 EntryAbility.onCreate、宣告基础层完成时
   - 情境：源端网络 baseUrl 由 DI 模块在注入时带上、键值工具（SpUtils/MMKV 一类）全局静态可用，Application.onCreate 里看不到对应的初始化；目标端改为静态 HttpClient（baseUrl 默认空串）加 NetworkConfig.init()、偏好封装需先传入上下文；入口 Ability 由编排会话维护，Flutter 插件 onAttachedToEngine 等回调里也能拿到上下文。
-- [迁移深链 intent-filter 时同时声明 module.json5 的 skills（actions、entities、uris），并用隐式 Want 验收](lesson-d77baa7494930d485425.lesson.md)
+- [裁定“大字体”是否迁移时看源端是否有随系统字号缩放的文本，而不是有无 fontScale 代码；需要时在 AppScope 声明 configuration 跟随系统字号](lesson-ea965b7baf2488be23cd.lesson.md)
+  - 时机：规格的横切能力裁定阶段（i18n、深色、大字体、无障碍）判断系统字号缩放是否迁移时；派发应用身份或应用外壳任务、落定 AppScope/app.json5 的 configuration 时
+  - 情境：源应用主体可能是固定 px 字号的 Canvas 自绘，但仍有系统 AlertDialog、Toast、菜单或 sp 单位文本；Activity 是否在 configChanges 声明 fontScale 决定字号变化时重建还是回调；目标 HarmonyOS 应用默认不跟随系统字号（nonFollowSystem），需在 AppScope 配置 configuration profile 才会跟随并下发配置变化。
+- [迁移深链 intent-filter 时同时声明 module.json5 的 skills（actions、entities、uris，App Links 加 domainVerify），并用隐式 Want 验收](lesson-d77baa7494930d485425.lesson.md)
   - 时机：入口与导航接线阶段，把源端 Activity 的 VIEW/BROWSABLE intent-filter 迁成 UIAbility 的 Want 接收与路由解析时；以及规格提取阶段描述深链映射时
-  - 情境：源 AndroidManifest 在启动 Activity 上声明 VIEW+BROWSABLE、http/https 与固定 host 的 intent-filter；目标 module.json5 的入口 Ability skills 仍是脚手架默认的 HOME 一项。
+  - 情境：源 AndroidManifest 在启动 Activity 上声明 VIEW+BROWSABLE、http/https 与固定 host 的 intent-filter；目标 module.json5 的入口 Ability skills 仍是脚手架默认的 HOME 一项。 也包括 intent-filter 带 android:autoVerify="true"（App Links），或决策写明 https 由域名校验的 App Linking 承载。

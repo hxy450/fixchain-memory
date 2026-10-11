@@ -1,0 +1,231 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-8809177953953374a01e",
+  "created_at": "2026-10-07T06:08:17.575677+00:00",
+  "migration_key": "antennapod-glm53-3c838ae1-111b-475a-a085-e9464ec2fde4",
+  "title": "冷启动后播放器控件无响应：叠层环吞掉播放键点击，控制门面同步路径缺少偏好媒体回退",
+  "when": "界面转换阶段在 Stack 中叠放按钮与进度环/加载圈并落位点击时；播放功能实现阶段把源端控制门面的懒加载 getMedia() 翻译成 seekTo/getPosition 等同步访问路径时",
+  "description": "源布局中可点击按钮之上叠有不可点击的自绘进度环或 ProgressBar，目标用 Stack 保留 z 序；源端 UI 控制器在播放服务未运行时，通过懒加载从偏好中的当前媒体 ID 读库取得 media，再用于 seek、位置和时长读取，目标侧服务实例只在起播后持有 playable。",
+  "summary": "本问题有两个独立偏差，冷启动后展开播放器时同时出现。\n(1) 界面转换：aconv AudioPlayerFragment（agent-a0b47fef38e1706b3）写前读到 audioplayer_fragment.xml，\n其中 butPlay 之后依次声明了 CircularProgressBar 和 progLoading，二者都没有 id 或点击属性，触摸会落到下层按钮；\n还读到 ui-migration-pitfalls.md 的 P-17，要求 Stack 中每个上层子节点都显式写明是否拦截触摸，可用\nhitTestBehavior(Transparent) 或把 onClick 挂到合适层级来实现。写入前它在思考中确认 z 序为“play image→ring→loading”，\n并只给 bg_gradient、cardViewSeek 补了 Transparent。最终把 onClick 挂在最底层 Image 上，\n而同尺寸（100%×100%）的 CircularProgressBar 和 LoadingProgress 没有命中设置，播放点击因此被环层吞掉。\n该片段一直保留到 d16b3d0；修复把 onClick 从 Image 移到外层 Stack 容器（repair L3061-L3062）。\n(2) 播放实现：Slice 6 实现者（agent-a3a307bca64776d79）写前读到 F005 AC140：服务未运行且是 FeedMedia 时，\n本地 setPosition、落库并 post PlaybackPositionEvent。它还完整读取了 Android PlaybackController.java，\n其中 getMedia() 在 media 为空时调用 DBReader.getFeedMedia(PlaybackPreferences.getCurrentlyPlayingFeedMediaId())，\nseekTo、getPosition、getDuration 都经 getMedia() 取媒体。它自己的源码笔记也记录了 AC140 双路径。\n但写出的 PlaybackController.ets 只把 getMedia() 做成异步方法；同步路径用的 getMediaCached() 与 seekTo\n都只取 service.getPlayable()，冷启动未起服务时为 null。结果 AC140 的离线分支成为死代码，getPosition 返回 INVALID_TIME。\n随后它又把 AudioPlayerPage 的 onRewind、onFastForward、onSeekCommit 接到这些同步接口，快退/快进因此无效。\n修复新增 mediaFromPreferences/setMediaFromPreferences，让 getMediaCached() 回退到偏好媒体、seekTo 改用 getMediaCached()，\n并在 AudioPlayerPage.loadMediaInfo 读出偏好媒体后登记给控制器（repair L3045-L3046）。复测冷启动快退 1:25→1:05，播放可起播（L3066-L3067）。\n两条分支的写前输入都已给出正确且足够的要求，偏差都出在实现输出，没有继续追溯 spec 作者。\n",
+  "recommendations": [
+    "界面转换时，若源布局的按钮上方后声明了不可点击的进度环、加载圈等展示层，在 Stack 中保留 z 序的同时，要给每个上层节点写明命中意图：纯展示层设 .hitTestBehavior(HitTestMode.Transparent)，或把 onClick 挂在整个 Stack 容器上，不要只挂在最底层 Image。",
+    "按 P-17 自检时覆盖所有 Stack 叠层，包括控件排中的按钮环和加载层，不止背景、渐变和预览卡；可以 grep 同一 Stack 内 width('100%').height('100%') 的兄弟节点，逐一确认 hitTestBehavior 或 onClick 落位。",
+    "实现 UI 控制门面时，若源端 getter 会懒加载（如 getMedia() 在服务未运行时从 PlaybackPreferences 当前媒体 ID 读库），同步调用的 seekTo/getPosition/getDuration 也要有等价的回退来源，例如缓存页面已读出的偏好媒体，不能只读服务实例的 playable。",
+    "spec 写有“服务未运行”分支（如 AC140 离线预滚动）时，写完后确认该分支的数据前提在冷启动、服务未起时能成立；若 playable 只来自服务，该分支就是死代码。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/pages/AudioPlayerPage.ets",
+        "since": "2026-10-03T04:49:05.918Z",
+        "at": "2026-10-06T17:26:02.113Z"
+      },
+      "summary": "本目标有两个起点。\n其一，转换者读到源布局：butPlay 之后叠放的 CircularProgressBar 和 progLoading 都不可点击；也读到 P-17 关于上层节点必须显式写命中意图的要求。\n写出的播放键 Stack 却只在底层 Image 上挂 onClick，同尺寸的环层和加载层没有 hitTestBehavior，点击被环层吞掉。\n该片段原样保留到 d16b3d0，修复把 onClick 移到 Stack 容器（repair L3061-L3062）。\n其二，播放实现者读过 Android PlaybackController 的 getMedia() 懒加载，却让控制器同步接口只读服务实例的 playable，\n随后把本页 onRewind、onFastForward、onSeekCommit 接到 PlaybackController.seekTo/getPosition，冷启动时快退无效。\n本页的修复是在 loadMediaInfo 读出偏好媒体后调用 PlaybackController.setMediaFromPreferences(media)，与控制器的回退一起生效（repair L3045-L3046）。\n",
+      "recommendations": [
+        "在 Stack 中叠放播放键、环形进度和加载圈时，把 onClick 挂在容器上，或给纯展示层设 hitTestBehavior(HitTestMode.Transparent)。",
+        "页面已经异步读出当前媒体时，要确认控制门面的同步 seek/位置接口在服务未运行时也能拿到同一媒体。"
+      ],
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/AntennaPod-develop/app/src/main/res/layout/audioplayer_fragment.xml",
+          "at": "2026-10-01T09:23:44.393Z",
+          "reason": "正常输入：转换者 Read 回执中，player_control 内依次是 butPlay、CircularProgressBar（无 id、无 clickable）、progLoading（默认 gone）。后两者是声明在后的展示层，Android 中不消费触摸，点击交给 butPlay（agent-a0b47fef38e1706b3.jsonl:L32、L34）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/.claude/skills/android-ui-graph-query/references/ui-migration-pitfalls.md",
+          "at": "2026-10-01T09:24:07.630Z",
+          "reason": "正常输入：Read 回执给出 P-17“几何≠命中测试”：纯展示、点击交底层时，上层设 hitTestBehavior(Transparent) 或调整 onClick 落位；自检要求任一 Stack 上层子节点都显式设命中行为。这足以指导播放键叠层（agent-a0b47fef38e1706b3.jsonl:L50-L51）。"
+        },
+        {
+          "key": "agent-a0b47fef38e1706b3.jsonl",
+          "at": "2026-10-01T09:39:12.448Z",
+          "reason": "写前思考中确认 z 序为 play image→ring→loading，并只为 bg_gradient、cardViewSeek 应用 P-17（L187）。Write 后的播放键 Stack 只在底层 Image 挂 onClick，同为 100%×100% 的 CircularProgressBar 和 LoadingProgress 没有 hitTestBehavior。P-17 要求没有落到控件排叠层（L189-L190；报告 L267 也只列出 gradient 和 card）。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/AntennaPod-develop/playback/service/src/main/java/de/danoeh/antennapod/playback/service/PlaybackController.java",
+          "at": "2026-10-02T15:17:46.922Z",
+          "reason": "正常输入：播放实现者完整 Read 回执，其中 getMedia()（:352-357）在 media 为空时从 PlaybackPreferences.getCurrentlyPlayingFeedMediaId() 读库，getPosition/getDuration/seekTo（:332-404）都经 getMedia() 取媒体，足以说明服务未运行时控件仍要拿到当前媒体（agent-a3a307bca64776d79.jsonl:L192-L193）。"
+        },
+        {
+          "key": "agent-a3a307bca64776d79.jsonl",
+          "at": "2026-10-02T15:47:50.204Z",
+          "reason": "此前它把控制器的 getMediaCached/seekTo 写成只读 service.getPlayable()（L316-L317）。这次 Edit 把本页 onRewind/onFastForward 接到 PlaybackController.seekTo(getPosition()±秒数)（L353-L356），没有让页面已读出的偏好媒体进入控制器，冷启动时这些控件实际不生效。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/services/PlaybackController.ets",
+        "since": "2026-10-03T04:49:05.918Z",
+        "at": "2026-10-06T17:26:02.113Z"
+      },
+      "summary": "Slice 6 实现者写前收到 F005 AC140：服务未运行且是 FeedMedia 时，本地 setPosition、落库并 post 位置事件。\n它也读到 Android PlaybackController 中 getMedia() 从偏好当前媒体 ID 懒加载，seekTo/getPosition/getDuration 都经它取媒体。\n写出的 PlaybackController.ets 只把 getMedia() 做成异步方法；同步的 getMediaCached() 与 seekTo 只读 service.getPlayable()，\n冷启动未起服务时为 null，AC140 离线分支和 getPosition 的回退都失效。该写法原样保留到 d16b3d0。\n修复新增 mediaFromPreferences/setMediaFromPreferences，getMediaCached() 回退偏好媒体，seekTo 改用 getMediaCached()（repair L3045-L3046）。\n",
+      "recommendations": [
+        "翻译源端懒加载 getter 时，同步调用方需要的回退来源也要在同步路径上可得；不能把懒加载只放在异步方法里，而让 seekTo/getPosition 只读运行中服务的状态。",
+        "实现 spec 中“服务未运行”分支后，检查该分支使用的 playable 在服务未启动时由谁提供。"
+      ],
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/spec/baseline/features/F005-playback-audio.md",
+          "at": "2026-10-02T15:04:58.345Z",
+          "reason": "正常输入：Read 回执中的 F005-AC140 写明 PlaybackController.seekTo 双路径，服务未运行且是 FeedMedia 时本地 setPosition + DBWriter.setFeedItem + post PlaybackPositionEvent，判据为“服务停止时拖动进度后重开播放位置正确”，并锚定 PlaybackController.java:390（agent-a3a307bca64776d79.jsonl:L29-L30）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/AntennaPod-develop/playback/service/src/main/java/de/danoeh/antennapod/playback/service/PlaybackController.java",
+          "at": "2026-10-02T15:17:46.922Z",
+          "reason": "正常输入：完整 Read 回执给出 getMedia() 懒加载（:352-357，DBReader.getFeedMedia(PlaybackPreferences.getCurrentlyPlayingFeedMediaId())），seekTo 首行即 Playable playable = getMedia()（:390-404），足以说明离线分支的媒体从偏好懒加载而来（agent-a3a307bca64776d79.jsonl:L192-L193）。"
+        },
+        {
+          "key": "agent-a3a307bca64776d79.jsonl",
+          "at": "2026-10-02T15:42:04.856Z",
+          "reason": "Write 把 getMedia() 写成 async 并带 DB 回查，但 getMediaCached() 只返回 service().getPlayable()，seekTo 也取 service.getPlayable()，注释仍声称实现了 AC140 离线预滚动。服务未起时 playable 为 null，该分支不可达（L316-L317；源码笔记 L223 已记录 AC140 双路径）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-8809177953953374a01e",
+  "metadata": {
+    "migration": {
+      "id": "antennapod-glm53-3c838ae1-111b-475a-a085-e9464ec2fde4",
+      "project": "AntennaPod"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.285",
+        "2.1.286",
+        "2.1.287",
+        "2.1.288",
+        "2.1.289"
+      ]
+    },
+    "source_set_id": "sources-5f9a4b68d8866c1b1233",
+    "environment": [
+      {
+        "name": "toolchain.kotlin",
+        "value": "2.3.20",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-09-30T15:43:45.309Z",
+        "ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a3da0f444ffe5d81f.jsonl:L27",
+        "request_ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a3da0f444ffe5d81f.jsonl:L25",
+        "phase": "generation"
+      },
+      {
+        "name": "toolchain.agp",
+        "value": "8.11.0",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-09-30T15:43:45.309Z",
+        "ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a3da0f444ffe5d81f.jsonl:L27",
+        "request_ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a3da0f444ffe5d81f.jsonl:L25",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-09-30T17:34:05.597Z",
+        "ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a5c631d1e662fac13.jsonl:L54",
+        "request_ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a5c631d1e662fac13.jsonl:L53",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-09-30T17:34:05.597Z",
+        "ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a5c631d1e662fac13.jsonl:L54",
+        "request_ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a5c631d1e662fac13.jsonl:L53",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.0.2(22)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-10-04T16:26:51.075Z",
+        "ref": "repair/ae3bb09d-1f58-48a4-91c8-85a20fd96fc1.jsonl:L215",
+        "request_ref": "repair/ae3bb09d-1f58-48a4-91c8-85a20fd96fc1.jsonl:L214",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.0.1(21)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-10-04T16:26:51.075Z",
+        "ref": "repair/ae3bb09d-1f58-48a4-91c8-85a20fd96fc1.jsonl:L215",
+        "request_ref": "repair/ae3bb09d-1f58-48a4-91c8-85a20fd96fc1.jsonl:L214",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.4",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "040e09cc-8de1-45ba-bc4b-5202da7f9c23"
+      ]
+    }
+  },
+  "revision": "0f0a55473275f4a825fd345992d4bfd1b18db95262ea8d48b11572f0c0dfc81f"
+}

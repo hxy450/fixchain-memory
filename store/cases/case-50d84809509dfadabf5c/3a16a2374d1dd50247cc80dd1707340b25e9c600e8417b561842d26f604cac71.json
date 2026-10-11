@@ -1,0 +1,580 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-50d84809509dfadabf5c",
+  "created_at": "2026-10-07T06:01:46.280448+00:00",
+  "migration_key": "antennapod-glm53-3c838ae1-111b-475a-a085-e9464ec2fde4",
+  "title": "ComponentContent 构造即执行 builder，构造后才赋值的弹窗回调被 no-op 默认值冻结",
+  "when": "界面实现阶段，用 ComponentContent + wrapBuilder + openCustomDialog 封装弹窗、为内容组件接线关闭/确认/取消回调时；以及复用同批兄弟弹窗作为项目约定时",
+  "description": "源端是 DialogFragment / MaterialAlertDialogBuilder 的按钮回调（setPositiveButton/setNegativeButton 关闭或确认）；目标以 new ComponentContent(uiContext, wrapBuilder(builder), args) 构建弹窗内容，内容组件通过 @Param 接收回调，而关闭回调要用到构造后才得到的 content 句柄（closeCustomDialog(content)），只能在构造之后赋给 args。",
+  "summary": "写前实际收到的行为要求是正确且足够的：a2h-activity-converter（B4 转换 page_0071）读到页面规格\npage_0071_PlaybackControlsDialog.md 的“Close 正按钮 | 关闭对话框返回视频播放器”，以及 Android 源\nPlaybackControlsDialog.java 的 setPositiveButton(R.string.close_label, null)，即点击关闭弹窗\n（agent-a380a6f67e35e6fca.jsonl:L17-L18、L29-L30）。派工、agent 定义与它读取的映射参考\n（MaterialAlertDialogBuilder → AlertDialog）都没有 ComponentContent 的构建时序说明；项目 skill 在\nd16b3d0 中只把 ComponentContent 列为须 import 的值类及 splitPlaceholder 用法，\narkts-component-builder 的弹窗参考示例走 openCustomDialog({ builder }) + closeCustomDialog(id)，\n不涉及 ComponentContent 回调，且该写者未读取。\n该写者创建了 dialogs/ 下第一个文件：Args 类给 onClose 默认 no-op，@Builder 写\nPlaybackControlsDialogContent({ onClose: args.onClose })，show 函数先 new ComponentContent(..., args)，\n再执行 args.onClose = () => closeCustomDialog(content)。写前思考只从类型角度确认\n“PlaybackControlsDialogContent({ onClose: args.onClose }) ✓”（同转录 L157、Write L159-L160）。\nComponentContent 在构造时就执行 builder，@Param 拿到的是当时的 no-op 默认值；之后再给普通 args\n对象赋值不会传进已构建的内容，所以 Close 按钮无效。偏差出在把“点击即关闭”这一要求落到回调接线时序的环节。\n该范式随后被当作项目约定复制。04:18–04:37 同批 7 个转换者各自读取 PlaybackControlsDialog.ets，\n称其为“项目确切的 dialog-family 约定 / 函数式 API 的直接先例”，把“Args 默认 no-op + builder\n直接取 args.onX + 构造后赋值”原样写进 MediaPlayerErrorDialog、RenameFeedDialog、\nSkipPreferenceDialog、ParentalControlDialog、FeedCounterDialog、FeedStatisticsDialog、\nStatisticsFilterDialog。05:18–05:30 两个续跑转换者又以 FeedCounterDialog.ets（以及\nStatisticsFilterDialog.ets）为兄弟先例，写出 FeedSortDialog、HomeSectionsSettingsDialog。\n这些派工都没有指定该先例，是转换者自行检索 dialogs/ 后采用的；复制者不另计为独立成因。\n同一生成会话较晚写出的 FeedMultiSelectActionHandler、InboxSectionPage、QueueSectionPage 已改用\n(): void => args.onX() 延迟取值，但早先的 10 个弹窗没有回补，结构收尾和编译也未发现这个运行时问题。\n修复会话用 audit_cc_late.py 扫描“new ComponentContent 之后对 args 字段赋值”的位置，确认这 10 个 builder\n直接捕获了 args.onX，而 TimeRangeDialog 整体传入 args、点击时才读取，不受影响（ae3bb09d L7510-L7532）。\npatch_cc_callbacks.py 把 builder 中的 onX: args.onX 改成 onX: (...): void => args.onX(...)\n（L7537-L7543），真机确认 FeedSortDialog 的 Cancel 能关闭弹窗（L8422），603ce68 保留了这些改动。\n",
+  "recommendations": [
+    "实现 ComponentContent 弹窗时，按“构造即执行 builder”检查每个回调的取值时机。凡是在 new ComponentContent(...) 之后才赋值的 args 字段（典型是需要 content 句柄的 closeCustomDialog 回调），builder 中一律写成 onX: (...): void => args.onX(...)，或把 args 整体传给内容组件、在点击时读取；不要把 args.onX 直接作为 @Param 的值。",
+    "写完弹窗后做一次静态自检：对每个 new ComponentContent(..., args)，向后查找 args.xxx = 赋值；如果同一字段在 builder 中以 xxx: args.xxx 直接传入，就判定为失效接线。修复会话的 audit_cc_late.py 就是这项检查。",
+    "把同批刚写出、尚未运行验证的兄弟弹窗当作项目约定复制前，先核对它的回调接线时序是否真的能让按钮关闭/确认弹窗。类型检查通过不代表行为正确；首个范式文件出错，会随复制扩散到整族弹窗。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/dialogs/PlaybackControlsDialog.ets",
+        "since": "2026-10-03T04:49:05.918Z",
+        "at": "2026-10-06T17:26:02.113Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/spec/baseline/ui/page_0071_PlaybackControlsDialog.md",
+          "at": "2026-10-02T03:34:52.445Z",
+          "reason": "正常输入：Read 回执给出 MaterialAlertDialogBuilder…setPositiveButton(close_label) 及交互表“Close 正按钮 | 关闭对话框返回视频播放器 | 对话框关闭”，足以确定按钮必须关闭弹窗（agent-a380a6f67e35e6fca.jsonl:L17-L18）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/AntennaPod-develop/app/src/main/java/de/danoeh/antennapod/ui/screen/playback/PlaybackControlsDialog.java",
+          "at": "2026-10-02T03:35:03.883Z",
+          "reason": "正常输入：Read 回执第 66 行 setPositiveButton(R.string.close_label, null)，即点击正按钮由系统 dismiss（同转录 L29-L30）。"
+        },
+        {
+          "key": "agent-a380a6f67e35e6fca.jsonl",
+          "at": "2026-10-02T03:51:39.481Z",
+          "reason": "a2h-activity-converter 收到上述关闭要求，却首创了失效接线：Args.onClose 默认 no-op，builder 传 onClose: args.onClose，show 函数在 new ComponentContent(uiContext, builder, args) 之后才赋 args.onClose = closeCustomDialog(content)。写前思考只做类型确认（L157），Write 见 L159-L160；输入未提供 ComponentContent 构建时序，本分支在此停止上溯。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/dialogs/MediaPlayerErrorDialog.ets",
+        "since": "2026-10-03T04:49:05.918Z",
+        "at": "2026-10-06T17:26:02.113Z"
+      },
+      "nodes": [
+        {
+          "key": "agent-a380a6f67e35e6fca.jsonl",
+          "at": "2026-10-02T03:51:39.481Z",
+          "reason": "偏差起点：写出 PlaybackControlsDialog.ets 的“builder 直接取 args.onClose + 构造后赋值”范式（agent-a380a6f67e35e6fca.jsonl:L159-L160）。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/dialogs/PlaybackControlsDialog.ets",
+          "at": "2026-10-02T04:18:54.354Z",
+          "reason": "交付桥梁：MediaPlayerErrorDialog 转换者声明“读取 PlaybackControlsDialog openCustomDialog 模式”，Read 回执含 onClose: args.onClose 及构造后赋值（agent-ab6563e75539ed86b.jsonl:L64-L66）。"
+        },
+        {
+          "key": "agent-ab6563e75539ed86b.jsonl",
+          "at": "2026-10-02T04:26:44.540Z",
+          "reason": "以该文件为“Pattern precedent”（L69），Write 写出 builder onConfirm: args.onConfirm，并在 ComponentContent 构造后才赋 args.onConfirm（L93-L94）；本链确认的是范式传递。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/dialogs/RenameFeedDialog.ets",
+        "since": "2026-10-03T04:49:05.918Z",
+        "at": "2026-10-06T17:26:02.113Z"
+      },
+      "nodes": [
+        {
+          "key": "agent-a380a6f67e35e6fca.jsonl",
+          "at": "2026-10-02T03:51:39.481Z",
+          "reason": "偏差起点：PlaybackControlsDialog.ets 首创构造后赋值的回调范式（agent-a380a6f67e35e6fca.jsonl:L159-L160）。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/dialogs/PlaybackControlsDialog.ets",
+          "at": "2026-10-02T04:23:03.992Z",
+          "reason": "交付桥梁：RenameFeedDialog 转换者为“了解 openCustomDialog 的机制”读取该文件，回执含 builder 捕获与构造后赋值（agent-af658903d7689f102.jsonl:L70-L72）。"
+        },
+        {
+          "key": "agent-af658903d7689f102.jsonl",
+          "at": "2026-10-02T04:28:33.066Z",
+          "reason": "沿用该范式，Write 写出 RenameFeedDialogContent({ target: args.target, onClose: args.onClose })，并在构造后赋 args.onClose（L115-L116）；本链确认的是范式传递。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/dialogs/SkipPreferenceDialog.ets",
+        "since": "2026-10-03T04:49:05.918Z",
+        "at": "2026-10-06T17:26:02.113Z"
+      },
+      "nodes": [
+        {
+          "key": "agent-a380a6f67e35e6fca.jsonl",
+          "at": "2026-10-02T03:51:39.481Z",
+          "reason": "偏差起点：PlaybackControlsDialog.ets 首创构造后赋值的回调范式（agent-a380a6f67e35e6fca.jsonl:L159-L160）。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/dialogs/PlaybackControlsDialog.ets",
+          "at": "2026-10-02T04:25:55.079Z",
+          "reason": "交付桥梁：SkipPreferenceDialog 转换者用 grep 拿到 builder 的 onClose: args.onClose 与 ComponentContent 构造（agent-af4782d33a1414040.jsonl:L75-L76），称其为“函数式 API 的直接先例”，随后 Read 到构造后赋 args.onClose 的接线（L78-L80）。"
+        },
+        {
+          "key": "agent-af4782d33a1414040.jsonl",
+          "at": "2026-10-02T04:29:54.943Z",
+          "reason": "沿用该范式，Write 写出 builder onSummaryRefresh: args.onSummaryRefresh、onClose: args.onClose，并在构造后赋 args.onClose（L98-L99）；本链确认的是范式传递。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/dialogs/ParentalControlDialog.ets",
+        "since": "2026-10-03T04:49:05.918Z",
+        "at": "2026-10-06T17:26:02.113Z"
+      },
+      "nodes": [
+        {
+          "key": "agent-a380a6f67e35e6fca.jsonl",
+          "at": "2026-10-02T03:51:39.481Z",
+          "reason": "偏差起点：PlaybackControlsDialog.ets 首创构造后赋值的回调范式（agent-a380a6f67e35e6fca.jsonl:L159-L160）。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/dialogs/PlaybackControlsDialog.ets",
+          "at": "2026-10-02T04:22:22.557Z",
+          "reason": "交付桥梁：ParentalControlDialog 转换者读取该文件后写道“PlaybackControlsDialog 展示了该项目确切的 dialog-family 约定”（agent-a1604e6a7ef34e674.jsonl:L41-L42、L45）。"
+        },
+        {
+          "key": "agent-a1604e6a7ef34e674.jsonl",
+          "at": "2026-10-02T04:30:36.409Z",
+          "reason": "沿用该范式，Write 写出 ParentalControlDialogContent({ onVerified: args.onVerified, onDialogCancel: args.onDialogCancel })，两者都在构造后才赋值（L109-L110）；本链确认的是范式传递。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/dialogs/FeedCounterDialog.ets",
+        "since": "2026-10-03T04:49:05.918Z",
+        "at": "2026-10-06T17:26:02.113Z"
+      },
+      "nodes": [
+        {
+          "key": "agent-a380a6f67e35e6fca.jsonl",
+          "at": "2026-10-02T03:51:39.481Z",
+          "reason": "偏差起点：PlaybackControlsDialog.ets 首创构造后赋值的回调范式（agent-a380a6f67e35e6fca.jsonl:L159-L160）。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/dialogs/PlaybackControlsDialog.ets",
+          "at": "2026-10-02T04:22:22.449Z",
+          "reason": "交付桥梁：FeedCounterDialog 转换者读取该文件，总结为“the exact project convention for dialogs”，包括 ComponentContent + @Param onClose（agent-a152aa7bb253eaedb.jsonl:L68-L73）。"
+        },
+        {
+          "key": "agent-a152aa7bb253eaedb.jsonl",
+          "at": "2026-10-02T04:30:44.804Z",
+          "reason": "沿用该范式，Write 写出 FeedCounterDialogContent({ onClose: args.onClose })，并在构造后赋 args.onClose（L119-L120）；交付总结自述“使用 PlaybackControlsDialog 系列模式”（L155）；本链确认的是范式传递。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/components/FeedStatisticsDialog.ets",
+        "since": "2026-10-03T04:49:05.918Z",
+        "at": "2026-10-06T17:26:02.113Z"
+      },
+      "nodes": [
+        {
+          "key": "agent-a380a6f67e35e6fca.jsonl",
+          "at": "2026-10-02T03:51:39.481Z",
+          "reason": "偏差起点：PlaybackControlsDialog.ets 首创构造后赋值的回调范式（agent-a380a6f67e35e6fca.jsonl:L159-L160）。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/dialogs/PlaybackControlsDialog.ets",
+          "at": "2026-10-02T04:18:23.762Z",
+          "reason": "交付桥梁：FeedStatisticsDialog 转换者为确认“项目的 dialog 模式”读取该文件（agent-af549e9dc36160201.jsonl:L39-L43），随后记为 Existing dialog pattern（L47）。"
+        },
+        {
+          "key": "agent-af549e9dc36160201.jsonl",
+          "at": "2026-10-02T04:32:30.420Z",
+          "reason": "沿用该范式，Write 写出 builder onClose: args.onClose、onOpenPodcast: args.onOpenPodcast，两者都在构造后才赋值（L98-L99）；本链确认的是范式传递。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/dialogs/StatisticsFilterDialog.ets",
+        "since": "2026-10-03T04:49:05.918Z",
+        "at": "2026-10-06T17:26:02.113Z"
+      },
+      "nodes": [
+        {
+          "key": "agent-a380a6f67e35e6fca.jsonl",
+          "at": "2026-10-02T03:51:39.481Z",
+          "reason": "偏差起点：PlaybackControlsDialog.ets 首创构造后赋值的回调范式（agent-a380a6f67e35e6fca.jsonl:L159-L160）。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/dialogs/PlaybackControlsDialog.ets",
+          "at": "2026-10-02T04:27:50.733Z",
+          "reason": "交付桥梁：StatisticsFilterDialog 转换者读取该文件后写道“对话框系列规范很明确（openCustomDialog + ComponentContent + wrapBuilder…）”（agent-a29ef4307c93bc363.jsonl:L53-L54、L58）。"
+        },
+        {
+          "key": "agent-a29ef4307c93bc363.jsonl",
+          "at": "2026-10-02T04:36:54.753Z",
+          "reason": "沿用该范式，Write 写出 builder onClose: args.onClose、onFilterApplied: args.onFilterApplied，并在构造后赋 args.onClose（L126-L127）；本链确认的是范式传递。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/dialogs/FeedSortDialog.ets",
+        "since": "2026-10-03T04:49:05.918Z",
+        "at": "2026-10-06T17:26:02.113Z"
+      },
+      "nodes": [
+        {
+          "key": "agent-a380a6f67e35e6fca.jsonl",
+          "at": "2026-10-02T03:51:39.481Z",
+          "reason": "偏差起点：PlaybackControlsDialog.ets 首创构造后赋值的回调范式（agent-a380a6f67e35e6fca.jsonl:L159-L160）。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/dialogs/PlaybackControlsDialog.ets",
+          "at": "2026-10-02T04:22:22.449Z",
+          "reason": "交付桥梁：FeedCounterDialog 转换者把该文件读作项目弹窗约定（agent-a152aa7bb253eaedb.jsonl:L68-L73）。"
+        },
+        {
+          "key": "agent-a152aa7bb253eaedb.jsonl",
+          "at": "2026-10-02T04:30:44.804Z",
+          "reason": "沿用后写出 FeedCounterDialog.ets，其中 onClose: args.onClose 在构造后才赋值（L119-L120），形成第二代先例。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/dialogs/FeedCounterDialog.ets",
+          "at": "2026-10-02T05:18:21.422Z",
+          "reason": "交付桥梁：FeedSortDialog 续跑转换者称“FeedCounterDialog.ets 是同类对话框……读取它以了解确切的约定”，Read 回执含 builder 捕获与构造后赋值（agent-ac746eecd6dd41069.jsonl:L59-L62、L65）。"
+        },
+        {
+          "key": "agent-ac746eecd6dd41069.jsonl",
+          "at": "2026-10-02T05:20:05.092Z",
+          "reason": "按兄弟先例 Write 写出 FeedSortDialogContent({ onClose: args.onClose })，并在构造后赋 args.onClose（L85-L86），这就是修复会话观察到 Cancel 不关闭的片段；本链确认的是范式传递。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/dialogs/HomeSectionsSettingsDialog.ets",
+        "since": "2026-10-03T04:49:05.918Z",
+        "at": "2026-10-06T17:26:02.113Z"
+      },
+      "nodes": [
+        {
+          "key": "agent-a380a6f67e35e6fca.jsonl",
+          "at": "2026-10-02T03:51:39.481Z",
+          "reason": "偏差起点：PlaybackControlsDialog.ets 首创构造后赋值的回调范式（agent-a380a6f67e35e6fca.jsonl:L159-L160）。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/dialogs/PlaybackControlsDialog.ets",
+          "at": "2026-10-02T04:22:22.449Z",
+          "reason": "交付桥梁：FeedCounterDialog 转换者把该文件读作项目弹窗约定（agent-a152aa7bb253eaedb.jsonl:L68-L73）。"
+        },
+        {
+          "key": "agent-a152aa7bb253eaedb.jsonl",
+          "at": "2026-10-02T04:30:44.804Z",
+          "reason": "沿用后写出 FeedCounterDialog.ets，其中 onClose: args.onClose 在构造后才赋值（L119-L120）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/dialogs/FeedCounterDialog.ets",
+          "at": "2026-10-02T05:19:40.952Z",
+          "reason": "交付桥梁：HomeSectionsSettingsDialog 续跑转换者并行 Read 了 FeedCounterDialog.ets 与 StatisticsFilterDialog.ets（agent-ae82b24bf9f515f52.jsonl:L99-L102），之后写道“项目约定很明确（openCustomDialog + ComponentContent 对话框系列）”（L104）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/dialogs/PlaybackControlsDialog.ets",
+          "at": "2026-10-02T04:27:50.733Z",
+          "reason": "交付桥梁：StatisticsFilterDialog 转换者把该文件读作对话框系列规范（agent-a29ef4307c93bc363.jsonl:L53-L54、L58）。"
+        },
+        {
+          "key": "agent-a29ef4307c93bc363.jsonl",
+          "at": "2026-10-02T04:36:54.753Z",
+          "reason": "沿用后写出 StatisticsFilterDialog.ets，其中 onClose/onFilterApplied 由 builder 直接取 args，onClose 在构造后才赋值（L126-L127）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/dialogs/StatisticsFilterDialog.ets",
+          "at": "2026-10-02T05:19:40.950Z",
+          "reason": "交付桥梁：同一续跑转换者 Read 的另一份兄弟先例，回执含 builder 捕获与构造后赋值（agent-ae82b24bf9f515f52.jsonl:L99、L101）。"
+        },
+        {
+          "key": "agent-ae82b24bf9f515f52.jsonl",
+          "at": "2026-10-02T05:30:12.048Z",
+          "reason": "按这两份兄弟先例 Write 写出 builder onSettingsChanged: args.onSettingsChanged、onClose: args.onClose，并在构造后赋 args.onClose（L181-L182）；本链确认的是范式传递。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 8
+        },
+        {
+          "from": 1,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": 6
+        },
+        {
+          "from": 6,
+          "to": 7
+        },
+        {
+          "from": 7,
+          "to": 8
+        },
+        {
+          "from": 8,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-50d84809509dfadabf5c",
+  "metadata": {
+    "migration": {
+      "id": "antennapod-glm53-3c838ae1-111b-475a-a085-e9464ec2fde4",
+      "project": "AntennaPod"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.285",
+        "2.1.286",
+        "2.1.287",
+        "2.1.288",
+        "2.1.289"
+      ]
+    },
+    "source_set_id": "sources-5f9a4b68d8866c1b1233",
+    "environment": [
+      {
+        "name": "toolchain.kotlin",
+        "value": "2.3.20",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-09-30T15:43:45.309Z",
+        "ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a3da0f444ffe5d81f.jsonl:L27",
+        "request_ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a3da0f444ffe5d81f.jsonl:L25",
+        "phase": "generation"
+      },
+      {
+        "name": "toolchain.agp",
+        "value": "8.11.0",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-09-30T15:43:45.309Z",
+        "ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a3da0f444ffe5d81f.jsonl:L27",
+        "request_ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a3da0f444ffe5d81f.jsonl:L25",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-09-30T17:34:05.597Z",
+        "ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a5c631d1e662fac13.jsonl:L54",
+        "request_ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a5c631d1e662fac13.jsonl:L53",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-09-30T17:34:05.597Z",
+        "ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a5c631d1e662fac13.jsonl:L54",
+        "request_ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a5c631d1e662fac13.jsonl:L53",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.0.2(22)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-10-04T16:26:51.075Z",
+        "ref": "repair/ae3bb09d-1f58-48a4-91c8-85a20fd96fc1.jsonl:L215",
+        "request_ref": "repair/ae3bb09d-1f58-48a4-91c8-85a20fd96fc1.jsonl:L214",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.0.1(21)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-10-04T16:26:51.075Z",
+        "ref": "repair/ae3bb09d-1f58-48a4-91c8-85a20fd96fc1.jsonl:L215",
+        "request_ref": "repair/ae3bb09d-1f58-48a4-91c8-85a20fd96fc1.jsonl:L214",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.4",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "040e09cc-8de1-45ba-bc4b-5202da7f9c23"
+      ]
+    }
+  },
+  "revision": "3a16a2374d1dd50247cc80dd1707340b25e9c600e8417b561842d26f604cac71"
+}

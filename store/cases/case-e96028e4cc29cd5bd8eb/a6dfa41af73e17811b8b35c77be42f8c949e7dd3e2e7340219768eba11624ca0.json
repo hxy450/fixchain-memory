@@ -1,0 +1,134 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-e96028e4cc29cd5bd8eb",
+  "created_at": "2026-10-10T07:13:15.915341+00:00",
+  "migration_key": "game2048-glm53-d90de388-a6d4-4f09-8cd2-28dfc31c5901",
+  "title": "把只认首指的 getAction 触控分支逐一映射成 ArkUI 逐指 Down/Up，并统一取 changedTouches[0]",
+  "when": "输入控制的规格提取与实现阶段，将 Android onTouch 的 MotionEvent 动作分支和坐标读取映射为 ArkUI onTouch 的 TouchType 分支与触点来源时",
+  "description": "源端 OnTouchListener 用未掩码的 event.getAction() 只匹配 ACTION_DOWN/MOVE/UP，并用无索引的 getX()/getY() 读坐标，附加手指的 POINTER_DOWN/UP 不进入任何分支；目标端 ArkUI .onTouch 对每根手指都派发 TouchType.Down/Up，TouchEvent 同时提供 touches（全部在屏触点）与 changedTouches（本次变化的触点）。",
+  "summary": "规格作者（生成主会话）写前 Read 了 InputListener.java（主会话 L74-L75）：onTouch 用 switch (event.getAction())，\n只列 ACTION_DOWN/ACTION_MOVE/ACTION_UP 三个 case，坐标用无索引的 getX()/getY()。未掩码的 getAction() 对附加手指\n返回带指针索引位的 ACTION_POINTER_DOWN/UP，不匹配任何 case；getX() 取指针索引 0。这些已足以确定状态机只跟随首指。\nF004 实现映射却把这一行写成 MotionEvent.ACTION_DOWN/MOVE/UP → TouchType.Down/Move/Up（只补了 Cancel，难度标低），\nfeature-base 跨栈基线也写成\"TouchType.Down/Move/Up/Cancel + touches[0].x/y，行为等价\"（主会话 L269、L315），\n没有说明 ArkUI 对每根手指都派发 Down/Up、需要过滤附加手指。坐标列写 touches[0].x/y，就 Move 而言与 getX() 取索引 0 一致。\n这是规格这一环的缺口：附加手指按下/抬起的处理没有写进契约。\n\nSlice 4（F004）worker 写前读到同一份源码和 F004 规格（agent-a138689b12eef3b6c.jsonl:L34-L37），派工要求状态机逐行移植；\n它 grep 交互映射参考时，回执也给出 getX()→touches[0].x、getPointerCount()→touches.length（L77-L78）。\n但它在思考中只从\"Up 时 touches 已移除抬起点\"考虑触点来源，并假定单指游戏、Down/Move 取 changedTouches[0] 与 touches[0] 等价（L95）；\n随后在 MainPage.onGameTouch 中对 Down/Move/Up/Cancel 统一取 event.changedTouches[0] 喂给 InputController（L119-L120），\nsource-notes 差异清单第 3 条也写\"统一取 changedTouches[0]……（单指游戏）\"（L97）。这一处既偏离了规格的 touches[0]，\n又沿用了规格对 Down/Up 的逐一映射：第二指 Down 被当成新的 ACTION_DOWN，重置起点和 hasMoved；Move 跟着本次变化的手指\n在两指间跳动；首指抬起被当成 ACTION_UP。同一 worker 已经识别出按键的同类差异：ArkUI onKeyEvent 对 Down/Up 双派发，\n而 Android onKeyDown 只在 ACTION_DOWN 时触发，于是加了 KeyType.Down 守卫（L96-L97 差异第 5 条）；触控却没有做同样的派发语义对照。\n\n之后的写者只加了接线说明注释，没有改 onGameTouch 正文，生成检查点 dc92e69 中仍是 worker 写出的版本。\n返修用 uinput 两指同时下滑并插桩日志，看到第二指 Down 把起点重置到 x=900，第一条 Move 算出 dx=-600，触发左移\n（repair L1445-L1455）。最终保留的修改：Down/Up 事件中 event.touches.length > 1 时直接忽略；Move 取 event.touches[0]；\n首指 Down、末指 Up 和 Cancel 取 changedTouches[0]（检查点 E8 a885f5a，repair L1463-L1464、L1478-L1479）。\nadb input 无法注入多点，安卓端由返修按源码语义核对。\n",
+  "recommendations": [
+    "规格提取时，映射 MotionEvent 动作分支要写明源端用的是 getAction() 还是 getActionMasked()，以及附加手指的 POINTER_DOWN/UP 是被忽略还是参与；目标契约要写出 ArkUI 对每根手指都派发 Down/Up，并规定如何过滤非首指按下、非末指抬起（例如 touches.length > 1 时跳过），不要用'TouchType.Down/Move/Up 行为等价'一句带过。",
+    "实现触控桥接时，把无索引的 getX()/getY()（指针索引 0）对应到 Move 事件的 event.touches[0]；changedTouches[0] 只用于首指 Down、末指 Up 和 Cancel 取本次触点。不要以'单指游戏'为由对所有类型统一取 changedTouches[0]。",
+    "凡是 ArkUI 回调的派发粒度比源端细（按键 Down/Up 双派发、触控逐指 Down/Up），先在差异清单写明源端实际进入分支的事件子集，再在桥接处过滤。最小检查：两指同时同向滑动只触发一次该方向的 move，单指四向仍各触发一次。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-2048-glm5.3/entry/src/main/ets/pages/MainPage.ets",
+        "since": "2026-10-09T18:47:43.289Z",
+        "at": "2026-10-10T04:36:17.957Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/2048-tpcstld-2863bbe/2048/base/src/main/java/com/tpcstld/twozerogame/InputListener.java",
+          "at": "2026-10-09T15:31:58.567Z",
+          "reason": "正常输入：主会话 Read 回执是完整源码，onTouch 为 switch (event.getAction())，只有 ACTION_DOWN/MOVE/UP 三个 case，坐标用无索引的 getX()/getY()。足以确定附加手指的 POINTER_DOWN/UP 被忽略、Move 只跟随指针索引 0（d90de388 主会话 L74-L75）。"
+        },
+        {
+          "key": "d90de388-a6d4-4f09-8cd2-28dfc31c5901.jsonl",
+          "at": "2026-10-09T15:43:17.579Z",
+          "reason": "读到上述源码后，Write F004 实现映射，把 MotionEvent.ACTION_DOWN/MOVE/UP 逐一写成 TouchType.Down/Move/Up（只补 Cancel，难度低），坐标列写 touches[0].x/y；此前写的 feature-base 跨栈基线也称'TouchType.Down/Move/Up/Cancel + touches[0].x/y 行为等价'。两处都没有写 ArkUI 逐指派发 Down/Up、需要过滤附加手指（主会话 L269、L315、L322）。源码到规格在此丢失多指语义。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-2048-glm5.3/spec/baseline/features/F004-input-control.md",
+          "at": "2026-10-09T17:27:38.335Z",
+          "reason": "交付桥梁：Slice 4 worker 的 Read 回执包含实现映射第 36-37 行（touches[0].x/y；ACTION_DOWN/MOVE/UP → TouchType.Down/Move/Up）（agent-a138689b12eef3b6c.jsonl:L33、L37）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/2048-tpcstld-2863bbe/2048/base/src/main/java/com/tpcstld/twozerogame/InputListener.java",
+          "at": "2026-10-09T17:27:38.334Z",
+          "reason": "正常输入：worker 自己的 Read 回执同样是完整源码，含 switch (event.getAction()) 三个 case 和 getX()/getY()；派工要求状态机逐行移植（agent-a138689b12eef3b6c.jsonl:L1、L34、L36）。"
+        },
+        {
+          "key": "agent-a138689b12eef3b6c.jsonl",
+          "at": "2026-10-09T17:38:31.679Z",
+          "reason": "已收到源码与规格（touches[0]），思考中却假定单指游戏、Down/Move 取 changedTouches[0] 与 touches[0] 等价（L95）；Edit MainPage.onGameTouch，对所有 TouchType 统一取 event.changedTouches[0]，也没有过滤附加手指的 Down/Up（L119-L120）；source-notes 差异第 3 条同述（L97）。Move 偏离规格与源码的指针索引 0，Down/Up 沿用了规格的逐一映射。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 5
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-e96028e4cc29cd5bd8eb",
+  "metadata": {
+    "migration": {
+      "id": "game2048-glm53-d90de388-a6d4-4f09-8cd2-28dfc31c5901",
+      "project": "2048"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.295",
+        "2.1.296"
+      ]
+    },
+    "source_set_id": "sources-8cc5e9d8f4b3bafc7d31",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-2048-glm5.3",
+        "at": "2026-10-09T15:56:56.310Z",
+        "ref": "generation/d90de388-a6d4-4f09-8cd2-28dfc31c5901.jsonl:L692",
+        "request_ref": "generation/d90de388-a6d4-4f09-8cd2-28dfc31c5901.jsonl:L686",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-2048-glm5.3",
+        "at": "2026-10-09T15:56:56.310Z",
+        "ref": "generation/d90de388-a6d4-4f09-8cd2-28dfc31c5901.jsonl:L692",
+        "request_ref": "generation/d90de388-a6d4-4f09-8cd2-28dfc31c5901.jsonl:L686",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.10.4",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "4566ae59-a9cb-4783-8d98-daad7bff832a"
+      ]
+    }
+  },
+  "revision": "a6dfa41af73e17811b8b35c77be42f8c949e7dd3e2e7340219768eba11624ca0"
+}

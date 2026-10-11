@@ -1,0 +1,115 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-1e64c642a169c6a160fd",
+  "created_at": "2026-10-10T07:08:59.768901+00:00",
+  "migration_key": "game2048-glm53-d90de388-a6d4-4f09-8cd2-28dfc31c5901",
+  "title": "背景位图改为每帧矢量重绘后，首启帮助文案改读实时 showHelp，丢失“生成背景时取值”语义",
+  "when": "界面实现阶段，把源端预渲染的背景位图或缓存改成每帧重绘时，确定其中条件元素按什么时机取值",
+  "description": "Android 自绘 View 在 onSizeChanged 中把受状态字段控制的元素（例如 showHelp 为真时才画的首启说明）烘焙进背景 Bitmap，onDraw 每帧只贴这张位图；该字段在位图生成后仍会被 newGame 等流程改写。目标端 Canvas 不做离屏缓存，改为每帧矢量绘制背景层。",
+  "summary": "Slice 3（F003）渲染 worker 写目标文件前已经拿到正确且足够的输入。F003 规格写明\n“静态背景层（onSizeChanged 预渲染一次：标题/计分框底/图标/棋盘框/16 格底/首启说明）”；\nAC06 写明背景层含“首启说明文本（仅 showHelp=true 时）”，锚到 MainView.createBackgroundBitmap:433。\n跨栈映射允许“OffscreenCanvas 缓存或直接每帧矢量重绘”二选一，但要求“行为等价”\n（agent-a6ffdc5db8eb83d2e.jsonl:L25-L26）。该 worker 通读 MainView.java，读到三处事实：\n构造器 :100 先调 game.newGame()；onSizeChanged :142-148 才调 createBackgroundBitmap；\n:441 `if (showHelp) drawInstructions(canvas)`；onDraw :112 每帧只贴已经烘焙好的 background（L31-L32）。\n它在源码笔记里也写下“showHelp 只在 onSizeChanged 进背景”（L147-L148，差异表第 12 行）。\n可见首启说明在背景生成时就取定了值，之后 newGame 把 showHelp 改成 false 也不会让它消失。\n但该 worker 选择“位图缓存策略 = 每帧矢量”，并声称行为等价，而它核对等价时只比较了元素集合、\n绘制顺序和颜色。它在 GameRenderer.ets 的 drawBackgroundLayer 里每帧读实时的\n`if (this.host.showHelp)`，没有在 onSizeChanged 时留快照（L151-L152）。\n交回结果时，decision_gaps 只上报了 tile 缓存选型，没有提这个取值时机（L266）。\n所以偏差出在“已收到冻结语义 → 改写成每帧绘制”这一步。规格和派工都没有指定选哪条路径，\n选每帧矢量的是这名 worker；规格用“预渲染一次”加锚点源码交代了取值时机，\n只是没有逐字写出“生成后再改字段也不影响背景”。\n该片段一直保留到生成结束（生成检查点 dc92e69 中 :352 仍是 `if (this.host.showHelp)`；\n返修前读回为 :439，见 R:L1233）。返修发现：首启会话中点新游戏→RESET 后，鸿蒙的说明立即消失，安卓仍保留。\n最终修改（R:L1238-L1239，检查点 D8 172447f，保留到 FINAL）如下。新增 backgroundShowHelp 快照，\napplyLayout 时取 host.showHelp，背景层改读快照。另给 applyLayout 加“引擎已启动（aGrid 非空）”门控，\n未启动就下一帧重试，并抽出 scheduleLayoutRetry。之所以要加门控：快照语义要求布局晚于首次 newGame，\n而并行的 Slice 5 已把 newGame 移进偏好就绪后的冷启链 runColdStart（agent-adc76c9a85cdc57ce，17:35）；\n渲染 worker 笔记中“aboutToAppear(newGame)→onReady”的时序依据，是它 17:27 读到的旧 MainPage。\n改成每帧实时读取后，这个时序差异被掩盖了。两端同序列墨迹计数复测结果：\n首启、RESET 后、重启三态一致（R:L1244-L1245）。\n",
+  "recommendations": [
+    "实现阶段把源端预渲染位图或缓存换成每帧绘制前，先逐一列出缓存构建函数里读到的可变状态（如 createBackgroundBitmap 里的 showHelp）及缓存的重建时机（只在 onSizeChanged）。在目标端对应的布局或尺寸变化入口给这些状态留快照，绘制时读快照，不读实时字段。",
+    "声称“行为等价”前，查出这些状态在缓存生成后还有哪些写者（如 newGame 中的 showHelp = firstRun()），并按源端顺序走一遍：首启 → 新游戏 → 重建视图。确认元素何时出现、何时消失，而不只比较元素集合、顺序和颜色。",
+    "快照依赖状态的首次写入（引擎冷启 newGame）时，要确认目标端布局晚于这次写入；若初始化是异步的（例如偏好就绪后才 newGame），给布局加“引擎已启动”门控并在下一帧重试。缓存策略的这项语义差异应写入交回的 decision_gaps。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-2048-glm5.3/entry/src/main/ets/view/GameRenderer.ets",
+        "since": "2026-10-09T18:47:43.289Z",
+        "at": "2026-10-10T04:36:17.957Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-2048-glm5.3/spec/baseline/features/F003-rendering-animation.md",
+          "at": "2026-10-09T17:27:13.528Z",
+          "reason": "正常输入：worker 的 Read 回执返回以下内容。架构第 26 行：静态背景层由 onSizeChanged 预渲染一次，含首启说明。AC06：背景层含首启说明（仅 showHelp=true 时），锚 MainView.createBackgroundBitmap:433。第 107 行：背景位图绘制顺序以“说明文本（showHelp）”收尾。第 44 行：映射允许每帧矢量重绘，但要求行为等价。这些足以说明说明文案的取值属于背景生成时刻（agent-a6ffdc5db8eb83d2e.jsonl:L25-L26）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/2048-tpcstld-2863bbe/2048/base/src/main/java/com/tpcstld/twozerogame/MainView.java",
+          "at": "2026-10-09T17:27:23.736Z",
+          "reason": "正常输入：worker 全文 Read 回执包含以下代码。构造器 :100 调 game.newGame()；onSizeChanged :142-148 调 createBackgroundBitmap；:433-443 中 `if (showHelp) drawInstructions(canvas)`；onDraw :112 每帧 drawBitmap(background)。由此可确定说明文案只在背景位图生成时按当时的 showHelp 绘入（agent-a6ffdc5db8eb83d2e.jsonl:L31-L32）。"
+        },
+        {
+          "key": "agent-a6ffdc5db8eb83d2e.jsonl",
+          "at": "2026-10-09T17:41:29.105Z",
+          "reason": "偏差输出：读到上述输入后，源码笔记 Write（L147-L148）自己写下“showHelp 只在 onSizeChanged 进背景”，同时选定“位图缓存策略 = 每帧矢量”并称行为等价。随后 Write GameRenderer.ets（L151-L152），drawBackgroundLayer 每帧读实时 `if (this.host.showHelp)`，没有在 onSizeChanged 时取快照，冻结取值的语义因此丢失。交回结果的 decision_gaps 只报了 tile 缓存选型（L266）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-1e64c642a169c6a160fd",
+  "metadata": {
+    "migration": {
+      "id": "game2048-glm53-d90de388-a6d4-4f09-8cd2-28dfc31c5901",
+      "project": "2048"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.295",
+        "2.1.296"
+      ]
+    },
+    "source_set_id": "sources-8cc5e9d8f4b3bafc7d31",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-2048-glm5.3",
+        "at": "2026-10-09T15:56:56.310Z",
+        "ref": "generation/d90de388-a6d4-4f09-8cd2-28dfc31c5901.jsonl:L692",
+        "request_ref": "generation/d90de388-a6d4-4f09-8cd2-28dfc31c5901.jsonl:L686",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-2048-glm5.3",
+        "at": "2026-10-09T15:56:56.310Z",
+        "ref": "generation/d90de388-a6d4-4f09-8cd2-28dfc31c5901.jsonl:L692",
+        "request_ref": "generation/d90de388-a6d4-4f09-8cd2-28dfc31c5901.jsonl:L686",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.10.4",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "4566ae59-a9cb-4783-8d98-daad7bff832a"
+      ]
+    }
+  },
+  "revision": "9d9cb22c2b2c4ed486cccd15fa2214f9317fc0a4e7dd155486da5b3544cf5e5b"
+}

@@ -1,0 +1,141 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-605ca2c835a2d8b2950f",
+  "created_at": "2026-10-10T07:38:31.417441+00:00",
+  "migration_key": "game2048-glm53-d90de388-a6d4-4f09-8cd2-28dfc31c5901",
+  "title": "画布文案改用 getStringSync(Resource) 重载取值，未核实与按 id 取值等价，不随应用偏好语言切换",
+  "when": "界面实现阶段，把安卓自绘 View 中命令式取字符串（getResources().getString）改写为 ArkTS 代码内取值、并选择 resourceManager 取值接口时；以及后续切片沿用该写法扩展取值点时",
+  "description": "源端在自绘 View/Canvas 里用 getResources().getString(R.string.*) 按当前资源配置取文案，再拿去 drawText/measureText；目标端要在 ArkTS 代码中拿到纯字符串，不能直接用组件上的声明式 $r 绑定。应用带多个 locale 资源目录，同一屏还有走声明式 $r 的文本（如确认对话框）。",
+  "summary": "MainActivity 页面 converter 写前 Read 了 MainView.java，回执里画布文案全部是\ncanvas.drawText(getResources().getString(R.string.*))，测宽也用 paint.measureText(getResources().getString(...))\n（agent-aff8280c29a186c0a.jsonl:L40-L41）。这说明源端只有一条解析路径：按当前资源配置取值，和界面其他文本一致。\nconverter 思考时先写出 resourceManager.getStringSync($r('app.string.instructions').id)，随后改口：\n“There's getStringSync(resId: number) and (API 10+) getStringSync(resource: Resource). Yes, both exist. I'll pass the Resource.”\n（同转录 L92），把“两个重载都存在”当成了“行为相同”，没有任何验证；接着 Write MainPage.ets，\n五处几何测量文案写成 getStringSync($r('app.string.*'))（L114-L115，报告 L154）。\n生成期输入里没有任何材料说明两种重载在应用偏好语言下表现不同：页面规格、F003 规格和已加载的映射参考都没讲取值接口；\nF007-AC06 只要求“系统语言切换后文案跟随”；Slice 7 的 i18n 核验只 grep 到 $r/getStringSync 引用就判“落地”，\n并写明“Android 端无应用内语言切换（仅系统跟随），无需 setPreferredLanguage”（agent-a60c82bc5753db32b.jsonl:L155）。\n因此本条偏差是 converter 在重载之间作了未经核实的等价判断，同时 skill 材料也没有覆盖这一平台差异；不声称 converter 明知会出错。\nSlice 3 worker 写前 Read 了 MainView.java（agent-a6ffdc5db8eb83d2e.jsonl:L31-L32）和带上述五处写法的 MainPage.ets（L47、L52），\n思考中写“resourceManager type has getStringSync(Resource) ✓ (used in Slice 1 code already)”（L145），\n随后 Edit 新建 buildRendererTexts()，把 header/high_score/score/instructions/you_win/game_over/go_on/for_now/endless\n九项全部写成 getStringSync($r(...))，注释称“保持多语言正确性”（L202-L203）。这条链里它是沿用先例的传递者。\nSlice 4 在 17:38 的 Edit 只把同一行当作上下文原样保留（agent-a138689b12eef3b6c.jsonl:L117-L118）。\n该片段原样保留到返修：返修读到的 buildRendererTexts 仍是九处 Resource 重载（R:L3385-L3386）。\n返修在应用偏好语言 fa 下发现确认框是波斯语、画布仍是英文（R:L3350-L3356）；插桩显示同一 resourceManager、\nlocale fa_Arab_ 下 getStringSync($r('app.string.score')) 返回 SCORE，getStringSync($r('app.string.score').id) 返回 امتیاز（R:L3365-L3366）。\n修复把九处改为 getStringSync($r('app.string.*').id) 并加注释说明原因（R:L3390-L3391、L3397、L3403），\n复测画布与安卓一致，记为检查点 X5 fecd29b（R:L3420-L3434），最终保留在 FINAL a87425f。\n",
+  "recommendations": [
+    "界面实现时，命令式取字符串要与声明式 $r 文本走同一解析路径：用 resourceManager.getStringSync($r('app.string.x').id) 按数字 id 取值，不用 getStringSync($r(...)) 的 Resource 对象重载。本次在应用偏好语言 fa（locale fa_Arab_）下，按 id 取值返回 امتیاز，Resource 重载却回落到 base 的 SCORE。",
+    "在两个看似等价的接口重载之间选择时，“都存在”不代表“行为一致”。没有经验证的资料能证明等价，就采用 skill 或参考里已验证的写法；或者做一次最小验证：临时调用 i18n.System.setAppPreferredLanguage 切到一个有资源的 locale，把两种取值打印出来对比，再决定。",
+    "后续切片把已有写法扩展到更多调用点时（本例从 5 处扩到 9 处），要对照源端语义重新核对先例，不能拿“前一切片已经用过”当作正确的依据。同一屏如果既有声明式 $r 文本又有代码内取值的文本，确认两者在系统语言和应用偏好语言下给出的是同一种语言。",
+    "国际化核验阶段，“文案随语言切换”这类验收不能只看代码里有没有引用 $r/getStringSync；要在系统语言和应用偏好语言两种配置下，分别对比画布文本和组件文本是否切换到同一语言。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-2048-glm5.3/entry/src/main/ets/pages/MainPage.ets",
+        "since": "2026-10-09T18:47:43.289Z",
+        "at": "2026-10-10T04:36:17.957Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/2048-tpcstld-2863bbe/2048/base/src/main/java/com/tpcstld/twozerogame/MainView.java",
+          "at": "2026-10-09T16:22:42.071Z",
+          "reason": "正常输入：converter 的 Read 回执给出 canvas.drawText(getResources().getString(R.string.high_score/score/header/instructions/endless/you_win/go_on/for_now/game_over))，测宽也用 getResources().getString。足以说明源端按当前资源配置取值、与其他界面文本同一路径（agent-aff8280c29a186c0a.jsonl:L40-L41）。"
+        },
+        {
+          "key": "agent-aff8280c29a186c0a.jsonl",
+          "at": "2026-10-09T16:29:54.630Z",
+          "reason": "收到上述源码后，思考中先写出 getStringSync($r(...).id)，又以“both exist. I'll pass the Resource”改用 Resource 对象重载，未核实两者等价（L92）；随后 Write MainPage.ets，五处几何测量文案写成 resourceManager.getStringSync($r('app.string.*'))（L114-L115）。输入未说明重载差异，偏差是未经验证的接口等价判断，此处停止上溯。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-2048-glm5.3/entry/src/main/ets/pages/MainPage.ets",
+          "at": "2026-10-09T17:27:47.034Z",
+          "reason": "交付桥梁：Slice 3 worker 的 Read 回执第 284-288 行仍是 converter 写下的五处 resourceManager.getStringSync($r('app.string.*'))（agent-a6ffdc5db8eb83d2e.jsonl:L47、L52）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/2048-tpcstld-2863bbe/2048/base/src/main/java/com/tpcstld/twozerogame/MainView.java",
+          "at": "2026-10-09T17:27:23.736Z",
+          "reason": "正常输入：Slice 3 worker 的 Read 回执同样给出 MainView.java:192/203/261/268/399/416/418-419 的 getResources().getString(R.string.*)，即九项画布文案的源端取值方式（agent-a6ffdc5db8eb83d2e.jsonl:L31-L32）。"
+        },
+        {
+          "key": "agent-a6ffdc5db8eb83d2e.jsonl",
+          "at": "2026-10-09T17:46:36.121Z",
+          "reason": "读到先例后，思考写“getStringSync(Resource) ✓ (used in Slice 1 code already)”（L145），随后 Edit 新建 buildRendererTexts()，九项画布文案全部写成 getStringSync($r(...))，注释称“保持多语言正确性”（L202-L203）。这就是返修所改的片段；本链确认它沿用 converter 先例传递到目标，不另推定为独立成因。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 5
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "生成期输入（MainView.java、页面/F003/F007 规格、已加载的映射参考与 skill）都没有说明 getStringSync 两种重载在应用偏好语言下的差异；该行为来自返修在本机模拟器上的插桩观察（R:L3365-L3366），本卡没有找到官方文档佐证。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-605ca2c835a2d8b2950f",
+  "metadata": {
+    "migration": {
+      "id": "game2048-glm53-d90de388-a6d4-4f09-8cd2-28dfc31c5901",
+      "project": "2048"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.295",
+        "2.1.296"
+      ]
+    },
+    "source_set_id": "sources-8cc5e9d8f4b3bafc7d31",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-2048-glm5.3",
+        "at": "2026-10-09T15:56:56.310Z",
+        "ref": "generation/d90de388-a6d4-4f09-8cd2-28dfc31c5901.jsonl:L692",
+        "request_ref": "generation/d90de388-a6d4-4f09-8cd2-28dfc31c5901.jsonl:L686",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-2048-glm5.3",
+        "at": "2026-10-09T15:56:56.310Z",
+        "ref": "generation/d90de388-a6d4-4f09-8cd2-28dfc31c5901.jsonl:L692",
+        "request_ref": "generation/d90de388-a6d4-4f09-8cd2-28dfc31c5901.jsonl:L686",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.10.4",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "4566ae59-a9cb-4783-8d98-daad7bff832a"
+      ]
+    }
+  },
+  "revision": "5885d2629daf3e1bd7b6e0ace40ac6b4389e87598667a069721cffe49353fd43"
+}

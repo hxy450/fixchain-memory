@@ -1,6 +1,6 @@
 # ui/list
 
-列表与宫格：多类型 Adapter 页面的 item 布局与绑定分支（默认态、文案模板、附属子卡），分页加载的并发门闩与刷新互斥，多列 Grid 中占位与跨列项的排布，列表项主副行与空值回退，多组列表的数据源绑定与级联选择，列表项滑动操作（swipeAction）的挂载位置，LazyForEach 改 Repeat.virtualScroll 时的项高度与数据切换核对，按列表区分的排序器，侧栏分类与右侧分组列表的联动，条目点击回调与数据源本地变换（shuffled 等）随列表迁移，ExpandableListView 组头的默认交互与展开状态，异步分页列表新增批量修补时的代次保护与行内远端提交的在途锁
+列表与宫格：多类型 Adapter 页面的 item 布局与绑定分支（默认态、文案模板、附属子卡），分页加载的并发门闩与刷新互斥，下拉刷新 onRefreshing 在程序置 refreshing 时的触发，多列 Grid 中占位与跨列项的排布，列表项主副行与空值回退，多组列表的数据源绑定与级联选择，列表项滑动操作（swipeAction）的挂载位置，长按上下文菜单的契约，宿主改写共享行组件时的覆盖入参，LazyForEach 改 Repeat.virtualScroll 时的项高度与数据切换核对，按列表区分的排序器，侧栏分类与右侧分组列表的联动，条目点击回调与数据源本地变换（shuffled 等）随列表迁移，ExpandableListView 组头的默认交互与展开状态，异步分页列表新增批量修补时的代次保护与行内远端提交的在途锁
 
 [上一级](../index.md)
 
@@ -10,15 +10,24 @@
   - 时机：界面实现及对齐修复阶段，把 ExpandableListView + BaseExpandableListAdapter 翻译为 ArkUI 列表，确定组头交互与展开状态时
   - 情境：源 Activity 只调用 expandGroup(n) 设定初始展开，没有 setOnGroupClickListener（或监听返回 false）；getGroupView 按 isExpanded 切换上下箭头等资源；目标用 List/ForEach 渲染分组。
   - 例外：源端注册了 OnGroupClickListener 并返回 true 拦截默认行为，此时按监听体实现
+- [Refresh.onRefreshing 会在程序置 refreshing 时触发，发起刷新前先判断是否已在运行](lesson-fa79c5a6658c68b71a21.lesson.md)
+  - 时机：界面转换时把 SwipeRefreshLayout 映射为 Refresh，以及接线时把运行态事件接到 refreshing 绑定状态时
+  - 情境：源 setOnRefreshListener 只响应用户下拉，另由运行态事件 setRefreshing 同步指示器；目标 Refresh({ refreshing: $$state }) 的状态会被事件或菜单刷新程序置为 true。
 - [SmartRefreshLayout 的加载更多转成 onReachEnd 时，显式建立“加载中不重入、刷新中不派发”的门闩](lesson-0a398b212a8a80bd0c7f.lesson.md)
   - 时机：数据接线阶段，把 SmartRefreshLayout 的 onRefresh/onLoadMore 实现为 Refresh.onRefreshing 与 List/Grid.onReachEnd 分页处理时；规格提取阶段写分页竞态约束时
   - 情境：源页面由 SmartRefreshLayout 驱动分页（setOnLoadMoreListener、观察者里 finishRefresh/finishLoadMore），页面本身没有 isLoading 变量；ViewModel 的页码在响应成功后才自增；目标用 Refresh + onReachEnd 并以 concat 追加。
 - [为新列表数据路径选排序时找到源端该列表自己的排序器，不复用同文件其他列表的比较函数](lesson-eb59181d6dfaeb014aef.lesson.md)
   - 时机：功能实现阶段，为待办、日程等不同列表的数据查询选择排序比较器时
   - 情境：源端按列表区分排序器（如待办用专门的排序器：未完成在前、同状态按创建时间降序），目标多个列表共用同一仓库查询与比较函数，写者正在为新列表加查询方法。
+- [为某个宿主改写共享组件时加默认保持原行为的覆盖入参，并检索全部宿主调用点](lesson-67e0a326dea085296fb9.lesson.md)
+  - 时机：列表页与弹层接线阶段，源宿主或子类 adapter 改配共享行内的按钮或显隐，或要给多页共享的组件新增宿主须接的事件时
+  - 情境：子类用另一动作按钮配置改写次级按钮（图标、文案、点击一起换），宿主按状态把按钮设为 GONE，或为某个宿主给共享面板新增回调事件；目标行组件或面板被多页共享，写者常受写盘边界限制。
 - [侧栏分类页的右侧做成承载全部一级分组的 List + Scroller：点击 scrollToIndex、onScrollIndex 回写，并迁移程序滚动保护](lesson-7723af3766fb843a2577.lesson.md)
   - 时机：规格提取与界面实现阶段，迁移“左侧一级分类栏 + 右侧分组内容区”的分类页、确定右侧展示范围与左右联动时；按“对比源端”修复联动时
   - 情境：源端左侧一级分类与右侧按一级分类分组的单一滚动列表双向联动：点击左侧滚到对应分组，滚动右侧回写左侧选中项，并用标志位屏蔽点击引发的程序滚动回调（如 LazyListState、animateScrollToItem、visibleItemsInfo）；规格可能只写“右侧展示对应分类分组”“用列表控制器表达选择与滚动联动”。
+- [列表长按上下文菜单按源 onCreateContextMenu 契约逐项移植](lesson-9975dd1d15f5c73758e8.lesson.md)
+  - 时机：功能切片接线阶段，为列表页与首页区段实现条目长按交互和上下文菜单时
+  - 情境：源经 registerForContextMenu 与 onCreateContextMenu 弹出菜单：选择模式中直接返回、设置标题、共享准备函数决定可见项、multi_select 默认隐藏仅子类开放；目标在多个页面、共享组件和区段组件中移植。
 - [列表项新增独立副行显示某字段时，主行的空值回退不再回退到同一字段](lesson-b202de11960c156829b5.lesson.md)
   - 时机：界面实现阶段，迁移设备、联系人等列表项的主标题、副标题与空值回退文案时
   - 情境：源端列表项只有一个名称控件，名称为空时回退显示地址或 ID；目标布局另加了一行地址/ID 副标题；名称来自平台接口，无名条目较多。

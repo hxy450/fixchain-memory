@@ -1,6 +1,6 @@
 # ui/layout/sizing
 
-宽高、比例、百分比与边距的组合（父尺寸减边距、占剩余空间），Compose 修饰符链顺序与 Row 的测量顺序、固有高度，Material 按钮的布局占位与实绘尺寸，px 域整数布局公式与随进度收放的间距，以及随内容定尺寸的图片、背景和描边，以及非 Row/Column/Flex 父级中 layoutWeight 不生效时的显式尺寸；嵌入满高子组件时的剩余高度分配，居中的 wrap_content 子项组不被拉伸。
+宽高、比例、百分比与边距的组合（父尺寸减边距、占剩余空间，由内容定尺寸的父级里的百分比），Compose 修饰符链顺序与 Row 的测量顺序、固有高度，Material 按钮的布局占位与实绘尺寸，px 域整数布局公式与随进度收放的间距，以及随内容定尺寸的图片、背景和描边，以及非 Row/Column/Flex 父级中 layoutWeight 不生效时的显式尺寸；嵌入满高子组件时的剩余高度分配，居中的 wrap_content 子项组不被拉伸。
 
 [上一级](../index.md)
 
@@ -24,7 +24,7 @@
   - 情境：源布局用 marginEnd/marginStart（常与 marginBottom 等写在同一控件上）；映射参考把它对到 .margin({ end }) 并给出纯数字示例。
 - [“父尺寸减边距”或“扣除兄弟后的剩余空间”不写成 '100%'：match_parent/0dp 加同轴 margin 改用容器 padding 或 calc，Column 中占剩余高度的内容区用 layoutWeight(1)，等权重兄弟的间距改用 space](lesson-75f4743dff663f50966b.lesson.md)
   - 时机：界面实现阶段，把 match_parent 或两侧约束 0dp 且带同轴 margin 的视图、或带 margin 的等权重兄弟翻译成 ArkUI 尺寸与间距时；按要求调整左右边距时；为 Compose Column 中排在搜索栏、分隔线等固定高度节点之后、占满剩余高度的内容区确定高度时；宿主页在固定标题栏下嵌入根节点为 height('100%') 的面板或弹层组件时
-  - 情境：源元素 match_parent（或约束到父两侧的 0dp）同时设 layout_marginHorizontal/Start/End 或 marginTop/Bottom；或水平 LinearLayout 中等权重（0dp + weight）的子项以 marginStart 作间距；目标用 width/height('100%') 或 layoutWeight。也包括 Compose Column 里内容区排在固定高度兄弟之后，靠 fillMaxSize、weight 或 Lazy 列表默认行为占满剩余高度，可能有空结果、加载、结果等多个状态分支。 也包括宿主页 Column 顶部有固定高度标题栏，下方直接放根节点 height('100%')、自带标题行与底部按钮栏的筛选面板；对应 Android 以 MATCH_PARENT 的 PopupWindow showAsDropDown(标题栏) 弹出，只占锚点以下的高度。
+  - 情境：源元素 match_parent（或约束到父两侧的 0dp）同时设 layout_marginHorizontal/Start/End 或 marginTop/Bottom；或水平 LinearLayout 中等权重（0dp + weight）的子项以 marginStart 作间距；目标用 width/height('100%') 或 layoutWeight。也包括 Compose Column 里内容区排在固定高度兄弟之后，靠 fillMaxSize、weight 或 Lazy 列表默认行为占满剩余高度，可能有空结果、加载、结果等多个状态分支。 也包括宿主页 Column 顶部有固定高度标题栏，下方直接放根节点 height('100%')、自带标题行与底部按钮栏的筛选面板；对应 Android 以 MATCH_PARENT 的 PopupWindow showAsDropDown(标题栏) 弹出，只占锚点以下的高度。也包括 wrap_content 加 minWidth 实际占满可用宽，或 RecyclerView 项偏移（ItemDecoration）被写成容器外边距的变体。
 - [区分 Material 按钮的布局占位、背景实绘与触控范围：不只凭调用处 size 定背景，也不给内容撑开的容器补最小尺寸](lesson-b73a1ac8908f74856a02.lesson.md)
   - 时机：规格提取或界面实现阶段，确定 Material 按钮及包装容器的尺寸与位置时
   - 情境：源组件含 size/background 与库内部的最小交互尺寸规则（如 IconButton 在调用方 .size(x) 之内再套 minimumInteractiveComponentSize），或只是由内容撑开的 Surface/Box（如图标撑开的圆钮）；ui 快照由源码合成、bounds 为空时，调用处 size 数值最容易被当成实绘尺寸。
@@ -40,17 +40,17 @@
   - 时机：界面实现阶段，把已有空态、未登录引导等内容 builder 放进下拉刷新组件或其他封装容器的 content 时，确定内容根节点的高度约束
   - 情境：内容根节点原本在 Column 中用 layoutWeight(1) + justifyContent(Center) 占满剩余空间并居中；新父级是封装了原生 Refresh（或 Stack、Scroll 等）的组件，经 @BuilderParam 注入内容；工程里可能已有同样写法可以照搬。
 - [源端在整数 px 上取整的布局公式：规格写明运算域，实现在 px 域取整、写入布局属性前再换回 vp](lesson-0ef2cd00e1a91491b350.lesson.md)
-  - 时机：规格提取阶段，把自定义 Layout、MeasureScope 里的测量与整数几何公式翻成目标契约时；界面实现阶段，用 onAreaChange、measureText 等返回值驱动这类公式时
-  - 情境：源算法在约束或测量结果（Compose constraints、placeable 宽高等整数 px）上做整数除法、.toInt() 截断或取整；目标布局属性和尺寸回调（onAreaChange）使用 vp 等逻辑单位，回调值通常不是整数，measureText 返回 px。
+  - 时机：规格提取阶段，把自定义 Layout、MeasureScope 里的测量与整数几何公式翻成目标契约时；界面实现阶段，用 onAreaChange、measureText 等返回值驱动这类公式时；移植自绘 View 的绘制坐标、setBounds 边界、位移与文字基线修正中的 (int) 强转时
+  - 情境：源算法在约束或测量结果（Compose constraints、placeable 宽高等整数 px）上做整数除法、.toInt() 截断或取整；目标布局属性和尺寸回调（onAreaChange）使用 vp 等逻辑单位，回调值通常不是整数，measureText 返回 px。 也包括 Canvas 绘制代码中的 (int) 强转（setBounds 边界、int 位移、文字基线修正），其中的量可能为负。
   - 例外：公式本来作用于 Dp 常量（固定间距、固定尺寸），不涉及 constraints 或 placeable 时，按原单位保留
+- [由内容定尺寸的父级（列表行、wrap_content 头部、FIT_CONTENT 半模态）里不写 width/height('100%')：描边背景画在节点自身，行内撑满用 Stretch；源端描边不改尺寸时注意 .border() 计入测量](lesson-a58ebfe7a4c55b041b14.lesson.md)
+  - 时机：界面实现与规格映射阶段，翻译用 fillMaxSize()、matchContentSize 贴合内容的选中指示器、描边或背景，为高度由内容决定的行加铺满的背景层（滑删进度背景等），或把 Compose Modifier.border 这类只绘制、不改测量的修饰符落到 ArkUI 容器上时；把 match_parent 高度翻译到 ListItem、列表行组件、折叠头部背景层或 bindSheet 内容根时
+  - 情境：源端指示器或背景层以 fillMaxSize、matchContentSize 贴合某个由内容定尺寸的格子；目标准备在 Stack/Row 里叠一层 width/height('100%') 的节点来画描边或背景。也包括列表行里的 Stack 没有确定高度，准备放一层宽高 100% 的背景子节点；或源 border 画在调用方已定尺寸的盒内侧，目标容器自身不设宽高、尺寸由槽内容决定。也包括源 match_parent 子视图位于 wrap_content 的行、AppBar 或 BottomSheet 容器中，实际随内容或兄弟高度；目标放进 List、ListItem、Scroll 或 FIT_CONTENT 半模态，准备直译为 height('100%')。
+  - 例外：父节点有确定的宽高（显式数值，或已被外层约束定死）时，百分比层按该尺寸解析，可以使用
 - [网格里跨列数不同的卡片要同行等高时，用实际列宽与留边推导宽卡比例；组件自身的原生宽高比只用于卡内内容缩放](lesson-4fc212d401ac7b2a4218.lesson.md)
   - 时机：列表或首页网格的界面实现阶段，为不同尺寸规格（如 2x2、4x2）的卡片确定外框高度或 aspectRatio 时
   - 情境：源网格按规格分配 span（窄卡占 n 列、宽卡占 2n 列），卡片两侧有固定内边距或网格留边；参考截图里同一行的窄卡与宽卡外框等高；目标用百分比列宽加 aspectRatio 决定卡片高度，手头有组件自身的原生尺寸表（如 334.75×158）。
   - 例外：源端或参考截图里不同规格的卡片本就按各自原生比例显示、不等高
-- [贴合内容的描边、背景画在由内容定尺寸的节点自身，不用 width/height('100%') 覆盖层；源端描边不改尺寸时注意 .border() 计入测量](lesson-a58ebfe7a4c55b041b14.lesson.md)
-  - 时机：界面实现与规格映射阶段，翻译用 fillMaxSize()、matchContentSize 贴合内容的选中指示器、描边或背景，为高度由内容决定的行加铺满的背景层（滑删进度背景等），或把 Compose Modifier.border 这类只绘制、不改测量的修饰符落到 ArkUI 容器上时
-  - 情境：源端指示器或背景层以 fillMaxSize、matchContentSize 贴合某个由内容定尺寸的格子；目标准备在 Stack/Row 里叠一层 width/height('100%') 的节点来画描边或背景。也包括列表行里的 Stack 没有确定高度，准备放一层宽高 100% 的背景子节点；或源 border 画在调用方已定尺寸的盒内侧，目标容器自身不设宽高、尺寸由槽内容决定。
-  - 例外：父节点有确定的宽高（显式数值，或已被外层约束定死）时，百分比层按该尺寸解析，可以使用
 - [随选中进度收放的图标与文本位置：源端为 0 的间距按同一选中条件归零](lesson-c39245065cc26d8c9f64.lesson.md)
   - 时机：界面实现阶段，把源端自定义 Layout 中随动画进度收放的图标、文本位置公式翻成 ArkUI 属性时
   - 情境：源端导航项等按 animationProgress 计算文本宽度（含其两侧间距），未选中时为 0、图标在槽内居中；目标用 Row 居中加 constraintSize、opacity、scale 折叠文本来模拟。

@@ -1,0 +1,252 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-0b0bf6cdf94608e17cbb",
+  "created_at": "2026-10-07T04:26:30.515885+00:00",
+  "migration_key": "antennapod-glm53-3c838ae1-111b-475a-a085-e9464ec2fde4",
+  "title": "播放引擎改写为异步AVPlayer单例时丢失源端的串行装载、单次报错与停止复位语义",
+  "when": "播放服务实现阶段，把Android LocalPSMP/ExoPlayer的装载、错误回调与服务停止生命周期改写为AVPlayer封装时",
+  "description": "源端播放器在调用线程内同步完成停止→重建→设源→prepare，ExoPlayer只经onPlayerError报一次错，服务stopSelf后onDestroy/shutdown把状态归STOPPED并在下次启动重建；目标是常驻单例、方法返回Promise、同时有stateChange('error')与on('error')两条通道的AVPlayer。",
+  "summary": "Slice 6 实现者（agent-a3a307bca64776d79）写 PlaybackService 前已读到：F005 规格 AC30（shutdown 后状态 STOPPED）、\nAC133（stopService = stopForeground(true)+stopSelf）、AC134（onDestroy 中 mediaPlayer shutdown）、AC173（错误 → 单个\nPlayerErrorEvent → MediaPlayerErrorDialog）；LocalPSMP.java 中 playMediaObject 在调用线程内顺序执行\nstop→createMediaPlayer→setDataSource→prepare，只注册一个 setOnErrorListener→postSticky，shutdown 置 STOPPED(:538)；\narkts-media-playback 的 avplayer-lifecycle 参考给出 url 只在 idle 设置、stop 只在播放/暂停后调用，以及 reset/release 为异步。\n这些输入已足以确定装载必须串行、一个错误只报一次、停止服务后状态要复位。\n该 agent 的 Write 却写成：stateChange 'error' 与 on('error') 各自调用 onEngineError，每次都 postSticky 一个\nPlayerErrorEvent（流播失败时弹两个对话框）；prepare/play/pause/stop/reset 只包同步 try/catch，Promise 拒绝没人接，\n落到 unhandledRejection 被写成伪崩溃报告；stopService 只调用 stopToStoppedState（仅 INDETERMINATE→STOPPED），\n常驻单例播完后仍停在 PLAYING，同一集再按 Play 被「同集在播即忽略」吞掉；loadAndPrepare 经多个 await\n（随后 Edit 又在首行加了 await createMediaPlayer()）后才对共享的 this.avPlayer 设源，completed 回调不核对实例。\n两次装载因此交错，后到的装源打到已 initialized 的实例上报 not idle，前一次装载照常起播、播完并按播完收尾\n（标记已播、归零、出队、自动下一集）。偏差在“同步源语义 → 异步单例实现”这一步，这些片段一直保留到\nd16b3d0（retained-application.patch 中的“-”行）。\n修复依次去掉 stateChange 的二次上报、给 AVPlayer 调用加 no-op catch、stopService 置 STOPPED 并清 startWhenPrepared；\npass-3 再加装载代数 loadGeneration，让每次装载独占自己创建的实例；非 idle 时先 reset 再设源；每个实例只报一次错，\n并作废在途装载；completed 只认当前实例；stop 只在允许的状态下调用；续播时若引擎已失效，按断点重新装载。\nPlaybackController.start 与 CoverPanel 是同一问题的另外两处（成因见各自 graph 的 summary）。\n外部 skill 参考的模板本身就同时处理两条 error 通道、prepare() 也没接 catch，属于上游材料缺口；\n但规格与源码已给出单次报错、shutdown 置 STOPPED 的要求，本卡把偏差归在实现者。\n",
+  "recommendations": [
+    "把源端同步执行的 playMediaObject 改写为含 await 的异步装载时，给每次装载分配代数或令牌，并让装载持有自己创建的播放器实例；每个 await 之后核对代数，被新装载、引擎错误或停止服务取代就放弃；completed/error 回调只处理当前实例。",
+    "映射 ExoPlayer 的单次 onPlayerError 时，只选一条 AVPlayer 通道（on('error') 带具体原因）发 PlayerErrorEvent，stateChange('error') 只做状态处理；同一实例只上报一次。",
+    "AVPlayer 的 prepare/play/pause/stop/reset 返回 Promise，同步 try/catch 接不住拒绝；对已由 on('error') 上报的调用接 .catch。调用前按状态表检查：设 url/fdSrc/setMediaSource 前确保处于 idle（不是就先 reset），stop 只在 prepared/playing/paused/completed 下调用。",
+    "把 Android 前台服务的 stopService（stopSelf→onDestroy→LocalPSMP.shutdown 置 STOPPED，下次启动会新建实例）迁到常驻单例时，在 stopService 里显式完成 shutdown 的复位：playerStatus=STOPPED、清 startWhenPrepared、作废在途装载；最小检查：播完一集后同集再按 Play 能重新起播。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/services/PlaybackService.ets",
+        "since": "2026-10-03T04:49:05.918Z",
+        "at": "2026-10-06T17:26:02.113Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/spec/baseline/features/F005-playback-audio.md",
+          "at": "2026-10-02T15:04:58.345Z",
+          "reason": "正常输入：实现者的 Read 回执（generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a3a307bca64776d79.jsonl:L29-L30）包含 AC30（shutdown：release 播放器、状态 STOPPED）、AC133（stopService=stopForeground(true)+stopSelf）、AC134（onDestroy 中 mediaPlayer shutdown）、AC34/AC173（ExoPlayerWrapper.onPlayerError → 单个 PlayerErrorEvent → MediaPlayerErrorDialog）。frontmatter 列出 races 等 addenda，其中 races.md 写有“HMOS 侧用单线程命令队列或互斥锁等价”，但该 agent 写前没有打开它。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/AntennaPod-develop/playback/service/src/main/java/de/danoeh/antennapod/playback/service/internal/LocalPSMP.java",
+          "at": "2026-10-02T15:15:22.921Z",
+          "reason": "正常输入：Read 回执（同转录 L173-L174）显示 playMediaObject 在调用线程内顺序执行 stop→createMediaPlayer→setDataSource→prepare（注释写明在内部 executor 上执行），setMediaPlayerListeners 只有一个 setOnErrorListener→postSticky(PlayerErrorEvent)，shutdown 置 playerStatus=STOPPED(:538)，stop() 只把 INDETERMINATE 归为 STOPPED。足以确定装载要串行、错误只报一次、服务销毁后要复位状态。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/.claude/skills/arkts-media-playback/references/avplayer-lifecycle.md",
+          "at": "2026-10-02T15:13:34.565Z",
+          "reason": "正常输入兼材料边界：Read 回执（同转录 L149-L150）给出 AVPlayer 状态机（url 设置 Idle→Initialized，prepare 之后才能 play，stop/reset 之后才能 release）并注明“reset() 和 release() 都是异步操作”。缺口在于：模板的 on('error') 与 stateChange 'error' 两处都只做幂等 reset、不弹窗，onStateChange 里的 prepare() 也没接 catch，没有说明两条通道同源、Promise 拒绝需要 catch。这一缺口记作上游问题，不替代规格与源码给出的要求。"
+        },
+        {
+          "key": "agent-a3a307bca64776d79.jsonl",
+          "at": "2026-10-02T15:41:24.345Z",
+          "reason": "偏差起点：收到上述输入后，Write（L287-L288）写出 stateChange 'error' → onEngineError(new Error('AVPlayer entered error state')) 与 on('error') → onEngineError(err) 两条上报路径，onEngineError 每次都 postSticky PlayerErrorEvent；prepare/play/pause/stop/reset 只包同步 try/catch；stopService 只调用 stopToStoppedState；loadAndPrepare 在 await 之后对 this.avPlayer 调 setDataSource，completed 直接 endPlayback(true,false,true,true)。随后 Edit（L312-L313）又在 loadAndPrepare 首行加了 await this.createMediaPlayer()，使同一字段在多个 await 之间被并发装载替换。这些片段到 d16b3d0 都还在（retained-application.patch 中对应的“-”行）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/services/PlaybackController.ets",
+        "since": "2026-10-03T04:49:05.918Z",
+        "at": "2026-10-06T17:26:02.113Z"
+      },
+      "summary": "同一实现者写 PlaybackController 前已读到 F005 的 AC12（resume 只在 PAUSED/PREPARED 有效）和 AC139\n（playPause 五分支：PAUSED/PREPARED→resume，PREPARING/INITIALIZED 另行处理，其他→PlaybackServiceStarter\n.callEvenIfRunning(true) 重新起播），自己写的 PlaybackService.resume() 也只在 PAUSED/PREPARED 生效。\n但 start() 把 Media3 的「同曲 → controller.play()」写成：isRunning 且同曲时，只要不是 PLAYING 就一律\nservice.resume() 后返回。对 STOPPED/ERROR/INDETERMINATE 来说这是空操作，不会走重新装载。\n修复者先改了这里（repair 主会话 L12719-L12720），但复现仍未消失（L12740），真正起效的是 PlaybackService 的\nstopService 置 STOPPED；这处改动作为与 AC139 对齐的修正被保留：STOPPED/ERROR/INDETERMINATE 视为可重启，\n只有非 PLAYING 的可续播态才 resume。\n",
+      "recommendations": [
+        "迁移控制入口的同曲快捷路径时，按目标引擎实际可续播的状态（PAUSED/PREPARED）限定 resume；其他非播放态（STOPPED/ERROR/INDETERMINATE）按 AC139 的“其他”分支重新装载起播。"
+      ],
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/spec/baseline/features/F005-playback-audio.md",
+          "at": "2026-10-02T15:04:58.345Z",
+          "reason": "正常输入：Read 回执（agent-a3a307bca64776d79.jsonl:L29-L30）包含 AC12（resume 只在 PAUSED/PREPARED 态有效）、AC138（media3 同曲在播 → controller.play()）和 AC139（playPause 五分支，其他态 → callEvenIfRunning(true) 起播），足以判断哪些状态可以走 resume 快捷路径。"
+        },
+        {
+          "key": "agent-a3a307bca64776d79.jsonl",
+          "at": "2026-10-02T15:43:09.296Z",
+          "reason": "偏差起点：Write（L316-L317）写出 start() 中 `PlaybackService.isRunning && 同曲 → if (status !== PLAYING) service.resume(); return`；Edit（L325-L326、L328-L329）只把判空改成 currentPlayable 局部变量，逻辑未变。同一 agent 在 L287 写的 resume() 只接受 PAUSED/PREPARED，因此对其他非播放态，这条快捷路径是空操作。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/components/player/CoverPanel.ets",
+        "since": "2026-10-03T04:49:05.918Z",
+        "at": "2026-10-06T17:26:02.113Z"
+      },
+      "summary": "CoverFragment 的 UI 转换者（agent-a8e9426843dcb3d40）写前已读到 CoverFragment.java：loadMediaInfo(false)\n成功后若 chapters 仍为 null，就 loadMediaInfo(true) 装载章节，再经 displayMediaInfo→updateChapterControlVisibility\n重算按钮；item.hasChapters 只在章节尚未装载时临时使用。它也读到宿主 AudioPlayerPage 的 P-S6-007，该条只登记\n宿主自身 loadMediaInfo 的二跳（currentMedia/chapters→setChapterDividers 等），没有承诺给 CoverPage 交付新实例。\n转换者却在头注释写“CoverFragment 自有的 Maybe 装载链不在此重复”，让按钮在 chapters 为 null 时取 hasChapters，\n注“等待二跳 loadMediaInfo(true)”，重算只挂在 @Monitor('media')（宿主赋新实例）上，组件内没有二跳，也没有登记\nforward-ref。后来 G3 closer（agent-a38cd1659eed13e29.jsonl:L291-L292）在宿主上原地 ChapterService.loadChapters，\n只刷新宿主的 setChapters，CoverPanel 不会被重新触发：hasChapters=true 而实际没有章节的单集一直显示“‹ Chapters ›”。\npass-3 在 CoverPanel 内补上一轮 loadChapters 后重算按钮显隐（agent-a51c31fccb3417995.jsonl:L542-L543）。\n",
+      "recommendations": [
+        "UI 转换阶段，源 Fragment 自带的二次装载（如 chapters 为 null 时 loadMediaInfo(true)）不要以“宿主负责”为由省略，除非宿主已登记的契约明确会给本组件交付新实例或触发重算；否则在组件内保留二跳，或登记指向本组件的 forward-ref。"
+      ],
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/AntennaPod-develop/app/src/main/java/de/danoeh/antennapod/ui/screen/playback/audio/CoverFragment.java",
+          "at": "2026-10-01T09:48:31.109Z",
+          "reason": "正常输入：Read 回执（generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a8e9426843dcb3d40.jsonl:L30-L31）显示 loadMediaInfo(boolean) 在 chapters 为 null 且未含章节时再调 loadMediaInfo(true)（:120-141），updateChapterControlVisibility 只在 chapters 为 null 时临时用 hasChapters（:204-222），足以说明本组件需要自己完成第二轮章节装载再定显隐。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/pages/AudioPlayerPage.ets",
+          "at": "2026-10-01T09:48:44.319Z",
+          "reason": "正常输入：宿主页 Read 回执（同转录 L40-L41）中 P-S6-007 只登记宿主自身 loadMediaInfo 的二跳，更新 currentMedia/chapters 与分割线等宿主状态，没有给 CoverPage 交付新实例或触发其按钮重算的约定。"
+        },
+        {
+          "key": "agent-a8e9426843dcb3d40.jsonl",
+          "at": "2026-10-01T09:59:21.322Z",
+          "reason": "偏差起点：Write（L111-L112）的头注释写“CoverFragment 自有的 Maybe 装载链不在此重复”；updateChapterControlVisibility 在 chapters 为 null 时取 media.item.hasChapters，并注“等待二跳 loadMediaInfo(true)”，重算只由 @Monitor('media') 触发。组件内没有第二轮装载，也没有为它登记 forward-ref。该片段保留到 d16b3d0，后续对 CoverPanel 的生成期 Edit 没有改动这段逻辑。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "pass-3 修复者未能定位一次点按产生第二次装载的具体触发点（hilog 已滚动）；本卡只归因“异步装载共享实例且无代数”这一可核偏差，不认定具体的重复调用者。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-0b0bf6cdf94608e17cbb",
+  "metadata": {
+    "migration": {
+      "id": "antennapod-glm53-3c838ae1-111b-475a-a085-e9464ec2fde4",
+      "project": "AntennaPod"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.285",
+        "2.1.286",
+        "2.1.287",
+        "2.1.288",
+        "2.1.289"
+      ]
+    },
+    "source_set_id": "sources-5f9a4b68d8866c1b1233",
+    "environment": [
+      {
+        "name": "toolchain.kotlin",
+        "value": "2.3.20",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-09-30T15:43:45.309Z",
+        "ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a3da0f444ffe5d81f.jsonl:L27",
+        "request_ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a3da0f444ffe5d81f.jsonl:L25",
+        "phase": "generation"
+      },
+      {
+        "name": "toolchain.agp",
+        "value": "8.11.0",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-09-30T15:43:45.309Z",
+        "ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a3da0f444ffe5d81f.jsonl:L27",
+        "request_ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a3da0f444ffe5d81f.jsonl:L25",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-09-30T17:34:05.597Z",
+        "ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a5c631d1e662fac13.jsonl:L54",
+        "request_ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a5c631d1e662fac13.jsonl:L53",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-09-30T17:34:05.597Z",
+        "ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a5c631d1e662fac13.jsonl:L54",
+        "request_ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a5c631d1e662fac13.jsonl:L53",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.0.2(22)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-10-04T16:26:51.075Z",
+        "ref": "repair/ae3bb09d-1f58-48a4-91c8-85a20fd96fc1.jsonl:L215",
+        "request_ref": "repair/ae3bb09d-1f58-48a4-91c8-85a20fd96fc1.jsonl:L214",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.0.1(21)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-10-04T16:26:51.075Z",
+        "ref": "repair/ae3bb09d-1f58-48a4-91c8-85a20fd96fc1.jsonl:L215",
+        "request_ref": "repair/ae3bb09d-1f58-48a4-91c8-85a20fd96fc1.jsonl:L214",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.4",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "040e09cc-8de1-45ba-bc4b-5202da7f9c23"
+      ]
+    }
+  },
+  "revision": "dd2e8bf60efdf5837f24bc9a7ed3431911662580e1b814ee514fb8c78df9d3e0"
+}

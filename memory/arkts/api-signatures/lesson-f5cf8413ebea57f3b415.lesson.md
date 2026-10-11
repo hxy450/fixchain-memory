@@ -1,6 +1,6 @@
 # 依赖 API 的单位、默认行为或作用范围时读到字段注释与语义说明，不以签名存在推定等价
 
-ID：`lesson-f5cf8413ebea57f3b415` · 版本：1
+ID：`lesson-f5cf8413ebea57f3b415` · 版本：2
 
 [本主题](index.md)
 
@@ -10,7 +10,7 @@ ID：`lesson-f5cf8413ebea57f3b415` · 版本：1
 
 ## 适用情境
 
-当前疑点涉及数值单位（px 还是 vp）、默认是否占位、对子节点的作用、单行与多行的排版语义等；查询只返回同名签名、字段声明行或接口前言，或 grep 过滤掉了紧邻的注释行。
+当前疑点涉及数值单位（px 还是 vp）、默认是否占位、对子节点的作用、单行与多行的排版语义等；查询只返回同名签名、字段声明行或接口前言，或 grep 过滤掉了紧邻的注释行。 也包括同名接口的多个重载（如按 Resource 对象与按数字 id 取资源字符串），查询只证明它们都存在。
 
 ## 例外与边界
 
@@ -18,7 +18,7 @@ ID：`lesson-f5cf8413ebea57f3b415` · 版本：1
 
 ## 原因
 
-签名相同不等于语义相同：把 ShadowOptions 的数值当 vp（注释写明 px）、把 HitTestMode.Block 当作只挡兄弟、把 Compose lineHeight 当作 ArkUI .lineHeight 的等价物、认为根 Navigation 不设 title 就不占位，都是只看到签名或凭记忆定稿。grep 截取字段行时，单位说明常在紧邻的注释行里被过滤掉。
+签名相同不等于语义相同：把 ShadowOptions 的数值当 vp（注释写明 px）、把 HitTestMode.Block 当作只挡兄弟、把 Compose lineHeight 当作 ArkUI .lineHeight 的等价物、认为根 Navigation 不设 title 就不占位，都是只看到签名或凭记忆定稿。grep 截取字段行时，单位说明常在紧邻的注释行里被过滤掉。两个重载都存在也不代表在应用偏好语言等配置下行为一致。
 
 ## 做法
 
@@ -30,7 +30,7 @@ ID：`lesson-f5cf8413ebea57f3b415` · 版本：1
 
 - 只有实现与声明仍有冲突时，局部对照实际用到的字段与结果。
 
-来源支持：9 张卡 · 2 次迁移 · 1 个应用
+来源支持：10 张卡 · 3 次迁移 · 2 个应用
 
 ## 来源（按需复核）
 
@@ -40,6 +40,8 @@ ID：`lesson-f5cf8413ebea57f3b415` · 版本：1
   卡片版本：`caedcf037b4f51f56e370b09f5e18559d3a5abf76c513a88e701ad9ca342fe0f`
 - [case-4056358e68946ac061c6](../../../store/cases/case-4056358e68946ac061c6/5a37ff393ac488101441f9a3889af9b15392ce1ebfecf83f56931f1255d3bc75.json) · 结论：recommendation:1
   卡片版本：`5a37ff393ac488101441f9a3889af9b15392ce1ebfecf83f56931f1255d3bc75`
+- [case-605ca2c835a2d8b2950f](../../../store/cases/case-605ca2c835a2d8b2950f/5885d2629daf3e1bd7b6e0ace40ac6b4389e87598667a069721cffe49353fd43.json) · 结论：recommendation:2
+  卡片版本：`5885d2629daf3e1bd7b6e0ace40ac6b4389e87598667a069721cffe49353fd43`
 - [case-6534af52334df8447e04](../../../store/cases/case-6534af52334df8447e04/56d6fa2d87fb62934a462b44a58ecab7d232cb683c20c6bf262b043cabd877c6.json) · 结论：recommendation:2
   卡片版本：`56d6fa2d87fb62934a462b44a58ecab7d232cb683c20c6bf262b043cabd877c6`
 - [case-6aedeaac4c252c3c5626](../../../store/cases/case-6aedeaac4c252c3c5626/cb859fb4cd4eff0d54a717636ac7b7bcac5b5b0656eb9688d0f19721977a84b9.json) · 结论：recommendation:1

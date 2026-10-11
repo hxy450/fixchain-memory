@@ -1,0 +1,181 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-02008ba6db4e6a0ddfa2",
+  "created_at": "2026-10-07T06:08:42.285814+00:00",
+  "migration_key": "antennapod-glm53-3c838ae1-111b-475a-a085-e9464ec2fde4",
+  "title": "承接下载进度聚合时把作业结束写成从事件表删除，完成态 COMPLETED 无人产出",
+  "when": "功能实现阶段，把源端 WorkManager/LiveData 等运行时聚合并入目标服务、确定作业结束时状态表与粘性事件载荷怎么写时",
+  "description": "源端由宿主观察后台作业列表（WorkInfo 等）生成 url→状态 表并粘性广播，结束作业以 COMPLETED 一类终态保留在表里；目标端没有等价框架，由下载服务自己维护状态表并直接发事件；订阅方按 url 是否在事件中过滤，查询接口要区分“完成”与“缺失”。",
+  "summary": "Slice 13（F004 剧集下载）的生成者 agent-ae663eba77aefacb6 写 EpisodeDownloadService 前已实际读到：\nF004 规格 §状态管理把 episodeDownloads 定义为 url→{state: QUEUED=0|RUNNING=2|COMPLETED=1, progress}，并写明它对应\nDownloadServiceInterface.currentDownloads + EpisodeDownloadEvent 载荷；AC54 要求 isDownloadingEpisode = 含 url 且非 COMPLETED，\n并按 QUEUED/RUNNING/COMPLETED/缺失四种状态精确断言（agent-ae663eba77aefacb6.jsonl:L26-L28）。\nAndroid DownloadServiceInterface.java 的 currentDownloads 由外部 setCurrentDownloads 注入，查询面专门排除 STATE_COMPLETED（同转录 L66、L72）；\nCompletedDownloadsFragment 的粘性事件处理遍历 event.getUrls() 后再用 isDownloadingEpisode 过滤（L79、L82），说明事件里本来就带着已结束的 url；\n工程内 Events.ets 也注明 EpisodeDownloadEvent 由 MainActivity 的 WorkManager LiveData 聚合 postSticky（MainActivity.java:272）发布（L123-L124）。\n这些输入已足以说明：结束的作业在表中以 COMPLETED 保留，而不是被移除。\n生成者在设计笔记中自认承接“MainActivity postSticky 聚合面”，却没有读它引用的 MainActivity 聚合源码，直接规划“markComplete → currentDownloads.delete(url); postEvent”（L360）；\n随后 Write 写出 finishRun：activeRuns.delete 后 currentDownloads.delete(run.tagUrl) 再 postDownloadEvent，注释为“currentDownloads 移除 + 粘性广播”（L365-L366）。\n这样它自己写的 isDownloadingEpisode/getProgress 都在判断 COMPLETED，但全文件没有任何一处写入 COMPLETED。偏差位于“已给出的状态域与源端聚合语义”到“作业收尾实现”这一环。\n该片段在生成期没有其他写者改动，原样进入 d16b3d0：修复会话开始时读回的 finishRun 仍是 delete 写法（repair L7615-L7616）。\n后果是：单集详情页订阅方用 getUrls().has(url) 过滤，下载完成那次事件不再含该 url，因此被丢弃，页面仍停在旧的 RUNNING 状态，详情页既不刷新，按钮也不变（repair L7620）。\n修复者对照 Android MainActivity.java:253-269（结束作业 → STATE_COMPLETED 保留在表）及各订阅方只看 state、不看 key 是否存在（L7621-L7673），\n把 finishRun 改为 currentDownloads.set(url, new DownloadStatus(STATE_COMPLETED, -1)) 后再广播（L7696-L7697），之后真机复核下载完成后能刷新（L8422）；该改动保留到 603ce68。\n上游补充：精确的映射规则（RUNNING→RUNNING、ENQUEUED/BLOCKED→QUEUED、其余→COMPLETED）写在 F001-AC19，归属壳层。\nSlice 4 只在自己的源码笔记中把“聚合发布侧”推给 Slice 13，Slice 13 的派工和 slice 文件都没有带上这条规则；不过 F004 规格与 Android 源码已足以支撑本次决策，所以本链在生成者处停止。\n",
+  "recommendations": [
+    "实现阶段：在目标端替代源端的作业观察/聚合器时，先读它实际的状态映射（如 MainActivity 的 WorkInfo→DownloadStatus），把终态写成显式状态并留在表中，不要把“作业结束”实现成删除 key。",
+    "实现阶段：写完状态服务后逐个核对状态域（QUEUED/RUNNING/COMPLETED）各有哪个产出点；查询方法检查某个状态，而全文件找不到写入该状态的位置，就说明收尾写法偏离。",
+    "实现阶段：发布前对照订阅方的过滤方式（如按 getUrls().has(url) 过滤）检查最后一次事件：完成时目标 url 必须仍在载荷里，订阅方才能收到这次刷新。",
+    "规格/计划阶段：源端聚合器（如 MainActivity 观察 WorkManager）的职责移交给另一切片的服务时，把对应的映射验收条款（本例 F001-AC19）写进承接切片的 spec 引用或派工池，不要只记在移出方的笔记里。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/services/EpisodeDownloadService.ets",
+        "since": "2026-10-03T04:49:05.918Z",
+        "at": "2026-10-06T17:26:02.113Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/spec/baseline/features/F004-episode-download.md",
+          "at": "2026-10-02T19:46:55.378Z",
+          "reason": "正常输入：Read 回执给出 §状态管理 episodeDownloads 的状态域 QUEUED=0|RUNNING=2|COMPLETED=1，对应 currentDownloads 与 EpisodeDownloadEvent 载荷；AC54 要求按 QUEUED/RUNNING/COMPLETED/缺失四种状态精确返回，说明 COMPLETED 是表中独立于“缺失”的状态（agent-ae663eba77aefacb6.jsonl:L26-L28）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/AntennaPod-develop/net/download/service-interface/src/main/java/de/danoeh/antennapod/net/download/serviceinterface/DownloadServiceInterface.java",
+          "at": "2026-10-02T19:49:13.412Z",
+          "reason": "正常输入：Read 回执显示 currentDownloads 由外部 setCurrentDownloads 注入，isDownloadingEpisode/getProgress 专门排除 STATE_COMPLETED，即表里会出现完成态条目（同转录 L66、L72）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/AntennaPod-develop/app/src/main/java/de/danoeh/antennapod/ui/screen/download/CompletedDownloadsFragment.java",
+          "at": "2026-10-02T19:49:28.141Z",
+          "reason": "正常输入：Read 回执中的 onEventMainThread(EpisodeDownloadEvent) 遍历 event.getUrls()，再用 isDownloadingEpisode 筛出运行集合，说明粘性事件本来就带着已结束的 url（同转录 L79、L82，源码 :208-227）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/events/Events.ets",
+          "at": "2026-10-02T19:50:58.098Z",
+          "reason": "正常输入：Read 回执注明 EpisodeDownloadEvent 是粘性事件，由 MainActivity 的 WorkManager LiveData 聚合 postSticky 发布（MainActivity.java:272），getUrls() 返回载荷全部 key；这里已经指向了要承接的聚合源（同转录 L123-L124）。"
+        },
+        {
+          "key": "agent-ae663eba77aefacb6.jsonl",
+          "at": "2026-10-02T20:41:16.429Z",
+          "reason": "已收到上述状态域与源端语义，却没有读 Events.ets 指向的 MainActivity 聚合源码。设计笔记规划“markComplete → currentDownloads.delete(url); postEvent”（L360）；Write 写出 finishRun 先 currentDownloads.delete(run.tagUrl) 再 postDownloadEvent，注释称“currentDownloads 移除 + 粘性广播”。同一文件的查询面在判断 COMPLETED，但没有任何写入点产出 COMPLETED（L365-L366）。该片段原样留到修复前（repair L7615-L7616）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 5
+        },
+        {
+          "from": 2,
+          "to": 5
+        },
+        {
+          "from": 3,
+          "to": 5
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-02008ba6db4e6a0ddfa2",
+  "metadata": {
+    "migration": {
+      "id": "antennapod-glm53-3c838ae1-111b-475a-a085-e9464ec2fde4",
+      "project": "AntennaPod"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.285",
+        "2.1.286",
+        "2.1.287",
+        "2.1.288",
+        "2.1.289"
+      ]
+    },
+    "source_set_id": "sources-5f9a4b68d8866c1b1233",
+    "environment": [
+      {
+        "name": "toolchain.kotlin",
+        "value": "2.3.20",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-09-30T15:43:45.309Z",
+        "ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a3da0f444ffe5d81f.jsonl:L27",
+        "request_ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a3da0f444ffe5d81f.jsonl:L25",
+        "phase": "generation"
+      },
+      {
+        "name": "toolchain.agp",
+        "value": "8.11.0",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-09-30T15:43:45.309Z",
+        "ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a3da0f444ffe5d81f.jsonl:L27",
+        "request_ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a3da0f444ffe5d81f.jsonl:L25",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-09-30T17:34:05.597Z",
+        "ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a5c631d1e662fac13.jsonl:L54",
+        "request_ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a5c631d1e662fac13.jsonl:L53",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-09-30T17:34:05.597Z",
+        "ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a5c631d1e662fac13.jsonl:L54",
+        "request_ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a5c631d1e662fac13.jsonl:L53",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.0.2(22)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-10-04T16:26:51.075Z",
+        "ref": "repair/ae3bb09d-1f58-48a4-91c8-85a20fd96fc1.jsonl:L215",
+        "request_ref": "repair/ae3bb09d-1f58-48a4-91c8-85a20fd96fc1.jsonl:L214",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.0.1(21)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-10-04T16:26:51.075Z",
+        "ref": "repair/ae3bb09d-1f58-48a4-91c8-85a20fd96fc1.jsonl:L215",
+        "request_ref": "repair/ae3bb09d-1f58-48a4-91c8-85a20fd96fc1.jsonl:L214",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.4",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "040e09cc-8de1-45ba-bc4b-5202da7f9c23"
+      ]
+    }
+  },
+  "revision": "c4e9657f6da6da85435faa109fb5d920b0fe9b1560b66011aac636021cad5a18"
+}

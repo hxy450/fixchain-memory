@@ -1,11 +1,14 @@
 # ui/input
 
-输入与选择控件：源端输入约束到 TextInput 等组件属性的转换（含小数输入），格子式密码输入层与获焦，会被子页覆盖再返回的页面里获焦来源的判别，自定义控件 XML 属性的初值，Compose Slider 的 steps 取值，选择列表行的选中标记（条件勾选与 Radio 的取舍），选择器回填的多级字段（省市区），密码显隐图标、清除按钮等 ArkUI 默认装饰的显式关闭，未定制光标外观的取证基准与 caretStyle
+输入与选择控件：源端输入约束到 TextInput 等组件属性的转换（含小数输入），用户输入校验正则（Android 平台 Patterns 常量）的逐段移植与全串匹配，格子式密码输入层与获焦，会被子页覆盖再返回的页面里获焦来源的判别，自定义控件 XML 属性的初值，Compose Slider 的 steps 取值，选择列表行的选中标记（条件勾选与 Radio 的取舍），选择器回填的多级字段（省市区），密码显隐图标、清除按钮等 ArkUI 默认装饰的显式关闭，未定制光标外观的取证基准与 caretStyle
 
 [上一级](../index.md)
 
 ## 本级经验
 
+- [Android 平台公开正则常量按定义逐段移植并保持全串匹配语义](lesson-90e0f1db3e1e13a6fd6a.lesson.md)
+  - 时机：界面实现阶段，移植 Patterns.WEB_URL、Patterns.EMAIL_ADDRESS 等平台正则对用户输入的校验时
+  - 情境：源以 String.matches(Patterns.X.pattern()) 做全串校验，目标没有同名 API，需要自行提供正则。
 - [Compose Slider 的 steps 是两端之间的离散值个数：取值共 steps+2 个，步长为区间/(steps+1)](lesson-d715fa78ada2e79a5fd2.lesson.md)
   - 时机：规格提取或界面实现阶段，把 Compose Slider 的 valueRange 与 steps 翻成目标滑杆步长和验收条款时
   - 情境：源端 Slider(valueRange = a..b, steps = n) 做离散取值；目标用 ArkUI Slider 的 min、max、step。

@@ -1,6 +1,6 @@
 # 源确认框用 setView 注入复选框等自定义内容时改用自定义弹窗承载，不写成 AlertDialog.show 的 builder 参数
 
-ID：`lesson-18fca50f9c801cb282ec` · 版本：1
+ID：`lesson-18fca50f9c801cb282ec` · 版本：2
 
 [本主题](index.md)
 
@@ -14,7 +14,7 @@ ID：`lesson-18fca50f9c801cb282ec` · 版本：1
 
 ## 例外与边界
 
-- 源对话框只有标题、正文与按钮，没有自定义视图，此时直接映射 AlertDialog.show
+- 源对话框只有标题、正文与按钮，没有自定义视图：可以映射 AlertDialog.show，但正/负键按角色核对目标槽位位置；项目要求一比一还原平台默认外观时改用自定义弹窗复刻
 
 ## 原因
 
@@ -22,7 +22,7 @@ AlertDialog.show 的参数只有标题、副标题、必填的 message、按钮�
 
 ## 做法
 
-1. 先看源对话框是否调用 setView 或加载自定义布局：没有才映射 AlertDialog.show；有则用自定义弹窗，在同一个自定义构建里放正文、复选框与按钮，确认回调读取复选状态后再执行源端的偏好写入与后续动作。
+1. 先看源对话框是否调用 setView 或加载自定义布局：没有时才考虑 AlertDialog.show（按钮槽位与外观取舍见例外）；有则用自定义弹窗，在同一个自定义构建里放正文、复选框与按钮，确认回调读取复选状态后再执行源端的偏好写入与后续动作。
 2. V1 页面可用 @CustomDialog + CustomDialogController；@ComponentV2 页面用 UIContext.getPromptAction().openCustomDialog 或状态驱动浮层，不用 CustomDialogController 承载 V2 组件。
 3. 只能先落简化弹窗时，把丢失的交互（控件、偏好写入）登记为占位与回补点，并在报告中列为与源端的行为差异；不以不存在的参数假装等价。
 
@@ -30,9 +30,11 @@ AlertDialog.show 的参数只有标题、副标题、必填的 message、按钮�
 
 - [@ComponentV2 页面的弹窗不用 CustomDialogController 承载 V2 组件，改用状态驱动浮层、半模态或 openCustomDialog](lesson-3f3e1ff0a4d0e0299bda.lesson.md)
 
-来源支持：1 张卡 · 1 次迁移 · 1 个应用
+来源支持：2 张卡 · 2 次迁移 · 2 个应用
 
 ## 来源（按需复核）
 
+- [case-bee1ccf417ac7e3b453c](../../../store/cases/case-bee1ccf417ac7e3b453c/068040f8788f96fdef9193826f1b953f434b4436bdfe72355d6b81975952282b.json) · 结论：recommendation:2, recommendation:3
+  卡片版本：`068040f8788f96fdef9193826f1b953f434b4436bdfe72355d6b81975952282b`
 - [case-d8867d30fe76e4d44ceb](../../../store/cases/case-d8867d30fe76e4d44ceb/3537efdf372896502b8a0b63e22b06ece4e7d54e2c06ca2c8c0ff730e6a5f932.json) · 结论：diagnosis, recommendation:1, recommendation:3
   卡片版本：`3537efdf372896502b8a0b63e22b06ece4e7d54e2c06ca2c8c0ff730e6a5f932`

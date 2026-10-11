@@ -1,6 +1,6 @@
 # ui/text
 
-文本展示与排版：源端对展示文本的加工（富文本、链接识别与点击）到 ArkUI Text/StyledString 的转换，Compose 行高到单行文本盒与多行行距的映射，多行末行省略的截断粒度，静态说明页的逐字文案与图文结构，Tab、页面标题、设置行等可见文案的逐字取值，以及字符串资源生成哪些语言限定目录，单行中间/开头省略的测量截断，setSpan 区间拆成 Span 时的着色范围，以及数值显示精度（复用基类格式化 getter 与品类精度不一致时的子类覆写），以及源端代码格式化文案的参数化字符串资源
+文本展示与排版：源端对展示文本的加工（富文本、链接识别与点击）到 ArkUI Text/StyledString 的转换，Compose 行高到单行文本盒与多行行距的映射，多行末行省略的截断粒度，静态说明页的逐字文案与图文结构，Tab、页面标题、设置行等可见文案的逐字取值，以及字符串资源生成哪些语言限定目录，单行中间/开头省略的测量截断，setSpan 区间拆成 Span 时的着色范围，以及数值显示精度（复用基类格式化 getter 与品类精度不一致时的子类覆写），以及源端代码格式化文案的参数化字符串资源，代码内取资源字符串的接口与应用偏好语言，按 locale 的全大写变换（textAllCaps）
 
 [上一级](../index.md)
 
@@ -12,6 +12,12 @@
 - [Tab 标签、页面标题与设置行等可见文案沿资源引用链取源端 strings 资源的逐字值，不用枚举名、路由名或自拟英文](lesson-31ab9f59945e5f0259ea.lesson.md)
   - 时机：界面实现阶段，为 Tab 标签、页面/路由标题、设置入口行等可见文案取值并写入页面与路由表时；以及派发侦察或规格任务、确定导航与标题字段的形态时
   - 情境：源端可见文案经资源键间接引用（导航目的地的 label、配置路由的标题资源、顶栏 title），常与目的地枚举名或功能名不同（如 Map 目的地显示“Mesh Map”、Messages 目的地的页面标题为“Conversations”）；目标以硬编码字符串或自建资源表承载；上游 brief 或页面规格已给出、或可从 strings.xml 解析出逐字值。
+- [textAllCaps 按当前 locale 做大写：取资源字符串后调用 toLocaleUpperCase，locale 标签按子标签解析并留回落，不用 textCase(UpperCase) 代替](lesson-cce58a1538fedfda3695.lesson.md)
+  - 时机：界面实现或返修阶段，把安卓 textAllCaps（含按钮样式默认的全大写）移植为 ArkUI 文本，并为大小写转换确定 locale 标签时
+  - 情境：安卓按钮或文本靠 textAllCaps（AllCapsTransformationMethod 按当前 locale 大写）显示全大写；应用带含非 ASCII 字母的多语言资源（如 de 的 ü、tr 的 i/İ、el 的重音），也可能以只有语言码的应用偏好语言运行；目标要自己取字符串做大写，并把 resourceManager 配置的 locale（下划线分隔、子标签可能为空，如 fa_Arab_）转成 BCP 47 标签。
+- [代码内取资源字符串用 getStringSync($r('app.string.x').id) 按数字 id 取值，与声明式 $r 走同一解析路径，不用 Resource 对象重载](lesson-22432022455bff6f849b.lesson.md)
+  - 时机：界面实现阶段，把安卓命令式取字符串（getResources().getString，如自绘 View 里 drawText、measureText 的文案）改写为 ArkTS 代码内取值并选择 resourceManager 接口时；后续切片扩展已有取值写法时
+  - 情境：源端在自绘 View 或代码里按当前资源配置取文案；目标需要在 ArkTS 中拿到纯字符串（Canvas 绘制、测宽、拼接），同一屏还有走声明式 $r 的组件文本；应用带多个 locale 资源目录，可能以应用偏好语言运行。
 - [分开单行文本盒与多行行距，不把 Compose lineHeight 同名直映为 ArkUI .lineHeight](lesson-2a2924aaebbfbea80780.lesson.md)
   - 时机：规格提取、主题实现或页面转换阶段，把 Compose 排版令牌落成 ArkUI 文本属性或据文本高度推算容器尺寸时；视觉修复阶段改写主题层行高公式时
   - 情境：源 TextStyle 声明 fontSize/lineHeight、未设 lineHeightStyle；目标准备给所有 Text 无条件设置 .lineHeight()，或把 lineHeight 数值当单行文本的实际盒高来推算横向列表等容器的显式高度；映射参考可能给出 lineHeight → .lineHeight() 的 1:1 对应。

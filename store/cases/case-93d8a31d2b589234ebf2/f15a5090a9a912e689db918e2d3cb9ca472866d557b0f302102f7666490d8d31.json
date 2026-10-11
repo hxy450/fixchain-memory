@@ -1,0 +1,162 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-93d8a31d2b589234ebf2",
+  "created_at": "2026-10-10T07:11:55.427500+00:00",
+  "migration_key": "game2048-glm53-d90de388-a6d4-4f09-8cd2-28dfc31c5901",
+  "title": "Activity级onKeyDown被挂到从未获焦的Canvas上，方向键到不了处理器",
+  "when": "页面实现与输入接线阶段，为源端Activity级硬件按键回调选择ArkUI onKeyEvent的挂载节点时",
+  "description": "安卓源在Activity上覆写onKeyDown/dispatchKeyEvent处理方向键、MENU等按键，不依赖某个View持有焦点；目标页面是Navigation下的NavDestination，交互由内部Canvas或自绘子组件承载。",
+  "summary": "页面转换者（MainActivity converter）写前实际读到页面规格page_0001_MainActivity.md的转换决策\n“onKeyDown DPAD → 页面 onKeyEvent / 焦点按键回调”，以及MainActivity.java:56-74：onKeyDown是Activity覆写方法\n（MENU吞掉，DPAD四向move并返回true），与哪个View获焦无关。它在思考中已意识到组件级onKeyEvent需要焦点，\n却误判NavDestination没有onKeyEvent，于是把.onKeyEvent挂在Canvas上、只加.focusable(true)，没有任何获焦机制，\n并在转换报告里写“焦点获取细节归 Slice 4”。偏差位于“页面级按键要求→实际挂载节点”这一环\n（agent-aff8280c29a186c0a.jsonl:L18、L74、L92、L114-L115、L154-L155）。\nSlice 4（F004输入控制）写前读到F004规格“KeyEvent.ACTION_DOWN onKeyDown → 页面 onKeyEvent / KeyEvent 回调”，\ngrep转换报告时也拿到了“焦点获取细节归 Slice 4”这句移交；但它只把回调改成返回boolean并加KeyType.Down守卫，\n思考中假定Canvas会在渲染后自然获焦，保留Canvas挂载点，既没补获焦也没改挂载点\n（agent-a138689b12eef3b6c.jsonl:L37、L75、L93、L121-L124）。之后group closer只补了一行注释，写的是\n“Canvas.onTouch/onKeyEvent”，没有改变本问题。\n到生成结束时，MainPage.ets里.onKeyEvent仍挂在Canvas（.focusable(true)）上。返修时鸿蒙注入方向键棋盘不动，\nhilog显示焦点停在NavDestination/14、consumed: 0。返修先试了Canvas.defaultFocus(true)（无效），\n又试了onReady时requestFocus（报150003，找不到节点），两次都撤回了；最终把.onKeyEvent从Canvas移到NavDestination\n（页面级，Canvas若获焦事件也会冒泡到此），onGameKeyEvent和InputController.onKeyDown不变，两端四向加MENU验证通过\n（c746b830-56d2-498d-94af-eca5c148c09f.jsonl:L1331-L1387，检查点E5 19a532c；FINAL中NavDestination.onKeyEvent保留）。\n",
+  "recommendations": [
+    "页面实现阶段：源端是Activity级onKeyDown/dispatchKeyEvent时，把ArkUI .onKeyEvent挂在页面根节点（NavDestination或@Entry根组件）上，不挂在需要先获焦的子组件上；ArkUI按键沿焦点链派发，获焦子节点的事件也会冒泡到页面根。",
+    "若决定挂在子组件上，必须同时写出获焦机制，并核对页面显示后的实际焦点节点（如hilog AceKeyboard的“current focus node”）就是该组件；不能只凭.focusable(true)假定它会获焦。对“某容器不支持onKeyEvent”这类平台能力判断，先查SDK声明再缩小挂载选择。",
+    "输入接线阶段：收到“焦点获取归本slice”这类移交时，把它当作显式验收项：要么改挂到页面级节点，要么落地获焦代码并给出焦点证据；只改返回值或加KeyType.Down守卫不算完成。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-2048-glm5.3/entry/src/main/ets/pages/MainPage.ets",
+        "since": "2026-10-09T18:47:43.289Z",
+        "at": "2026-10-10T04:36:17.957Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-2048-glm5.3/spec/baseline/ui/page_0001_MainActivity.md",
+          "at": "2026-10-09T16:22:16.152Z",
+          "reason": "正常输入：转换者Read回执中的转换决策表写明“onKeyDown DPAD → 页面 onKeyEvent / 焦点按键回调”，输入节也列出“MainActivity.onKeyDown DPad 四方向”；已指明按键在页面级接收（agent-aff8280c29a186c0a.jsonl:L17-L18）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/2048-tpcstld-2863bbe/2048/base/src/main/java/com/tpcstld/twozerogame/MainActivity.java",
+          "at": "2026-10-09T16:22:58.621Z",
+          "reason": "正常输入：Read回执给出MainActivity.onKeyDown（L56-74），它是Activity覆写方法，MENU吞掉、DPAD四向move返回true，不依赖View焦点；足以确定挂载点应是页面/窗口级（agent-aff8280c29a186c0a.jsonl:L71、L74）。"
+        },
+        {
+          "key": "agent-aff8280c29a186c0a.jsonl",
+          "at": "2026-10-09T16:32:08.803Z",
+          "reason": "偏差起点：思考中已写明component-level onKeyEvent requires focus，却以NavDestination doesn't have onKeyEvent为由，决定attach onKeyEvent to the Stack/Canvas with focusable(true) and let Slice 4 refine focus acquisition（L92）。Write MainPage.ets时.onKeyEvent挂在Canvas.focusable(true)上，没有获焦机制（L114-L115）；随后Write转换报告，写下“Canvas .focusable(true) + .onKeyEvent…焦点获取细节归 Slice 4”（L154-L155）。页面级要求在此被落成依赖焦点的子组件挂载。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-2048-glm5.3/spec/execution/conversion-reports/page_0001_MainActivity.md",
+          "at": "2026-10-09T17:34:11.752Z",
+          "reason": "交付桥梁：Slice 4用Grep读转换报告，回执的映射表行“MainActivity.onKeyDown DPAD | Canvas .focusable(true) + .onKeyEvent → onGameKeyEvent()（P-S1-004，Slice 4）| 焦点获取细节归 Slice 4”，把挂载决定和获焦责任一起交给了接线者（agent-a138689b12eef3b6c.jsonl:L91、L93）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-2048-glm5.3/spec/baseline/features/F004-input-control.md",
+          "at": "2026-10-09T17:27:38.335Z",
+          "reason": "正常输入：Slice 4的Read回执中，实现映射写“KeyEvent.ACTION_DOWN onKeyDown → 页面 onKeyEvent / KeyEvent 回调”，对接点写“onKeyEvent → inputController.onKeyDown”（触摸才写明Canvas容器）；AC12锚定MainActivity.java:56（agent-a138689b12eef3b6c.jsonl:L33、L37）。"
+        },
+        {
+          "key": "agent-a138689b12eef3b6c.jsonl",
+          "at": "2026-10-09T17:38:33.607Z",
+          "reason": "第二个偏差点（漏接移交）：已收到F004“页面 onKeyEvent”和转换报告“焦点获取细节归 Slice 4”。思考中假定“Canvas .onKeyEvent fires when canvas has focus; focus happens after render”（L75），Edit只把onGameKeyEvent改为boolean加KeyType.Down守卫（L121-L122），并把Canvas.onKeyEvent回调改成return（L123-L124），保留Canvas挂载点，未补获焦或改挂载。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 6,
+          "force": true,
+          "reason": "Slice 4以Grep（-C 3）直接读取该转换报告文件，回执第22行即“MainActivity.onKeyDown DPAD | Canvas .focusable(true) + .onKeyEvent … | 焦点获取细节归 Slice 4”；这是接线者写MainPage前对该文件的真实读取。",
+          "evidence": [
+            {
+              "source": "generation/d90de388-a6d4-4f09-8cd2-28dfc31c5901/subagents/agent-a138689b12eef3b6c.jsonl",
+              "line": 91
+            },
+            {
+              "source": "generation/d90de388-a6d4-4f09-8cd2-28dfc31c5901/subagents/agent-a138689b12eef3b6c.jsonl",
+              "line": 93
+            }
+          ]
+        },
+        {
+          "from": 5,
+          "to": 6
+        },
+        {
+          "from": 6,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "转换者“NavDestination没有onKeyEvent”的判断只见于其思考自述；它读到的交互映射参考没有这一说法，未找到外部来源。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-93d8a31d2b589234ebf2",
+  "metadata": {
+    "migration": {
+      "id": "game2048-glm53-d90de388-a6d4-4f09-8cd2-28dfc31c5901",
+      "project": "2048"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.295",
+        "2.1.296"
+      ]
+    },
+    "source_set_id": "sources-8cc5e9d8f4b3bafc7d31",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-2048-glm5.3",
+        "at": "2026-10-09T15:56:56.310Z",
+        "ref": "generation/d90de388-a6d4-4f09-8cd2-28dfc31c5901.jsonl:L692",
+        "request_ref": "generation/d90de388-a6d4-4f09-8cd2-28dfc31c5901.jsonl:L686",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-2048-glm5.3",
+        "at": "2026-10-09T15:56:56.310Z",
+        "ref": "generation/d90de388-a6d4-4f09-8cd2-28dfc31c5901.jsonl:L692",
+        "request_ref": "generation/d90de388-a6d4-4f09-8cd2-28dfc31c5901.jsonl:L686",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.10.4",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "4566ae59-a9cb-4783-8d98-daad7bff832a"
+      ]
+    }
+  },
+  "revision": "f15a5090a9a912e689db918e2d3cb9ca472866d557b0f302102f7666490d8d31"
+}

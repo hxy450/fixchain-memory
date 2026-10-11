@@ -1,0 +1,165 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-569a68ae79caad45dbb6",
+  "created_at": "2026-10-10T06:52:01.285888+00:00",
+  "migration_key": "game2048-glm53-d90de388-a6d4-4f09-8cd2-28dfc31c5901",
+  "title": "把 View.invalidate 的一次性下一帧重绘写成永不清除的 setInterval，并让引擎 invalidate 同步直绘",
+  "when": "渲染与动画实现阶段，为 Canvas 自绘视图确定帧循环和 invalidate 重绘入口时",
+  "description": "源端自定义 View 在 onDraw 尾部按动画状态调用 invalidate()+tick() 自续帧，业务层也用 invalidate() 请求重绘；目标端用 ArkUI Canvas 全量重绘，需要选定下一帧调度 API 并处理请求合并、停止和页面销毁。",
+  "summary": "Slice 3 渲染 worker（agent-a6ffdc5db8eb83d2e）写前已收到三类正确输入：F003 规格把 invalidate() 映射为\n“动画活跃时每 vsync 调 render()；循环结构：tick → 若 isAnimationActive 继续请求下一帧”（L26 第48行），\n并在 AC24 要求帧循环只在动画活跃时持续、静止后停止；MainView.java 的 onDraw 尾部在动画活跃时\ninvalidate(...) + tick()，否则仅在结束且 refreshLastTime 时补一次 invalidate()（L32 第131-137行），\n即每次 invalidate 只请求下一帧的一次 onDraw；它查到的 setInterval 参考写法（v2-explicit-animation.md，L135）\n也在回调完成时 clearInterval 并复位 id。\nworker 未在知识库找到已验证的 vsync API，出于编译安全选了 16ms 定时器（L78、L132-L136），这本身只是近似；\n已核偏差在于实现：L151 写 GameRenderer 时 scheduleFrame() 用 setInterval 充当一次性定时器，回调只把\nframeTimer 置 -1、从不 clearInterval，随后在回调里 render()，而 render() 尾部动画活跃时又调 scheduleFrame()\n新开 interval。旧 interval 不停，动画期间每次触发都再开一个，数量约每帧翻倍且动画结束后仍持续全量重绘，占满 UI 线程。\n同一次 Write 还把引擎侧 invalidate 写成 requestRender() { this.render() }（L145 推理为“render() public alias”），\n同步直绘，与 onDraw 自续走定时器的路径语义不一；随后它在 MainPage 中把桥 listener 接到 requestRender，\n页面 requestRender() 同步调用 renderer.requestRender() 再从渲染器镜像 continueButtonEnabled（L193、L202），\n这个镜像依赖同步绘制。\n两处写法之后的生成期编译修复未触及帧循环，生成检查点 dc92e69 的 GameRenderer.ets:333-341 与 L151 片段一致。\n返修 X1（3d9e480/c17f879，FINAL 保留）删除 setInterval/frameTimer/FRAME_INTERVAL_MS，新增 RenderFrameCallback 与\ninvalidate()：framePending 合并、UIContext.postFrameCallback 下一 vsync 绘制一次，stop() 置 stopped 丢弃待决帧；\ntick() 自取当前时间，render() 改 private 并按 onDraw 原序 invalidate(); tick()；MainPage 注入 getUIContext()，\nrequestRender 改为 renderer.invalidate()，继续按钮可用性改为在 Up 时刻直读渲染器字段，删去 @Local 镜像。\n",
+  "recommendations": [
+    "移植 View.invalidate/onDraw 自续帧时，把 invalidate 实现为“请求下一帧绘制一次”的唯一入口：待决标志合并同帧多次请求，帧回调里先清标志再绘制；引擎桥、尺寸变化和 onDraw 尾部都走这一入口，不再另留同步直调 render 的路径。",
+    "优先用 UIContext.postFrameCallback（FrameCallback.onFrame）对齐 vsync；只能用定时器时用 setTimeout 做一次性调度，若用 setInterval 必须由同一句柄 clearInterval，禁止在回调里只复位 id 后再开新定时器。",
+    "写完帧循环后按动画活跃期模拟三帧核对：任一时刻待决调度数不超过 1，动画结束后为 0，页面销毁后到达的回调不再绘制。",
+    "依赖绘制结果的状态（如 continueButtonEnabled）在消费时刻直读渲染器字段，不在请求重绘后立即镜像，以免重绘改为异步后读到旧值。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-2048-glm5.3/entry/src/main/ets/view/GameRenderer.ets",
+        "since": "2026-10-09T18:47:43.289Z",
+        "at": "2026-10-10T04:36:17.957Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-2048-glm5.3/spec/baseline/features/F003-rendering-animation.md",
+          "at": "2026-10-09T17:27:13.528Z",
+          "reason": "正常输入：Read 回执给出实现映射“invalidate() 逐帧重绘 → 动画活跃时每 vsync 调 render()，循环结构：tick → 若 isAnimationActive 继续请求下一帧”，以及 AC24“帧循环只在动画活跃时持续，静止局面停止重绘”；足以说明每次 invalidate 只排一帧（agent-a6ffdc5db8eb83d2e.jsonl:L25-L26）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/2048-tpcstld-2863bbe/2048/base/src/main/java/com/tpcstld/twozerogame/MainView.java",
+          "at": "2026-10-09T17:27:23.736Z",
+          "reason": "正常输入：Read 回执返回 onDraw 尾部 isAnimationActive 时 invalidate(startingX..)+tick()，否则结束且 refreshLastTime 时单次 invalidate()；源端为一次性、可合并的下一帧重绘请求（agent-a6ffdc5db8eb83d2e.jsonl:L31-L32，源码第131-137行）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-2048-glm5.3/.claude/skills/arkts-animation-builder/references/v2-explicit-animation.md",
+          "at": "2026-10-09T17:34:07.422Z",
+          "reason": "正常输入：worker 选定定时器方案后读取的参考写法，setInterval 回调在完成时 clearInterval(this.timer) 并置 -1，启动前也先清旧定时器；生命周期写法足够明确（agent-a6ffdc5db8eb83d2e.jsonl:L134-L135）。"
+        },
+        {
+          "key": "agent-a6ffdc5db8eb83d2e.jsonl",
+          "at": "2026-10-09T17:41:29.105Z",
+          "reason": "Slice 3 渲染 worker：Write GameRenderer 时 scheduleFrame 用 setInterval(…,16) 当一次性定时器，回调只置 frameTimer=-1 不 clearInterval，再经 render() 尾部 scheduleFrame 每帧新开 interval；requestRender() 直接同步调用 render()。偏离了规格“请求下一帧”和参考写法的清除要求（同转录 L145 推理、L151-L152 写入）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-2048-glm5.3/entry/src/main/ets/pages/MainPage.ets",
+        "since": "2026-10-09T18:47:43.289Z",
+        "at": "2026-10-10T04:36:17.957Z"
+      },
+      "summary": "页面侧接线由同一 worker 完成：L193 把引擎桥 listener 接成 syncFromEngine() 后 requestRender()，并以\nnew GameRenderer(this.renderContext, …) 构造渲染器；L202 新增 requestRender()，同步调用\nrenderer.requestRender() 后立即把 renderer.continueButtonEnabled 镜像到 @Local。规格与源码给出的是异步、\n合并的 invalidate 语义，这里却按同步直绘接线，镜像也依赖同步绘制。生成检查点 dc92e69 的 MainPage.ets:313-318\n保留该写法；返修 X1 改为 renderer.invalidate()、构造时注入 getUIContext()，继续按钮可用性在 Up 时刻直读渲染器字段。\n",
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-2048-glm5.3/spec/baseline/features/F003-rendering-animation.md",
+          "at": "2026-10-09T17:27:13.528Z",
+          "reason": "正常输入：对接点要求“引擎（F001）move 后触发 render”，实现映射同时规定 invalidate 为“动画活跃时每 vsync 调 render()”的下一帧请求（agent-a6ffdc5db8eb83d2e.jsonl:L25-L26）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/2048-tpcstld-2863bbe/2048/base/src/main/java/com/tpcstld/twozerogame/MainView.java",
+          "at": "2026-10-09T17:27:23.736Z",
+          "reason": "正常输入：源端只经 invalidate() 请求重绘，onDraw 由下一帧调度执行（agent-a6ffdc5db8eb83d2e.jsonl:L31-L32）。"
+        },
+        {
+          "key": "agent-a6ffdc5db8eb83d2e.jsonl",
+          "at": "2026-10-09T17:46:36.121Z",
+          "reason": "Slice 3 渲染 worker：Edit MainPage 把桥 listener 接到 requestRender（L193-L194），页面 requestRender() 同步调用 renderer.requestRender() 并立即镜像 continueButtonEnabled（L202-L203）；把引擎 invalidate 接成同步直绘。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-569a68ae79caad45dbb6",
+  "metadata": {
+    "migration": {
+      "id": "game2048-glm53-d90de388-a6d4-4f09-8cd2-28dfc31c5901",
+      "project": "2048"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.295",
+        "2.1.296"
+      ]
+    },
+    "source_set_id": "sources-8cc5e9d8f4b3bafc7d31",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-2048-glm5.3",
+        "at": "2026-10-09T15:56:56.310Z",
+        "ref": "generation/d90de388-a6d4-4f09-8cd2-28dfc31c5901.jsonl:L692",
+        "request_ref": "generation/d90de388-a6d4-4f09-8cd2-28dfc31c5901.jsonl:L686",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-2048-glm5.3",
+        "at": "2026-10-09T15:56:56.310Z",
+        "ref": "generation/d90de388-a6d4-4f09-8cd2-28dfc31c5901.jsonl:L692",
+        "request_ref": "generation/d90de388-a6d4-4f09-8cd2-28dfc31c5901.jsonl:L686",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.10.4",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "4566ae59-a9cb-4783-8d98-daad7bff832a"
+      ]
+    }
+  },
+  "revision": "f52b572012bb921778066e276b5ebecd610f8263b432b09bccedfe8de4edeb49"
+}

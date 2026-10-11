@@ -1,0 +1,546 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-c1c7d598a9076a276e6a",
+  "created_at": "2026-10-07T06:00:01.011676+00:00",
+  "migration_key": "antennapod-glm53-3c838ae1-111b-475a-a085-e9464ec2fde4",
+  "title": "列表行键只含 id/选中位，更新时整体换入同 id 新实例，Repeat/ForEach 复用旧行不刷新",
+  "when": "界面转换与功能接线阶段，为 Repeat/ForEach 列表确定键生成函数、并把 Android 的条目替换+notifyItemChanged 迁移为 ArkTS 数组更新时",
+  "description": "源端 RecyclerView 列表在 FeedItemEvent 等事件中 remove(pos)+add(pos, 新对象)+notifyItemChangedCompat(pos) 或整表重载后重新绑定行；目标端行组件用 Repeat/ForEach 渲染 @ObservedV2 模型（FeedItem/Feed），行内次级按钮、下载/播放态等显示取自条目对象的可变字段，更新路径以同 id 的新实例替换数组元素或整表赋值，而键函数只含 id（或再加选中位、列数等页面状态）。",
+  "summary": "写前输入：a2h-activity-converter 在 Phase 2 读到 ui-migration-pitfalls.md 的 P-05——keyGenerator 只含 id 时属性变更不刷新；\nVM 用「同 id、新值」重建对象时框架按 key 复用旧子组件、不重派 @Param；修复要求 key 含所有影响显示的可变字段，\n或保持对象引用稳定、以 @ObservedV2+@Trace 原地改字段。FeedItemlistPage 转换器同时读到 FeedItemlistFragment.onEventMainThread(FeedItemEvent)\n的 remove/add/notifyItemChangedCompat。这些输入已正确、足够。\n输出偏离（代表链 FeedItemlistPage）：同一次 Write 把事件处理写成 replaced[pos] = updated 后 this.episodes = replaced（整体换入新实例），\nRepeat 键仍为 `${item.id}_${选中位}`；行内次级按钮由 item.media.isDownloaded() 推导，键不变时行被复用，下载完成后仍显示 Download。\n修复主会话 L3110-L3138 用临时日志确认先收到 dl=false、再收到 dl=true 的新 FeedItem 且已换入数组，行仍为 Download，判定为键复用。\n同一成因的其他列表页分两段形成：Inbox/AllEpisodes/Favorites/Queue/Search/CompletedDownloads/Subscription 的转换器都在读 P-05 后只把选中位\n（或列数、标题显示等页面状态）并入键，行内容多为留给切片的占位；随后功能切片 worker 接入真实行与事件更新，均以同 id 新实例替换\n（Slice 15 Queue/Inbox 的 splice(pos,1,item)「原位替换（notifyItemChangedCompat）」、Slice 13 CompletedDownloads 的\nthis.items[pos] = updated「@Trace 字段级刷新（notifyItemChangedCompat 等价）」、Slice 16 EpisodesListViewModel 的 replaced[pos] = item\n且头注释称「@Trace 字段直驱刷新」、SearchPage 的 replaced[pos] = updated、Slice 7 把订阅网格键改为稳定 `${feed.id}` 并整表赋新 Feed），\n键保持不变。这些 worker 转录未读 pitfalls（派工只列 arkts-state-manager/arkts-data-layer 等且未加载），P-05 没有交付到接线环节；\n它们读到的 Android 源码都要求替换后重新绑定行。偏差位于「已知键复用陷阱 → 键与更新方式配对」一环：把 @Trace 属性观察当成对新实例同样生效，\n把数组元素替换当成 notifyItemChanged。\n这些键片段保留到返修前（修复 L3204-L3212 列出各页原键）。最终修复新增 RenderKey.instanceKey（WeakMap 实例序号，L3222-L3223），\n各页 Repeat/ForEach 键追加 _${instanceKey(item|feed)}（L3227-L3228），新实例→新键→重建该行，同实例 @Trace 原地变更键不变；\n真机上 Talk Video 下载后立即变 Play（L3286）。QueuePage 另由 visual-fixer pass 2 把 Repeat（非 virtualScroll）改为同键函数的 ForEach，\n处理 2026-10-06 设备复查发现的实时顺序反向与下载后行按钮仍陈旧（agent-a37c11da1d273ee04.jsonl L481-L487）。\n",
+  "recommendations": [
+    "界面转换阶段：写 Repeat/ForEach 键前，列出行内依赖条目可变字段的显示（下载态、播放/暂停、已读、封面标题、计数等），并查明本页或后续切片如何更新条目；凡会以同 id 新实例替换或整表重载，键必须随实例或相关字段变化（如追加实例序号），否则约定只在原实例上改 @Trace 字段，并把该约定写在键旁供切片沿用。",
+    "功能接线阶段：把 Android 的 remove(pos)+add(pos, item)+notifyItemChanged 迁移为 arr[pos] = item、splice(pos, 1, item) 或整表赋值时，同时核对该列表键是否会随新实例变化；@Trace 只追踪同一实例上的属性写入，不能代替键变化，也不要用「@Trace 字段级刷新」注释替代这一检查。",
+    "编排派工阶段：负责事件处理/数据接线的切片 worker 也需拿到 ui-migration-pitfalls 中的列表刷新条目（P-05），或在页面键契约旁注明更新方式约束，避免该要求只在转换阶段可见；续收/重试的转换器同样要重新加载完整 pitfalls，而非只 grep 个别条目。",
+    "最小检查：对每个 Repeat/ForEach，grep 其数据数组的 `[pos] =`、`splice(pos, 1, x)`、整表赋值来源；写入新对象而键不含实例分量或相关字段者列为待修，并在设备上验证一次「下载完成后行按钮由下载变播放」。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/pages/FeedItemlistPage.ets",
+        "since": "2026-10-03T04:49:05.918Z",
+        "at": "2026-10-06T17:26:02.113Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/.claude/skills/android-ui-graph-query/references/ui-migration-pitfalls.md",
+          "at": "2026-10-01T09:23:38.779Z",
+          "reason": "正常输入：Read 回执含 P-05（key 只含 id 不刷新；同 id 新值重建对象时复用旧子组件、不重派 @Param；修复为 key 含全部影响显示的可变字段或保持引用、@Trace 原地改），文件头写明转换器 Phase 2 必须逐条检查（agent-a358f402fecba1474.jsonl L47-L48）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/AntennaPod-develop/app/src/main/java/de/danoeh/antennapod/ui/screen/feed/FeedItemlistFragment.java",
+          "at": "2026-10-01T09:23:52.312Z",
+          "reason": "正常输入：Read 回执 onEventMainThread(FeedItemEvent) 按 id 找到位置后 remove(pos)、add(pos, item)、adapter.notifyItemChangedCompat(pos)，EpisodeDownloadEvent 也逐项 notifyItemChangedCompat；说明换入新对象后必须重新绑定该行（同转录 L56-L57）。"
+        },
+        {
+          "key": "agent-a358f402fecba1474.jsonl",
+          "at": "2026-10-01T09:37:17.625Z",
+          "reason": "已读上述两项，Write FeedItemlistPage 时把事件处理写成 replaced[pos] = updated、this.episodes = replaced（整体换入新实例），Repeat 行内 EpisodeListItem 以 item 推导下载/播放按钮，键却只写 `${item.id}_${isSelectMode && selectedIds.includes(item.id) ? 1 : 0}`；P-05 与 notifyItemChanged 语义未落到键或原地更新（同转录 L154-L155）。该键与替换写法保留到返修前（修复 L3167、L3227 的替换基线）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/pages/QueuePage.ets",
+        "since": "2026-10-03T04:49:05.918Z",
+        "at": "2026-10-06T17:26:02.113Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/.claude/skills/android-ui-graph-query/references/ui-migration-pitfalls.md",
+          "at": "2026-10-01T08:26:32.801Z",
+          "reason": "正常输入：队列页转换器 Read 回执含完整 P-05 键与对象重建要求（agent-ae6edfac92d138c0d.jsonl L69-L70，L64-L65 先列过标题）。"
+        },
+        {
+          "key": "agent-ae6edfac92d138c0d.jsonl",
+          "at": "2026-10-01T08:37:11.025Z",
+          "reason": "读到 P-05 后 Write QueuePage：Repeat(this.queue) 行内容为留给 Slice 15 的 episodeItemSlot 占位，键契约只写 `${item.id}_${选中位}`，未把条目可变显示状态或实例身份纳入、也未约定原地更新（同转录 L131-L132）。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/AntennaPod-develop/app/src/main/java/de/danoeh/antennapod/ui/screen/queue/QueueFragment.java",
+          "at": "2026-10-02T20:04:23.764Z",
+          "reason": "接线者实际读到的源端：onEventMainThread(FeedItemEvent) 按 id 定位后替换条目并通知适配器重绑该行（agent-ab6e9696fba1c7311.jsonl L195-L196）。"
+        },
+        {
+          "key": "agent-ab6e9696fba1c7311.jsonl",
+          "at": "2026-10-02T20:34:48.051Z",
+          "reason": "Slice 15 worker 未读 pitfalls（转录只 grep a2h-execute/SKILL.md，L128-L130），Write QueuePage 接入 EpisodeListItem 与事件处理：feedItemEventHandler 用 this.queue.splice(pos, 1, item) 换入事件新实例并注「原位替换（notifyItemChangedCompat，AC15）」，Repeat 键沿用 id+选中位（同转录 L391-L392，L404-L405 再写保留）。P-05 未交付到此接线环节。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/pages/CompletedDownloadsPage.ets",
+        "since": "2026-10-03T04:49:05.918Z",
+        "at": "2026-10-06T17:26:02.113Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/.claude/skills/android-ui-graph-query/references/ui-migration-pitfalls.md",
+          "at": "2026-10-01T08:10:58.488Z",
+          "reason": "正常输入：已下载页转换器 Read 回执含完整 P-05（agent-aa49b7f0dc3838558.jsonl L51-L52）。"
+        },
+        {
+          "key": "agent-aa49b7f0dc3838558.jsonl",
+          "at": "2026-10-01T08:25:11.838Z",
+          "reason": "读到 P-05 后 Write CompletedDownloadsPage：Repeat(this.items) 行内容为 episodeItemSlot 占位，键写成 item.id.toString()，未纳入任何可变显示字段或实例身份（同转录 L172-L173）。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/AntennaPod-develop/app/src/main/java/de/danoeh/antennapod/ui/screen/download/CompletedDownloadsFragment.java",
+          "at": "2026-10-02T19:49:28.141Z",
+          "reason": "接线者实际读到的源端：onEventMainThread(FeedItemEvent) 按 id 定位并替换条目、通知适配器（agent-ae663eba77aefacb6.jsonl L79、L82）。"
+        },
+        {
+          "key": "agent-ae663eba77aefacb6.jsonl",
+          "at": "2026-10-02T20:46:16.833Z",
+          "reason": "Slice 13 worker 派工要求 arkts-state-manager 但只加载了 arkts-download-manager（L152），未读 pitfalls；Edit 写入 feedItemHandler：this.items[pos] = updated 并注「@Trace 字段级刷新（notifyItemChangedCompat 等价）」，同一处 playbackPositionHandler 却是原实例上改 media.position；键仍为 item.id.toString()（同转录 L422-L423）。把 @Trace 观察误当作对新实例生效。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/pages/InboxPage.ets",
+        "since": "2026-10-03T04:49:05.918Z",
+        "at": "2026-10-06T17:26:02.113Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/.claude/skills/android-ui-graph-query/references/ui-migration-pitfalls.md",
+          "at": "2026-10-01T04:53:15.338Z",
+          "reason": "正常输入：收件箱转换器 Read 回执含完整 P-05（agent-acfed46868a406cd7.jsonl L48-L49）。"
+        },
+        {
+          "key": "agent-acfed46868a406cd7.jsonl",
+          "at": "2026-10-01T05:14:51.235Z",
+          "reason": "读到 P-05 后 Write InboxPage：局部 interface FeedItem { id } 占位，Repeat 键写 `${item.id}_${选中位}`，注释称「Repeat key（含选中位）驱动重建」——P-05 只用于选中态，未覆盖条目可变显示或实例替换（同转录 L156-L157）。该写法随后被 AllEpisodes/PlaybackHistory 等兄弟页作为参考。",
+          "problem": true
+        },
+        {
+          "key": "agent-ab6e9696fba1c7311.jsonl",
+          "at": "2026-10-02T20:46:24.684Z",
+          "reason": "Slice 15 worker（未读 pitfalls）Write InboxPage 接入真实行与 feedItemEventHandler：先 splice(pos, 1) 再 splice(pos, 0, item) 把事件新实例放回原位并注「原位替换」，键仍为 id+选中位（同转录 L425-L426）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/pages/SearchPage.ets",
+        "since": "2026-10-03T04:49:05.918Z",
+        "at": "2026-10-06T17:26:02.113Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/.claude/skills/android-ui-graph-query/references/ui-migration-pitfalls.md",
+          "at": "2026-10-01T09:31:51.816Z",
+          "reason": "正常输入：搜索页转换器 Read 回执含完整 P-05（agent-a4eeed72f04ae66cf.jsonl L91、L93）。"
+        },
+        {
+          "key": "agent-a4eeed72f04ae66cf.jsonl",
+          "at": "2026-10-01T09:40:21.085Z",
+          "reason": "读到 P-05 后 Write SearchPage：剧集结果 Repeat 键 `${item.id}_${选中位}`，订阅结果键 `${feed.id}_${feed.imageUrl}`，均未覆盖实例替换或剧集行的下载/播放态（同转录 L168-L169）。",
+          "problem": true
+        },
+        {
+          "key": "agent-a2665b6468828cce7.jsonl",
+          "at": "2026-10-02T21:20:07.526Z",
+          "reason": "Slice 16 worker（未读 pitfalls）Edit SearchPage 接入 feedItemEventHandler：replaced[pos] = updated 后整表赋回 episodeResults，注「命中 → 原位替换」，并称下载态「Repeat 局部重渲染」，键不变（同转录 L560-L561）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/pages/AllEpisodesPage.ets",
+        "since": "2026-10-03T04:49:05.918Z",
+        "at": "2026-10-06T17:26:02.113Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/.claude/skills/android-ui-graph-query/references/ui-migration-pitfalls.md",
+          "at": "2026-10-01T08:09:38.608Z",
+          "reason": "正常输入：全部剧集页转换器 Read 回执含完整 P-05（agent-af72698f7ec45d05b.jsonl L77-L78）。"
+        },
+        {
+          "key": "agent-af72698f7ec45d05b.jsonl",
+          "at": "2026-10-01T08:15:02.420Z",
+          "reason": "读到 P-05、并按派工对齐兄弟页 InboxPage 后，Write AllEpisodesPage 的 Repeat 键 `${item.id}_${选中位}`，行内容为切片占位（同转录 L131-L132）。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/AntennaPod-develop/app/src/main/java/de/danoeh/antennapod/ui/episodeslist/EpisodesListFragment.java",
+          "at": "2026-10-02T19:54:33.375Z",
+          "reason": "接线者实际读到的源端基类：onEventMainThread(FeedItemEvent) 命中 id 时 episodes.remove(pos)、add(pos, item)、listAdapter.notifyItemChangedCompat(pos)（agent-a2665b6468828cce7.jsonl L105-L106）。"
+        },
+        {
+          "key": "agent-a2665b6468828cce7.jsonl",
+          "at": "2026-10-02T20:56:33.501Z",
+          "reason": "Slice 16 worker（未读 pitfalls）先 Write EpisodesListViewModel：replaced[pos] = item「原位替换」后整表赋 episodes，头注释称组件持 @ObservedV2 实例「@Trace 字段直驱刷新」（L404-L405）；再 Write AllEpisodesPage 以 Repeat(this.vm.episodes) 接入 EpisodeListItem，键仍为 id+选中位（L424-L425）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/pages/FavoritesPage.ets",
+        "since": "2026-10-03T04:49:05.918Z",
+        "at": "2026-10-06T17:26:02.113Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/.claude/skills/android-ui-graph-query/references/ui-migration-pitfalls.md",
+          "at": "2026-10-01T08:09:17.045Z",
+          "reason": "正常输入：收藏页转换器 Read 回执含完整 P-05（agent-a0e9ce05d66f01246.jsonl L54-L55）。"
+        },
+        {
+          "key": "agent-a0e9ce05d66f01246.jsonl",
+          "at": "2026-10-01T08:16:11.720Z",
+          "reason": "读到 P-05 后 Write FavoritesPage 的 Repeat 键 `${item.id}_${选中位}`，行内容为切片占位（同转录 L118-L119）。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/AntennaPod-develop/app/src/main/java/de/danoeh/antennapod/ui/episodeslist/EpisodesListFragment.java",
+          "at": "2026-10-02T19:54:33.375Z",
+          "reason": "接线者实际读到的源端基类 FeedItemEvent 替换+notifyItemChangedCompat（agent-a2665b6468828cce7.jsonl L105-L106）。"
+        },
+        {
+          "key": "agent-a2665b6468828cce7.jsonl",
+          "at": "2026-10-02T21:11:04.702Z",
+          "reason": "Slice 16 worker 以同一 EpisodesListViewModel（同 id 新实例替换）Write FavoritesPage，Repeat(this.vm.episodes) 键仍为 id+选中位（同转录 L404-L405、L467-L468）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/pages/PlaybackHistoryPage.ets",
+        "since": "2026-10-03T04:49:05.918Z",
+        "at": "2026-10-06T17:26:02.113Z"
+      },
+      "nodes": [
+        {
+          "key": "agent-a799f5efbc4435d4f.jsonl",
+          "at": "2026-10-01T08:27:06.224Z",
+          "reason": "重试的转换器本次未读 pitfalls，读兄弟页 InboxPage.ets、FavoritesPage.ets（L38、L112）后 Write PlaybackHistoryPage，沿用 `${item.id}_${选中位}` 键（L124）。本节点只说明键的来源，不另定独立失职。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/AntennaPod-develop/app/src/main/java/de/danoeh/antennapod/ui/episodeslist/EpisodesListFragment.java",
+          "at": "2026-10-02T19:54:33.375Z",
+          "reason": "接线者实际读到的源端基类 FeedItemEvent 替换+notifyItemChangedCompat（agent-a2665b6468828cce7.jsonl L105-L106）。"
+        },
+        {
+          "key": "agent-a2665b6468828cce7.jsonl",
+          "at": "2026-10-02T21:12:20.940Z",
+          "reason": "Slice 16 worker（未读 pitfalls）以 EpisodesListViewModel 同 id 新实例替换接线，Write PlaybackHistoryPage 时 Repeat 键仍为 id+选中位（同转录 L404-L405、L474）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": "target"
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/pages/SubscriptionPage.ets",
+        "since": "2026-10-03T04:49:05.918Z",
+        "at": "2026-10-06T17:26:02.113Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/.claude/skills/android-ui-graph-query/references/ui-migration-pitfalls.md",
+          "at": "2026-10-01T09:23:51.290Z",
+          "reason": "正常输入：订阅页转换器 Read 回执含完整 P-05（agent-a54962879c67a85db.jsonl L36、L38）。"
+        },
+        {
+          "key": "agent-a54962879c67a85db.jsonl",
+          "at": "2026-10-01T09:37:40.478Z",
+          "reason": "读到 P-05 后 Write SubscriptionPage，订阅网格键写 `${feed.id}_${多选}_${选中}_${列数}_${标题显示}`：只纳入页面状态，未纳入 Feed 实例或其封面/标题等可变字段（同转录 L181-L182）。",
+          "problem": true
+        },
+        {
+          "key": "agent-a684d656b3490892a.jsonl",
+          "at": "2026-10-02T15:43:05.548Z",
+          "reason": "Slice 7 worker（未读 pitfalls）读原页后（L37-L38）把网格键改成「稳定 key」`${feed.id}`，注明多选/列数/标题态经 @Param 派发不重建；同一 worker 的 SubscriptionsViewModel 以整表赋值换入新 Feed 实例（L333；VM 写于 15:37）。键不随实例变化。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "QueuePage 实时顺序反向首次见于 2026-10-06 设备复查，当时键已含 instanceKey；修复者把它归于 Repeat 非 virtualScroll 在整表换键后的显示顺序。d16b3d0 构建上是否已存在反向缺少设备证据，本卡不把 Repeat 选型本身归为生成偏差。"
+  ],
+  "unresolved_targets": [
+    {
+      "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/components/common/RenderKey.ets",
+      "reason": "修复期新建的共享辅助文件（修复主会话 L3222-L3223 Write），生成期不存在、无生成写入可绑定；它承载的「键含实例分量」缺失已在各页面图中归因。"
+    },
+    {
+      "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/pages/SubscriptionsSectionPage.ets",
+      "reason": "转换器 a83bc05edcfef515c 读 P-05 后（L139-L140）已按 P-05① 把 imageUrl、getTitle() 并入键并注「P-05：key 含显示相关字段」（L178），HorizontalFeedCard 只显示封面与标题；修复为同批统一追加 instanceKey，未见该区块陈旧的设备证据，未认定生成偏差。"
+    },
+    {
+      "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/pages/DownloadsSectionPage.ets",
+      "reason": "键 item.id.toString()+整表重载由重跑转换器 a9293c39e712f6bc6 写入（L204）；它只 grep 了 pitfalls 的 P-25/P-22 等条目（L79-L80），回执不含 P-05。转换器协议要求的整文件加载为何缺失、该输入缺口的交付边界未逐项核验。"
+    },
+    {
+      "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/pages/EpisodesSurpriseSectionPage.ets",
+      "reason": "键 item.id.toString() 与 splice(pos, 1, updated) 原位替换由续收转换器 a8311c6aa2493d33e 写入（L153），其转录写前未读 P-05，参考了兄弟页 DownloadsSectionPage（L51、L56）；前次中断尝试 a626594275845e50d 读过 P-05（L96-L97），续收派工未交付该要求，交接未逐项核验。"
+    },
+    {
+      "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/pages/InboxSectionPage.ets",
+      "reason": "键 item.id.toString()+整表重载由续收转换器 ab80a9886f257f75b 写入（L165），写后才 grep 到 P-05（L224-L225），写前参考兄弟页 DownloadsSectionPage（L54）；前次尝试的输入与交接未核验。"
+    },
+    {
+      "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/pages/QueueSectionPage.ets",
+      "reason": "键 item.id.toString() 与 splice(pos, 1, updated) 原位替换由续收转换器 a652e59fe2f155d97 写入（L144），其转录写前未读 P-05，参考兄弟页 DownloadsSectionPage（L69）；前次中断尝试 a23d4a14e46740f4e 读过 P-05（L115-L116），续收派工未交付该要求，交接未逐项核验。"
+    }
+  ],
+  "job": "issue-c1c7d598a9076a276e6a",
+  "metadata": {
+    "migration": {
+      "id": "antennapod-glm53-3c838ae1-111b-475a-a085-e9464ec2fde4",
+      "project": "AntennaPod"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.285",
+        "2.1.286",
+        "2.1.287",
+        "2.1.288",
+        "2.1.289"
+      ]
+    },
+    "source_set_id": "sources-5f9a4b68d8866c1b1233",
+    "environment": [
+      {
+        "name": "toolchain.kotlin",
+        "value": "2.3.20",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-09-30T15:43:45.309Z",
+        "ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a3da0f444ffe5d81f.jsonl:L27",
+        "request_ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a3da0f444ffe5d81f.jsonl:L25",
+        "phase": "generation"
+      },
+      {
+        "name": "toolchain.agp",
+        "value": "8.11.0",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-09-30T15:43:45.309Z",
+        "ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a3da0f444ffe5d81f.jsonl:L27",
+        "request_ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a3da0f444ffe5d81f.jsonl:L25",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-09-30T17:34:05.597Z",
+        "ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a5c631d1e662fac13.jsonl:L54",
+        "request_ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a5c631d1e662fac13.jsonl:L53",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-09-30T17:34:05.597Z",
+        "ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a5c631d1e662fac13.jsonl:L54",
+        "request_ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a5c631d1e662fac13.jsonl:L53",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.0.2(22)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-10-04T16:26:51.075Z",
+        "ref": "repair/ae3bb09d-1f58-48a4-91c8-85a20fd96fc1.jsonl:L215",
+        "request_ref": "repair/ae3bb09d-1f58-48a4-91c8-85a20fd96fc1.jsonl:L214",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.0.1(21)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-10-04T16:26:51.075Z",
+        "ref": "repair/ae3bb09d-1f58-48a4-91c8-85a20fd96fc1.jsonl:L215",
+        "request_ref": "repair/ae3bb09d-1f58-48a4-91c8-85a20fd96fc1.jsonl:L214",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.4",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "040e09cc-8de1-45ba-bc4b-5202da7f9c23"
+      ]
+    }
+  },
+  "revision": "e08fcecfcb0ba66ded65b06bfca4e2fae61130f9835525a62f6e684c11cec824"
+}

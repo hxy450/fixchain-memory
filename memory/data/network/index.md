@@ -1,6 +1,6 @@
 # data/network
 
-网络层：服务地址与环境、运行配置的构建期注入、URL 拼接、拦截器注入的公共请求头、请求体字段与编码（表单或 JSON）、登录凭证来源与失效踢登，加解密工具的前置返回与异常回退、网关加密传输到 cryptoFramework 的移植，以及多路请求聚合结果的缓存写入与命中，拦截器读取的公共参数（设备标识、当前分组）的生产者，网络权限声明，请求通道内会话密钥前置门（ensureKey）的取舍与握手基址
+网络层：服务地址与环境、运行配置的构建期注入、URL 拼接、拦截器注入的公共请求头、请求体字段与编码（表单或 JSON）、登录凭证来源与失效踢登，加解密工具的前置返回与异常回退、网关加密传输到 cryptoFramework 的移植，以及多路请求聚合结果的缓存写入与命中，拦截器读取的公共参数（设备标识、当前分组）的生产者，网络权限声明，请求通道内会话密钥前置门（ensureKey）的取舍与握手基址，按承载判定计费网络
 
 [上一级](../index.md)
 
@@ -12,6 +12,9 @@
 - [多路请求聚合写 TTL 缓存前先确认至少一路成功；缓存命中同时校验时效和载荷](lesson-c6379cfcbee86500f91f.lesson.md)
   - 时机：数据层实现阶段，为首页等多路并发请求（如首页数据与趋势）实现按键（城市）的 TTL 缓存写入与命中判定时
   - 情境：源端或规格按城市缓存多路并发结果（refreshTime + 4h 一类），每一路都可能失败；目标 Service 把各路结果聚合成一条缓存记录，命中条件只看保存时间。
+- [平台计费网络判定按承载显式映射，不直译为单一能力位](lesson-20afdfffa13dc5bca10c.lesson.md)
+  - 时机：网络基础层实现阶段，把 isActiveNetworkMetered 等平台判定改写为 @ohos.net.connection 实现时
+  - 情境：源以平台判定计费网络并门控刷新、下载、流播或图片，同一工具类对以太网另有放行；目标只能读取 networkCap 与 bearerTypes，SDK 声明没写各承载是否会置 NOT_METERED。
 - [把 RSA-OAEP + AES-GCM 网关加密移植到 cryptoFramework：生成器规格串只写算法与位数、加解密结果判空、Buffer 不套 Node 视图](lesson-3684e08592c85de82204.lesson.md)
   - 时机：网络基础设施实现阶段，把 Android 端 RSA-OAEP 包裹会话密钥加 AES-GCM 加密的网关传输改写为 ArkTS cryptoFramework 与 buffer 调用时（含为通过编译改写同步 API 与类型的收敛步骤）
   - 情境：源端用 X509EncodedKeySpec 解析“BEGIN PUBLIC KEY”PEM，以 RSA/ECB/OAEPWithSHA-256AndMGF1Padding 包裹随机密钥，用 AES/GCM/NoPadding 加密可能为空的请求体并解密响应；目标用 createAsyKeyGenerator/convertPemKeySync、Cipher.updateSync/doFinalSync 与 @kit.ArkTS buffer 实现同一协议。

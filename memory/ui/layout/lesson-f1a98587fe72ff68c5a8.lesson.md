@@ -1,6 +1,6 @@
 # 页面转换逐项落实源 XML 的 gone 节点（代码只绑点击、没有设为可见的入口也不渲染）、固定尺寸点击容器与 tools:listitem 行布局
 
-ID：`lesson-f1a98587fe72ff68c5a8` · 版本：2
+ID：`lesson-f1a98587fe72ff68c5a8` · 版本：3
 
 [本主题](index.md)
 
@@ -10,7 +10,7 @@ ID：`lesson-f1a98587fe72ff68c5a8` · 版本：2
 
 ## 适用情境
 
-源布局含 visibility=gone 的标题等节点、固定尺寸的点击容器（如 40×48dp 的返回 ImageView），列表 RecyclerView 用 tools:listitem 引用独立的 item 布局；迁移用的页面快照是合成的，可能把 gone 节点列为可见文本。 也包括 Activity 对 visibility=gone 的标题栏图标 findViewById 并绑定跳转（如打开搜索页），全文没有 setVisibility(VISIBLE)；目标工程其他页面已有同类入口的现成写法。
+源布局含 visibility=gone 的标题等节点、固定尺寸的点击容器（如 40×48dp 的返回 ImageView），列表 RecyclerView 用 tools:listitem 引用独立的 item 布局；迁移用的页面快照是合成的，可能把 gone 节点列为可见文本。 也包括 Activity 对 visibility=gone 的标题栏图标 findViewById 并绑定跳转（如打开搜索页），全文没有 setVisibility(VISIBLE)；目标工程其他页面已有同类入口的现成写法。也包括页面声明并在更新函数中维护某个展示状态（如倍速文本），build 中却没有消费它的组件。
 
 ## 原因
 
@@ -23,12 +23,15 @@ ID：`lesson-f1a98587fe72ff68c5a8` · 版本：2
 3. 列表行结构打开 tools:listitem（或适配器 inflate 的）item 布局，取图标、文字层级与右侧列。
 4. 判定图标按钮是否显示时，先看 XML 初始 visibility，再查代码中对该 View 的全部 setVisibility；只有 findViewById 与点击监听、没有 VISIBLE 分支的 gone 入口不生成。目标工程其他页面的写法只决定怎样实现，不决定源页是否有该入口；有截图时新增可见元素前先用截图核对，协调者追加的入口要求与源布局或截图冲突时先回报冲突。
 5. 源端靠左右对称让中间控件居中时，隐藏一侧用同尺寸空占位（如返回键对侧的 44×44 空 Row）保持居中，不放可点击图标。
+6. 以源布局 View id 为清单逐个生成渲染节点；每个声明并赋值的展示状态，在 build 中都要有消费它的组件。
 
-来源支持：2 张卡 · 2 次迁移 · 2 个应用
+来源支持：3 张卡 · 3 次迁移 · 3 个应用
 
 ## 来源（按需复核）
 
 - [case-436d1b16d79796c667d6](../../../store/cases/case-436d1b16d79796c667d6/fc0a6307eebf5b3bce1a7c1f60a97bf1685ed3251e7fcbb0728afeab5ff1ac70.json) · 结论：diagnosis, recommendation:4
   卡片版本：`fc0a6307eebf5b3bce1a7c1f60a97bf1685ed3251e7fcbb0728afeab5ff1ac70`
+- [case-5b7b00a1deb25ed0b8d3](../../../store/cases/case-5b7b00a1deb25ed0b8d3/919bf87f71df8c5347bde16fb06fa3396a51d284ab648ce5d123265dfbf05b5e.json) · 结论：recommendation:1
+  卡片版本：`919bf87f71df8c5347bde16fb06fa3396a51d284ab648ce5d123265dfbf05b5e`
 - [case-a348083ad18c6f87030f](../../../store/cases/case-a348083ad18c6f87030f/ff4ca14c213bc58cab29a246315afb07ff950c3ead8d54b4816a9b98629adda5.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3, recommendation:4
   卡片版本：`ff4ca14c213bc58cab29a246315afb07ff950c3ead8d54b4816a9b98629adda5`

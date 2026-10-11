@@ -1,6 +1,6 @@
 # 多个相互独立的底部弹层不在同一组件上链式 bindSheet：分别挂到不同节点，或用一个 bindSheet 按类型切换内容
 
-ID：`lesson-b661a3a6a4c0a1e2a3c9` · 版本：1
+ID：`lesson-b661a3a6a4c0a1e2a3c9` · 版本：2
 
 [本主题](index.md)
 
@@ -10,7 +10,7 @@ ID：`lesson-b661a3a6a4c0a1e2a3c9` · 版本：1
 
 ## 适用情境
 
-源页面并列存在两个及以上由各自 visible 状态控制的底部弹窗（如规格选择与优惠券）；目标页面用 @Local 状态加 bindSheet 实现，并把它们写在同一个容器的修饰链上。
+源页面并列存在两个及以上由各自 visible 状态控制的底部弹窗（如规格选择与优惠券）；目标页面用 @Local 状态加 bindSheet 实现，并把它们写在同一个容器的修饰链上。也包括同一页面要挂章节、定时、分享、日志、排序等多个半模态，或沿用这样连写的先例页。
 
 ## 原因
 
@@ -20,14 +20,17 @@ ID：`lesson-b661a3a6a4c0a1e2a3c9` · 版本：1
 
 1. 每个弹层状态对应的 bindSheet 绑在不同的组件节点上（如一个挂内容容器、一个挂根容器，绑定节点在触发按钮可点击时已渲染），或合并为一个 bindSheet 并按类型切换内容；不在同一组件上链式调用两次 bindSheet。
 2. 排查“点击后弹层不出现”时，先确认状态翻转后对应的 bindSheet 唯一生效、没有被同节点的后续绑定覆盖，再考虑网络时序。
+3. 需要多个独立弹层时，每个挂在独立的零尺寸锚点上：Column().width(0).height(0).bindSheet(...)。
 
 ## 可选检查
 
 - 写完页面后用 rg -n 'bindSheet\(' 核对每个弹层状态变量各有唯一生效的绑定。
 
-来源支持：1 张卡 · 1 次迁移 · 1 个应用
+来源支持：2 张卡 · 2 次迁移 · 2 个应用
 
 ## 来源（按需复核）
 
-- [case-c7c5aa055fe76d9864b6](../../../store/cases/case-c7c5aa055fe76d9864b6/6c5075c59eac4d9a6e8f50f5146f04624fd47d07678f02c9381339d272650b98.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:4
+- [case-c4e5b6ca6da92a568d18](../../../../store/cases/case-c4e5b6ca6da92a568d18/7fd836a3b3b3874e2f2f95df046b726804dddfab303ad8497ada8936a28e0940.json) · 结论：diagnosis, recommendation:1
+  卡片版本：`7fd836a3b3b3874e2f2f95df046b726804dddfab303ad8497ada8936a28e0940`
+- [case-c7c5aa055fe76d9864b6](../../../../store/cases/case-c7c5aa055fe76d9864b6/6c5075c59eac4d9a6e8f50f5146f04624fd47d07678f02c9381339d272650b98.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:4
   卡片版本：`6c5075c59eac4d9a6e8f50f5146f04624fd47d07678f02c9381339d272650b98`

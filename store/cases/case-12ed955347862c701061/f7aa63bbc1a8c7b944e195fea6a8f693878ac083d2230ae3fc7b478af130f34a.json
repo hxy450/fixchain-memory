@@ -1,0 +1,332 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-12ed955347862c701061",
+  "created_at": "2026-10-07T05:40:14.800912+00:00",
+  "migration_key": "antennapod-glm53-3c838ae1-111b-475a-a085-e9464ec2fde4",
+  "title": "闭合「PlaybackStatus.isCurrentlyPlaying等价」占位时只比媒体id，丢掉服务运行与PLAYING条件，暂停后队列行与首页卡片仍显示在播",
+  "when": "功能接线阶段，闭合列表行/首页卡片的播放态占位，推导传给共享行组件的isCurrentlyPlaying（暂停按钮与activated高亮）时",
+  "description": "源端列表项经PlaybackStatus.isCurrentlyPlaying(media)决定次级按钮是否为暂停、条目是否高亮，该谓词要求当前媒体id匹配、PlaybackService.isRunning且getCurrentPlayerStatus()==PLAYER_STATUS_PLAYING；目标页面用页面级「正播id」状态加PlayerStatusEvent重查折算，再以@Param传入HorizontalEpisodeCard/EpisodeListItem。",
+  "summary": "首页两个区段的isCurrentlyPlayingItem最初由页转换器写成playingItemId===item.id，并登记P-S4-065/069：\n「playingItemId数据源（PlaybackStatus.isCurrentlyPlaying(media)等价：PlayerStatusEvent后重查播放服务态）」，留给Slice 4 Step 3d闭合。\nSlice 4接线者ab0066写前已读到F001规格中ExternalPlayerBar「isPlaying ← PlaybackService.isRunning + PLAYER_STATUS_PLAYING」及AC76/AC78、\nregistry中P-S4-056「isPlaying = PlaybackService.isRunning && getCurrentPlayerStatus() == PLAYER_STATUS_PLAYING」和P-S4-065/069原行、\nExternalPlayerFragment.java中同一判定（agent-ab0066cefb71c5242.jsonl:L26-L28、L55-L56、L171-L173）。\n这些输入点名了要复刻的Android谓词，并在同一会话给出「正在播」必须看PLAYER_STATUS_PLAYING；PlaybackStatus.java就在源码根下。\n闭合065/069时它未打开PlaybackStatus.java，L611凭记忆断言isCurrentlyPlaying「只是playable instanceof FeedMedia且media id等于getCurrentlyPlayingFeedMediaId」，\n于是把refreshPlayingItemId写成只取getCurrentlyPlayingFeedMediaId，isCurrentlyPlayingItem改成item.media.id===playingItemId，\n注释「PlaybackStatus.isCurrentlyPlaying(media)等价（media.id比对，已闭合）」（L614-L619、L624-L625，registry闭合记录L675）。\nitem.id→media.id的修正是对的，但服务运行与PLAYING两条腿被丢掉；暂停后PAUSED触发的重查仍得到同一媒体id，卡片继续显示⏸并高亮。该片段原样保留到d16b3d0。\n队列页由Slice 15实现者ab6e9696写出：它写前cat了PauseActionButton.java（onClick以!PlaybackStatus.isCurrentlyPlaying(media)守卫，L183-L184），\n并在20:22-20:24自己写出EpisodeItemActionExecutor.isCurrentlyPlaying「服务在跑 + 同media + PLAYING」三条件版本，L348-L349的Grep回执也返回这条定义；\n十分钟后Write QueuePage（L391-L392）却把isCurrentlyPlayingItem写成item.media.id===playingMediaId，syncPlayingMediaId只取getPlayable()的id，\n没有复用自己的helper（它在L124-L125读过区段页“已闭合”的同款只比id先例）；L404再写时未变，保留到d16b3d0。\n规格侧：三条件只在F005-AC153（Slice 6）中给出，F001/F007与page_0038只以函数名引用PlaybackStatus.isCurrentlyPlaying；\n本卡偏差位于“已有谓词名、源码与同会话PLAYING规则→实现折算”这一环，不是规格写反。\n修复：pass-2 visual-fixer为QueuePage新增isPlayerPlaying=FeedItemMenu.isPlayingMedia(media)（isRunning && status==PLAYING），行判定改为当前媒体且在播\n（repair/…/agent-a37c11da1d273ee04.jsonl:L481-L482）；定向收尾为两个区段页加同口径isPlayerPlaying并在aboutToAppear初始化（ae3bb09d…jsonl:L17789-L17804）。\n进度旧值另有成因：PlaybackService在onPlaybackPause里不等待PlayableUtils.saveCurrentPosition返回的Promise就进入statusChanged发PlayerStatusEvent，\n订阅页重查读到≤5s前的节流位置；修复把saveCurrentPosition改为返回Promise并在落库后补发一次PlayerStatusEvent（L17809-L17815）。\n该顺序由Slice 6按F005-AC28/AC149与PlaybackService.java原序移植，Android两套服务同样不等DBWriter落库，规格未要求“落库后再广播”，属HMOS异步RDB时序适配，未画偏差链。\nround0e复核：暂停后≤0.7s首页两区段卡片回到▶且无高亮、进度34%与落库值一致，队列行+0.35s刷新（agent-aa14fb09adfcee6d9.jsonl:L631）。\n",
+  "recommendations": [
+    "功能接线阶段闭合“等价于源端谓词X”的占位时，先打开该谓词源码逐条列出条件再实现；本例PlaybackStatus.isCurrentlyPlaying = 媒体类型FEEDMEDIA且id匹配 && PlaybackService.isRunning && getCurrentPlayerStatus()==PLAYER_STATUS_PLAYING，不要凭记忆把它当作只比id的isPlaying。",
+    "页面用“正播媒体id”单值折算行/卡片显示态时，同时保存播放态（或直接调用仓内已有三条件helper，如FeedItemMenu.isPlayingMedia / EpisodeItemActionExecutor.isCurrentlyPlaying），并在PlayerStatusEvent处理与aboutToAppear中一起重算；自检：暂停后同一行应回到▶并取消activated高亮。",
+    "同一任务内已写出或已存在正确helper时，列表行判定复用它，不按同类页先例另写只比id的表达式；写完grep全仓isCurrentlyPlayingItem/isCurrentlyPlaying实现，核对各页口径一致。",
+    "规格与占位登记阶段，消费页引用PlaybackStatus.isCurrentlyPlaying等共享谓词时内联其完整条件或指向定义AC（本例F005-AC153），避免下游只拿到函数名。",
+    "平台适配（非本卡偏差链）：源端fire-and-forget落库映射为返回Promise的异步写，且同一流程随后发事件触发订阅方重查DB时，保留该Promise并在落库完成后再广播或补发一次事件。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/pages/QueueSectionPage.ets",
+        "since": "2026-10-03T04:49:05.918Z",
+        "at": "2026-10-06T17:26:02.113Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/spec/baseline/features/F001-app-shell-home.md",
+          "at": "2026-10-02T15:04:19.021Z",
+          "reason": "正常输入：Read回执含ExternalPlayerBar「@Local isPlaying ← PlaybackService.isRunning + PLAYER_STATUS_PLAYING」及AC76/AC78「正在播（isRunning+PLAYER_STATUS_PLAYING）」，给出本切片“正在播”的判定口径；F001未单列卡片isCurrentlyPlaying（agent-ab0066cefb71c5242.jsonl:L26、L28）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/spec/placeholder-registry.md",
+          "at": "2026-10-02T15:06:03.649Z",
+          "reason": "正常输入：Bash grep回执列出P-S4-065「playingItemId数据源（PlaybackStatus.isCurrentlyPlaying(media)等价：PlayerStatusEvent后重查播放服务态）」与P-S4-056「isPlaying = PlaybackService.isRunning && getCurrentPlayerStatus() == PLAYER_STATUS_PLAYING」；占位已点名要复刻的Android谓词（同转录L55-L56）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/AntennaPod-develop/app/src/main/java/de/danoeh/antennapod/ui/screen/playback/audio/ExternalPlayerFragment.java",
+          "at": "2026-10-02T15:16:19.517Z",
+          "reason": "正常输入：Read回执中butPlay点击以PlaybackService.isRunning && PlaybackPreferences.getCurrentPlayerStatus() == PLAYER_STATUS_PLAYING判定正在播（同转录L171、L173）。"
+        },
+        {
+          "key": "agent-ab0066cefb71c5242.jsonl",
+          "at": "2026-10-02T16:17:20.273Z",
+          "reason": "Slice 4 Step 3d闭合P-S4-065：未读PlaybackStatus.java，L611凭记忆称isCurrentlyPlaying只是media id比对；L614 Edit把refreshPlayingItemId写成只取getCurrentlyPlayingFeedMediaId，L618 Bash把isCurrentlyPlayingItem改为item.media.id===playingItemId并注“已闭合”（回执L615、L619），PLAYING与isRunning两腿缺失。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4,
+          "force": true,
+          "reason": "ab0066在L55用Bash grep \"^| P-S4-\" spec/placeholder-registry.md，L56回执逐行返回P-S4-065（PlaybackStatus.isCurrentlyPlaying(media)等价：PlayerStatusEvent后重查播放服务态）与P-S4-056（isRunning && PLAYER_STATUS_PLAYING）；这支持它闭合占位前已收到这两行。",
+          "evidence": [
+            {
+              "source": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-ab0066cefb71c5242.jsonl",
+              "line": 55
+            },
+            {
+              "source": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-ab0066cefb71c5242.jsonl",
+              "line": 56
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/pages/EpisodesSurpriseSectionPage.ets",
+        "since": "2026-10-03T04:49:05.918Z",
+        "at": "2026-10-06T17:26:02.113Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/spec/baseline/features/F001-app-shell-home.md",
+          "at": "2026-10-02T15:04:19.021Z",
+          "reason": "正常输入：同上，F001给出正在播=isRunning+PLAYER_STATUS_PLAYING口径（agent-ab0066cefb71c5242.jsonl:L26、L28）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/spec/placeholder-registry.md",
+          "at": "2026-10-02T15:06:03.649Z",
+          "reason": "正常输入：grep回执含P-S4-069（与065同机制：PlaybackStatus.isCurrentlyPlaying(media)等价、PlayerStatusEvent后重查播放服务态）及P-S4-056的PLAYER_STATUS_PLAYING判定（同转录L55-L56）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/AntennaPod-develop/app/src/main/java/de/danoeh/antennapod/ui/screen/playback/audio/ExternalPlayerFragment.java",
+          "at": "2026-10-02T15:16:19.517Z",
+          "reason": "正常输入：源端正在播判定含isRunning与PLAYER_STATUS_PLAYING（同转录L171、L173）。"
+        },
+        {
+          "key": "agent-ab0066cefb71c5242.jsonl",
+          "at": "2026-10-02T16:18:08.347Z",
+          "reason": "闭合P-S4-069：L624 Bash脚本写入同款refreshPlayingItemId（只取getCurrentlyPlayingFeedMediaId）与isCurrentlyPlayingItem=item.media.id===playingItemId，注“PlaybackStatus.isCurrentlyPlaying(media)等价（media.id比对，P-S4-069已闭合）”（回执L625）；判定依据同L611。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4,
+          "force": true,
+          "reason": "ab0066在L55用Bash grep \"^| P-S4-\" spec/placeholder-registry.md，L56回执逐行返回P-S4-069（PlaybackStatus.isCurrentlyPlaying(media)等价：PlayerStatusEvent后重查播放服务态）与P-S4-056（isRunning && PLAYER_STATUS_PLAYING）；这支持它闭合占位前已收到这两行。",
+          "evidence": [
+            {
+              "source": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-ab0066cefb71c5242.jsonl",
+              "line": 55
+            },
+            {
+              "source": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-ab0066cefb71c5242.jsonl",
+              "line": 56
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target",
+          "force": true,
+          "reason": "L624是ab0066自己的Bash python3脚本，打开entry/src/main/ets/pages/EpisodesSurpriseSectionPage.ets，assert后替换playbackPositionHandler、playerStatusHandler与isCurrentlyPlayingItem（新增只取getCurrentlyPlayingFeedMediaId的refreshPlayingItemId、media.id比对）并写回；L625回执EpisodesSurpriseSectionPage OK。这是对目标文件的真实写入。",
+          "evidence": [
+            {
+              "source": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-ab0066cefb71c5242.jsonl",
+              "line": 624
+            },
+            {
+              "source": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-ab0066cefb71c5242.jsonl",
+              "line": 625
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/pages/QueuePage.ets",
+        "since": "2026-10-03T04:49:05.918Z",
+        "at": "2026-10-06T17:26:02.113Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/AntennaPod-develop/app/src/main/java/de/danoeh/antennapod/actionbutton/PauseActionButton.java",
+          "at": "2026-10-02T20:02:29.846Z",
+          "reason": "正常输入：Bash cat回执显示PauseActionButton.onClick以!PlaybackStatus.isCurrentlyPlaying(media)守卫，行内暂停态依赖该谓词（agent-ab6e9696fba1c7311.jsonl:L183-L184）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/services/EpisodeItemActionExecutor.ets",
+          "at": "2026-10-02T20:24:14.906Z",
+          "reason": "正常输入：同一agent在L342写出、L355修正的isCurrentlyPlaying注明“PlaybackStatus.isCurrentlyPlaying(media)等价（服务在跑 + 同media + PLAYING）”，L348-L349 Grep回执亦返回该定义；三条件已在其上下文中（同转录）。"
+        },
+        {
+          "key": "agent-ab6e9696fba1c7311.jsonl",
+          "at": "2026-10-02T20:34:48.051Z",
+          "reason": "Slice 15实现者Write QueuePage（L391-L392）：isCurrentlyPlayingItem只写item.media.id===playingMediaId，syncPlayingMediaId只取getPlayable()的id，未复用自己的三条件helper；L404再写未改。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "ab6e9696在L183用Bash cat读取actionbutton目录下PlayActionButton/PauseActionButton等源码，L184回执含PauseActionButton.onClick的if (!PlaybackStatus.isCurrentlyPlaying(media)) return守卫；这支持它写QueuePage前已收到行内暂停态依赖该谓词。",
+          "evidence": [
+            {
+              "source": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-ab6e9696fba1c7311.jsonl",
+              "line": 183
+            },
+            {
+              "source": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-ab6e9696fba1c7311.jsonl",
+              "line": 184
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "L348 ab6e9696对entry/src/main/ets执行Grep isCurrentlyPlaying，L349回执返回EpisodeItemActionExecutor.ets:219-220「PlaybackStatus.isCurrentlyPlaying(media) 等价（服务在跑 + 同 media + PLAYING）」；该函数是它在L342写出、L355修正的同一agent产物。这支持三条件定义在其写QueuePage前已作为Grep回执再次返回。",
+          "evidence": [
+            {
+              "source": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-ab6e9696fba1c7311.jsonl",
+              "line": 348
+            },
+            {
+              "source": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-ab6e9696fba1c7311.jsonl",
+              "line": 349
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "ab0066与ab6e9696写前都未读取F005-AC153或PlaybackStatus.java原文；本卡只归因为“有谓词名与PLAYING规则仍按只比id实现”，不声称二者明知三条件后故意省略。"
+  ],
+  "unresolved_targets": [
+    {
+      "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/services/PlaybackService.ets",
+      "reason": "修复已确认（ae3bb09d…jsonl:L17809-L17815：saveCurrentPosition返回Promise，onPlaybackPause落库后补发PlayerStatusEvent）。生成者a3a307bca64776d79（Slice 6）首写时按F005-AC28（PLAYING→非PLAYING先onPlaybackPause，随后总是statusChanged）、AC149与PlaybackService.java:973-985原序移植；Android PlaybackService与Media3PlaybackService同样在DBWriter异步落库未完成时post PlayerStatusEvent。规格与源码均未给出“落库后再广播”要求，属HMOS异步RDB与订阅页重查的时序适配缺口，无写前正确输入可对照，故不画偏差链。"
+    },
+    {
+      "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/components/common/EpisodeListItem.ets",
+      "reason": "本问题未改此文件的播放态逻辑：pass-2只读其forItem与@Param（agent-a37c11da1d273ee04.jsonl:L381-L386），row-button-stale修复全部落在QueuePage.isCurrentlyPlayingItem；保留差异中该文件的改动为LabelSmall次级文字、拖拽柄高度/颜色、secondaryActionOverride等其他工单。isCurrentlyPlaying仍由宿主@Param传入，偏差已在QueuePage图中归因。"
+    }
+  ],
+  "job": "issue-12ed955347862c701061",
+  "metadata": {
+    "migration": {
+      "id": "antennapod-glm53-3c838ae1-111b-475a-a085-e9464ec2fde4",
+      "project": "AntennaPod"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.285",
+        "2.1.286",
+        "2.1.287",
+        "2.1.288",
+        "2.1.289"
+      ]
+    },
+    "source_set_id": "sources-5f9a4b68d8866c1b1233",
+    "environment": [
+      {
+        "name": "toolchain.kotlin",
+        "value": "2.3.20",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-09-30T15:43:45.309Z",
+        "ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a3da0f444ffe5d81f.jsonl:L27",
+        "request_ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a3da0f444ffe5d81f.jsonl:L25",
+        "phase": "generation"
+      },
+      {
+        "name": "toolchain.agp",
+        "value": "8.11.0",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-09-30T15:43:45.309Z",
+        "ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a3da0f444ffe5d81f.jsonl:L27",
+        "request_ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a3da0f444ffe5d81f.jsonl:L25",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-09-30T17:34:05.597Z",
+        "ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a5c631d1e662fac13.jsonl:L54",
+        "request_ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a5c631d1e662fac13.jsonl:L53",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-09-30T17:34:05.597Z",
+        "ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a5c631d1e662fac13.jsonl:L54",
+        "request_ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a5c631d1e662fac13.jsonl:L53",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.0.2(22)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-10-04T16:26:51.075Z",
+        "ref": "repair/ae3bb09d-1f58-48a4-91c8-85a20fd96fc1.jsonl:L215",
+        "request_ref": "repair/ae3bb09d-1f58-48a4-91c8-85a20fd96fc1.jsonl:L214",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.0.1(21)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-10-04T16:26:51.075Z",
+        "ref": "repair/ae3bb09d-1f58-48a4-91c8-85a20fd96fc1.jsonl:L215",
+        "request_ref": "repair/ae3bb09d-1f58-48a4-91c8-85a20fd96fc1.jsonl:L214",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.4",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "040e09cc-8de1-45ba-bc4b-5202da7f9c23"
+      ]
+    }
+  },
+  "revision": "f7aa63bbc1a8c7b944e195fea6a8f693878ac083d2230ae3fc7b478af130f34a"
+}

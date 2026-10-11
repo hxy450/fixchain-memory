@@ -1,0 +1,124 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-01a9d880ec486fbc834f",
+  "created_at": "2026-10-10T07:19:00.953506+00:00",
+  "migration_key": "game2048-glm53-d90de388-a6d4-4f09-8cd2-28dfc31c5901",
+  "title": "矢量重绘替代位图缓存时，漏掉 setBounds 的 int 截断与圆角随位图等比缩放",
+  "when": "界面实现阶段，用每帧矢量绘制替代源端预烘焙位图，并实现 tile 出生、合并缩放与移动位移的绘制边界时",
+  "description": "源端把圆角底和数字一起烘焙成 cellSize 见方的位图，动画期用 setBounds((int)…) 整体拉伸，或按 int 位移绘制；目标改用 Canvas 的 roundRect + fillText 逐帧矢量绘制。",
+  "summary": "写前，Slice 3（F003）worker 完整读取了 MainView.java：drawCells 的出生、合并分支是\nbitmapCell[index].setBounds((int)(sX + cellScaleSize), …)，移动分支是 int dX/dY = (int)(…)；\ncreateBitmapCells 把 cell_rectangle 圆角底和数字烘焙进 cellSize 见方的位图\n（agent-a6ffdc5db8eb83d2e.jsonl:L31-L32）。F003 规格要求位图缓存迁移“行为等价”\n（推荐 OffscreenCanvas 预渲染 + drawImage，也允许每帧矢量），并写明 tile 位图由 cell_rectangle 样式底\n和居中数字组成（L25-L26）。决策台账 D-009 已批准 tile 位图用 OffscreenCanvas 预渲染缓存（L107-L108）。\nworker 认为 OffscreenCanvas 链路在知识库中未经验证，改走每帧矢量，并声称绘制顺序、颜色、圆角、文字都保持等价（L126）。\n它还自己推导出“位图按 s = 绘制宽 / cellSize 整体等比缩放，烘焙的文字随之缩放”（L141），\n实际却只让字号和基线修正乘 textScale，roundRect 圆角仍固定为 TILE_CORNER_RADIUS；\n出生、合并的 bounds 和移动的 dX/dY 都保留浮点，没有照源码做 (int) 截断。source-notes 把这个选择记为\n“行为等价判据：绘制顺序/颜色/圆角/字号/动画曲线逐式同源”（L147），GameRenderer.ets 的头注释和 drawTile 注释也声明等价（L151-L152 Write）。\n所以“每帧矢量等价于位图缓存”这个判断形成于该 worker 的输出：规格和派工只给出了允许矢量路线、要求行为等价的条件。\n偏差位于“已读源码与等价要求 → 矢量实现”这一环。生成结束时，drawTile、drawCells 片段与该次 Write 一致\n（生成检查点 dc92e69 的 GameRenderer.ets:486-576），后续生成期对该文件的编辑只涉及头注释、字体函数改名、导入、图标加载和时钟，没有动这些片段。\n返修时逐帧插桩，对照 MainView 的 setBounds 截断和位图拉伸语义修改：drawTile 去掉 textScale 参数，改由 (ex−sx)/cellSize 推出缩放比，\n圆角改为 vp2px(TILE_CORNER_RADIUS)×比例（vp2px 部分来自此前 D1 单位修复），字号和基线同比缩放；出生、合并边界和移动位移都改为\nMath.trunc（repair c746b830…jsonl:L1817-L1823、L1834-L1835，检查点 D5-2/D5-3），FINAL 保留。\n规格的 AC12、AC14 公式没有写出 (int)，“行为等价”也没有列出位图拉伸隐含的圆角缩放；但规格附有 MainView.java 的行号锚点，\nworker 也已完整读取源码，因此本卡不把规格当作偏差起点。\n",
+  "recommendations": [
+    "用矢量绘制替代源端位图缓存时，先列出位图被 setBounds 拉伸时会一起缩放的全部属性（圆角半径、字号、基线修正、描边等），统一乘以“绘制宽 / 烘焙尺寸”的比例，不要只缩放文字。",
+    "逐个对照源端坐标表达式里的 (int) 强转：setBounds 边界和 int 位移在目标中用 Math.trunc（Java 强转向零截断，合并扩张和反向位移时会出现负数，不能用 Math.floor）保留后再绘制。",
+    "声明“行为等价”前，出生（比例 0→1）和合并（比例 >1）各取一帧，核对边界是否为整数、圆角是否等于“基准圆角×比例”；如果已批准的决策是离屏位图 + drawImage 拉伸，优先沿用，它天然保留这些语义。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-2048-glm5.3/entry/src/main/ets/view/GameRenderer.ets",
+        "since": "2026-10-09T18:47:43.289Z",
+        "at": "2026-10-10T04:36:17.957Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/2048-tpcstld-2863bbe/2048/base/src/main/java/com/tpcstld/twozerogame/MainView.java",
+          "at": "2026-10-09T17:27:23.736Z",
+          "reason": "正常输入：worker 的 Read 回执返回完整源码，包括 :329/:338 setBounds((int)(sX + cellScaleSize), …)、:350-351 int dX/dY = (int)(…)、:445-460 createBitmapCells 把圆角 drawable 和数字画进 cellSize 见方的位图。这足以说明边界要截断、圆角会随位图一起拉伸（agent-a6ffdc5db8eb83d2e.jsonl:L31-L32）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-2048-glm5.3/spec/baseline/features/F003-rendering-animation.md",
+          "at": "2026-10-09T17:27:13.528Z",
+          "reason": "正常输入：worker 的 Read 回执给出实现映射，Bitmap 预渲染可迁移为 OffscreenCanvas 或每帧矢量，前提是“行为等价”；AC12-AC14 给出缩放和位移公式，并附 MainView.java:323/331/350 锚点；render 节写明 tile 位图 = cell_rectangle 样式底 + 居中数字。规格没有写 (int)，但提供了等价要求和源码锚点（同转录 L25-L26）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-2048-glm5.3/spec/decision-ledger.md",
+          "at": "2026-10-09T17:31:36.026Z",
+          "reason": "正常输入：worker 的 Read 回执显示 D-009 已批准“tile 位图以 OffscreenCanvas 预渲染缓存（对应 createBitmapCells）”。按此路线 drawImage 拉伸会自然保留圆角缩放；worker 随后在 L126 思考中决定偏离它改走矢量（同转录 L107-L108）。"
+        },
+        {
+          "key": "agent-a6ffdc5db8eb83d2e.jsonl",
+          "at": "2026-10-09T17:41:29.105Z",
+          "reason": "收到上述输入后，worker 自行推导出位图按 s 整体等比缩放（L141），Write 却只把字号和基线乘 textScale，roundRect 圆角固定为 TILE_CORNER_RADIUS，出生、合并边界和移动 dX/dY 都保留浮点；source-notes（L147）和头注释仍声明“圆角/字号逐式同源、行为等价”。偏差在已有正确输入 → 实现这一环，本链在此停止上溯（同转录 L151-L152）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-01a9d880ec486fbc834f",
+  "metadata": {
+    "migration": {
+      "id": "game2048-glm53-d90de388-a6d4-4f09-8cd2-28dfc31c5901",
+      "project": "2048"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.295",
+        "2.1.296"
+      ]
+    },
+    "source_set_id": "sources-8cc5e9d8f4b3bafc7d31",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-2048-glm5.3",
+        "at": "2026-10-09T15:56:56.310Z",
+        "ref": "generation/d90de388-a6d4-4f09-8cd2-28dfc31c5901.jsonl:L692",
+        "request_ref": "generation/d90de388-a6d4-4f09-8cd2-28dfc31c5901.jsonl:L686",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-2048-glm5.3",
+        "at": "2026-10-09T15:56:56.310Z",
+        "ref": "generation/d90de388-a6d4-4f09-8cd2-28dfc31c5901.jsonl:L692",
+        "request_ref": "generation/d90de388-a6d4-4f09-8cd2-28dfc31c5901.jsonl:L686",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.10.4",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "4566ae59-a9cb-4783-8d98-daad7bff832a"
+      ]
+    }
+  },
+  "revision": "4446a73b3ea51ae85cde8ac4ca8488dbb6414880efa2dd99f20de4f76d54a688"
+}

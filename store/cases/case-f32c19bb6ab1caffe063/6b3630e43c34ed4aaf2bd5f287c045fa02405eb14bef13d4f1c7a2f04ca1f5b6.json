@@ -1,0 +1,290 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-f32c19bb6ab1caffe063",
+  "created_at": "2026-10-07T05:23:02.670496+00:00",
+  "migration_key": "antennapod-glm53-3c838ae1-111b-475a-a085-e9464ec2fde4",
+  "title": "返回键只走壳层封闭分支、页内菜单/多选态不消费返回键；根级键盘快捷键误信输入框会吞掉抬起事件",
+  "when": "规格提取阶段整理列表多选状态机时，以及页面/壳实现阶段把Android返回键分发（OnBackPressedDispatcher、ContextMenu窗口、ActionMode）和根级硬件键盘快捷键迁移到ArkUI时",
+  "description": "源端返回键由OnBackPressedDispatcher按后登记先问分发：Activity只登记壳层回调，SelectableAdapter.startSelectMode另登记回调结束多选，registerForContextMenu弹出的ContextMenu作为窗口先吃掉返回键；目标把长按菜单、多选态写成页面@Local状态浮层，壳用NavDestination.onBackPressed。源端MainActivity.onKeyUp在currentFocus instanceof EditText时放行快捷键，目标在入口页根组件onKeyEvent统一处理按键。",
+  "summary": "键盘分支（实现偏离）：Slice 4壳实现者agent-ab0066cefb71c5242写前读到F001-AC29\"P→播放/暂停、J/A/COMMA→快退、K/D/PERIOD→快进……EditText聚焦时不拦截\"（L26-L28），\n并整读MainActivity.java，onKeyUp首行即getCurrentFocus() instanceof EditText时return super.onKeyUp（L146-L147）；要求和源端判据都已给出。\n它在L132、L320的思考里假定\"TextInput聚焦时按键被输入框先消费、不冒泡到根\"，未核实也未实现任何焦点判据；\nL558 Edit给SplashPage根Navigation写onKeyEvent：只要KeyType.Up就调ShellRouter.onHardwareKeyUp，注释称\"天然满足AC29\"（同一假定也写进ShellRouter.onHardwareKeyUp注释，L362）。\n实际聚焦的TextInput只消费字符键按下，抬起仍冒泡到根，于是在RSS地址框输入pad触发播放快捷键。该片段原样保留到d16b3d0：修复脚本按原文断言替换（ae3bb09d…jsonl:L7557-L7568），\n新增rootKeyDowns集合，只处理根上见过按下的抬起；真机在输入框键入\"pad.dk,\"不再触发，框外P键仍生效（L8431-L8442）。\n返回键分支（规格漏出口 + 实现丢窗口语义）：F008规格作者agent-a7e72a0c90ef8a4ad受派\"穷举EpisodesListFragment基类行为（……多选模式）\"（L1），\n写前读到EpisodeItemListAdapter extends SelectableAdapter、onCreateContextMenu在inActionMode时直接返回、multi_select→startSelectMode（L60-L61），\n却没有追读基类SelectableAdapter（startSelectMode内登记OnBackPressedCallback、返回键结束ActionMode），L325写出的\"列表多选模式\"状态表只有\"菜单动作完成或onDestroyView→普通\"，漏掉返回键出口。\n其后主会话为满足覆盖检查把SelectableAdapter补为F008锚点，grep回执已出现handleOnBackPressed（3c838ae1….jsonl:L1212-L1213），但L1219补写的F008-AC76只交代COUNT_AUTOMATICALLY计数语义，状态表未补。\nSlice 16实现者agent-a2665b6468828cce7读到该规格（L31-L32）和EpisodeItemListAdapter的ContextMenu实现（L180-L181），L218曾比较bindMenu后改用页内浮层，\nL615、L646把FeedItemlistPage长按菜单写成\"InboxPage同款\"的页面级@Local contextMenuItem浮层，多选态沿用isSelectMode；两者只靠遮罩点击、菜单动作或选中清空关闭，未补ContextMenu窗口与ActionMode的返回键消费。\nFeedItemlistPage等列表页是嵌入壳的组件，自身没有onBackPressed；同期壳实现者ab0066按F001-AC23/24/33把MainPage.handleMainBackPress写成封闭四分支（栈判断→默认页→开抽屉→finish，L428、L441），\n其输入只列壳层OpenDefaultPage/BottomSheet两个回调，没有子页登记入口。d16b3d0时feed页按返回即被loadFragment(默认页)替换；修复会话先把feed页改为壳内子页（ae3bb09d…jsonl:L1429）后，\nL7711-L7716读回确认菜单打开或多选态按返回直接走ShellRouter.popChildPage离开feed页。\n修复在ShellRouter新增addBackCallback/removeBackCallback/dispatchBackCallbacks（后登记先问），MainPage在栈判断后先分发，OnlineFeedViewPage/PreviewChildPage预览宿主onBackPressed也分发（L7882-L7896、L8093）；\n各列表页与EpisodeDetailComponent在aboutToAppear登记回调（先关上下文菜单、再退出多选），aboutToDisappear注销（L7901-L7923）；真机验证菜单/多选态按返回只关菜单或退出多选、仍停留feed页（L8143-L8149）。\n",
+  "recommendations": [
+    "规格提取阶段整理多选/选择模式状态机时，沿列表Adapter追读其基类（本例SelectableAdapter.startSelectMode/ActionMode回调），把全部退出触发写入状态表：菜单动作完成、onDestroyView之外还包括返回键（OnBackPressedCallback）与ActionMode关闭，各出口标注源码位置；锚点补入后同步核对已有状态表，不只为覆盖检查补计数类AC。",
+    "页面实现阶段把ContextMenu、ActionMode等窗口型临时UI改写为页面@Local状态浮层时，同步实现其返回键语义：浮层打开时返回键先关闭浮层，多选态先退出多选，均消费本次返回；复制已有页内浮层写法前先确认它是否已接返回键。",
+    "壳实现阶段把OnBackPressedDispatcher翻译成可登记的后进先出回调栈（子页aboutToAppear登记、aboutToDisappear注销），宿主NavDestination.onBackPressed在执行壳层分支前先分发；同一子页还嵌入其他宿主（如预览NavDestination）时，这些宿主也接同一分发。",
+    "实现根级硬件键盘快捷键时，不假定聚焦的TextInput会吞掉全部按键事件；按源端'EditText聚焦时放行'要求写显式判据（本例经真机验证的做法是只处理根上同时收到按下的抬起事件），并在输入框内键入快捷键字母、在框外按快捷键各验证一次。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/pages/SplashPage.ets",
+        "since": "2026-10-03T04:49:05.918Z",
+        "at": "2026-10-06T17:26:02.113Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/spec/baseline/features/F001-app-shell-home.md",
+          "at": "2026-10-02T15:04:19.021Z",
+          "reason": "正常输入：Read回执第316行F001-AC29要求硬件键盘传输快捷键P/J/A/COMMA/K/D/PERIOD经事件通道转发媒体键且'EditText聚焦时不拦截'，标注标:MainPage.onKeyEvent、判据'输入框场景放行'；足以规定输入框聚焦时不得触发快捷键（agent-ab0066cefb71c5242.jsonl:L26、L28）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/AntennaPod-develop/app/src/main/java/de/danoeh/antennapod/activity/MainActivity.java",
+          "at": "2026-10-02T15:14:37.239Z",
+          "reason": "正常输入：整文件Read回执第851-856行onKeyUp先取getCurrentFocus()，instanceof EditText即return super.onKeyUp，之后才映射KEYCODE_P等；源端的焦点判据明确（agent-ab0066cefb71c5242.jsonl:L146-L147）。"
+        },
+        {
+          "key": "agent-ab0066cefb71c5242.jsonl",
+          "at": "2026-10-02T16:07:57.219Z",
+          "reason": "收到上述要求与源码后，L132/L320思考假定TextInput聚焦时按键不会冒泡到根，L558 Edit给SplashPage根onKeyEvent只判KeyType.Up即调ShellRouter.onHardwareKeyUp，注释'子页TextInput聚焦时按键被输入框先消费，天然满足AC29'，未实现任何焦点放行判据；该片段保留到d16b3d0，修复按原文替换（ae3bb09d…jsonl:L7567）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/pages/FeedItemlistPage.ets",
+        "since": "2026-10-03T04:49:05.918Z",
+        "at": "2026-10-06T17:26:02.113Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/AntennaPod-develop/app/src/main/java/de/danoeh/antennapod/ui/episodeslist/EpisodeItemListAdapter.java",
+          "at": "2026-09-30T16:22:03.472Z",
+          "reason": "上游线索：规格作者整文件Read回执显示class EpisodeItemListAdapter extends SelectableAdapter、setOnCreateContextMenuListener、onCreateContextMenu在inActionMode()时直接返回、multi_select→startSelectMode(longPressedPosition)；多选的进入/退出实现位于基类，回执本身不含返回回调（agent-a7e72a0c90ef8a4ad.jsonl:L60-L61）。"
+        },
+        {
+          "key": "agent-a7e72a0c90ef8a4ad.jsonl",
+          "at": "2026-09-30T16:56:15.105Z",
+          "reason": "受派穷举多选模式（同转录L1），读到上述基类线索后未读SelectableAdapter.java；L325 Edit新增state-machine表，'列表多选模式'只写'长按菜单multi_select→多选；菜单动作完成或onDestroyView→普通（endSelectMode）'，漏掉startSelectMode登记的返回键出口。规格阶段在此偏离。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/spec/baseline/features/F008-episodes-lists-detail.md",
+          "at": "2026-10-02T19:46:52.578Z",
+          "reason": "交付桥梁：Slice 16实现者整文件Read回执第191行仍是不含返回键出口的多选状态表，AC76对SelectableAdapter只交代COUNT_AUTOMATICALLY计数语义（agent-a2665b6468828cce7.jsonl:L31-L32）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/AntennaPod-develop/app/src/main/java/de/danoeh/antennapod/ui/episodeslist/EpisodeItemListAdapter.java",
+          "at": "2026-10-02T20:02:01.622Z",
+          "reason": "正常输入：Bash sed读取80-240行，回执给出setOnCreateContextMenuListener与onCreateContextMenu(ContextMenu menu…)——长按弹出的是系统ContextMenu窗口；同转录L182据此确认长按应先弹feeditemlist_context菜单（agent-a2665b6468828cce7.jsonl:L180-L182）。"
+        },
+        {
+          "key": "agent-a2665b6468828cce7.jsonl",
+          "at": "2026-10-02T21:28:27.995Z",
+          "reason": "沿用规格的多选状态表，并在L218比较bindMenu后改用页内浮层：L615写onEpisodeLongPressed→@Local contextMenuItem（注释'InboxPage同款Stack浮层'），L646写遮罩+菜单卡页面级浮层，只靠遮罩点击/菜单动作关闭；多选态isSelectMode同样无返回键出口。ContextMenu窗口与ActionMode的返回键消费在此丢失，保留到d16b3d0（修复读回ae3bb09d…jsonl:L7711-L7712）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 5
+        },
+        {
+          "from": 4,
+          "to": 5,
+          "force": true,
+          "reason": "Slice 16实现者用Bash执行sed -n '80,240p'读取该Android源文件（Windows路径未被索引解析为读取），回执返回setOnCreateContextMenuListener与onCreateContextMenu(ContextMenu…)实现；这支持它写前已知长按弹出的是系统ContextMenu窗口。",
+          "evidence": [
+            {
+              "source": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a2665b6468828cce7.jsonl",
+              "line": 180
+            },
+            {
+              "source": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a2665b6468828cce7.jsonl",
+              "line": 181
+            }
+          ]
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "F008规格作者写前未读SelectableAdapter.java，返回回调本身未进入其输入；该分支归因为未追读已给出的基类线索导致状态表漏出口，不声称其明知返回键语义。",
+    "Slice 16实现者写前读到的输入未显式写出返回键关闭菜单或退出多选；ContextMenu窗口吃返回键属平台隐含语义，本卡据其L218已比较bindMenu与页内浮层、仍未补返回键而归为实现阶段的转换遗漏。"
+  ],
+  "unresolved_targets": [
+    {
+      "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/pages/MainPage.ets",
+      "reason": "已确认生成期handleMainBackPress由Slice 4壳实现者agent-ab0066cefb71c5242写出（L428、L441），按F001-AC23/24/33实现壳层OpenDefaultPage四分支，展开态播放器交bindSheet模态返回；其读过的MainActivity/BottomSheetBackPressedCallback/FloatingSelectMenu只出现壳层两个回调，未出现子页登记者（未读SelectableAdapter），未单独判为偏差。修复在其中加入dispatchBackCallbacks先分发（其间popChildPage分支为修复会话L1429自行引入），承接的页级缺口已在FeedItemlistPage图归因。"
+    },
+    {
+      "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/services/ShellRouter.ets",
+      "reason": "生成期由agent-ab0066cefb71c5242 Write（L362），只有popChildPage等壳路由与onHardwareKeyUp，无OnBackPressedDispatcher等价登记；修复新增addBackCallback/removeBackCallback/dispatchBackCallbacks是页级回调的承接设施，未另追独立生成偏差。onHardwareKeyUp注释中的焦点假定已在SplashPage图说明。"
+    },
+    {
+      "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/pages/OnlineFeedViewPage.ets",
+      "reason": "预览宿主NavDestination由agent-a2038fad0538a255f建页、agent-a941f56de12f8a913接入hostedInPreviewStack嵌入FeedItemlistPage；修复为其onBackPressed接dispatchBackCallbacks。宿主未分发属同一缺失的承接面，未逐项核写前输入。"
+    },
+    {
+      "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/pages/PreviewChildPage.ets",
+      "reason": "d16b3d0中不存在，修复期新建（retained-application.patch为new file），onBackPressed分发随新建加入，无生成期写者可连。"
+    },
+    {
+      "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/pages/InboxPage.ets",
+      "reason": "页内contextMenuItem浮层与isSelectMode由F007实现者agent-ab6e9696fba1c7311写入（L425、L431-L433、L594），是FeedItemlistPage浮层所称的'InboxPage同款'来源；同类返回键缺失，其写前输入未逐项核。"
+    },
+    {
+      "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/pages/QueuePage.ets",
+      "reason": "isSelectMode/contextMenuItem浮层由agent-ab6e9696fba1c7311写入（L391、L404、L422），多选态最初由转换器agent-ae6edfac92d138c0d写出；同类返回键缺失，写前输入未逐项核。"
+    },
+    {
+      "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/pages/CompletedDownloadsPage.ets",
+      "reason": "多选态由转换器agent-aa49b7f0dc3838558写出，contextMenuItem浮层由agent-ae663eba77aefacb6加入（L422-L531）；同类返回键缺失，写前输入未逐项核。"
+    },
+    {
+      "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/pages/AllEpisodesPage.ets",
+      "reason": "多选态由转换器agent-af72698f7ec45d05b写出，Slice 16 agent-a2665b6468828cce7 L424整写保留；该实现者读到的F008状态表同样缺返回键出口（见FeedItemlistPage图），本页写入未逐片段核对。修复同时把长按改为先弹上下文菜单，属另一缺陷。"
+    },
+    {
+      "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/pages/FavoritesPage.ets",
+      "reason": "多选态由转换器agent-a0e9ce05d66f01246写出，Slice 16 agent-a2665b6468828cce7 L467整写保留；成因应同F008状态表漏返回键出口，本页写入未逐片段核对。"
+    },
+    {
+      "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/pages/PlaybackHistoryPage.ets",
+      "reason": "多选态由转换器agent-a799f5efbc4435d4f写出，Slice 16 agent-a2665b6468828cce7 L474整写保留；成因应同F008状态表漏返回键出口，本页写入未逐片段核对。"
+    },
+    {
+      "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/pages/SearchPage.ets",
+      "reason": "多选态由转换器agent-a4eeed72f04ae66cf写出，Slice 16 agent-a2665b6468828cce7 L570-L583修改；成因应同F008状态表漏返回键出口，本页写入未逐片段核对。"
+    },
+    {
+      "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/pages/SubscriptionPage.ets",
+      "reason": "订阅网格多选态由转换器agent-a54962879c67a85db与F009实现者agent-a684d656b3490892a写出；F009规格状态机同样只列动作完成与onStop退出（F009-subscriptions-grid.md第95-97行），未追该规格的写者与本页写前读取。"
+    },
+    {
+      "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/components/EpisodeDetailComponent.ets",
+      "reason": "正文长按链接菜单showWebContextMenu页内浮层由转换器agent-af20b9cd01fa3f430写出（L150），后经agent-a6c9ace57e8a8ceb9、agent-a2665b6468828cce7修改；同属ContextMenu窗口改页内浮层而丢返回键，写前输入未逐项核。"
+    }
+  ],
+  "job": "issue-f32c19bb6ab1caffe063",
+  "metadata": {
+    "migration": {
+      "id": "antennapod-glm53-3c838ae1-111b-475a-a085-e9464ec2fde4",
+      "project": "AntennaPod"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.285",
+        "2.1.286",
+        "2.1.287",
+        "2.1.288",
+        "2.1.289"
+      ]
+    },
+    "source_set_id": "sources-5f9a4b68d8866c1b1233",
+    "environment": [
+      {
+        "name": "toolchain.kotlin",
+        "value": "2.3.20",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-09-30T15:43:45.309Z",
+        "ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a3da0f444ffe5d81f.jsonl:L27",
+        "request_ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a3da0f444ffe5d81f.jsonl:L25",
+        "phase": "generation"
+      },
+      {
+        "name": "toolchain.agp",
+        "value": "8.11.0",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-09-30T15:43:45.309Z",
+        "ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a3da0f444ffe5d81f.jsonl:L27",
+        "request_ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a3da0f444ffe5d81f.jsonl:L25",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-09-30T17:34:05.597Z",
+        "ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a5c631d1e662fac13.jsonl:L54",
+        "request_ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a5c631d1e662fac13.jsonl:L53",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-09-30T17:34:05.597Z",
+        "ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a5c631d1e662fac13.jsonl:L54",
+        "request_ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a5c631d1e662fac13.jsonl:L53",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.0.2(22)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-10-04T16:26:51.075Z",
+        "ref": "repair/ae3bb09d-1f58-48a4-91c8-85a20fd96fc1.jsonl:L215",
+        "request_ref": "repair/ae3bb09d-1f58-48a4-91c8-85a20fd96fc1.jsonl:L214",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.0.1(21)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-10-04T16:26:51.075Z",
+        "ref": "repair/ae3bb09d-1f58-48a4-91c8-85a20fd96fc1.jsonl:L215",
+        "request_ref": "repair/ae3bb09d-1f58-48a4-91c8-85a20fd96fc1.jsonl:L214",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.4",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "040e09cc-8de1-45ba-bc4b-5202da7f9c23"
+      ]
+    }
+  },
+  "revision": "6b3630e43c34ed4aaf2bd5f287c045fa02405eb14bef13d4f1c7a2f04ca1f5b6"
+}

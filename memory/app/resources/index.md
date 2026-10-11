@@ -1,11 +1,20 @@
 # app/resources
 
-资源批量转换：Android values 转 element JSON（颜色值形态、数组项结构、引用写法）与 drawable 转 media（反编译 APK 的内联片段、资源文件名合法性），以及宣布资源阶段完成前的产物校验，以及快捷方式等图标的画布尺寸与图形显示区（低分辨率源图的处理）
+资源批量转换：Android values 转 element JSON（颜色值形态与 #AARRGGBB 字节序、数组项结构、引用写法）与 drawable 转 media（VectorDrawable 转 SVG 的 viewBox 与显示尺寸、反编译 APK 的内联片段、资源文件名合法性），以及宣布资源阶段完成前的产物校验，以及快捷方式等图标的画布尺寸与图形显示区（低分辨率源图的处理），以及自适应图标转分层图标的图层尺寸与可见区裁切
 
 [上一级](../index.md)
 
 ## 本级经验
 
+- [8 位颜色保持 #AARRGGBB 字节序，转换后与源逐项往返核对](lesson-783faf2767a952034514.lesson.md)
+  - 时机：资源迁移阶段，编写或运行 colors.xml 到 color.json 的转换逻辑（包括编排者降级自跑脚本）时
+  - 情境：源含带透明度的 8 位颜色；转换由自写脚本完成而不是直接按资源转换 skill 的规则执行，深色值可能从浅色转换结果派生，接手者可能被告知已完成部分“勿重做”。
+- [VectorDrawable 转 SVG 时 viewBox 取 viewport，width/height 取显示尺寸](lesson-4e306a66aba5f1d76fdf.lesson.md)
+  - 时机：资源迁移阶段，编写 VectorDrawable 到 SVG 的批量转换脚本时
+  - 情境：源 vector 的 android:width/height（dp 显示尺寸）与 viewportWidth/Height（路径坐标系）常不相等，部分 fillColor 引用主题属性。
+- [adaptive-icon 转 layered-image 时前景与背景生成同尺寸图层，前景先裁出启动器可见区再缩放，不直接拷贝 108dp 全层](lesson-d838f9236f7452b82738.lesson.md)
+  - 时机：资源迁移阶段，把 Android adaptive-icon 转成鸿蒙 layered-image 并生成前景、背景图层 PNG 时；核验应用图标或维护资源转换规则时
+  - 情境：Android 应用图标是 adaptive-icon：背景为 @color 纯色或 108dp 图层，前景为 mipmap 下 108dp 全层 PNG（启动器只显示中央 72dp）；鸿蒙侧用 layered_image.json 的 foreground/background 两个 $media 图层；转换规则写“mipmap 直接拷贝”“纯色背景任意尺寸（如 1×1 或 108×108）”。
 - [values 批量转 element JSON 按目标格式出口：颜色只写 hex 或已定义的 $color:，数组项写成 {value} 对象并映射引用，不可解析值不原样写出](lesson-94a3f7a5ec5ad8f8a3e8.lesson.md)
   - 时机：资源转换阶段，编写并运行把 Android values（colors.xml、arrays.xml 等）转成 HarmonyOS element JSON 的批量脚本，决定无法解析的值与数组项怎样输出时；宣布资源阶段完成、把产物镜像到其他限定目录之前
   - 情境：资源源为 Android res 或反编译 APK；颜色值含 @android:color/* 系统色或指向本次未转换条目的 @color/ 引用，string-array 含 @string/ 引用；转换规则文档已给出目标格式，但转换由自写脚本完成，运行后控制台只报 unresolved 计数。

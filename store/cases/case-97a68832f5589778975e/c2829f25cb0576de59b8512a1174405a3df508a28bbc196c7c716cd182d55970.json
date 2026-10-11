@@ -1,0 +1,165 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-97a68832f5589778975e",
+  "created_at": "2026-10-07T06:10:07.686306+00:00",
+  "migration_key": "antennapod-glm53-3c838ae1-111b-475a-a085-e9464ec2fde4",
+  "title": "把平台计费判定直译为单一NOT_METERED能力位，以太网被判为受限网络",
+  "when": "网络基础层实现阶段，把Android ConnectivityManager的计费/受限网络判定改写为@ohos.net.connection实现时",
+  "description": "源码用isActiveNetworkMetered等平台查询判定计费网络，并以isNetworkRestricted（计费或蜂窝）门控feed刷新、下载、流播或图片；同一工具类对以太网另有放行分支。目标端只能读取NetCapabilities的networkCap与bearerTypes，需要自行决定以太网等承载是否计费。",
+  "summary": "Base-3 Network实现者（agent-a2ce3ea26ddde511a）写前读到NetworkUtils.java：isNetworkMetered直接返回平台\nconnManager.isActiveNetworkMetered()，isNetworkRestricted = isNetworkMetered() || isNetworkCellular()，\nisFeedRefreshAllowed/isImageAllowed/isStreamingAllowed等许可都以它门控；同文件isAutoDownloadAllowed对\nTYPE_ETHERNET直接返回true。它也从@ohos.net.connection.d.ts核到NET_CAPABILITY_NOT_METERED=11和BEARER_ETHERNET=3，\n但SDK声明没有说明各承载是否会置该能力位；规格feature-base §网络层与跨栈映射基线也没写计费口径。\n写前检查点里，它已注意到“cm.isActiveNetworkMetered returns its own heuristics”，却仍把这次平台查询直译为\n“networkCap缺NET_CAPABILITY_NOT_METERED即计量”，没有按承载核对，交回信封的五条存疑中也没有这一假设。\n结果同一文件前后不一致：isAutoDownloadAllowed按BEARER_ETHERNET放行，而isNetworkMetered/isNetworkRestricted\n对以太网的结论取决于目标平台是否给以太网置NOT_METERED。\n该片段随stage1-batch1提交保留到d16b3d0，期间无人改动。修复期模拟器以太网实测bearer=[3]、caps=[12,15,16]\n（无NOT_METERED），isNetworkRestricted为true；订阅后feedUpdateRunOnceOrAsk以askHost=null调用runOnceOrAsk，\n受限分支静默取消，服务器没有刷新请求（repair主会话L2137-L2201）。修复在isNetworkMetered的无网络判断之后\n加入“bearerTypes含BEARER_ETHERNET即返回false”，并注明Android以太网默认带NOT_METERED、HMOS以太网不置该位\n（L2206-L2207），改后订阅即出现第二次GET（L2217-L2218）；该改动保留到603ce68。\n偏差位于“源平台查询语义 → 目标能力位”的映射环节。HMOS以太网不置NOT_METERED这一点不在写前输入中，\n但源码对以太网的放行和isActiveNetworkMetered由平台判定这一事实，已足以要求按承载核对或把该假设列为待验，\n而不是只依赖一个能力位。\n",
+  "recommendations": [
+    "迁移isActiveNetworkMetered这类由平台判定的查询时，先按承载列出源端的实际结果（以太网不计费、Wi-Fi看热点计费标记、蜂窝计费），再写目标判定；不要只把它直译成“networkCap缺NET_CAPABILITY_NOT_METERED即计量”。",
+    "目标平台是否为某承载置能力位不在输入中时，对源端结论确定的承载（以太网）按bearerTypes显式分支，或把该假设写进交回存疑、列为真机核验项。最小检查：在以太网或模拟器上打印bearerTypes与networkCap，确认isNetworkRestricted()为false。",
+    "同一许可工具类内，核对各函数对同一承载结论一致：isAutoDownloadAllowed已对BEARER_ETHERNET放行时，isNetworkMetered/isNetworkRestricted及其门控的feed刷新、下载、流播、图片也应放行。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/network/NetworkAllowance.ets",
+        "since": "2026-10-03T04:49:05.918Z",
+        "at": "2026-10-06T17:26:02.113Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/AntennaPod-develop/net/common/src/main/java/de/danoeh/antennapod/net/common/NetworkUtils.java",
+          "at": "2026-10-01T08:37:53.651Z",
+          "reason": "正常输入：Read回执（generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a2ce3ea26ddde511a.jsonl:L71-L72）给出isNetworkMetered()=connManager.isActiveNetworkMetered()（:69-72，计费判定交给平台）、isNetworkRestricted=计费||蜂窝、isFeedRefreshAllowed=isAllowMobileFeedRefresh||!isNetworkRestricted，以及isAutoDownloadAllowed中TYPE_ETHERNET直接返回true。足以说明源端计费口径由平台按承载给出、以太网在源端不受限。"
+        },
+        {
+          "key": "C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/ets/api/@ohos.net.connection.d.ts",
+          "at": "2026-10-01T08:41:27.348Z",
+          "reason": "正常输入兼材料边界：Read回执（同转录L140-L141）给出NET_CAPABILITY_NOT_METERED=11（Indicates that the network traffic is not metered）、NOT_VPN=15、VALIDATED=16；Grep回执（L150、L152）给出BEARER_ETHERNET=3。声明只列能力位和承载枚举，没有说明各承载是否置NOT_METERED，HMOS以太网的实际置位不在输入中。"
+        },
+        {
+          "key": "agent-a2ce3ea26ddde511a.jsonl",
+          "at": "2026-10-01T08:46:02.182Z",
+          "reason": "偏差起点：写前检查点（L185）自述isActiveNetworkMetered是平台自身的启发式判定，Write（L198-L199）仍把isNetworkMetered写成“caps为null返回false、networkCap未定义返回true、否则!networkCap.includes(NET_CAPABILITY_NOT_METERED)”，文件头注释为“Android isActiveNetworkMetered → NetCap缺NET_CAPABILITY_NOT_METERED即计量”，未区分承载；同一次Write的isAutoDownloadAllowed却按BEARER_ETHERNET放行。交回信封（L286）存疑①-⑤未提这一假设。该片段在d16b3d0原样存在（retained-application.patch中NetworkAllowance.ets hunk @@ -43,6 的上下文行）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "写前收到的SDK声明、规格和已加载skill都没有说明HMOS以太网是否置NET_CAPABILITY_NOT_METERED；本卡不认定实现者能事先确知这一平台差异，只归因它没有按承载核对，也没有把该假设列为待验。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-97a68832f5589778975e",
+  "metadata": {
+    "migration": {
+      "id": "antennapod-glm53-3c838ae1-111b-475a-a085-e9464ec2fde4",
+      "project": "AntennaPod"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.285",
+        "2.1.286",
+        "2.1.287",
+        "2.1.288",
+        "2.1.289"
+      ]
+    },
+    "source_set_id": "sources-5f9a4b68d8866c1b1233",
+    "environment": [
+      {
+        "name": "toolchain.kotlin",
+        "value": "2.3.20",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-09-30T15:43:45.309Z",
+        "ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a3da0f444ffe5d81f.jsonl:L27",
+        "request_ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a3da0f444ffe5d81f.jsonl:L25",
+        "phase": "generation"
+      },
+      {
+        "name": "toolchain.agp",
+        "value": "8.11.0",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-09-30T15:43:45.309Z",
+        "ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a3da0f444ffe5d81f.jsonl:L27",
+        "request_ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a3da0f444ffe5d81f.jsonl:L25",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-09-30T17:34:05.597Z",
+        "ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a5c631d1e662fac13.jsonl:L54",
+        "request_ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a5c631d1e662fac13.jsonl:L53",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-09-30T17:34:05.597Z",
+        "ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a5c631d1e662fac13.jsonl:L54",
+        "request_ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a5c631d1e662fac13.jsonl:L53",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.0.2(22)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-10-04T16:26:51.075Z",
+        "ref": "repair/ae3bb09d-1f58-48a4-91c8-85a20fd96fc1.jsonl:L215",
+        "request_ref": "repair/ae3bb09d-1f58-48a4-91c8-85a20fd96fc1.jsonl:L214",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.0.1(21)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-10-04T16:26:51.075Z",
+        "ref": "repair/ae3bb09d-1f58-48a4-91c8-85a20fd96fc1.jsonl:L215",
+        "request_ref": "repair/ae3bb09d-1f58-48a4-91c8-85a20fd96fc1.jsonl:L214",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.4",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "040e09cc-8de1-45ba-bc4b-5202da7f9c23"
+      ]
+    }
+  },
+  "revision": "c2829f25cb0576de59b8512a1174405a3df508a28bbc196c7c716cd182d55970"
+}

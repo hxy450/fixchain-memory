@@ -1,0 +1,349 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-bdbb705b26462605b1c3",
+  "created_at": "2026-10-07T05:32:41.875155+00:00",
+  "migration_key": "antennapod-glm53-3c838ae1-111b-475a-a085-e9464ec2fde4",
+  "title": "工具函数与格式化语义凭记忆或字面转写，未按源定义逐字移植",
+  "when": "功能与界面实现阶段，移植Android辅助方法、框架格式化行为、常量拼接与构造初值时",
+  "description": "源码通过Formatter.formatShortFileSize、带%1$s的ListPreference摘要、FeedItem.getLinkWithFallback/ShareUtils.hasLinkToShare等框架或模型辅助方法得到显示值，或把Java long哨兵拼入SQL、在构造器中设定结果初值；ArkTS目标须自行实现等价函数或常量。",
+  "summary": "六个目标的生成者写前都拿到了正确且可追溯的源码入口，偏差都出在实现者把“调用/引用”翻成目标代码时，没有打开被调用方的定义，或忽略了目标运行时语义：\n1) Base-6生成者读到EpisodeItemViewHolder调用Formatter.formatShortFileSize，却凭记忆写成B/KB/MB/GB、999.5进位；Android为SI短格式kB、>900进位，最终按formatBytes(SI|SHORTER)重写。\n2) Base-2生成者读到PodDBAdapter把Long.MAX_VALUE拼进oldest_date SQL，却声明number常量9223372036854775807再拼接；JS number拼成9223372036854776000，被SQLite存为REAL、回读为0，统计页显示Jan 1970。最终新增字符串常量LONG_MAX_VALUE_SQL。\n3) Slice 5实现者同时读到Downloader（初值null/null）和FeedParserTask（ERROR_REQUEST_ERROR + \"Unknown error: Status not set\"），却在下载器构造器中写入后者；成功路径不清详情，下载日志成功条目带出该文字。最终reasonDetailed初值改为null。\n4) FeedSettings转换者读到feed_settings.xml中VolumeAdaptationPreference的android:summary，只查了app内MaterialListPreference没有setSummary，就当成静态摘要，未看字符串值中的%1$s；最终用volumeAdaptationSummary()代入当前选项标签。\n5) ShareDialog转换者读到ShareUtils依赖item.getLinkWithFallback()，但没有打开FeedItem.java，凭记忆写成link → media.downloadUrl，还回写进page_0077规格；源方法为link → feed.link → null，最终按源链修正。\n6) AudioPlayer转换者grep FeedItemMenuHandler时只拿到visit_website_item分支行，在FWD-REF与registry中写出不存在的item.getWebsiteLinkWithFallback；Slice 6实现者沿这个名称和自己的猜测，把canVisitWebsite与visitWebsite都写成media.getWebsiteLink()（仅item.link），缺feed.link兜底与本地feed判断。最终改用FeedItemMenu.getLinkWithFallback并叠加!isLocalFeed。\n这些片段从生成写入起一直保留到d16b3d0，返修会话逐项读回原样后修改（repair L1902、L12243-L12258、L2423-L2442、L14652-L14675、L14796-L14802；pass-2 agent-a37c11da1d273ee04 L899-L913）。\n",
+  "recommendations": [
+    "实现阶段遇到源码调用的辅助方法（如FeedItem.getLinkWithFallback、ShareUtils.hasLinkToShare）时，先打开其定义逐分支移植兜底链与空白判断，不按方法名或记忆推断；目标模型缺该方法时补成共享函数，供各页面复用。",
+    "源码依赖Android框架行为时（Formatter.formatShortFileSize的SI单位kB与>900进位、ListPreference摘要中%s/%1$s代入当前entry），先查明框架算法或约定，把结论写进注释；再用一个已知输入（如96000字节应为96 kB）做最小核对。",
+    "把Java long常量移进SQL或字符串时，先判断是否超出Number.MAX_SAFE_INTEGER；超出时用字符串字面量拼接（如'9223372036854775807'），并用SQLite typeof()确认仍是INTEGER。",
+    "移植构造器初值时，只对照被移植类自身的构造器（Downloader为reason/reasonDetailed=null），不套用相邻类（FeedParserTask）的初值；目标类型不允许为空的字段单独说明替代值，其余字段保留源值。",
+    "移植摘要或文案资源时，读取字符串资源的实际值；含格式占位符时找到源端代入点，在目标端传入对应参数。",
+    "写FWD-REF或registry说明时，引用的源方法名必须完整读过对应源码行（不能只看grep命中的分支行）；下游实现者仍需回到源码核对，不按占位说明里的名称直接实现。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/components/common/Converter.ets",
+        "since": "2026-10-03T04:49:05.918Z",
+        "at": "2026-10-06T17:26:02.113Z"
+      },
+      "summary": "Base-6生成者读到EpisodeItemViewHolder的Formatter.formatShortFileSize调用，并认出它是1000进制，却凭记忆把单位写成KB、进位阈值写成999.5；\nAndroid框架实际是SI短格式（kB、>900进位、按量级取0/1/2位小数）。该片段原样保留到返修，返修时按formatBytes(SI|SHORTER)重写（repair L1900-L1909）。\n",
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/AntennaPod-develop/app/src/main/java/de/danoeh/antennapod/ui/episodeslist/EpisodeItemViewHolder.java",
+          "at": "2026-10-01T08:38:07.513Z",
+          "reason": "正常输入：Read回执L176-L183给出size.setText(Formatter.formatShortFileSize(activity, media.getSize()))，明确体积文本应等同Android框架formatShortFileSize；框架实现不在工程源码内，需另查其SI单位与进位规则（agent-a4e06551f0950f53d.jsonl:L59-L60）。"
+        },
+        {
+          "key": "3c838ae1-111b-475a-a085-e9464ec2fde4:a4e06551f0950f53d",
+          "at": "2026-10-01T08:47:17.762Z",
+          "reason": "写前思考自述“Android Formatter is 1000-based”，却凭记忆设定[B, KB, MB, GB]、while (v >= 999.5)，并认定这些单位与语言无关（同转录L185）；Write的formatShortFileSize据此写出KB与999.5/99.95阈值，注释称与formatShortFileSize等价（L195-L196）。源语义kB与>900进位没有落实，导致96 kB显示为96 KB。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/database/DatabaseHelper.ets",
+        "since": "2026-10-03T04:49:05.918Z",
+        "at": "2026-10-06T17:26:02.113Z"
+      },
+      "summary": "Base-2生成者读到PodDBAdapter用Java字符串拼接Long.MAX_VALUE作为oldest_date哨兵，F016-AC47也写明了“无值记Long.MAX剔除”；\n实现时却把它声明成ArkTS number再拼进SQL，丢失精度后变成REAL哨兵。该常量与拼接保留到返修，返修新增字符串字面量LONG_MAX_VALUE_SQL（repair L12243-L12271）。\n",
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/AntennaPod-develop/storage/database/src/main/java/de/danoeh/antennapod/storage/database/PodDBAdapter.java",
+          "at": "2026-10-01T08:38:27.222Z",
+          "reason": "正常输入：Read回执L1262-L1264为MIN(CASE WHEN lastPlayedTimeStatistics > 0 THEN ... ELSE \" + Long.MAX_VALUE + \" END) AS oldest_date，Java拼出的是精确整数9223372036854775807（agent-a3a6314f3b577e62d.jsonl:L87-L88）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/spec/baseline/features/F016-database.md",
+          "at": "2026-10-01T08:37:25.084Z",
+          "reason": "正常输入：F016-AC47规定oldest_date取MIN(last_played_time)，无值记Long.MAX剔除，语义正确，没有误导实现（agent-a3a6314f3b577e62d.jsonl:L43-L44）。"
+        },
+        {
+          "key": "3c838ae1-111b-475a-a085-e9464ec2fde4:a3a6314f3b577e62d",
+          "at": "2026-10-01T08:46:50.737Z",
+          "reason": "Write的DatabaseHelper写出static readonly LONG_MAX_VALUE: number = 9223372036854775807，并以' ELSE ' + PodDatabase.LONG_MAX_VALUE拼进SQL（L207-L208）。number无法精确表示2^63-1，拼接结果为9223372036854776000，超出int64后被SQLite当作REAL，回读得0，导致无播放记录时统计页显示Jan 1970。L324-L325自查只确认常量存在，没有核对数值。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/services/HttpFeedDownloader.ets",
+        "since": "2026-10-03T04:49:05.918Z",
+        "at": "2026-10-06T17:26:02.113Z"
+      },
+      "summary": "Slice 5实现者写前同时读了Downloader与FeedParserTask，写下载器构造器时却套用了FeedParserTask的初值。\n返修确认Android Downloader初始详情为null后，把reasonDetailed改为null；reason因目标类型不可空而保留（repair L2423-L2442）。\n",
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/AntennaPod-develop/net/download/service/src/main/java/de/danoeh/antennapod/net/download/service/feed/remote/Downloader.java",
+          "at": "2026-10-02T15:13:35.520Z",
+          "reason": "正常输入：Read回执L27-L33中，Downloader构造器为new DownloadResult(0, title, feedfileId, feedfileType, false, null, new Date(), null)，即初始reason与reasonDetailed均为null（agent-a57c4d7c907557f95.jsonl:L180、L182）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/AntennaPod-develop/net/download/service/src/main/java/de/danoeh/antennapod/net/download/service/feed/remote/FeedParserTask.java",
+          "at": "2026-10-02T15:14:27.378Z",
+          "reason": "相邻类输入：Read回执L30-L35为FeedParserTask自己的初值ERROR_REQUEST_ERROR与\"Unknown error: Status not set\"（L189-L190）；它属于解析任务，不是下载器的源值。"
+        },
+        {
+          "key": "3c838ae1-111b-475a-a085-e9464ec2fde4:a57c4d7c907557f95",
+          "at": "2026-10-02T16:00:28.694Z",
+          "reason": "写前设计仍是new DownloadResult(..., false, null)（L505）；Write时HttpFeedDownloader构造器（随后的方法注释对应Downloader.java）却写成DownloadError.ERROR_REQUEST_ERROR, 'Unknown error: Status not set'（L510-L511），把FeedParserTask初值套到下载器。目标模型reasonDetailed允许为null（L57/L59读回），本可保留源值。onSuccess只调setSuccessful()，不清详情，因此下载日志成功条目也显示该文字。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/pages/feed/FeedSettingsPreferenceView.ets",
+        "since": "2026-10-03T04:49:05.918Z",
+        "at": "2026-10-06T17:26:02.113Z"
+      },
+      "summary": "FeedSettings转换者读到音量适配ListPreference的summary资源，只检查了app内MaterialListPreference，就判定为静态摘要，没有查看字符串值和框架代入规则。\n该行保持不传参的资源引用直到返修，pass-2新增volumeAdaptationSummary()，代入当前选项标签（agent-a37c11da1d273ee04.jsonl:L899-L913）。\n",
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/AntennaPod-develop/app/src/main/res/xml/feed_settings.xml",
+          "at": "2026-10-01T09:47:11.816Z",
+          "reason": "正常输入：Read回执给出VolumeAdaptationPreference（MaterialListPreference/ListPreference子类）带entries/entryValues与android:summary=@string/feed_volume_adaptation_summary（agent-ac0406142d6e7bab5.jsonl:L33、L37）；源字符串为“...up or down: %1$s”，由ListPreference摘要格式化代入当前entry。"
+        },
+        {
+          "key": "3c838ae1-111b-475a-a085-e9464ec2fde4:ac0406142d6e7bab5",
+          "at": "2026-10-01T10:10:15.460Z",
+          "reason": "字符串资源只用grep -q检查了存在性，未读值（L104-L105）；随后只grep app内MaterialListPreference的setSummary，无命中，就推断static XML summaries stay for volumeReduction（L188-L190）。Write把音量行写成summary: $r('app.string.feed_volume_adaptation_summary')，不传格式参数（L224-L225），界面直接显示%1$s。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/pages/SharePage.ets",
+        "since": "2026-10-03T04:49:05.918Z",
+        "at": "2026-10-06T17:26:02.113Z"
+      },
+      "summary": "ShareDialog转换者读到ShareUtils依赖item.getLinkWithFallback()，但没有打开FeedItem.java，凭记忆把兜底链写成link → media.downloadUrl，并回写到page_0077规格。\n返修读FeedItem.java:235-242后改为link → feed.link → null（repair L14652-L14675）。\n",
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/AntennaPod-develop/app/src/main/java/de/danoeh/antennapod/ui/share/ShareUtils.java",
+          "at": "2026-10-02T04:17:30.341Z",
+          "reason": "正常输入：Read回执L47-L75中hasLinkToShare = item.getLinkWithFallback() != null，社交文案也取getLinkWithFallback()，明确需要移植FeedItem.getLinkWithFallback；FeedItem.java在源码中可直接打开（agent-a4350f4b223608cc1.jsonl:L33-L34）。"
+        },
+        {
+          "key": "3c838ae1-111b-475a-a085-e9464ec2fde4:a4350f4b223608cc1",
+          "at": "2026-10-02T04:38:28.247Z",
+          "reason": "发现ArkTS FeedItem没有该方法后，凭记忆写下Android FeedItem.getLinkWithFallback() = link != null ? link : (media != null ? media.downloadUrl : null)（L58）；Write的SharePage.getLinkWithFallback按link → media.downloadUrl兜底（L132-L133），之后又把这条写进page_0077规格（L151）。源方法实为isNotBlank(link) → isNotBlank(feed.link) → null。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/pages/AudioPlayerPage.ets",
+        "since": "2026-10-03T04:49:05.918Z",
+        "at": "2026-10-06T17:26:02.113Z"
+      },
+      "summary": "页面转换者把访问网站的链接来源记成不存在的getWebsiteLinkWithFallback；Slice 6实现者没有回源核对，把canVisitWebsite与visitWebsite都写成media.getWebsiteLink()（即item.link）。\n返修读FeedItemMenuHandler:211-216后改为!isLocalFeed && FeedItemMenu.getLinkWithFallback(item)，并用它打开链接（repair L14796-L14802）。\n",
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/AntennaPod-develop/app/src/main/java/de/danoeh/antennapod/ui/episodeslist/FeedItemMenuHandler.java",
+          "at": "2026-10-01T09:32:53.449Z",
+          "reason": "正常输入：Read回执L83为canVisitWebsite |= !item.getFeed().isLocalFeed() && ShareUtils.hasLinkToShare(item)；此前grep只返回L213的visit_website_item分支行，未读L214的openInBrowser(selectedItem.getLinkWithFallback())（agent-a0b47fef38e1706b3.jsonl:L165-L168）。"
+        },
+        {
+          "key": "3c838ae1-111b-475a-a085-e9464ec2fde4:a0b47fef38e1706b3",
+          "at": "2026-10-01T09:39:12.448Z",
+          "reason": "registry P-S6-019写入visit_website→getWebsiteLinkWithFallback(item)（L184-L185）；Write AudioPlayerPage时canVisitWebsite注释仍正确写作hasLinkToShare(item)，visitWebsite的FWD-REF却写成IntentUtils.openInBrowser(item.getWebsiteLinkWithFallback)（L189-L190）。源码中没有这个方法，名称混合了FeedMedia.getWebsiteLink与FeedItem.getLinkWithFallback。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/pages/AudioPlayerPage.ets",
+          "at": "2026-10-02T15:07:47.383Z",
+          "reason": "交付桥梁：Slice 6实现者的Read回执含上述两条注释：L329为canVisitWebsite = hasLinkToShare(item)，L582-L585为FWD-REF P-S6-019 item.getWebsiteLinkWithFallback（agent-a3a307bca64776d79.jsonl:L65-L66）。"
+        },
+        {
+          "key": "3c838ae1-111b-475a-a085-e9464ec2fde4:a3a307bca64776d79",
+          "at": "2026-10-02T15:48:20.037Z",
+          "reason": "没有打开ShareUtils/FeedItem，思考中自行猜测hasLinkToShare是“websiteLink or downloadUrl?”，并简化成item.link（L346）；Edit写canVisitWebsite = media.getWebsiteLink() !== null // hasLinkToShare(item)（L350-L351），visitWebsite保留getWebsiteLinkWithFallback注释，实际取media.getWebsiteLink()（L359-L360）。两处都缺feed.link兜底，可见性也缺!isLocalFeed。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-bdbb705b26462605b1c3",
+  "metadata": {
+    "migration": {
+      "id": "antennapod-glm53-3c838ae1-111b-475a-a085-e9464ec2fde4",
+      "project": "AntennaPod"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.285",
+        "2.1.286",
+        "2.1.287",
+        "2.1.288",
+        "2.1.289"
+      ]
+    },
+    "source_set_id": "sources-5f9a4b68d8866c1b1233",
+    "environment": [
+      {
+        "name": "toolchain.kotlin",
+        "value": "2.3.20",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-09-30T15:43:45.309Z",
+        "ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a3da0f444ffe5d81f.jsonl:L27",
+        "request_ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a3da0f444ffe5d81f.jsonl:L25",
+        "phase": "generation"
+      },
+      {
+        "name": "toolchain.agp",
+        "value": "8.11.0",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-09-30T15:43:45.309Z",
+        "ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a3da0f444ffe5d81f.jsonl:L27",
+        "request_ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a3da0f444ffe5d81f.jsonl:L25",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-09-30T17:34:05.597Z",
+        "ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a5c631d1e662fac13.jsonl:L54",
+        "request_ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a5c631d1e662fac13.jsonl:L53",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-09-30T17:34:05.597Z",
+        "ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a5c631d1e662fac13.jsonl:L54",
+        "request_ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a5c631d1e662fac13.jsonl:L53",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.0.2(22)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-10-04T16:26:51.075Z",
+        "ref": "repair/ae3bb09d-1f58-48a4-91c8-85a20fd96fc1.jsonl:L215",
+        "request_ref": "repair/ae3bb09d-1f58-48a4-91c8-85a20fd96fc1.jsonl:L214",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.0.1(21)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-10-04T16:26:51.075Z",
+        "ref": "repair/ae3bb09d-1f58-48a4-91c8-85a20fd96fc1.jsonl:L215",
+        "request_ref": "repair/ae3bb09d-1f58-48a4-91c8-85a20fd96fc1.jsonl:L214",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.4",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "040e09cc-8de1-45ba-bc4b-5202da7f9c23"
+      ]
+    }
+  },
+  "revision": "ad200a78c3c72540d53a93e8cbf6f54f99aa14007e6e209df98a73f3d6837888"
+}

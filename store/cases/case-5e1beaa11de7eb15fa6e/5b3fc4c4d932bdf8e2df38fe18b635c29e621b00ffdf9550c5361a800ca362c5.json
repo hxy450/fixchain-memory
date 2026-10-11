@@ -1,0 +1,128 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-5e1beaa11de7eb15fa6e",
+  "created_at": "2026-10-10T07:16:45.678800+00:00",
+  "migration_key": "game2048-glm53-d90de388-a6d4-4f09-8cd2-28dfc31c5901",
+  "title": "未经实测把fontBoundingBox当作Paint字体上下伸，并去掉centerText的(int)截断",
+  "when": "功能实现阶段，移植Canvas文字基线修正（centerText）并决定能否关闭“需实测校正”的不确定标记时",
+  "description": "源端以Paint.ascent()/descent()（字体hhea上/下伸，带符号）计算(int)((descent+ascent)/2)作为基线偏移，供方块数字、标题、说明、遮罩文字使用；目标端用ArkUI CanvasRenderingContext2D.measureText返回的TextMetrics取等价度量，且上游已把字段对应登记为“注册字体后实测校正”的不确定项。",
+  "summary": "Slice 3渲染worker（agent-a6ffdc5db8eb83d2e）写前收到的输入如下。MainView.java:573-575的源式为\n(int)((paint.descent()+paint.ascent())/2)（L31-L32），worker在推理里逐字引用了这一式子，也写明Java (int)向零截断（L141）。\nconverter版MainPage.ets的TODO P-S1-UNC-001说明，fontBoundingBox折算只是近似，需在“Slice 3渲染层注册ClearSans-Bold.ttf后按实测字模基线校正”（L47/L52）。\n派工要求升级为真实实现，可选fontBoundingBox或actualBoundingBox，并写明“若实测不可行则retained附因”（L1）。\nF003实现映射只写“actualBoundingBoxAscent/Descent或fontMetrics近似”，契约栏为“—”（L25-L26）。\n这些输入已足以要求两件事：保留(int)截断；字段等价在实测前不能当作已证实。\n输出却偏离了这两点。worker以“I believe ArkUI implements the full CSS TextMetrics”为据，推定fontBoundingBoxAscent/Descent与Paint ascent/descent量值相同，\n并把派工措辞和MainPage现有写法当作认可，fontBoundingBox这一选择沿用了converter先例。它还以“visual ACs judge by screenshot; sub-pixel difference invisible”为由，明知截断仍保留浮点（L141）。\n随后Write GameRenderer.centerTextFn = (fontBoundingBoxDescent − fontBoundingBoxAscent) / 2，注释声称与源式“数值同值”（L151-L152）；源码笔记写“≡ 源式”（L147）。\n它把“若实测不可行”理解成实现可行（L258），回执报uncertain_regions_resolved: [P-S1-UNC-001]、retained: []，引用源式时也不带(int)（L265-L266）。\n偏差位于实现阶段关闭不确定映射这一环：没有做任何度量核对就宣称等价并清除标记，同时主动去掉取整。\nconverter当初已把该写法标为medium置信、需实测（agent-aff8280c29a186c0a.jsonl:L114-L115、L167），属于正确登记，不另归因。\n该片段保留到返修前（R:L1546-L1547读到的修复前代码相同）。\n返修插桩实测ClearSans 100px：fontBoundingBoxAscent=107.71，fontBoundingBoxDescent=30.71，后者等于head.yMin（629/2048），不是hhea下伸；\nemHeightAscent/emHeightDescent为107.71/27.49，恰为hhea 2206/563（R:L1540-L1541、L1546-L1547）。\n因此偏移量偏小，方块数字偏上约0.008×cellSize；标题使用centerText×2，偏上约0.026×cellSize。\n最终改为Math.trunc((emHeightDescent − emHeightAscent) / 2)，并在注释写明依据（R:L1556-L1557）。复测墨迹中心由0.517升至0.523–0.525（安卓0.525），检查点D2 3b73c7f（R:L1612-L1613）。\n主要偏移来自descent字段；截断差≤1px，是同一修复中的忠实度细节。\n",
+  "recommendations": [
+    "实现阶段把Paint.ascent/descent映射到TextMetrics前，先在注册目标字体后取固定字号（如100px），打印fontBoundingBox*/emHeight*/actualBoundingBox*，与字体hhea ascender/descender÷unitsPerEm对比，选取数值吻合的字段（本次ClearSans为emHeightAscent/Descent=2206/563，fontBoundingBoxDescent却是head.yMin 629）。不要凭W3C语义或前序先例推定等价。",
+    "上游登记为“需实测校正”的不确定项，若生成阶段无法实测，应保持retained，并写明待测字段与预期值（如hhea 2206/563 per 2048）。不要把“实现可行”当作“已验证”来关闭标记，也不要在注释或笔记中写“数值同值/≡源式”。",
+    "源式含(int)或floor等取整时原样移植（Java (int)向零截断对应Math.trunc），即使视觉验收看不出亚像素差；偏移会乘2用于标题/说明时，误差随之放大。",
+    "规格提取阶段写文字基线映射时，写明Paint.ascent/descent是字体级（hhea）带符号度量、结果按(int)截断；不要把字形墨迹级的actualBoundingBox列为等价候选，契约栏不留空。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-2048-glm5.3/entry/src/main/ets/view/GameRenderer.ets",
+        "since": "2026-10-09T18:47:43.289Z",
+        "at": "2026-10-10T04:36:17.957Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-2048-glm5.3/spec/baseline/features/F003-rendering-animation.md",
+          "at": "2026-10-09T17:27:13.528Z",
+          "reason": "规格输入（含缺口）：worker的Read回执中，F003实现映射第46行把centerText映射为“measureText的actualBoundingBoxAscent/Descent或fontMetrics近似”，契约栏为“—”。该行没有写明Paint.ascent/descent是字体hhea度量，也没有截断契约；worker最终没有采用actualBoundingBox（agent-a6ffdc5db8eb83d2e.jsonl:L25-L26）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/2048-tpcstld-2863bbe/2048/base/src/main/java/com/tpcstld/twozerogame/MainView.java",
+          "at": "2026-10-09T17:27:23.736Z",
+          "reason": "正常输入：worker全文Read回执包含:573-575 `return (int) ((paint.descent() + paint.ascent()) / 2);`，以及drawCellText(:158)、drawHeader(:259，×2)、drawInstructions(:267，×2)等消费点。足以确定源端使用字体级上下伸，并按(int)取整（agent-a6ffdc5db8eb83d2e.jsonl:L31-L32）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-2048-glm5.3/entry/src/main/ets/pages/MainPage.ets",
+          "at": "2026-10-09T17:27:47.034Z",
+          "reason": "先例输入：worker的Read回执中，converter版centerText()写作(fontBoundingBoxDescent − fontBoundingBoxAscent) / 2，无截断。TODO P-S1-UNC-001注明这是折算近似，须在“注册ClearSans-Bold.ttf后按实测字模基线校正”。字段候选与“须实测”的要求都在这里（agent-a6ffdc5db8eb83d2e.jsonl:L47、L52）。"
+        },
+        {
+          "key": "agent-a6ffdc5db8eb83d2e.jsonl",
+          "at": "2026-10-09T17:41:29.105Z",
+          "reason": "偏差输出：派工首条消息（L1）要求把P-S1-UNC-001升级为真实实现（fontBoundingBox或actualBoundingBox），并写明“若实测不可行则retained附因”。worker推理中逐字引用源式(int)，却以“I believe ArkUI implements the full CSS TextMetrics”推定fontBoundingBox与Paint ascent/descent同量值，并以“sub-pixel difference invisible”保留浮点（L141）。随后Write GameRenderer.centerTextFn = (fontBoundingBoxDescent − fontBoundingBoxAscent) / 2，注释称“与源式数值同值”（L151-L152）。未做度量核对就把P-S1-UNC-001报为resolved、retained为空（L258、L265-L266）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "生成期材料中没有skill或参考文档说明ArkUI TextMetrics各字段的度量来源（worker对skills的measureText检索L92-L93无相关结果），不能认定worker写前可得知fontBoundingBoxDescent取head.yMin；本卡只归因未经实测即宣称等价并关闭不确定标记，以及主动去掉截断。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-5e1beaa11de7eb15fa6e",
+  "metadata": {
+    "migration": {
+      "id": "game2048-glm53-d90de388-a6d4-4f09-8cd2-28dfc31c5901",
+      "project": "2048"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.295",
+        "2.1.296"
+      ]
+    },
+    "source_set_id": "sources-8cc5e9d8f4b3bafc7d31",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-2048-glm5.3",
+        "at": "2026-10-09T15:56:56.310Z",
+        "ref": "generation/d90de388-a6d4-4f09-8cd2-28dfc31c5901.jsonl:L692",
+        "request_ref": "generation/d90de388-a6d4-4f09-8cd2-28dfc31c5901.jsonl:L686",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-2048-glm5.3",
+        "at": "2026-10-09T15:56:56.310Z",
+        "ref": "generation/d90de388-a6d4-4f09-8cd2-28dfc31c5901.jsonl:L692",
+        "request_ref": "generation/d90de388-a6d4-4f09-8cd2-28dfc31c5901.jsonl:L686",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.10.4",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "4566ae59-a9cb-4783-8d98-daad7bff832a"
+      ]
+    }
+  },
+  "revision": "5b3fc4c4d932bdf8e2df38fe18b635c29e621b00ffdf9550c5361a800ca362c5"
+}

@@ -1,0 +1,155 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-abb1f63235ed950c4841",
+  "created_at": "2026-10-10T07:17:52.273494+00:00",
+  "migration_key": "game2048-glm53-d90de388-a6d4-4f09-8cd2-28dfc31c5901",
+  "title": "动画单调时钟映射到SDK不存在的performance.now，编译门再回退成墙钟Date.now",
+  "when": "编译修复阶段，源端时钟API的目标映射在当前SDK中不存在、需要换一个时钟源时；以及规格提取阶段为System.nanoTime等源端计时API选目标API时",
+  "description": "源端帧动画用System.nanoTime（CLOCK_MONOTONIC）求帧间隔与动画进度，目标ArkTS实现把时钟封装在单点函数里；规格映射写了未经项目SDK核实的Web API（performance.now），构建报找不到符号或Kit无导出后要选替代时钟。",
+  "summary": "规格阶段：主会话写F003规格前已读到MainView.java的lastFPSTime = System.nanoTime()以及tick/resyncTime\n用它求帧间隔（主转录L66-L67），却在实现映射里把System.nanoTime()写成performance.now()（ms）、标“低难度/行为等价”，\n没有引用SDK d.ts或已验证知识（主转录L306/L313），D-009台账再以“feature-base已论证API同构性”批准（L902）。\nSlice 3 worker读到该映射（agent-a6ffdc5db8eb83d2e.jsonl:L25-L26），自查skill知识库找不到performance的已验证用法、\n凭约75-80%的记忆仍按契约写performance.now()，并包成nowMs()，注释写“System.nanoTime()对应…单点包裹便于构建期统一兜底”（L136-L141、L151-L152）。\n编译门：hmos-builder收到“不得改spec语义、已实现行为代码只做编译级最小改动”的派工（主转录L2226-L2227），\n读回的nowMs注释已写明它对应System.nanoTime（agent-a3976c11d827d1b72.jsonl:L85-L86）。确认SDK 6.1.0(23)中\nPerformanceAnalysisKit不导出performance、也没有@ohos.performance.d.ts后（L113-L125），它在思考中列出“单调ms时钟的替代”，\n也承认Date.now会跳变，但只凭印象把systemDateTime判为墙钟，没有打开同一api目录下的@ohos.systemDateTime.d.ts（L111、L119）；\n随后Edit把nowMs改成return Date.now()，注释写“ms墙钟，单位域不变”（L151-L152），只把单调性差异作为decision-gap上报（L171）。\n主会话收到后只在migration-report“遗留披露1”记录，没有修（主转录L2380、L2559）。\n该Date.now片段保留到返修前。返修查SDK得知systemDateTime.getUptime(TimeType.ACTIVE, isNanoseconds)自API 10可用，\n把nowMs改为systemDateTime.getUptime(systemDateTime.TimeType.ACTIVE, true) / NANOS_PER_MILLI（@kit.BasicServicesKit），注释同步，\n检查点D5（返修转录L1705-L1706、L1721-L1726、L1760-L1761）。\n已核偏差分两层：规格把源端单调时钟映射到SDK不存在的API，这让时钟选择被推到编译门；\n编译门在已知单调语义要求的情况下没有按语义检索SDK，用墙钟替换，改变了规格语义。\n",
+  "recommendations": [
+    "编译修复阶段：被替换API没有导出时，先写明原调用承担的语义（这里是nowMs注释所写的System.nanoTime：单调、不受校时影响），再在当前SDK的ets/api与kits d.ts中按语义检索候选（如grep getUptime、monotonic、TimeType），读完候选声明再排除；不能只凭印象把@ohos.systemDateTime判成墙钟。",
+    "编译门的修复边界是“不改spec语义”时，如果只剩语义不同的替代（Date.now墙钟会随系统校时回拨或跳变），不要在门内落地，应回报主线程按决策缺口处理；主线程收到这类decision-gap后，要在生成期补查替代API并修正，不能只记入遗留披露。",
+    "规格提取阶段：为System.nanoTime等源端系统计时API写目标映射时，同时写清所需语义（单调、是否含深睡眠、ns/ms精度），并以项目SDK d.ts作为目标API存在的证据；performance.now这类Web API要先核实ArkTS SDK里有没有，本例应落到systemDateTime.getUptime(TimeType.ACTIVE, true)再换算毫秒。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-2048-glm5.3/entry/src/main/ets/view/GameRenderer.ets",
+        "since": "2026-10-09T18:47:43.289Z",
+        "at": "2026-10-10T04:36:17.957Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/2048-tpcstld-2863bbe/2048/base/src/main/java/com/tpcstld/twozerogame/MainView.java",
+          "at": "2026-10-09T15:31:50.243Z",
+          "reason": "正常输入：主会话Read回执返回lastFPSTime = System.nanoTime()（:51），tick()以System.nanoTime()差值推进动画、resyncTime()重置基线（:500、:506），足以确定动画时钟是单调纳秒时钟（d90de388主转录L66-L67）。"
+        },
+        {
+          "key": "d90de388-a6d4-4f09-8cd2-28dfc31c5901.jsonl",
+          "at": "2026-10-09T15:42:38.417Z",
+          "reason": "规格作者读到上述源码后，Write F003规格的实现映射把System.nanoTime()动画时钟写成performance.now()（ms），标“低/精度足够”，没有引用SDK d.ts或已验证知识来证明该API在ArkTS SDK中存在（主转录L306/L313；feature-base同口径L269）。后续D-009以此批准（L902）。偏差是源端单调时钟映射到目标SDK里没有的API。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-2048-glm5.3/spec/baseline/features/F003-rendering-animation.md",
+          "at": "2026-10-09T17:27:13.528Z",
+          "reason": "交付桥梁：Slice 3 worker的Read回执第47行仍是“System.nanoTime()动画时钟 → performance.now()（ms）”，第56行“动画时钟: lastFPSTime（performance.now）”（agent-a6ffdc5db8eb83d2e.jsonl:L25-L26）。"
+        },
+        {
+          "key": "agent-a6ffdc5db8eb83d2e.jsonl",
+          "at": "2026-10-09T17:41:29.105Z",
+          "reason": "实现者读到该规格后，在skill库里找不到performance的已验证用法，仍按契约凭记忆写performance.now()，并包成nowMs()，注释写“System.nanoTime()对应（ms域，D-009）；单点包裹便于构建期统一兜底”（同转录L128-L141、L151-L152）。本链确认的是传递：它把源端单调语义和未核实的API一起写进目标文件，不另推定为独立成因。"
+        },
+        {
+          "key": "d90de388-a6d4-4f09-8cd2-28dfc31c5901.jsonl",
+          "at": "2026-10-09T18:17:26.305Z",
+          "reason": "正常输入（派工）：主线程派发Stage 3编译门，点名风险“GameRenderer: performance.now()全局调用（可能需import或nowMs包裹）”，并限定“不得改spec语义；已implemented的行为代码只做编译级最小改动”（主转录L2226-L2227；agent-a3976c11d827d1b72.jsonl:L1）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-2048-glm5.3/entry/src/main/ets/view/GameRenderer.ets",
+          "at": "2026-10-09T18:21:43.977Z",
+          "reason": "正常输入：编译门Read回执第243-245行为“System.nanoTime()对应（ms域，D-009）”及return performance.now()，明确了nowMs要承担的单调时钟语义（agent-a3976c11d827d1b72.jsonl:L85-L86）。"
+        },
+        {
+          "key": "agent-a3976c11d827d1b72.jsonl",
+          "at": "2026-10-09T18:26:55.184Z",
+          "reason": "编译门已收到单调语义要求和不改语义的边界，核实PerformanceAnalysisKit无performance后（L113-L125），思考中列出单调ms时钟的替代、承认Date.now会跳，却把systemDateTime一笔判为墙钟，没有读@ohos.systemDateTime.d.ts（L111、L119）；随后Edit把nowMs改为return Date.now()，注释写“ms墙钟，单位域不变”（L151-L152），只上报decision-gap（L171）。墙钟替换在这里落入目标文件并保留到返修前。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 6
+        },
+        {
+          "from": 5,
+          "to": 7
+        },
+        {
+          "from": 6,
+          "to": 7
+        },
+        {
+          "from": 7,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "编译门与规格作者写前都没有收到点名systemDateTime.getUptime的知识材料；本卡认定的是：单调语义要求已在输入中给出，SDK也可查，但没有按语义检索，不声称它们明知getUptime可用。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-abb1f63235ed950c4841",
+  "metadata": {
+    "migration": {
+      "id": "game2048-glm53-d90de388-a6d4-4f09-8cd2-28dfc31c5901",
+      "project": "2048"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.295",
+        "2.1.296"
+      ]
+    },
+    "source_set_id": "sources-8cc5e9d8f4b3bafc7d31",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-2048-glm5.3",
+        "at": "2026-10-09T15:56:56.310Z",
+        "ref": "generation/d90de388-a6d4-4f09-8cd2-28dfc31c5901.jsonl:L692",
+        "request_ref": "generation/d90de388-a6d4-4f09-8cd2-28dfc31c5901.jsonl:L686",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-2048-glm5.3",
+        "at": "2026-10-09T15:56:56.310Z",
+        "ref": "generation/d90de388-a6d4-4f09-8cd2-28dfc31c5901.jsonl:L692",
+        "request_ref": "generation/d90de388-a6d4-4f09-8cd2-28dfc31c5901.jsonl:L686",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.10.4",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "4566ae59-a9cb-4783-8d98-daad7bff832a"
+      ]
+    }
+  },
+  "revision": "f5b824a9ef757f00ab0eb7c877fdd33947c2fdd54420510962728ba20a259f79"
+}

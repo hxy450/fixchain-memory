@@ -1,6 +1,6 @@
 # ui/navigation/hosts
 
-Navigation/@Entry宿主与页面注册（含根 Navigation 默认标题栏与工具栏）、嵌入页取栈、路由跳板和跨页面共享生命周期，外部入口（推送、快捷方式）宿主导航执行器的可用性守卫。
+Navigation/@Entry宿主与页面注册（含根 Navigation 默认标题栏与工具栏）、嵌入页取栈、单 Activity 壳内 loadChildFragment 子页的壳内回退栈与嵌入承载、半透明卡片式 Activity 的透明 DIALOG 路由、路由跳板和跨页面共享生命周期，外部入口（推送、快捷方式）宿主导航执行器的可用性守卫。
 
 [上一级](../index.md)
 
@@ -16,6 +16,12 @@ Navigation/@Entry宿主与页面注册（含根 Navigation 默认标题栏与工
   - 时机：入口页实现或收尾接线阶段，创建 Navigation 宿主、决定首屏放在根内容还是压栈、编写 navDestination 分发时
   - 情境：目标入口页用 Navigation + @Provider NavPathStack 承载路由；首屏（启动页等）写成返回 NavDestination 的组件，在 onReady 取栈并按启动决策 pushPathByName 下一页；目的地由 @Builder 映射分发。
   - 例外：首屏是普通组件（不返回 NavDestination）、作为 Navigation 根内容常驻，且不依赖 NavDestinationContext 取栈
+- [半透明卡片式 Activity 迁移为透明 DIALOG 路由，遮罩只作页内一层](lesson-22c2a8f0e6b782b95448.lesson.md)
+  - 时机：界面实现与规格提取阶段，迁移 windowIsTranslucent 主题的卡片式 Activity 及其内嵌子页时
+  - 情境：源主题 windowIsTranslucent=true、windowBackground 透明、backgroundDimEnabled=true，以卡片内的容器承载 Fragment；目标为 Navigation/NavDestination。
+- [单 Activity 壳内的 loadChildFragment 子页映射为壳内回退栈，不改成独立路由或清栈切页](lesson-7bcb44f0e376ec67e5a8.lesson.md)
+  - 时机：壳层导航实现与页面形态决策阶段，为源端在内容区压栈加载的子 Fragment 确定承载方式、返回与底部导航选中语义时
+  - 情境：源主 Activity 用 loadChildFragment（hide 加 add 加 addToBackStack）打开详情、搜索等子页，子页期间底栏与迷你播放条仍在，工具栏随栈深显示上箭头，带 navigationTag 时同步底栏选中；启动器构造时写入默认 extras。目标同时有 Navigation 路由与壳内容槽。
 - [外部入口的宿主导航守卫按“目标已注册或路由命中”判断，不用导航栈成员检查](lesson-1b05b8d5cc528d5dc5bc.lesson.md)
   - 时机：入口接线阶段，为推送、桌面快捷方式、通知点击等外部 Want 编写宿主导航执行器（路由器回调里的 pushPathByName）的可用性守卫时
   - 情境：源端跳转前用 isIntentAvailable 一类判断目标是否可用；目标由单一 EntryAbility 加 Navigation pageMap 承载，外部 Want 冷启时暂存、热启时直跳，由宿主页 pushPathByName 入栈；守卫可能先写在跨切片草稿里，再被复制到闪屏页、主页等多个宿主。

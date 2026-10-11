@@ -1,11 +1,14 @@
 # ui/layout/layers
 
-运行时addView、全屏底层与状态覆盖层：确定视图挂在哪里、如何叠放及几何范围；点击命中与事件时坐标属于ui/interaction。
+运行时addView、全屏底层、状态覆盖层与 BottomSheetBehavior 管理的布局内面板：确定视图挂在哪里、如何叠放及几何范围；点击命中与事件时坐标属于ui/interaction。
 
 [上一级](../index.md)
 
 ## 本级经验
 
+- [BottomSheetBehavior 面板映射：容器可见性与面板状态分离，位于底栏之上的面板用布局内实现](lesson-9f45b5d79206b5654aff.lesson.md)
+  - 时机：界面实现与规格提取阶段，把由 BottomSheetBehavior 管理、初始收起的播放器等面板翻译为 ArkUI 壳布局与状态机时
+  - 情境：源面板位于 CoordinatorLayout 内、底部导航之上，不可隐藏，可见性方法只切换容器 VISIBLE/GONE；目标可选窗口级 bindSheet 或 Stack 加 translate。
 - [为已转换页面接线时保留“全屏底层 + 按状态切换的前景层”骨架；地图 SDK 不可用也不把全屏承载改成自绘小卡](lesson-4de4283ec625be7e976c.lesson.md)
   - 时机：功能切片为已转换页面接入 ViewModel、Service 与跳转，决定保留还是重写布局骨架时；巡检修复处理“缺少全屏地图承载”一类发现时
   - 情境：Android 页面以全屏 MapView/导航视图为底层，前景由 ViewModel 布尔状态（如 showRoute）切换两套覆盖层；导航页 FEATURE_NO_TITLE、只承载导航视图；目标地图/导航 SDK 暂不可用，页面转换阶段已写出带全屏占位底图与两态覆盖层的骨架。

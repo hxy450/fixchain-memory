@@ -1,6 +1,6 @@
 # 要靠其他文件或任务补实现的功能，登记成带负责方、验证方式和源端确定值的移交项，不只写在注释或动作摘要里
 
-ID：`lesson-4f81eeea17b94190c2de` · 版本：7
+ID：`lesson-4f81eeea17b94190c2de` · 版本：8
 
 [本主题](index.md)
 
@@ -10,7 +10,7 @@ ID：`lesson-4f81eeea17b94190c2de` · 版本：7
 
 ## 适用情境
 
-写码者确认某项行为在当前文件里无法闭合（例如非入口组件的平台回调要由入口页转发、宿主回调留给接线切片、脚手架身份值留给后续步骤、新建的 init 要由入口调用、UI 转换阶段先留业务占位），工程提供了移交登记约定（如带 owner/what/verify 的 HANDOFF 标记、前向引用登记表、返回信封中的字段）；或接线者在上游文件头读到要求本文件转发的说明。
+写码者确认某项行为在当前文件里无法闭合（例如非入口组件的平台回调要由入口页转发、宿主回调留给接线切片、脚手架身份值留给后续步骤、新建的 init 要由入口调用、UI 转换阶段先留业务占位），工程提供了移交登记约定（如带 owner/what/verify 的 HANDOFF 标记、前向引用登记表、返回信封中的字段）；或接线者在上游文件头读到要求本文件转发的说明。也包括写者读到源端宿主或子类对共享组件的改写、自己不能改共享文件，只在转换报告里记“保真缺口”；以及 UI 阶段规格写明交互留给后续切片，写者准备照兄弟页写成真实但不符合源端的实现。
 
 ## 原因
 
@@ -24,11 +24,14 @@ ID：`lesson-4f81eeea17b94190c2de` · 版本：7
 4. 接线时读到上游文件要求本文件转发或补调用点，就在本文件实现；派工不允许或实现不了时作为阻塞项上报。接手者从登记里取不到确切值时，打开出处源码取值，取不到就登记缺口，不写推测值。
 5. 派工只允许写本文件、而源端依赖的共享工具还没有目标文件时，在本文件实现等价逻辑，或登记前向引用交给后续切片；不要静默省略。
 6. 修复轮核出、但本轮不修的相邻偏差，当轮写入持久的偏差台账（如迁移报告的“已知未修偏差”），写明源端条件与文件位置；不只留在思考或会话上下文里，压缩会丢掉这类判断。
+7. 当场做不完的源行为登记为占位，不只写进报告的“保真缺口”；UI 阶段规格写明交互留给后续切片时登记占位，不照兄弟页写成与源端不符的真实实现。
 
-来源支持：13 张卡 · 7 次迁移 · 7 个应用
+来源支持：16 张卡 · 8 次迁移 · 8 个应用
 
 ## 来源（按需复核）
 
+- [case-07655e78d2a5ab769146](../../../store/cases/case-07655e78d2a5ab769146/abd71acc4b5a73c206e8a4f93e18a878cb83cb6a9531a303afdac6bceea12b2c.json) · 结论：recommendation:3
+  卡片版本：`abd71acc4b5a73c206e8a4f93e18a878cb83cb6a9531a303afdac6bceea12b2c`
 - [case-0ac442a09e1e8ee36a8a](../../../store/cases/case-0ac442a09e1e8ee36a8a/a8ef5f4a3b6e86969bb09b0df9de25820f2b67887ac0349a98141071b3b6b276.json) · 结论：recommendation:1
   卡片版本：`a8ef5f4a3b6e86969bb09b0df9de25820f2b67887ac0349a98141071b3b6b276`
 - [case-1cad884865343910ce02](../../../store/cases/case-1cad884865343910ce02/27369625dcbbe450f68beab2e162e179bde87573f0d20d5282655293b42e24d3.json) · 结论：recommendation:2
@@ -39,6 +42,10 @@ ID：`lesson-4f81eeea17b94190c2de` · 版本：7
   卡片版本：`399f7b12747efb0e2c5ee69d85083f67576d91c11b7c8f93adacb6d0713f92f6`
 - [case-37a2c6aacb67d1fc0aee](../../../store/cases/case-37a2c6aacb67d1fc0aee/528d09b041c06639c78c05521087576cda7b79594f84cb4fcc278d8c2c62a75b.json) · 结论：diagnosis, recommendation:2, recommendation:3
   卡片版本：`528d09b041c06639c78c05521087576cda7b79594f84cb4fcc278d8c2c62a75b`
+- [case-3ca3658855acd903c4ca](../../../store/cases/case-3ca3658855acd903c4ca/d0ba935e82dce8bcb9f5694089a9e6dbc438222f1b51a6dcd0b46a87967216cb.json) · 结论：recommendation:5
+  卡片版本：`d0ba935e82dce8bcb9f5694089a9e6dbc438222f1b51a6dcd0b46a87967216cb`
+- [case-47b9e1107e4e4ecd40bd](../../../store/cases/case-47b9e1107e4e4ecd40bd/87b0c345ca3fa21bf70b01c74e3a2714a0880c4a2e5531942fe4d81a24d85b98.json) · 结论：recommendation:6
+  卡片版本：`87b0c345ca3fa21bf70b01c74e3a2714a0880c4a2e5531942fe4d81a24d85b98`
 - [case-4ecfc0b10264caacad49](../../../store/cases/case-4ecfc0b10264caacad49/23ae043b4ec073a5f76c24cd0e8182ec63aae669f723a247cb685df9abde36f2.json) · 结论：diagnosis, recommendation:1
   卡片版本：`23ae043b4ec073a5f76c24cd0e8182ec63aae669f723a247cb685df9abde36f2`
 - [case-5dc757ad90507a893798](../../../store/cases/case-5dc757ad90507a893798/18a2456f40974f82b2393cee85af61357923b351dd4954b8d0c59ab3a2a01bfb.json) · 结论：recommendation:3

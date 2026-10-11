@@ -1,0 +1,162 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-e2f82d2a4d27325abe09",
+  "created_at": "2026-10-07T05:38:57.265965+00:00",
+  "migration_key": "antennapod-glm53-3c838ae1-111b-475a-a085-e9464ec2fde4",
+  "title": "把单线程执行器的同线程重入内联误当作Promise串行队列天然具备，队列任务内await同队列写方法导致自锁死",
+  "when": "数据层实现阶段，将源端单线程写执行器移植为异步串行队列，并处理队列任务内对同一写仓库其他公开方法的嵌套调用时",
+  "description": "源端写仓库用单线程Executor串行执行全部写任务，并在调用方已处于该执行线程时同步内联执行嵌套调用（如runOnDbThread按线程名判断后runnable.run()）；目标端以链式Promise等异步串行队列替代，且某些队列任务体内会再调用同类公开写方法（入队后标记未播放、订阅状态变更后写偏好等）。",
+  "summary": "Base-2 Database 生成者（agent-a3a6314f3b577e62d）写 DBWriter.ets 前已实际收到两份正确且足够的输入：\nF016-database.md 的 F016-AC54 明写“全部写操作串行、顺序=提交顺序；调用方已在 DB 线程时同步直接执行不二次排队（runOnDbThread 重入）”，\n并标注真值 DBWriter.java:995（Read 回执 L43-L44）；完整 Read 的 DBWriter.java 回执含 runOnDbThread 源码——\n线程名为 DatabaseExecutor 时 runnable.run() 内联、否则 dbExec.submit，以及 addQueueItem 任务体内调用\nDBWriter.markItemsPlayed、setFeedState 任务体内调用 DBWriter.setFeedPreferences（L93-L94）。\n本次 Write（L254-L255）却把执行器写成仅有 tail.then(task) 的链式 Promise 队列，没有任何重入判断，\n文件头注释还声称“ArkTS 单线程事件循环下「重入同步执行」天然成立（无第二工作线程）”；\n同时在 addQueueItemAt、addQueueItem、setFeedState 三个 runOnDbThread 任务体内写出\nawait DBWriter.markItemsPlayed(...) ×2 与 await DBWriter.setFeedPreferences(...)。\n嵌套调用被排到当前任务之后，而当前任务又在等它完成，形成串行队列自锁死。\n同一文件里源端已有 *Synchronous 版本的方法（deleteFeedMediaSynchronous、removeQueueItemSynchronous 等）均被正确内联调用，\n偏离只出现在源端依赖 runOnDbThread 重入分支、调用公开方法的这三处；生成者写后 L324-L325 回读 setFeedState 时嵌套 await 仍在。\nAC54 的判定只描述“并发提交 100 个写任务后结果等于某串行顺序”，未覆盖重入分支，因此串行性自查不会暴露此问题。\n这三处片段原样保留到 d16b3d0 交付（修复会话扫描回执列出第 386、434、799 行 AWAITED，repair L2052-L2053），\n表现为点击 Subscribe 后 setFeedState 永不完成、后续 DB 写入冻结。\n修复者先试 void 不等待（L2065-L2066），读 Android runOnDbThread 后改为新增 markItemsPlayedSynchronous、\napplyPlayedStateInMemory、setFeedPreferencesSynchronous 内联版本，公开方法经 runOnDbThread 包裹内联版本，\n三处嵌套调用改 await 内联版本（L2103-L2104），并保留到 603ce68；runOnDbThread 本身仍是无重入判断的 Promise 链。\n",
+  "recommendations": [
+    "移植单线程写执行器时，把“已在执行器任务内则同步内联、不再排队”的重入分支作为独立契约落实：为任务体内会被调用的公开写方法提供不经队列的内部 *Synchronous 版本，任务体内只调用内部版本；不要以“单线程事件循环无第二线程”推定 Promise 队列天然支持重入。",
+    "写完串行队列后，逐个检查每个 runOnDbThread 任务体内对本类其他经队列的公开写方法的 await（本例为 addQueueItemAt/addQueueItem→markItemsPlayed、setFeedState→setFeedPreferences），对照源码中依赖 runOnDbThread 重入的调用点逐一改为内部版本；可用脚本扫描“队列任务体内 await 同队列方法”作为最小检查。",
+    "自查串行执行契约时，除提交顺序外再验证一次嵌套写：在队列任务内调用另一个写方法，确认外层 Promise 能完成。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/database/DBWriter.ets",
+        "since": "2026-10-03T04:49:05.918Z",
+        "at": "2026-10-06T17:26:02.113Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/spec/baseline/features/F016-database.md",
+          "at": "2026-10-01T08:37:25.084Z",
+          "reason": "正常输入：生成者 Read 回执中 F016-AC54 要求 DBWriter 写操作串行、顺序=提交顺序，且“调用方已在 DB 线程时同步直接执行不二次排队（runOnDbThread 重入）”，标:DBWriter.runOnDbThread、真:DBWriter.java:995；足以说明嵌套调用不能再排队后等待（agent-a3a6314f3b577e62d.jsonl:L43-L44，回执第286行）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/AntennaPod-develop/storage/database/src/main/java/de/danoeh/antennapod/storage/database/DBWriter.java",
+          "at": "2026-10-01T08:38:38.091Z",
+          "reason": "正常输入：完整 Read 回执含 runOnDbThread（991-1002 行：线程名 DatabaseExecutor 时 runnable.run() 并返回 immediateFuture，否则 dbExec.submit），以及 addQueueItem 任务体内 DBWriter.markItemsPlayed(...)、setFeedState 任务体内 DBWriter.setFeedPreferences(...) 的嵌套调用；源端重入语义与依赖它的调用点均已给出（agent-a3a6314f3b577e62d.jsonl:L93-L94）。"
+        },
+        {
+          "key": "agent-a3a6314f3b577e62d.jsonl",
+          "at": "2026-10-01T08:52:38.187Z",
+          "reason": "已收到上述输入，Write 却把 runOnDbThread 写成仅 tail.then(task) 的链式 Promise 队列、无重入判断，头注释声称“ArkTS 单线程事件循环下「重入同步执行」天然成立”，并在 addQueueItemAt/addQueueItem/setFeedState 任务体内写 await DBWriter.markItemsPlayed(...)×2、await DBWriter.setFeedPreferences(...)，使嵌套任务排在自身之后而被等待（同转录 L254-L255；L324-L325 写后回读 setFeedState 仍保留）。输入正确且足够，本分支在此停止上溯。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-e2f82d2a4d27325abe09",
+  "metadata": {
+    "migration": {
+      "id": "antennapod-glm53-3c838ae1-111b-475a-a085-e9464ec2fde4",
+      "project": "AntennaPod"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.285",
+        "2.1.286",
+        "2.1.287",
+        "2.1.288",
+        "2.1.289"
+      ]
+    },
+    "source_set_id": "sources-5f9a4b68d8866c1b1233",
+    "environment": [
+      {
+        "name": "toolchain.kotlin",
+        "value": "2.3.20",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-09-30T15:43:45.309Z",
+        "ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a3da0f444ffe5d81f.jsonl:L27",
+        "request_ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a3da0f444ffe5d81f.jsonl:L25",
+        "phase": "generation"
+      },
+      {
+        "name": "toolchain.agp",
+        "value": "8.11.0",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-09-30T15:43:45.309Z",
+        "ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a3da0f444ffe5d81f.jsonl:L27",
+        "request_ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a3da0f444ffe5d81f.jsonl:L25",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-09-30T17:34:05.597Z",
+        "ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a5c631d1e662fac13.jsonl:L54",
+        "request_ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a5c631d1e662fac13.jsonl:L53",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-09-30T17:34:05.597Z",
+        "ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a5c631d1e662fac13.jsonl:L54",
+        "request_ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a5c631d1e662fac13.jsonl:L53",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.0.2(22)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-10-04T16:26:51.075Z",
+        "ref": "repair/ae3bb09d-1f58-48a4-91c8-85a20fd96fc1.jsonl:L215",
+        "request_ref": "repair/ae3bb09d-1f58-48a4-91c8-85a20fd96fc1.jsonl:L214",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.0.1(21)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-10-04T16:26:51.075Z",
+        "ref": "repair/ae3bb09d-1f58-48a4-91c8-85a20fd96fc1.jsonl:L215",
+        "request_ref": "repair/ae3bb09d-1f58-48a4-91c8-85a20fd96fc1.jsonl:L214",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.4",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "040e09cc-8de1-45ba-bc4b-5202da7f9c23"
+      ]
+    }
+  },
+  "revision": "0336a4b7b2d7cd500729764c3abeadecfc4ac1d3245474fd4c45053205d7a744"
+}
