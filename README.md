@@ -11,9 +11,9 @@
 
 当前知识版本以 `store/HEAD.json` 为准；`memory/manifest.json` 记录对应 revision、文件校验和与来源绑定。[MEMORY.md](MEMORY.md) 保留为兼容入口。
 
-## 部署到一次迁移
+## 用这个库跑迁移实验
 
-想用这个经验库和目前最好的召回方式跑一次迁移，只需要一个已装配好 agents、skills 的目标工程：`python3 deploy/deploy.py install --project <工程>`，再照常启动迁移，结束后 `finish`。默认用本分支的 `memory/`、首写召回（sweep3 + 摘要注入），召回 worker 继承迁移会话的模型和凭据；同时录下每个 agent 的影子 git 快照和转录。不绑定 app，Windows / macOS / Linux 通用。详见 [deploy/README.md](deploy/README.md)；最新的合并库在 `memory/multi-app-20261011` 分支。
+一条命令起一组端到端迁移（无 memory / 有 memory 两种条件，建好目标工程、装好我们的 `.claude`、影子 git 记录和首写召回）在 [a2h-replay-bench](https://github.com/hxy450/a2h-replay-bench) 的 `e2e/`；它带着本库 `memory/multi-app-20261011`（版本 `cc7b238e`）的固定副本。
 
 ## 更新与历史
 
