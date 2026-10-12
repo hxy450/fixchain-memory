@@ -13,7 +13,7 @@
 
 ## 部署到一次迁移
 
-[deploy/](deploy/README.md) 给任意 a2h 目标工程装上迁移记录（影子 git 快照 + Claude Code hook）和可选的首写 memory 召回，跑完补拷转录、打 `execute-end` 标签、做防抄扫描并打包归档：`python3 deploy/deploy.py install|status|finish --project <工程>`。不绑定 app，Windows / macOS / Linux 通用，部署本身不调用模型。召回读的经验库用部署版导出（见上节），不要直接拿开发版 `memory/`。
+想用这个经验库和目前最好的召回方式跑一次迁移，只需要一个已装配好 agents、skills 的目标工程：`python3 deploy/deploy.py install --project <工程>`，再照常启动迁移，结束后 `finish`。默认用本分支的 `memory/`、首写召回（sweep3 + 摘要注入），召回 worker 继承迁移会话的模型和凭据；同时录下每个 agent 的影子 git 快照和转录。不绑定 app，Windows / macOS / Linux 通用。详见 [deploy/README.md](deploy/README.md)；最新的合并库在 `memory/multi-app-20261011` 分支。
 
 ## 更新与历史
 

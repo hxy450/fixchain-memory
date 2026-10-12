@@ -1,17 +1,20 @@
-"""Deploy migration recording, and optionally memory recall, onto an a2h target project: shadow git snapshots at
-every dispatch / first explicit write / end, the Claude Code hooks that drive them, and the first-write recall hook
-over a memory library. App-agnostic: the project, its scaffold, the migration prompt and the model launch stay
-yours. No model is involved here; only the migration and the recall workers call one.
+"""Deploy migration recording and memory recall onto an a2h target project: shadow git snapshots at every
+dispatch / first explicit write / end, the Claude Code hooks that drive them, and the first-write recall hook over
+this repository's memory library. App-agnostic: the project (already carrying its .claude agents and skills), the
+migration prompt and the model launch stay yours. No model is involved here; only the migration and the recall
+workers call one.
 
 usage:
-  python3 deploy/deploy.py install --project P [--shadow S]
-                           [--memory LIB --recall-slot glm-03[,glm-0x] [--recall-root R] [--method sweep3]]
+  python3 deploy/deploy.py install --project P                  recording + recall with this branch's memory/
+  python3 deploy/deploy.py install --project P [--no-recall] [--shadow S] [--memory LIB] [--recall-root R]
+                           [--recall-slot glm-03[,glm-0x] --keys K] [--method sweep3]
   python3 deploy/deploy.py status  --project P [--shadow S]
   python3 deploy/deploy.py finish  --project P [--shadow S] [--archive ZIP] [--forbid PATH ...] [--notes FILE] [--force]
 
 Defaults: S = <parent of P>/_shadow/<name of P>, R = <parent of P>/_recall/<name of P>,
 ZIP = <parent of P>/a2h-migration-archive/<name of P>-execute-YYYYMMDD.zip.
-Recall worker keys: a slot csv (columns slot,api_key,base_url) given by --keys or RECALL_KEYS.
+Recall workers use the migration session's own endpoint, credentials and model unless --recall-slot names key
+slots in a csv (columns slot,api_key,base_url; --keys or RECALL_KEYS), which keeps their quota separate.
 """
 from __future__ import annotations
 
@@ -27,6 +30,7 @@ import time
 import zipfile
 
 E2E = Path(__file__).resolve().parent
+MEMORY = E2E.parent / "memory"   # this branch's library
 SHADOW_TOOL = E2E / "shadow_snapshot.py"
 RECALL_TOOL = E2E / "recall_hook.py"
 SHADOW_EVENTS = [("SubagentStart", "*"), ("UserPromptSubmit", None),
@@ -83,28 +87,48 @@ def install(a):
         raise SystemExit(f"no project at {project}: prepare it first (template + .claude), then install")
     if (shadow / "repo.git").exists():
         raise SystemExit(f"shadow repository already exists: {shadow}")
-    if a.memory and not a.recall_slot:
-        raise SystemExit("--memory needs --recall-slot")
+    memory = None if a.no_recall else Path(a.memory or MEMORY).resolve()
+    if memory and not (memory / "index.md").is_file():
+        raise SystemExit(f"no memory library (index.md) at {memory}")
     write_shadow_hooks(project, shadow)
     lib = None
-    if a.memory:
+    if memory:
         lib = recall / "library" / "memory"
         if lib.exists():
             raise SystemExit(f"memory copy already exists: {lib}")
         # isolated copy: recall workers read only this, nothing that sits next to the original library
-        shutil.copytree(Path(a.memory).resolve(), lib)
+        shutil.copytree(memory, lib)
         print(run([sys.executable, "-B", "-X", "utf8", RECALL_TOOL, "install", "--project", project, "--root", recall,
-                   "--library", lib, "--slot", a.recall_slot, "--method", a.method]
-                  + (["--keys", Path(a.keys).expanduser().resolve()] if a.keys else [])).strip())
+                   "--library", lib, "--method", a.method]
+                  + (["--slot", a.recall_slot] if a.recall_slot else [])
+                  + (["--keys", Path(a.keys).expanduser().resolve()] if a.recall_slot and a.keys else [])).strip())
     # baseline commit after the hooks are in: the tree the migration starts from, settings included
     print(run([sys.executable, "-B", "-X", "utf8", SHADOW_TOOL, "init", "--root", shadow, "--project", project,
                "--label", "scaffold"]).strip())
     cfg = {"project": str(project), "shadow": str(shadow), "recall": str(recall) if lib else None,
-           "memory_source": str(Path(a.memory).resolve()) if a.memory else None,
-           "recall_slots": a.recall_slot.split(",") if lib else [], "installed": time.strftime("%Y-%m-%dT%H:%M:%S%z")}
+           "memory_source": str(memory) if memory else None, "memory_revision": memory_revision(memory),
+           "recall_slots": (a.recall_slot.split(",") if a.recall_slot else ["inherit"]) if lib else [],
+           "installed": time.strftime("%Y-%m-%dT%H:%M:%S%z")}
     (shadow / "deploy.json").write_text(json.dumps(cfg, ensure_ascii=False, indent=1), encoding="utf-8")
     print(json.dumps({"installed": str(project), "shadow": str(shadow), "recall": cfg["recall"],
                       "next": "start the migration in the project as usual"}, ensure_ascii=False))
+
+
+def memory_revision(memory):
+    """The library's knowledge revision and git commit, so a run records exactly which memory it recalled from."""
+    if not memory:
+        return None
+    out = {}
+    try:
+        out["revision"] = json.loads((memory / "manifest.json").read_text(encoding="utf-8")).get("memory_revision")
+    except (OSError, ValueError):
+        pass
+    try:
+        out["commit"] = run(["git", "-C", memory, "rev-parse", "HEAD"]).strip()
+        out["branch"] = run(["git", "-C", memory, "rev-parse", "--abbrev-ref", "HEAD"]).strip()
+    except (OSError, subprocess.CalledProcessError):
+        pass
+    return out or None
 
 
 # ---------------------------------------------------------------- status / finish
@@ -291,7 +315,8 @@ def readme(cfg, st, counts, haps, notes):
     if cfg.get("recall") and rec:
         recall_line = (f"首写召回 {rec['recalls']} 次，注入 {rec['injected']} 次，失败放行 {len(rec['failed_open'])} 次"
                        f"（{', '.join(rec['failed_open']) or '-'}）；worker 输入 {rec['worker_input'] / 1e6:.1f}M、"
-                       f"输出 {rec['worker_output'] / 1e6:.2f}M token；经验库副本来自 {cfg['memory_source']}")
+                       f"输出 {rec['worker_output'] / 1e6:.2f}M token；经验库副本来自 {cfg['memory_source']}"
+                       f"（{json.dumps(cfg.get('memory_revision'), ensure_ascii=False)}）")
     elif cfg.get("recall"):
         recall_line = f"装了首写召回（经验库副本来自 {cfg['memory_source']}），没有召回记录"
     else:
@@ -324,9 +349,12 @@ def main():
     ap.add_argument("cmd", choices=["install", "status", "finish"])
     ap.add_argument("--project", required=True, help="the migration's target project directory")
     ap.add_argument("--shadow", help="shadow root (default <parent>/_shadow/<name>)")
-    ap.add_argument("--memory", help="install: memory library to recall from (copied into the recall root)")
+    ap.add_argument("--memory", help="install: memory library to recall from, copied into the recall root "
+                    "(default: memory/ of this branch)")
+    ap.add_argument("--no-recall", action="store_true", help="install: recording only, no memory recall")
     ap.add_argument("--recall-root", help="default <parent>/_recall/<name>")
-    ap.add_argument("--recall-slot", help="install: worker key slot(s), comma-separated; not the migration's slot")
+    ap.add_argument("--recall-slot", help="install: worker key slot(s), comma-separated; default: the migration "
+                    "session's own endpoint and credentials")
     ap.add_argument("--keys", help="install: slot csv (slot,api_key,base_url); default RECALL_KEYS")
     ap.add_argument("--method", default="sweep3", help="install: recall steps (recall_core.RECALL_STEPS)")
     ap.add_argument("--archive", help="finish: zip path")
