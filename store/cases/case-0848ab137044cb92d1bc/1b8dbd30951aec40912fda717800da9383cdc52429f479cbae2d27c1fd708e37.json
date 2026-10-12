@@ -1,0 +1,388 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-0848ab137044cb92d1bc",
+  "created_at": "2026-10-11T22:31:24.162982+00:00",
+  "migration_key": "acdd6966-d460-4d88-b0a6-5dc0c5262ee5",
+  "title": "设置区对话框、Snackbar 与开关的源端隐式语义在页面实现中丢失或被规则替换",
+  "when": "界面实现阶段（及其上游的分页规格提取），把 Compose Dialog、showSnackbar、M3 Switch、ListItem 前导文本和字重转换为 ArkUI 页内实现时",
+  "description": "源页面使用 Compose Dialog（DialogProperties 默认返回键/点外关闭）、条件挂载对话框内 remember 的选择状态、带 actionLabel 的 showSnackbar、Switch thumbContent 勾选图标、ListItem 前导 emoji 文本与 SemiBold 字重；目标改用 NavDestination 内 Stack 覆盖层、页级 @Local 状态、Toggle 与 FontWeight 枚举实现。",
+  "summary": "本卡按成因分为五支，目标都在设置区（计时设置、备份恢复、关于、许可）及公共开关组件。\n1) 返回键不先关页内对话框：计时设置页写者写前读到 Material3Dialog.kt 中 Dialog(onDismissRequest, properties = DialogProperties())，\n分页规格也写明以 @CustomDialog / bindSheet 承载（两者都自带返回键关闭）；它在推理中明确写下\n「Android's Dialog: back button dismisses too; skip (onBackPress at page level is out of scope)」，随后用 Stack 覆盖层 + 遮罩实现、未接 NavDestination.onBackPressed\n（agent-af50d51f8e3c3df7c.jsonl:L145、L163）。备份恢复页写者并行写出页内 MaterialDialogShell 覆盖层，同样未拦截返回（agent-a0bae97cc49dd1e2a.jsonl:L114）。\n关于页写者把计时设置页的覆盖层当作项目先例照搬（「AboutPage 用同款 Stack overlay 模式与 TimerSettingsPage 一致」，agent-ac45f641323ed5a13.jsonl:L57-L59、L93）。\nBase-6 的 Material3Dialog.ets 只是内容载体并在文件头建议用 openCustomDialog 承载（该通道原生处理返回键），页面都没有采用，所以返回键缺口是各页面写者的实现偏差，而非沿用公共组件缺口。\n修复在三个页面加入 onBackPressed，先关闭可见对话框再返回（R1:L5831、L6014、L6055）。\n2) 备份/默认配方对话框不在每次打开时重置：BackupRestore.kt 的 recipesToBackup / recipesToAdd 是条件挂载对话框内的 remember 状态，\n每次打开都重建，备份对话框随后由 LaunchedEffect 全选。写者把两者提为页级 @Local（分页规格的状态接口表也只按页级变量列出、未写生命周期），\nselectAllRecipesIfEmpty 仅在集合为空时全选，于是第二次打开会保留上次的勾选。修复在 openBackupDialog / openDefaultDialog 中清空并重新全选（R1:L5831）。\n3) Snackbar 时长与队列：源恢复完成调用 showSnackbar(message, actionLabel = button_show)，Compose 在有 actionLabel 时默认 Indefinite，SnackbarHostState 会串行排队。\n写者推理写成「Compose showSnackbar 默认 Short(4s)」，对备份和恢复都用单槽 4s 定时器并直接覆盖（agent-a0bae97cc49dd1e2a.jsonl:L85、L114）。\n修复新增 CofiSnackbar 队列宿主：无 action 用 Short 4000ms，有 action 用 Indefinite（R1:L3444），并改造页面（R1:L5831）。\n4) CofiSwitch 无勾选图标：Base-6 写者读到 CofiSwitch.kt 的 thumbContent = { if (checked) Icon(Icons.Rounded.Check) }，规划时也写到用 mi_check.svg 实现，\n最终却以未核实的「HMOS Toggle Switch shows check icon natively when on」为前提，只写了 Toggle（agent-a75b1dce962949479.jsonl:L101、L140、L172）。\n修复改为自绘 M3 Switch，thumb 内使用 app.media.mi_check（R1:L5941）。\n5) 支持对话框 emoji：分页规格作者读到 SupportCofi.kt 的 Text(「⭐」/「🐘」/「☕️」)，却在加载的 arkts-ui-alignment「SymbolGlyph 铁律」（绝不把 emoji 塞进 Text 当图标）驱动下，\n在 page_0007 规格中写明 emoji 改为已验证 symbol（agent-a82b551f85d4bcb55.jsonl:L10、L192）。关于页写者推理时承认「Text emoji 直接显示——最忠实源码」，\n但仍按规格写成 sys.symbol star_fill / person_fill / heart_fill（agent-ac45f641323ed5a13.jsonl:L65、L93）。修复恢复为 emoji 文本（R1:L6055）。\n另一支是许可页标题字重：规格写 SemiBold，写者写出 ArkUI 中不存在的 FontWeight.SemiBold；Base-7 编译修复者以「closest to semibold」统一替换成 FontWeight.Medium（500），\n没有改用数值 600（agent-a4f5fdad2d36532dd.jsonl:L68、L227）。修复改为 fontWeight(600)（R1:L6383）。\n不属于生成偏差：无步骤时点备份后首个返回被吞，是修复者自己加入 onBackPressed 后由复审发现、再补上 hasAnySteps 条件（R1:L11955、L13051）；生成态没有返回拦截，不存在该问题。\n遮罩 32% 对比 60% 的差异中，生成写者把 Compose Dialog 遮罩猜成 32%，但生成输入里没有平台变暗系数，本卡只记录、不另归因。\n",
+  "recommendations": [
+    "界面实现阶段用页内 Stack 覆盖层替代 Compose Dialog / ModalBottomSheet 时，把 DialogProperties 的默认行为（返回键关闭、点外关闭）列为必须复刻的行为：在宿主 NavDestination.onBackPressed 中先关闭可见对话框并返回 true；拦截条件与对话框的实际渲染条件一致（例如备份对话框还要求存在步骤）。",
+    "复用其他页面的覆盖层写法作先例前，先核对先例是否已处理返回键，不把「条件挂载」等同于 Dialog 窗口语义。",
+    "迁移条件挂载的 Compose 子组件时，它内部 remember / LaunchedEffect 的生命周期是每次挂载重建；若把状态提升到页级 @Local，每次打开都要重置并重跑初始化（如备份对话框全选、默认配方对话框清空）。",
+    "转换 showSnackbar 时按调用参数推导时长：有 actionLabel 默认 Indefinite，无 action 为 Short 4s；SnackbarHostState 串行排队，目标端用队列，不用单槽覆盖。",
+    "源组件带显式子内容（如 Switch thumbContent 勾选图标）时，不要假定目标原生控件会呈现；未经验证就用工程已有图标资源（本例 mi_check.svg）自绘。",
+    "规格提取阶段区分「源矢量图标映射」与「源界面字面文本」：源码中 Text(「⭐」) 一类 emoji 属于界面内容，应原样保留为 Text；目标平台的 SymbolGlyph 规则只约束图标资源映射，两者冲突时在规格中记录，不替换。",
+    "目标 FontWeight 枚举缺少源字重（如 SemiBold）时写数值 600；编译修复替换不存在的枚举成员时保持原数值语义，不降级为最接近的枚举成员。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/entry/src/main/ets/pages/AboutPage.ets",
+        "since": "2026-10-01T14:11:08.477Z",
+        "at": "2026-10-01T23:45:55.694Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Cofi/app/src/main/java/com/omelan/cofi/components/SupportCofi.kt",
+          "at": "2026-10-01T07:20:12.342Z",
+          "reason": "正常输入：分页规格作者读取回执显示三个可点 ListItem 的 leadingContent 分别为 Text(「⭐」)、Text(「🐘」)、Text(「☕️」)，可确定这些 emoji 是源界面的字面文本（agent-a82b551f85d4bcb55.jsonl:L137-L138）。"
+        },
+        {
+          "key": "agent-a82b551f85d4bcb55.jsonl",
+          "at": "2026-10-01T07:24:21.261Z",
+          "reason": "规格偏差起点：上下文中注入了 arkts-ui-alignment 的「SymbolGlyph 铁律」（L10），作者把这条图标规则用在源端字面 emoji 上，在 page_0007_About.md 中写明「leadingContent 为 emoji Text —— HMOS 侧按 SymbolGlyph 铁律替换为已验证 symbol」，转换决策表也写成 emoji → SymbolGlyph（L192）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/spec/baseline/ui/page_0007_About.md",
+          "at": "2026-10-01T11:02:44.925Z",
+          "reason": "交付桥梁：关于页写者读取的规格中仍是 emoji 替换为 SymbolGlyph 的决策（agent-ac45f641323ed5a13.jsonl:L10-L11；该写者 L37-L38 的 grep 回执也列出第 39 行这条决策）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Cofi/app/src/main/java/com/omelan/cofi/components/Material3Dialog.kt",
+          "at": "2026-10-01T10:42:07.087Z",
+          "reason": "正常输入：计时设置页写者读取回执显示 Material3Dialog 外层为 Dialog(onDismissRequest = onDismissRequest, properties = DialogProperties())，返回键关闭是该窗口的默认语义（agent-af50d51f8e3c3df7c.jsonl:L21-L22）。"
+        },
+        {
+          "key": "agent-af50d51f8e3c3df7c.jsonl",
+          "at": "2026-10-01T10:52:52.671Z",
+          "reason": "返回键分支起点：推理中已写出 Android Dialog 的返回键会关闭对话框，但以「onBackPress at page level is out of scope」跳过（L145），写出的 TimerSettingsPage 只有 Stack 覆盖层、遮罩点击关闭，没有 onBackPressed（L163）。该页成为后续页面复用的覆盖层先例。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/entry/src/main/ets/pages/TimerSettingsPage.ets",
+          "at": "2026-10-01T11:05:23.086Z",
+          "reason": "交付桥梁：关于页写者读取计时设置页全文，L59 推理把它当作项目弹窗模式先例（「AboutPage 用同款 Stack overlay 模式与 TimerSettingsPage 一致」）（agent-ac45f641323ed5a13.jsonl:L57-L59）。"
+        },
+        {
+          "key": "agent-ac45f641323ed5a13.jsonl",
+          "at": "2026-10-01T11:09:55.188Z",
+          "reason": "传递者：L65 推理承认 Text emoji 直接显示「最忠实源码」，但按规格写成 sys.symbol.star_fill / person_fill / heart_fill；对话框沿用先例的 Stack 覆盖层，未接返回键（L93）。本链确认两项偏差均经此写入目标，不另推定其独立成因。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 7
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": 6
+        },
+        {
+          "from": 6,
+          "to": 7
+        },
+        {
+          "from": 7,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/entry/src/main/ets/pages/TimerSettingsPage.ets",
+        "since": "2026-10-01T14:11:08.477Z",
+        "at": "2026-10-01T23:45:55.694Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/spec/baseline/ui/page_0005_TimerSettings.md",
+          "at": "2026-10-01T10:41:56.623Z",
+          "reason": "正常输入：分页规格把 CombineWeightDialog 写成 Material3Dialog 覆盖层，转换决策为 @CustomDialog / bindSheet + Radio(group)，这两种目标承载都自带返回键关闭（agent-af50d51f8e3c3df7c.jsonl:L9-L10）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Cofi/app/src/main/java/com/omelan/cofi/components/Material3Dialog.kt",
+          "at": "2026-10-01T10:42:07.087Z",
+          "reason": "正常输入：Material3Dialog 外层为 Dialog(onDismissRequest, DialogProperties())，返回键与点外都会触发 onDismissRequest（agent-af50d51f8e3c3df7c.jsonl:L21-L22）。"
+        },
+        {
+          "key": "agent-af50d51f8e3c3df7c.jsonl",
+          "at": "2026-10-01T10:52:52.671Z",
+          "reason": "实现偏差：改用页内 Stack 覆盖层后，推理写下「Android's Dialog: back button dismisses too; skip」（L145），Write 只实现遮罩点击关闭，没有 NavDestination.onBackPressed，按返回会直接退出页面（L163）。该覆盖层在生成结束快照中仍无返回拦截，修复者重写时补上 onBackPressed（R1:L6014）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/entry/src/main/ets/pages/BackupRestorePage.ets",
+        "since": "2026-10-01T14:11:08.477Z",
+        "at": "2026-10-01T23:45:55.694Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/spec/baseline/ui/page_0006_BackupRestore.md",
+          "at": "2026-10-01T10:42:03.243Z",
+          "reason": "输入：规格把两个对话框映射为 @CustomDialog，写明恢复 Snackbar 带「显示」action；状态接口表只把 recipesToBackup / recipesToAdd 列为页级变量（Backup 初始全选 / Default 初始空），没有写每次打开重建的生命周期，属于含糊处，但源码同时可读（agent-a0bae97cc49dd1e2a.jsonl:L14-L15）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Cofi/app/src/main/java/com/omelan/cofi/pages/settings/BackupRestore.kt",
+          "at": "2026-10-01T10:42:06.258Z",
+          "reason": "正常输入：回执显示 BackupDialog / DefaultRecipesDialog 只在 show 标志为真时组合，内部 recipesToBackup / recipesToAdd 用 remember { mutableStateListOf() } 声明，备份对话框由 LaunchedEffect 全选；恢复完成调用 showSnackbar(..., actionLabel = button_show)，由 SnackbarHostState 统一展示（agent-a0bae97cc49dd1e2a.jsonl:L19-L20）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Cofi/app/src/main/java/com/omelan/cofi/components/Material3Dialog.kt",
+          "at": "2026-10-01T10:42:06.514Z",
+          "reason": "正常输入：Material3Dialog 外层为 Dialog(onDismissRequest, DialogProperties())，返回键会关闭对话框（agent-a0bae97cc49dd1e2a.jsonl:L21-L22）。"
+        },
+        {
+          "key": "agent-a0bae97cc49dd1e2a.jsonl",
+          "at": "2026-10-01T10:49:58.234Z",
+          "reason": "实现偏差：Write 把两个选择集合提为页级 @Local，selectAllRecipesIfEmpty 仅在为空时全选，打开时不重置；Snackbar 按 L85 推理「Compose showSnackbar 默认 Short(4s)」，对恢复消息也用 4000ms 单槽定时器，新消息直接覆盖、没有队列；两个对话框都是页内 Stack 覆盖层，没有 onBackPressed（L114）。这些片段保留到生成结束，修复者整页重写（R1:L5831）并新增 CofiSnackbar（R1:L3444）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/entry/src/main/ets/components/common/CofiSwitch.ets",
+        "since": "2026-10-01T14:11:08.477Z",
+        "at": "2026-10-01T23:45:55.694Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Cofi/app/src/main/java/com/omelan/cofi/components/CofiSwitch.kt",
+          "at": "2026-10-01T10:43:41.173Z",
+          "reason": "正常输入：回执显示 material3.Switch 的 thumbContent = { if (checked) Icon(Icons.Rounded.Check, size = SwitchDefaults.IconSize) }，选中态 thumb 内有勾选图标（agent-a75b1dce962949479.jsonl:L61-L62）。"
+        },
+        {
+          "key": "agent-a75b1dce962949479.jsonl",
+          "at": "2026-10-01T10:56:44.955Z",
+          "reason": "实现偏差：L101 规划用工程已有的 mi_check.svg 实现勾选图标，L140 却改为未核实的「HMOS Toggle Switch shows check icon natively when on」，Write 只写 Toggle({type: Switch}) 加颜色，并在注释中声称 Check 图形由原生选中图形承载（L172）。修复改为自绘 M3 Switch，thumb 内 Image(app.media.mi_check)（R1:L5941）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/entry/src/main/ets/pages/LicensesPage.ets",
+        "since": "2026-10-01T14:11:08.477Z",
+        "at": "2026-10-01T23:45:55.694Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/spec/baseline/ui/page_0008_Licenses.md",
+          "at": "2026-10-01T11:12:43.333Z",
+          "reason": "正常输入：规格写明 DependencyItem 第一行「{project} @{version}」为 SemiBold（agent-ae775910d24854bb6.jsonl:L21-L22）。"
+        },
+        {
+          "key": "agent-ae775910d24854bb6.jsonl",
+          "at": "2026-10-01T11:18:50.228Z",
+          "reason": "上游写者：意图正确，但 Write 写成 ArkUI 枚举中不存在的 .fontWeight(FontWeight.SemiBold)，留下编译错误（L126）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/entry/src/main/ets/pages/LicensesPage.ets",
+          "at": "2026-10-01T11:38:05.533Z",
+          "reason": "交付桥梁：编译修复者读取第 124-133 行，回执同时含注释「SemiBold」和 FontWeight.SemiBold；构建日志报 Property 'SemiBold' does not exist on type 'typeof FontWeight'（agent-a4f5fdad2d36532dd.jsonl:L197-L198）。"
+        },
+        {
+          "key": "agent-a4f5fdad2d36532dd.jsonl",
+          "at": "2026-10-01T11:39:09.348Z",
+          "reason": "字重偏差起点：L68 推理以「FontWeight.SemiBold → FontWeight.Medium (closest to semibold)」处理，Edit replace_all 把 600 语义降级为 500（L227），没有改用数值 600。该行保留到生成结束，修复改为 fontWeight(600)（R1:L6383）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/entry/src/main/ets/components/common/Material3Dialog.ets",
+      "reason": "已确认修复把它改写为含遮罩、平台宽度、返回键转发说明、secondary 图标色和 tonal 6dp 色调的完整 Dialog 等价物（R1:L5630、L6024）。生成期 Base-6 版本是内容载体，文件头建议用 openCustomDialog 承载（该通道原生处理返回键），但页面没有采用，所以返回键缺口已归入各页面分支。图标色与色调差异取决于 M3 库默认 token（AlertDialogDefaults.iconContentColor、surfaceColorAtElevation），生成输入中没有这些值；OK 文案的本地化缺口来自其他页面先加入、只放在 base 的 button_ok。以上均未逐项完成生成归因。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/entry/src/main/ets/components/common/CofiSnackbar.ets",
+      "reason": "修复新增文件（R1:L3444），生成期没有该文件的历史；它承载的时长与队列语义，其生成偏差已在 BackupRestorePage 分支归因。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/entry/src/main/ets/components/common/LoadingIndicator.ets",
+      "reason": "修复新增文件（R1:L5819）。生成期按 page_0006 规格「LoadingProgress 覆盖」的决定，在 BackupRestorePage 内用 ArkUI LoadingProgress 近似 M3 Expressive LoadingIndicator；该近似属于生成偏差还是修复期的保真提升尚未核实，未制链。"
+    }
+  ],
+  "job": "issue-0848ab137044cb92d1bc",
+  "metadata": {
+    "migration": {
+      "project": "Cofi",
+      "server_session_id": "acdd6966-d460-4d88-b0a6-5dc0c5262ee5"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-sonnet-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.247"
+      ]
+    },
+    "source_set_id": "sources-22befa667a51476d2497",
+    "environment": [
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0-alpha17",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos",
+        "at": "2026-10-01T06:38:41.480Z",
+        "ref": "generation/9176a7f7b2203f7a/runs/721fb7c7-0508-4e2f-8b79-cfb906c65d16/epoch-0/sessions/agent-ad0f8989f195b578f.jsonl:L18",
+        "request_ref": "generation/9176a7f7b2203f7a/runs/721fb7c7-0508-4e2f-8b79-cfb906c65d16/epoch-0/sessions/agent-ad0f8989f195b578f.jsonl:L17",
+        "phase": "generation"
+      },
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0-alpha17",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Cofi",
+        "at": "2026-10-01T06:58:28.349Z",
+        "ref": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/main-507b2f1f-5d21-4455-a17e-460566675ced.jsonl:L45",
+        "request_ref": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/main-507b2f1f-5d21-4455-a17e-460566675ced.jsonl:L43",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos",
+        "at": "2026-10-01T08:45:11.210Z",
+        "ref": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/agent-a6b66d337af813fff.jsonl:L63",
+        "request_ref": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/agent-a6b66d337af813fff.jsonl:L62",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos",
+        "at": "2026-10-01T10:50:10.334Z",
+        "ref": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/agent-a099e355ad83c788a.jsonl:L122",
+        "request_ref": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/agent-a099e355ad83c788a.jsonl:L121",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-10-01T14:45:59.485Z",
+        "ref": "repair/cofi-migration-complete-20261007/fix-cofi-opus/stream-01.jsonl:L288",
+        "request_ref": "repair/cofi-migration-complete-20261007/fix-cofi-opus/stream-01.jsonl:L287",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-10-01T14:45:59.485Z",
+        "ref": "repair/cofi-migration-complete-20261007/fix-cofi-opus/stream-01.jsonl:L288",
+        "request_ref": "repair/cofi-migration-complete-20261007/fix-cofi-opus/stream-01.jsonl:L287",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0-alpha17",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": null,
+        "at": "2026-10-01T14:53:18.885Z",
+        "ref": "repair/cofi-migration-complete-20261007/fix-cofi-opus/stream-01.jsonl:L713",
+        "request_ref": "repair/cofi-migration-complete-20261007/fix-cofi-opus/stream-01.jsonl:L712",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "e0dce297-f0f9-4e8e-adb6-f2a8eeef850a"
+      ]
+    }
+  },
+  "revision": "1b8dbd30951aec40912fda717800da9383cdc52429f479cbae2d27c1fd708e37"
+}

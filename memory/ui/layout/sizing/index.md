@@ -1,6 +1,6 @@
 # ui/layout/sizing
 
-宽高、比例、百分比与边距的组合（父尺寸减边距、占剩余空间，由内容定尺寸的父级里的百分比），Compose 修饰符链顺序与 Row 的测量顺序、固有高度，Material 按钮的布局占位与实绘尺寸，px 域整数布局公式与随进度收放的间距，以及随内容定尺寸的图片、背景和描边，以及非 Row/Column/Flex 父级中 layoutWeight 不生效时的显式尺寸；嵌入满高子组件时的剩余高度分配，居中的 wrap_content 子项组不被拉伸。
+宽高、比例、百分比与边距的组合（父尺寸减边距、占剩余空间，由内容定尺寸的父级里的百分比），Compose 修饰符链顺序与 Row 的测量顺序、固有高度，Material 按钮的布局占位与实绘尺寸，px 域整数布局公式与随进度收放的间距，以及随内容定尺寸的图片、背景和描边，以及非 Row/Column/Flex 父级中 layoutWeight 不生效时的显式尺寸；嵌入满高子组件时的剩余高度分配，居中的 wrap_content 子项组不被拉伸。；换容器（Tabs、Grid 槽位改自绘 Row）后子项的主轴尺寸，TableLayout 按内容测量的列宽
 
 [上一级](../index.md)
 
@@ -19,8 +19,11 @@
 - [Row(height(IntrinsicSize.Min)) 先算出固有高度写成显式高度，再让子项按百分比撑满并保留源偏移](lesson-cb1a12afca61db08ed9a.lesson.md)
   - 时机：页面转换阶段，遇到 Row(height(IntrinsicSize.Min)) 且子项 fillMaxHeight、带 padding(top) 等偏移时
   - 情境：源 Row 以固有最小高度定高，高度由最高的子项（如按钮的最小触控尺寸）决定；子项用 fillMaxHeight 并在内部偏移；目标端没有固有尺寸测量，迁移陷阱表提示不定高父级下的百分比子项会撑满。
+- [TableLayout 加外部表头与 fake header 行的表格按内容测量列宽：表体每列宽取 fake header（文字＋paddingRight）与各单元格单行自然宽的最大值，不自拟 fr 比例或权重](lesson-6cb9ad45093ce2ca28af.lesson.md)
+  - 时机：规格提取与页面转换阶段，把 Android TableLayout 表格（滚动表体外另有固定表头）翻译为 ArkUI 列宽时
+  - 情境：源页面在 ScrollView 外放一行固定表头 TableRow，表体 TableLayout 首行是 height=0、文案与 paddingRight 同表头的 fake header 行（注释说明用于对齐外部表头列宽）；单元格是默认 wrap_content 的 TextView 逐行 addView，没有设定列宽；合成 view.xml 会丢掉 padding 与 height；规格可能写“fake header 删除（Grid 定宽列天然对齐）”并自拟 columnsTemplate 或权重。
 - [layout_marginStart/End 写成 margin 的 start/end 时同一对象各边都用 LengthMetrics；不需要随语言方向翻转时改用 left/right 数值](lesson-e3077bf60cfc3f34d0a2.lesson.md)
-  - 时机：界面实现阶段，把 layout_marginStart/End 一类方向相关边距写成 ArkUI margin 时；维护映射参考的边距示例时
+  - 时机：界面实现阶段，把 layout_marginStart/End、paddingStart/End 或 Compose padding(start/end) 一类方向相关边距写成 ArkUI margin/padding 时；维护映射参考的边距示例时
   - 情境：源布局用 marginEnd/marginStart（常与 marginBottom 等写在同一控件上）；映射参考把它对到 .margin({ end }) 并给出纯数字示例。
 - [“父尺寸减边距”或“扣除兄弟后的剩余空间”不写成 '100%'：match_parent/0dp 加同轴 margin 改用容器 padding 或 calc，Column 中占剩余高度的内容区用 layoutWeight(1)，等权重兄弟的间距改用 space](lesson-75f4743dff663f50966b.lesson.md)
   - 时机：界面实现阶段，把 match_parent 或两侧约束 0dp 且带同轴 margin 的视图、或带 margin 的等权重兄弟翻译成 ArkUI 尺寸与间距时；按要求调整左右边距时；为 Compose Column 中排在搜索栏、分隔线等固定高度节点之后、占满剩余高度的内容区确定高度时；宿主页在固定标题栏下嵌入根节点为 height('100%') 的面板或弹层组件时
@@ -36,6 +39,9 @@
 - [并排 wrap_content 图片列不按固有 dp 写死宽度：按固有宽度比例分列，高度用 aspectRatio](lesson-0618cdf331560d389f0e.lesson.md)
   - 时机：界面实现阶段，把 match_parent 父行中并排的 wrap_content 图片列转换为 ArkUI Row/Column 并确定列宽时；修复“右侧顶满/被遮挡”时
   - 情境：源布局在 match_parent 的水平 LinearLayout 中并排放置 wrap_content 图片列，列宽来自 drawable 固有尺寸与左右、列间 margin，其总和接近或超过常见手机屏宽；目标要在宽度不同的设备上与源截图对齐。
+- [把原由 Tabs、Grid 等容器分配槽位的子项搬进自绘 Row/Column 时重新确定主轴尺寸：等分用 layoutWeight(1)，不保留依赖旧容器的 width('100%')](lesson-c572346f0be19acf5579.lesson.md)
+  - 时机：公共组件或页面实现阶段，把 Tabs 内置 tabBar、Grid 等由容器分配槽位的子项改写为自绘 Row/Column + ForEach（如自绘底部导航），确定每个子项的主轴尺寸时
+  - 情境：源端底栏是水平 LinearLayout，子项由代码以 LayoutParams(0, MATCH_PARENT) 与 weight=1 动态添加，布局 XML 里没有静态子项；目标原先用 Tabs BarMode.Fixed 承载页签、页签 builder 写 width('100%')/height('100%')，新组件把该 builder 原样搬进 Row。
 - [把靠 layoutWeight 填满并居中的内容移进 Refresh、Stack 等非 Row/Column/Flex 父级时，改用 height('100%') 等显式尺寸](lesson-1c3d6367be48f70bb001.lesson.md)
   - 时机：界面实现阶段，把已有空态、未登录引导等内容 builder 放进下拉刷新组件或其他封装容器的 content 时，确定内容根节点的高度约束
   - 情境：内容根节点原本在 Column 中用 layoutWeight(1) + justifyContent(Center) 占满剩余空间并居中；新父级是封装了原生 Refresh（或 Stack、Scroll 等）的组件，经 @BuilderParam 注入内容；工程里可能已有同样写法可以照搬。
@@ -44,8 +50,8 @@
   - 情境：源算法在约束或测量结果（Compose constraints、placeable 宽高等整数 px）上做整数除法、.toInt() 截断或取整；目标布局属性和尺寸回调（onAreaChange）使用 vp 等逻辑单位，回调值通常不是整数，measureText 返回 px。 也包括 Canvas 绘制代码中的 (int) 强转（setBounds 边界、int 位移、文字基线修正），其中的量可能为负。
   - 例外：公式本来作用于 Dp 常量（固定间距、固定尺寸），不涉及 constraints 或 placeable 时，按原单位保留
 - [由内容定尺寸的父级（列表行、wrap_content 头部、FIT_CONTENT 半模态）里不写 width/height('100%')：描边背景画在节点自身，行内撑满用 Stretch；源端描边不改尺寸时注意 .border() 计入测量](lesson-a58ebfe7a4c55b041b14.lesson.md)
-  - 时机：界面实现与规格映射阶段，翻译用 fillMaxSize()、matchContentSize 贴合内容的选中指示器、描边或背景，为高度由内容决定的行加铺满的背景层（滑删进度背景等），或把 Compose Modifier.border 这类只绘制、不改测量的修饰符落到 ArkUI 容器上时；把 match_parent 高度翻译到 ListItem、列表行组件、折叠头部背景层或 bindSheet 内容根时
-  - 情境：源端指示器或背景层以 fillMaxSize、matchContentSize 贴合某个由内容定尺寸的格子；目标准备在 Stack/Row 里叠一层 width/height('100%') 的节点来画描边或背景。也包括列表行里的 Stack 没有确定高度，准备放一层宽高 100% 的背景子节点；或源 border 画在调用方已定尺寸的盒内侧，目标容器自身不设宽高、尺寸由槽内容决定。也包括源 match_parent 子视图位于 wrap_content 的行、AppBar 或 BottomSheet 容器中，实际随内容或兄弟高度；目标放进 List、ListItem、Scroll 或 FIT_CONTENT 半模态，准备直译为 height('100%')。
+  - 时机：界面实现与规格映射阶段，翻译用 fillMaxSize()、matchContentSize 贴合内容的选中指示器、描边或背景，为高度由内容决定的行加铺满的背景层（滑删进度背景等），或把 Compose Modifier.border 这类只绘制、不改测量的修饰符落到 ArkUI 容器上时；把 match_parent 高度翻译到 ListItem、列表行组件、折叠头部背景层或 bindSheet 内容根时；转换将被宿主嵌入的子组件（Fragment 转子组件）、确定根节点及各状态视图的高度约束时
+  - 情境：源端指示器或背景层以 fillMaxSize、matchContentSize 贴合某个由内容定尺寸的格子；目标准备在 Stack/Row 里叠一层 width/height('100%') 的节点来画描边或背景。也包括列表行里的 Stack 没有确定高度，准备放一层宽高 100% 的背景子节点；或源 border 画在调用方已定尺寸的盒内侧，目标容器自身不设宽高、尺寸由槽内容决定。也包括源 match_parent 子视图位于 wrap_content 的行、AppBar 或 BottomSheet 容器中，实际随内容或兄弟高度；目标放进 List、ListItem、Scroll 或 FIT_CONTENT 半模态，准备直译为 height('100%')。也包括被宿主嵌入的子组件：源布局根节点与空态容器都是 wrap_content，在宿主 NestedScrollView 的 wrap_content 槽位里按内容取高；目标根 Column 与 loading/empty/error 各分支写 height('100%')，宿主把它放进 Scroll 内未设高度的 Column。
   - 例外：父节点有确定的宽高（显式数值，或已被外层约束定死）时，百分比层按该尺寸解析，可以使用
 - [网格里跨列数不同的卡片要同行等高时，用实际列宽与留边推导宽卡比例；组件自身的原生宽高比只用于卡内内容缩放](lesson-4fc212d401ac7b2a4218.lesson.md)
   - 时机：列表或首页网格的界面实现阶段，为不同尺寸规格（如 2x2、4x2）的卡片确定外框高度或 aspectRatio 时

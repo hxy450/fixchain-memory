@@ -1,6 +1,6 @@
 # 用共享组件替换页面已实现片段前（关闭孤儿组件检查或按计划收口），完整读取被替换片段并逐项比对源码视觉；组件不符先修组件，不覆写参数保留旧外观
 
-ID：`lesson-ad6f23b88f09b55dd92a` · 版本：2
+ID：`lesson-ad6f23b88f09b55dd92a` · 版本：3
 
 [本主题](index.md)
 
@@ -22,10 +22,12 @@ ID：`lesson-ad6f23b88f09b55dd92a` · 版本：2
 2. 不为保持旧页面外观给共享组件传覆盖参数；只有源码在该调用点确有覆写时才传。
 3. 替换前完整读取将被删除的调用及其引用的 builder，并与共享组件的对应变体比较；局部实现更完整时，先把差异补进共享组件或报告缺口，再切换调用。
 
-来源支持：3 张卡 · 2 次迁移 · 2 个应用
+来源支持：4 张卡 · 3 次迁移 · 3 个应用
 
 ## 来源（按需复核）
 
+- [case-036361d8949e7daf5247](../../../store/cases/case-036361d8949e7daf5247/c13fd2d3c873845a6b80e49b91ae8bf21a59ba21b8c781410440623289dcfa79.json) · 结论：recommendation:2
+  卡片版本：`c13fd2d3c873845a6b80e49b91ae8bf21a59ba21b8c781410440623289dcfa79`
 - [case-5adfa1aabec5f52b2744](../../../store/cases/case-5adfa1aabec5f52b2744/8d73f1f55f7e5d92563cd9bff885e8803e2cdc7f766006a6e4539d1560ef5cbb.json) · 结论：recommendation:4
   卡片版本：`8d73f1f55f7e5d92563cd9bff885e8803e2cdc7f766006a6e4539d1560ef5cbb`
 - [case-a3404675917f8a352eb9](../../../store/cases/case-a3404675917f8a352eb9/251cba380648c037ead6cf198430233a569adb360f6b3ef5ae66404b79cb74ab.json) · 结论：recommendation:3

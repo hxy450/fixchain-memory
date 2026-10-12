@@ -1,0 +1,307 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-7d097177e497ea9e202c",
+  "created_at": "2026-10-11T20:45:45.791792+00:00",
+  "migration_key": "6ccfd659-7ee2-49d9-a90b-a7fa247e4484",
+  "title": "Activity 生命周期与结果投递映射到 Navigation 时语义走样：启动页未进栈、onStart 降为一次性、规格自创丢弃迟到结果、擅自修正源码常亮时序",
+  "when": "入口装配、页面实现与规格提取阶段，把 Android Activity 的 onStart/onResume/onActivityResult/finish 及后台线程回投映射到 Navigation/NavDestination 生命周期时",
+  "description": "多 Activity 应用迁移为单 Navigation + NavDestination；启动页依赖 onResume 重跑流程与 onActivityResult 接收结果，页面在 onStart 中每次重读 Intent 并重建列表，后台线程完成后无条件 post 回 UI（Toast/startActivity/finish），或源码在边界路径上存在看似缺陷的副作用时序。",
+  "summary": "本问题按目标分为四个已核分支，另有三个目标未完成归因。\n1）启动页结构（MainPage.ets）：主 worker 写前读到 ui-manifest「单 Navigation + 21 个 Activity 全部映射为 NavDestination 页面」，\n以及 entry-navigation-setup.md「其余页面是 NavDestination 子页面，由入口页 pageMap 路由」；L1255 的思考也明确 MainMenuPage 是 NavDestination 路由页，\n并考虑过“push 'MainMenu' as initial route”。15:00:12 的 Write 却把 MainMenuPage() 放进 Navigation 首页内容槽，pageMap 虽登记 'MainMenu' 但从未压栈。\nskill 模板只写“页面内容包进 Navigation{...}”，未提示首页内容不进栈、NavDestination 的 onShown/onResult/onBackPressed 不触发，这是输入缺口；\n16:31 Slice 10 worker 给 MainMenuPage 加 onShown/onResult 时注意到它是首页内容，却假定“onShown on home NavDestination fires”（agent-a341c9f56682bd734.jsonl:L141），\n使 F002-AC10/AC19 依赖的回调落空。修复在模拟器证实 FileChooser 结果丢失后改为 aboutToAppear 中 pushPathByName(ROUTE_MAIN_MENU)，\nNavigation 本体留空并 hideNavBar（stream-01.jsonl:L3394）。\n2）onStart 降为一次性（FileChooserPage.ets）：Stage 1 converter 读到 FileChooser.onStart():145-193 每次重读 Intent 并 updateFileIndex，\n写出的 applyParam 注释仍为“FileChooser.onStart()”，却挂在一次性 onReady 中，onShown 只处理启动错误码。\nSlice 3 worker 写前读到 F007-AC14“onStart 每次重入经 updateFileIndex 幂等重建列表”（agent-a25c30a7bf6a00764.jsonl:L26-L27）和 FileChooser.java（L42-L43），\nL150 重写整页时仍保留 onReady 版本，保留到交付。这次写入登记在 Entry/… 路径下（macOS 卷大小写不敏感，实为同一文件），\n索引不把它绑定到小写的目标键，图中只画最早的 converter 写入，这一保留只在文字中说明。\n修复先改为每次 onShown 重新初始化（stream-01.jsonl:L3627），后为首帧移到 onWillShow（stream-04.jsonl:L8223）；回前台不经 onWillShow，又在 onShown(APP_STATE) 补初始化（L11661）。后两步属修复期自身回归再修，不计生成偏差。\n3）规格自创“丢弃迟到结果”（ReadTagFlowController.ets、ReadTagPage.ets）：规格作者读到 ReadTag.readTag() 新线程读完后 close 并无条件 mHandler.post(createTagDump)，\ncreateTagDump 无 isFinishing 判断地 Toast/startActivity(DumpEditor)/finish。为回应 lint 的 ordering/races 建议，它在 F004 races 不变式 2 与 AC09 写成\n“读卡期间返回（页面销毁）→ 迟到的完成回调必须丢弃，不写 UI、不路由 DumpEditor”。偏差先出现在源码到规格这一环。\nSlice 15 worker 读到该 addendum（也读了 ReadTag.java）后照写：detach() 置 destroyed 并清空 hooks，读完若 destroyed 直接 return；页面 aboutToDisappear 注释引用不变式 2。\n修复改为页面结束只做标记、保留 hooks 和导航栈引用，迟到结果照常 Toast/打开 DumpEditor（stream-02.jsonl:L3516、L3565）。\n4）擅自修正源码常亮时序（KeyMapCreatorVM.ets）：Slice 11 worker 读到 onCreateKeyMap:434-436 在 setKeyFile 成功后、范围解析前 addFlags(FLAG_KEEP_SCREEN_ON)，\n收尾段 503-505 先 clearFlags。它把这判为“越界路径常亮泄漏”的源缺陷，把常亮收敛到成功路径 beginKeyMapRun 才置位（VM 注释与 source-notes D-2）。\n修复把 setKeepScreenOn(true) 移回 setKeyFile 成功后、收尾第一步清除，与源一致（stream-02.jsonl:L3643）。\n未完成归因：KeyMapCreatorPage 的 onPause/返回键/窗口标志/出栈后 pop（W12–W15）、NavResult.finishPage 与结果信箱，以及 ImportExport 导出后结束本页（D-IE-9）。\n三者都与 setResult+finish 被统一映射为 NavPathStack.pop() 有关；生成期输入（feature-base §事件系统、page_0002、F003 映射表）本身就这样写，\n未找到给出“finish 结束的是本页而非栈顶”的正确输入，详见 unresolved_targets。\n",
+  "recommendations": [
+    "入口装配阶段：启动页若已按 NavDestination 实现并依赖 onShown/onResult/onBackPressed，就在入口页 aboutToAppear 以根路由 push 进栈，不放进 Navigation 首页内容槽；装配后逐一核对依赖 onResult 的页面都由 NavPathStack 管理。",
+    "页面实现阶段：Android onStart/onResume 中的初始化（重读 Intent、重建列表、目录校验）不放进一次性 onReady/aboutToAppear；按“每次可见”映射到 onWillShow/onShown，并单独处理从后台回前台（onShown 的 APP_STATE 原因）。用“进入子页再返回”“切后台再回前台”两条路径自查。",
+    "规格提取阶段：lint 要求补顺序、取消或竞态条目时，按源码实际行为写。例如源码读卡线程完成后无条件回投 createTagDump，就要写明“页面结束后 Toast、启动 DumpEditor 与 finish 照常发生”，不以“页面销毁应丢弃迟到结果”的通用防御代替；确需偏离时登记为有意偏离供裁决。",
+    "一比一实现阶段：源码副作用时序看似有缺陷（如常亮标志在范围校验前置位、越界返回不清除）时，按源码的 set/clear 位置复刻；认为应修正时写入决策账本交裁决，不在代码里自行收敛。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/pages/MainPage.ets",
+        "since": "2026-10-01T17:23:26.037Z",
+        "at": "2026-10-08T12:26:25.614Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/spec/baseline/ui-manifest.md",
+          "at": "2026-10-01T11:31:27.256Z",
+          "reason": "正常输入：主 worker 读取回执给出全局约定「单 Navigation 容器 + NavDestination 子页面」「21 个独立 Activity 全部映射为 NavDestination 页面」，MainMenu 为 0001 launcher（main-5c351e82…jsonl:L70-L72）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/.claude/skills/a2h-execute/references/entry-navigation-setup.md",
+          "at": "2026-10-01T14:57:27.265Z",
+          "reason": "§3a-bis 规范读取回执：入口页只登记 main_pages.json，「其余页面是 NavDestination 子页面，由入口页 pageMap 路由表分发」；第 5 步模板只写“页面内容包进 Navigation(this.navPathStack){ ... }”，没有说明首页内容不进栈、NavDestination 生命周期与 onResult 不触发，属输入缺口（同转录 L1250-L1252）。"
+        },
+        {
+          "key": "5c351e82-95e2-401f-b543-f0184a296f20:main",
+          "at": "2026-10-01T15:00:12.142Z",
+          "reason": "L1255 思考已识别 MainMenuPage 是 NavDestination 路由页，并列出“push 'MainMenu' as initial route”的备选；L1307 Write 的 MainPage 却写 Navigation(this.navPathStack){ MainMenuPage() }，'MainMenu' 只在 pageMap 中登记、从不压栈。启动页因此不在 NavPathStack 中，后续 onShown/onResult 落空（同转录 L1255、L1298、L1307-L1309）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/pages/FileChooserPage.ets",
+        "since": "2026-10-01T17:23:26.037Z",
+        "at": "2026-10-08T12:26:25.614Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/android/MifareClassicTool/app/src/main/java/de/syss/MifareClassicTool/Activities/FileChooser.java",
+          "at": "2026-10-01T11:58:41.629Z",
+          "reason": "正常输入：Stage 1 converter 读取回执返回 onStart():145-193，每次 onStart 都重设标题/提示/按钮/allowNewFile，校验目录后调用 updateFileIndex；足以说明这是“每次可见”的初始化（agent-abd59ca39bb2fd9d7.jsonl:L24-L25）。"
+        },
+        {
+          "key": "5c351e82-95e2-401f-b543-f0184a296f20:abd59ca39bb2fd9d7",
+          "at": "2026-10-01T12:06:42.641Z",
+          "reason": "L83 Write 把注释为“FileChooser.onStart()”的 applyParam（含 updateFileIndex）挂在一次性的 .onReady 中，.onShown 只处理启动错误码；onStart 被降为首次进入执行一次。这是本片段最早可核的偏差；Slice 3 重写时又在 AC14 已明示的情况下保留了这一结构（见 summary）（同转录 L83-L84）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/viewmodels/ReadTagFlowController.ets",
+        "since": "2026-10-01T17:23:26.037Z",
+        "at": "2026-10-08T12:26:25.614Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/android/MifareClassicTool/app/src/main/java/de/syss/MifareClassicTool/Activities/ReadTag.java",
+          "at": "2026-10-01T09:38:10.855Z",
+          "reason": "正常输入：规格作者读取回执返回 readTag():99-113（新线程 readAsMuchAsPossible → reader.close → 无条件 mHandler.post(createTagDump)）和 createTagDump:124-156（无 isFinishing 判断，Toast/startActivity(DumpEditor)/finish）；足以说明页面结束后迟到结果照常处理（agent-a9b4ed50598d6e1da.jsonl:L47-L48）。"
+        },
+        {
+          "key": "5dce7670-6d33-4372-86d7-d9708672de20:a9b4ed50598d6e1da",
+          "at": "2026-10-01T09:51:07.957Z",
+          "reason": "lint 建议补 ordering/races（L119-L120）后，L132 Edit、L140 AC09 和 L151 Write 的 races addendum 写入不变式 2“用户在读卡期间返回（页面销毁）→ 迟到的完成回调必须丢弃：不写 UI 状态、不触发 DumpEditor 路由”。源码没有这一守卫，偏差在源码到规格这一环形成（同转录 L132-L133、L140-L141、L151-L152）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/spec/baseline/features/F004-read-tag.races.md",
+          "at": "2026-10-01T16:38:13.313Z",
+          "reason": "交付桥梁：Slice 15 worker 读取回执仍含不变式 2 的“迟到结果丢弃”契约（agent-a4fe8ec521a08ed55.jsonl:L23-L26）。"
+        },
+        {
+          "key": "5c351e82-95e2-401f-b543-f0184a296f20:a4fe8ec521a08ed55",
+          "at": "2026-10-01T16:45:11.738Z",
+          "reason": "按该契约在 L129 Write 中实现 detach()：置 destroyed 并清空 hooks；读完后若 destroyed 直接 return（注释标“races 不变式 2”）。它也读了 ReadTag.java（L28-L29），但沿用规格；本链确认传递，不另推定独立失职（同转录 L129-L130）。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/pages/ReadTagPage.ets",
+        "since": "2026-10-01T17:23:26.037Z",
+        "at": "2026-10-08T12:26:25.614Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/android/MifareClassicTool/app/src/main/java/de/syss/MifareClassicTool/Activities/ReadTag.java",
+          "at": "2026-10-01T09:38:10.855Z",
+          "reason": "正常输入：同上，源码读卡线程完成后无条件回投 createTagDump，页面结束不拦截（agent-a9b4ed50598d6e1da.jsonl:L47-L48）。"
+        },
+        {
+          "key": "5dce7670-6d33-4372-86d7-d9708672de20:a9b4ed50598d6e1da",
+          "at": "2026-10-01T09:51:07.957Z",
+          "reason": "规格作者把源码没有的“页面销毁后丢弃迟到结果、不路由 DumpEditor”写成 F004 races 不变式 2 与 AC09（同转录 L132-L133、L140-L141、L151-L152）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/spec/baseline/features/F004-read-tag.races.md",
+          "at": "2026-10-01T16:38:13.313Z",
+          "reason": "交付桥梁：Slice 15 worker 读取回执含不变式 2（agent-a4fe8ec521a08ed55.jsonl:L23-L26）。"
+        },
+        {
+          "key": "5c351e82-95e2-401f-b543-f0184a296f20:a4fe8ec521a08ed55",
+          "at": "2026-10-01T16:45:25.534Z",
+          "reason": "L133 Write 的 ReadTagPage 在 aboutToDisappear 调 flow.detach()，注释“读卡期间页面销毁 → 丢弃迟到结果、不路由 DumpEditor（F004 races 不变式 2 / AC09）”，导航挂钩经 this.navPathStack 取栈，页面结束后不再承接迟到结果（同转录 L133-L134）。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/viewmodels/KeyMapCreatorVM.ets",
+        "since": "2026-10-01T17:23:26.037Z",
+        "at": "2026-10-08T12:26:25.614Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/android/MifareClassicTool/app/src/main/java/de/syss/MifareClassicTool/Activities/KeyMapCreator.java",
+          "at": "2026-10-01T16:21:17.777Z",
+          "reason": "正常输入：Slice 11 worker 读取回执返回 onCreateKeyMap:434-436，在 setKeyFile 成功后、范围解析与 setMappingRange 之前 addFlags(FLAG_KEEP_SCREEN_ON)；createKeyMap:503-505 在收尾段第一步 clearFlags。置位与清除位置都明确（agent-a1a61960528a94631.jsonl:L25-L26）。"
+        },
+        {
+          "key": "5c351e82-95e2-401f-b543-f0184a296f20:a1a61960528a94631",
+          "at": "2026-10-01T16:30:56.444Z",
+          "reason": "L125 Write 的 VM 在范围解析处注释“屏幕常亮成对收敛至成功路径 beginKeyMapRun/结束清理（Android 在本段之前置位、越界路径泄漏——见 source-notes D-2）”，不再在 setKeyFile 后置位；随后的 source-notes D-2 把源时序称为源缺陷（L147）。这是对一比一源时序的自行修正（同转录 L125-L126）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/pages/KeyMapCreatorPage.ets",
+      "reason": "修复确认了四处改动：贴卡投递前的 onPause 也调 onPageHidden（W12）、返回键显式 finishPage 回传取消（W13）、窗口常亮只在本页可见时作用（W14 页面侧），以及建图完成用 finishPage 替代 navStack.pop（W15）。生成期 Slice 11 worker 读到的 page_0002 与 F003 映射表本身写“setResult + finish → NavPathStack.pop”；“finish 结束本页而非栈顶”“Activity 窗口标志随 Activity 可见性生效”“onNewIntent 前有 onPause”都是平台语义，未找到给出它们的正确输入，偏差边界未定。W12/W13 只有源码对照，NFC 不可达，未运行验证。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/state/NavResult.ets",
+      "reason": "修复新增 finishPage（按 navDestinationId 结束本页，不在栈中则不动作；非顶页的结果暂存信箱，由调用页 onShown 取走）。生成期 Base-4 worker（agent-abb65c44174c62dcf.jsonl:L1、L99）按派工给的 feature-base §事件系统“页面回传 → NavPathStack 参数 + onPop 回调”只写了 popWithResult=stack.pop；该映射由 spec 主会话写入（main-5dce7670…jsonl:L473），Android finish 的目标语义没有出现在任何生成期输入中，未追到“正确输入 → 偏差”的边界。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/pages/ImportExportToolPage.ets",
+      "reason": "D-IE-9：被他页携文件调起时，导出后的 navPathStack.pop() 改为 finishPage(navId)，与上面同属 finish→pop 映射。修复报告只做源码对照，未给出该页导出时不在栈顶的运行场景；生成写者（agent-a5247705332ce1ccf、agent-ae46e645bc1504cb5）的输入未单独核对。"
+    }
+  ],
+  "job": "issue-7d097177e497ea9e202c",
+  "metadata": {
+    "migration": {
+      "project": "MifareClassicTool",
+      "server_session_id": "6ccfd659-7ee2-49d9-a90b-a7fa247e4484"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5",
+        "claude-sonnet-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.247"
+      ]
+    },
+    "source_set_id": "sources-aa4e59703bcc1d60f854",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos",
+        "at": "2026-10-01T12:05:48.424Z",
+        "ref": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-abba5084389876d39.jsonl:L102",
+        "request_ref": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-abba5084389876d39.jsonl:L101",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos",
+        "at": "2026-10-01T12:05:48.424Z",
+        "ref": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-abba5084389876d39.jsonl:L102",
+        "request_ref": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-abba5084389876d39.jsonl:L101",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-10-01T22:42:23.282Z",
+        "ref": "repair/mifareclassictool-migration-complete-20261008/fix-mifareclassictool-opus/stream-01.jsonl:L60",
+        "request_ref": "repair/mifareclassictool-migration-complete-20261008/fix-mifareclassictool-opus/stream-01.jsonl:L58",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-10-01T22:42:23.282Z",
+        "ref": "repair/mifareclassictool-migration-complete-20261008/fix-mifareclassictool-opus/stream-01.jsonl:L60",
+        "request_ref": "repair/mifareclassictool-migration-complete-20261008/fix-mifareclassictool-opus/stream-01.jsonl:L58",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "6f4879bc-c69f-4670-9167-9b09da20a889"
+      ]
+    }
+  },
+  "revision": "4c5e7396ce9a9a0eac126b95b23ab3c18f03dc352495dec2fa11f218b7dfad3a"
+}

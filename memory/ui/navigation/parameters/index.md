@@ -11,7 +11,7 @@
   - 情境：源端 Compose Navigation 以带占位符的路由模式（如 detail/{id}）注册目的地，并用拼串函数生成实际路由；目标用 Navigation + NavPathStack，由 pageMap 按目的地名分发。
 - [同一目标页有多个启动入口时，按全部源端入口的 Intent extras 定义一个共享路由载荷，并实现每个来源分支](lesson-953309e05bc1cd36c0d1.lesson.md)
   - 时机：功能切片、页面转换与编译修复阶段，为有多个入口的目标页（如搜索页）定义路由参数、编写各入口的 push 与接收端解析、实现选中结果的去向时
-  - 情境：Android 目标 Activity 被多个入口以不同 Intent extras 启动（如 searchText、locationType、searchFromMap），并按这些 extra 决定结果去向（setResult 回传或跳转下一页）；目标用 NavPathStack 传单一 param，各入口由不同切片、编译修复或巡检修复分别写入。
+  - 情境：Android 目标 Activity 被多个入口以不同 Intent extras 启动（如 searchText、locationType、searchFromMap），并按这些 extra 决定结果去向（setResult 回传或跳转下一页）；目标用 NavPathStack 传单一 param，各入口由不同切片、编译修复或巡检修复分别写入。也包括结果页一类接收页按启动方传入的来源类型（fromType）只对特定来源显示“下一步”等跨功能动作，目标契约却规定路由参数只传稳定的媒体或实体 ID、对象留在共享 Store。
 - [同一路由参数被调用方与接收页当作不同语义（完整 JSON、实体 ID、预览地址）时，按源端契约拆成字段或在入口解析，不用格式判断把冲突屏蔽成占位](lesson-e202ff0d01ace7dee225.lesson.md)
   - 时机：组件详情、编辑页等页面的实现或按截图补齐阶段，确定页面启动参数与编辑会话模型的契约时；构建修复为悬空引用补建该页依赖的模型与 ViewModel 时
   - 情境：目标页只有一个字符串入参（如 resource），各调用方实际写入完整业务 JSON，页面内部却把它当实体 ID 请求详情、又当图片地址显示；源端页面按已安装实例、用户数据、缓存的完整 JSON 等顺序恢复会话。

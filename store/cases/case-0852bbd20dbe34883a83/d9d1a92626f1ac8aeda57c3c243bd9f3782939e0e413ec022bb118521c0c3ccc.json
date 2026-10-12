@@ -1,0 +1,686 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-0852bbd20dbe34883a83",
+  "created_at": "2026-10-11T19:51:07.152288+00:00",
+  "migration_key": "6ccfd659-7ee2-49d9-a90b-a7fa247e4484",
+  "title": "把 Android inputType 键盘提示翻成字符过滤与强制大写，漏掉 ArkUI 键盘/候选属性和粘贴截断",
+  "when": "界面实现阶段（含公共输入组件设计、页面规格的控件映射与页面转换），把 Android EditText 的 inputType、maxLength 和粘贴回填翻译成 ArkUI TextInput/TextArea 属性时",
+  "description": "源布局 EditText 用 textCapCharacters、textNoSuggestions、number、numberSigned 等 inputType 标志声明键盘与输入法行为，未配 android:digits 或页面级 InputFilter，内容合法性在点击计算/保存时才校验；页面另有粘贴或程序回填写入带 maxLength 的输入框。目标为 ArkUI TextInput/TextArea（SDK 6.x，可用 autoCapitalizationMode、enablePreviewText、InputType.Number/PhoneNumber）。",
+  "summary": "源端事实在生成期已经被各写者读到：BCC/VB/AC/CloneUid/DataConversion/WriteTag/KeyEditor 布局的 hex 输入只有\ninputType=\"textCapCharacters|textNoSuggestions\"（无 digits、无 InputFilter），数值框为 number 或 numberSigned；\nBccTool.onCalculate、AccessConditionTool 解码等在点击时才用 [0-9A-Fa-f]+ 校验并 Toast（说明输入期本来允许非 hex 字符）；\nDumpEditor 只对扇区编辑框设 InputFilter.AllCaps，hex 检查在保存时的 checkDumpAndUpdateLines；\n各页粘贴都是 setText(text)，会经过 maxLength 的 LengthFilter 截断。\n偏差分两层形成：\n1) Base-6 公共组件作者读到上述 DumpEditor 代码与 activity_bcc_tool.xml 后，写出 HexInputFilter：\n   inputFilter('[0-9A-Fa-f]*') 在输入期丢弃非 hex 字符并 onChange toUpperCase，且把 BccTool 的\n   textCapCharacters|textNoSuggestions 列为同义源锚、把 Bcc/ValueBlock/AccessCondition/CloneUid 等列为消费方。\n   页面规格（b2-02）也把 textCapCharacters 写成\"大写过滤\"\"文本过滤转大写\"，VB 的 numberSigned 写成 InputType.Number。\n   页面转换者沿用：AC 页直接用 HexInputFilter 组件，VB→BCC→CloneUid 依次以 HexInputPatterns.HEX_ONLY + toUpperCase\n   复制（注释均写\"textCapCharacters|textNoSuggestions 等价\"），CloneUid 因输入被转大写，复扫时 UID 比较实际变成大小写不敏感。\n2) 键盘/候选提示本身没有映射：skill 的原子组件映射参考 §1.1.2 只给 number→InputType.Number、\n   android:capitalize→\"无直接对应，使用文本转换\"，没有 textCapCharacters/textNoSuggestions/numberSigned 行；生成转录中\n   没有任何 agent 提到 autoCapitalizationMode 或 enablePreviewText。于是 WriteTag/KeyEditor 写成\"textCapCharacters 无对应，\n   大写约束下沉 Feature 校验\"（无大写键盘），DataConversion 的 Hex 行 toUpperCase、Bin/Dec 行只加正则不设数字键盘，\n   WriteTag 的 number|numberSigned 写成 InputType.Number（无法输入负号），VB 的 numberSigned 写成 Normal 键盘+'-?[0-9]*'（不收 '+'）；\n   所有 textNoSuggestions 都未设 enablePreviewText(false)，粘贴回调直接赋值不按 maxLength 截断。\n修复（stream-02/04）统一改为：去掉 HexInputFilter/HEX_ONLY 与 toUpperCase，改 autoCapitalizationMode(ALL_CHARACTERS)；\ntextNoSuggestions 加 enablePreviewText(false)；numberSigned 用 PhoneNumber 键盘+[0-9+-] 过滤并按 DigitsKeyListener\n只允许首位单个符号（ConversionUtil 新增过滤函数）；number 用 InputType.Number+[0-9]；粘贴经 lengthFilter 截断到 maxLength；\nhex 合法性仍在计算/解码时校验。\n",
+  "recommendations": [
+    "公共输入组件设计时：只封装源码里真实挂在控件上的 InputFilter（如 DumpEditor 扇区框的 AllCaps），注明适用控件；保存/点击时的 hex 校验不得前移成输入期过滤，也不要把单处行为推广为全部 textCapCharacters 输入的默认组件。",
+    "页面规格与实现映射 inputType 时把键盘提示和内容约束分开：textCapCharacters→autoCapitalizationMode(AutoCapitalizationMode.ALL_CHARACTERS)（小写仍可输入，不 toUpperCase、不过滤）；textNoSuggestions→enablePreviewText(false)；只有源码有 android:digits/InputFilter 时才加 inputFilter。",
+    "数值框按源 inputType 选键盘：number→InputType.Number+[0-9] 过滤；numberSigned（含 number|numberSigned）→InputType.PhoneNumber 一类带 +/- 的键盘，并按 DigitsKeyListener 规则只允许首位单个 '+'/'-'；不要用 InputType.Number 承载可负值字段。",
+    "实现粘贴/扫描回填等程序写入时，先按该框 maxLength 截断再赋值（Android setText 经过 LengthFilter）；比较原文的逻辑（如 CloneUid 复扫比对）保持输入原样大小写。",
+    "写前逐个 EditText 列出 inputType、digits、maxLength、InputFilter 与目标属性的一一对应；映射参考没有对应行时查 ArkUI TextInput/TextArea API，而不是用过滤器或大写转换近似。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/pages/BccToolPage.ets",
+        "since": "2026-10-01T17:23:26.037Z",
+        "at": "2026-10-08T12:26:25.614Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/android/MifareClassicTool/app/src/main/res/layout/activity_bcc_tool.xml",
+          "at": "2026-10-01T12:22:05.335Z",
+          "reason": "正常输入：Base-6 组件作者 Bash cat 回执给出 UID 框 inputType=textCapCharacters|textNoSuggestions、maxLength=8，无 digits/InputFilter（agent-a60c0648ca4e795ee.jsonl:L61-L62）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/android/MifareClassicTool/app/src/main/java/de/syss/MifareClassicTool/Activities/DumpEditor.java",
+          "at": "2026-10-01T12:21:52.224Z",
+          "reason": "正常输入：Read 回执显示 DumpEditor 只给扇区编辑框 setFilters(AllCaps)+NO_SUGGESTIONS/CAP_CHARACTERS，hex 检查在保存时 checkDumpAndUpdateLines 的 matches([0-9A-Fa-f-]+)（L582-L586、L509；agent-a60c0648ca4e795ee.jsonl:L53-L54）。足以说明没有输入期 hex 过滤。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/spec/baseline/feature-base.md",
+          "at": "2026-10-01T12:20:35.741Z",
+          "reason": "上下文：公共组件表只写 HexInputFilter=AllCaps+无建议+hex 校验，来源仅 DumpEditor，未要求工具页使用或输入期过滤（agent-a60c0648ca4e795ee.jsonl:L29-L30）；派工文字为'hex 校验输入过滤——TextInput formatter 形态'（同转录 L1）。"
+        },
+        {
+          "key": "agent-a60c0648ca4e795ee.jsonl",
+          "at": "2026-10-01T12:27:55.118Z",
+          "reason": "读到上述源码后 Write HexInputFilter.ets：HEX_ONLY='[0-9A-Fa-f]*' 在输入期过滤并 onChange toUpperCase，并把 BccTool 的 textCapCharacters|textNoSuggestions 列为同义源锚、Bcc/ValueBlock/AccessCondition/CloneUid 列为消费方。把保存期校验和单页 AllCaps 推广成所有大写键盘输入的过滤（同转录 L112-L113）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/components/common/HexInputFilter.ets",
+          "at": "2026-10-01T12:56:00.851Z",
+          "reason": "交付桥梁：BCC 页转换者 Read 回执包含上述过滤正则、toUpperCase 和'BccTool textCapCharacters'源锚（agent-a62aee046521a8cd8.jsonl:L35-L36）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/android/MifareClassicTool/app/src/main/res/layout/activity_bcc_tool.xml",
+          "at": "2026-10-01T09:25:30.168Z",
+          "reason": "正常输入：页面规格作者 Bash 批量 cat 布局，回执含 UID 框 textCapCharacters|textNoSuggestions、maxLength=8（agent-a275efc5e8214a938.jsonl:L85-L86）。"
+        },
+        {
+          "key": "agent-a275efc5e8214a938.jsonl",
+          "at": "2026-10-01T09:29:14.058Z",
+          "reason": "页面规格作者把只请求大写键盘的 textCapCharacters 写成 'TextInput（maxLength 8 + 大写过滤）'，未提键盘与无候选属性（同转录 L119-L120）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/spec/baseline/ui/page_0017_BccTool.md",
+          "at": "2026-10-01T12:55:43.485Z",
+          "reason": "交付桥梁：BCC 页转换者读取的规格仍含'大写过滤'映射（agent-a62aee046521a8cd8.jsonl:L13-L14）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/android/MifareClassicTool/app/src/main/res/layout/activity_bcc_tool.xml",
+          "at": "2026-10-01T12:55:48.398Z",
+          "reason": "正常输入：转换者 Read 回执同样给出 textCapCharacters|textNoSuggestions、maxLength=8（agent-a62aee046521a8cd8.jsonl:L20、L22）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/android/MifareClassicTool/app/src/main/java/de/syss/MifareClassicTool/Activities/BccTool.java",
+          "at": "2026-10-01T12:55:48.397Z",
+          "reason": "正常输入：onCalculate 在点击时检查长度与 [0-9A-Fa-f]+ 并 Toast info_not_hex_data；onPasteFromClipboard 为 mUid.setText(text)（agent-a62aee046521a8cd8.jsonl:L19、L21，转换者在 L73 自述）。"
+        },
+        {
+          "key": "agent-a62aee046521a8cd8.jsonl",
+          "at": "2026-10-01T13:01:35.247Z",
+          "reason": "Write BccToolPage：UID 框 .inputFilter(HexInputPatterns.HEX_ONLY) // textCapCharacters|textNoSuggestions + onChange toUpperCase（沿用组件与规格）；自身另有偏差：无 enablePreviewText(false)，粘贴回调 this.uidHex = record.plainText 不按 maxLength 8 截断（同转录 L98-L99）。修复后 UID 框为 autoCapitalizationMode+enablePreviewText(false)，粘贴经 lengthFilter。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4,
+          "force": true,
+          "reason": "组件作者 Bash cat 该布局（与 file_chooser 布局同批），回执含 UID 框 textCapCharacters|textNoSuggestions、maxLength=8；这是写组件前的真实读取。",
+          "evidence": [
+            {
+              "source": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-a60c0648ca4e795ee.jsonl",
+              "line": 61
+            },
+            {
+              "source": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-a60c0648ca4e795ee.jsonl",
+              "line": 62
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": 11
+        },
+        {
+          "from": 6,
+          "to": 7,
+          "force": true,
+          "reason": "规格作者 Bash 循环 cat activity_tag_info_tool/value_block_tool/bcc_tool 等布局，回执含 BCC UID 框 textCapCharacters|textNoSuggestions、maxLength=8，早于写 page_0017。",
+          "evidence": [
+            {
+              "source": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-a275efc5e8214a938.jsonl",
+              "line": 85
+            },
+            {
+              "source": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-a275efc5e8214a938.jsonl",
+              "line": 86
+            }
+          ]
+        },
+        {
+          "from": 7,
+          "to": 8
+        },
+        {
+          "from": 8,
+          "to": 11
+        },
+        {
+          "from": 9,
+          "to": 11
+        },
+        {
+          "from": 10,
+          "to": 11
+        },
+        {
+          "from": 11,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/pages/AccessConditionToolPage.ets",
+        "since": "2026-10-01T17:23:26.037Z",
+        "at": "2026-10-08T12:26:25.614Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/android/MifareClassicTool/app/src/main/java/de/syss/MifareClassicTool/Activities/DumpEditor.java",
+          "at": "2026-10-01T12:21:52.224Z",
+          "reason": "正常输入：AllCaps 只在 DumpEditor 扇区框，hex 检查在保存时（agent-a60c0648ca4e795ee.jsonl:L53-L54）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/android/MifareClassicTool/app/src/main/res/layout/activity_bcc_tool.xml",
+          "at": "2026-10-01T12:22:05.335Z",
+          "reason": "正常输入：工具页 hex 框只有 textCapCharacters|textNoSuggestions（agent-a60c0648ca4e795ee.jsonl:L61-L62）。"
+        },
+        {
+          "key": "agent-a60c0648ca4e795ee.jsonl",
+          "at": "2026-10-01T12:27:55.118Z",
+          "reason": "公共组件 HexInputFilter 写成输入期 hex 过滤+toUpperCase，并列 AccessConditionTool 为消费方（同转录 L112-L113）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/components/common/HexInputFilter.ets",
+          "at": "2026-10-01T12:40:48.693Z",
+          "reason": "交付桥梁：AC 页转换者 Read 回执含组件的过滤正则、toUpperCase 与消费方列表（agent-a0b2a55c7d714b523.jsonl:L82-L83）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/android/MifareClassicTool/app/src/main/res/layout/activity_access_condition_tool.xml",
+          "at": "2026-10-01T12:37:49.614Z",
+          "reason": "正常输入：AC 框 inputType=textCapCharacters|textNoSuggestions、maxLength=6，无 digits（agent-a0b2a55c7d714b523.jsonl:L17-L18）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/android/MifareClassicTool/app/src/main/java/de/syss/MifareClassicTool/Activities/AccessConditionTool.java",
+          "at": "2026-10-01T12:37:52.788Z",
+          "reason": "正常输入：onPasteFromClipboard 为 mAC.setText(text)（L270-L275），解码时才校验 hex 并 Toast（agent-a0b2a55c7d714b523.jsonl:L21-L22）。"
+        },
+        {
+          "key": "agent-a0b2a55c7d714b523.jsonl",
+          "at": "2026-10-01T12:45:05.631Z",
+          "reason": "Write AccessConditionToolPage：AC 输入直接用 HexInputFilter(maxChars 6)，转换报告称'inputFilter hex + 自动大写 = textCapCharacters+textNoSuggestions'（沿用组件）；自身粘贴回调直接赋值未截断到 6 字符（同转录 L100-L101、L144）。修复去掉组件改大写键盘、粘贴截断（D-ACT-2/3）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "组件作者 Bash cat 该布局，回执含 textCapCharacters|textNoSuggestions、maxLength=8；写组件前的真实读取。",
+          "evidence": [
+            {
+              "source": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-a60c0648ca4e795ee.jsonl",
+              "line": 61
+            },
+            {
+              "source": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-a60c0648ca4e795ee.jsonl",
+              "line": 62
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 7
+        },
+        {
+          "from": 5,
+          "to": 7
+        },
+        {
+          "from": 6,
+          "to": 7
+        },
+        {
+          "from": 7,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/pages/ValueBlockToolPage.ets",
+        "since": "2026-10-01T17:23:26.037Z",
+        "at": "2026-10-08T12:26:25.614Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/android/MifareClassicTool/app/src/main/res/layout/activity_value_block_tool.xml",
+          "at": "2026-10-01T09:25:30.168Z",
+          "reason": "正常输入：规格作者 Bash cat 回执含 VB/Addr 框 textCapCharacters|textNoSuggestions、VB as Int 框 numberSigned（agent-a275efc5e8214a938.jsonl:L85-L86）。"
+        },
+        {
+          "key": "agent-a275efc5e8214a938.jsonl",
+          "at": "2026-10-01T09:27:45.223Z",
+          "reason": "规格写成 VB 框 'TextInput（maxLength 32 + 文本过滤转大写）'、numberSigned 框 'TextInput({ type: InputType.Number })，负号校验放 convert 层'（数字键盘无负号）（同转录 L111-L112）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/spec/baseline/ui/page_0013_ValueBlockTool.md",
+          "at": "2026-10-01T12:37:44.844Z",
+          "reason": "交付桥梁：VB 页转换者读到上述决策表（agent-a3ea29cd445aa27f8.jsonl:L16-L17）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/android/MifareClassicTool/app/src/main/java/de/syss/MifareClassicTool/Activities/DumpEditor.java",
+          "at": "2026-10-01T12:21:52.224Z",
+          "reason": "正常输入：AllCaps 只在 DumpEditor 扇区框，hex 检查在保存时（agent-a60c0648ca4e795ee.jsonl:L53-L54）。"
+        },
+        {
+          "key": "agent-a60c0648ca4e795ee.jsonl",
+          "at": "2026-10-01T12:27:55.118Z",
+          "reason": "公共组件导出 HexInputPatterns.HEX_ONLY 并声明 ValueBlockTool 为消费方（同转录 L112-L113）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/components/common/HexInputFilter.ets",
+          "at": "2026-10-01T12:39:08.207Z",
+          "reason": "交付桥梁：VB 页转换者 Read 回执含 HEX_ONLY 与 toUpperCase（agent-a3ea29cd445aa27f8.jsonl:L68-L69）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/.claude/skills/android-ui-graph-query/references/android-to-harmonyOS-ui-atomic-component-mapping-reference.md",
+          "at": "2026-10-01T12:38:38.661Z",
+          "reason": "材料边界：映射参考 §1.1.2 只有 number→InputType.Number、android:capitalize→'无直接对应，使用文本转换'、digits→输入过滤器，无 textCapCharacters/textNoSuggestions/numberSigned 行（agent-a3ea29cd445aa27f8.jsonl:L57、L60）。外部 skill 缺口，未再上溯。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/android/MifareClassicTool/app/src/main/res/layout/activity_value_block_tool.xml",
+          "at": "2026-10-01T12:37:51.696Z",
+          "reason": "正常输入：转换者 Read 回执给出 VB maxLength=32、Addr maxLength=2 均为 textCapCharacters|textNoSuggestions，VB as Int 为 numberSigned（agent-a3ea29cd445aa27f8.jsonl:L20-L21）。"
+        },
+        {
+          "key": "agent-a3ea29cd445aa27f8.jsonl",
+          "at": "2026-10-01T12:44:13.550Z",
+          "reason": "Write ValueBlockToolPage：VB/Addr 用 HEX_ONLY+toUpperCase（报告称'映射参考 §1.1.2'）；numberSigned 改成 InputType.Normal+'-?[0-9]*'（全键盘、不收 '+'）；无 enablePreviewText(false)，粘贴不截断（同转录 L109-L110、L134）。修复为大写键盘、PhoneNumber+符号位过滤、粘贴截断 32（D-VB-1~4）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "规格作者 Bash 循环 cat 布局，回执含 activity_value_block_tool.xml 的 VB/Addr textCapCharacters|textNoSuggestions 与 VB as Int numberSigned，早于写 page_0013。",
+          "evidence": [
+            {
+              "source": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-a275efc5e8214a938.jsonl",
+              "line": 85
+            },
+            {
+              "source": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-a275efc5e8214a938.jsonl",
+              "line": 86
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 9
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": 6
+        },
+        {
+          "from": 6,
+          "to": 9
+        },
+        {
+          "from": 7,
+          "to": 9
+        },
+        {
+          "from": 8,
+          "to": 9
+        },
+        {
+          "from": 9,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/pages/CloneUidToolPage.ets",
+        "since": "2026-10-01T17:23:26.037Z",
+        "at": "2026-10-08T12:26:25.614Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/android/MifareClassicTool/app/src/main/java/de/syss/MifareClassicTool/Activities/DumpEditor.java",
+          "at": "2026-10-01T12:21:52.224Z",
+          "reason": "正常输入：AllCaps 只在 DumpEditor 扇区框，hex 检查在保存时（agent-a60c0648ca4e795ee.jsonl:L53-L54）。"
+        },
+        {
+          "key": "agent-a60c0648ca4e795ee.jsonl",
+          "at": "2026-10-01T12:27:55.118Z",
+          "reason": "公共组件导出 HEX_ONLY 并声明 CloneUidTool 为消费方（同转录 L112-L113）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/components/common/HexInputFilter.ets",
+          "at": "2026-10-01T14:46:53.229Z",
+          "reason": "交付桥梁：CloneUid 转换者 Bash grep 回执列出 HEX_ONLY 导出（agent-acf0003a75c9ab1a9.jsonl:L96-L97）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/pages/BccToolPage.ets",
+          "at": "2026-10-01T14:46:48.628Z",
+          "reason": "兄弟页范式：sed 回执含 UID 框 inputFilter(HEX_ONLY)+toUpperCase 与直接赋值的粘贴（agent-acf0003a75c9ab1a9.jsonl:L93-L94）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/android/MifareClassicTool/app/src/main/res/layout/activity_clone_uid_tool.xml",
+          "at": "2026-10-01T14:43:07.684Z",
+          "reason": "正常输入：UID(maxLength 20)/块0余量/密钥框均为 textCapCharacters|textNoSuggestions、monospace，无 digits（agent-acf0003a75c9ab1a9.jsonl:L17-L18）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/android/MifareClassicTool/app/src/main/java/de/syss/MifareClassicTool/Activities/CloneUidTool.java",
+          "at": "2026-10-01T14:43:07.415Z",
+          "reason": "正常输入：计算块0时才校验 hex；复扫时 uid.equals(mUid.getText()) 按原文比较；粘贴 setText(text)（L136-L137、L478-L483；agent-acf0003a75c9ab1a9.jsonl:L15-L16）。"
+        },
+        {
+          "key": "agent-acf0003a75c9ab1a9.jsonl",
+          "at": "2026-10-01T14:51:39.243Z",
+          "reason": "Write CloneUidToolPage：三个输入框 .inputFilter(HexInputPatterns.HEX_ONLY)+toUpperCase（注释'textCapCharacters|textNoSuggestions'），使复扫比较实际大小写不敏感；无 enablePreviewText(false)，粘贴不截断到 20（同转录 L125-L126）。修复为大写键盘、原文比较、粘贴截断（D-CU-2/3/8、W9）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 7,
+          "force": true,
+          "reason": "CloneUid 转换者 Bash grep HexInputFilter.ets 的 HEX_ONLY/export，回执列出 HEX_ONLY='[0-9A-Fa-f]*'，早于写页面。",
+          "evidence": [
+            {
+              "source": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-acf0003a75c9ab1a9.jsonl",
+              "line": 96
+            },
+            {
+              "source": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-acf0003a75c9ab1a9.jsonl",
+              "line": 97
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": 7,
+          "force": true,
+          "reason": "CloneUid 转换者 Bash sed 读取 BccToolPage.ets 30-180 行，回执含 UID 框 inputFilter(HEX_ONLY)+toUpperCase 范式，早于写页面。",
+          "evidence": [
+            {
+              "source": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-acf0003a75c9ab1a9.jsonl",
+              "line": 93
+            },
+            {
+              "source": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-acf0003a75c9ab1a9.jsonl",
+              "line": 94
+            }
+          ]
+        },
+        {
+          "from": 5,
+          "to": 7
+        },
+        {
+          "from": 6,
+          "to": 7
+        },
+        {
+          "from": 7,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/pages/DataConversionToolPage.ets",
+        "since": "2026-10-01T17:23:26.037Z",
+        "at": "2026-10-08T12:26:25.614Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/android/MifareClassicTool/app/src/main/res/layout/activity_data_conversion_tool.xml",
+          "at": "2026-10-01T12:56:15.095Z",
+          "reason": "正常输入：Read 回执给出 Hex=textCapCharacters|textNoSuggestions、ASCII=textNoSuggestions、Bin=numberSigned、Dec(BE/LE)=number（agent-afd458c48a9b901be.jsonl:L21-L22）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/spec/baseline/ui/page_0021_DataConversionTool.md",
+          "at": "2026-10-01T12:56:12.857Z",
+          "reason": "上下文：页面规格只写'输入过滤（大写 hex、0/1 二进制、纯数字）在 Service 校验'，未给键盘映射（agent-afd458c48a9b901be.jsonl:L17-L18）。"
+        },
+        {
+          "key": "agent-afd458c48a9b901be.jsonl",
+          "at": "2026-10-01T13:01:51.393Z",
+          "reason": "Write DataConversionToolPage：自己注明 textCapCharacters 不限字符集，却仍以 capitalize 做 onChange toUpperCase；numberSigned/number 只设 inputFilter 正则，键盘保持默认 Normal；textNoSuggestions 未设 enablePreviewText(false)（同转录 L73-L74，L89 仅锚定正则）。修复为 Hex 大写键盘、Bin PhoneNumber+符号位、Dec InputType.Number、无候选（D-DC-1/2/3/6）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/pages/WriteTagPage.ets",
+        "since": "2026-10-01T17:23:26.037Z",
+        "at": "2026-10-08T12:26:25.614Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/android/MifareClassicTool/app/src/main/res/layout/activity_write_tag.xml",
+          "at": "2026-10-01T11:59:38.337Z",
+          "reason": "正常输入：Read 回执给出数据框/静态 AC/VTR 地址为 textCapCharacters|textNoSuggestions，VTR 值框 inputType=number|numberSigned、maxLength 10（L156、L255、L722；agent-aaf1bab76055fff32.jsonl:L23、L26）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/spec/baseline/ui/page_0007_WriteTag.md",
+          "at": "2026-10-01T11:58:53.678Z",
+          "reason": "上下文：规格把 sector/block/value/address 统写成数字输入 InputType.Number，hex 数据框只写校验下沉（agent-aaf1bab76055fff32.jsonl:L16-L17）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/.claude/skills/android-ui-graph-query/references/android-to-harmonyOS-ui-atomic-component-mapping-reference.md",
+          "at": "2026-10-01T12:00:22.508Z",
+          "reason": "材料边界：sed 读取 §1.1.2，只有 number→InputType.Number、capitalize→使用文本转换，无 numberSigned/textCapCharacters/textNoSuggestions 行（agent-aaf1bab76055fff32.jsonl:L53-L54）。"
+        },
+        {
+          "key": "agent-aaf1bab76055fff32.jsonl",
+          "at": "2026-10-01T12:14:42.633Z",
+          "reason": "已读到布局中的 number|numberSigned，仍写 .type(InputType.Number) // 负值约束由 Feature 校验（数字键盘无法输入负号）；hex 框写 'textCapCharacters|textNoSuggestions → Normal（大写约束由 Feature 校验）'，无大写键盘与 enablePreviewText(false)（同转录 L145-L146）。修复为 VTR 值 PhoneNumber+[0-9+-] 符号位规则，hex 框大写键盘+无候选（D-WT-6/7/15）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "WriteTag 转换者 Bash sed 读取映射参考 114-180 行，回执以 '#### 1.1.2 EditText → TextInput/TextArea 属性映射' 开头，含 number/capitalize 行，早于写页面。",
+          "evidence": [
+            {
+              "source": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-aaf1bab76055fff32.jsonl",
+              "line": 53
+            },
+            {
+              "source": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-aaf1bab76055fff32.jsonl",
+              "line": 54
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/pages/KeyEditorPage.ets",
+        "since": "2026-10-01T17:23:26.037Z",
+        "at": "2026-10-08T12:26:25.614Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/android/MifareClassicTool/app/src/main/res/layout/activity_key_editor.xml",
+          "at": "2026-10-01T11:59:20.191Z",
+          "reason": "正常输入：Read 回执给出密钥编辑框 inputType=textCapCharacters|textMultiLine|textNoSuggestions（L48；agent-a78e00f2f8b835d04.jsonl:L17-L18）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/.claude/skills/android-ui-graph-query/references/android-to-harmonyOS-ui-atomic-component-mapping-reference.md",
+          "at": "2026-10-01T12:00:32.271Z",
+          "reason": "材料边界：Read 25-304 行含 §1.1.2，仅有 capitalize→'无直接对应，使用文本转换'，无 textCapCharacters/textNoSuggestions 映射（agent-a78e00f2f8b835d04.jsonl:L56-L57）。"
+        },
+        {
+          "key": "agent-a78e00f2f8b835d04.jsonl",
+          "at": "2026-10-01T12:11:36.343Z",
+          "reason": "Write KeyEditorPage：TextArea 只设 monospace，转换报告称'textCapCharacters 无 ArkUI 输入过滤器等价，由校验大写化覆盖'，未请求大写键盘也未设 enablePreviewText(false)（同转录 L113-L114）。修复加 autoCapitalizationMode(ALL_CHARACTERS) 且不转换输入（D-KE-5）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "未核实生成环境可读的 SDK/skill 文档是否提供 autoCapitalizationMode、enablePreviewText 说明；转录中无相关读取，故键盘提示缺失部分同时记为映射参考缺口。"
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/pages/KeyMapCreatorPage.ets",
+      "reason": "生成交付态 From/To 已是 InputType.Number+maxLength(2)，修复只补 [0-9] 过滤（D-KM-3）；未核实 ArkUI Number 类型是否放行非数字粘贴，未判定其为生成偏差。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/services/ConversionUtil.ets",
+      "reason": "修复在此新增 numberSigned 过滤与 lengthFilter 供 VB/DataConversion/粘贴复用；生成期偏差位于页面输入框（见 VB、DataConversion 图），本文件只是修复落点，未单独画链。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/viewmodels/CloneUidController.ets",
+      "reason": "生成态 verifyCloneResult 已是 uid === uidOriginal 原文比较；W9 的大小写不敏感来自 CloneUid 页输入 toUpperCase（见 CloneUid 图）。控制器本轮其余差异属其他问题，未单独归因。"
+    }
+  ],
+  "job": "issue-0852bbd20dbe34883a83",
+  "metadata": {
+    "migration": {
+      "project": "MifareClassicTool",
+      "server_session_id": "6ccfd659-7ee2-49d9-a90b-a7fa247e4484"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5",
+        "claude-sonnet-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.247"
+      ]
+    },
+    "source_set_id": "sources-aa4e59703bcc1d60f854",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos",
+        "at": "2026-10-01T12:05:48.424Z",
+        "ref": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-abba5084389876d39.jsonl:L102",
+        "request_ref": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-abba5084389876d39.jsonl:L101",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos",
+        "at": "2026-10-01T12:05:48.424Z",
+        "ref": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-abba5084389876d39.jsonl:L102",
+        "request_ref": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-abba5084389876d39.jsonl:L101",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-10-01T22:42:23.282Z",
+        "ref": "repair/mifareclassictool-migration-complete-20261008/fix-mifareclassictool-opus/stream-01.jsonl:L60",
+        "request_ref": "repair/mifareclassictool-migration-complete-20261008/fix-mifareclassictool-opus/stream-01.jsonl:L58",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-10-01T22:42:23.282Z",
+        "ref": "repair/mifareclassictool-migration-complete-20261008/fix-mifareclassictool-opus/stream-01.jsonl:L60",
+        "request_ref": "repair/mifareclassictool-migration-complete-20261008/fix-mifareclassictool-opus/stream-01.jsonl:L58",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "6f4879bc-c69f-4670-9167-9b09da20a889"
+      ]
+    }
+  },
+  "revision": "d9d1a92626f1ac8aeda57c3c243bd9f3782939e0e413ec022bb118521c0c3ccc"
+}

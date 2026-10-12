@@ -1,6 +1,6 @@
 # 迁移源端异步结果回调时，按成功、失败分支（含失败类型）列出全部副作用（跳转与关页、提示、引导弹窗、标记写入），计划与代码逐项对上
 
-ID：`lesson-ac7a2e17b8d88c3cee7b` · 版本：6
+ID：`lesson-ac7a2e17b8d88c3cee7b` · 版本：7
 
 [本主题](index.md)
 
@@ -26,8 +26,9 @@ ID：`lesson-ac7a2e17b8d88c3cee7b` · 版本：6
 6. 核查清单由抽取器生成时，在源文件补查 AlertDialog.Builder、Settings.ACTION_APPLICATION_DETAILS_SETTINGS 等调用，补齐清单外的弹窗分支。
 7. 修补回调中任一分支的文案或常量前，先写出源端到达该分支的完整判别路径（信封成功 → data 键是否存在 → data 层错误码），与目标逐层对照；层级或判别键不同就一并修正，不只替换字符串。
 8. 源端登录拦截在成功分支续做原操作、而目标登录守卫没有成功回调时，在拦截处暂存待执行动作（类型与参数），在页面重新可见（如 NavDestination.onShown）或登录态广播时一次性消费：已登录则刷新权限后执行，仍未登录则丢弃；先检索并复用工程已有的登录回流实现。注释写“对齐源端”前核对是否覆盖回调全部分支，有意简化时向用户说明省略了哪一步。
+9. 资源收尾（close、cancel）也列入分支动作清单并按源顺序落地；规格验收只写用户可见结果时，仍按锚点源码在成功分支补齐（如先关闭读写器再提示、结束页面）。
 
-来源支持：8 张卡 · 6 次迁移 · 6 个应用
+来源支持：9 张卡 · 7 次迁移 · 7 个应用
 
 ## 来源（按需复核）
 
@@ -41,6 +42,8 @@ ID：`lesson-ac7a2e17b8d88c3cee7b` · 版本：6
   卡片版本：`68ab16b9112c85d3355a0548d963fe9e347178c301269162dfa692892d0551b5`
 - [case-8c249997059a2524ea7b](../../../store/cases/case-8c249997059a2524ea7b/921750461c1e7e278c419ca26c21b17048d692c94b180c54164c66f94aafa6e6.json) · 结论：recommendation:4
   卡片版本：`921750461c1e7e278c419ca26c21b17048d692c94b180c54164c66f94aafa6e6`
+- [case-902b42725495e1b86fdd](../../../store/cases/case-902b42725495e1b86fdd/ce0d6a5b9a6bd056dfb7f7eb5cdd44f2e82bf50b645f7c36eb4ac30f0f0ec6d8.json) · 结论：recommendation:3
+  卡片版本：`ce0d6a5b9a6bd056dfb7f7eb5cdd44f2e82bf50b645f7c36eb4ac30f0f0ec6d8`
 - [case-9618601c4a21f2f18560](../../../store/cases/case-9618601c4a21f2f18560/870a2d98075a73dc88a2cfd3ac2fb801bc3d216cf1120c6f9583496d9f1c6941.json) · 结论：diagnosis, recommendation:1, recommendation:2
   卡片版本：`870a2d98075a73dc88a2cfd3ac2fb801bc3d216cf1120c6f9583496d9f1c6941`
 - [case-dac1fda1c66cbfa8bc78](../../../store/cases/case-dac1fda1c66cbfa8bc78/ab39f6b4fbefd2e63757c8197e2298157f2bd77d5bb063c598f2afdc61bcab08.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3

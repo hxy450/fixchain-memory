@@ -1,0 +1,126 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-80a1f68e71defddf45b2",
+  "created_at": "2026-10-11T17:59:53.079069+00:00",
+  "migration_key": "000b5663-bd91-43fd-9509-147b230e6657",
+  "title": "迁移协议链接getter时只复制配置里的基础地址，漏掉渠道参数拼接",
+  "when": "功能切片实现阶段，把源端配置读取和链接getter迁移成目标Service里的URL常量或构造方法时",
+  "description": "Android通过assets JSON等配置提供协议/隐私/个人信息清单的基础地址（query以aliasCode=这类空值结尾），由PJConfig之类的getter在返回时追加渠道等运行期参数；目标ArkTS在Service层统一提供受控WebView链接。",
+  "summary": "Web/设置/关于功能切片的worker（stage3_g3_slice8，F013）写目标文件前已读到PJConfig.kt：\nreadJsonFromAssets把protocolData中id 1/2/10/11的address分别存为serviceLink/policyLink/personalInfoLink/sdkInfoLink\n（agent-01a05cd0:L76-L77）；getServiceLink/getPolicyLink/getPersonalInfoLink/getSdkInfoLink全部是\n`return url + AdEntrance.getStartChannel()`（同转录L80-L81）。随后它读了assets/com.busfy.linecheck.json，\n四个address都以`aliasCode=`结尾（L104-L105），MineFragment也是通过PJConfig.getPersonalInfoLink()把url传给WebViewActivity（L68-L69）。\n这些输入已经足以说明：最终链接等于配置地址加上启动渠道。\n11:58:48 它新建WebSupportService.ets，却把四个address原样写成PRIVACY_URL/AGREEMENT_URL/PERSONAL_INFO_URL/SDK_INFO_URL常量，\nsupportUrl()直接返回这些常量，getter里的渠道拼接被丢掉了。同一个类的loadAppInfo用了ApplicationIdentity.DEFAULT_CHANNEL，\nURL却没有拼任何渠道（L168-L169）。偏差出在实现环节：源端getter的返回表达式被当成了配置值本身。\n生成期后来改过这个文件的人都没碰这四个常量：slice8在12:00把路由参数换成WebViewRouteParam；主线程12:18只调整了import和want action\n（main-01a05ad0:L6146、L6154）；router_splash_web_fix在14:21只把SupportRouter.openWeb改成resolveWebRoute（agent-01a05d57:L2025-L2026）。\nslice8读回的结果仍是`http://...aliasCode=`（agent-01a05cd0:L288）。\nRound 2视觉验证中，HarmonyOS WebView的URL是`http://cshdlq.cn/persDataLis?appId=476&aliasCode=`，Android运行态则是\n`https://cshdlq.cn/persDataLis?appId=476&aliasCode=004`（agent-01a05e6d:L2669）。\n修复VFIX-URL-001在SupportService里新增SUPPORT_CHANNEL='004'，四条URL改为https并拼接该渠道（agent-01a079f6:L2685-L2686、L2709）。\nhttp与https的区别不算生成偏差：源码assets中的地址本来就是http://，生成期材料里没有https版本，\nhttps最早出现在09-01 15:14之后的Android运行态捕获中（agent-01a05d83:L3006、L4268）。\n渠道取值另有问题：目标工程已有DEFAULT_CHANNEL='001'，Android测试机的运行渠道是004，About页渠道号不一致已另立finding。\n本卡只归因\"丢掉了getter的渠道拼接\"。\n",
+  "recommendations": [
+    "实现阶段迁移源端链接getter时，按getter完整的返回表达式（配置基础地址+追加的渠道等参数）构造目标URL，不要只把配置文件里的address抄成常量；配置中以`aliasCode=`这类空值结尾的query，就是要在运行期补值的信号。",
+    "把源端追加的运行期值（如AdEntrance.getStartChannel()）映射到目标工程统一的渠道来源（渠道常量或构建配置），在Service中拼接，页面不硬编码。写完后逐条对照源getter，检查生成的URL是否仍以`=`结尾、追加参数是否齐全。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/a/Desktop/app_realtime_transportation_harmony/entry/src/main/ets/services/WebSupportService.ets",
+        "since": "2026-09-01T13:48:11.692Z",
+        "at": "2026-09-07T04:08:05.293Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/a/Desktop/app-realtime-transportation-android/base/src/main/java/com/yfkj/yfkj/api/util/PJConfig.kt",
+          "at": "2026-09-01T11:54:23.658Z",
+          "reason": "正常输入。slice8读取的回执显示：protocolData中各address存成serviceLink/policyLink/personalInfoLink/sdkInfoLink（agent-01a05cd0:L76-L77），四个getter都返回`url + AdEntrance.getStartChannel()`（L80-L81），足以确定最终链接必须追加渠道。"
+        },
+        {
+          "key": "/Users/a/Desktop/app-realtime-transportation-android/app/src/main/assets/com.busfy.linecheck.json",
+          "at": "2026-09-01T11:55:09.679Z",
+          "reason": "正常输入。读取回执给出四个协议address：http://cshdlq.cn/...?appId=476&aliasCode=，以空值结尾，需要由getter补上渠道（agent-01a05cd0:L104-L105）。"
+        },
+        {
+          "key": "01a05cd0-5c59-7e72-a74a-326c0ddc4233",
+          "at": "2026-09-01T11:58:48.151Z",
+          "reason": "stage3_g3_slice8已读到上述getter和配置，Add File写WebSupportService时却把四个address原样写成URL常量，supportUrl()直接返回，没有拼接任何渠道。getter的渠道追加在这里丢失（agent-01a05cd0:L168-L169）。后续写者没有改动这些常量，修复前的diff仍是同样的行（agent-01a079f6:L2686）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "slice8在exec里用sed读取PJConfig.kt：L76/L77读1-220行，返回readJsonFromAssets把protocolData的address存成各Link键；L80/L81读260-430行，返回四个getter都是url + AdEntrance.getStartChannel()。两次都是写目标文件之前，由生成者本人读取的。",
+          "evidence": [
+            {
+              "source": "runs/cc1135c5-0205-4975-812a-0690ee9b243c/epoch-0/sessions/agent-01a05cd0-5c59-7e72-a74a-326c0ddc4233.jsonl",
+              "line": 76
+            },
+            {
+              "source": "runs/cc1135c5-0205-4975-812a-0690ee9b243c/epoch-0/sessions/agent-01a05cd0-5c59-7e72-a74a-326c0ddc4233.jsonl",
+              "line": 77
+            },
+            {
+              "source": "runs/cc1135c5-0205-4975-812a-0690ee9b243c/epoch-0/sessions/agent-01a05cd0-5c59-7e72-a74a-326c0ddc4233.jsonl",
+              "line": 80
+            },
+            {
+              "source": "runs/cc1135c5-0205-4975-812a-0690ee9b243c/epoch-0/sessions/agent-01a05cd0-5c59-7e72-a74a-326c0ddc4233.jsonl",
+              "line": 81
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "slice8在exec里用sed -n '1,125p'读取assets/com.busfy.linecheck.json，回执给出四个以aliasCode=结尾的http协议地址。这是写目标文件之前由生成者本人读取的。",
+          "evidence": [
+            {
+              "source": "runs/cc1135c5-0205-4975-812a-0690ee9b243c/epoch-0/sessions/agent-01a05cd0-5c59-7e72-a74a-326c0ddc4233.jsonl",
+              "line": 104
+            },
+            {
+              "source": "runs/cc1135c5-0205-4975-812a-0690ee9b243c/epoch-0/sessions/agent-01a05cd0-5c59-7e72-a74a-326c0ddc4233.jsonl",
+              "line": 105
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "Android运行态https的来源（服务端跳转还是远程配置覆盖）在材料中未核实，因此不把生成期的http字面量算作偏差。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-80a1f68e71defddf45b2",
+  "metadata": {
+    "migration": {
+      "project": "实时公交",
+      "server_session_id": "000b5663-bd91-43fd-9509-147b230e6657"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "gpt-5.6-sol"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.145.0-alpha.27"
+      ]
+    },
+    "source_set_id": "sources-ed5c7dd4ca4fbc6d1292",
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "c03ec964-fcaf-42ca-95a7-013ee58f3d86"
+      ]
+    }
+  },
+  "revision": "fc468d40e6d225ca4928bc03aef1ee98ede42efbe8413402bd232a26d951995d"
+}

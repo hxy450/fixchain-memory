@@ -1,0 +1,142 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-dc0bf21d0784e98b919e",
+  "created_at": "2026-10-11T18:15:40.460729+00:00",
+  "migration_key": "000b5663-bd91-43fd-9509-147b230e6657",
+  "title": "选城页把定位/选城等所有错误并入同一errorMessage，并据此用整页网络错误态替换已加载城市目录",
+  "when": "功能切片数据接线阶段：把ViewModel状态绑定到页面时，决定整页错误/重试态由哪个状态驱动，以及失败后页面数据源是否随之清空",
+  "description": "列表页同时承载列表加载与定位、权限、选择等次级动作；ViewModel暴露单一errorMessage（另有列表状态枚举），页面已有“errorMessage非空即整页错误态”的分支；规格要求权限拒绝后仍可手动选择、不支持城市时保留并提示、失败保持最近成功数据。",
+  "summary": "写前输入：Slice 2 worker（agent-01a05ca9，stage3_g2_slice2）在L1219-L1220读取F002与决策账本。F002写明\nAC11“权限拒绝后允许手动选城市”、AC15“定位城市不支持时保留当前城市并提示”、AC16“定位失败保留缓存城市”、AC21“城市列表网络失败显示重试态”，\n并把定位（LocationState含PermissionDenied/Failed）与列表（CityListState=Loading|Content|Empty|Error）分成两套状态；\nD-022选定“显式Result + 最近成功缓存 + 重试”，影响全部网络与数据Slice。L1313-L1314读到的Android SelectCityActivity中，\nonLocationFailure为空实现，不支持城市只Toast“不支持该城市的公交查询”，列表失败走defaultFailedAndError，均不替换已显示的城市目录。\n这些输入已足够说明：整页重试态只属于列表加载失败，定位/权限/选择失败不能遮住可手动选择的目录。\n输出偏差：它在L1365-L1366读到converter留下的pageContent分支（errorMessage非空即errorContent）。随后先写CityViewModel（L1493-L1494）：\n所有失败都写同一个errorMessage（location_permission_denied、located_city_unsupported、location_failed、city_map_code_unavailable、city_list_load_failed等），\n列表加载catch中把items/hotItems/groups清空。11:25:45在SelectCityPage（L1517-L1518）新增syncViewState，执行this.errorMessage = this.viewModel.errorMessage，\n并无条件用VM的groups/hotItems执行replaceAll；同时把errorContent的Text(this.errorMessage)改成固定的null_data_network。\n结果是权限拒绝、不支持城市、地图编码失败等任一次级错误，都会把已加载的热门城市和字母目录替换成“检查网络重试~ / 重新加载”整页态，违背AC11/AC15；\n列表重载失败也会清空最近成功目录，违背D-022。页面没有用VM已有的listState区分列表错误。生成结束（13:48）前没有其他写者改动这段，修复者在18:31读到的仍是该状态（agent-01a05e39:L3382-L3383）。\n最终修改：visual-fixer（agent-01a05e39，verify Round 1）在L3454-L3455把整页错误分支收窄为“errorMessage非空且items、hotItems都为空”；\nL3504-L3505让syncViewState在VM返回空列表且有错误时不覆盖页面已有目录，并新增retainedCityContent：目录上方显示非阻塞失败提示和重试入口。\n首次加载、无任何目录时仍显示整页错误（agent-01a05e39:L3540）。\n范围说明：Round 1截图中的首屏整页错误由城市接口首次请求失败触发。本页修改没有改变“首次失败显示整页错误”，同期材料另记为网络运行配置未初始化（agent-01a06a11:L599）；\nRound 2仍记录城市接口错误态差异（main-01a05ad0:L12789）。本卡只归因“次级错误/重载失败时替换已加载目录”这一页面状态绑定偏差。\n同一修复中热门城市“去‘市’后匹配”未核到生成偏差：converter照Android的when(item.city)写了'北京市'等精确比较（agent-01a05bb9:L415-L416、L479-L480），\nRepository将接口原始名称直接传给页面；修复者在attempts中把它列为“假设根因”（agent-01a05e39:L3542）。标题栏改用AppToolbar属于公共标题栏修复，不在本卡归因。\n",
+  "recommendations": [
+    "接线阶段：整页错误/重试态只绑定列表加载失败且无可用数据（例如listState为Error、目录为空），不要用聚合了定位、权限、选择等结果的单一errorMessage驱动整页替换。",
+    "次级动作失败（权限拒绝、不支持城市、编码解析失败）用Toast、提示条或对话框呈现，保留已加载目录可继续手动选择；与AC中“允许手动选择”“保留并提示”逐条对照。",
+    "按“失败保持最近成功数据”的决策同步状态：VM的catch不清空已成功列表，或者页面只在成功结果到达时replaceAll；重载失败后目录仍可见，同时提供非阻塞重试入口。",
+    "提交前逐个模拟VM的每个错误值，检查pageContent会落到哪个分支，确认只有首次列表失败、没有缓存时才显示整页错误。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/a/Desktop/app_realtime_transportation_harmony/entry/src/main/ets/pages/city/SelectCityPage.ets",
+        "since": "2026-09-01T13:48:11.692Z",
+        "at": "2026-09-07T04:08:05.293Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/a/Desktop/app_realtime_transportation_harmony/spec/baseline/features/F002-city-location-home.md",
+          "at": "2026-09-01T11:10:59.170Z",
+          "reason": "正常输入：Slice 2 worker用cat读取F002全文，回执包含AC11权限拒绝后允许手动选城市、AC15不支持城市时保留并提示、AC16定位失败保留缓存城市、AC21列表网络失败显示重试态，并把LocationState与CityListState分开。足以说明整页重试态只对应列表失败（agent-01a05ca9:L1219-L1220）。"
+        },
+        {
+          "key": "/Users/a/Desktop/app_realtime_transportation_harmony/spec/decision-ledger.md",
+          "at": "2026-09-01T11:10:59.170Z",
+          "reason": "正常输入：同一调用中sed读取决策索引和D-022详情，内容为“失败保持显式错误与最近成功数据，不伪造空成功”，选定“显式Result + 最近成功缓存 + 重试”，影响全部网络与数据Slice（agent-01a05ca9:L1219-L1220）。"
+        },
+        {
+          "key": "/Users/a/Desktop/app-realtime-transportation-android/app/src/main/java/com/hkfybus/mobiletravel/ui/home/activity/SelectCityActivity.kt",
+          "at": "2026-09-01T11:12:59.879Z",
+          "reason": "正常输入：cat回执显示onLocationFailure为空实现，不支持城市只Toast“不支持该城市的公交查询”，列表失败走defaultFailedAndError，均不替换已显示的城市目录（agent-01a05ca9:L1313-L1314）。"
+        },
+        {
+          "key": "agent-01a05ca9-bf3f-7342-9ab9-8d14ca5c9aed.jsonl",
+          "at": "2026-09-01T11:25:45.682Z",
+          "reason": "偏差输出：读到上述输入和页面原有分支“errorMessage非空即errorContent”（L1365-L1366）后，CityViewModel让所有失败共用一个errorMessage，列表失败时清空列表（L1493-L1494）。页面新增syncViewState，把VM的errorMessage直接赋给页面，并无条件replaceAll；errorContent改为固定网络文案（L1517-L1518）。因此次级错误会用整页网络错误替换已加载目录，重载失败也会丢失最近成功数据。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4,
+          "force": true,
+          "reason": "Slice 2 worker的exec在同一命令中执行cat spec/baseline/features/F002-city-location-home.md，回执返回F002全文，包括AC11/AC15/AC16/AC21，以及LocationState、CityListState两套状态。这说明它在写CityViewModel和接线页面前已收到这些错误态要求。",
+          "evidence": [
+            {
+              "source": "runs/cc1135c5-0205-4975-812a-0690ee9b243c/epoch-0/sessions/agent-01a05ca9-bf3f-7342-9ab9-8d14ca5c9aed.jsonl",
+              "line": 1219
+            },
+            {
+              "source": "runs/cc1135c5-0205-4975-812a-0690ee9b243c/epoch-0/sessions/agent-01a05ca9-bf3f-7342-9ab9-8d14ca5c9aed.jsonl",
+              "line": 1220
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 4,
+          "force": true,
+          "reason": "同一exec用sed读取spec/decision-ledger.md的1-40行与220-268行，回执包含D-022索引行和详情（最近成功缓存 + 重试，影响全部网络与数据Slice）。这说明接线前已收到失败保留最近成功数据的决策。",
+          "evidence": [
+            {
+              "source": "runs/cc1135c5-0205-4975-812a-0690ee9b243c/epoch-0/sessions/agent-01a05ca9-bf3f-7342-9ab9-8d14ca5c9aed.jsonl",
+              "line": 1219
+            },
+            {
+              "source": "runs/cc1135c5-0205-4975-812a-0690ee9b243c/epoch-0/sessions/agent-01a05ca9-bf3f-7342-9ab9-8d14ca5c9aed.jsonl",
+              "line": 1220
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "exec执行cat读取Android SelectCityActivity.kt，回执显示onLocationFailure为空、不支持城市只Toast、getCity失败走defaultFailedAndError。这说明它写页面状态前已看到源端失败时不替换城市目录。",
+          "evidence": [
+            {
+              "source": "runs/cc1135c5-0205-4975-812a-0690ee9b243c/epoch-0/sessions/agent-01a05ca9-bf3f-7342-9ab9-8d14ca5c9aed.jsonl",
+              "line": 1313
+            },
+            {
+              "source": "runs/cc1135c5-0205-4975-812a-0690ee9b243c/epoch-0/sessions/agent-01a05ca9-bf3f-7342-9ab9-8d14ca5c9aed.jsonl",
+              "line": 1314
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "Slice 2的派工正文为加密内容，无法逐字确认派工是否另有错误态说明；其明文读取已包含F002与D-022。",
+    "城市接口实际返回的名称是否带“市”，材料中未见样本；热门图“市”后缀匹配是否曾在设备上失败无法确认，因此不归因。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-dc0bf21d0784e98b919e",
+  "metadata": {
+    "migration": {
+      "project": "实时公交",
+      "server_session_id": "000b5663-bd91-43fd-9509-147b230e6657"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "gpt-5.6-sol"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.145.0-alpha.27"
+      ]
+    },
+    "source_set_id": "sources-ed5c7dd4ca4fbc6d1292",
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "c03ec964-fcaf-42ca-95a7-013ee58f3d86"
+      ]
+    }
+  },
+  "revision": "788129a45070f5a873255b341d99c5563cffe8138e365f20cedc69e3f7ed4ab8"
+}

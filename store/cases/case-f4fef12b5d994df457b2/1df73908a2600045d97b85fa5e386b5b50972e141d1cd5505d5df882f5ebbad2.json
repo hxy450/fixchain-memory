@@ -1,0 +1,552 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-f4fef12b5d994df457b2",
+  "created_at": "2026-10-11T21:48:33.156041+00:00",
+  "migration_key": "acdd6966-d460-4d88-b0a6-5dc0c5262ee5",
+  "title": "规格凭未查证的平台约束把后台计时通知降级为静态通知、按钮拉起应用；实现另遗留 requestCode 0 与空正文",
+  "when": "规格提取阶段，为后台逐拍计时通知及其控制按钮判定 HARD-DIV 平台差异并铸造降级决策时；实现阶段，把多个 PendingIntent 按钮与可空通知正文映射为 WantAgent / NotificationRequest 时",
+  "description": "Android 源由 WorkManager Worker 每 500ms 刷新进度通知并切换步骤、发完成通知，通知按钮是 PendingIntent.getBroadcast（应用不前台化、每次 requestCode 不同），setContentText 可为 null；目标是 HarmonyOS 第三方应用（退后台会被挂起，通知按钮经 WantAgent 触发，基础文本通知 text 字段带“不可为空”约束）。",
+  "summary": "降级决策链：规格作者 c4-02 写 F008 前完整读到 TimerWorker.kt（500ms tickerFlow 逐拍 postNotificationWithProgress、步间切换、完成通知）、\nTimerActionBroadcastReceiver.kt（按钮 PendingIntent.getBroadcast 交给 WorkManager，应用不被拉起）、NotificationUtils.kt（setProgress 进度条、contentText 可空），\n并读到 feature-spec-template 对平台 API 契约列“依据三选一（SDK d.ts doc 注释 / arkts-knowledge-verifier / 参考收录），禁止凭模型记忆”的要求。\n这些输入足以说明源端可观察行为，也要求平台约束先查证。c4-02 的 F008 写入却铸出 PD-C12（退后台 ticker 停摆 + 单条静态常驻通知，后台不逐拍刷新）\n与 PD-C13（进度转文本；按钮 wantAgent(StartAbility) 拉起应用；“HMOS 无应用级广播对等通道”“第三方通知无进度条字段”），并在契约列标注 d.ts 依据，\n而该转录中没有任何 SDK、knowledge-verifier 或参考文件查询（agent-ab7acc37d655b8c27.jsonl:L113）。派工虽预设“HMOS 无 1:1 对等、三选降级”，\n但没有指定静态通知或拉起应用；主线随后在无人值守预授权下原样批准 PD-C12/13 入 decision-ledger（main-507b2f1f:L1081-L1083）。\nSlice 9 worker 读到 F008 后按已批准决策实现 TimerSession（退后台锚点 + 静态常驻通知）、NotificationActionsBuilder（START_ABILITY）、\nTimerActionRouter / TimerNotificationConsts（want 参数路由），Slice 10 依 TimerActionRouter 的 HANDOFF 在 EntryAbility 的 onCreate/onNewWant 接派发；\n这些片段在生成完成态快照中仍在。修复推翻降级：短时任务保活窗口内进程内逐拍刷新、到期转代理提醒；进程存活时按钮用 SEND_COMMON_EVENT 静默派发\n（TimerActionRouter 订阅、EntryAbility 接线），挂起态才 START_ABILITY；通知恢复模板进度（R1:L4422、L4509、L13518、L13524、L13544）。\n另两处是 Slice 9 worker 的独立实现偏差，与决策无关：其写前读到源 createPendingIntent 以 SystemClock.elapsedRealtime().toInt() 作每次不同的 requestCode，\n却给所有按钮写 requestCode: 0 且不设 flags（L28 → L191），修复改为递增唯一 requestCode + UPDATE_PRESENT_FLAG（R1:L4427）；\n源 contentText 可为 null、完成通知无正文，worker 查 notificationContent.d.ts 时用 grep -v 去掉了全部 JSDoc，只见 text: string，\n便在思考中认定 '' 可用（L112-L113、L193），完成通知与无进度文本的步骤都发布 text ''；SDK 注释写明 Notification content cannot be empty，\n修复以零宽空格占位（R1:L12431、L13551）。\n",
+  "recommendations": [
+    "规格阶段铸后台执行/通知控制类 HARD-DIV 决策前，逐条查证所称平台约束：在项目 SDK d.ts 中核对 wantAgent OperationType（含 SEND_COMMON_EVENT）与 commonEventManager 订阅、backgroundTaskManager 短时任务与长时任务模式、reminderAgentManager 代理提醒、NotificationRequest 模板/进度能力；契约列“依据”只引用本次实际返回的条款。",
+    "降级只覆盖确实不可用的那一段：进程存活或保活窗口内保留源的逐拍刷新、步间切换和不拉起应用的按钮动作，挂起后再由代理提醒等系统通道接续，不因“无长驻 Worker”整体退成单条静态通知。",
+    "批准 PD 决策（含无人值守自动批准）时，核对每条 HARD-DIV 依据在规格转录中是否有对应查询回执；没有回执的约束退回规格作者查证。",
+    "实现阶段把多个 PendingIntent 按钮映射为 WantAgent 时，为每个按钮、每次构建给出不同 requestCode（源本就逐次取 elapsedRealtime），需要刷新载荷时加 UPDATE_PRESENT_FLAG，避免同一 Want 的 WantAgent 沿用旧参数。",
+    "查 SDK 类型时保留 JSDoc 读取字段约束，不要用 grep -v 去掉注释；源端可空正文映射到 NotificationBasicContent.text 时不要直接给空串，按“不可为空”使用不可见占位或改用其他内容形态，并分别核对完成通知与无重量步骤。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/entry/src/main/ets/timer/background/NotificationActionsBuilder.ets",
+        "since": "2026-10-01T14:11:08.477Z",
+        "at": "2026-10-01T23:45:55.694Z"
+      },
+      "summary": "本文件有两个起点。决策分支：c4-02 铸 PD-C13“按钮 wantAgent(StartAbility) 拉起应用、无通知内广播对等”，Slice 9 按 F008 写出 operationType START_ABILITY，\n修复后进程存活用 SEND_COMMON_EVENT、挂起态 START_ABILITY（R1:L13518）。实现分支：Slice 9 写前读到源 requestCode = SystemClock.elapsedRealtime().toInt()，\n却为每个按钮写 requestCode: 0，生成完成态仍是该值；修复改为 nextRequestCode() 递增唯一值并加 UPDATE_PRESENT_FLAG（R1:L4427）。\n",
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/.claude/skills/a2h-spec/templates/feature-spec-template.md",
+          "at": "2026-10-01T07:30:04.311Z",
+          "reason": "正常输入：c4-02 整文件读取模板，契约列要求平台 API 依据三选一（SDK d.ts doc 注释 / Skill(arkts-knowledge-verifier) / hmos-references-collection），禁止凭模型记忆；HARD-DIV 仅用于平台确无对等能力（agent-ab7acc37d655b8c27.jsonl:L18-L19）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Cofi/cofi-share/src/main/java/com/omelan/cofi/share/timer/notification/TimerActionBroadcastReceiver.kt",
+          "at": "2026-10-01T07:31:00.556Z",
+          "reason": "正常输入：c4-02 读到按钮 PendingIntent.getBroadcast(FLAG_MUTABLE) 交给 BroadcastReceiver → WorkManager，应用不被拉起（agent-ab7acc37d655b8c27.jsonl:L67-L68）。"
+        },
+        {
+          "key": "agent-ab7acc37d655b8c27.jsonl",
+          "at": "2026-10-01T07:41:38.248Z",
+          "reason": "已收到源码行为与查证要求，F008 Write 却铸 PD-C13：按钮 wantAgent(StartAbility) 拉起应用、“HMOS 无应用级广播对等通道”，并标注 @kit.AbilityKit d.ts 依据；本转录无任何 SDK 或 knowledge-verifier 查询（同转录 L113）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/spec/baseline/features/F008-background-timer-notification.md",
+          "at": "2026-10-01T12:29:24.059Z",
+          "reason": "交付桥梁：Slice 9 worker 整文件读取 F008，回执含 PD-C13 替代路径与 AC28“通知按钮经 wantAgent 拉起应用”（agent-a54a0d0e8d4f6f0ef.jsonl:L20-L21）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Cofi/cofi-share/src/main/java/com/omelan/cofi/share/timer/notification/TimerActionBroadcastReceiver.kt",
+          "at": "2026-10-01T12:29:26.796Z",
+          "reason": "正常输入：Slice 9 worker 读到 createPendingIntent 使用 SystemClock.elapsedRealtime().toInt() 作 requestCode，每次构建都不同，足以说明各按钮的意图需要独立标识（agent-a54a0d0e8d4f6f0ef.jsonl:L27-L28）。"
+        },
+        {
+          "key": "agent-a54a0d0e8d4f6f0ef.jsonl",
+          "at": "2026-10-01T12:44:20.685Z",
+          "reason": "Write 按 F008 写 operationType START_ABILITY（传递 PD-C13，不另推定失职）；同时把源的逐次 requestCode 写成所有按钮恒为 requestCode: 0、无 wantAgentFlags，思考中只核对字段可选即定为 0（同转录 L189、L191）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 6
+        },
+        {
+          "from": 5,
+          "to": 6
+        },
+        {
+          "from": 6,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/entry/src/main/ets/timer/background/NotificationPoster.ets",
+        "since": "2026-10-01T14:11:08.477Z",
+        "at": "2026-10-01T23:45:55.694Z"
+      },
+      "summary": "本文件有两个起点。决策分支：c4-02 铸 PD-C13“进度转文本、第三方通知无进度条字段”，Slice 9 写出仅 BASIC 文本、PD-C12 后台静态常驻的发布器；\n修复重写为模板进度（downloadTemplate）与串行发布（R1:L4422）。实现分支：源 contentText 可空、完成通知无正文，Slice 9 查 notificationContent.d.ts 时过滤掉注释，\n把 null 映射为 text ''（postOngoing 与 postDone），生成完成态仍在；该 '' 在修复者首轮重写中也被保留，复审指出后改为 NO_CONTENT_TEXT 零宽空格（R1:L12520、L13551）。\n",
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/.claude/skills/a2h-spec/templates/feature-spec-template.md",
+          "at": "2026-10-01T07:30:04.311Z",
+          "reason": "正常输入：模板要求平台 API 契约依据来自 SDK d.ts doc 注释等三源之一，禁止凭记忆（agent-ab7acc37d655b8c27.jsonl:L18-L19）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Cofi/cofi-share/src/main/java/com/omelan/cofi/share/timer/notification/NotificationUtils.kt",
+          "at": "2026-10-01T07:30:55.837Z",
+          "reason": "正常输入：c4-02 读到计时步 setProgress(1000, progress×1000) 进度条、setOngoing、逐步通知结构（agent-ab7acc37d655b8c27.jsonl:L65-L66）。"
+        },
+        {
+          "key": "agent-ab7acc37d655b8c27.jsonl",
+          "at": "2026-10-01T07:41:38.248Z",
+          "reason": "F008 Write 铸 PD-C13“进度转文本，第三方通知仅模板 content + actionButton、无进度条字段”并标 @kit.NotificationKit d.ts 依据，同时 AC25 要求后台单条静态通知；转录中无 SDK 查询（同转录 L113）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/spec/baseline/features/F008-background-timer-notification.md",
+          "at": "2026-10-01T12:29:24.059Z",
+          "reason": "交付桥梁：Slice 9 读取回执含 PD-C13 进度转文本、AC25 静态常驻、AC27 文本形态（agent-a54a0d0e8d4f6f0ef.jsonl:L20-L21）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Cofi/cofi-share/src/main/java/com/omelan/cofi/share/timer/notification/NotificationUtils.kt",
+          "at": "2026-10-01T12:29:26.456Z",
+          "reason": "正常输入：Slice 9 读到 createContentText 空时返回 null、setContentText 接收该值，完成通知只有标题和 subText、无正文（agent-a54a0d0e8d4f6f0ef.jsonl:L25-L26）。"
+        },
+        {
+          "key": "/Users/fengyi/Library/Huawei/Sdk/default/openharmony/ets/api/notification/notificationContent.d.ts",
+          "at": "2026-10-01T12:31:50.308Z",
+          "reason": "输入缺口：Slice 9 用 grep -v 过滤掉以 * 或 /* 开头的行读取该文件，回执只剩 title: string / text: string 字段，没有字段注释；“不可为空”约束因此未进入回执（agent-a54a0d0e8d4f6f0ef.jsonl:L112-L113）。"
+        },
+        {
+          "key": "agent-a54a0d0e8d4f6f0ef.jsonl",
+          "at": "2026-10-01T12:45:03.166Z",
+          "reason": "按 F008 写 BASIC 文本通知（传递 PD-C13）；另在思考中自判“text: string required — '' works”，Write 写出 text: text !== null ? text : '' 与完成通知 text: ''，未回查被自己过滤掉的字段注释（同转录 L193、L195）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 7
+        },
+        {
+          "from": 5,
+          "to": 7
+        },
+        {
+          "from": 6,
+          "to": 7,
+          "force": true,
+          "reason": "Slice 9 用 Bash 设 SDK 变量后对该 notificationContent.d.ts 执行 grep -v 过滤注释行，回执返回 NotificationBasicContent 的 title/text 字段但不含字段注释；这是生成者写 NotificationPoster 前对该文件的真实读取，变量路径未被索引解析。",
+          "evidence": [
+            {
+              "source": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/agent-a54a0d0e8d4f6f0ef.jsonl",
+              "line": 112
+            },
+            {
+              "source": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/agent-a54a0d0e8d4f6f0ef.jsonl",
+              "line": 113
+            }
+          ]
+        },
+        {
+          "from": 7,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/entry/src/main/ets/timer/background/TimerSession.ets",
+        "since": "2026-10-01T14:11:08.477Z",
+        "at": "2026-10-01T23:45:55.694Z"
+      },
+      "summary": "PD-C12 分支：Slice 9 按 F008 写出“PD-C12 退后台移交：锚点 + 静态常驻通知，不启动 countdown”，生成完成态快照仍保留该片段。\n修复把 TimerSession 重写为进程内 ticker + 短时任务保活窗口，到期把后续步骤交给 reminderAgentManager 代理提醒（R1:L4509、L13524）。\n",
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/.claude/skills/a2h-spec/templates/feature-spec-template.md",
+          "at": "2026-10-01T07:30:04.311Z",
+          "reason": "正常输入：模板规定平台约束依据须来自 SDK d.ts / knowledge-verifier / 参考收录，HARD-DIV 仅限平台确无对等能力（agent-ab7acc37d655b8c27.jsonl:L18-L19）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Cofi/cofi-share/src/main/java/com/omelan/cofi/share/timer/notification/TimerWorker.kt",
+          "at": "2026-10-01T07:30:52.524Z",
+          "reason": "正常输入：c4-02 读到 500ms tickerFlow、每拍 postNotificationWithProgress、步终切下一步并在最后一步发完成通知（agent-ab7acc37d655b8c27.jsonl:L61-L62）。"
+        },
+        {
+          "key": "agent-ab7acc37d655b8c27.jsonl",
+          "at": "2026-10-01T07:41:38.248Z",
+          "reason": "F008 Write 铸 PD-C12：退后台 ticker 停摆、单条静态常驻通知、系统挂起期间不推进，并以“ContinuousTaskMode 无 timer 模式”为 d.ts 依据，未查短时任务、代理提醒等替代；转录中无 SDK 查询（同转录 L113）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/spec/baseline/features/F008-background-timer-notification.md",
+          "at": "2026-10-01T12:29:24.059Z",
+          "reason": "交付桥梁：Slice 9 读取回执含 PD-C12 替代路径与 AC24/AC25（agent-a54a0d0e8d4f6f0ef.jsonl:L20-L21）。"
+        },
+        {
+          "key": "agent-a54a0d0e8d4f6f0ef.jsonl",
+          "at": "2026-10-01T12:47:23.241Z",
+          "reason": "实际读到 PD-C12 后，Write 写出 suspendOnStart：退后台锚点 + 单条静态常驻通知、不启动 countdown（同转录 L203）。本链确认传递，不另推定其独立失职。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/entry/src/main/ets/timer/background/TimerActionRouter.ets",
+        "since": "2026-10-01T14:11:08.477Z",
+        "at": "2026-10-01T23:45:55.694Z"
+      },
+      "summary": "PD-C13 分支：Slice 9 写出“通知内广播不存在——按钮经 wantAgent(StartAbility) 拉起应用，EntryAbility 解析后 dispatch”的路由，只有 want 参数入口；\n修复加入公共事件订阅（subscribeSilentActions，按发布方包名过滤后 dispatch），挂起态仍走 want 入口（R1:L13544）。\n",
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/.claude/skills/a2h-spec/templates/feature-spec-template.md",
+          "at": "2026-10-01T07:30:04.311Z",
+          "reason": "正常输入：平台约束依据须来自 SDK d.ts 等三源，禁止凭记忆（agent-ab7acc37d655b8c27.jsonl:L18-L19）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Cofi/cofi-share/src/main/java/com/omelan/cofi/share/timer/notification/TimerActionBroadcastReceiver.kt",
+          "at": "2026-10-01T07:31:00.556Z",
+          "reason": "正常输入：源按钮广播由 TimerActionBroadcastReceiver.onReceive 静默装配任务参数并 enqueueUniqueWork，不涉及界面（agent-ab7acc37d655b8c27.jsonl:L67-L68）。"
+        },
+        {
+          "key": "agent-ab7acc37d655b8c27.jsonl",
+          "at": "2026-10-01T07:41:38.248Z",
+          "reason": "F008 Write 把广播通道判为“HMOS 无应用级广播对等通道”，改为 wantAgent 拉起应用后 onCreate/onNewWant 解析派发（PD-C13），依据未经查询（同转录 L113）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/spec/baseline/features/F008-background-timer-notification.md",
+          "at": "2026-10-01T12:29:24.059Z",
+          "reason": "交付桥梁：Slice 9 读取回执含 PD-C13 替代路径与 §对接点 EntryAbility onCreate/onNewWant → TimerActionRouter.dispatch（agent-a54a0d0e8d4f6f0ef.jsonl:L20-L21）。"
+        },
+        {
+          "key": "agent-a54a0d0e8d4f6f0ef.jsonl",
+          "at": "2026-10-01T12:47:35.579Z",
+          "reason": "按 PD-C13 写出仅解析 want.parameters 的 TimerActionRouter，头注声明通知内广播不存在（同转录 L207）。本链确认传递。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/entry/src/main/ets/timer/background/TimerNotificationConsts.ets",
+        "since": "2026-10-01T14:11:08.477Z",
+        "at": "2026-10-01T23:45:55.694Z"
+      },
+      "summary": "PD-C13 分支：Slice 9 只为 wantAgent 拉起路径定义 WANT_KEY_ACTION / WANT_KEY_TIMER_DATA 载荷键；修复为静默公共事件补 ACTION_EVENT_SUFFIX 等常量与平台映射（R1:L13518）。\n",
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/.claude/skills/a2h-spec/templates/feature-spec-template.md",
+          "at": "2026-10-01T07:30:04.311Z",
+          "reason": "正常输入：平台约束依据须来自 SDK d.ts 等三源，禁止凭记忆（agent-ab7acc37d655b8c27.jsonl:L18-L19）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Cofi/cofi-share/src/main/java/com/omelan/cofi/share/timer/notification/TimerActionBroadcastReceiver.kt",
+          "at": "2026-10-01T07:31:00.556Z",
+          "reason": "正常输入：源按钮通过广播 action 名 + TimerData extra 静默投递（agent-ab7acc37d655b8c27.jsonl:L67-L68）。"
+        },
+        {
+          "key": "agent-ab7acc37d655b8c27.jsonl",
+          "at": "2026-10-01T07:41:38.248Z",
+          "reason": "F008 Write 铸 PD-C13，把广播投递改为 wantAgent 拉起 + params 携 action 与 TimerData JSON（同转录 L113）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/spec/baseline/features/F008-background-timer-notification.md",
+          "at": "2026-10-01T12:29:24.059Z",
+          "reason": "交付桥梁：Slice 9 读取回执含 PD-C13 wantAgent 参数域（agent-a54a0d0e8d4f6f0ef.jsonl:L20-L21）。"
+        },
+        {
+          "key": "agent-a54a0d0e8d4f6f0ef.jsonl",
+          "at": "2026-10-01T12:43:25.538Z",
+          "reason": "Write 按 PD-C13 只定义 wantAgent params 载荷键，无公共事件相关常量（同转录 L183）。本链确认传递。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/entry/src/main/ets/entryability/EntryAbility.ets",
+        "since": "2026-10-01T14:11:08.477Z",
+        "at": "2026-10-01T23:45:55.694Z"
+      },
+      "summary": "PD-C13 分支经两跳到达宿主：Slice 9 在 TimerActionRouter 留下 HANDOFF（owner=EntryAbility，onCreate/onNewWant 解析 want.parameters 后 dispatch），\nSlice 10 读到后在 EntryAbility 只接了 want 入口。修复在 onCreate 订阅静默动作公共事件、onDestroy 退订，并接入前后台切换驱动会话（R1:L13544）。\nEntryAbility 的其他修改（主题、回收恢复、帧时钟）不属本问题。\n",
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/.claude/skills/a2h-spec/templates/feature-spec-template.md",
+          "at": "2026-10-01T07:30:04.311Z",
+          "reason": "正常输入：平台约束依据须来自 SDK d.ts 等三源，禁止凭记忆（agent-ab7acc37d655b8c27.jsonl:L18-L19）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Cofi/cofi-share/src/main/java/com/omelan/cofi/share/timer/notification/TimerActionBroadcastReceiver.kt",
+          "at": "2026-10-01T07:31:00.556Z",
+          "reason": "正常输入：源按钮动作由广播接收者处理，应用不被拉起（agent-ab7acc37d655b8c27.jsonl:L67-L68）。"
+        },
+        {
+          "key": "agent-ab7acc37d655b8c27.jsonl",
+          "at": "2026-10-01T07:41:38.248Z",
+          "reason": "F008 Write 铸 PD-C13：按钮拉起应用，由 EntryAbility onCreate/onNewWant 解析派发，依据未经查询（同转录 L113）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/spec/baseline/features/F008-background-timer-notification.md",
+          "at": "2026-10-01T12:29:24.059Z",
+          "reason": "交付桥梁：Slice 9 读取回执含 §对接点 EntryAbility onCreate/onNewWant → TimerActionRouter.dispatch（agent-a54a0d0e8d4f6f0ef.jsonl:L20-L21）。"
+        },
+        {
+          "key": "agent-a54a0d0e8d4f6f0ef.jsonl",
+          "at": "2026-10-01T12:47:35.579Z",
+          "reason": "Write 写出仅 want 入口的 TimerActionRouter，头注写明按钮经 StartAbility 拉起、由 EntryAbility 解析（同转录 L207）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/entry/src/main/ets/timer/background/TimerActionRouter.ets",
+          "at": "2026-10-01T12:53:34.919Z",
+          "reason": "交付桥梁：Slice 10 读取回执含 PD-C13 头注与 HANDOFF owner=EntryAbility 的接线要求（agent-a4e2a53bfc70188f1.jsonl:L74-L75）。"
+        },
+        {
+          "key": "agent-a4e2a53bfc70188f1.jsonl",
+          "at": "2026-10-01T13:04:21.310Z",
+          "reason": "按 HANDOFF 写 EntryAbility：onCreate/onNewWant 把 want.parameters 交 TimerActionRouter.dispatch，注释标 PD-C13 wantAgent 拉起，无公共事件订阅（同转录 L152）。本链确认传递。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": 6
+        },
+        {
+          "from": 6,
+          "to": 7
+        },
+        {
+          "from": 7,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "生成期 Slice 9 查询的是 ~/Library/Huawei/Sdk 副本，其注释被 grep 过滤，材料未直接展示该副本含“cannot be empty”；复审在 DevEco-Studio SDK 的 notificationContent.d.ts:55 读到该条（@since 7），据此推定同样存在。",
+    "空正文被拒与 requestCode 0 复用旧载荷的结论来自 SDK 注释、源码对照与修复注释，材料中未见对应的设备发布失败日志或按钮串载复现。"
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/entry/src/main/module.json5",
+      "reason": "修复为新的代理提醒设计补 PUBLISH_AGENT_REMINDER 等权限（R1:L4532）。生成期缺失是 PD-C12 不设后台提醒的连带结果，但生成期写 module.json5 的 agent（VIBRATE 权限、深链 skills）未接收或处理该决策，Slice 9 被禁写此文件，未找到可画的实际交接。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/entry/src/main/resources/base/element/string.json",
+      "reason": "修复新增 reminder_permission_reason 提醒权限理由字符串（R1:L4539），是新权限的伴随资源；生成期无写者接收过与提醒权限相关的决策或派工，未形成可画的交接。"
+    }
+  ],
+  "job": "issue-f4fef12b5d994df457b2",
+  "metadata": {
+    "migration": {
+      "project": "Cofi",
+      "server_session_id": "acdd6966-d460-4d88-b0a6-5dc0c5262ee5"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-sonnet-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.247"
+      ]
+    },
+    "source_set_id": "sources-22befa667a51476d2497",
+    "environment": [
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0-alpha17",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos",
+        "at": "2026-10-01T06:38:41.480Z",
+        "ref": "generation/9176a7f7b2203f7a/runs/721fb7c7-0508-4e2f-8b79-cfb906c65d16/epoch-0/sessions/agent-ad0f8989f195b578f.jsonl:L18",
+        "request_ref": "generation/9176a7f7b2203f7a/runs/721fb7c7-0508-4e2f-8b79-cfb906c65d16/epoch-0/sessions/agent-ad0f8989f195b578f.jsonl:L17",
+        "phase": "generation"
+      },
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0-alpha17",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Cofi",
+        "at": "2026-10-01T06:58:28.349Z",
+        "ref": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/main-507b2f1f-5d21-4455-a17e-460566675ced.jsonl:L45",
+        "request_ref": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/main-507b2f1f-5d21-4455-a17e-460566675ced.jsonl:L43",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos",
+        "at": "2026-10-01T08:45:11.210Z",
+        "ref": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/agent-a6b66d337af813fff.jsonl:L63",
+        "request_ref": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/agent-a6b66d337af813fff.jsonl:L62",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos",
+        "at": "2026-10-01T10:50:10.334Z",
+        "ref": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/agent-a099e355ad83c788a.jsonl:L122",
+        "request_ref": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/agent-a099e355ad83c788a.jsonl:L121",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-10-01T14:45:59.485Z",
+        "ref": "repair/cofi-migration-complete-20261007/fix-cofi-opus/stream-01.jsonl:L288",
+        "request_ref": "repair/cofi-migration-complete-20261007/fix-cofi-opus/stream-01.jsonl:L287",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-10-01T14:45:59.485Z",
+        "ref": "repair/cofi-migration-complete-20261007/fix-cofi-opus/stream-01.jsonl:L288",
+        "request_ref": "repair/cofi-migration-complete-20261007/fix-cofi-opus/stream-01.jsonl:L287",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0-alpha17",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": null,
+        "at": "2026-10-01T14:53:18.885Z",
+        "ref": "repair/cofi-migration-complete-20261007/fix-cofi-opus/stream-01.jsonl:L713",
+        "request_ref": "repair/cofi-migration-complete-20261007/fix-cofi-opus/stream-01.jsonl:L712",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "e0dce297-f0f9-4e8e-adb6-f2a8eeef850a"
+      ]
+    }
+  },
+  "revision": "1df73908a2600045d97b85fa5e386b5b50972e141d1cd5505d5df882f5ebbad2"
+}

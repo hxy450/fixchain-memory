@@ -1,6 +1,6 @@
 # ui/safearea
 
-沉浸式安全区：全屏布局下前景避让与 expandSafeArea 的区别，避让区测量与 px/vp 换算（状态栏、导航指示条），系统栏图标深浅（按源端浅色状态栏标志推导），源根视图自设状态栏 padding 与底色时由页面容器承载（系统栏透明），路由页内容原点与顶部 inset 的消费位置，Compose Scaffold innerPadding 的顶部 inset 由宿主还是子页消费，向子页与页内浮层下发的状态栏高度参数，Tab 宿主按各 Tab 沉浸设置处理顶部安全区（含嵌入页状态栏占位的背景延伸与前景避让分层），全屏页底部按钮、按键区与贴底弹层的避让及承载层，逐页落实前景避让，状态栏实色避让带的承载层（Tabs 宿主包进外层 Column），自绘标题栏按源端避让来源接入 topInset（固定高度含内距、顶距与 inset 只取一份）
+沉浸式安全区：全屏布局下前景避让与 expandSafeArea 的区别，避让区测量与 px/vp 换算（状态栏、导航指示条），系统栏图标深浅（按源端浅色状态栏标志推导），源根视图自设状态栏 padding 与底色时由页面容器承载（系统栏透明），路由页内容原点与顶部 inset 的消费位置，Compose Scaffold innerPadding 的顶部 inset 由宿主还是子页消费，向子页与页内浮层下发的状态栏高度参数，Tab 宿主按各 Tab 沉浸设置处理顶部安全区（含嵌入页状态栏占位的背景延伸与前景避让分层），全屏页底部按钮、按键区与贴底弹层的避让及承载层，逐页落实前景避让，状态栏实色避让带的承载层（Tabs 宿主包进外层 Column），自绘标题栏按源端避让来源接入 topInset（固定高度含内距、顶距与 inset 只取一份），页面级避让订阅取承载页面的主窗口；三键与手势导航的判定、按导航方式给导航栏着色、底部避让取两类避让区的较大值，以及页面级软键盘避让模式（adjustResize/imePadding）
 
 [上一级](../index.md)
 
@@ -21,7 +21,7 @@
   - 情境：Android 页面在透明状态栏下用自屏幕顶部起算的固定顶距（layout_marginTop、getStatusBarsHeight）给顶栏留位，背景铺到状态栏后面；目标 EntryAbility 全屏并发布 windowTopPadding，入口只在 Navigation 宿主上 expandSafeArea(TOP)，页面经路由框架承载。
 - [全屏窗口的底部避让：导航指示条取 bottomRect，贴底按钮、按键区、Tab 栏与 bindSheet 内容都让出避让值（原高度已含底部留白时先抵扣），并加在占据屏幕底边的那一层](lesson-0e1c846868f2683cc280.lesson.md)
   - 时机：沉浸式安全区实现阶段，测量导航指示条避让区，并为底部按钮行、按键区、Tab 栏或贴底弹层确定底部间距及承载它的容器层时；为已有固定高度（含内容下方留白）的底部 Tab 栏或底部定位元素补导航条避让时
-  - 情境：目标页面在 setWindowLayoutFullScreen(true) 下用 getWindowAvoidArea 测避让值，写入页面或全局窗口模型；Android 源布局的底部按钮行、底部 sheet 没有导航栏间距（源窗口不延伸到导航栏下，BottomSheetDialog 由系统处理 inset）。或页面规格标注全屏页、需要沉浸式安全区，入口对 BOTTOM 边 expandSafeArea，根容器与底部内容层背景色不同。 也包括底部 Tab 栏原固定高度已在图标文字下方留有空白，避让值取自 TYPE_NAVIGATION_INDICATOR 的单一 px 快照、不区分三键与手势模式，用户只报告某一种导航模式被遮挡。也包括 Material3 BottomSheet 页面（库默认带 paddingBottomSystemWindowInsets）迁为 bindSheet，规格把“弹层跳过沉浸式处理”理解为自动避让。
+  - 情境：目标页面在 setWindowLayoutFullScreen(true) 下用 getWindowAvoidArea 测避让值，写入页面或全局窗口模型；Android 源布局的底部按钮行、底部 sheet 没有导航栏间距（源窗口不延伸到导航栏下，BottomSheetDialog 由系统处理 inset）。或页面规格标注全屏页、需要沉浸式安全区，入口对 BOTTOM 边 expandSafeArea，根容器与底部内容层背景色不同。 也包括底部 Tab 栏原固定高度已在图标文字下方留有空白，避让值取自 TYPE_NAVIGATION_INDICATOR 的单一 px 快照、不区分三键与手势模式，用户只报告某一种导航模式被遮挡。也包括 Material3 BottomSheet 页面（库默认带 paddingBottomSystemWindowInsets）迁为 bindSheet，规格把“弹层跳过沉浸式处理”理解为自动避让。也包括规格要求手势与三键两种导航模式下内容都不被导航栏遮挡，而入口按沉浸式模板只以 TYPE_NAVIGATION_INDICATOR 测底部。
 - [向子页或页内浮层下发状态栏高度参数时写明消费方式，挂在同一 Stack 的每一层都拿到它](lesson-2cf2614847a8dba832b3.lesson.md)
   - 时机：派工与界面实现阶段，向子页、页内浮层下发状态栏高度参数，或把浮层挂进从窗口顶起的宿主 Stack 时
   - 情境：宿主页采用“子页自理”分工，以组件参数下发状态栏高度；子页或浮层（遮罩 + 居中卡片、铺满父容器）与列表、顶栏同挂一个 Stack；派工或槽位契约可能只列出回调参数，或写“接收但本页不使用”。
@@ -29,9 +29,15 @@
 - [开启全屏布局后，前景按测得的避让区逐边补 padding；expandSafeArea 只让背景越过安全区，预设系统标题栏也不会自动避让](lesson-a8452bfea5d42d3dcae3.lesson.md)
   - 时机：界面实现阶段，为调用 setWindowLayoutFullScreen(true) 的入口壳（根 Navigation + Tabs/NavDestination）落实状态栏与底部导航条避让时；转换承载内嵌子页的壳 NavDestination、移植 Android insets 代码，或入口根 Navigation 四向 expandSafeArea 后逐页核对时
   - 情境：规格或 ui-manifest 标注全屏页、需要沉浸式安全区，并把 API 细节委托给具名 skill（如 arkts-immersive-safearea）；EntryAbility 开启全屏布局，页面标题由 NavDestination 标题栏或自绘标题承担；源端通常是 enableEdgeToEdge 加 safeDrawingPadding。也包括壳页承载声明豁免安全区、自绘工具栏的内嵌子页，源端顶部 inset 由子 Fragment 的 AppBarLayout 或 Toolbar 根布局 fitsSystemWindows 隐式消费、Activity 代码只显式处理底部和左右；或 NavDestination 页保留预设系统标题栏。
+- [源端只在三键导航时给导航栏着色：以 TYPE_SYSTEM 底部避让高度判定导航方式，非手势时用 navigationBarColor 着色并随避让区变化更新](lesson-8bc258c2833be65f4fcd.lesson.md)
+  - 时机：规格提取与入口窗口实现阶段，把源 Activity 按导航方式设置导航栏颜色的分支映射到目标窗口系统栏属性时
+  - 情境：源端在 Activity 中按是否手势导航决定导航栏底色（如非手势导航时 setNavigationBarColor(背景色带透明度)），判定依赖隐藏系统资源（config_navBarInteractionMode）或系统设置；目标为全屏沉浸窗口，入口用 getWindowAvoidArea 测避让区、用 setWindowSystemBarProperties 设置系统栏。
 - [源端给根视图设状态栏高度的顶部 padding 并自绘底色时：目标在页面容器上设 padding 与背景色、系统栏保持透明，子内容按扣除状态栏后的尺寸布局](lesson-baf0ca22a69e7b76f636.lesson.md)
   - 时机：规格提取与界面实现阶段，把源端根视图（DecorView 或内容根）的状态栏 insets padding 与背景设色翻译为目标页面的避让方式和状态栏底色时
   - 情境：源 Activity（常见于 Android 15+ 边到边分支）给 DecorView 或根布局 setBackgroundColor，并 setPadding(top = 状态栏 inset)，内容 View 在 onSizeChanged 中按自身宽高布局；目标为全屏沉浸窗口，页面里可能有带遮罩的弹窗。
+- [源页面声明 adjustResize 并用 imePadding 时，在该页显示期间设 KeyboardAvoidMode.RESIZE、离开时还原，不以默认 OFFSET 记作等价](lesson-f86b02e97cc77e31d51a.lesson.md)
+  - 时机：页面实现阶段，为含文本输入的页面（编辑表单等 NavDestination 子页）落实源端软键盘避让方式时
+  - 情境：源 Activity 声明 windowSoftInputMode=adjustResize，页面在滚动内容或尾部用 imePadding 让键盘弹出时内容区收缩、仍可滚到末项；规格或页面元数据写明 adjustResize + imePadding 并要求等价避让；目标未设键盘避让模式，转换者不确定默认行为是否等价。
 - [状态栏实色避让带挂在只承担避让的外层 Column：宿主是 Tabs 时把 Tabs 包进该 Column，不在 Tabs 上挂 padding 加背景色](lesson-fe10bd2491ca4ba82cb5.lesson.md)
   - 时机：界面实现或修复阶段，为带 Tabs 等子页铺满容器的主框架页补源端状态栏实色带，决定避让 padding 与背景色挂在哪个组件时
   - 情境：源 Activity 基类在 onCreate 设置实色状态栏；目标全屏布局，用测得的顶部避让值做 padding；宿主页的避让 padding 写在 Tabs（或 Swiper）上，TabContent 是满铺白底子页；工程其他页面已用“padding + 背景色挂在只包标题条的普通 Column”实现同一色带。
@@ -42,3 +48,6 @@
   - 时机：界面实现阶段，为全屏页自绘标题栏/工具栏接入顶部系统安全区（topInset）并确定其高度与顶部内距时
   - 情境：Android 全屏页工具栏为固定 dp 高度，状态栏避让由根布局 fitsSystemWindows=true 承担，或由工具栏自身的固定 paddingTop（如 80dp 高、40dp 顶距，根无 fitsSystemWindows）承担；目标页以窗口模型的 topInset 做前景避让，标题栏写固定 .height()。
   - 例外：页面内容原点已在状态栏 inset 之下（宿主已消费 inset），此时只补源端顶距的剩余部分，不再给标题栏加 topInset
+- [页面级安全区订阅从承载页面的主窗口取窗口对象：复用工程主窗口入口或入口 Ability 已维护的避让状态，不用 window.getLastWindow](lesson-8e0e9fe5373a2bbe47af.lesson.md)
+  - 时机：界面实现或巡检修复阶段，为全屏页订阅 avoidAreaChange、调用 getWindowAvoidArea 取顶部与底部避让值并选择窗口对象时
+  - 情境：ArkUI 页面需自行订阅避让区或读取避让值；工程已在 EntryAbility 用主窗口测量安全区并写入共享状态，或有 getMainWindow()、windowStage.getMainWindowSync() 一类主窗口入口；运行时可能出现分享面板、调试浮窗等其他窗口；skill 示例为设置系统栏属性用了 window.getLastWindow(context)。

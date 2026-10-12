@@ -1,0 +1,445 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-33b4b9ce51ba471ee770",
+  "created_at": "2026-10-11T22:09:33.347961+00:00",
+  "migration_key": "acdd6966-d460-4d88-b0a6-5dc0c5262ee5",
+  "title": "未查 SDK 就断言 HarmonyOS 无壁纸取色 API，把 Material You 动态取色降级为固定双配色并传到主题与设置实现",
+  "when": "规格提取与决策登记阶段，判定源端系统能力在 HarmonyOS 有无对等 API、准备写 skip-list / decision-ledger 的 HARD-DIV 降级决策和 feature 规格映射依据时",
+  "description": "源端功能依赖系统级能力（本例 Android 12+ Material You dynamicLight/DarkColorScheme 壁纸取色），且源码自带版本门槛与“不支持时回退固定方案”的分支；目标侧需要判断 HarmonyOS 公开 SDK 是否有相同或最接近的接口（包括已弃用、需权限或仅系统可用的变体），再决定实现、探测回退还是降级。",
+  "summary": "写前实际收到的输入：a2h-spec 编排主线（首轮会话 main-507b2f1f）在 07:03 读到源码 Theme.kt：\ngetMaterialYouPallets = dynamicDark/LightColorScheme，CofiTheme 只在 SDK_INT >= S 且 dynamic_theme 开启时用动态配色，\n否则回退固定 light/darkScheme（main-507b2f1f:L293-L295）。同期读到 feature-spec-template：HARD-DIV 的前提是\n“平台无对等能力”；平台 API 结论的依据只能三选一，即 SDK d.ts 注释、arkts-knowledge-verifier 或 hmos-references，\n并且“禁止凭模型记忆”，HARD-DIV 示例行也写“依据：d.ts §…”（L315-L317）。07:30 读到的 default-policy 又要求\n完整复刻必要系统能力，用官方技术文档确认平台 API；无法等价复刻时，PD 应保持 proposed、进入确认表，不自行替换或降级（L696-L698）。\n这些输入已经足以要求先查 SDK 再判定“无对等”。\n输出偏差：主线在 07:06 写 ui-manifest 时就预写了“动态色降级决策”（L346）；07:29 用 Bash 写 skip-list，\n登记“Material You 动态取色 | 平台无对等 | HMOS 无取色 API；降级为固定双 Palette”（L660-L662）；\n08:07 写 decision-ledger PD-C7，“平台约束：HarmonyOS 无系统取色 API 对等（无 d.ts 能力条款）”，\n并在 headless 预授权下自批为 approved（L1083-L1085）。整个生成材料（G、G0 全部会话）没有一次检索 wallpaper\n或任何取色相关 d.ts。b2-01 页面规格代理同样只凭记忆写“HMOS 无全局取色 API”（agent-a82b551f85d4bcb55:L196）。\n实际上，同一台机器的 DevEco SDK 就是生成期 env-prewarm 写进 local.properties 的 hwsdk.dir（main-507b2f1f:L1504），\n其中公开的 ets/api/@ohos.wallpaper.d.ts 有 getColors(WallpaperType)（@since 7、@deprecated since 9）\n和 on('colorChange')，@kit.BasicServicesKit 也导出 wallpaper（R1:L1156-L1157、R1:L6093-L6098）。\n因此偏差起点是“未查 SDK 就断言平台无 API”，而不是平台确实没有入口。\n交付与传播：c4-04 规格代理按派工引用既有 PD-C7。它读了 skip-list（agent-ac26d607677f04547:L32-L33）\n和同一模板（L18-L19），但写 F007 时把依据写成“skip-list PD-C7 行——HMOS 无取色 API；d.ts 无对应能力条款”，\n并发出 AC04“产物不含动态取色 API 调用与版本门槛分支”（L180、L190）。它没有查 d.ts，\n却把上游结论包装成了 d.ts 证据，这是第二个漏掉核查的位置；F006 的 PD-C7-F006-01（设置行恒可用、无视觉效果）也出自这里（L174）。\n首轮 Stage 1 基础组件代理读 F007 后，写出 CofiThemeState.colors“二值解析（PD-C7 固定双 Palette，无取色输入域）”（agent-ad94eb8129c07d5a8:L125-L126、L148）。\n续跑 Slice 2 代理读 F007 后，写出 ThemeRegistry.resolve 二值解析和“F007-AC04 PD-C7: 无取色 API 调用”（agent-a70bebb18d576b187:L32-L33、L122）。\n设置页代理 grep 到 ledger 的 PD-C7 行“设置行恒可用但无视觉变化”，按 ledger 优先写出恒可用开关（agent-adc250b0567319e78:L21-L23、L83）。\n这些片段保留到生成结束。修复者审计后推翻 PD-C7：新增 DynamicColor.ets（MCU TonalSpot 移植，R1:L6196）；\nThemeRegistry 改为以 wallpaper.getColors 主色为种子生成明暗配色，并订阅 dynamic_theme 与 colorChange（R1:L6338）；\nCofiThemeState 增加动态配色 @Trace 和 colors @Computed（R1:L6340）；EntryAbility 调用 initDynamicColor（R1:L6352）；\n设置行 enabled 改为取色能力可用（R1:L6359），ledger 记为 PF-002（R1:L6410）。修复者真机上观察到“动态取色蓝”（R1:L16736）。\n使用阶段区分：决策/skip-list 环节应先检索 SDK、按源码回退语义设计“能力探测 + 回退”；feature 规格环节写依据时应自行补查，\n不能把上游一句结论写成 d.ts 证据。实现者按规格与 ledger 实现，本卡不另判其失职。\n",
+  "recommendations": [
+    "登记 HARD-DIV、skip 或降级决策前，先在工程 local.properties 的 hwsdk.dir 下检索 openharmony/ets/api、hms/ets/api 和 kits 导出，用能力关键词查找最接近的接口（本例 wallpaper、getColors、colorChange、theme）。把命中的 d.ts 文件及 @deprecated、@systemapi、@permission 标注写进决策的“平台约束”；检索为空时写明检索词和路径，不凭记忆写“无 API”。",
+    "源码本身带“不支持时回退”分支（如 SDK_INT >= S 才动态取色，否则用固定配色）时，优先映射为“能力探测 + 原回退”：取色成功就生成配色，失败就用原固定双配色，设置行 enabled 绑定能力是否可用。只有确认公开 SDK 没有任何可调用入口，才登记降级，并按 default-policy 让 PD 保持 proposed 进入确认表。",
+    "最接近的能力只剩已弃用的公开 API（替代接口仅系统可用）时，在决策中写出弃用风险、失败回退和真机验证项，让审批在“降级”和“弃用 API + 回退”之间选择，不要直接写成“平台无对等”。",
+    "feature 规格作者在契约或依据列写平台能力结论时，只引用自己实际查过的 d.ts 段落、arkts-knowledge-verifier 结论或 references 条目。上游 skip-list 的一句“无 API”要补查一次再落笔，不能改写成“d.ts 无对应能力条款”。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/entry/src/main/ets/components/common/ThemeRegistry.ets",
+        "since": "2026-10-01T14:11:08.477Z",
+        "at": "2026-10-01T23:45:55.694Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/.claude/skills/a2h-spec/templates/feature-spec-template.md",
+          "at": "2026-10-01T07:03:25.453Z",
+          "reason": "正常输入：主线 Read 回执写明 HARD-DIV 的前提是“平台无对等能力”；平台 API 结论的依据须三选一（SDK d.ts 注释 / arkts-knowledge-verifier / hmos-references-collection），并“禁止凭模型记忆”；HARD-DIV 示例行契约列写“依据：d.ts §…”。这足以要求判定“无对等”前先查 SDK（main-507b2f1f:L315-L317，模板第65-80行）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Cofi/app/src/main/java/com/omelan/cofi/ui/Theme.kt",
+          "at": "2026-10-01T07:03:02.729Z",
+          "reason": "正常输入：主线 Bash sed 回执给出 getMaterialYouPallets = dynamicDark/LightColorScheme(context)，并且 colors = if (SDK_INT >= S && dynamicThemeEnabled) getMaterialYouPallets else 固定 scheme。源端能力和不支持时的回退语义都已明确（main-507b2f1f:L293-L295）。"
+        },
+        {
+          "key": "507b2f1f-5d21-4455-a17e-460566675ced:main",
+          "at": "2026-10-01T07:29:21.404Z",
+          "reason": "偏差起点：主线 07:06 在 ui-manifest 预写“动态色降级决策”（L346）。07:29 Bash 写 skip-list，登记“Material You 动态取色 | 平台无对等 | HMOS 无取色 API；降级为固定双 Palette”（L660-L662）。此前没有任何 SDK/d.ts 检索（全部生成会话无 wallpaper 检索），而同机 DevEco SDK 公开 d.ts 有 wallpaper.getColors（弃用但公开）与 on('colorChange')（R1:L1156-L1157）。模板要求的证据核查没有落实到这条平台结论。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/spec/baseline/skip-list.md",
+          "at": "2026-10-01T07:45:01.400Z",
+          "reason": "交付桥梁：c4-04 规格代理的 Read 回执第10行就是上述 PD-C7 行“HMOS 无取色 API；降级为固定双 Palette”。主线派工也要求 F007“引用既有 PD-C7”（agent-ac26d607677f04547:L1、L32-L33）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/.claude/skills/a2h-spec/templates/feature-spec-template.md",
+          "at": "2026-10-01T07:44:55.034Z",
+          "reason": "正常输入：c4-04 写规格前完整 Read 同一模板，收到平台 API 依据须三选一、禁止凭模型记忆的要求，以及 HARD-DIV“平台无对等能力”的定义（agent-ac26d607677f04547:L18-L19）。"
+        },
+        {
+          "key": "507b2f1f-5d21-4455-a17e-460566675ced:ac26d607677f04547",
+          "at": "2026-10-01T07:57:40.305Z",
+          "reason": "传播并新增偏差：Write F007 时把 PD-C7 替代路径写成“HMOS 无取色 API → 固定双 Palette”，映射行依据写成“skip-list PD-C7 行——HMOS 无取色 API；d.ts 无对应能力条款”，并发出 AC04“产物不含动态取色 API 调用与版本门槛分支”（L180、L190-L191）。该代理全程没有检索 d.ts，却把上游结论写成 d.ts 证据；F006 的 PD-C7-F006-01 也由它铸出（L174）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/spec/baseline/features/F007-theming.md",
+          "at": "2026-10-01T11:57:00.568Z",
+          "reason": "交付桥梁：Slice 2 代理的 Read 回执包含 PD-C7 替代路径、resolve(isDarkMode) 二值解析、映射行“d.ts 无对应能力条款”和 AC04（agent-a70bebb18d576b187:L32-L33，第37、41、50、64、101行）。"
+        },
+        {
+          "key": "f254816a-2fd5-4687-b493-a2136a7510d9:a70bebb18d576b187",
+          "at": "2026-10-01T12:01:58.301Z",
+          "reason": "按规格实现：Write ThemeRegistry，注释写“getMaterialYouPallets 动态取色路径 PD-C7 不迁移”“F007-AC04 PD-C7: 无 dynamicColorScheme/取色 API 调用与版本门槛分支”。resolve 只按深浅二值返回固定 Palette，dynamic_theme 不参与（L122-L123）。本节点确认传递，不另判实现者失职；修复时整段重写为壁纸种子动态配色（R1:L6338）。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "主线在 L293 用 Bash（会话 cwd 为 /Users/fengyi/Workspace/migbot_set/L1/Cofi）执行 sed -n '95,119p' app/src/main/java/com/omelan/cofi/ui/Theme.kt；L295 回执返回 getMaterialYouPallets 与 SDK_INT >= S && dynamicThemeEnabled 的分支。这是写 skip-list 前对该源文件的真实读取。",
+          "evidence": [
+            {
+              "source": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/main-507b2f1f-5d21-4455-a17e-460566675ced.jsonl",
+              "line": 293
+            },
+            {
+              "source": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/main-507b2f1f-5d21-4455-a17e-460566675ced.jsonl",
+              "line": 295
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "主线在 L648 先 cd 到 cofi-hmos/spec/baseline；L660 的 Bash 用 heredoc cat > skip-list.md 写入 PD-C7 行“HMOS 无取色 API；降级为固定双 Palette”，L662 回执 skip-list written。这是对 spec/baseline/skip-list.md 的真实写入。",
+          "evidence": [
+            {
+              "source": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/main-507b2f1f-5d21-4455-a17e-460566675ced.jsonl",
+              "line": 660
+            },
+            {
+              "source": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/main-507b2f1f-5d21-4455-a17e-460566675ced.jsonl",
+              "line": 662
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": 6
+        },
+        {
+          "from": 5,
+          "to": 6
+        },
+        {
+          "from": 6,
+          "to": 7
+        },
+        {
+          "from": 7,
+          "to": 8
+        },
+        {
+          "from": 8,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/entry/src/main/ets/components/common/CofiTheme.ets",
+        "since": "2026-10-01T14:11:08.477Z",
+        "at": "2026-10-01T23:45:55.694Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/.claude/skills/a2h-spec/templates/feature-spec-template.md",
+          "at": "2026-10-01T07:03:25.453Z",
+          "reason": "正常输入：同 ThemeRegistry 图。平台 API 结论须以 d.ts / verifier / references 为据，禁止凭模型记忆（main-507b2f1f:L315-L317）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Cofi/app/src/main/java/com/omelan/cofi/ui/Theme.kt",
+          "at": "2026-10-01T07:03:02.729Z",
+          "reason": "正常输入：源 CofiTheme 在 SDK_INT >= S 且 dynamic_theme 开启时用 dynamicColorScheme，否则回退固定 scheme（main-507b2f1f:L293-L295）。"
+        },
+        {
+          "key": "507b2f1f-5d21-4455-a17e-460566675ced:main",
+          "at": "2026-10-01T07:29:21.404Z",
+          "reason": "偏差起点：未检索 SDK 就在 skip-list 登记“HMOS 无取色 API；降级为固定双 Palette”（L660-L662）。依据同 ThemeRegistry 图。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/spec/baseline/skip-list.md",
+          "at": "2026-10-01T07:45:01.400Z",
+          "reason": "交付桥梁：c4-04 Read 回执含 PD-C7 行（agent-ac26d607677f04547:L32-L33）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/.claude/skills/a2h-spec/templates/feature-spec-template.md",
+          "at": "2026-10-01T07:44:55.034Z",
+          "reason": "正常输入：c4-04 写前 Read 模板的证据规则（agent-ac26d607677f04547:L18-L19）。"
+        },
+        {
+          "key": "507b2f1f-5d21-4455-a17e-460566675ced:ac26d607677f04547",
+          "at": "2026-10-01T07:57:40.305Z",
+          "reason": "传播并新增偏差：F007 写入 colors = isDarkMode ? darkPalette : lightPalette（PD-C7）、“HMOS 无取色 API”，以及未经检索的“d.ts 无对应能力条款”（L180、L190-L191）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/spec/baseline/features/F007-theming.md",
+          "at": "2026-10-01T08:48:57.423Z",
+          "reason": "交付桥梁：首轮 Stage 1 基础组件代理 Read F007，回执含 PD-C7 条目10处，包括二值 colors 与 PD-C7 替代路径（agent-ad94eb8129c07d5a8:L125-L126）。"
+        },
+        {
+          "key": "507b2f1f-5d21-4455-a17e-460566675ced:ad94eb8129c07d5a8",
+          "at": "2026-10-01T08:54:14.206Z",
+          "reason": "按规格实现：Write CofiTheme.ets，契约注释写“PD-C7（固定双 Palette，无动态取色）”。CofiThemeState 只有 colorMode，colors 为“二值解析（PD-C7 固定双 Palette，无取色输入域）”isDark ? cofiDarkPalette : cofiLightPalette（L148-L149）。这一片段到生成结束未变（之后的编辑只补导入；Slice 2 只把 connectTheme 接到 ThemeRegistry.attachState，并改了注释，agent-a70bebb18d576b187:L126-L132）；修复时为其增加 dynamicThemeEnabled、dynamicLight/Dark @Trace，并在 colors 中优先返回动态配色（R1:L6340）。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "主线在 L293 用 Bash（会话 cwd 为 /Users/fengyi/Workspace/migbot_set/L1/Cofi）执行 sed -n '95,119p' app/src/main/java/com/omelan/cofi/ui/Theme.kt；L295 回执返回 getMaterialYouPallets 与 SDK_INT >= S && dynamicThemeEnabled 的分支。这是写 skip-list 前对该源文件的真实读取。",
+          "evidence": [
+            {
+              "source": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/main-507b2f1f-5d21-4455-a17e-460566675ced.jsonl",
+              "line": 293
+            },
+            {
+              "source": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/main-507b2f1f-5d21-4455-a17e-460566675ced.jsonl",
+              "line": 295
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "主线在 L648 先 cd 到 cofi-hmos/spec/baseline；L660 的 Bash 用 heredoc cat > skip-list.md 写入 PD-C7 行“HMOS 无取色 API；降级为固定双 Palette”，L662 回执 skip-list written。这是对 spec/baseline/skip-list.md 的真实写入。",
+          "evidence": [
+            {
+              "source": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/main-507b2f1f-5d21-4455-a17e-460566675ced.jsonl",
+              "line": 660
+            },
+            {
+              "source": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/main-507b2f1f-5d21-4455-a17e-460566675ced.jsonl",
+              "line": 662
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": 6
+        },
+        {
+          "from": 5,
+          "to": 6
+        },
+        {
+          "from": 6,
+          "to": 7
+        },
+        {
+          "from": 7,
+          "to": 8
+        },
+        {
+          "from": 8,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/entry/src/main/ets/pages/AppearanceSettingsPage.ets",
+        "since": "2026-10-01T14:11:08.477Z",
+        "at": "2026-10-01T23:45:55.694Z"
+      },
+      "summary": "源 AppearanceSettings.kt 中 Dynamic Theme 行 enabled = SDK_INT >= S，表示设备不支持动态取色时禁用该行。\n主线读过源码、模板证据规则和 default-policy 后，在 decision-ledger PD-C7 写下“平台约束：HarmonyOS 无系统取色 API 对等（无 d.ts 能力条款）”，\n提议“外观设置行恒可用（PD-C7-F006-01）但主题恒静态”，并自批 approved。设置页代理 grep 到这一行，按 ledger 优先写出\n恒可用、开关无视觉效果的 Dynamic Theme 行，并删去版本门槛。修复后，enabled 改为 theme.dynamicColorAvailable（取色能力），\n开关真实驱动动态配色（R1:L6359）。\n",
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Cofi/app/src/main/java/com/omelan/cofi/pages/settings/AppearanceSettings.kt",
+          "at": "2026-10-01T07:13:56.755Z",
+          "reason": "正常输入：主线 Read 回执第98、104行为 enabled = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S，说明设置行可用性绑定设备是否支持动态取色（main-507b2f1f:L464-L466）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/.claude/skills/a2h-spec/templates/feature-spec-template.md",
+          "at": "2026-10-01T07:03:25.453Z",
+          "reason": "正常输入：平台 API 结论须以 d.ts / verifier / references 为据，禁止凭模型记忆（main-507b2f1f:L315-L317）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/.claude/skills/a2h-spec/references/default-policy.md",
+          "at": "2026-10-01T07:30:02.416Z",
+          "reason": "正常输入：Read 回执要求“完整复刻……必要系统能力”“官方技术文档查询用于确认平台 API”“无法等价复刻时记 PD-* 保持 proposed 进确认表，不自行替换或降级”，确认表 C6/C8 无鸿蒙对等默认“阻断”（main-507b2f1f:L696-L698）。"
+        },
+        {
+          "key": "507b2f1f-5d21-4455-a17e-460566675ced:main",
+          "at": "2026-10-01T08:07:13.352Z",
+          "reason": "偏差：Write decision-ledger，PD-C7 写“平台约束：HarmonyOS 无系统取色 API 对等（无 d.ts 能力条款）”“外观设置行恒可用（PD-C7-F006-01）但主题恒静态”，索引行“设置行恒可用但无视觉变化 | approved”（L1083-L1085）。此前没有任何 d.ts 检索，“无 d.ts 能力条款”与同机 SDK 的 wallpaper.getColors 不符（R1:L1156-L1157）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/spec/decision-ledger.md",
+          "at": "2026-10-01T11:03:01.459Z",
+          "reason": "交付桥梁：设置页代理 grep 回执含第27行“PD-C7（+PD-C7-F006-01）| Material You 动态取色无对等 → 固定双 Palette；dynamic_theme 键保留、设置行恒可用但无视觉变化 | approved”，以及第75行提议替代（agent-adc250b0567319e78:L21-L22）。"
+        },
+        {
+          "key": "f254816a-2fd5-4687-b493-a2136a7510d9:adc250b0567319e78",
+          "at": "2026-10-01T11:06:25.321Z",
+          "reason": "按 ledger 实现：思考中写明“ledger 命中 → 按之执行”（L23）。Write AppearanceSettingsPage 时注释“PD-C7+PD-C7-F006-01（Material You 动态色无对等 → 设置行恒可用、主题恒静态；Build.VERSION.SDK_INT>=S guard 移除）”，Dynamic Theme 行不传 isEnabled（恒 true），toggle 只写偏好（L83-L84）。本节点确认传递。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": 6,
+          "force": true,
+          "reason": "设置页代理在 L21 用 Bash grep -n 'PD-C7…' 读取 cofi-hmos/spec/decision-ledger.md；L22 回执返回第27行 PD-C7 索引“设置行恒可用但无视觉变化 | approved”和第75行提议替代。这是写 AppearanceSettingsPage 前对 ledger 的真实读取。",
+          "evidence": [
+            {
+              "source": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/agent-adc250b0567319e78.jsonl",
+              "line": 21
+            },
+            {
+              "source": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/agent-adc250b0567319e78.jsonl",
+              "line": 22
+            }
+          ]
+        },
+        {
+          "from": 6,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "生成转录中没有出现 @ohos.wallpaper.d.ts 的内容；SDK 中存在 getColors，依据是修复期在同一台机器、同一 hwsdk.dir 下的检索。生成期到修复期之间 SDK 未变化，这一点由安装路径一致推断，没有直接回执。",
+    "getColors 自 API 9 起弃用，替代接口不在公开 SDK 中。修复者真机观察到取色生效（R1:L16736），复审子代理仍提示设备相关性、置信度低（R1:L11955）；该接口在其他设备和后续版本上是否可用仍未知。"
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/entry/src/main/ets/components/common/DynamicColor.ets",
+      "reason": "修复新建文件（R1:L6196 写入 MCU TonalSpot 移植，R1:L6246 校验）。生成期没有该文件的任何写入，无法绑定生成写者；它缺失的成因与 ThemeRegistry/CofiTheme 两图相同，都是 PD-C7 未查 SDK 就降级。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/entry/src/main/ets/entryability/EntryAbility.ets",
+      "reason": "修复只把系统栏背景改为 ThemeRegistry.resolve，并新增 initDynamicColor / onPaletteChange 接线（R1:L6352）。生成态由 Slice 10 代理在 13:04 写入，按 PD-C7 直接取固定双 Palette（agent-a4e2a53bfc70188f1:L152）；其写前读到的 ThemeRegistry/CofiTheme 片段已含 PD-C7（L91-L95）。这是同一决策的下游接线，未单独画图，也未逐项核对该写者的全部写前输入。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/entry/src/main/ets/components/common/TrackRing.ets",
+      "reason": "这是修复中新生的问题，不作生成归因。R1:L16725 改掉的 @Monitor('…', 'theme.colorMode') 来自修复者在 R1:L2333（15:26:48Z）重写 TrackRing 时的代码；生成态 TrackRing 只有26行，没有该监听。新增动态配色后，修复者才把监听改为 theme.colors。"
+    }
+  ],
+  "job": "issue-33b4b9ce51ba471ee770",
+  "metadata": {
+    "migration": {
+      "project": "Cofi",
+      "server_session_id": "acdd6966-d460-4d88-b0a6-5dc0c5262ee5"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-sonnet-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.247"
+      ]
+    },
+    "source_set_id": "sources-22befa667a51476d2497",
+    "environment": [
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0-alpha17",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos",
+        "at": "2026-10-01T06:38:41.480Z",
+        "ref": "generation/9176a7f7b2203f7a/runs/721fb7c7-0508-4e2f-8b79-cfb906c65d16/epoch-0/sessions/agent-ad0f8989f195b578f.jsonl:L18",
+        "request_ref": "generation/9176a7f7b2203f7a/runs/721fb7c7-0508-4e2f-8b79-cfb906c65d16/epoch-0/sessions/agent-ad0f8989f195b578f.jsonl:L17",
+        "phase": "generation"
+      },
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0-alpha17",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Cofi",
+        "at": "2026-10-01T06:58:28.349Z",
+        "ref": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/main-507b2f1f-5d21-4455-a17e-460566675ced.jsonl:L45",
+        "request_ref": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/main-507b2f1f-5d21-4455-a17e-460566675ced.jsonl:L43",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos",
+        "at": "2026-10-01T08:45:11.210Z",
+        "ref": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/agent-a6b66d337af813fff.jsonl:L63",
+        "request_ref": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/agent-a6b66d337af813fff.jsonl:L62",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos",
+        "at": "2026-10-01T10:50:10.334Z",
+        "ref": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/agent-a099e355ad83c788a.jsonl:L122",
+        "request_ref": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/agent-a099e355ad83c788a.jsonl:L121",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-10-01T14:45:59.485Z",
+        "ref": "repair/cofi-migration-complete-20261007/fix-cofi-opus/stream-01.jsonl:L288",
+        "request_ref": "repair/cofi-migration-complete-20261007/fix-cofi-opus/stream-01.jsonl:L287",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-10-01T14:45:59.485Z",
+        "ref": "repair/cofi-migration-complete-20261007/fix-cofi-opus/stream-01.jsonl:L288",
+        "request_ref": "repair/cofi-migration-complete-20261007/fix-cofi-opus/stream-01.jsonl:L287",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0-alpha17",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": null,
+        "at": "2026-10-01T14:53:18.885Z",
+        "ref": "repair/cofi-migration-complete-20261007/fix-cofi-opus/stream-01.jsonl:L713",
+        "request_ref": "repair/cofi-migration-complete-20261007/fix-cofi-opus/stream-01.jsonl:L712",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "e0dce297-f0f9-4e8e-adb6-f2a8eeef850a"
+      ]
+    }
+  },
+  "revision": "871dbcf0ed85e10b3dc05afa0ae591d090cd53dc24ad85bc90d89cbb0d6affe5"
+}

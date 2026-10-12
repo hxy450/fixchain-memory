@@ -1,0 +1,190 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-68b0d7a44f60b8170647",
+  "created_at": "2026-10-11T19:56:27.495502+00:00",
+  "migration_key": "6ccfd659-7ee2-49d9-a90b-a7fa247e4484",
+  "title": "认证被拒与底层异常同以 reject 返回时整体按异常处理，致认证重试失效；规格又给重连等待加了取消出口",
+  "when": "NFC 引擎实现阶段，把 Android 以 boolean 返回认证结果、以异常表示丢卡的 API 映射到只以 Promise reject 报错的 SDK，并实现带重试的认证方法时；兼及规格提取阶段描述源码重连循环的退出条件时",
+  "description": "源方法 authenticateSectorWithKeyA/B 返回 false 表示密钥被拒并据此按偏好重试，仅 IOException/TagLostException 等表示丢卡；目标 MifareClassicTag.authenticateSector 返回 Promise<void>，认证被拒与 I/O、状态异常都以 BusinessError reject，d.ts 只列出 3100201/3100204 而未说明分别对应哪种情形。源码的 auto_reconnect 等待循环只在重新连上后退出。",
+  "summary": "写前，Slice 1 F001 引擎 worker（agent-a253fc76af4eeb005）完整读取了 MCReader.java。其中 authenticate(1039-1072)\n用 ret = authenticateSectorWithKeyA/B(...) 取 boolean：ret 为 false 且 use_retry_authentication 开启时最多重试\nretry_authentication_count+1 轮，只有 IOException/AIOOBE/SecurityException 才立即返回 false。它同时读到 F001 spec\nAC45，判定写明「偏好开 + count=2 + 持续失败 → 恰 3 次；底层异常 → 1 次即 false」。它还用 sed 读过 nfctech.d.ts，\n确认 authenticateSector 只返回 Promise<void>。这些输入已经正确且足够，worker 在 source-notes D-2 里也自己写明\n「HMOS 认证失败/IO 错同为 reject」，并约定其余错误码按认证失败返回 false。\n然而，McReader.ets 初次 Write 中的 authenticate() 直接 await mfc.authenticateSector，只要 reject 就立即 return false\n（注释写「底层异常 → 立即 false，D-2」）；ret=true 只在 resolve 后赋值，所以「ret 为 false 再重试」这一分支永远走不到。\n同一文件的 authenticateSectorOnce 按 D-2 区分了 false 与异常，但只有 buildNextKeyMapPart 和 valueTransferRestore\n调用它。于是认证重试只在密钥映射路径生效：readSector、writeBlock、writeValueBlock、isWritableOnPositions、\nhasDecTransRestPermission 都经 authenticate，重试偏好在这些路径上不起作用。生成末期的自检（同转录 L229）只核了\nauthenticateSectorOnce 与 D-2 一致，没有回看 authenticate。该片段原样保留到生成结束快照。\n修复批次 C 的脚本（stream-01 L4704）把 authenticate 改为每轮调用 authenticateSectorOnce：被拒得 false 后按偏好重试，\n丢卡等异常才立即返回 false。终轮修复（stream-04 L8104）随后又补强了 authenticateSectorOnce 的在场判定。\n第二个分支（C10）出在规格。规格作者 c4-01（agent-aedadd5e5914d0027）完整读过 MCReader.java，其中 518-542 行的重连循环\n只有 while(!isConnected()) { sleep(500); connect(); }，不检查取消；同一作者写的 F001 AC25 也写着「循环 connect 直到成功」。\n可是 races addendum §2 写成「页面销毁必须能终止该循环——引擎侧以取消标志为唯一出口」，decision-ledger 里没有把它登记为偏离。\n实现者读到 races 后，在 while 循环内加入 if (cancelKeyMapFlag) return -1，注释引用 races §2。\n修复时删除了这一出口，改为在下一轮检点再响应取消。\n未归因部分：C6 用哪个错误码判定丢卡（生成时认定 3100204 为 IO/丢卡，修复改为 3100201 + 在场复核）。\n生成侧 migration-report:130 与修复侧审计都把它列为真机待验，修复报告也注明「NFC 不可达、源码对照」，\n所以本卡不把选哪个码本身记为已核偏差。N1/N2 是修复期为补强 C6 新判定而加的；生成快照中 readSector\n已按 races §4 与 AC31 在读错后复核 isConnected 并抛 TagLostError，readAsMuchAsPossible 也会捕获并返回 null。\n报告中 C9 的修前状态「缺失」与快照不符，其最终改动来自 N1/N2，不另记生成偏差。C11（key 只取前 6 字节）属于\nAndroid 框架 MifareClassic 的内部行为，不在 MCReader.java 和 spec 输入中，没有给出可达的触发输入，不归因。\n",
+  "recommendations": [
+    "实现阶段：源 API 用返回值表示「被拒」、用异常表示「丢卡」，而目标 SDK 只会 reject 时，先写一个单次原语适配器（成功 true、被拒 false、丢卡 throw）。所有带重试或返回码的上层方法（authenticate、readSector、writeBlock 等）都经这一个适配器，不要在上层再 catch 全部 reject 后直接返回。",
+    "实现阶段：按 spec 判定用例逐条走读代码。例如 AC45 的「偏好开 + count=2 + 持续失败 → 恰 3 次」：既然「持续失败」在目标 SDK 中表现为 reject，就要确认代码确实会进入第 2、3 轮，不能只核与源码形状相同。",
+    "实现阶段：适配器若靠 d.ts 未说明语义的错误码区分被拒与丢卡，要把这个码值假设写进真机待验项，并配合连接或在场复核等独立信号，不要只靠单个码分流。",
+    "规格提取阶段：描述源码循环时保留源码的退出条件。若出于平台理由要新增取消或超时出口，作为显式偏离写入决策账本，并同步对应 AC；不要在 addendum 里直接把它写成实现要求。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/services/McReader.ets",
+        "since": "2026-10-01T17:23:26.037Z",
+        "at": "2026-10-08T12:26:25.614Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/android/MifareClassicTool/app/src/main/java/de/syss/MifareClassicTool/MCReader.java",
+          "at": "2026-10-01T15:59:34.134Z",
+          "reason": "正常输入：实现者完整 Read 的回执中有 authenticate(1039-1072)，用 boolean ret 判定被拒，被拒且开启偏好时重试 count+1 轮，只有 IOException/AIOOBE/SecurityException 才立即 false；还有 buildNextKeyMapPart 的重连循环（agent-a253fc76af4eeb005.jsonl:L37、L40）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/spec/baseline/features/F001-nfc-engine.md",
+          "at": "2026-10-01T15:59:25.827Z",
+          "reason": "正常输入：Read 回执中 F001-AC45 写明 use_retry_authentication=true 时最多 count+1 次，判定用例为「偏好开 + count=2 + 持续失败 → 恰 3 次」；AC34 写明认证失败时 readSector 返回 null。足以要求持续被拒时进入重试（agent-a253fc76af4eeb005.jsonl:L31、L34）。"
+        },
+        {
+          "key": "/Applications/DevEco-Studio.app/Contents/sdk/default/openharmony/ets/api/tag/nfctech.d.ts",
+          "at": "2026-10-01T16:01:21.396Z",
+          "reason": "正常输入：Bash sed 读回 MifareClassicTag.authenticateSector(...) 的签名为 Promise<void>，只列出 BusinessError 201/401/3100201/3100204，没有 boolean 结果。可见被拒只能以 reject 出现，实现者随后在思考中也这样记录（agent-a253fc76af4eeb005.jsonl:L84-L86、L116）。"
+        },
+        {
+          "key": "agent-a253fc76af4eeb005.jsonl",
+          "at": "2026-10-01T16:13:12.840Z",
+          "reason": "偏差输出：它已在 source-notes D-2 中写明「认证失败/IO 错同为 reject、其余码按认证失败 false」（L165），但 McReader.ets 初次 Write 的 authenticate() 对任意 reject 立即 return false，重试分支因此不可达；只有映射路径用的 authenticateSectorOnce 区分了 false 与异常（L169-L170；自检 L229 只核了后者）。同一次 Write 还按 races §2 在重连 while 循环内加入 cancelKeyMapFlag → return -1，这一处只是传递规格要求。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/android/MifareClassicTool/app/src/main/java/de/syss/MifareClassicTool/MCReader.java",
+          "at": "2026-10-01T09:37:23.497Z",
+          "reason": "正常输入：规格作者完整 Read 的回执中有 518-542 行 auto_reconnect 循环 while(!isConnected()) { sleep(500); connect(); }，循环内不检查 cancel，取消只在每个密钥轮检点生效（agent-aedadd5e5914d0027.jsonl:L36-L37）。"
+        },
+        {
+          "key": "agent-aedadd5e5914d0027.jsonl",
+          "at": "2026-10-01T10:03:05.157Z",
+          "reason": "规格偏差：读到上述源码后，主 spec 的 AC25 仍写「循环 connect 直到成功」，但 Write 出的 races addendum §2 要求「页面销毁必须能终止该循环——引擎侧以取消标志为唯一出口」，给源码循环新增了退出条件，且没有登记为偏离（L89、L101-L102）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/spec/baseline/features/F001-nfc-engine.races.md",
+          "at": "2026-10-01T15:59:55.117Z",
+          "reason": "交付桥梁：实现者 Read 的回执中 §取消与自动重连第 2 条仍是「引擎侧以取消标志为唯一出口」，随后它在目标的重连循环中照此实现（agent-a253fc76af4eeb005.jsonl:L51-L52）。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "实现者用 Bash sed 读取 nfctech.d.ts 的 680-760 行，回执给出 MifareClassicTag.authenticateSector 签名为 Promise<void> 及其 BusinessError 列表；这是它写 McReader.ets 前对认证结果形态的真实查证。",
+          "evidence": [
+            {
+              "source": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-a253fc76af4eeb005.jsonl",
+              "line": 84
+            },
+            {
+              "source": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-a253fc76af4eeb005.jsonl",
+              "line": 85
+            }
+          ]
+        },
+        {
+          "from": 5,
+          "to": 6
+        },
+        {
+          "from": 6,
+          "to": 7
+        },
+        {
+          "from": 7,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "没有真机材料能确认 authenticateSector 在密钥错误和拔卡时分别返回哪个 BusinessError 码；C6 的码值极性在生成侧与修复侧都是未验证的假设。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-68b0d7a44f60b8170647",
+  "metadata": {
+    "migration": {
+      "project": "MifareClassicTool",
+      "server_session_id": "6ccfd659-7ee2-49d9-a90b-a7fa247e4484"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5",
+        "claude-sonnet-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.247"
+      ]
+    },
+    "source_set_id": "sources-aa4e59703bcc1d60f854",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos",
+        "at": "2026-10-01T12:05:48.424Z",
+        "ref": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-abba5084389876d39.jsonl:L102",
+        "request_ref": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-abba5084389876d39.jsonl:L101",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos",
+        "at": "2026-10-01T12:05:48.424Z",
+        "ref": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-abba5084389876d39.jsonl:L102",
+        "request_ref": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-abba5084389876d39.jsonl:L101",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-10-01T22:42:23.282Z",
+        "ref": "repair/mifareclassictool-migration-complete-20261008/fix-mifareclassictool-opus/stream-01.jsonl:L60",
+        "request_ref": "repair/mifareclassictool-migration-complete-20261008/fix-mifareclassictool-opus/stream-01.jsonl:L58",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-10-01T22:42:23.282Z",
+        "ref": "repair/mifareclassictool-migration-complete-20261008/fix-mifareclassictool-opus/stream-01.jsonl:L60",
+        "request_ref": "repair/mifareclassictool-migration-complete-20261008/fix-mifareclassictool-opus/stream-01.jsonl:L58",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "6f4879bc-c69f-4670-9167-9b09da20a889"
+      ]
+    }
+  },
+  "revision": "1a6362abd01bf2efef12a84518e969b1cc7e4a2a05d94027ccdca22adb072d44"
+}

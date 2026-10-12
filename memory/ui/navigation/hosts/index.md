@@ -1,20 +1,24 @@
 # ui/navigation/hosts
 
-Navigation/@Entry宿主与页面注册（含根 Navigation 默认标题栏与工具栏）、嵌入页取栈、单 Activity 壳内 loadChildFragment 子页的壳内回退栈与嵌入承载、半透明卡片式 Activity 的透明 DIALOG 路由、路由跳板和跨页面共享生命周期，外部入口（推送、快捷方式）宿主导航执行器的可用性守卫。
+Navigation/@Entry宿主与页面注册（含根 Navigation 默认标题栏与工具栏）、嵌入页取栈、单 Activity 壳内 loadChildFragment 子页的壳内回退栈与嵌入承载、半透明卡片式 Activity 的透明 DIALOG 路由、路由跳板和跨页面共享生命周期，外部入口（推送、快捷方式）宿主导航执行器的可用性守卫；NavHost 四向自定义转场到 customNavContentTransition 与页面绑定，导航目的地内 LocalLifecycleOwner 的 ON_STOP/ON_RESUME 接到 onHidden/onShown
 
 [上一级](../index.md)
 
 ## 本级经验
 
+- [NavHost 的 enter/exit/popEnter/popExit 自定义转场迁到 Navigation：用 customNavContentTransition 驱动，各 NavDestination 把位移、透明度与缩放绑定到共享转场状态](lesson-9de3322165e533d6b790.lesson.md)
+  - 时机：规格提取、计划派工与界面实现阶段，把 Compose NavHost（或目的地）上的 enterTransition/exitTransition/popEnterTransition/popExitTransition 落到 ArkUI Navigation 时
+  - 情境：源端 NavHost 定义四向自定义转场（scaleIn/scaleOut、slideIn/slideOut、tween 时长与延迟等）；目标为 Navigation + NavDestination，在已观察的 API 中 customNavContentTransition 回调拿到的 NavContentInfo 不提供页面的 opacity、translate 属性；规格或派工可能写“customNavContentTransition 或默认转场”二选一，验收只核转场常量是否与源相等。
+  - 例外：决策记录以编号批准采用系统默认转场，并写明差异
 - [main_pages.json 只登记经 router 进入的 @Entry 页：被 Tabs/父页导入的子组件与 @CustomDialog 不登记，10905402 与 @Entry+export 警告先判定角色](lesson-c4a6eaaf6a22c0b8823f.lesson.md)
   - 时机：入口装配阶段写 main_pages.json 路由登记时；编译修复遇到“登记页面须有且仅有一个 @Entry”（10905402）或“export struct with @Entry”警告时
   - 情境：源端单 Activity 以底部导航承载多个 Fragment，另有 DialogFragment 与经导航跳转的二级页；目标主页面用 Tabs/TabContent import 并实例化页面 struct，弹窗写成 @CustomDialog，这些文件都放在 pages/ 目录；工程用 main_pages.json 登记路由页。
 - [一进入就无条件跳转并 finish 的 Activity 是路由跳板：目标按同样条件直达实际页面，不把它的布局做成可见页](lesson-0b72c197ea20fbe6f277.lesson.md)
   - 时机：页面转换阶段迁移入口类 Activity、以及调用方为 Intent(X) 确定目标路由时
   - 情境：Android Activity 在 onCreate/initView 开头按条件 startActivity 到另一页并立即 finish()（如登录入口按配置转到短信登录或一键登录），它的布局文件仍含可渲染的按钮；多个调用方以 Intent 指向这个跳板 Activity。
-- [入口页 Navigation 宿主：NavDestination 首屏只在 navDestination 映射中注册并压入同一栈，不作根内容；.navDestination 直接传 @Builder](lesson-8953e390416a80d7dd8c.lesson.md)
-  - 时机：入口页实现或收尾接线阶段，创建 Navigation 宿主、决定首屏放在根内容还是压栈、编写 navDestination 分发时
-  - 情境：目标入口页用 Navigation + @Provider NavPathStack 承载路由；首屏（启动页等）写成返回 NavDestination 的组件，在 onReady 取栈并按启动决策 pushPathByName 下一页；目的地由 @Builder 映射分发。
+- [入口页 Navigation 宿主：NavDestination 首屏只在 navDestination 映射中注册并在空栈时压入同一栈，不作根内容；隐藏 navBar 时初始栈必须非空；.navDestination 直接传 @Builder](lesson-8953e390416a80d7dd8c.lesson.md)
+  - 时机：入口页实现或收尾接线阶段，创建 Navigation 宿主、决定首屏放在根内容还是压栈、编写 navDestination 分发时；为根 Navigation 决定是否设 hideNavBar 时
+  - 情境：目标入口页用 Navigation + @Provider NavPathStack 承载路由；首屏（启动页等）写成返回 NavDestination 的组件，在 onReady 取栈并按启动决策 pushPathByName 下一页；目的地由 @Builder 映射分发。也包括启动页以 NavDestination 为根、已在 pageMap 注册，入口却把它放进 Navigation 内容槽并加 hideNavBar(true)，初始栈为空；或首屏页依赖 onShown、onResult、onBackPressed（如接收文件选择结果），却作为 Navigation 首页内容承载。
   - 例外：首屏是普通组件（不返回 NavDestination）、作为 Navigation 根内容常驻，且不依赖 NavDestinationContext 取栈
 - [半透明卡片式 Activity 迁移为透明 DIALOG 路由，遮罩只作页内一层](lesson-22c2a8f0e6b782b95448.lesson.md)
   - 时机：界面实现与规格提取阶段，迁移 windowIsTranslucent 主题的卡片式 Activity 及其内嵌子页时
@@ -36,3 +40,7 @@ Navigation/@Entry宿主与页面注册（含根 Navigation 默认标题栏与工
   - 时机：规格提取与计划阶段，把源端 DisposableEffect/onDispose 等清理映射成目标多页面的生命周期契约时；实现阶段把共享服务的 stop/dispose 挂到页面回调时
   - 情境：源端单 Activity 在同一个 Composable 里用状态变量切换多个屏幕，播放器等资源和 DisposableEffect 清理挂在这个外层 Composable；目标端拆成 Navigation 下的多个页面，共享服务需要重新确定由哪一层、在什么时机停止和释放。
   - 例外：源端清理本就挂在单个屏幕自己的 Composable 上，切屏即离开组合，此时按该屏对应页面的退出处理
+- [源端在导航目的地内用 LocalLifecycleOwner 观察 ON_STOP/ON_RESUME 时，owner 是返回栈条目：导航离开与退后台都要触发，目标按 onHidden/onShown 接线，销毁前先调停止入口](lesson-19dd006e049c3f9d7563.lesson.md)
+  - 时机：规格提取阶段翻译 LifecycleEventObserver 的 ON_STOP/ON_RESUME 触发契约时；页面实现阶段把引擎或服务暴露的 onStop/onResume 一类入口接到 NavDestination 生命周期时
+  - 情境：源 Composable 用 DisposableEffect(LocalLifecycleOwner.current) 注册 LifecycleEventObserver，ON_STOP 时移交后台服务、暂停或保存，ON_RESUME 时取回；该 Composable 位于 navigation-compose 的目的地内。目标页面是 NavDestination，引擎是普通类，需由页面在 onShown/onHidden/aboutToDisappear 中显式调用入口；规格可能把触发写成“退后台/前后台切换”。
+  - 例外：观察者挂在 Activity 或 ProcessLifecycleOwner 上：只对应应用前后台，按 Ability 或应用前后台回调接线

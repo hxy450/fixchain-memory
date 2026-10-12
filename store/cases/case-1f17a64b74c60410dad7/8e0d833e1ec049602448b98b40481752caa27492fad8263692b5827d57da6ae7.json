@@ -1,0 +1,201 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-1f17a64b74c60410dad7",
+  "created_at": "2026-10-11T21:48:14.610430+00:00",
+  "migration_key": "acdd6966-d460-4d88-b0a6-5dc0c5262ee5",
+  "title": "把导航目的地生命周期的 ON_STOP 窄化为“退后台”，详情页离开时在跑计时未移交后台",
+  "when": "规格提取阶段翻译源端经 LocalLifecycleOwner 观察的 ON_STOP/ON_RESUME 移交触发契约时；页面实现阶段把引擎暴露的 onStop/onResume 入口接到目标页面生命周期时",
+  "description": "源端计时等长任务在 Compose 导航目的地内用 DisposableEffect(LocalLifecycleOwner.current) 注册 LifecycleEventObserver，ON_STOP 时移交后台服务、ON_RESUME 时取回；目标端页面是 Navigation/NavDestination，引擎为普通类，需由页面在 onShown/onHidden/aboutToDisappear 等回调里显式调用移交入口。",
+  "summary": "F002 规格作者（agent-ac26d607677f04547）写前完整读到 Timer.kt：createTimerControllers 内\nval lifecycleOwner = LocalLifecycleOwner.current（L105），DisposableEffect(lifecycleOwner, steps)\n把观察者挂在该 owner 上（L221、L321-324），ON_STOP 分支在 guard 成立时 sendBroadcast(ACTION_RESUME) 移交 Worker（L296-316）；\n同一作者也读到 F003 中详情页是导航路由目的地（agent-ac26d607677f04547.jsonl:L55-L56、L34-L35）。\n在 navigation-compose 中该 owner 是返回栈条目，返回出栈或跳到编辑页时同样进入 ON_STOP 并移交。\nF002 写入时却把它表述为“前后台移交”（§数据流）、“D. 前后台移交触发侧”，AC20 写成“退后台移交”，\n唯一验收场景为“计时中退后台 2s 回前台”，没有写出 owner 是谁、导航离开也触发，以及目标端对应哪些页面事件（L167）。\nF002 自称“只规约 ON_STOP/ON_RESUME 触发侧”，F008 则把触发侧列为 out of scope、归 F002。\n同样的“退后台”说法更早已出现在分析器的 ref/Cofi_design.md 用例 3“退后台移交”（agent-aaf901398bcd7e3fb.jsonl:L191，07:12Z）、\nref/Cofi_spec.md“false：切后台计时冻结”（同转录 L187），以及 F008 §对接点“退后台 → TimerSession.startUnique”\n（agent-ab7acc37d655b8c27.jsonl:L113，07:41Z；F002 作者在 L67 读过 F008）。这些作者都直接读过 Timer.kt，都没有确认 owner 是谁。\nSlice 4（agent-a4922dccdd07c887a）读到 F002 与 Timer.kt 后，把 TimerEngine.onStop 注释为“页面退后台接线入口（Slice 8 调用）”（L157），\n源码笔记写“页面前后台事件接线归 Slice 8”（L138），但没有登记跨 slice 占位，只是沿用了“退后台”语义。\nSlice 8（agent-abe21593acb112058）的派工 engine_api 列出 onStop()/onResume()（L1），也读到上述注释（L55-L56），\n但 F003、slice 计划和派工都没有生命周期接线项。它写的 aboutToDisappear 只复位运行态并 engine.dispose()（L162），\n没有调用 onStop，也没有 onShown/onHidden 处理，全程也未提到这两个入口。Slice 9（agent-a54a0d0e8d4f6f0ef.jsonl:L176-L178）\n发现页面未调用 onStop/onResume，以为 Slice 8 会接，只登记了 installTimerSeams。\n到生成结束时 engine.onStop() 没有任何调用方（快照；R1:L2506 修复者确认）：返回出栈时引擎被直接销毁，计时丢失；\n跳到编辑页时，隐藏的详情页在进程内继续计时，没有移交后台，也没有通知。\n修复期 R1:L3924 重写页面，改为 onHidden(APP_STATE)→onStop、TRANSITION→disposeComposition，并加注释\n“ON_STOP 发生在观察者注销之后，不移交后台”。该注释是修复者自己的判断，不是生成产物。\n复审子代理 R1:L17862 标为 high；R1 查证 navigation-runtime 2.9.1 源码后，在 R1:L18062 改为宿主可见时先 engine.onStop() 再 disposeComposition（PF-021），\nR2:L1979 记录运行期复测。本卡归因的生成偏差有两处：规格把触发窄化为“退后台”；页面实现完全没接引擎的生命周期入口。\n",
+  "recommendations": [
+    "规格提取时，遇到 LifecycleEventObserver 或 DisposableEffect(lifecycleOwner) 先确认 owner 是谁（Activity、进程、NavBackStackEntry）。把让它进入 ON_STOP/ON_RESUME 的用户路径逐条写成触发契约和验收：退后台、返回出栈、跳到其他目的地、回到本页。不要用“退后台/前后台”一笔带过。",
+    "规格或计划中，引擎把生命周期回调暴露为 onStop/onResume 等入口时，在页面 feature spec 和 slice 派工里写明调用位：NavDestination onShown/onHidden 的各 reason，以及应用前后台。登记跨 slice 占位，不要只留在代码注释里。",
+    "页面实现时，离开路径（onHidden(TRANSITION)、aboutToDisappear）若要销毁引擎，先调用移交入口再 dispose。完工前用 grep 确认引擎公开的每个生命周期入口都有调用方，并验证“计时中返回列表/进入编辑页”这两个场景。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/entry/src/main/ets/pages/RecipeDetailsPage.ets",
+        "since": "2026-10-01T14:11:08.477Z",
+        "at": "2026-10-01T23:45:55.694Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Cofi/cofi-share/src/main/java/com/omelan/cofi/share/timer/Timer.kt",
+          "at": "2026-10-01T07:45:31.507Z",
+          "reason": "正常输入：F002 作者完整 Read 回执给出 lifecycleOwner = LocalLifecycleOwner.current（L105）、DisposableEffect(lifecycleOwner, steps) 注册观察者（L221、L321-324），以及 ON_STOP guard 后 sendBroadcast(ACTION_RESUME)（L296-316）。移交触发是该 owner 的 ON_STOP，不是应用退后台（agent-ac26d607677f04547.jsonl:L55-L56）。"
+        },
+        {
+          "key": "agent-ac26d607677f04547.jsonl",
+          "at": "2026-10-01T07:54:44.092Z",
+          "reason": "读到上述源码后，Write 的 F002 把 ON_STOP 写成“前后台移交”和“D. 前后台移交触发侧”，AC20 写成“退后台移交”，验收只覆盖“计时中退后台”，没有写导航离开（返回出栈/进入编辑）同样触发，也没有给出目标端触发事件映射。F002 自称负责触发侧，源码到规格的偏差落在这里（同转录 L167-L168）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/spec/baseline/features/F002-brew-timer-engine.md",
+          "at": "2026-10-01T12:03:37.831Z",
+          "reason": "交付桥梁：Slice 4 的 Read 回执仍是“前后台移交（F008 seam）: ON_STOP guard 通过 → …”（L41）和 AC20“退后台移交”（L145）（agent-a4922dccdd07c887a.jsonl:L21-L24）。"
+        },
+        {
+          "key": "agent-a4922dccdd07c887a.jsonl",
+          "at": "2026-10-01T12:22:21.090Z",
+          "reason": "读到 F002（也读了 Timer.kt，L27-L28）后，Write 的 TimerEngine 把 onStop/onResume 定为“页面退后台/回前台接线入口（Slice 8 调用）”（L157-L158），源码笔记写“页面前后台事件接线归 Slice 8”（L138），未登记占位。本链确认它传递了“退后台”语义，不另认定它独立失职。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/entry/src/main/ets/timer/TimerEngine.ets",
+          "at": "2026-10-01T12:29:15.236Z",
+          "reason": "交付桥梁：Slice 8 的 Read 回执包含 onStop 的“页面退后台接线入口（Slice 8 调用）：guard 通过 → 前台停摆 + 会话移交”和 onResume 的“页面回前台接线入口（Slice 8 调用）”（agent-abe21593acb112058.jsonl:L55-L56）。"
+        },
+        {
+          "key": "agent-abe21593acb112058.jsonl",
+          "at": "2026-10-01T12:37:28.432Z",
+          "reason": "派工 engine_api 已列出 onStop()/onResume()（L1），TimerEngine 注释写明由 Slice 8 调用。Edit 写的 aboutToDisappear 却只复位 timerRunningState 并 engine.dispose()，页面没有任何 onStop/onResume 调用，也没有 onShown/onHidden（L162-L163），全程未提及这两个入口。返回出栈因此直接丢弃计时。导航离开语义在其输入中本已缺失，这里只认定未接生命周期入口这一实现偏差。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": 6
+        },
+        {
+          "from": 6,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "生成期材料没有 navigation-runtime 源码或文档；“导航离开时 ON_STOP 先于观察者注销”依据 Timer.kt 的 LocalLifecycleOwner，以及修复期对 navigation-compose 2.9.1 的查证（R1:L17953 起，修复报告 §2.8 #64），未在设备上做源端复现。",
+    "无法判断 Slice 8 若按输入的“退后台”语义接线，是否会经 NavDestination.onHidden 一并覆盖导航离开；因此导航离开分支的主要偏差归于规格窄化，Slice 8 的偏差只限于未接任何生命周期入口。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-1f17a64b74c60410dad7",
+  "metadata": {
+    "migration": {
+      "project": "Cofi",
+      "server_session_id": "acdd6966-d460-4d88-b0a6-5dc0c5262ee5"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-sonnet-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.247"
+      ]
+    },
+    "source_set_id": "sources-22befa667a51476d2497",
+    "environment": [
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0-alpha17",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos",
+        "at": "2026-10-01T06:38:41.480Z",
+        "ref": "generation/9176a7f7b2203f7a/runs/721fb7c7-0508-4e2f-8b79-cfb906c65d16/epoch-0/sessions/agent-ad0f8989f195b578f.jsonl:L18",
+        "request_ref": "generation/9176a7f7b2203f7a/runs/721fb7c7-0508-4e2f-8b79-cfb906c65d16/epoch-0/sessions/agent-ad0f8989f195b578f.jsonl:L17",
+        "phase": "generation"
+      },
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0-alpha17",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Cofi",
+        "at": "2026-10-01T06:58:28.349Z",
+        "ref": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/main-507b2f1f-5d21-4455-a17e-460566675ced.jsonl:L45",
+        "request_ref": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/main-507b2f1f-5d21-4455-a17e-460566675ced.jsonl:L43",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos",
+        "at": "2026-10-01T08:45:11.210Z",
+        "ref": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/agent-a6b66d337af813fff.jsonl:L63",
+        "request_ref": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/agent-a6b66d337af813fff.jsonl:L62",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos",
+        "at": "2026-10-01T10:50:10.334Z",
+        "ref": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/agent-a099e355ad83c788a.jsonl:L122",
+        "request_ref": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/agent-a099e355ad83c788a.jsonl:L121",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-10-01T14:45:59.485Z",
+        "ref": "repair/cofi-migration-complete-20261007/fix-cofi-opus/stream-01.jsonl:L288",
+        "request_ref": "repair/cofi-migration-complete-20261007/fix-cofi-opus/stream-01.jsonl:L287",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-10-01T14:45:59.485Z",
+        "ref": "repair/cofi-migration-complete-20261007/fix-cofi-opus/stream-01.jsonl:L288",
+        "request_ref": "repair/cofi-migration-complete-20261007/fix-cofi-opus/stream-01.jsonl:L287",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0-alpha17",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": null,
+        "at": "2026-10-01T14:53:18.885Z",
+        "ref": "repair/cofi-migration-complete-20261007/fix-cofi-opus/stream-01.jsonl:L713",
+        "request_ref": "repair/cofi-migration-complete-20261007/fix-cofi-opus/stream-01.jsonl:L712",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "e0dce297-f0f9-4e8e-adb6-f2a8eeef850a"
+      ]
+    }
+  },
+  "revision": "8e0d833e1ec049602448b98b40481752caa27492fad8263692b5827d57da6ae7"
+}

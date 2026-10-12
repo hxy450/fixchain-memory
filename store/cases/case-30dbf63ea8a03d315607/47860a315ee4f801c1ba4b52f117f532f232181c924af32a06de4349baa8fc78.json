@@ -1,0 +1,486 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-30dbf63ea8a03d315607",
+  "created_at": "2026-10-11T22:03:39.726524+00:00",
+  "migration_key": "acdd6966-d460-4d88-b0a6-5dc0c5262ee5",
+  "title": "源端返回栈随 savedInstanceState 恢复，规格只写“冷启进入列表页”，后台回收恢复未迁移",
+  "when": "规格提取阶段，为宿主 Activity 生命周期与导航容器（onCreate(savedInstanceState)、rememberNavController/NavHost）编写验收项时；其次是实现阶段装配 UIAbility 与根 Navigation 时",
+  "description": "Android 源用 Compose Navigation（rememberNavController + NavHost）或 Activity savedInstanceState 承担进程被系统回收后的返回栈与路由参数恢复，源码里没有显式保存代码；目标 HarmonyOS 用 UIAbility + Navigation/NavDestination + NavPathStack，后台回收恢复需要显式开启。",
+  "summary": "规格作者（c4-03 批，负责 F004/F009/F010）写前完整 Read 了 MainActivity.kt。回执里有\nonCreate(savedInstanceState) / super.onCreate(savedInstanceState)（:53-55），\n以及 MainNavigation() 中的 val navController = rememberNavController() 和\nNavHost(startDestination = RECIPE_LIST)（:88-89 起）\n（agent-ae7e55812e05594c5.jsonl:L66-L67）。Compose Navigation 依靠这两处框架调用，在进程被系统回收后\n恢复返回栈 [list, recipe] 和路由参数。这是源应用用户可见的行为：源码没有显式保存代码，但从这两处调用可以确定。\n同一会话注入的 ArkTS 导航目录也列有“导航栈持久化·进程回收后恢复多级页面（recoverable）”可选模式（同转录 L12）。\nF009 规格却在“H. 宿主生命周期”中只写了 AC19“onCreate 初始化链……冷启进入配方列表起始页”，\n并把真源标为 MainActivity.kt:53；AC20 只覆盖前后台回切与监听释放。全文没有“进程回收后重建 → 恢复页面栈与参数”的\n分支，也没有对应的平台差异决策（同转录 L165-L166）。偏差位于源码到规格的生命周期语义映射：\n带 savedInstanceState 的重建入口被收窄成了冷启。\nSlice 10 实现者读到该规格（agent-a4e2a53bfc70188f1.jsonl:L24-L25）以及同一份源码（L28-L29）后，按规格写了宿主代码。\nEntryAbility 的 onCreate 只做 DB 预热和深链 want，onWindowStageCreate 每次都 loadContent（L152-L153）。\nMainNavigation 在 aboutToAppear 栈空时 push RecipeList，Navigation 没有设 id/recoverable（L166-L167）。\n它随后在 RecipeList/RecipeEdit/BackupRestore/About/RecipeDetails 五个页面上做路由名收敛，也没有给 NavDestination 设\nrecoverable（L174-L209）。两个宿主文件在生成期内没有更晚的写者，缺口一直保留到修复前。\n修复在 EntryAbility.onCreate 中加入 setRestoreEnabled(true)；launchReason 为 APP_RECOVERY 时调用\nrestoreWindowStage(new LocalStorage())，并新增 onWindowStageRestore。根 Navigation 加了 id 与 recoverable(true)，\n9 个 NavDestination 在 hideTitleBar(true) 后加 recoverable(true)（R1:L16561、L16571）。\n修复者试验时发现，只开 setRestoreEnabled + recoverable，APP_RECOVERY 拉起后仍不恢复，还需要 restoreWindowStage\n（stream-01.jsonl:L16425-L16456）。\nRecipeEditPage 中的 obj instanceof RecipeEditParam 由页面转换者写入（agent-a099e355ad83c788a.jsonl:L138），\n在内存栈传类实例时判断成立。开启恢复后，参数经序列化还原为同形普通对象，判断才失效，修复改为按 recipeId 字段识别\n（R1:L16602）。这是引入恢复机制后的配套调整，不另计为生成偏差。\n",
+  "recommendations": [
+    "规格提取时，若源宿主使用 rememberNavController/NavHost，或在 onCreate 接收 savedInstanceState，应在生命周期/导航节单列“进程回收后重建”分支：写明要恢复哪些返回栈页面与路由参数、计时等会话如何接续，以及目标平台的对应决策；不要只写“冷启进入起始页”。",
+    "实现装配 UIAbility 与根 Navigation 时，若需要页面栈恢复：在 onCreate 调用 setRestoreEnabled(true)；launchReason 为 APP_RECOVERY 时调用 restoreWindowStage(new LocalStorage()) 并实现 onWindowStageRestore；根 Navigation 设 id 与 recoverable(true)，每个 NavDestination 设 recoverable(true)。验证方法：页面进入详情后 aa force-stop 再启动，确认 launchReason=APP_RECOVERY 时页面栈与参数都已还原。",
+    "可恢复页面的路由参数应可序列化，接收端按字段识别（例如 typeof recipeId === 'number'），不要只依赖 instanceof 判断类实例。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/entry/src/main/ets/entryability/EntryAbility.ets",
+        "since": "2026-10-01T14:11:08.477Z",
+        "at": "2026-10-01T23:45:55.694Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Cofi/app/src/main/java/com/omelan/cofi/MainActivity.kt",
+          "at": "2026-10-01T07:45:12.853Z",
+          "reason": "正常输入：规格作者 Read 回执返回完整 MainActivity.kt，含 onCreate(savedInstanceState)/super.onCreate(savedInstanceState)（:53-55）与 rememberNavController() + NavHost(startDestination=RECIPE_LIST)（:88-89 起）。这足以确定源端在进程回收后恢复返回栈与路由参数（agent-ae7e55812e05594c5.jsonl:L66-L67）。"
+        },
+        {
+          "key": "agent-ae7e55812e05594c5.jsonl",
+          "at": "2026-10-01T07:59:41.089Z",
+          "reason": "读到上述源码后，Write F009 规格：宿主生命周期只写 AC19“onCreate 初始化链……冷启进入配方列表起始页”（真源标 MainActivity.kt:53），AC20 只写前后台回切；没有进程回收重建、恢复页面栈与参数的分支或平台差异决策。savedInstanceState 重建语义在源码到规格这一步丢失（同转录 L165-L166）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/spec/baseline/features/F009-system-integration.md",
+          "at": "2026-10-01T12:52:51.500Z",
+          "reason": "交付桥梁：Slice 10 实现者 Read 回执返回该规格，含 AC19 冷启直达列表页、不含页面栈恢复要求（agent-a4e2a53bfc70188f1.jsonl:L24-L25）。"
+        },
+        {
+          "key": "agent-a4e2a53bfc70188f1.jsonl",
+          "at": "2026-10-01T13:04:21.310Z",
+          "reason": "读到规格（也读了同一源码 L28-L29）后，Write EntryAbility：onCreate 只做 DB 预热与 handleIncomingWant，onWindowStageCreate 每次都 loadContent(pages/MainNavigation)；没有 setRestoreEnabled/restoreWindowStage/onWindowStageRestore（同转录 L152-L153）。本链确认它按规格传递了缺口，不另推定其独立失职。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/entry/src/main/ets/pages/MainNavigation.ets",
+        "since": "2026-10-01T14:11:08.477Z",
+        "at": "2026-10-01T23:45:55.694Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Cofi/app/src/main/java/com/omelan/cofi/MainActivity.kt",
+          "at": "2026-10-01T07:45:12.853Z",
+          "reason": "正常输入：规格作者 Read 回执返回完整 MainActivity.kt，含 onCreate(savedInstanceState)/super.onCreate(savedInstanceState)（:53-55）与 rememberNavController() + NavHost(startDestination=RECIPE_LIST)（:88-89 起）。这足以确定源端在进程回收后恢复返回栈与路由参数（agent-ae7e55812e05594c5.jsonl:L66-L67）。"
+        },
+        {
+          "key": "agent-ae7e55812e05594c5.jsonl",
+          "at": "2026-10-01T07:59:41.089Z",
+          "reason": "读到上述源码后，Write F009 规格：宿主生命周期只写 AC19“onCreate 初始化链……冷启进入配方列表起始页”（真源标 MainActivity.kt:53），AC20 只写前后台回切；没有进程回收重建、恢复页面栈与参数的分支或平台差异决策。savedInstanceState 重建语义在源码到规格这一步丢失（同转录 L165-L166）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/spec/baseline/features/F009-system-integration.md",
+          "at": "2026-10-01T12:52:51.500Z",
+          "reason": "交付桥梁：Slice 10 实现者 Read 回执返回该规格，含 AC19 冷启直达列表页、不含页面栈恢复要求（agent-a4e2a53bfc70188f1.jsonl:L24-L25）。"
+        },
+        {
+          "key": "agent-a4e2a53bfc70188f1.jsonl",
+          "at": "2026-10-01T13:05:11.646Z",
+          "reason": "按规格 Write MainNavigation：注释写“启动首页 = RecipeList；aboutToAppear 栈空时 push 一次”，Navigation(navPathStack) 只挂 navDestination(pageMap)，没有 id 与 recoverable（同转录 L166-L167）。本链确认它按规格传递了缺口。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/entry/src/main/ets/pages/RecipeListPage.ets",
+        "since": "2026-10-01T14:11:08.477Z",
+        "at": "2026-10-01T23:45:55.694Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Cofi/app/src/main/java/com/omelan/cofi/MainActivity.kt",
+          "at": "2026-10-01T07:45:12.853Z",
+          "reason": "正常输入：规格作者 Read 回执返回完整 MainActivity.kt，含 onCreate(savedInstanceState)/super.onCreate(savedInstanceState)（:53-55）与 rememberNavController() + NavHost(startDestination=RECIPE_LIST)（:88-89 起）。这足以确定源端在进程回收后恢复返回栈与路由参数（agent-ae7e55812e05594c5.jsonl:L66-L67）。"
+        },
+        {
+          "key": "agent-ae7e55812e05594c5.jsonl",
+          "at": "2026-10-01T07:59:41.089Z",
+          "reason": "读到上述源码后，Write F009 规格：宿主生命周期只写 AC19“onCreate 初始化链……冷启进入配方列表起始页”（真源标 MainActivity.kt:53），AC20 只写前后台回切；没有进程回收重建、恢复页面栈与参数的分支或平台差异决策。savedInstanceState 重建语义在源码到规格这一步丢失（同转录 L165-L166）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/spec/baseline/features/F009-system-integration.md",
+          "at": "2026-10-01T12:52:51.500Z",
+          "reason": "交付桥梁：Slice 10 实现者 Read 回执返回该规格，含 AC19 冷启直达列表页、不含页面栈恢复要求（agent-a4e2a53bfc70188f1.jsonl:L24-L25）。"
+        },
+        {
+          "key": "agent-a4e2a53bfc70188f1.jsonl",
+          "at": "2026-10-01T13:05:29.990Z",
+          "reason": "作为 Slice 10 宿主装配者，对本页做 RouteName 收敛 Edit（同转录 L174-L177）；规格没有页面栈恢复要求，本页 NavDestination 没有补 recoverable。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/entry/src/main/ets/pages/RecipeEditPage.ets",
+        "since": "2026-10-01T14:11:08.477Z",
+        "at": "2026-10-01T23:45:55.694Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Cofi/app/src/main/java/com/omelan/cofi/MainActivity.kt",
+          "at": "2026-10-01T07:45:12.853Z",
+          "reason": "正常输入：规格作者 Read 回执返回完整 MainActivity.kt，含 onCreate(savedInstanceState)/super.onCreate(savedInstanceState)（:53-55）与 rememberNavController() + NavHost(startDestination=RECIPE_LIST)（:88-89 起）。这足以确定源端在进程回收后恢复返回栈与路由参数（agent-ae7e55812e05594c5.jsonl:L66-L67）。"
+        },
+        {
+          "key": "agent-ae7e55812e05594c5.jsonl",
+          "at": "2026-10-01T07:59:41.089Z",
+          "reason": "读到上述源码后，Write F009 规格：宿主生命周期只写 AC19“onCreate 初始化链……冷启进入配方列表起始页”（真源标 MainActivity.kt:53），AC20 只写前后台回切；没有进程回收重建、恢复页面栈与参数的分支或平台差异决策。savedInstanceState 重建语义在源码到规格这一步丢失（同转录 L165-L166）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/spec/baseline/features/F009-system-integration.md",
+          "at": "2026-10-01T12:52:51.500Z",
+          "reason": "交付桥梁：Slice 10 实现者 Read 回执返回该规格，含 AC19 冷启直达列表页、不含页面栈恢复要求（agent-a4e2a53bfc70188f1.jsonl:L24-L25）。"
+        },
+        {
+          "key": "agent-a4e2a53bfc70188f1.jsonl",
+          "at": "2026-10-01T13:05:36.278Z",
+          "reason": "作为 Slice 10 宿主装配者，对本页做 RecipeEditParam 导入与 RouteName 收敛 Edit（同转录 L180-L183）；没有补 recoverable。onReady 中的 instanceof 参数识别来自页面转换者（agent-a099e355ad83c788a.jsonl:L138），只在恢复开启后才失效。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/entry/src/main/ets/pages/BackupRestorePage.ets",
+        "since": "2026-10-01T14:11:08.477Z",
+        "at": "2026-10-01T23:45:55.694Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Cofi/app/src/main/java/com/omelan/cofi/MainActivity.kt",
+          "at": "2026-10-01T07:45:12.853Z",
+          "reason": "正常输入：规格作者 Read 回执返回完整 MainActivity.kt，含 onCreate(savedInstanceState)/super.onCreate(savedInstanceState)（:53-55）与 rememberNavController() + NavHost(startDestination=RECIPE_LIST)（:88-89 起）。这足以确定源端在进程回收后恢复返回栈与路由参数（agent-ae7e55812e05594c5.jsonl:L66-L67）。"
+        },
+        {
+          "key": "agent-ae7e55812e05594c5.jsonl",
+          "at": "2026-10-01T07:59:41.089Z",
+          "reason": "读到上述源码后，Write F009 规格：宿主生命周期只写 AC19“onCreate 初始化链……冷启进入配方列表起始页”（真源标 MainActivity.kt:53），AC20 只写前后台回切；没有进程回收重建、恢复页面栈与参数的分支或平台差异决策。savedInstanceState 重建语义在源码到规格这一步丢失（同转录 L165-L166）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/spec/baseline/features/F009-system-integration.md",
+          "at": "2026-10-01T12:52:51.500Z",
+          "reason": "交付桥梁：Slice 10 实现者 Read 回执返回该规格，含 AC19 冷启直达列表页、不含页面栈恢复要求（agent-a4e2a53bfc70188f1.jsonl:L24-L25）。"
+        },
+        {
+          "key": "agent-a4e2a53bfc70188f1.jsonl",
+          "at": "2026-10-01T13:05:43.093Z",
+          "reason": "作为 Slice 10 宿主装配者，对本页做 RouteName 收敛 Edit（同转录 L186-L189）；规格没有页面栈恢复要求，本页 NavDestination 没有补 recoverable。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/entry/src/main/ets/pages/AboutPage.ets",
+        "since": "2026-10-01T14:11:08.477Z",
+        "at": "2026-10-01T23:45:55.694Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Cofi/app/src/main/java/com/omelan/cofi/MainActivity.kt",
+          "at": "2026-10-01T07:45:12.853Z",
+          "reason": "正常输入：规格作者 Read 回执返回完整 MainActivity.kt，含 onCreate(savedInstanceState)/super.onCreate(savedInstanceState)（:53-55）与 rememberNavController() + NavHost(startDestination=RECIPE_LIST)（:88-89 起）。这足以确定源端在进程回收后恢复返回栈与路由参数（agent-ae7e55812e05594c5.jsonl:L66-L67）。"
+        },
+        {
+          "key": "agent-ae7e55812e05594c5.jsonl",
+          "at": "2026-10-01T07:59:41.089Z",
+          "reason": "读到上述源码后，Write F009 规格：宿主生命周期只写 AC19“onCreate 初始化链……冷启进入配方列表起始页”（真源标 MainActivity.kt:53），AC20 只写前后台回切；没有进程回收重建、恢复页面栈与参数的分支或平台差异决策。savedInstanceState 重建语义在源码到规格这一步丢失（同转录 L165-L166）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/spec/baseline/features/F009-system-integration.md",
+          "at": "2026-10-01T12:52:51.500Z",
+          "reason": "交付桥梁：Slice 10 实现者 Read 回执返回该规格，含 AC19 冷启直达列表页、不含页面栈恢复要求（agent-a4e2a53bfc70188f1.jsonl:L24-L25）。"
+        },
+        {
+          "key": "agent-a4e2a53bfc70188f1.jsonl",
+          "at": "2026-10-01T13:05:52.338Z",
+          "reason": "作为 Slice 10 宿主装配者，对本页做 RouteName 收敛 Edit（同转录 L192-L195）；规格没有页面栈恢复要求，本页 NavDestination 没有补 recoverable。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/entry/src/main/ets/pages/RecipeDetailsPage.ets",
+        "since": "2026-10-01T14:11:08.477Z",
+        "at": "2026-10-01T23:45:55.694Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Cofi/app/src/main/java/com/omelan/cofi/MainActivity.kt",
+          "at": "2026-10-01T07:45:12.853Z",
+          "reason": "正常输入：规格作者 Read 回执返回完整 MainActivity.kt，含 onCreate(savedInstanceState)/super.onCreate(savedInstanceState)（:53-55）与 rememberNavController() + NavHost(startDestination=RECIPE_LIST)（:88-89 起）。这足以确定源端在进程回收后恢复返回栈与路由参数（agent-ae7e55812e05594c5.jsonl:L66-L67）。"
+        },
+        {
+          "key": "agent-ae7e55812e05594c5.jsonl",
+          "at": "2026-10-01T07:59:41.089Z",
+          "reason": "读到上述源码后，Write F009 规格：宿主生命周期只写 AC19“onCreate 初始化链……冷启进入配方列表起始页”（真源标 MainActivity.kt:53），AC20 只写前后台回切；没有进程回收重建、恢复页面栈与参数的分支或平台差异决策。savedInstanceState 重建语义在源码到规格这一步丢失（同转录 L165-L166）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/spec/baseline/features/F009-system-integration.md",
+          "at": "2026-10-01T12:52:51.500Z",
+          "reason": "交付桥梁：Slice 10 实现者 Read 回执返回该规格，含 AC19 冷启直达列表页、不含页面栈恢复要求（agent-a4e2a53bfc70188f1.jsonl:L24-L25）。"
+        },
+        {
+          "key": "agent-a4e2a53bfc70188f1.jsonl",
+          "at": "2026-10-01T13:06:22.137Z",
+          "reason": "作为 Slice 10 宿主装配者，对本页做 push 路由名收敛与 seams 注入 Edit（同转录 L202-L209）；规格没有页面栈恢复要求，本页 NavDestination 没有补 recoverable。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "a2h-spec 的 COV.LIFECYCLE 规则只要求 lifecycle_init/lifecycle_release，派工列出的 F009 分支也不含进程回收重建；源端行为来自框架默认。本卡认定源码输入足以推出该行为，但没有材料说明规格作者是否意识到 rememberNavController 的状态保存语义。"
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/entry/src/main/ets/pages/SettingsListPage.ets",
+      "reason": "已确认修复在 hideTitleBar(true) 后追加 recoverable(true)（R1:L16571）。它属于同一页面栈恢复机制，成因是上游 F009 规格缺少恢复要求。但本文件的生成期写者（agent-a15d4c93724bc3c4a 首写，agent-ad4c9daf0d99f2687 后续接线）没有读 F009 规格，Slice 10 实现者也没有写过本文件，尚缺从偏差规格到本文件的实际交接，因此不单独画图。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/entry/src/main/ets/pages/TimerSettingsPage.ets",
+      "reason": "已确认修复在 hideTitleBar(true) 后追加 recoverable(true)（R1:L16571）。它属于同一页面栈恢复机制，成因是上游 F009 规格缺少恢复要求。但本文件的生成期写者（agent-af50d51f8e3c3df7c 首写，agent-ad4c9daf0d99f2687 后续接线）没有读 F009 规格，Slice 10 实现者也没有写过本文件，尚缺从偏差规格到本文件的实际交接，因此不单独画图。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/entry/src/main/ets/pages/AppearanceSettingsPage.ets",
+      "reason": "已确认修复在 hideTitleBar(true) 后追加 recoverable(true)（R1:L16571）。它属于同一页面栈恢复机制，成因是上游 F009 规格缺少恢复要求。但本文件的生成期写者（agent-adc250b0567319e78 首写，agent-ad4c9daf0d99f2687 后续接线）没有读 F009 规格，Slice 10 实现者也没有写过本文件，尚缺从偏差规格到本文件的实际交接，因此不单独画图。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/entry/src/main/ets/pages/LicensesPage.ets",
+      "reason": "已确认修复在 hideTitleBar(true) 后追加 recoverable(true)（R1:L16571）。它属于同一页面栈恢复机制，成因是上游 F009 规格缺少恢复要求。但本文件的生成期写者（agent-ae775910d24854bb6 首写，agent-adef14fa5ad52396e 后续接线）没有读 F009 规格，Slice 10 实现者也没有写过本文件，尚缺从偏差规格到本文件的实际交接，因此不单独画图。"
+    }
+  ],
+  "job": "issue-30dbf63ea8a03d315607",
+  "metadata": {
+    "migration": {
+      "project": "Cofi",
+      "server_session_id": "acdd6966-d460-4d88-b0a6-5dc0c5262ee5"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-sonnet-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.247"
+      ]
+    },
+    "source_set_id": "sources-22befa667a51476d2497",
+    "environment": [
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0-alpha17",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos",
+        "at": "2026-10-01T06:38:41.480Z",
+        "ref": "generation/9176a7f7b2203f7a/runs/721fb7c7-0508-4e2f-8b79-cfb906c65d16/epoch-0/sessions/agent-ad0f8989f195b578f.jsonl:L18",
+        "request_ref": "generation/9176a7f7b2203f7a/runs/721fb7c7-0508-4e2f-8b79-cfb906c65d16/epoch-0/sessions/agent-ad0f8989f195b578f.jsonl:L17",
+        "phase": "generation"
+      },
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0-alpha17",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Cofi",
+        "at": "2026-10-01T06:58:28.349Z",
+        "ref": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/main-507b2f1f-5d21-4455-a17e-460566675ced.jsonl:L45",
+        "request_ref": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/main-507b2f1f-5d21-4455-a17e-460566675ced.jsonl:L43",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos",
+        "at": "2026-10-01T08:45:11.210Z",
+        "ref": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/agent-a6b66d337af813fff.jsonl:L63",
+        "request_ref": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/agent-a6b66d337af813fff.jsonl:L62",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos",
+        "at": "2026-10-01T10:50:10.334Z",
+        "ref": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/agent-a099e355ad83c788a.jsonl:L122",
+        "request_ref": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/agent-a099e355ad83c788a.jsonl:L121",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-10-01T14:45:59.485Z",
+        "ref": "repair/cofi-migration-complete-20261007/fix-cofi-opus/stream-01.jsonl:L288",
+        "request_ref": "repair/cofi-migration-complete-20261007/fix-cofi-opus/stream-01.jsonl:L287",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-10-01T14:45:59.485Z",
+        "ref": "repair/cofi-migration-complete-20261007/fix-cofi-opus/stream-01.jsonl:L288",
+        "request_ref": "repair/cofi-migration-complete-20261007/fix-cofi-opus/stream-01.jsonl:L287",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0-alpha17",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": null,
+        "at": "2026-10-01T14:53:18.885Z",
+        "ref": "repair/cofi-migration-complete-20261007/fix-cofi-opus/stream-01.jsonl:L713",
+        "request_ref": "repair/cofi-migration-complete-20261007/fix-cofi-opus/stream-01.jsonl:L712",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "e0dce297-f0f9-4e8e-adb6-f2a8eeef850a"
+      ]
+    }
+  },
+  "revision": "47860a315ee4f801c1ba4b52f117f532f232181c924af32a06de4349baa8fc78"
+}

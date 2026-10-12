@@ -1,0 +1,298 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-7456fcf259be55a8834b",
+  "created_at": "2026-10-11T20:22:45.999710+00:00",
+  "migration_key": "6ccfd659-7ee2-49d9-a90b-a7fa247e4484",
+  "title": "带 HTML 标记的对话框文案被剥标记或按纯文本渲染，链接不可点",
+  "when": "资源转换与界面实现阶段，迁移 strings.xml 中带 <b>/<i>/<a>/CDATA 标记、由 setMessage(resId)/android:text 或 HtmlCompat.fromHtml 渲染的对话框文案时",
+  "description": "Android 字符串资源内联 <b>/<i>/<a href> 或用 CDATA 包裹 HTML；消费端经 getText/setMessage(resId)/布局 android:text（Styled）或 HtmlCompat.fromHtml（Html）渲染，并以 LinkMovementMethod 让链接可点。目标端 string.json 与 ArkUI Text 不会自动解释这些标记。",
+  "summary": "本问题有三处已核偏差，分属资源转换与两个功能切片的实现。\n① 资源转换（string.json）：a2h-execute 主 worker 在 Stage 0 调 android2hmos_resources_convert，\n该 skill 的字符串规则只写了“实体解码、\\n 保留、CDATA 提取文本、占位符保留”，未提内联样式标签；\nworker 未查看 strings.xml 的取值，直接用 ElementTree 的 ''.join(el.itertext()) 批量转换\n（main-5c351e82…jsonl:L509→L511）。结果非 CDATA 键里的 <b>/<a href> 被静默丢弃：\ndialog_donate 丢失 4 个链接的 href，dialog_first_run 丢失末句粗体；CDATA 键\n（dialog_about_mct、dialog_no_mfc_support_device 等）则保留原始 HTML 文本。源文件确含这些链接\n（Slice 12 worker 对源 strings.xml 的检索返回 dialog_no_mfc_support_device/dialog_about_mct/dialog_donate，\nagent-afc8c7a3fd82194ff.jsonl:L138-L139）。修复按 aapt 语义重建 string.json，带标记键以 HTML 保存\n（修复 stream-01 L248、L4042）。\n② MainMenuPage：Slice 10 worker 写前读到的 F002 规格已写明 HtmlCompat.fromHtml + LinkMovementMethod\n需映射为 “Text + RichText/Span 可点击 span”，AC22 要求关于框“含版本号文案与可点击链接”，AC06 要求\n无 MFC 支持框“正文链接可点击”（agent-a341c9f56682bd734.jsonl:L21-L22）；页面规格写明捐赠弹窗是\n“可点击链接文案”（L27-L28）；MainMenu.java 的 setMessage(R.string.dialog_first_run)、fromHtml 与\nsetMovementMethod(LinkMovementMethod) 也已读到（L33/L36，:370、:395-400、:598、:845-859）。\n规格只说无 MFC 框的链接可点性“受 PD-C6-F002-01 影响”，该 PD 实为 External NFC 探测、商店跳转和 NFC 设置深链收敛。\nworker 却在 source-notes 中把它扩大为“正文为既有 string 资源原样 Text 渲染；span 可点性不在本 Slice 恢复”（L164），\n随后重写 MainMenuPage，所有启动/关于/捐赠对话框正文都用 Text(this.dialogMessageOf(...)) 显示 $r 资源\n（L172→L173），结果 CDATA 文案直接显示标签原文，非 CDATA 文案已无标记，链接全部不可点；回执的\ndecision_gaps 也未列此项（L217）。此前页面转换器把它记为“人工 review 建议（非债务）”留给 Slice 10；\n之后主 worker 把 S12 的提醒转述成“S10 已页内自渲染解决”，group-closer 据此判“一致性通过”，\n均未核实际代码。该写法保留到生成结束（迁移快照 MainMenuPage 仍为纯 Text）。修复新建 HtmlText（Styled/Html 两路、linksClickable），\n对话框改用它渲染，About 填 versionName（stream-01 L3256、L3469、L4200）。\n③ TagInfoToolPage：Slice 12 worker 读到 F008 映射行 “Text + TextSpan（链接色 + .onClick 打开浏览器）或 RichText”\n与 AC17 “正文 HTML 富文本、内嵌文档链接可点”（agent-afc8c7a3fd82194ff.jsonl:L20-L21），以及 TagInfoTool.java:104-117\n的 fromHtml + LinkMovementMethod（L25-L26）。派工另给了“Span 点击或改用 RichText/外链按钮，按 AlertDialogWrapper 能力实现”\n的余地（main-5c351e82…jsonl:L1795）。worker 查 span.d.ts 确认 BaseSpan 继承 CommonMethod、类型上有 onClick\n（L118-L124），又决定页内自绘对话框，不再受 AlertDialogWrapper 限制；最终 Edit 却让正文链接 Span 只着色、不响应点击，\n另在正文下追加 DialogLinkSpec 外链行（L181→L182）。结果正文链接不可点，同一链接又在下方重复一行。修复删去外链行，\nRead More 正文改走 Html 通路，链接行内可点（stream-01 L4204；stream-02 L3528 调整导入）。\nHtmlText 自闭合判定（B2-R3）是修复期新建组件的问题，不属本卡。\n",
+  "recommendations": [
+    "资源转换阶段：不要用只取文本的 itertext 或去标签方式转换 strings.xml。先列出含 <b>/<i>/<u>/<a>/<br>/CDATA 的键，按 HTML 保存（字面 < 与 & 转义），交付一份带样式键清单，标出各键的消费方式：setMessage(resId)/android:text 走 Styled，getString + Html.fromHtml 走 Html，并注明是否设置 LinkMovementMethod。",
+    "实现阶段：对每个 HtmlCompat.fromHtml、setMessage(resId) 或 android:text 引用的带样式键，用公共富文本组件把 b/i/u/small/a/br 与实体解析成 Span，链接 Span 设 onClick（ohos.want.action.viewData）实现行内可点。不要用 Text($r(...)) 直接显示带标记文案，也不要在正文外另起链接行。",
+    "规格中的平台差异决策只收敛其列明的出口（如 market://、NFC 设置深链）。实现者不能把它扩展成“整段富文本或全部链接都不实现”。确需降级时登记为显式偏离或占位，不要写成已实现。",
+    "派工与收尾：派工不要加入规格没有的交互形态（如独立外链按钮）。closer 应逐个对照源码中 fromHtml/LinkMovementMethod 的调用点检查目标代码，不能凭“已页内自渲染”之类的转述判通过。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/resources/base/element/string.json",
+        "since": "2026-10-01T17:23:26.037Z",
+        "at": "2026-10-08T12:26:25.614Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/.claude/skills/android2hmos_resources_convert/SKILL.md",
+          "at": "2026-10-01T11:54:28.073Z",
+          "reason": "输入缺口：Skill 调用加载的资源转换规则只写了“XML 实体解码、\\n 保留、CDATA sections → extract text content、占位符保留”，没有说明内联 <b>/<i>/<a> 样式标签如何保存，也没有要求登记消费方式（main-5c351e82-95e2-401f-b543-f0184a296f20.jsonl:L474、L478）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/android/MifareClassicTool/app/src/main/res/values/strings.xml",
+          "at": "2026-10-01T11:55:43.240Z",
+          "reason": "源资源：主 worker 的转换脚本用 ET.parse 读取 values/strings.xml。源串 dialog_donate、dialog_about_mct、dialog_no_mfc_support_device 含 <a href>，dialog_first_run 含 <b>（源串链接由 agent-afc8c7a3fd82194ff.jsonl:L138-L139 的检索佐证）。worker 写前没有查看这些取值。"
+        },
+        {
+          "key": "5c351e82-95e2-401f-b543-f0184a296f20:main",
+          "at": "2026-10-01T11:55:43.240Z",
+          "reason": "Stage 0 全量资源转换脚本以 unesc(''.join(el.itertext())).strip() 生成 base/element/string.json，非 CDATA 键的内联标签被静默丢弃（dialog_donate 的 4 个 href、dialog_first_run 的粗体），CDATA 键则留下原始 HTML；回执只报告 strings: base=468（L509→L511）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "主 worker 调 Skill android2hmos_resources_convert，回执后以用户消息注入该 skill 的 SKILL.md 全文（Base directory 即该 skill 目录）。其中 Strings 规则只有实体、\n、CDATA 和占位符四条，这就是本次转换写前收到的规则。",
+          "evidence": [
+            {
+              "source": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/main-5c351e82-95e2-401f-b543-f0184a296f20.jsonl",
+              "line": 474
+            },
+            {
+              "source": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/main-5c351e82-95e2-401f-b543-f0184a296f20.jsonl",
+              "line": 476
+            },
+            {
+              "source": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/main-5c351e82-95e2-401f-b543-f0184a296f20.jsonl",
+              "line": 478
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "同一 Bash heredoc 脚本以 base_files = [A/app/src/main/res/values/{x} for x in ('strings.xml', ...)] 拼出 values/strings.xml 路径，并用 ET.parse 读取；回执 strings: base=468 证明脚本已解析该文件。路径是变量拼接，索引未识别。",
+          "evidence": [
+            {
+              "source": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/main-5c351e82-95e2-401f-b543-f0184a296f20.jsonl",
+              "line": 509
+            },
+            {
+              "source": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/main-5c351e82-95e2-401f-b543-f0184a296f20.jsonl",
+              "line": 511
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target",
+          "force": true,
+          "reason": "同一脚本 write_json(f'{RES}/base/element/string.json', 'string', sorted(base_str.items())) 写出目标文件，值来自 ''.join(el.itertext())；回执 strings: base=468 zh=468 表示写入完成。路径由 RES 变量拼接，索引未识别。",
+          "evidence": [
+            {
+              "source": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/main-5c351e82-95e2-401f-b543-f0184a296f20.jsonl",
+              "line": 509
+            },
+            {
+              "source": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/main-5c351e82-95e2-401f-b543-f0184a296f20.jsonl",
+              "line": 511
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/pages/MainMenuPage.ets",
+        "since": "2026-10-01T17:23:26.037Z",
+        "at": "2026-10-08T12:26:25.614Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/spec/baseline/features/F002-main-menu.md",
+          "at": "2026-10-01T16:21:01.934Z",
+          "reason": "正确输入：Read 回执第 79 行把 HtmlCompat.fromHtml + LinkMovementMethod（无 MFC 框/关于框）映射为“Text + RichText/Span 可点击 span 或超链文本”，PD 影响仅限无 MFC 框的链接出口。AC06 要求无 MFC 框正文链接可点击，AC22 要求关于框“含版本号文案与可点击链接”（agent-a341c9f56682bd734.jsonl:L21-L22）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/spec/baseline/ui/page_0001_MainMenu.md",
+          "at": "2026-10-01T16:21:08.657Z",
+          "reason": "正确输入：页面规格写明捐赠弹窗是 dialog_donate.xml 中的 TextView(可点击链接文案) + CheckBox（同转录 L27-L28）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/android/MifareClassicTool/app/src/main/java/de/syss/MifareClassicTool/Activities/MainMenu.java",
+          "at": "2026-10-01T16:21:14.341Z",
+          "reason": "正确输入：全文 Read 返回 :370 setMessage(R.string.dialog_first_run)、:395-400 与 :845-850 HtmlCompat.fromHtml、:226-229/:598/:857-859 setMovementMethod(LinkMovementMethod)，足以确定各对话框正文的渲染通路与链接可点（同转录 L33、L36）。"
+        },
+        {
+          "key": "5c351e82-95e2-401f-b543-f0184a296f20:a341c9f56682bd734",
+          "at": "2026-10-01T16:31:57.762Z",
+          "reason": "Slice 10 worker 已收到上述要求，却在 source-notes 中把 PD-C6-F002-01 扩大为“正文为既有 string 资源原样 Text 渲染；span 可点性不在本 Slice 恢复”（L164）。随后 Write 重写 MainMenuPage，startupOverlay 对首启/无 MFC/捐赠/关于等对话框统一 Text(this.dialogMessageOf(...))，没有富文本解析，也没有链接点击（L172→L173）。回执 decision_gaps 未列此偏离（L217）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/pages/TagInfoToolPage.ets",
+        "since": "2026-10-01T17:23:26.037Z",
+        "at": "2026-10-08T12:26:25.614Z"
+      },
+      "nodes": [
+        {
+          "key": "5c351e82-95e2-401f-b543-f0184a296f20:main",
+          "at": "2026-10-01T16:21:06.670Z",
+          "reason": "派工：要求接线 P-S12-002“onReadMore 对话框 <a href> 可点链接 + openUrl——Span 点击或改用 RichText/外链按钮，按 AlertDialogWrapper 能力实现”。“外链按钮”不在 F008 的映射行内，是以 AlertDialogWrapper 能力不足为条件的余地（main-5c351e82-95e2-401f-b543-f0184a296f20.jsonl:L1795）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/spec/baseline/features/F008-tag-info.md",
+          "at": "2026-10-01T16:21:25.868Z",
+          "reason": "正确输入：第 61 行映射为 Text + TextSpan（链接色 + .onClick 打开浏览器）或 RichText；AC17 要求 Read More 正文 HTML 富文本渲染、内嵌文档链接可点（agent-afc8c7a3fd82194ff.jsonl:L20-L21）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/android/MifareClassicTool/app/src/main/java/de/syss/MifareClassicTool/Activities/TagInfoTool.java",
+          "at": "2026-10-01T16:21:30.808Z",
+          "reason": "正确输入：Read 返回 :104-105 HtmlCompat.fromHtml(getString(messageID)) 与 :115-117 对 message TextView 设 LinkMovementMethod，即链接在正文内可点（同转录 L25-L26）。"
+        },
+        {
+          "key": "/Applications/DevEco-Studio.app/Contents/sdk/default/openharmony/ets/component/span.d.ts",
+          "at": "2026-10-01T16:26:46.944Z",
+          "reason": "可行性输入：worker 查 SDK 得到 BaseSpan<T> extends CommonMethod<T>，并在思考中确认 Span 类型上可用 onClick（同转录 L118-L124）。"
+        },
+        {
+          "key": "5c351e82-95e2-401f-b543-f0184a296f20:afc8c7a3fd82194ff",
+          "at": "2026-10-01T16:32:14.700Z",
+          "reason": "Slice 12 worker 已决定页内自绘 Read More 对话框，不再受 AlertDialogWrapper 能力限制，也确认 Span 可设 onClick，却选择外链行：Edit 写出的 readMoreDialog 中正文链接 Span 只按 theme_accent 着色、无点击，另在正文下逐条渲染 DialogLinkSpec 外链行，造成正文链接不可点并重复一行（L181→L182）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 5
+        },
+        {
+          "from": 2,
+          "to": 5
+        },
+        {
+          "from": 3,
+          "to": 5
+        },
+        {
+          "from": 4,
+          "to": 5,
+          "force": true,
+          "reason": "Slice 12 worker 用 Bash sed -n '60,130p' 读取 span.d.ts，回执返回 declare class BaseSpan<T> extends CommonMethod<T>；随后思考确认 Span 可继承 onClick。这是该 worker 写前真实读取的 SDK 声明。",
+          "evidence": [
+            {
+              "source": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-afc8c7a3fd82194ff.jsonl",
+              "line": 122
+            },
+            {
+              "source": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-afc8c7a3fd82194ff.jsonl",
+              "line": 123
+            }
+          ]
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "资源转换主 worker 写前没有查看 strings.xml 的具体取值（L485 只做了计数），所以本卡把 string.json 的偏差归因为 skill 规则缺口加上未核查取值的有损解析，不认为它是明知标记存在而删除。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-7456fcf259be55a8834b",
+  "metadata": {
+    "migration": {
+      "project": "MifareClassicTool",
+      "server_session_id": "6ccfd659-7ee2-49d9-a90b-a7fa247e4484"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5",
+        "claude-sonnet-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.247"
+      ]
+    },
+    "source_set_id": "sources-aa4e59703bcc1d60f854",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos",
+        "at": "2026-10-01T12:05:48.424Z",
+        "ref": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-abba5084389876d39.jsonl:L102",
+        "request_ref": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-abba5084389876d39.jsonl:L101",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos",
+        "at": "2026-10-01T12:05:48.424Z",
+        "ref": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-abba5084389876d39.jsonl:L102",
+        "request_ref": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-abba5084389876d39.jsonl:L101",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-10-01T22:42:23.282Z",
+        "ref": "repair/mifareclassictool-migration-complete-20261008/fix-mifareclassictool-opus/stream-01.jsonl:L60",
+        "request_ref": "repair/mifareclassictool-migration-complete-20261008/fix-mifareclassictool-opus/stream-01.jsonl:L58",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-10-01T22:42:23.282Z",
+        "ref": "repair/mifareclassictool-migration-complete-20261008/fix-mifareclassictool-opus/stream-01.jsonl:L60",
+        "request_ref": "repair/mifareclassictool-migration-complete-20261008/fix-mifareclassictool-opus/stream-01.jsonl:L58",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "6f4879bc-c69f-4670-9167-9b09da20a889"
+      ]
+    }
+  },
+  "revision": "0fcbb858330dc0692a5ef76947e2ee1aae9990c5195f78148938c87b3ce94fe8"
+}

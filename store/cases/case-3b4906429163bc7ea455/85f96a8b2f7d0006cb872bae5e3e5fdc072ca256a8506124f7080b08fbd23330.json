@@ -1,0 +1,380 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-3b4906429163bc7ea455",
+  "created_at": "2026-10-11T21:48:05.836687+00:00",
+  "migration_key": "acdd6966-d460-4d88-b0a6-5dc0c5262ee5",
+  "title": "把非空Boolean与null比较的死分支误读为首启弹窗条件，并经规格传到详情页实现",
+  "when": "规格提取阶段，把源端显示条件里的null判断翻译为页面触发条件和偏好默认值契约时",
+  "description": "Compose页面用collectAsState(initial = false)收集DataStore的Flow<Boolean>（getter映射为preferences[KEY] == true），却在弹窗显示条件中与null比较；迁移时需决定该弹窗/权限请求分支是否可达、偏好键是否三态。",
+  "summary": "源端RecipeDetails.kt:193-204以dataStore.getBackgroundTimerSetting().collectAsState(initial = false)得到isBackgroundTimerEnabled，\n而cofi-share DataStore.kt:26-28把getBackgroundTimerSetting映射为preferences[BACKGROUND_TIMER_ENABLED] == true（Flow<Boolean>，不会为null）。\n因此showNotificationDialog = !hasNotificationPermission() && isBackgroundTimerEnabled == null恒为false：详情页实际永不弹通知权限对话框，\n通知权限只在计时设置的后台计时开关里请求。决策账本D-003要求忠实复刻源端行为。\n参考规格作者aaf901398写前读到了上述getter与页面声明（agent-aaf901398bcd7e3fb.jsonl:L45-L46、L61-L62），同一文档的偏好表也写了\nbackground_timer_enabled Boolean默认false；但§7.4对话框目录却写成“详情页首次进入且无通知权限且后台计时设置未初始化（isBackgroundTimerEnabled==null）”\n（L187-L188）。偏差位于源码到规格的语义翻译：把类型上不可达的null比较译成可达的“首启/未初始化”触发。\n主线读到该节（main-507b2f1f:L595-L597）后，在feature-base偏好表把该键默认值写成“null（未初始化，区分首启）”（L627-L629），把误读升级为三态偏好契约；\nF003规格作者读到feature-base（agent-ad3746317cc2eb676.jsonl:L35-L36），虽也读到源码initial = false（L43-L44）却未核getter类型，\n写出NotificationPermissionCoordinator.shouldAsk契约与AC42“授予/拒绝/未初始化三路径”（L100-L101）。\n同一误读还独立出现在UI快照meta.json（agent-a44fde3cf75d67f8c.jsonl:L88-L89“isBackgroundTimerEnabled==null(设置从未写入)”）、\nUI规格page_0002、F004-AC26与F008偏好描述，以及更早G0参考规格尝试，是规格阶段的系统性误读，不是规格正确而实现偏离。\n实现侧：页面转换a5a172b9读meta.json后首次写入checkNotificationPermission，偏好未接线时直接以!enabled弹窗（agent-a5a172b9d52d8ceb6.jsonl:L13-L16、L165-L166）；\nSlice 8实现者abe21593读F003（L47-L48）后新建NotificationPermissionCoordinator（shouldAsk = !permission && isBackgroundTimerEnabled === null，L148-L149），\n并把页面改成装载getBackgroundTimerEnabledOrNull三态后调用shouldAsk（L158-L167），生成态因此会在首次进入且无通知权限时弹窗。\n修复者审计记下“checkNotificationPermission shows dialog (must not)”“NotificationPermissionDialog effectively never shown”（R1:L883），\n重写详情页去掉该分支（R1:L3924），并删除成为孤儿的Coordinator（R1:L6403）；权限请求保留在计时设置后台开关。\n",
+  "recommendations": [
+    "规格提取时遇到对状态变量的== null/!= null判断，先核该变量的声明类型与来源：collectAsState的initial值、Flow的getter映射（?: 默认值或== true）。若为非空类型，记为“恒false/恒true的死分支，源端可观察行为=从不触发”，不要翻译成“未初始化/首启”触发。",
+    "偏好默认值以DataStore getter的实际映射为准；同一份规格里出现“Boolean默认false”与“==null表示未写入”这类矛盾时，回源码裁决，不从一个条件表达式反推出三态键或新增hasKey语义。",
+    "实现者按规格新增弹窗、权限请求或协调服务前，对照源码确认该分支在源端可达；规格的三态条件与源码非空类型冲突时，按源码可观察行为复刻（本例详情页不弹窗、权限请求只留在后台计时开关），并把冲突回报规格。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/entry/src/main/ets/pages/RecipeDetailsPage.ets",
+        "since": "2026-10-01T14:11:08.477Z",
+        "at": "2026-10-01T23:45:55.694Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Cofi/cofi-share/src/main/java/com/omelan/cofi/share/DataStore.kt",
+          "at": "2026-10-01T07:00:22.404Z",
+          "reason": "正常输入：参考规格作者Read回执给出getBackgroundTimerSetting() = data.map { preferences[BACKGROUND_TIMER_ENABLED] == true }，返回非空Boolean，未写入时为false而非null（agent-aaf901398bcd7e3fb.jsonl:L45-L46）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Cofi/app/src/main/java/com/omelan/cofi/pages/details/RecipeDetails.kt",
+          "at": "2026-10-01T07:00:44.592Z",
+          "reason": "正常输入：同一作者Read回执含L193-204：isBackgroundTimerEnabled由collectAsState(initial = false)收集，showNotificationDialog初值及LaunchedEffect复核均为!hasNotificationPermission() && isBackgroundTimerEnabled == null；与上条getter合看足以判定该条件恒false（L61-L62）。"
+        },
+        {
+          "key": "507b2f1f-5d21-4455-a17e-460566675ced:aaf901398bcd7e3fb",
+          "at": "2026-10-01T07:08:03.114Z",
+          "reason": "参考规格作者在读到上述两段后Write Cofi_spec.md：偏好表写background_timer_enabled Boolean默认false，§7.4却把NotificationPermissionDialog触发写成“详情页首次进入且无通知权限且后台计时设置未初始化（isBackgroundTimerEnabled==null）”，把死分支译为可达首启触发（L187-L188）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/spec/ref/Cofi_spec.md",
+          "at": "2026-10-01T07:27:09.261Z",
+          "reason": "交付桥梁：主线Bash sed读取ref spec §7，回执含上述对话框目录行“后台计时设置未初始化（isBackgroundTimerEnabled==null）”（main-507b2f1f-5d21-4455-a17e-460566675ced.jsonl:L595-L597）。"
+        },
+        {
+          "key": "507b2f1f-5d21-4455-a17e-460566675ced:main",
+          "at": "2026-10-01T07:28:21.049Z",
+          "reason": "读到该节后Write feature-base偏好表，把background_timer_enabled默认值写成“null（未初始化，区分首启）”，将对话框误读升级为三态偏好契约，且与ref spec自身的默认false相矛盾；主线写前未读getter实现（main-507b2f1f:L627-L629）。本节点为传递与放大，不另作起点。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/spec/baseline/feature-base.md",
+          "at": "2026-10-01T07:30:11.101Z",
+          "reason": "交付桥梁：F003规格作者Read回执L73为background_timer_enabled | Bool | null（未初始化，区分首启）（agent-ad3746317cc2eb676.jsonl:L35-L36）。"
+        },
+        {
+          "key": "507b2f1f-5d21-4455-a17e-460566675ced:ad3746317cc2eb676",
+          "at": "2026-10-01T07:37:43.252Z",
+          "reason": "沿用feature-base三态语义；虽读到源码initial = false（同转录L43-L44）但未核getter，Write F003写出NotificationPermissionCoordinator.shouldAsk(isBackgroundTimerEnabled: boolean | null) = 无通知权限 && 设置未初始化，以及AC42“授予/拒绝/未初始化三路径”（L100-L101）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/spec/baseline/features/F003-recipe-details-page.md",
+          "at": "2026-10-01T12:29:05.676Z",
+          "reason": "交付桥梁：Slice 8实现者Read回执含§服务层shouldAsk契约（L66-67）与AC42三态触发（L173）（agent-abe21593acb112058.jsonl:L47-L48）。"
+        },
+        {
+          "key": "f254816a-2fd5-4687-b493-a2136a7510d9:abe21593acb112058",
+          "at": "2026-10-01T12:37:35.741Z",
+          "reason": "按F003实现：Edit页面新增@Local isBackgroundTimerEnabled: boolean | null，装载prefs.getBackgroundTimerEnabledOrNull()后调用checkNotificationPermission，并把条件改为NotificationPermissionCoordinator.shouldAsk(enabled, this.isBackgroundTimerEnabled)，注释标AC42（同转录L158-L167）；该片段保留到生成结束。本链确认规格传递，不另推定其独立失职。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Cofi/app/src/main/java/com/omelan/cofi/pages/details/RecipeDetails.kt",
+          "at": "2026-10-01T07:01:52.382Z",
+          "reason": "UI快照作者Read回执同样含L193-204的initial = false与== null条件（agent-a44fde3cf75d67f8c.jsonl:L21-L22）；该作者未打开DataStore getter。"
+        },
+        {
+          "key": "507b2f1f-5d21-4455-a17e-460566675ced:a44fde3cf75d67f8c",
+          "at": "2026-10-01T07:04:40.708Z",
+          "reason": "Write page_0002 meta.json，compose_states写“isBackgroundTimerEnabled==null(设置从未写入) 时为 true”，overlays写“首次进入且从未设置后台计时”，在未核类型的情况下赋予null判断首启语义（同转录L88-L89）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/spec/baseline/ui-snapshots/page_0002_RecipeDetails/meta.json",
+          "at": "2026-10-01T08:37:21.800Z",
+          "reason": "交付桥梁：页面转换者Read meta.json，回执含上述showNotificationDialog首启触发描述（agent-a5a172b9d52d8ceb6.jsonl:L13、L16）。"
+        },
+        {
+          "key": "507b2f1f-5d21-4455-a17e-460566675ced:a5a172b9d52d8ceb6",
+          "at": "2026-10-01T08:50:10.752Z",
+          "reason": "首次Write RecipeDetailsPage.ets的通知弹窗片段：aboutToAppear调用checkNotificationPermission，注释“isBackgroundTimerEnabled的DataStore读取未接线前恒视为null”，以showNotificationDialog = !enabled直接弹窗（同转录L165-L166）；后续abe21593把条件改为shouldAsk但保留整个分支。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 5,
+          "force": true,
+          "reason": "主线以Bash执行sed -n '790,880p' spec/ref/Cofi_spec.md（工作目录为HarmonyOS工程根），回执返回§7.4对话框目录中“后台计时设置未初始化（isBackgroundTimerEnabled==null）”一行；相对路径读取未被索引解析，这支持主线写feature-base前已收到该误读。",
+          "evidence": [
+            {
+              "source": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/main-507b2f1f-5d21-4455-a17e-460566675ced.jsonl",
+              "line": 595
+            },
+            {
+              "source": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/main-507b2f1f-5d21-4455-a17e-460566675ced.jsonl",
+              "line": 597
+            }
+          ]
+        },
+        {
+          "from": 5,
+          "to": 6
+        },
+        {
+          "from": 6,
+          "to": 7
+        },
+        {
+          "from": 7,
+          "to": 8
+        },
+        {
+          "from": 8,
+          "to": 9
+        },
+        {
+          "from": 9,
+          "to": "target"
+        },
+        {
+          "from": 10,
+          "to": 11
+        },
+        {
+          "from": 11,
+          "to": 12
+        },
+        {
+          "from": 12,
+          "to": 13
+        },
+        {
+          "from": 13,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/entry/src/main/ets/services/NotificationPermissionCoordinator.ets",
+        "since": "2026-10-01T14:11:08.477Z",
+        "at": "2026-10-01T23:45:55.694Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Cofi/cofi-share/src/main/java/com/omelan/cofi/share/DataStore.kt",
+          "at": "2026-10-01T07:00:22.404Z",
+          "reason": "正常输入：getBackgroundTimerSetting映射为preferences[BACKGROUND_TIMER_ENABLED] == true，非空Boolean（agent-aaf901398bcd7e3fb.jsonl:L45-L46）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Cofi/app/src/main/java/com/omelan/cofi/pages/details/RecipeDetails.kt",
+          "at": "2026-10-01T07:00:44.592Z",
+          "reason": "正常输入：collectAsState(initial = false)与isBackgroundTimerEnabled == null显示条件（L61-L62）；合看可判定弹窗永不出现。"
+        },
+        {
+          "key": "507b2f1f-5d21-4455-a17e-460566675ced:aaf901398bcd7e3fb",
+          "at": "2026-10-01T07:08:03.114Z",
+          "reason": "Write Cofi_spec.md §7.4把该条件写成“后台计时设置未初始化（isBackgroundTimerEnabled==null）”的首启触发，与同文档偏好表默认false矛盾（L187-L188）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/spec/ref/Cofi_spec.md",
+          "at": "2026-10-01T07:27:09.261Z",
+          "reason": "交付桥梁：主线sed读取§7，回执含该对话框目录行（main-507b2f1f-5d21-4455-a17e-460566675ced.jsonl:L595-L597）。"
+        },
+        {
+          "key": "507b2f1f-5d21-4455-a17e-460566675ced:main",
+          "at": "2026-10-01T07:28:21.049Z",
+          "reason": "Write feature-base，把background_timer_enabled默认值写成“null（未初始化，区分首启）”（L627-L629），三态契约由此进入各feature规格。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/spec/baseline/feature-base.md",
+          "at": "2026-10-01T07:30:11.101Z",
+          "reason": "交付桥梁：F003规格作者读取的偏好表含上述三态默认值（agent-ad3746317cc2eb676.jsonl:L35-L36）。"
+        },
+        {
+          "key": "507b2f1f-5d21-4455-a17e-460566675ced:ad3746317cc2eb676",
+          "at": "2026-10-01T07:37:43.252Z",
+          "reason": "Write F003：§服务层定义NotificationPermissionCoordinator.shouldAsk(isBackgroundTimerEnabled: boolean | null)“= 无通知权限 && 设置未初始化”，AC42要求未初始化路径弹窗（L100-L101）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/spec/baseline/features/F003-recipe-details-page.md",
+          "at": "2026-10-01T12:29:05.676Z",
+          "reason": "交付桥梁：实现者Read回执含shouldAsk契约与AC42（agent-abe21593acb112058.jsonl:L47-L48）。"
+        },
+        {
+          "key": "f254816a-2fd5-4687-b493-a2136a7510d9:abe21593acb112058",
+          "at": "2026-10-01T12:36:39.407Z",
+          "reason": "按F003新建该服务：shouldAsk返回!hasNotificationPermission && isBackgroundTimerEnabled === null，注释“契约: F003 §服务层 shouldAsk / request + F003-AC42（授予/拒绝/未初始化三路径）”（同转录L148-L149）。源端没有对应的可达分支，修复时整文件删除。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 5,
+          "force": true,
+          "reason": "主线以Bash执行sed -n '790,880p' spec/ref/Cofi_spec.md（工作目录为HarmonyOS工程根），回执返回§7.4对话框目录中“后台计时设置未初始化（isBackgroundTimerEnabled==null）”一行；相对路径读取未被索引解析，这支持主线写feature-base前已收到该误读。",
+          "evidence": [
+            {
+              "source": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/main-507b2f1f-5d21-4455-a17e-460566675ced.jsonl",
+              "line": 595
+            },
+            {
+              "source": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/main-507b2f1f-5d21-4455-a17e-460566675ced.jsonl",
+              "line": 597
+            }
+          ]
+        },
+        {
+          "from": 5,
+          "to": 6
+        },
+        {
+          "from": 6,
+          "to": 7
+        },
+        {
+          "from": 7,
+          "to": 8
+        },
+        {
+          "from": 8,
+          "to": 9
+        },
+        {
+          "from": 9,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "UI快照作者a44fde3cf只读了RecipeDetails.kt而未打开getBackgroundTimerSetting，其“设置从未写入”是未核类型的推断；本卡以读到完整输入的参考规格作者为代表起点，a44fde3cf分支只用于说明详情页片段最初写入的来源。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-3b4906429163bc7ea455",
+  "metadata": {
+    "migration": {
+      "project": "Cofi",
+      "server_session_id": "acdd6966-d460-4d88-b0a6-5dc0c5262ee5"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-sonnet-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.247"
+      ]
+    },
+    "source_set_id": "sources-22befa667a51476d2497",
+    "environment": [
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0-alpha17",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos",
+        "at": "2026-10-01T06:38:41.480Z",
+        "ref": "generation/9176a7f7b2203f7a/runs/721fb7c7-0508-4e2f-8b79-cfb906c65d16/epoch-0/sessions/agent-ad0f8989f195b578f.jsonl:L18",
+        "request_ref": "generation/9176a7f7b2203f7a/runs/721fb7c7-0508-4e2f-8b79-cfb906c65d16/epoch-0/sessions/agent-ad0f8989f195b578f.jsonl:L17",
+        "phase": "generation"
+      },
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0-alpha17",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Cofi",
+        "at": "2026-10-01T06:58:28.349Z",
+        "ref": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/main-507b2f1f-5d21-4455-a17e-460566675ced.jsonl:L45",
+        "request_ref": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/main-507b2f1f-5d21-4455-a17e-460566675ced.jsonl:L43",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos",
+        "at": "2026-10-01T08:45:11.210Z",
+        "ref": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/agent-a6b66d337af813fff.jsonl:L63",
+        "request_ref": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/agent-a6b66d337af813fff.jsonl:L62",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos",
+        "at": "2026-10-01T10:50:10.334Z",
+        "ref": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/agent-a099e355ad83c788a.jsonl:L122",
+        "request_ref": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/agent-a099e355ad83c788a.jsonl:L121",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-10-01T14:45:59.485Z",
+        "ref": "repair/cofi-migration-complete-20261007/fix-cofi-opus/stream-01.jsonl:L288",
+        "request_ref": "repair/cofi-migration-complete-20261007/fix-cofi-opus/stream-01.jsonl:L287",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-10-01T14:45:59.485Z",
+        "ref": "repair/cofi-migration-complete-20261007/fix-cofi-opus/stream-01.jsonl:L288",
+        "request_ref": "repair/cofi-migration-complete-20261007/fix-cofi-opus/stream-01.jsonl:L287",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0-alpha17",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": null,
+        "at": "2026-10-01T14:53:18.885Z",
+        "ref": "repair/cofi-migration-complete-20261007/fix-cofi-opus/stream-01.jsonl:L713",
+        "request_ref": "repair/cofi-migration-complete-20261007/fix-cofi-opus/stream-01.jsonl:L712",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "e0dce297-f0f9-4e8e-adb6-f2a8eeef850a"
+      ]
+    }
+  },
+  "revision": "85f96a8b2f7d0006cb872bae5e3e5fdc072ca256a8506124f7080b08fbd23330"
+}

@@ -1,6 +1,6 @@
 # ui/state
 
-ArkUI V2 状态刷新与订阅：@Builder 参数（含异步重赋值的数组与对象）、复用开关组件的事件值、页面与共享模型的绑定、共享状态 key 的命名、按状态显隐、只在回调执行后才成立的显示状态与控件自带的前置过滤、负责上抛自身可见性的组件须常建、事件驱动的重新加载、生命周期回调迁入 ViewModel 时的成对状态、单例 ViewModel 的取消语义与页面加载入口单飞、ForEach 键与子组件刷新、变更信号与 @Monitor 数组路径的配套、可观察字段的判定、监听的注册与释放、乐观更新与访问器兜底，多个 ViewModel 实例间的跨页面状态（拆单例、弹窗与宿主），稳定列表键与可观察实例原位更新，Repeat 条目的传参，离开组合即销毁的复位与框架会恢复的界面状态
+ArkUI V2 状态刷新与订阅：@Builder 参数（含异步重赋值的数组与对象）、复用开关组件的事件值、页面与共享模型的绑定、共享状态 key 的命名、按状态显隐、只在回调执行后才成立的显示状态与控件自带的前置过滤、负责上抛自身可见性的组件须常建、事件驱动的重新加载、生命周期回调迁入 ViewModel 时的成对状态、单例 ViewModel 的取消语义与页面加载入口单飞、ForEach 键与子组件刷新、变更信号与 @Monitor 数组路径的配套、可观察字段的判定、监听的注册与释放、乐观更新与访问器兜底，多个 ViewModel 实例间的跨页面状态（拆单例、弹窗与宿主），稳定列表键与可观察实例原位更新，Repeat 条目的传参，离开组合即销毁的复位与框架会恢复的界面状态，Activity 实例会话态的作用域，每次可见时的初始化与只在可见时接收的监听；Compose remember 的求值与重建时机（无键、带 key、条件挂载、无 key 惰性项），以引用比较实现的未保存检测
 
 [上一级](../index.md)
 
@@ -14,7 +14,7 @@ ArkUI V2 状态刷新与订阅：@Builder 参数（含异步重赋值的数组�
   - 情境：目标 ViewModel 为单例，run() 对任何新请求先取消上一请求；页面同时存在 aboutToAppear、Refresh（refreshing 初值可能为 true）与切城监听等入口；规格要求按 areaId 一类键丢弃旧城市的迟到响应、一次刷新只产生一次请求。
 - [列表条目以新对象替换或整表重建时，ForEach/Repeat 键要包含会变且需要显示的字段；要稳定键就改为可观察实例原位更新](lesson-2e636699fa65aefd63f0.lesson.md)
   - 时机：功能实现与页面接线阶段，为可编辑或会重新拉取的列表选定条目更新方式与 ForEach 键时；为消除重建抖动而稳定 ForEach/Repeat 的键时
-  - 情境：列表条目编辑（如改名）后以保留 id 的新对象替换，或操作成功后重新请求列表并整表 setList（id 不变、计数等字段变化）；ArkUI 用 ForEach 渲染，并把条目字段作为子组件的 @Param 传入；源端是 Compose 不设 key 的 forEach 加不可变 copy，或 RecyclerView 整表刷新。也包括分页或 Swiper 的页模型是普通 interface，键原先拼入请求状态与数据导致每次加载都销毁重建（抖动），修复者准备把键缩成只含页标识。也包括 RecyclerView 的 remove+add+notifyItemChanged 被迁成 arr\[pos\] = 新实例、splice 或整表赋值，行内显示取自条目可变字段（下载态、播放态），注释以“@Trace 字段级刷新”代替键检查。
+  - 情境：列表条目编辑（如改名）后以保留 id 的新对象替换，或操作成功后重新请求列表并整表 setList（id 不变、计数等字段变化）；ArkUI 用 ForEach 渲染，并把条目字段作为子组件的 @Param 传入；源端是 Compose 不设 key 的 forEach 加不可变 copy，或 RecyclerView 整表刷新。也包括分页或 Swiper 的页模型是普通 interface，键原先拼入请求状态与数据导致每次加载都销毁重建（抖动），修复者准备把键缩成只含页标识。也包括 RecyclerView 的 remove+add+notifyItemChanged 被迁成 arr\[pos\] = 新实例、splice 或整表赋值，行内显示取自条目可变字段（下载态、播放态），注释以“@Trace 字段级刷新”代替键检查。也包括源端 removeAllViews 后逐项 inflate 的结果区改成嵌套 ForEach，键只用显示内容拼接（内容可能完全相同，如多个全零数据块），条目是普通 class，每次计算整体重建。
   - 例外：更新方式是对 @ObservedV2 条目的 @Trace 字段原地赋值，子组件绑定的仍是同一对象，此时可保留只含 id 的键
 - [判定模型字段不需要可观察之前，先读修改它的方法和显示它的界面](lesson-4d1c980bbbd20275f5c3.lesson.md)
   - 时机：数据模型阶段，决定模型字段是否需要 @Trace 或其他可观察包装，或在模型注释里写“静态、不会修改”时
@@ -31,12 +31,19 @@ ArkUI V2 状态刷新与订阅：@Builder 参数（含异步重赋值的数组�
 - [拆除共享 ViewModel 单例或让弹窗与宿主各持实例时，跨页面状态显式传递或从持久化重读，不只把 getInstance() 换成 new](lesson-fc724027e2c995632733.lesson.md)
   - 时机：架构重构阶段把跨页面共享的 ViewModel 单例改为页面级实例时；修复阶段为页面补传筛选参数，或让弹窗与宿主页各自持有 ViewModel 实例时
   - 情境：多个页面经全局单例（如 AppStorageV2）共用一个 ViewModel，其中的筛选或显示状态（当前空间、选中日期、显示偏好）由某个页面的动作写入，其他页面的查询只隐式读这份状态；重构要求改为页面级实例，或弹窗内改动的持久化偏好只经回调通知宿主，宿主刷新时又用自己实例的快照回填。
+- [源端 Activity 实例字段承载的会话态映射为页面实例作用域：服务需要持有会话态时按页面实例创建，只有源端本就静态全局的状态才做单例](lesson-d9143de006714935afe2.lesson.md)
+  - 时机：规格提取与服务实现阶段，为页面编排服务确定作用域（单例还是页面实例），并迁移源 Activity 的实例字段（待写数据、密钥映射、挂起状态）时
+  - 情境：源 Activity 把本次会话的数据放在实例字段里，Activity 重建或另开一个实例就是全新状态；目标规格把页面编排服务写成单例，实现者用 getInstance() 持有这些字段，并以 attach 时复位来近似实例重建。
+  - 例外：源端该状态本就是静态全局的（如公共类的静态字段），此时可以映射为单例
+- [源端以引用比较判断“有未保存改动”时，先确认未改动时两侧是同一对象；ArkUI V2 中改用显式改动标志，不拿 @Local 数组与另存的原数组或新字面量做 ===](lesson-5d6e099ff0c8965f2b3c.lesson.md)
+  - 时机：界面实现阶段，把编辑页的未保存检测（离开前确认、canSafelyExit 一类）从 Compose 翻译到 ArkUI V2 状态时
+  - 情境：源端编辑页以 remember(x){ mutableStateOf(x) } 一类写法让编辑状态的初值就是入参对象，修改时整体替换成新列表，再用 !== / === 引用比较判断是否改动；目标用 @Local 数组承载编辑状态，另存一份初始数组，或在新增模式把两者各自初始化为 \[\]。
 - [源端用带兜底的访问器取显示值时，目标调用已移植的等价访问器，不改读原始字段再自拟兜底](lesson-1fa08bf929cfced0ff34.lesson.md)
   - 时机：功能接线阶段，把源端刷新函数里的显示赋值（如 text = Manager.getX()）翻译成目标组件状态，或把登录判定与用户名显示映射成身份文案表达式时
   - 情境：源端在某一分支调用带空值兜底的访问器（如已登录但昵称为空时返回“用户{id}”或默认昵称），另一分支才显示“未登录”等占位文案；登录判定来自 token/session。目标侧会话或仓库层保留原始字段（昵称可为空），可能已移植同名兜底方法，组件状态是普通字段，工程里有现成的未登录占位字符串资源。也包括源端经工具类把数值码映射为显示文案（天气码、空气质量、风向）的情形。
-- [源页面由事件订阅或结果回调触发的重新加载要迁成订阅；Navigation 根页、Tab 内容或经 router 返回的 @Entry 页在子页返回时不会再走 aboutToAppear](lesson-b3bb0bc33f4caded78a2.lesson.md)
-  - 时机：ViewModel 与页面接线阶段，决定目标页由哪些入口触发数据重新加载时；流程闭环阶段从该页新增 push 子流程时
-  - 情境：源 Fragment 用 EventBus @Subscribe（登录成功、记录变化等）和 ActivityResult 回调重拉数据；目标页是 Navigation 下常驻的根内容或 Tab 页，登录、详情等子页用 pushPathByName 覆盖后 pop 返回；工程已有会话状态与应用事件总线。 也包括列表页经 router.pushUrl 打开新增/编辑页，对方保存后 router.back 返回，列表数据只在 aboutToAppear 拉取。
+- [源页面在每次可见时、或由事件订阅与结果回调触发的重新加载，要迁成可见性回调或订阅：Navigation 根页、Tab 内容或经 router 返回的 @Entry 页在子页返回时不会再走 aboutToAppear](lesson-b3bb0bc33f4caded78a2.lesson.md)
+  - 时机：ViewModel 与页面接线阶段，决定目标页由哪些入口触发数据重新加载时；流程闭环阶段从该页新增 push 子流程时；把 Activity 的 onStart/onResume 初始化与只在页面可见时接收的监听映射到 NavDestination 生命周期时
+  - 情境：源 Fragment 用 EventBus @Subscribe（登录成功、记录变化等）和 ActivityResult 回调重拉数据；目标页是 Navigation 下常驻的根内容或 Tab 页，登录、详情等子页用 pushPathByName 覆盖后 pop 返回；工程已有会话状态与应用事件总线。 也包括列表页经 router.pushUrl 打开新增/编辑页，对方保存后 router.back 返回，列表数据只在 aboutToAppear 拉取。也包括源 Activity 在 onStart/onResume 每次可见时重读 Intent、重建列表或校验目录，目标挂在一次性的 onReady/aboutToAppear；以及只应在页面可见时接收的监听（如 NFC 标签监听）挂在 aboutToAppear/aboutToDisappear，被覆盖的页面仍在接收。
 - [用 @Monitor 监听数组路径代替 collect 时，生产方按源端以新数组重新赋值发出变更](lesson-0cc7ae4eec0a59086202.lesson.md)
   - 时机：状态模型与 ViewModel 实现阶段，把 StateFlow/Flow 的列表或消息队列迁成 @Trace 数组，并由消费方用 @Monitor 监听数组属性路径时
   - 情境：源端以 StateFlow.update { list + item } 一类写法每次发射新列表；目标生产方准备原位 push（出队却重新赋值），消费方以 @Monitor('model.items') 一类路径模拟 collect。
@@ -49,6 +56,10 @@ ArkUI V2 状态刷新与订阅：@Builder 参数（含异步重赋值的数组�
 - [负责上抛自身可见性的组件必须常建，不被条件构建或 Visibility.None 包住](lesson-3a00fd66c5188f5cfdf4.lesson.md)
   - 时机：界面实现阶段，翻译“容器初始隐藏、内部组件常驻并自行通知宿主显示”的结构，或向他人预留的条件槽位嵌入组件时
   - 情境：源容器 visibility=gone，但内部 Fragment 在 onCreate 即挂载，并由它调用宿主的可见性方法；目标用 if 或 Visibility 控制容器。
+- [迁移 Compose remember 状态时按源端的求值与重建时机落实：无键 remember 只在首次组合求值，remember(key) 只在 key 变化时重算，条件挂载的子组件每次显示都是新状态，无 key 惰性项随位置重建](lesson-3b4a96141329db62a6af.lesson.md)
+  - 时机：界面实现或公共组件抽取阶段，把 Compose 中 remember、derivedStateOf、LaunchedEffect 持有或算出的局部状态迁到 ArkUI（写成 @Computed、getter 或缓存字段，提升为页级 @Local，放进常驻的 ListItem 或子组件，或改成选择 handler 里的直接赋值），并决定何时求值、何时复位时
+  - 情境：源端状态写在无键 remember { … } 或 remember { derivedStateOf { … } } 包住的一次性判定（如按目标值是否含小数点决定是否显示小数）、remember(k1, k2){…} 派生值、条件挂载（if (show) Dialog/卡片）子组件内的 remember 与 LaunchedEffect，或 LazyColumn 中不设 key 的 item{}/items 项里；源码没有显式重算或清空，时机依赖组合身份。目标准备写成每次渲染都重算的 @Computed、getter，或把状态放到页级 @Local、常驻组件，或在每次点击时重写派生值。
+  - 例外：目标保持与源端相同的挂载结构（条件渲染的子组件自己持有状态、每次显示新建实例），重建语义已自然保留
 - [迁移按状态切换的显示时同时迁移 setVisibility 分支：该状态下隐藏的控件不渲染，显示的区块要实现](lesson-43a9050245b1afa165bf.lesson.md)
   - 时机：界面实现与巡检修复阶段，迁移登录态等状态下控件的显示内容与显隐时；把 ViewHolder.bind 中的 setVisibility 逻辑移植到共享行组件时
   - 情境：源端 Fragment 按登录态等状态对多个控件 setVisibility（如登录后隐藏用户名、显示签到区），部分 setText 被注释；目标 ArkTS 按状态条件渲染；工程可能有显隐或绑定检查器报告源控件丢失。

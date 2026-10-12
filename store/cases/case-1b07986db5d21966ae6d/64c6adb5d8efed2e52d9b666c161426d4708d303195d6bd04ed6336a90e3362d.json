@@ -1,0 +1,155 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-1b07986db5d21966ae6d",
+  "created_at": "2026-10-11T20:02:55.522147+00:00",
+  "migration_key": "6ccfd659-7ee2-49d9-a90b-a7fa247e4484",
+  "title": "提取访问条件时误用着色切分常量，漏掉 GPB 字节",
+  "when": "功能切片的服务层实现阶段，把源端内联的尾块字符串切片抽进服务并用命名常量替换字面下标时",
+  "description": "源码对同一扇区尾块行按用途取不同区间：着色只染 3 字节 AC（substring(12,18)），提取并传给访问条件解码的是 AC+GPB 共 8 hex（substring(12,20)）；目标实现为这些切分点定义了一组共享常量。",
+  "summary": "Slice 2（F006 Dump 编辑器）的实现者 af255fbd775da7afe 写前已收到三处一致且足够的输入：\nF006 功能 spec 的服务接口写明 extractACs“substring(12,20)；>4 块扇区加 * 前缀”，\nF006-AC19 写明“取各尾块 substring(12,20)（8 hex 字符）……区间字符精确”\n（agent-af255fbd775da7afe.jsonl:L20-L21）；当时页面 DumpEditorPage.showAC 已内联\nsubstring(12, 20)（L33-L34）；Android DumpEditor.java:700-702 同为 substring(12, 20)，\n而 colorSectorTrailer（:1061）的 substring(12, 18) 只用于 AC 着色（L37-L38）。\n它还读到 HexDumpEditor 中 TRAILER_AC_END = 18 的注释“colorSectorTrailer substring 边界”（L47-L48）。\nL126 思考里的 extractACs 草稿仍是 substring(12, 20)。\n但 L132 Write 新建 DumpEditorService.ets 时，把字面下标换成命名常量，\nextractACs 两个分支都写成 substring(TRAILER_KEY_A_END, TRAILER_AC_END)，即 (12,18)，\n只取 3 字节 AC、漏掉 GPB；同一函数的文档注释仍写“各尾块 substring(12,20)”。\n随后 L136 把页面 showAC 改为调用该服务，页内原来正确的切片被替换。\n偏差发生在“已给定的提取区间 → 服务层实现”这一环；常量本身对着色正确，错在把着色边界套用到数据提取。\n生成期后续只有编译、grep 等调用，迁移完成快照中 extractACs 仍为 (12,18)。\n结果是 GPB 含“-”时 Android hex2Bytes 为 null、判为 Access Conditions are invalid，鸿蒙却照常解码。\n修复阶段报告核对子代理逐行比对时发现（G3①），修复主会话把终点改为 TRAILER_GB_END(20) 并加注释\n（repair stream-04.jsonl:L12365-L12366），进度记录两端运行时一致（stream-04.jsonl:L12737）。\n",
+  "recommendations": [
+    "用命名常量替换源端字面下标时，按每处调用的用途逐一选端点：数据提取的 substring(12,20) 对应 AC+GPB 结束位（本例 TRAILER_GB_END=20），不能沿用着色用的 AC 结束位（18）。",
+    "把页面中已有的正确内联逻辑搬进服务层时，逐字核对搬移前后的切片区间与 spec 契约；写后用 spec 给出的字面区间检查表达式，并核对代码与它自己的注释是否一致。",
+    "spec 标注“区间字符精确”的提取类验收项，在实现中补最小断言：1K dump 每个 AC 项为 8 hex，16 块扇区为“*”加 8 hex。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/services/DumpEditorService.ets",
+        "since": "2026-10-01T17:23:26.037Z",
+        "at": "2026-10-08T12:26:25.614Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/spec/baseline/features/F006-dump-editor.md",
+          "at": "2026-10-01T15:16:29.047Z",
+          "reason": "正常输入：实现者 Read 回执给出服务接口 extractACs“substring(12,20)；>4 块扇区加 * 前缀”及 F006-AC19“取各尾块 substring(12,20)（8 hex 字符）……区间字符精确”，足以确定提取区间（agent-af255fbd775da7afe.jsonl:L20-L21）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/pages/DumpEditorPage.ets",
+          "at": "2026-10-01T15:16:43.303Z",
+          "reason": "正常输入：实现者读到的现有页面 showAC 已内联 substring(12, 20)，大扇区加“*”，即待搬移逻辑本身正确（同转录L33-L34，页面行910/912）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/android/MifareClassicTool/app/src/main/java/de/syss/MifareClassicTool/Activities/DumpEditor.java",
+          "at": "2026-10-01T15:16:50.181Z",
+          "reason": "正常输入：Read 回执含 showAC:700-702 的 substring(12, 20)，以及 colorSectorTrailer:1061 仅用于 AC 着色的 substring(12, 18)，两种用途区间可分（同转录L37-L38）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/components/common/HexDumpEditor.ets",
+          "at": "2026-10-01T15:17:08.468Z",
+          "reason": "上下文：Base 组件定义 TRAILER_KEY_A_END=12、TRAILER_AC_END=18、TRAILER_GB_END=20，并注明是 colorSectorTrailer 着色切分边界；常量语义本身清楚（同转录L47-L48）。"
+        },
+        {
+          "key": "agent-af255fbd775da7afe.jsonl",
+          "at": "2026-10-01T15:28:21.451Z",
+          "reason": "已收到上述 (12,20) 要求且 L126 草稿仍写 substring(12, 20)，L132 Write 新建 DumpEditorService 时却把 extractACs 两个分支写成 substring(TRAILER_KEY_A_END, TRAILER_AC_END) 即 (12,18)，漏掉 GPB；文档注释仍写 substring(12,20)。偏差在输入正确时的实现输出，本分支在此停止上溯（同转录L126、L132-L133）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 5
+        },
+        {
+          "from": 2,
+          "to": 5
+        },
+        {
+          "from": 3,
+          "to": 5
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-1b07986db5d21966ae6d",
+  "metadata": {
+    "migration": {
+      "project": "MifareClassicTool",
+      "server_session_id": "6ccfd659-7ee2-49d9-a90b-a7fa247e4484"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5",
+        "claude-sonnet-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.247"
+      ]
+    },
+    "source_set_id": "sources-aa4e59703bcc1d60f854",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos",
+        "at": "2026-10-01T12:05:48.424Z",
+        "ref": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-abba5084389876d39.jsonl:L102",
+        "request_ref": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-abba5084389876d39.jsonl:L101",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos",
+        "at": "2026-10-01T12:05:48.424Z",
+        "ref": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-abba5084389876d39.jsonl:L102",
+        "request_ref": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-abba5084389876d39.jsonl:L101",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-10-01T22:42:23.282Z",
+        "ref": "repair/mifareclassictool-migration-complete-20261008/fix-mifareclassictool-opus/stream-01.jsonl:L60",
+        "request_ref": "repair/mifareclassictool-migration-complete-20261008/fix-mifareclassictool-opus/stream-01.jsonl:L58",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-10-01T22:42:23.282Z",
+        "ref": "repair/mifareclassictool-migration-complete-20261008/fix-mifareclassictool-opus/stream-01.jsonl:L60",
+        "request_ref": "repair/mifareclassictool-migration-complete-20261008/fix-mifareclassictool-opus/stream-01.jsonl:L58",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "6f4879bc-c69f-4670-9167-9b09da20a889"
+      ]
+    }
+  },
+  "revision": "64c6adb5d8efed2e52d9b666c161426d4708d303195d6bd04ed6336a90e3362d"
+}

@@ -1,0 +1,236 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-74bcab538b062ee7cac8",
+  "created_at": "2026-10-11T20:12:26.695782+00:00",
+  "migration_key": "6ccfd659-7ee2-49d9-a90b-a7fa247e4484",
+  "title": "动态重建列表用内容拼 ForEach 键，且把源端“缺 dump 不动作”写成清空结果",
+  "when": "界面实现阶段，把源端“清空容器后逐项 addView”的动态结果区改写为 ArkUI ForEach 数据驱动渲染、并决定空输入分支是否改动界面时",
+  "description": "Android 页面在一次计算中 removeAllViews 后逐项 inflate 结果行，行内容可能完全相同（如 dump 中多个相同数据块）；计算入口带 if (a != null && b != null) 守卫且没有 else 分支，输入无效时只 Toast 并把该侧置 null。目标用 @Local 数组 + 嵌套 ForEach 渲染，渲染模型条目是普通 class。",
+  "summary": "D-DF-1（ForEach 键）：UI 转换者 a66cb 写前读到 ui-migration-pitfalls.md 的 P-05，\n其中明确 key 要由“标识 + 所有影响显示的可变字段”组成（item.id + '_' + item.count）；\n也读到 DiffTool.java runDiff 每次 removeAllViews 后为每个块 inflate 一行，包括内容相同的块。\n它在思考中计划内层键用 `${index}_${b.dump1Line}_${b.diffLine}`（L118），\n但 L148 实际写出的内层键是 `${dump1Line}_${dump2Line}_${diffLine}`，丢掉了块序号：\n同一扇区内容相同的块（如多个全零数据块）键重复，ForEach 只渲染第一个。\n外层扇区键写成 sector + onlyInText + blocks.length + 各块 diffLine，不含 dump1/dump2 的 hex 内容，\n所以再次 runDiff 时只要差异图样相同，就会复用旧扇区行、显示旧数据。\n渲染模型 DiffBlockItem/DiffSectorItem 也没有块级唯一标识字段。\nSlice 13 实现者 a62af 把这两个模型类原样移到新建的 DiffService，没有补标识；页面上的两个 keyGenerator 也没动，\n一直保留到生成结束（按 a66cb Write 和 a62af 各次 Edit 重放，结果与迁移完成快照逐字一致）。\n修复给两个模型类加 key 字段，并在 DiffService 加 generation 计数，\n每次 buildDiffResult 递增，键写成『代次_扇区[_块]』；页面两层 ForEach 都改用 item.key\n（repair stream-02.jsonl:L3623、L3626、L3667）。\n\nD-DF-2（无效 dump 清空结果）：a66cb 写前读到的 DiffTool.java 中，runDiff 只有\nif (mDump1 != null && mDump2 != null) 分支，没有 else；processChosenDump 校验失败时 Toast 并返回 null。\n所以 Android 选到无效 dump 后不重跑 diff，界面保留旧结果。\na66cb 却在 runDiff 的 null 分支里写了 diffSectors = []、differenceText = ''，\nonPageResult 又在 processChosenDump 返回 null 后照常调用 runDiff，选到无效文件时界面被清空\n（processChosenDump 的注释写的是“runDiff 不触发”，与代码不符）。\na62af 写前读到 F010-AC07“两 dump 齐备才渲染（缺任一为空操作）”、AC03“该侧置 null 不参与 diff”，\n也重新读了 DiffTool.java。但它在 DiffService.buildDiffResult 中把 null 输入定义为返回空 DiffResult，\n注释说“页面据此复位 UI 态”；页面 runDiff 改成无条件用服务结果覆盖 diffSectors/differenceText，\n并自称“等价 Android 无动作 + 清空渲染”。这次重写把偏差固化成了跨文件契约。\n修复在页面 runDiff 开头加 if (dump1 === null || dump2 === null) return，\nDiffService 的 null 分支只改注释，说明由页面在调用前判定并跳过（stream-02.jsonl:L3667，修复后快照）。\n",
+  "recommendations": [
+    "把源端“清空容器后逐项 addView”改写成 ForEach 时，key 要包含条目在本次结果中的位置标识（如扇区号 + 块序号），再按需加内容字段；不要只用显示内容拼键。内容可能重复的条目（如相同数据块），仅靠内容拼出的键必然重复。",
+    "结果每次整体重建、条目又是普通 class（非 @ObservedV2）时，参照源端 removeAllViews 的语义，给每次计算分配一个代次前缀并写入条目 key，确保旧行不会因键相同被复用。写完后用含重复块的两份 dump 和两次连续计算各核一遍键是否唯一。",
+    "移植计算入口的空输入守卫时，照源码 if 分支的范围翻译：源码没有 else 就不要新增清空界面的分支。若规格写了“缺任一为空操作”，服务层的空结果不应被页面无条件拿去覆盖界面；在页面调用前判断并直接 return。",
+    "重构或下沉已有页面逻辑时，把迁入的分支逐条与规格 AC 及源码核对；不要把已有实现里的偏差写成新的服务契约注释（如“等价 Android 无动作 + 清空渲染”）。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/pages/DiffToolPage.ets",
+        "since": "2026-10-01T17:23:26.037Z",
+        "at": "2026-10-08T12:26:25.614Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/.claude/skills/android-ui-graph-query/references/ui-migration-pitfalls.md",
+          "at": "2026-10-01T12:42:42.016Z",
+          "reason": "正常输入：Read 回执中 P-05 写明 ForEach key 不完整会导致 UI 不刷新，修复方式是 key 含 id 和所有影响显示的可变字段（item.id + '_' + item.count）。这足以要求键同时带条目标识和显示内容（agent-a66cb48c68ae29ef8.jsonl:L84、L86）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/android/MifareClassicTool/app/src/main/java/de/syss/MifareClassicTool/Activities/DiffTool.java",
+          "at": "2026-10-01T12:40:31.178Z",
+          "reason": "正常输入：Read 回执给出 runDiff 只有 if (mDump1 != null && mDump2 != null) 分支，其中 removeAllViews 后为每个块（含相同块）inflate 一行；processChosenDump 校验失败时 Toast 并返回 null，onActivityResult 随后调用 runDiff，等于不动作（agent-a66cb48c68ae29ef8.jsonl:L18-L19）。派工也要求以该锚点源文件生成对等代码（L1）。"
+        },
+        {
+          "key": "agent-a66cb48c68ae29ef8.jsonl",
+          "at": "2026-10-01T12:52:52.121Z",
+          "reason": "UI 转换者在思考中计划内层键带 index（L118），Write 却写成 `${dump1Line}_${dump2Line}_${diffLine}`；外层键为 sector+onlyInText+blocks.length+diffLine，不含 hex 内容；模型类没有块级标识。runDiff 在 null 分支清空 diffSectors/differenceText，onPageResult 对无效 dump 仍调用 runDiff。D-DF-1 与 D-DF-2 均在此首次写出（同转录 L148-L149）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/spec/baseline/features/F010-diff-tool.md",
+          "at": "2026-10-01T16:21:29.937Z",
+          "reason": "正常输入：Read 回执给出 F010-AC07“两 dump 齐备才渲染（缺任一为空操作）”和 AC03“校验失败 Toast，该侧 dump 置 null 不参与 diff”（agent-a62af7ea15e016089.jsonl:L20-L21）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/android/MifareClassicTool/app/src/main/java/de/syss/MifareClassicTool/Activities/DiffTool.java",
+          "at": "2026-10-01T16:21:30.342Z",
+          "reason": "正常输入：实现者重新读了 DiffTool.java，回执中仍是 runDiff 无 else 的守卫（agent-a62af7ea15e016089.jsonl:L22-L23）。"
+        },
+        {
+          "key": "agent-a62af7ea15e016089.jsonl",
+          "at": "2026-10-01T16:26:59.435Z",
+          "reason": "Slice 13 实现者读到上述 AC 与源码，也读到页面里已有的清空分支（L27、L30）。它没有按 AC07 纠正，而是把 runDiff 改成无条件用 DiffService.buildDiffResult 的空结果覆盖界面，注释写“等价 Android 无动作 + 清空渲染”（同转录 L111-L112）。D-DF-2 在这次重写中被再次写入并固化；ForEach 键未被改动。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        },
+        {
+          "from": 4,
+          "to": 6
+        },
+        {
+          "from": 5,
+          "to": 6
+        },
+        {
+          "from": 6,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/services/DiffService.ets",
+        "since": "2026-10-01T17:23:26.037Z",
+        "at": "2026-10-08T12:26:25.614Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/.claude/skills/android-ui-graph-query/references/ui-migration-pitfalls.md",
+          "at": "2026-10-01T12:42:42.016Z",
+          "reason": "正常输入：P-05 要求 key 含 id 和所有影响显示的可变字段（agent-a66cb48c68ae29ef8.jsonl:L84、L86）。"
+        },
+        {
+          "key": "agent-a66cb48c68ae29ef8.jsonl",
+          "at": "2026-10-01T12:52:52.121Z",
+          "reason": "UI 转换者在页面中定义渲染模型 DiffBlockItem/DiffSectorItem，没有块级唯一标识，配套的 ForEach 键只用内容拼成。这是 DiffService 后来模型缺 key 的源头（同转录 L148-L149）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/pages/DiffToolPage.ets",
+          "at": "2026-10-01T16:21:37.687Z",
+          "reason": "交付桥梁：实现者 Read 该页面，回执中有无标识字段的两个模型类、内容拼成的 keyGenerator，以及 runDiff 的 null 清空分支（agent-a62af7ea15e016089.jsonl:L27、L30）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/spec/baseline/features/F010-diff-tool.md",
+          "at": "2026-10-01T16:21:29.937Z",
+          "reason": "正常输入：AC07“缺任一为空操作”、AC03“该侧置 null 不参与 diff”（agent-a62af7ea15e016089.jsonl:L20-L21）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/android/MifareClassicTool/app/src/main/java/de/syss/MifareClassicTool/Activities/DiffTool.java",
+          "at": "2026-10-01T16:21:30.342Z",
+          "reason": "正常输入：runDiff 仅在两 dump 非 null 时 removeAllViews 并重建，没有 else（agent-a62af7ea15e016089.jsonl:L22-L23）。"
+        },
+        {
+          "key": "agent-a62af7ea15e016089.jsonl",
+          "at": "2026-10-01T16:25:33.999Z",
+          "reason": "实现者 Write 新建 DiffService，把两个模型类原样迁入，没有补唯一 key，模型缺 key 的问题由此带到目标。同时把 buildDiffResult 的 null 输入定义为返回空 DiffResult、“页面据此复位 UI 态”，与已读到的 AC07“空操作”相悖（同转录 L84-L85）。修复给模型加 key 字段和 generation 代次，null 分支注释改为由页面跳过。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 6
+        },
+        {
+          "from": 4,
+          "to": 6
+        },
+        {
+          "from": 5,
+          "to": 6
+        },
+        {
+          "from": 6,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "未单独核实 ArkUI 运行时在重复键下具体渲染哪一项；本卡依据修复报告 D-DF-1“一致（运行时已验证）”的结论和代码形态，不另证运行时细节。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-74bcab538b062ee7cac8",
+  "metadata": {
+    "migration": {
+      "project": "MifareClassicTool",
+      "server_session_id": "6ccfd659-7ee2-49d9-a90b-a7fa247e4484"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5",
+        "claude-sonnet-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.247"
+      ]
+    },
+    "source_set_id": "sources-aa4e59703bcc1d60f854",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos",
+        "at": "2026-10-01T12:05:48.424Z",
+        "ref": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-abba5084389876d39.jsonl:L102",
+        "request_ref": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-abba5084389876d39.jsonl:L101",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos",
+        "at": "2026-10-01T12:05:48.424Z",
+        "ref": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-abba5084389876d39.jsonl:L102",
+        "request_ref": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-abba5084389876d39.jsonl:L101",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-10-01T22:42:23.282Z",
+        "ref": "repair/mifareclassictool-migration-complete-20261008/fix-mifareclassictool-opus/stream-01.jsonl:L60",
+        "request_ref": "repair/mifareclassictool-migration-complete-20261008/fix-mifareclassictool-opus/stream-01.jsonl:L58",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-10-01T22:42:23.282Z",
+        "ref": "repair/mifareclassictool-migration-complete-20261008/fix-mifareclassictool-opus/stream-01.jsonl:L60",
+        "request_ref": "repair/mifareclassictool-migration-complete-20261008/fix-mifareclassictool-opus/stream-01.jsonl:L58",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "6f4879bc-c69f-4670-9167-9b09da20a889"
+      ]
+    }
+  },
+  "revision": "b08ad9aa1c7b953bf8cb52b98ed3769cfb39ff95071e66a7245cfb7b0e47101f"
+}

@@ -1,0 +1,330 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-ea77ad96a8fa0f09fbc8",
+  "created_at": "2026-10-11T21:59:18.747971+00:00",
+  "migration_key": "acdd6966-d460-4d88-b0a6-5dc0c5262ee5",
+  "title": "后台计时降级规格只按锚点重算当前步、会话不持久化、未查证即判定无单调时钟",
+  "when": "规格提取阶段，为源端持久化后台计时任务（WorkManager Worker）制定平台差异替代方案、写入降级决策与差异AC时",
+  "description": "源端后台Worker在退后台期间跨步推进计时（计时步结束续下一步、需用户输入步停住、末步完成），以elapsedRealtime计偏移，任务由WorkManager持久化、回前台读取任务进度；目标平台第三方应用退后台后定时器不保证执行，需改为退后台锚点+回前台重算。",
+  "summary": "规格作者c4-02（agent-ab7acc37d655b8c27）写F008前实际读到：TimerWorker.kt全文——计时到终值后startCountDown(下一步)递归跨步（:176-186）、\n需输入步发暂停通知后停住（:165-167）、末步发完成通知、offset = elapsedRealtime − startingRealtime（:195-197）；Timer.kt ON_RESUME以\ngetWorkInfosForUniqueWorkLiveData(\"cofi_${recipe.id}\")读取持久任务进度（:230）；规格模板要求HARD-DIV契约列的平台能力依据只能引自\nSDK d.ts、arkts-knowledge-verifier或参考集，禁止凭模型记忆。派工要求穷举“Worker 500ms ticker+elapsedRealtime补偿/回前台状态同步”，\n同时预设了“后台计时降级三选”的口径，但未指定删减哪些语义。这些输入足以判断：平台限制只排除“后台持续tick”，不排除回前台按Worker语义补算。\n本次输出却把“后台不能tick”扩大为三处删减：PD-C12替代路径与AC24只锚定{stepId, remainingMs, anchorAt}，回前台“TimerTicker从剩余时长续跑”，\n未规定后台时长越过当前步时如何跨步推进（AC24/F002-AC20只测30s/2s单步内）；会话状态只放AppStorageV2（草稿曾写AppStorageV2/preferences，\n终稿去掉落盘），未交代进程重建；elapsedRealtime映射为墙钟并写“HMOS未开放跨休眠单调时钟”——思考中自认“Monotonic since boot: not exposed\npublicly? Hmm”，却没有查d.ts或verifier，backgroundTaskManager的d.ts依据同样未实际读取（agent-ab7acc37d655b8c27.jsonl L93、L111、L113）。\n主线随后在headless预授权下把PD-C12原样批准入ledger，并把单调时钟写成运行期验证项R-001（“若HMOS提供”），同样未查证。\nSlice 9实现者（agent-a54a0d0e8d4f6f0ef）读到F008后，思考中已注意到Android Worker会在后台跨多步推进，但以“PD-C12 explicitly accepts\ndegradation”为由只做单步边界（同转录L144）：TimerTicker.recomputeFromAnchor在remainingMs≤0时返回1、仅当前步内插值且用Date.now()；\nTimerSession只写AppStorageV2 'timerSession'并以Date.now()作锚点；TimerSeams同步返回该进程内全局状态。偏差位于源码到规格的平台差异决策环节，\n实现者为传递者；这些片段保留到修复前（修复者审计R1:L883“recomputeFromAnchor only current step”，backlog C1/C3于R1:L1552）。\n修复期删除TimerTicker，新增TimerSchedule按Worker语义从锚点生成计时/需输入等待/完成段（R1:L4416），TimerSession记录经preferences持久化并在\n进程重建后恢复（R1:L4509、L5878），锚点改为systemDateTime.getUptime(STARTUP)（修复者查d.ts为@since 18，工程compatibleSdkVersion为24，\nR1:L9899-L9976），TimerSeams改为按recipeId异步queryProgress（R1:L4532）。代码复审轮#65–#69、#74–#76、派发代次#67及TimerEngine的\nstopped/disposed标志是修复者重写后自身新增逻辑的修正，不计入本偏差。\n",
+  "recommendations": [
+    "规格阶段写后台降级决策前，把源后台任务拆成「执行载体」与「可观察语义」：只降级平台确实不支持的载体（后台持续tick）；回前台的跨步推进、需输入步停顿、完成判定可由锚点+步骤表纯计算复现，应保留并写进替代路径与AC。",
+    "判定「平台无对等」前当场查项目SDK d.ts或arkts-knowledge-verifier，记录API名与@since并对照compatibleSdkVersion（本例elapsedRealtime对应systemDateTime.getUptime(TimeType.STARTUP)）；查不到时写成待查疑点，不写成已知边界。",
+    "源任务由WorkManager等机制持久化、回前台读取任务状态时，规格应要求会话记录落盘（如preferences）并在进程重建后恢复；AppStorageV2只在进程内存活，不能作为唯一载体。",
+    "降级差异AC的验证场景覆盖后台时长超过当前步剩余时间、跨多步、停在需输入步或已完成等情形，不只测几秒到30秒的单步内恢复。",
+    "实现阶段读源码发现规格降级未覆盖的行为（本例Worker跨步推进）时，先核对降级理由是否真的排除该行为；可由纯计算复现的，登记规格疑点或按源语义实现，不默认取最小降级。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/entry/src/main/ets/timer/background/TimerTicker.ets",
+        "since": "2026-10-01T14:11:08.477Z",
+        "at": "2026-10-01T23:45:55.694Z"
+      },
+      "nodes": [
+        {
+          "key": "507b2f1f-5d21-4455-a17e-460566675ced:main",
+          "at": "2026-10-01T07:29:53.573Z",
+          "reason": "派工输入：要求F008穷举“Worker 500ms ticker+elapsedRealtime补偿/回前台状态同步”等分支，并以“HMOS无1:1对等，后台计时降级方案三选，基于源码行为写proposed决策”预设降级口径；未规定只重算当前步、不落盘或改墙钟（main-507b2f1f L679-L681）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/.claude/skills/a2h-spec/templates/feature-spec-template.md",
+          "at": "2026-10-01T07:30:04.311Z",
+          "reason": "正常输入：模板规定契约列平台能力依据三选一（SDK d.ts / arkts-knowledge-verifier / 参考集），禁止凭模型记忆；HARD-DIV仅限平台无对等能力（agent-ab7acc37d655b8c27.jsonl L18-L19，模板L65-L69）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Cofi/cofi-share/src/main/java/com/omelan/cofi/share/timer/notification/TimerWorker.kt",
+          "at": "2026-10-01T07:30:52.524Z",
+          "reason": "正常输入：Read回执给出终值后startCountDown(下一步)跨步（:176-186）、time==null步发暂停通知停住（:165-167）、末步postDone、offset=elapsedRealtime−startingRealtime（:195-197）；足以说明回前台应按这些语义补算（agent-ab7acc37d655b8c27.jsonl L61-L62）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Cofi/cofi-share/src/main/java/com/omelan/cofi/share/timer/Timer.kt",
+          "at": "2026-10-01T07:31:10.235Z",
+          "reason": "正常输入：Read回执（140-325行）给出ON_RESUME按getWorkInfosForUniqueWorkLiveData(\"cofi_${recipe.id}\")读取WorkManager任务进度后snapTo并发ACTION_STOP，即回前台依赖可跨进程存活的任务状态（同转录L73-L74）。"
+        },
+        {
+          "key": "507b2f1f-5d21-4455-a17e-460566675ced:ab7acc37d655b8c27",
+          "at": "2026-10-01T07:41:38.248Z",
+          "reason": "收到上述输入后，Write F008：PD-C12替代路径/AC24只锚定{stepId, remainingMs, anchorAt}并“TimerTicker从剩余时长续跑”，无跨步推进；会话只存AppStorageV2；elapsedRealtime映射为墙钟并断言“HMOS未开放跨休眠单调时钟”。思考中自认不确定却未查d.ts/verifier，草稿中的preferences落盘在终稿被删（同转录L93、L111、L113-L114）。源码到规格在此偏离。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/spec/baseline/features/F008-background-timer-notification.md",
+          "at": "2026-10-01T12:29:24.059Z",
+          "reason": "交付桥梁：Slice 9实现者Read回执仍含PD-C12替代路径、AppStorageV2锚点会话、墙钟映射行与AC24（agent-a54a0d0e8d4f6f0ef.jsonl L20-L21）。"
+        },
+        {
+          "key": "f254816a-2fd5-4687-b493-a2136a7510d9:a54a0d0e8d4f6f0ef",
+          "at": "2026-10-01T12:43:45.044Z",
+          "reason": "读到F008后思考中注意到Worker会后台跨多步推进，但以PD-C12已接受降级为由只做单步边界（同转录L144）；Write TimerTicker.recomputeFromAnchor：remainingMs≤0返回1、仅当前步插值、elapsed用Date.now()（同转录L187-L188）。本链确认传递，不另推定其独立失职。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 5
+        },
+        {
+          "from": 2,
+          "to": 5
+        },
+        {
+          "from": 3,
+          "to": 5
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": 6
+        },
+        {
+          "from": 6,
+          "to": 7
+        },
+        {
+          "from": 7,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/entry/src/main/ets/timer/background/TimerSession.ets",
+        "since": "2026-10-01T14:11:08.477Z",
+        "at": "2026-10-01T23:45:55.694Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/.claude/skills/a2h-spec/templates/feature-spec-template.md",
+          "at": "2026-10-01T07:30:04.311Z",
+          "reason": "正常输入：契约列平台能力依据须引SDK d.ts / verifier / 参考集，禁止凭记忆（agent-ab7acc37d655b8c27.jsonl L18-L19）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Cofi/cofi-share/src/main/java/com/omelan/cofi/share/timer/notification/TimerWorker.kt",
+          "at": "2026-10-01T07:30:52.524Z",
+          "reason": "正常输入：跨步推进、需输入步停住、末步完成与elapsedRealtime偏移（同转录L61-L62，:165-197）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Cofi/cofi-share/src/main/java/com/omelan/cofi/share/timer/Timer.kt",
+          "at": "2026-10-01T07:31:10.235Z",
+          "reason": "正常输入：ON_RESUME按配方唯一任务读取WorkManager持久进度（同转录L73-L74，:230）。"
+        },
+        {
+          "key": "507b2f1f-5d21-4455-a17e-460566675ced:ab7acc37d655b8c27",
+          "at": "2026-10-01T07:41:38.248Z",
+          "reason": "Write F008：§状态管理只规定AppStorageV2 timerSession单一键、无落盘与进程重建恢复；锚点时钟改墙钟并断言平台无跨休眠单调时钟（未查证）；回前台只按当前步重算（同转录L93、L111、L113-L114）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/spec/baseline/features/F008-background-timer-notification.md",
+          "at": "2026-10-01T12:29:24.059Z",
+          "reason": "交付桥梁：实现者Read回执含上述状态管理、映射行与AC24（agent-a54a0d0e8d4f6f0ef.jsonl L20-L21）。"
+        },
+        {
+          "key": "f254816a-2fd5-4687-b493-a2136a7510d9:a54a0d0e8d4f6f0ef",
+          "at": "2026-10-01T12:47:23.241Z",
+          "reason": "按F008写TimerSession：会话态只经AppStorageV2.connect('timerSession')保存，startingTimeData与anchor.anchorAt取Date.now()，progressPayload调用单步recomputeFromAnchor（同转录L203-L204）；头注把挂起不推进与改时间漂移标为PD-C12/R-001已知边界。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": 6
+        },
+        {
+          "from": 6,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/entry/src/main/ets/timer/background/TimerSeams.ets",
+        "since": "2026-10-01T14:11:08.477Z",
+        "at": "2026-10-01T23:45:55.694Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Cofi/cofi-share/src/main/java/com/omelan/cofi/share/timer/Timer.kt",
+          "at": "2026-10-01T07:31:10.235Z",
+          "reason": "正常输入：ON_RESUME按getWorkInfosForUniqueWorkLiveData(\"cofi_${recipe.id}\")观察对应配方的任务进度（agent-ab7acc37d655b8c27.jsonl L73-L74）。"
+        },
+        {
+          "key": "507b2f1f-5d21-4455-a17e-460566675ced:ab7acc37d655b8c27",
+          "at": "2026-10-01T07:41:38.248Z",
+          "reason": "Write F008：把WorkInfo观察映射为进程内AppStorageV2单一timerSession键，回前台读一次当前步重算值；未保留按配方查询可恢复任务状态的语义（同转录L113-L114）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/spec/baseline/features/F008-background-timer-notification.md",
+          "at": "2026-10-01T12:29:24.059Z",
+          "reason": "交付桥梁：实现者Read回执含§对接点“回前台→TimerSession.progressPayload()”与AppStorageV2工件契约（agent-a54a0d0e8d4f6f0ef.jsonl L20-L21）。"
+        },
+        {
+          "key": "f254816a-2fd5-4687-b493-a2136a7510d9:a54a0d0e8d4f6f0ef",
+          "at": "2026-10-01T12:47:47.283Z",
+          "reason": "Write TimerSeams：progressProvider同步返回session.progressPayload()（进程内全局态+单步重算），不带recipeId（同转录L211-L212）；修复期改为queryProgress(recipeId)异步查询已恢复会话。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/entry/src/main/ets/timer/background/TimerSchedule.ets",
+      "reason": "修复期新建文件（R1:L4416），生成期无任何写入；它承接被删除TimerTicker的跨步日程语义，生成来源即TimerTicker图所示偏差，无独立生成写者可画。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/entry/src/main/ets/timer/TimerEngine.ets",
+      "reason": "本job所列TimerEngine改动是适配修复后异步queryProgress的Promise签名，以及修复者复审项（dispose后忽略迟到回调、宿主停止期间丢弃查询结果，R2:L629–L635，#74–#76），属修复者自身新增逻辑的修正；生成期同步progressProvider与F002/F008 seam一致，未核到独立生成偏差。"
+    }
+  ],
+  "job": "issue-ea77ad96a8fa0f09fbc8",
+  "metadata": {
+    "migration": {
+      "project": "Cofi",
+      "server_session_id": "acdd6966-d460-4d88-b0a6-5dc0c5262ee5"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-sonnet-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.247"
+      ]
+    },
+    "source_set_id": "sources-22befa667a51476d2497",
+    "environment": [
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0-alpha17",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos",
+        "at": "2026-10-01T06:38:41.480Z",
+        "ref": "generation/9176a7f7b2203f7a/runs/721fb7c7-0508-4e2f-8b79-cfb906c65d16/epoch-0/sessions/agent-ad0f8989f195b578f.jsonl:L18",
+        "request_ref": "generation/9176a7f7b2203f7a/runs/721fb7c7-0508-4e2f-8b79-cfb906c65d16/epoch-0/sessions/agent-ad0f8989f195b578f.jsonl:L17",
+        "phase": "generation"
+      },
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0-alpha17",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Cofi",
+        "at": "2026-10-01T06:58:28.349Z",
+        "ref": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/main-507b2f1f-5d21-4455-a17e-460566675ced.jsonl:L45",
+        "request_ref": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/main-507b2f1f-5d21-4455-a17e-460566675ced.jsonl:L43",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos",
+        "at": "2026-10-01T08:45:11.210Z",
+        "ref": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/agent-a6b66d337af813fff.jsonl:L63",
+        "request_ref": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/agent-a6b66d337af813fff.jsonl:L62",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos",
+        "at": "2026-10-01T10:50:10.334Z",
+        "ref": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/agent-a099e355ad83c788a.jsonl:L122",
+        "request_ref": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/agent-a099e355ad83c788a.jsonl:L121",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-10-01T14:45:59.485Z",
+        "ref": "repair/cofi-migration-complete-20261007/fix-cofi-opus/stream-01.jsonl:L288",
+        "request_ref": "repair/cofi-migration-complete-20261007/fix-cofi-opus/stream-01.jsonl:L287",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-10-01T14:45:59.485Z",
+        "ref": "repair/cofi-migration-complete-20261007/fix-cofi-opus/stream-01.jsonl:L288",
+        "request_ref": "repair/cofi-migration-complete-20261007/fix-cofi-opus/stream-01.jsonl:L287",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0-alpha17",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": null,
+        "at": "2026-10-01T14:53:18.885Z",
+        "ref": "repair/cofi-migration-complete-20261007/fix-cofi-opus/stream-01.jsonl:L713",
+        "request_ref": "repair/cofi-migration-complete-20261007/fix-cofi-opus/stream-01.jsonl:L712",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "e0dce297-f0f9-4e8e-adb6-f2a8eeef850a"
+      ]
+    }
+  },
+  "revision": "6cd1f556630841a2ecd89461200b4ea6d26d01cbaca3eb1b97acaec296947081"
+}

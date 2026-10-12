@@ -1,6 +1,6 @@
 # 派工的必读清单、阅读顺序与对接清单要覆盖任务依赖的语义来源（含已识别的框架约束与移交的验收条款），附加提速要求时也保留
 
-ID：`lesson-8598e0af342dd5c8ba28` · 版本：3
+ID：`lesson-8598e0af342dd5c8ba28` · 版本：4
 
 [本主题](index.md)
 
@@ -31,7 +31,7 @@ ID：`lesson-8598e0af342dd5c8ba28` · 版本：3
 
 - 收敛后有疑问时，检索原生属性（如 .shadow(）确认只剩共享函数调用。
 
-来源支持：11 张卡 · 4 次迁移 · 3 个应用
+来源支持：12 张卡 · 5 次迁移 · 4 个应用
 
 ## 来源（按需复核）
 
@@ -47,6 +47,8 @@ ID：`lesson-8598e0af342dd5c8ba28` · 版本：3
   卡片版本：`87b0c345ca3fa21bf70b01c74e3a2714a0880c4a2e5531942fe4d81a24d85b98`
 - [case-75329cae60986f74dc43](../../../store/cases/case-75329cae60986f74dc43/03422478523b463e70feeccf65d3a54f73c2cf4463d4df454e234046c3cc04f1.json) · 结论：recommendation:3
   卡片版本：`03422478523b463e70feeccf65d3a54f73c2cf4463d4df454e234046c3cc04f1`
+- [case-be590c45de6e4195a7aa](../../../store/cases/case-be590c45de6e4195a7aa/8bd4ff591319a27aad91736ee43fe1cde1fd581f63d209f68e730ac2f406e5bb.json) · 结论：recommendation:4
+  卡片版本：`8bd4ff591319a27aad91736ee43fe1cde1fd581f63d209f68e730ac2f406e5bb`
 - [case-c1c7d598a9076a276e6a](../../../store/cases/case-c1c7d598a9076a276e6a/e08fcecfcb0ba66ded65b06bfca4e2fae61130f9835525a62f6e684c11cec824.json) · 结论：recommendation:3
   卡片版本：`e08fcecfcb0ba66ded65b06bfca4e2fae61130f9835525a62f6e684c11cec824`
 - [case-c42ad6674b3abc0daece](../../../store/cases/case-c42ad6674b3abc0daece/ce2dd3a3dfa66b82469be871a9b2b7ca7f958335b5e9e2f52c6b4e12c126ac88.json) · 结论：recommendation:3

@@ -1,0 +1,183 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-58b7b9c32dd320dca714",
+  "created_at": "2026-10-11T23:20:23.893937+00:00",
+  "migration_key": "9aa88a78-601e-448f-9145-671a57ef3256",
+  "title": "把 Release 响应解密写成一律强制、失败即报错，丢失源端解密失败回退原文的兼容语义",
+  "when": "规格提取与网络层实现阶段，确定响应解密/解码拦截器的失败语义时",
+  "description": "源端在响应转换前经 beforeResponse 一类钩子调用加解密工具函数（如 aesDecrypt），该函数异常分支返回原文；目标端需在 JSON/信封解析前插入解密步骤，且后端是否所有接口都返回密文尚无抓包证据。",
+  "summary": "规格写前，主代理在 L867 读到 api-inventory.json 的 open 不确定项：App.beforeResponse 在非 DEBUG\n无条件 aesDecrypt，但无运行期抓包证据，候选为“全接口 AES 密文/部分接口明文并由服务端适配”，影响解密与\nunwrap 次序。写前没有读取 aesDecrypt 函数体（其 catch 分支原样返回 content）。06:57 主代理写 feature-base.md\n网络层时却规定“与 App.beforeResponse 等价的 AES 解密；解密失败显式返回错误，不伪造成功”，decision-ledger\nR-001 默认“沿用 Android AES 响应壳”；07:11 又把该不确定项标为 answered，把“明文兼容与解密失败分支”留到联调\n（main L1249-L1250、L1491）。源端的等价行为其实是解密失败按原文继续解析，因此本条偏差先出现在规格的失败语义。\n网络实现者 base_03 在 L33 读到上述规格，又在 L44-L45 读到 Extension_AES.kt 全文，其中 catch 返回 content，\n已足以看出规格与源码冲突；但它在 NetworkCrypto.decryptReleaseResponse 的 catch 抛 NetworkError(DECRYPTION)，\nReleaseResponseInterceptor 对所有 Release 响应一律调用该函数（L127-L128、L140-L141），自检报告未提回退差异（L163）。\nslice-06 worker（01a08fc2）L449-L450 读回拦截器与 NetworkCrypto 后，L500-L501 抽出 ResponseDecoder.ets，原样保留\n“非 Release 才直通，否则 decryptReleaseResponse”；生成期此后无其他写入。网络巡检（01a09099）L98 读到 aesDecrypt\n回退仍判“Release AES 解密后再解析的静态接线一致”（L173），未纠正。\n交付后真机反馈/举报统一失败；修复者探测到生产返回 HTTP 200、业务码 201 的明文 JSON，离线复现旧路径\nWRONG_FINAL_BLOCK_LENGTH，在 decode() 增加 isJsonResponse 直通、非 JSON 仍解密（agent-01a09d80 L192-L194、L270），\n观察截止时保留。ApiClient 的同批改动只是排障日志。\n",
+  "recommendations": [
+    "规格提取时，沿源端响应转换钩子追到被调工具函数的异常分支（如 aesDecrypt 的 catch 返回原文），把“失败时回退原文/抛错/返回空”写进契约；不要用“显式失败、不伪造成功”这类通用错误策略替换源端兼容行为。",
+    "存在“是否全接口密文”这类 open 不确定项且无法抓包时，规格保留源端容错路径：解密失败按原文进入信封解析，由业务码判定成败；不要选更严格分支再延后到不会执行的联调。",
+    "实现解密/解码拦截器前对照源函数 catch 分支；规格失败语义与已读源码冲突时，按行为等价实现或显式上报冲突，并补一条“Release 模式收到明文 JSON 仍能解析业务码”的单测。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/a/Desktop/app_nfc_harmony/entry/src/main/ets/network/ResponseDecoder.ets",
+        "since": "2026-09-11T18:52:37.023Z",
+        "at": "2026-09-14T04:06:23.696Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/a/Desktop/app_nfc_harmony/spec/baseline/api-inventory/api-inventory.json",
+          "at": "2026-09-11T06:36:29.813Z",
+          "reason": "正常输入：主代理 jq 读取 uncertainties，回执给出 open 项“Release 响应是否对所有接口均为 AES 解密后的 BaseResponse”，候选含“部分接口明文并由服务端适配”，impact 为响应解密与 unwrap 次序（main-01a08f06 L866-L867）。它提示解密失败路径必须按源端核实，而不能直接定为硬失败。"
+        },
+        {
+          "key": "01a08f06-19e3-7bd0-8c03-2b186bd9499e",
+          "at": "2026-09-11T06:57:21.485Z",
+          "reason": "规格作者：apply_patch 新建 feature-base.md，网络层写“Release 响应在 JSON 解析前执行与 Android App.beforeResponse 等价的 AES 解密；解密失败显式返回错误，不伪造成功”，同批 decision-ledger R-001 默认沿用 AES 响应壳（main L1249-L1250）。写前未读 aesDecrypt 函数体，却给它补了源端没有的失败语义，并把明文兼容推到联调（L1491）。偏差在此形成。",
+          "problem": true
+        },
+        {
+          "key": "/Users/a/Desktop/app_nfc_harmony/spec/baseline/feature-base.md",
+          "at": "2026-09-11T09:50:59.896Z",
+          "reason": "交付桥梁：base_03 用 sed 读取 feature-base 网络层段，回执仍含“解密失败显式返回错误，不伪造成功”（agent-01a08fdf L32-L33）。"
+        },
+        {
+          "key": "/Users/a/Desktop/app-nfc-android/coreKit/src/main/java/com/brick/core/extension/Extension_AES.kt",
+          "at": "2026-09-11T09:51:31.295Z",
+          "reason": "正常输入：base_03 sed 读取全文，回执显示 aesDecrypt 用 AES/CBC/PKCS5Padding 解密，catch(java.lang.Exception) 分支 printStackTrace 后返回 content，即解密失败回退原文（agent-01a08fdf L44-L45）。这足以发现规格的“显式失败”与源端不等价。"
+        },
+        {
+          "key": "01a08fdf-ef24-7870-a528-e7a394347a89",
+          "at": "2026-09-11T09:58:07.734Z",
+          "reason": "网络实现者 base_03：读到规格和含回退分支的源码后，L127-L128 写 NetworkCrypto.decryptReleaseResponse，在 catch 抛 NetworkError(DECRYPTION, 'Release response decryption failed')；L140-L141 新建 ReleaseResponseInterceptor.intercept，非 Release 才返回 body，否则一律调用该解密。worker 报告 L163 自检 PASS，没有提回退差异。它沿用了规格，也漏掉已读源码给出的纠正机会。",
+          "problem": true
+        },
+        {
+          "key": "/Users/a/Desktop/app_nfc_harmony/entry/src/main/ets/network/ReleaseResponseInterceptor.ets",
+          "at": "2026-09-11T12:36:07.522Z",
+          "reason": "交付桥梁：slice-06 worker 用 sed 读取 NetworkCrypto.ets 与 ReleaseResponseInterceptor.ets，回执含 decryptReleaseResponse 及拦截器的一律解密分支（agent-01a08fc2 L449-L450）；两文件此前只有 base_03 写过。"
+        },
+        {
+          "key": "01a08fc2-dcb0-7380-a3f6-328909a13d82",
+          "at": "2026-09-11T12:39:29.309Z",
+          "reason": "传递写者：apply_patch 新建 ResponseDecoder.ets，把拦截器逻辑原样移入 decode()：if (!releaseResponse) return body; return NetworkCrypto.decryptReleaseResponse(body, aesKey)，并让拦截器委托它（L500-L501）。写前已读到同一规格（L40），没有新的偏差或纠正；这是生成期对目标唯一的写入，片段保留到返修。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "主代理 exec_command 用 jq 读取 api-inventory.json 的 uncertainties，回执列出 U-NET-001“Release 响应是否对所有接口均为 AES 解密后的 BaseResponse”及“部分接口明文”候选；这是规格写前收到的不确定项。",
+          "evidence": [
+            {
+              "source": "runs/46b0e579-a0a3-480c-8429-285628ab68e5/epoch-1/sessions/main-01a08f06-19e3-7bd0-8c03-2b186bd9499e.jsonl",
+              "line": 866
+            },
+            {
+              "source": "runs/46b0e579-a0a3-480c-8429-285628ab68e5/epoch-1/sessions/main-01a08f06-19e3-7bd0-8c03-2b186bd9499e.jsonl",
+              "line": 867
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 5,
+          "force": true,
+          "reason": "base_03 exec_command 用 sed 读取 spec/baseline/feature-base.md 网络层段，回执含“解密失败显式返回错误，不伪造成功”；实现者写码前实际收到这条规格。",
+          "evidence": [
+            {
+              "source": "runs/46b0e579-a0a3-480c-8429-285628ab68e5/epoch-0/sessions/agent-01a08fdf-ef24-7870-a528-e7a394347a89.jsonl",
+              "line": 32
+            },
+            {
+              "source": "runs/46b0e579-a0a3-480c-8429-285628ab68e5/epoch-0/sessions/agent-01a08fdf-ef24-7870-a528-e7a394347a89.jsonl",
+              "line": 33
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": 5,
+          "force": true,
+          "reason": "base_03 exec_command 用 sed -n '1,140p' 读取 Extension_AES.kt，回执含 aesDecrypt 全文及 catch 分支返回 content；实现者写码前已看到源端解密失败回退原文。",
+          "evidence": [
+            {
+              "source": "runs/46b0e579-a0a3-480c-8429-285628ab68e5/epoch-0/sessions/agent-01a08fdf-ef24-7870-a528-e7a394347a89.jsonl",
+              "line": 44
+            },
+            {
+              "source": "runs/46b0e579-a0a3-480c-8429-285628ab68e5/epoch-0/sessions/agent-01a08fdf-ef24-7870-a528-e7a394347a89.jsonl",
+              "line": 45
+            }
+          ]
+        },
+        {
+          "from": 5,
+          "to": 6
+        },
+        {
+          "from": 6,
+          "to": 7,
+          "force": true,
+          "reason": "slice-06 worker exec_command 用 sed 读取 NetworkCrypto.ets 与 ReleaseResponseInterceptor.ets，回执含 intercept() 的 Release 一律解密分支和 decryptReleaseResponse 的 DECRYPTION 抛错；随后它把这段逻辑抽进 ResponseDecoder.ets。",
+          "evidence": [
+            {
+              "source": "runs/46b0e579-a0a3-480c-8429-285628ab68e5/epoch-0/sessions/agent-01a08fc2-dcb0-7380-a3f6-328909a13d82.jsonl",
+              "line": 449
+            },
+            {
+              "source": "runs/46b0e579-a0a3-480c-8429-285628ab68e5/epoch-0/sessions/agent-01a08fc2-dcb0-7380-a3f6-328909a13d82.jsonl",
+              "line": 450
+            }
+          ]
+        },
+        {
+          "from": 7,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/a/Desktop/app_nfc_harmony/entry/src/main/ets/network/ApiClient.ets",
+      "reason": "已确认修复者在 post() 外包 try/catch 记录 FeedbackNetwork hilog 并补成功日志（agent-01a09d80 L192-L194、L254-L255）。这是排障可观测性补充，不修正生成偏差；Release 解密原先在 base_03 写 ApiClient 时内联（L127），12:39 已移入 ResponseDecoder。因此本目标不另画生成归因链。"
+    }
+  ],
+  "job": "issue-58b7b9c32dd320dca714",
+  "metadata": {
+    "migration": {
+      "project": "NFC",
+      "server_session_id": "9aa88a78-601e-448f-9145-671a57ef3256"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "codex-auto-review",
+        "gpt-5.6-sol"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.145.0-alpha.27"
+      ]
+    },
+    "source_set_id": "sources-c99832c177c1f1855569",
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "64096d20-6599-407d-87b8-7d05b3c67b9d"
+      ]
+    }
+  },
+  "revision": "72151b4cd7d105de53553def5a3b53c4a276f1eee7ce96418d386e3f5f67c0ca"
+}

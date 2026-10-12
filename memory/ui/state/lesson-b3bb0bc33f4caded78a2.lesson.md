@@ -1,16 +1,16 @@
-# 源页面由事件订阅或结果回调触发的重新加载要迁成订阅；Navigation 根页、Tab 内容或经 router 返回的 @Entry 页在子页返回时不会再走 aboutToAppear
+# 源页面在每次可见时、或由事件订阅与结果回调触发的重新加载，要迁成可见性回调或订阅：Navigation 根页、Tab 内容或经 router 返回的 @Entry 页在子页返回时不会再走 aboutToAppear
 
-ID：`lesson-b3bb0bc33f4caded78a2` · 版本：3
+ID：`lesson-b3bb0bc33f4caded78a2` · 版本：4
 
 [本主题](index.md)
 
 ## 何时使用
 
-ViewModel 与页面接线阶段，决定目标页由哪些入口触发数据重新加载时；流程闭环阶段从该页新增 push 子流程时
+ViewModel 与页面接线阶段，决定目标页由哪些入口触发数据重新加载时；流程闭环阶段从该页新增 push 子流程时；把 Activity 的 onStart/onResume 初始化与只在页面可见时接收的监听映射到 NavDestination 生命周期时
 
 ## 适用情境
 
-源 Fragment 用 EventBus @Subscribe（登录成功、记录变化等）和 ActivityResult 回调重拉数据；目标页是 Navigation 下常驻的根内容或 Tab 页，登录、详情等子页用 pushPathByName 覆盖后 pop 返回；工程已有会话状态与应用事件总线。 也包括列表页经 router.pushUrl 打开新增/编辑页，对方保存后 router.back 返回，列表数据只在 aboutToAppear 拉取。
+源 Fragment 用 EventBus @Subscribe（登录成功、记录变化等）和 ActivityResult 回调重拉数据；目标页是 Navigation 下常驻的根内容或 Tab 页，登录、详情等子页用 pushPathByName 覆盖后 pop 返回；工程已有会话状态与应用事件总线。 也包括列表页经 router.pushUrl 打开新增/编辑页，对方保存后 router.back 返回，列表数据只在 aboutToAppear 拉取。也包括源 Activity 在 onStart/onResume 每次可见时重读 Intent、重建列表或校验目录，目标挂在一次性的 onReady/aboutToAppear；以及只应在页面可见时接收的监听（如 NFC 标签监听）挂在 aboutToAppear/aboutToDisappear，被覆盖的页面仍在接收。
 
 ## 原因
 
@@ -20,18 +20,23 @@ aboutToAppear 只在组件创建时执行；子页 pop 返回时根页组件没�
 
 1. 把源页面所有重新加载的入口列成清单（生命周期回调、事件订阅、结果回调），在目标 ViewModel 为每项写对应订阅（如会话状态订阅、应用事件总线订阅），并确认发布方存在：保存、删除等成功处发布刷新事件。
 2. 需要“返回后刷新”时用订阅或 NavDestination 的 onShown 等可见性回调，不依赖 aboutToAppear；订阅在销毁时注销，不因页面暂时不可见的标志而丢弃事件；经 router 返回的 @Entry 页用 onPageShow 重载，并区分首次加载与返回刷新的 loading 状态。重写占位页时不沿用占位版的生命周期写法。
+3. onStart/onResume 中的初始化按每次可见映射到 onWillShow/onShown，从后台回前台另由 onShown 的 APP_STATE 原因处理，用“进入子页再返回”“切后台再回前台”两条路径自查；只在可见时应接收的监听在 onShown 登记、onHidden 注销。
 
 ## 可选检查
 
 - 登录后返回该页、保存或删除记录后返回该页，数据无需重进即更新。
 
-来源支持：3 张卡 · 3 次迁移 · 3 个应用
+来源支持：5 张卡 · 4 次迁移 · 4 个应用
 
 ## 来源（按需复核）
 
 - [case-03947f1730e7f74c490f](../../../store/cases/case-03947f1730e7f74c490f/275699fba1617e98eab38ad764c023e51e92270e7462d59018314a432e6d3fa7.json) · 结论：diagnosis, recommendation:3, recommendation:4
   卡片版本：`275699fba1617e98eab38ad764c023e51e92270e7462d59018314a432e6d3fa7`
+- [case-3735da03c6e544339df6](../../../store/cases/case-3735da03c6e544339df6/38c6e0dfc90fd2fe86eb204ba199a8fd1d8df2fc6b790f9073ac59a0c02a29f8.json) · 结论：diagnosis
+  卡片版本：`38c6e0dfc90fd2fe86eb204ba199a8fd1d8df2fc6b790f9073ac59a0c02a29f8`
 - [case-46ac36102451125de693](../../../store/cases/case-46ac36102451125de693/86c57b38cd3897abac8b2c1d68ca50b219ea6c13be75dcd1fd0045e39be6fba6.json) · 结论：diagnosis, recommendation:2
   卡片版本：`86c57b38cd3897abac8b2c1d68ca50b219ea6c13be75dcd1fd0045e39be6fba6`
 - [case-6077d9f3d384e0cb140f](../../../store/cases/case-6077d9f3d384e0cb140f/d4db908aa23c5fb9494c808b0986c8d73a46e81f50b35e70e79146b6235a6d02.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
   卡片版本：`d4db908aa23c5fb9494c808b0986c8d73a46e81f50b35e70e79146b6235a6d02`
+- [case-7d097177e497ea9e202c](../../../store/cases/case-7d097177e497ea9e202c/4c5e7396ce9a9a0eac126b95b23ab3c18f03dc352495dec2fa11f218b7dfad3a.json) · 结论：diagnosis, recommendation:2
+  卡片版本：`4c5e7396ce9a9a0eac126b95b23ab3c18f03dc352495dec2fa11f218b7dfad3a`

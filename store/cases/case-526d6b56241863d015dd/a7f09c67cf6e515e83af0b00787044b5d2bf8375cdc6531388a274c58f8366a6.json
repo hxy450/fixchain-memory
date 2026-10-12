@@ -1,0 +1,345 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-526d6b56241863d015dd",
+  "created_at": "2026-10-11T20:34:00.930435+00:00",
+  "migration_key": "6ccfd659-7ee2-49d9-a90b-a7fa247e4484",
+  "title": "Java 文本切行、trim/split、String.format 与 Calendar 周规则被同名 JS 实现近似替代",
+  "when": "页面转换和服务/VM 抽取阶段，把 Java 标准库的读行、切分、去空白、数值格式化和日历计算翻译成 ArkTS 时",
+  "description": "源码通过 BufferedReader.readLine、String.split/trim、String.format(\"%.2f\", float) 或 Calendar.getInstance() 的 WEEK_OF_YEAR 处理文件行、编辑框文本、差异百分比和生产周；目标端准备用 JS 的 split/trim/toFixed、TextDecoder 或手写 ISO 周换算实现。",
+  "summary": "各写者写前都读到了对应的 Java 源码。Common.readLineByLine 用 reader.readLine() 循环加 line.trim()；\nKeyEditor/DumpEditor 用 getText().split(System.getProperty(\"line.separator\"))；\nDiffTool 先算 float percentage，再用 String.format(\"%.2f\", percentage)；\nDumpEditor.decodeDateOfManuf 用 Calendar.getInstance() 加 set(WEEK_OF_YEAR, week)。\n派工还要求\"readFileLineByLine 等价\"，F006 映射要求\"数值域同 Android\"。这些输入已经足够说明需要按 Java 语义实现。\n实际输出却把这些调用换成了同名 JS API 或\"确定性\"近似实现。\n(1) FileService.readFileLineByLine 用 readTextSync 加 split(/\\r\\n|\\r|\\n/) 再 JS trim：\n文件以换行结尾时，readAll=true 会多出一个空串行。KeyEditor 正是用 readAll=true 加载，于是编辑器末尾多出空行。\n(2) 页面转换者先在 KeyEditorPage、DumpEditorPage 中写 split('\\n')，这样会保留末尾空串（Java split 会丢弃）；\nslice 抽取者写前重读了 Java 源码，仍把它原样搬进 KeyEditorVM 和 DumpEditorService。\nDumpEditor 的扇区文本若以换行结尾，会被判成 5 行，返回错误码 1。\n(3) ImportExportTool 转换者写 isValidKeyFile 时注释称\"trim 语义与 Java 逐行一致\"，实际用的是 JS trim，它会多去掉 NBSP、U+FEFF 等字符；\n它写的 parseTextLines 只按 '\\n' 断行，并用 TextDecoder，后者会丢掉 BOM。随后 slice 5 原样迁入 ImportExportService。\n(4) DiffToolPage 转换者用 double 运算加 toFixed(2)，DiffService 抽取者在注释里写着 String.format(\"%.2f\") 却照搬了这种写法。\n因此丢失了 float 精度、HALF_UP 舍入，以及按默认 Locale 输出小数点（fr/it/pt/ru 等语言下应为逗号）的行为。\n(5) DumpEditorPage 转换者在注释中写明\"Java 锚点为 locale 相关 Calendar，此处取确定性 ISO 语义\"，按 ISO 8601 周一起算；\nslice 2 迁入 DumpEditorService 后，又在源码笔记里登记为\"确定性取舍\"。en-US 等区域的周首日和首周最少天数与 ISO 不同，起止日期会偏移。\n上述片段都保留到修复前。修复新建 JavaCompat，提供 readLines/trim/split/decodeUtf8/formatFixed/toFloat/localizeDigits/timestampForFileName；\n各服务改用这些函数，weekStartOf 改按 i18n Calendar 的 firstDayOfWeek/minimalDaysInFirstWeek 计算。\nDumpEditor/KeyEditor 的 tmp 文件名和日期数字改为本地数字，这一点与 UidLog 时间戳同属区域数字系统差异，本卡不单独归因。\n图中已入链的是 DumpEditorService、DiffService、CommonService、ImportExportService 四个目标。\n(1) 和 KeyEditorVM 的链已在原文中核实，但写者把这两个文件登记在大小写变体路径 Entry/... 上，检查器无法绑定，因此列入未决目标并说明原因。\n",
+  "recommendations": [
+    "页面转换或服务实现阶段，翻译 Java String/IO 基础调用时逐项核对语义，不要用 JS 同名方法直接替代：readLine 按 \\n、\\r、\\r\\n 断行，最后一个终止符后不产生空行；String.split 丢弃末尾空串；String.trim 只去除 ≤U+0020 的字符；FileReader/InputStreamReader 会把 BOM 当作普通字符保留。",
+    "同一工程里多处要用 Java 语义时，先在服务层集中实现一组 Java 兼容函数（readLines/split/trim/decode），所有服务、VM 和页面统一调用，不在各处各写一份近似实现。",
+    "实现后用最小样例自检：内容为 \"a\\nb\\n\" 的文件在 readAll=true 下应读出 [\"a\",\"b\"]；以换行结尾的扇区或密钥文本 split 后不应多出末尾空串，DumpEditor 的 4/16 行判定不应因此失败。",
+    "源码用 String.format(\"%.Nf\", float) 时，按 float 运算、HALF_UP 舍入，并按默认 Locale 输出小数点和数字字形，不要直接用 toFixed；源码用 Calendar.getInstance() 或 SimpleDateFormat(..., Locale.getDefault()) 时，按区域周规则和数字系统实现。",
+    "不要以\"确定性\"为由改用 ISO 等固定语义；确需偏离源码时，登记为待确认决策，不要只写在注释或源码笔记里了事。",
+    "服务/VM 抽取阶段从已转换页面搬运逻辑时，以 Java 源码为准复核被搬运的片段，不要把页面里的近似实现当作已验证的结论。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/services/DumpEditorService.ets",
+        "since": "2026-10-01T17:23:26.037Z",
+        "at": "2026-10-08T12:26:25.614Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/android/MifareClassicTool/app/src/main/java/de/syss/MifareClassicTool/Activities/DumpEditor.java",
+          "at": "2026-10-01T12:19:51.137Z",
+          "reason": "正常输入：DumpEditor 页面转换者 Read 全文，回执第 501-502 行为 split(System.getProperty(\"line.separator\"))，第 783-791 行为 Calendar.getInstance()、clear、set(WEEK_OF_YEAR, week)、set(YEAR, year+2000)（agent-afc2eb8e77bdfaff5.jsonl:L22、L25）。"
+        },
+        {
+          "key": "agent-afc2eb8e77bdfaff5.jsonl",
+          "at": "2026-10-01T12:33:48.299Z",
+          "reason": "Write DumpEditorPage.ets 时，weekStartOf 按 ISO 8601（1 月 4 日所在周的周一）计算，注释自述\"Java 锚点为 locale 相关 Calendar，此处取确定性 ISO 语义\"；扇区文本用 blocksText.split(LINE_SEPARATOR) 切分（同转录 L159-L160；转换报告 L208 记为有意偏差）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/pages/DumpEditorPage.ets",
+          "at": "2026-10-01T15:16:43.303Z",
+          "reason": "交付桥梁：slice 2 写者 Read 的页面回执中仍有 ISO weekStartOf 和 JS split（agent-af255fbd775da7afe.jsonl:L33-L34）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/spec/baseline/features/F006-dump-editor.md",
+          "at": "2026-10-01T15:16:29.047Z",
+          "reason": "正常输入：F006 映射行要求 WEEK_OF_YEAR 推算\"数值域同 Android\"，AC21 要求区间\"与 Android 同日\"（agent-af255fbd775da7afe.jsonl:L20-L21）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/android/MifareClassicTool/app/src/main/java/de/syss/MifareClassicTool/Activities/DumpEditor.java",
+          "at": "2026-10-01T15:16:50.181Z",
+          "reason": "正常输入：slice 2 写者重读了 DumpEditor.java 全文（agent-af255fbd775da7afe.jsonl:L37-L38）。"
+        },
+        {
+          "key": "agent-af255fbd775da7afe.jsonl",
+          "at": "2026-10-01T15:28:21.451Z",
+          "reason": "Write DumpEditorService 时，checkDumpAndUpdateLines 写成 sector.blocksText.split('\\n')，decodeDateOfManuf 沿用 ISO 8601 周一起算，并写明\"确定性语义\"；随后源码笔记 L156 登记\"Calendar.getInstance() 周语义随 locale（US=周日首日）| 确定性取舍\"。片段保留到修复前（同转录 L132-L133）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 6
+        },
+        {
+          "from": 4,
+          "to": 6
+        },
+        {
+          "from": 5,
+          "to": 6
+        },
+        {
+          "from": 6,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/services/DiffService.ets",
+        "since": "2026-10-01T17:23:26.037Z",
+        "at": "2026-10-08T12:26:25.614Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/android/MifareClassicTool/app/src/main/java/de/syss/MifareClassicTool/Activities/DiffTool.java",
+          "at": "2026-10-01T12:40:31.178Z",
+          "reason": "正常输入：DiffTool 页面转换者 Read 全文，回执第 262-267 行为 float percentage = (float)diffLength / totalLength * 100f，以及 String.format(\"%.2f\", percentage)（agent-a66cb48c68ae29ef8.jsonl:L18-L19）。"
+        },
+        {
+          "key": "agent-a66cb48c68ae29ef8.jsonl",
+          "at": "2026-10-01T12:52:52.121Z",
+          "reason": "Write DiffToolPage.ets 时，用 number（double）计算 diffLength / totalLength * 100，并用 percentage.toFixed(2) 输出，丢失了 float 精度、HALF_UP 舍入和默认 Locale 小数点（同转录 L148-L149）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/pages/DiffToolPage.ets",
+          "at": "2026-10-01T16:21:37.687Z",
+          "reason": "交付桥梁：slice 13 写者 Read 的页面回执第 623-630 行仍是 double 运算加 toFixed(2)（agent-a62af7ea15e016089.jsonl:L27、L30）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/android/MifareClassicTool/app/src/main/java/de/syss/MifareClassicTool/Activities/DiffTool.java",
+          "at": "2026-10-01T16:21:30.342Z",
+          "reason": "正常输入：slice 13 写者重读了 DiffTool.java，回执中有同一段 float 运算和 String.format(\"%.2f\")（agent-a62af7ea15e016089.jsonl:L22-L23）。"
+        },
+        {
+          "key": "agent-a62af7ea15e016089.jsonl",
+          "at": "2026-10-01T16:25:33.999Z",
+          "reason": "Write DiffService 时，注释写着 String.format(\"%.2f\")，实现仍是 double 运算加 toFixed(2)，把页面的近似实现搬进服务层。该片段保留到修复前（同转录 L84-L85）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 5
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/services/CommonService.ets",
+        "since": "2026-10-01T17:23:26.037Z",
+        "at": "2026-10-08T12:26:25.614Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/android/MifareClassicTool/app/src/main/java/de/syss/MifareClassicTool/Common.java",
+          "at": "2026-10-01T14:12:22.257Z",
+          "reason": "正常输入：ImportExportTool 页面转换者用 Bash sed 读取 Common.java 第 1420-1560 行，回执包含 isValidKeyFile 的 line.split(\"#\")[0] 和 line.trim()（agent-a5247705332ce1ccf.jsonl:L43-L44）。"
+        },
+        {
+          "key": "agent-a5247705332ce1ccf.jsonl",
+          "at": "2026-10-01T14:21:56.263Z",
+          "reason": "Edit 向 CommonService 新增 isValidKeyFile，注释声称\"trim 语义与 Java 逐行一致\"，实现却是 rawLine.split('#')[0] 加 JS line.trim()。JS trim 会多去除 NBSP、U+FEFF 等字符，Java trim 只去 ≤U+0020（同转录 L152-L153）。该片段保留到修复前。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "Bash 执行 sed -n 1420,1560p 读取 Common.java，回执中 isValidKeyFile 段给出 line.split(\"#\")[0] 与 line.trim()；这是转换者写 isValidKeyFile 前的真实读取。",
+          "evidence": [
+            {
+              "source": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-a5247705332ce1ccf.jsonl",
+              "line": 43
+            },
+            {
+              "source": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-a5247705332ce1ccf.jsonl",
+              "line": 44
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/services/ImportExportService.ets",
+        "since": "2026-10-01T17:23:26.037Z",
+        "at": "2026-10-08T12:26:25.614Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/android/MifareClassicTool/app/src/main/java/de/syss/MifareClassicTool/Common.java",
+          "at": "2026-10-01T14:18:52.459Z",
+          "reason": "正常输入：同一转换者用 grep -A50 读取 readLineByLine，回执给出 reader.readLine() 循环、line.trim() 和 split(\"#\")[0]（agent-a5247705332ce1ccf.jsonl:L132-L133）。"
+        },
+        {
+          "key": "agent-a5247705332ce1ccf.jsonl",
+          "at": "2026-10-01T14:25:00.120Z",
+          "reason": "Write ImportExportToolPage.ets 时，parseTextLines 只按 text.split('\\n') 断行（虽然剔除了末尾空串），逐行用 JS trim，读取用 util.TextDecoder('utf-8')，会丢弃 BOM；裸 \\r 断行、Unicode 空白和 BOM 均与 BufferedReader/String.trim 不同（同转录 L160-L161）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/pages/ImportExportToolPage.ets",
+          "at": "2026-10-01T15:34:45.396Z",
+          "reason": "交付桥梁：slice 5 写者 Read 的页面回执中仍有 TextDecoder 和 parseTextLines 实现（agent-aa49f3ce1a4cbe915.jsonl:L43-L44）。"
+        },
+        {
+          "key": "agent-aa49f3ce1a4cbe915.jsonl",
+          "at": "2026-10-01T15:41:33.457Z",
+          "reason": "未重读 Common.java，Write ImportExportService 时把 readTextLines/parseTextLines 原样迁入服务层。本链只确认传递，不另推定独立失职（同转录 L65-L66）。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "Bash 执行 grep -n -A50 定位 Common.java 的 readLineByLine，回执第 406-417 行为 reader.readLine() 循环、line.trim() 与 split(\"#\")[0]；早于 ImportExportToolPage 写入。",
+          "evidence": [
+            {
+              "source": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-a5247705332ce1ccf.jsonl",
+              "line": 132
+            },
+            {
+              "source": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-a5247705332ce1ccf.jsonl",
+              "line": 133
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/services/FileService.ets",
+      "reason": "归因已核但未能入图：slice 3 写者 agent-a25c30a7bf6a00764 读到 Common.readLineByLine（L72-L73）后，在 L135-L136 写出 readTextSync+split(/\r\n|\r|\n/)+JS trim 的 readFileLineByLine，该片段保留到修复前（迁移完成态快照 mtime 与写入时刻一致，生成期无其他写者）。但该 Write 的 file_path 是大小写变体 .../mifareclassictool-hmos/Entry/src/main/ets/services/FileService.ets，索引把它登记为与 job 目标 entry/... 不同的文件；对 2→target 补 force 时，检查器返回 reviewed relation contradicts indexed operation endpoints，文件到文件的同一性边也不被接受。这是路径大小写登记缺口，不是来源缺失；稿件 draft-2.yaml 与 pack-2.out 保留了该反馈。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/viewmodels/KeyEditorVM.ets",
+      "reason": "归因已核但未能入图：KeyEditor 转换者 agent-a78e00f2f8b835d04 读到 KeyEditor.java 的 split(line.separator)（L25-L26）后，在 KeyEditorPage.ets 写了 keysText.split('\n')（L113-L114）；slice 3 写者 agent-a25c30a7bf6a00764 读页面（L32-L33）并重读源码（L40-L41）后，在 L139-L140 原样写入 KeyEditorVM，并经 readFileLineByLine(path, true) 加载。生成期唯一的后续写者 a90adb2c8ad687e00 只改了 UiHooks。但 a25c 的读页和写 VM 都登记在大小写变体 Entry/... 路径上，检查器拒绝把这些操作绑定到 job 目标 entry/...（同 FileService，见 pack-2.out）。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/services/UidLogService.ets",
+      "reason": "已确认修复只把 formatTimestamp 改为按 Locale.getDefault() 数字系统输出（B6）。但规格 F013-AC11 已明确选择\"固定 4-2-2_2-2-2 数字模式、不本地化\"，生成写者按规格实现。差异只出现在默认数字系统非拉丁数字的区域；本卡未追溯 F013 规格作者的写前输入，暂不认定为生成偏差。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/services/ConversionUtil.ets",
+      "reason": "已确认修复在 ConversionUtil 新增 base64EncodeDefault/cyberChefInput（Base64.DEFAULT 每 76 列换行）。生成期 CyberChef 编码位于 DataConversionToolPage.ets（util.Base64Helper，不换行），来源是 F015 映射行\"Base64.encodeToString(DEFAULT) → Base64Helper\"。ConversionUtil 的生成写入不含该片段，非 job 目标的页面文件也无法作为本目标的写入桥梁，因此未画图。"
+    }
+  ],
+  "job": "issue-526d6b56241863d015dd",
+  "metadata": {
+    "migration": {
+      "project": "MifareClassicTool",
+      "server_session_id": "6ccfd659-7ee2-49d9-a90b-a7fa247e4484"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5",
+        "claude-sonnet-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.247"
+      ]
+    },
+    "source_set_id": "sources-aa4e59703bcc1d60f854",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos",
+        "at": "2026-10-01T12:05:48.424Z",
+        "ref": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-abba5084389876d39.jsonl:L102",
+        "request_ref": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-abba5084389876d39.jsonl:L101",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos",
+        "at": "2026-10-01T12:05:48.424Z",
+        "ref": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-abba5084389876d39.jsonl:L102",
+        "request_ref": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-abba5084389876d39.jsonl:L101",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-10-01T22:42:23.282Z",
+        "ref": "repair/mifareclassictool-migration-complete-20261008/fix-mifareclassictool-opus/stream-01.jsonl:L60",
+        "request_ref": "repair/mifareclassictool-migration-complete-20261008/fix-mifareclassictool-opus/stream-01.jsonl:L58",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-10-01T22:42:23.282Z",
+        "ref": "repair/mifareclassictool-migration-complete-20261008/fix-mifareclassictool-opus/stream-01.jsonl:L60",
+        "request_ref": "repair/mifareclassictool-migration-complete-20261008/fix-mifareclassictool-opus/stream-01.jsonl:L58",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "6f4879bc-c69f-4670-9167-9b09da20a889"
+      ]
+    }
+  },
+  "revision": "a7f09c67cf6e515e83af0b00787044b5d2bf8375cdc6531388a274c58f8366a6"
+}

@@ -1,11 +1,14 @@
 # data/parsing
 
-JSON 与 XML 解析：打包资源的字段必填与空值语义，源解析器（如 Gson）的标量宽松转换与源数据实际类型，接口响应容器 Bean 的取值层级，自写 fromJson 的运行期类型收窄，以及 @ohos.xml 拉取解析的回调顺序与命名空间作用域
+JSON 与 XML 解析：打包资源的字段必填与空值语义，源解析器（如 Gson）的标量宽松转换与源数据实际类型，接口响应容器 Bean 的取值层级，自写 fromJson 的运行期类型收窄，以及 @ohos.xml 拉取解析的回调顺序与命名空间作用域，org.json 构造的宽松语法与取值类型校验；org.json 写侧（put(null) 删键、“/”转义）与读侧取值强转
 
 [上一级](../index.md)
 
 ## 本级经验
 
+- [以 org.json 构造并输出 JSON（备份、导出）时按库语义序列化：put(null) 删除键、toString 把 “/” 转义为 “\\/”；不以 JSON.stringify 直出，也不从 Kotlin 可空字段推出“保留 null 键”](lesson-0caaa4efc70dad90a15f.lesson.md)
+  - 时机：规格提取与数据层实现阶段，把源端用 JSONObject.put、JSONArray.toString(n) 生成的备份、导出或请求 JSON 写成目标契约与序列化代码时
+  - 情境：源端 serialize() 对可空值直接 put（如 put(key, steps?.serialize())、put(key, time)），再以 JSONObject/JSONArray 的 toString() 或 toString(indent) 写文件；对应 Kotlin 字段声明为可空；目标准备用 DTO 加 JSON.stringify(obj, null, n) 输出，规格可能写“null 字段输出 JSON null（键保留）”。
 - [显式 JSON 解码器按源解析器的接受范围和源数据的实际类型定规则：Gson 的数字与字符串互转要保留](lesson-871d3751cadde6dda1dc.lesson.md)
   - 时机：数据层与网络层实现阶段，把 Retrofit+Gson 的 Bean、响应壳或预置 JSON 资产的读取翻译成 ArkTS 显式解码器时
   - 情境：源端由 Gson 把 JSON 填进 Int/String 字段，或预置资产用字符串存放数值（"id": "43831"）；目标仓库提供只接受单一 typeof 的严格解码函数（string()/number() 类型不符即抛错），真实响应样例尚未采集，规格只写了“Gson → 显式 decoder、显式校验字段”。
@@ -16,9 +19,9 @@ JSON 与 XML 解析：打包资源的字段必填与空值语义，源解析器�
 - [用 @ohos.xml 重建 SAX 开始事件时采用与回调顺序无关的组装，并自建命名空间作用域](lesson-447985a4376146f6d9f2.lesson.md)
   - 时机：实现阶段，用 XmlPullParser 的 token 与属性分离回调重建 namespace-aware 开始事件（本元素属性与命名空间 URI）时
   - 情境：源 SAX/XmlPullParser 在开始标签读取本元素属性并按 uri 加前缀分发命名空间；目标用 tokenValueCallbackFunction 与 attributeWithTagCallbackFunction 两路回调，SDK 声明未写两路回调先后，也未保证 getNamespace() 给出元素 URI。
-- [翻译源端 JSON 解析时按源端取值 API 的空值语义定字段规则：org.json 的 getString 对 null 不抛错，只有缺键才抛](lesson-5034b56be6fd828164c9.lesson.md)
-  - 时机：实现阶段把源端 JSON 解析函数翻成 ArkTS 手写解析器、决定各字段必填与空值处理时
-  - 情境：源端用 Android org.json 的 getString 等读取打包 JSON 资源；对应 Kotlin 数据类字段声明为非空 String；目标解析器任一字段校验失败就让整页进入加载失败。
+- [翻译源端 JSON 解析时按源解析器与取值 API 的语义定规则：org.json 的 getString 对 JSON null 返回 "null"、缺键才抛，JSONObject 构造接受的语法比 JSON.parse 宽](lesson-5034b56be6fd828164c9.lesson.md)
+  - 时机：实现阶段把源端 JSON 解析函数翻成 ArkTS 手写解析器、决定各字段必填与空值处理时；把 org.json 读取导入文件的逻辑映射为 JSON.parse 并写失败验收时
+  - 情境：源端用 Android org.json 的 getString 等读取打包 JSON 资源；对应 Kotlin 数据类字段声明为非空 String；目标解析器任一字段校验失败就让整页进入加载失败。也包括源端用 new JSONObject(text) 与 getJSONObject、getString 读取导入文件，规格把它写成“JSON.parse 加显式 class、纯语言构造”，失败条目只列非法 JSON、缺键与空集合。也包括源端 toRecipe、fromJson 一类函数用 getString/getInt/getJSONArray 读备份或许可数据，数据中有 "description": null 一类值；目标准备用 as string 直取、把 null 或缺键的数组读成空数组，或写成“非字符串即抛”的取值函数。
 - [自写 fromJson 从宽类型输入取值时用 typeof/instanceof 收窄：as 只是编译期断言，?? 只兜底缺失与 null](lesson-2622bc32995ac62389c3.lesson.md)
   - 时机：数据模型实现阶段，为迁移实体编写 fromJson 反序列化方法、确定字段取值与默认值时
   - 情境：ArkTS 模型的 fromJson 接收 Record&lt;string, Object&gt; 等宽类型输入，字段声明为 number/string/boolean 并带默认值；源端是强类型 data class（Int/Long/Boolean 字段），没有可照搬的序列化代码，由目标自行补写。

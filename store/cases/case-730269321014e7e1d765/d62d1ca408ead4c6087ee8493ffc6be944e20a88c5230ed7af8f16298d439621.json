@@ -1,0 +1,242 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-730269321014e7e1d765",
+  "created_at": "2026-10-11T22:16:10.203659+00:00",
+  "migration_key": "acdd6966-d460-4d88-b0a6-5dc0c5262ee5",
+  "title": "把 AnimatedVectorDrawable 两态形变降为静态图标/符号切换，并把已知降级挂到流水线外",
+  "when": "规格提取与界面实现阶段，为源端 AnimatedImageVector 两态形变图标（播放↔暂停、播放↔完成勾）确定 ArkUI 实现方案，以及登记、收口该项保真度缺口时",
+  "description": "源 Compose 用 AnimatedImageVector.animatedVectorResource(R.drawable.xxx_anim) + rememberAnimatedVectorPainter(icon, atEnd) 在状态变化时播放 animated-vector 的 pathData 形变；目标 ArkUI 没有 AVD 直接等价组件，资源转换只能留下静态首帧 SVG，媒体目录也没有现成的另一态资源。",
+  "summary": "本问题有两个独立起点，后面又有一次收口，使已知偏差交付到最终产物：\n(1) 规格阶段（详情页 FAB 与页面内步骤行）。page_0002 UI 规格作者写前已读到 StartFAB.kt：\nAnimatedImageVector.animatedVectorResource(R.drawable.play_anim)，以及\nIcon(painter = rememberAnimatedVectorPainter(icon, isTimerRunning))；还读到 StepItem.kt：\nCurrent/Done 用 rememberAnimatedVectorPainter(step_done_anim, atEnd)，并由 LaunchedEffect(stepProgress) 设\natEnd = Done（agent-a82b551f85d4bcb55.jsonl:L113-L114、L129-L130）。源码已足以说明两者都是两态之间的矢量形变，\n规格作者在页面结构段也写了“play_anim 矢量动画图标”“step_done_anim 动画图标”。但转换决策表把\n“animatedVectorDrawable play_anim / step_done_anim”写成“SymbolGlyph 切换动画（play_fill↔pause_fill）或 ImageAnimator 序列帧”，\n理由为“矢量动画无直接等价，图标态切换即可满足”（同转录 L179，Write 内容第 66 行）。\n也就是说，它把形变过渡判成可以省略，而且没有决策 ID。F003 功能规格随后照抄为“（page_0002 决策）”，\n但 F003-AC22/AC32 仍是 parity AC（“step_done_anim 动画”“图标 play_anim 双态”），规格内部前后矛盾\n（agent-ad3746317cc2eb676.jsonl:L100）。详情页转换者读了该规格，也自己读了 StartFAB.kt（agent-a5a172b9d52d8ceb6.jsonl:L14-L15、L48-L49），\n思考中明确说“spec … explicitly sanctioned”“static icon switch is acceptable”（L120、L163），于是 Write\nRecipeDetailsPage.ets 时，FAB 用 SymbolGlyph(isTimerRunning ? sys.symbol.pause_fill : play_fill)，页内 StepItemView 的\nCurrent/Done 用静态 $r('app.media.step_done_anim')（L165-L166）。转换报告只把它记为“保真度已知偏差 ③FAB play_anim 矢量动画 → SymbolGlyph 状态切换”（L196），\n没有登记占位；之后 Slice 8 修改该页其他接线时，FAB 片段原样保留（agent-abe21593acb112058.jsonl:L200）。\n(2) 实现阶段（共享组件 StepListItem）。Base-6 组件库 worker 没读 page_0002/F003，独立读了 StepItem.kt 的\nrememberAnimatedVectorPainter(step_done_anim, atEnd)（agent-a75b1dce962949479.jsonl:L75-L76）。它在思考中写明：“Using static image = animation dropped”，\n这是“permanent platform degradation, not something a later Slice resolves”，永久降级属于决策，须走 ledger（HARD-GATE），\n也想到了 @AnimatableExtend 等替代方案；最后仍选了“cheapest faithful-enough approach: static icon”，\n并按 forward-ref 登记 P-B6-004 resolve_by=Slice 8 Step 3c（L128、L163）。Write 的 statusIcon 对 Current/Done\n返回静态 step_done_anim（L186-L187）。forward-ref 在派工里的用途是 Base 签名桩、等待尚不存在的产物，不是用来容纳永久保真度降级（L1）。\n(3) 收口阶段：已知偏差被挪到流水线外。用户只要求跑 a2h-spec → a2h-plan → a2h-execute\n（main-507b2f1f…jsonl:L3），a2h-verify 不会运行。编排线程先在 Slice 8 派工中说“视觉核验类可 retained 交 visual-verify”\n（main-f254816a…jsonl:L1116），Slice 8 worker 随即注明 retained、不动 components/common（agent-abe21593acb112058.jsonl:L267）。\n编排线程又令 G3 closer “统一 retag resolve_by 为 a2h-verify 视觉核验”（L1497、L1506），G3 closer 的理由是：不 retag\n会被债务闸判为 resolve_by 指向终态切片的 GAP FAIL（agent-af10fa01182e90ffc.jsonl:L77）。随后 FV-1 派工把这些行称为\n“合法外部延迟”，要求债务闸判 PASS（main-f254816a…jsonl:L1593），FV-1 closer 便把 StepListItem 的 marker 同步改成\nresolve_by=a2h-verify 视觉核验（agent-a50352484ab329f6a.jsonl:L141-L142）。而收口 skill 的规则是：“迁移偏差 → 交原 owner 修后重跑；\n证明不了 → to-verify 交 a2h-verify”，非 Slice 的“合法外部延迟”原本针对 SDK/凭据/后端这类集成期事项（main-f254816a…jsonl:L644）。\n源有动画、代码是静态图，这是可直接证明的迁移偏差，却借非 Slice resolve_by 的豁免通过了债务闸。\n最终报告写“决策缺口：无”，并把 12 行“视觉核验保留项”移交 a2h-verify（L1663）。因此占位转交确实让生成交付带着已知偏差结束；FAB 的降级甚至没进 registry。\n修复者把这项列为审计第 8 条：“Animated step icons (play→check morph) and FAB play→pause morph via path interpolation from AVD XML”（repair stream-01 L883）。\n修复新建 MorphIcon，从 play_anim.xml / step_done_anim.xml 取起止 pathData，按 500ms、fast_out_slow_in 逐数值插值，\natEnd=false 画首帧、true 画末帧（stream-01 L1984）。StepListItem 状态图标改为 MorphIcon(STEP_DONE_PATHS)（L2010、L3432），\n详情页 FAB 改为 MorphIcon(PLAY_PAUSE_PATHS)，页内步骤行改用共享 StepListItem（L3924）。\nMorphIcon 的迟到 onFinish 回调与绘制修正（报告 #17/#18）是修复者新增组件后运行期发现的后续修正，不属本次生成偏差。\n",
+  "recommendations": [
+    "规格提取阶段：源码出现 AnimatedImageVector / rememberAnimatedVectorPainter(icon, atEnd) 时，先读对应 res/drawable/*_anim.xml，取 pathData 的 valueFrom/valueTo、duration（本例 500ms）和 interpolator（fast_out_slow_in），把“两态之间的形变过渡”写成 parity 要求，并给出实现路线（Canvas/Path 按数值插值，或等价的属性动画）。不得用“无直接等价，图标态切换即可满足”作为转换决策；确需降级就走 decision-ledger 决策 ID 与差异 AC，并让结构段、映射表、AC 三处一致。",
+    "界面实现阶段：实现 atEnd 语义：atEnd=false 渲染动画首帧、true 渲染末帧，状态变化时按源 duration 和插值器在两组 pathData 间插值，反向时从当前帧回放。静态首帧图片、SymbolGlyph play_fill↔pause_fill 切换只算未实现形变，不能把规格里的“图标态切换”当作源行为已覆盖；规格与源码冲突时以源码为准，并回报规格缺口。",
+    "占位登记阶段：forward-ref 只用于等待尚不存在的代码或依赖。已知的永久保真度降级（源有动画、目标写成静态）应当场实现，或作为决策缺口上报，不登记成 resolve_by=后续 Slice 的 forward-ref 推迟处理。",
+    "编排/收口阶段：对视觉保真类遗留项，先按“可证明的迁移偏差交原 owner 修复”处理；只有确实需要渲染才能判定的项才交 verify。本次流水线不运行 a2h-verify 时，不把可在代码内实现的缺口 retag 到 a2h-verify 来通过债务闸，应在交付摘要中列为未完成项。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/entry/src/main/ets/components/common/StepListItem.ets",
+        "since": "2026-10-01T14:11:08.477Z",
+        "at": "2026-10-01T23:45:55.694Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Cofi/app/src/main/java/com/omelan/cofi/components/StepItem.kt",
+          "at": "2026-10-01T10:43:44.724Z",
+          "reason": "正常输入：Base-6 worker 的 Read 回执给出 L55 AnimatedImageVector.animatedVectorResource(R.drawable.step_done_anim)、L58 Current/Done → rememberAnimatedVectorPainter(icon, atEnd)、L61-63 LaunchedEffect(stepProgress){ atEnd = Done }。这足以说明状态图标是 Current→Done 的矢量形变，不是静态图（agent-a75b1dce962949479.jsonl:L75-L76）。"
+        },
+        {
+          "key": "agent-a75b1dce962949479.jsonl",
+          "at": "2026-10-01T10:58:10.725Z",
+          "reason": "读到上述源码后，自己认定静态图就是丢掉动画、属于永久降级，须走 ledger 决策，仍选择静态图标，并登记 forward-ref P-B6-004 resolve_by=Slice 8 Step 3c（L128、L163）。Write StepListItem 时，statusIcon 对 Current/Done 返回 $r('app.media.step_done_anim') 静态资源（L186-L187）。这是源码到实现的偏差起点，该片段一直保留到修复前。",
+          "problem": true
+        },
+        {
+          "key": "main-f254816a-2fd5-4687-b493-a2136a7510d9.jsonl",
+          "at": "2026-10-01T13:45:26.354Z",
+          "reason": "编排线程明知 a2h-verify 不在本次三阶段流水线内（main-507b2f1f…jsonl:L3），仍先让 Slice 8 把视觉核验类 retained（L1116），再令 G3 closer 把 P-B6-004 retag 到“a2h-verify 视觉核验”（L1497、L1506），FV-1 派工又把它定性为“合法外部延迟”、要求债务闸判 PASS（L1593，launch 回执 L1595）。这与收口 skill 中“迁移偏差交原 owner 修、证明不了才 to-verify”的规则不符（L644），把可证明的偏差挪出了流水线。",
+          "problem": true
+        },
+        {
+          "key": "agent-a50352484ab329f6a.jsonl",
+          "at": "2026-10-01T13:55:59.375Z",
+          "reason": "接到 FV-1 派工后，为消除 dangling marker 告警，把 StepListItem 的 marker 改成 resolve_by=a2h-verify 视觉核验（与 registry 同步，G3 closer retained），静态图标保持不变（L141-L142）。本节点只执行编排线程的定性，不另推定其独立失职。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/entry/src/main/ets/pages/RecipeDetailsPage.ets",
+        "since": "2026-10-01T14:11:08.477Z",
+        "at": "2026-10-01T23:45:55.694Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Cofi/app/src/main/java/com/omelan/cofi/pages/details/StartFAB.kt",
+          "at": "2026-10-01T07:19:59.646Z",
+          "reason": "正常输入：UI 规格作者的 Read 回执给出 L31 AnimatedImageVector.animatedVectorResource(R.drawable.play_anim) 与 L61 rememberAnimatedVectorPainter(icon, isTimerRunning)。这足以说明 FAB 图标是播放↔暂停的矢量形变（agent-a82b551f85d4bcb55.jsonl:L113-L114）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Cofi/app/src/main/java/com/omelan/cofi/components/StepItem.kt",
+          "at": "2026-10-01T07:20:11.331Z",
+          "reason": "正常输入：同一规格作者读到步骤行 Current/Done 用 rememberAnimatedVectorPainter(step_done_anim, atEnd)，atEnd 由 stepProgress==Done 驱动（agent-a82b551f85d4bcb55.jsonl:L129-L130）。"
+        },
+        {
+          "key": "agent-a82b551f85d4bcb55.jsonl",
+          "at": "2026-10-01T07:22:42.559Z",
+          "reason": "读到上述源码，并在结构段写了“play_anim 矢量动画图标”“step_done_anim 动画图标”，但在 page_0002 转换决策表把 play_anim / step_done_anim 写成“SymbolGlyph 切换动画（play_fill↔pause_fill）或 ImageAnimator 序列帧 | 矢量动画无直接等价，图标态切换即可满足”，没有决策 ID（L175、L179-L180）。源码到规格在此偏离：两态形变被判成可以省略。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/spec/baseline/ui/page_0002_RecipeDetails.md",
+          "at": "2026-10-01T08:37:21.615Z",
+          "reason": "交付桥梁：详情页转换者派工中列出该页面规格，其 Read 回执包含上述“图标态切换即可满足”的转换决策（agent-a5a172b9d52d8ceb6.jsonl:L14-L15）。"
+        },
+        {
+          "key": "agent-a5a172b9d52d8ceb6.jsonl",
+          "at": "2026-10-01T08:50:10.752Z",
+          "reason": "实际读到错误规格（也读了 StartFAB.kt，L48-L49），思考中以“spec explicitly sanctioned”“static icon switch is acceptable”为据（L120、L163）。Write RecipeDetailsPage 时，FAB 写成 SymbolGlyph(pause_fill/play_fill) 状态切换，页内 StepItemView 的 Current/Done 写成静态 step_done_anim（L165-L166），只在转换报告记为保真度已知偏差（L196）。本链确认规格把偏差传到了目标，不另推定该转换者独立失职。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/entry/src/main/ets/components/common/MorphIcon.ets",
+      "reason": "修复期新建的 AVD 路径形变组件（repair stream-01 L1984 首次 Write）。生成期该路径没有任何读写，生成完成态快照中也没有此文件，因此没有可画的生成期历史。它之所以需要新建，是因为上面两图归因的静态降级；后续绘制修正与迟到 onFinish 修正（stream-01 L11191/L11346/L16185/L16275，报告 #17/#18）是修复者引入该组件后的修复期后续项，不归生成偏差。"
+    }
+  ],
+  "job": "issue-730269321014e7e1d765",
+  "metadata": {
+    "migration": {
+      "project": "Cofi",
+      "server_session_id": "acdd6966-d460-4d88-b0a6-5dc0c5262ee5"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-sonnet-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.247"
+      ]
+    },
+    "source_set_id": "sources-22befa667a51476d2497",
+    "environment": [
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0-alpha17",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos",
+        "at": "2026-10-01T06:38:41.480Z",
+        "ref": "generation/9176a7f7b2203f7a/runs/721fb7c7-0508-4e2f-8b79-cfb906c65d16/epoch-0/sessions/agent-ad0f8989f195b578f.jsonl:L18",
+        "request_ref": "generation/9176a7f7b2203f7a/runs/721fb7c7-0508-4e2f-8b79-cfb906c65d16/epoch-0/sessions/agent-ad0f8989f195b578f.jsonl:L17",
+        "phase": "generation"
+      },
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0-alpha17",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Cofi",
+        "at": "2026-10-01T06:58:28.349Z",
+        "ref": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/main-507b2f1f-5d21-4455-a17e-460566675ced.jsonl:L45",
+        "request_ref": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/main-507b2f1f-5d21-4455-a17e-460566675ced.jsonl:L43",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos",
+        "at": "2026-10-01T08:45:11.210Z",
+        "ref": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/agent-a6b66d337af813fff.jsonl:L63",
+        "request_ref": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/agent-a6b66d337af813fff.jsonl:L62",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos",
+        "at": "2026-10-01T10:50:10.334Z",
+        "ref": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/agent-a099e355ad83c788a.jsonl:L122",
+        "request_ref": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/agent-a099e355ad83c788a.jsonl:L121",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-10-01T14:45:59.485Z",
+        "ref": "repair/cofi-migration-complete-20261007/fix-cofi-opus/stream-01.jsonl:L288",
+        "request_ref": "repair/cofi-migration-complete-20261007/fix-cofi-opus/stream-01.jsonl:L287",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-10-01T14:45:59.485Z",
+        "ref": "repair/cofi-migration-complete-20261007/fix-cofi-opus/stream-01.jsonl:L288",
+        "request_ref": "repair/cofi-migration-complete-20261007/fix-cofi-opus/stream-01.jsonl:L287",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0-alpha17",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": null,
+        "at": "2026-10-01T14:53:18.885Z",
+        "ref": "repair/cofi-migration-complete-20261007/fix-cofi-opus/stream-01.jsonl:L713",
+        "request_ref": "repair/cofi-migration-complete-20261007/fix-cofi-opus/stream-01.jsonl:L712",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "e0dce297-f0f9-4e8e-adb6-f2a8eeef850a"
+      ]
+    }
+  },
+  "revision": "d62d1ca408ead4c6087ee8493ffc6be944e20a88c5230ed7af8f16298d439621"
+}

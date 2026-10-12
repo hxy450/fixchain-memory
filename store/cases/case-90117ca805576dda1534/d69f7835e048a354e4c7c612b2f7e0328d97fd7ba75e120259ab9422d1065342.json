@@ -1,0 +1,367 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-90117ca805576dda1534",
+  "created_at": "2026-10-11T22:04:36.827511+00:00",
+  "migration_key": "acdd6966-d460-4d88-b0a6-5dc0c5262ee5",
+  "title": "数值格式化未复刻 ICU DecimalFormat/BigDecimal/Float.toString 语义，页面内还另写了一套近似实现",
+  "when": "实现阶段，将 Kotlin/Android 数值转文本函数（DecimalFormat 模式串、BigDecimal 舍入、Float.toString）翻译成 ArkTS 共享工具或页面内函数时",
+  "description": "源端用 android.icu.text.DecimalFormat(\"0.#\"/\"0.00\")、Float.toBigDecimal().setScale(HALF_EVEN) 或 Kotlin Float 的 toString/字符串模板生成显示文本；目标端以 number 加 Math.round/toFixed/模板字符串实现；共享数值工具与页面转换并行生成，页面可能先行内联同名函数。",
+  "summary": "写前实际收到的源码是 cofi-share NumberUtils.kt:58-65：toStringShort = android.icu.text.DecimalFormat(\"0.#\").format，\ntoStringShortWithDecimals = DecimalFormat(\"0.00\")，roundToDecimals = Float.toBigDecimal().setScale(scale, HALF_EVEN).toFloat()。\nBase-6、F002 规格作者、两个页面转换器和 Slice 4 都完整 Read 过这个文件。ICU DecimalFormat 默认按 HALF_EVEN 舍入，\n并使用默认区域的小数点；Float.toBigDecimal 以 Float.toString 产生的十进制串为基础；Kotlin Float 的 toString 对整数值输出 \"30.0\"。\n这些都是源 API 本身的语义，不需要另外的规格来补充。\n（1）共享工具：Base-6（agent-ad94eb8129c07d5a8）写 utils/NumberUtils.ets 时，把 toStringShort 写成 Math.round(v*10)/10 加模板串，\n注释举例“30.25→30.3”；toStringShortWithDecimals 写成 Math.round(v*100)/100 再 toFixed(2)。结果舍入变成 HALF_UP，\n小数点固定为 \".\"。该片段原样保留到生成结束。\n（2）规格与切片 owner：F002 规格作者（agent-ac26d607677f04547）在映射表和 §algo-io 中写了“DecimalFormat 默认 HALF_EVEN”，\n但 AC29 的判例写成“一位小数四舍五入（15.25→\"15.3\"）”，与 HALF_EVEN 应得的 \"15.2\" 矛盾；规格也没有写区域小数点和\nFloat.toString 规则。Slice 4（agent-a4922dccdd07c887a）是 F002 NumberFormat 层的 owner，读到了该规格和源码，\n自己在 source-notes 中写明“toStringShort（DecimalFormat \"0.#\"，默认 HALF_EVEN）”。它随后 Edit NumberUtils.ets，\n只新增一个按 double 运算的 roundToDecimals，同文件里 Math.round 实现的 toStringShort/WithDecimals 没有修正。\n（3）页面内分叉：编排者在共享组件建成之前派发页面转换，并要求“同页内联等价实现优先”。RecipeList 转换器\n（agent-af8488d0a0e24ae82，08:47:21Z）写了 weightShort，注释标 DecimalFormat(\"0.#\")，实现却是 Math.round；\nRecipeDetails 转换器（agent-a5a172b9d52d8ceb6，08:50:10Z）在页面内写了 toStringShort/toStringShortWithDecimals/roundToDecimals\n（Math.round/toFixed），并在转换报告中把“roundToDecimals 用 HALF_UP 近似源 HALF_EVEN”登记为已知偏差。\n两次写入都早于 Base-6 在 08:54:34Z 写出共享 NumberUtils，于是形成了同名函数的两份实现，后续切片和收尾都没有合并。\n（4）RecipeEdit 转换器（agent-a099e355ad83c788a）读到 StepAddCard.kt 的 (stepToEdit?.value ?: 0).toString()\n（Float 值输出 \"30.0\"），却写成模板串 `${value}`，结果输出 \"30\"。\n（5）RecipeInfo 由 Base-6 续做（agent-a75b1dce962949479）在读取当时的 NumberUtils.ets 之后写出，调用 NumberUtils.toStringShort，\n本身没有分叉，显示偏差继承自共享函数。\n修复 R1:L1742 整体重写了 NumberUtils：float32 语义、HALF_EVEN、区域小数点、Float.toString 模拟，以及按 BigDecimal 方式实现的 roundToDecimals。\n页面重写时删除了页内函数并统一调用 NumberUtils（R1:L3924、L7038、L8123），编辑卡的初始值改用 floatToString；\nRecipeInfo 在 R1:L2089 重写时，先做 Math.fround 再调用 NumberUtils。\n",
+  "recommendations": [
+    "实现阶段翻译 DecimalFormat/BigDecimal/Float.toString 时，把源 API 的隐含语义（舍入模式、默认区域的小数点和数字符号、Float 的十进制串）逐项写进目标函数，不用 Math.round/toFixed/模板字符串顶替；最小自检用例：\"0.#\" 下 15.25→\"15.2\"、德语区域 12.5→\"12,5\"、30f→\"30.0\"。",
+    "规格提取阶段，格式化函数的规格要同时给出舍入模式、区域小数点和 Float→String 规则；验收判例要与同一文件声明的舍入模式一致，HALF_EVEN 不要配“四舍五入”式的例子。",
+    "共享工具的 owner 修改该工具时，要对照规格和自己的源码笔记逐个函数核对；同文件里已有实现与源语义不符的（例如笔记写 HALF_EVEN、实现却是 Math.round），一并修正或登记，不要只补派工点名的那个函数。",
+    "页面转换时如果共享工具还没建成，内联的格式函数要登记为待收敛（指向共享模块），由页面 owner 切片收口时删除页内同名函数、统一调用共享实现；“已知近似偏差”的记录不能代替语义复刻。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/entry/src/main/ets/utils/NumberUtils.ets",
+        "since": "2026-10-01T14:11:08.477Z",
+        "at": "2026-10-01T23:45:55.694Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Cofi/cofi-share/src/main/java/com/omelan/cofi/share/utils/NumberUtils.kt",
+          "at": "2026-10-01T08:44:52.429Z",
+          "reason": "正常输入：Base-6 的 Read 回执给出 import android.icu.text.DecimalFormat，第 58-59 行 toStringShort = DecimalFormat(\"0.#\")、toStringShortWithDecimals = DecimalFormat(\"0.00\")，第 60-62 行 roundToDecimals = toBigDecimal().setScale(scale, HALF_EVEN)。这足以确定格式化应按 ICU DecimalFormat 的语义实现（agent-ad94eb8129c07d5a8.jsonl:L72-L73）。"
+        },
+        {
+          "key": "agent-ad94eb8129c07d5a8.jsonl",
+          "at": "2026-10-01T08:54:34.210Z",
+          "reason": "Base-6 读过上述源码后 Write NumberUtils.ets：toStringShort 为 Math.round(value*10)/10 加模板串（注释“30.25→30.3”），toStringShortWithDecimals 为 Math.round(value*100)/100 再 toFixed(2)，舍入成了 HALF_UP，小数点固定为 \".\"，也没有写 roundToDecimals。偏差起点在此（同转录 L152-L153）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Cofi/cofi-share/src/main/java/com/omelan/cofi/share/utils/NumberUtils.kt",
+          "at": "2026-10-01T07:45:31.829Z",
+          "reason": "正常输入：F002 规格作者的 Read 回执给出同一份源码，DecimalFormat(\"0.#\"/\"0.00\") 与 BigDecimal HALF_EVEN 都在其中（agent-ac26d607677f04547.jsonl:L57-L58）。"
+        },
+        {
+          "key": "agent-ac26d607677f04547.jsonl",
+          "at": "2026-10-01T07:54:44.092Z",
+          "reason": "规格作者 Write F002：映射表与 §algo-io 写了“DecimalFormat 默认 HALF_EVEN”，AC29 判例却写成“一位小数四舍五入（15.25→\"15.3\"）”，与 HALF_EVEN 矛盾；区域小数点与 Float.toString 规则都没有写（同转录 L167-L168；AC29 文本在后续编排者对 F002 的编辑 main-507b2f1f:L975 中未改动）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/spec/baseline/features/F002-brew-timer-engine.md",
+          "at": "2026-10-01T12:03:37.831Z",
+          "reason": "交付桥梁：Slice 4 的 Read 回执同时含第 93 行“DecimalFormat 默认舍入 = HALF_EVEN”、第 226 行“toStringShort | DecimalFormat \"0.#\"（默认 HALF_EVEN）”，以及第 159 行 AC29“四舍五入（15.25→\"15.3\"）”（agent-a4922dccdd07c887a.jsonl:L21、L24）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Cofi/cofi-share/src/main/java/com/omelan/cofi/share/utils/NumberUtils.kt",
+          "at": "2026-10-01T12:03:43.632Z",
+          "reason": "正常输入：Slice 4 精读 anchors 时也 Read 了源 NumberUtils.kt 全文（agent-a4922dccdd07c887a.jsonl:L37-L38）。"
+        },
+        {
+          "key": "agent-a4922dccdd07c887a.jsonl",
+          "at": "2026-10-01T12:22:58.847Z",
+          "reason": "Slice 4 是 F002 NumberFormat 层的 owner。它先 Read 现有的 NumberUtils.ets（L62-L63，可见 Math.round 版 toStringShort），在 source-notes 中写明“Float.toStringShort（DecimalFormat \"0.#\"，默认 HALF_EVEN）”（L138）；随后 Edit 该文件只追加按 double 运算的 roundToDecimals，没有按 Float.toString 的十进制串舍入，toStringShort/WithDecimals 的 HALF_UP 实现与固定小数点也未修正（L170-L171）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": 7
+        },
+        {
+          "from": 6,
+          "to": 7
+        },
+        {
+          "from": 7,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/entry/src/main/ets/pages/RecipeDetailsPage.ets",
+        "since": "2026-10-01T14:11:08.477Z",
+        "at": "2026-10-01T23:45:55.694Z"
+      },
+      "nodes": [
+        {
+          "key": "main-507b2f1f-5d21-4455-a17e-460566675ced.jsonl",
+          "at": "2026-10-01T08:37:10.272Z",
+          "reason": "派工背景：编排者派发 RecipeDetails 转换时写明“公共组件库（Base-6 未完成，同页内联等价实现优先）”，Base-6 直到 08:44:16Z 才派发（main-507b2f1f:L1599-L1601、L1661）。这条要求导致页面先行内联格式函数，但它要求的是“等价”实现，并未放宽数值语义。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Cofi/cofi-share/src/main/java/com/omelan/cofi/share/utils/NumberUtils.kt",
+          "at": "2026-10-01T08:38:19.258Z",
+          "reason": "正常输入：转换器的 Read 回执给出 DecimalFormat(\"0.#\"/\"0.00\") 与 toBigDecimal().setScale(scale, HALF_EVEN)（agent-a5a172b9d52d8ceb6.jsonl:L93-L94）。"
+        },
+        {
+          "key": "agent-a5a172b9d52d8ceb6.jsonl",
+          "at": "2026-10-01T08:50:10.752Z",
+          "reason": "读过源码后 Write RecipeDetailsPage，在页内写 toStringShort（Math.round(v*10)/10 再 toFixed 去尾零）、toStringShortWithDecimals（v.toFixed(2)）、roundToDecimals（Math.round(v*10)/10），全部为 HALF_UP 且小数点固定为 \".\"（同转录 L165-L166）。转换报告随后把“④roundToDecimals 用 HALF_UP 近似源 HALF_EVEN”登记为已知偏差（L196）。这些页内函数早于 08:54:34Z 才出现的共享 NumberUtils，并保留到生成结束。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/entry/src/main/ets/pages/RecipeListPage.ets",
+        "since": "2026-10-01T14:11:08.477Z",
+        "at": "2026-10-01T23:45:55.694Z"
+      },
+      "nodes": [
+        {
+          "key": "main-507b2f1f-5d21-4455-a17e-460566675ced.jsonl",
+          "at": "2026-10-01T08:37:01.717Z",
+          "reason": "派工背景：派发 RecipeList 转换时写明“Stage 2 Base-6 尚未完成——Base 组件未建时以 FWD-REF 或内联等价实现”（main-507b2f1f:L1595-L1597）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Cofi/cofi-share/src/main/java/com/omelan/cofi/share/utils/NumberUtils.kt",
+          "at": "2026-10-01T08:38:04.269Z",
+          "reason": "正常输入：转换器的 Read 回执给出 toStringShort = DecimalFormat(\"0.#\").format（agent-af8488d0a0e24ae82.jsonl:L60-L61）。"
+        },
+        {
+          "key": "agent-af8488d0a0e24ae82.jsonl",
+          "at": "2026-10-01T08:47:21.426Z",
+          "reason": "Write RecipeListPage 时内联 weightShort：注释写“Float.toStringShort(): DecimalFormat(\"0.#\")”，实现却是 Math.round(v*10)/10 加模板串，用于卡片的咖啡/水克数（同转录 L130-L131）。舍入为 HALF_UP、小数点固定为 \".\"，并与后来的共享 NumberUtils 形成分叉。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/entry/src/main/ets/pages/RecipeEditPage.ets",
+        "since": "2026-10-01T14:11:08.477Z",
+        "at": "2026-10-01T23:45:55.694Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Cofi/app/src/main/java/com/omelan/cofi/components/StepAddCard.kt",
+          "at": "2026-10-01T10:42:04.376Z",
+          "reason": "正常输入：Read 回执第 81-83 行为 stepValue = mutableStateOf((stepToEdit?.value ?: 0).toString())；value 是 Float，因此已有步骤的初始文本为 Kotlin Float.toString 形式（如 \"30.0\"），空值才是 \"0\"（agent-a099e355ad83c788a.jsonl:L21-L22）。"
+        },
+        {
+          "key": "agent-a099e355ad83c788a.jsonl",
+          "at": "2026-10-01T10:58:04.519Z",
+          "reason": "Write RecipeEditPage 时把初始值写成 this.stepValue = `${this.stepToEdit.value !== null ? this.stepToEdit.value : 0}`，JS 数字转字符串让 30 显示为 \"30\"，丢掉了 Kotlin Float.toString 的 \".0\"（同转录 L138-L139）。修复改为 NumberUtils.floatToString。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/entry/src/main/ets/components/common/RecipeInfo.ets",
+        "since": "2026-10-01T14:11:08.477Z",
+        "at": "2026-10-01T23:45:55.694Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Cofi/cofi-share/src/main/java/com/omelan/cofi/share/utils/NumberUtils.kt",
+          "at": "2026-10-01T08:44:52.429Z",
+          "reason": "正常输入：Base-6 的 Read 回执给出 DecimalFormat(\"0.#\") 等源实现（agent-ad94eb8129c07d5a8.jsonl:L72-L73）。"
+        },
+        {
+          "key": "agent-ad94eb8129c07d5a8.jsonl",
+          "at": "2026-10-01T08:54:34.210Z",
+          "reason": "Base-6 把 toStringShort 写成 Math.round 加模板串（HALF_UP、小数点固定为 \".\"），偏差起点在此（同转录 L152-L153）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/entry/src/main/ets/utils/NumberUtils.ets",
+          "at": "2026-10-01T10:42:51.309Z",
+          "reason": "交付桥梁：Base-6 续做的 Read 回执显示第 39-41 行 toStringShort 为 Math.round(value * 10) / 10，注释“30.25→30.3”（agent-a75b1dce962949479.jsonl:L30-L31）。"
+        },
+        {
+          "key": "agent-a75b1dce962949479.jsonl",
+          "at": "2026-10-01T10:57:11.233Z",
+          "reason": "Write RecipeInfo：咖啡/水克数文本调用 NumberUtils.toStringShort(...)，组件本身没有另写格式函数，显示偏差经此调用传到目标（同转录 L178-L179）。本链只确认传递，不推定该写者独立失职。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "未确认 Slice 4 保留 Math.round 版 toStringShort 是因为 AC29 的 HALF_UP 判例与现有注释一致而判定合格，还是仅因派工只要求核对 roundToDecimals；转录里没有它对 toStringShort 的明确判断。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-90117ca805576dda1534",
+  "metadata": {
+    "migration": {
+      "project": "Cofi",
+      "server_session_id": "acdd6966-d460-4d88-b0a6-5dc0c5262ee5"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-sonnet-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.247"
+      ]
+    },
+    "source_set_id": "sources-22befa667a51476d2497",
+    "environment": [
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0-alpha17",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos",
+        "at": "2026-10-01T06:38:41.480Z",
+        "ref": "generation/9176a7f7b2203f7a/runs/721fb7c7-0508-4e2f-8b79-cfb906c65d16/epoch-0/sessions/agent-ad0f8989f195b578f.jsonl:L18",
+        "request_ref": "generation/9176a7f7b2203f7a/runs/721fb7c7-0508-4e2f-8b79-cfb906c65d16/epoch-0/sessions/agent-ad0f8989f195b578f.jsonl:L17",
+        "phase": "generation"
+      },
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0-alpha17",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Cofi",
+        "at": "2026-10-01T06:58:28.349Z",
+        "ref": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/main-507b2f1f-5d21-4455-a17e-460566675ced.jsonl:L45",
+        "request_ref": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/main-507b2f1f-5d21-4455-a17e-460566675ced.jsonl:L43",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos",
+        "at": "2026-10-01T08:45:11.210Z",
+        "ref": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/agent-a6b66d337af813fff.jsonl:L63",
+        "request_ref": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/agent-a6b66d337af813fff.jsonl:L62",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos",
+        "at": "2026-10-01T10:50:10.334Z",
+        "ref": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/agent-a099e355ad83c788a.jsonl:L122",
+        "request_ref": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/agent-a099e355ad83c788a.jsonl:L121",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-10-01T14:45:59.485Z",
+        "ref": "repair/cofi-migration-complete-20261007/fix-cofi-opus/stream-01.jsonl:L288",
+        "request_ref": "repair/cofi-migration-complete-20261007/fix-cofi-opus/stream-01.jsonl:L287",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-10-01T14:45:59.485Z",
+        "ref": "repair/cofi-migration-complete-20261007/fix-cofi-opus/stream-01.jsonl:L288",
+        "request_ref": "repair/cofi-migration-complete-20261007/fix-cofi-opus/stream-01.jsonl:L287",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0-alpha17",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": null,
+        "at": "2026-10-01T14:53:18.885Z",
+        "ref": "repair/cofi-migration-complete-20261007/fix-cofi-opus/stream-01.jsonl:L713",
+        "request_ref": "repair/cofi-migration-complete-20261007/fix-cofi-opus/stream-01.jsonl:L712",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "e0dce297-f0f9-4e8e-adb6-f2a8eeef850a"
+      ]
+    }
+  },
+  "revision": "d69f7835e048a354e4c7c612b2f7e0328d97fd7ba75e120259ab9422d1065342"
+}

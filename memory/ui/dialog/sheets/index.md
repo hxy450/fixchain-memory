@@ -1,14 +1,14 @@
 # ui/dialog/sheets
 
-半模态 bindSheet：BottomSheetDialogFragment 的高度档与外壳参数，一个页面挂多个弹层的绑定节点，从半模态内打开的二级弹窗（层级与高度上限）与压入页面（SheetMode、targetId），自绘底部弹窗改 bindSheet 时的手势门禁
+半模态 bindSheet：BottomSheetDialogFragment 的高度档与外壳参数，一个页面挂多个弹层的绑定节点，从半模态内打开的二级弹窗（层级与高度上限）与压入页面（SheetMode、targetId），自绘底部弹窗改 bindSheet 时的手势门禁；Compose ModalBottomSheet（skipPartiallyExpanded）的高度档
 
 [上一级](../index.md)
 
 ## 本级经验
 
-- [BottomSheetDialogFragment 迁移为 bindSheet：按方法体定高度档，显式关掉系统关闭钮与拖拽条](lesson-df1f691759f84ba9e688.lesson.md)
-  - 时机：规格提取、内容组件实现与宿主接线阶段，把 Material BottomSheetDialogFragment 映射为 bindSheet，确定高度档、外壳参数与内容根高度时
-  - 情境：源面板有的在显示时调用名称暗示“全高”的展开方法（方法体只回填原 LayoutParams 并展开），有的不改 peek/state；根布局随内容；Material 面板没有关闭按钮与拖拽把手。目标外壳参数由宿主配置，内容组件被多个宿主复用。
+- [BottomSheetDialogFragment 或 Compose ModalBottomSheet 迁移为 bindSheet：按实际展开高度定高度档（跳过半展开仍随内容高），显式关掉源端没有的关闭钮与拖拽条](lesson-df1f691759f84ba9e688.lesson.md)
+  - 时机：规格提取、内容组件实现与宿主接线阶段，把 Material BottomSheetDialogFragment 或 Compose ModalBottomSheet 映射为 bindSheet，确定高度档、外壳参数与内容根高度时
+  - 情境：源面板有的在显示时调用名称暗示“全高”的展开方法（方法体只回填原 LayoutParams 并展开），有的不改 peek/state；根布局随内容；Material 面板没有关闭按钮与拖拽把手。目标外壳参数由宿主配置，内容组件被多个宿主复用。也包括 Compose ModalBottomSheet 以 rememberModalBottomSheetState(skipPartiallyExpanded = true) 跳过半展开态，规格写成“全展开 detent”或 SheetSize.LARGE。
 - [从 bindSheet 半模态里打开的弹窗必须叠在 sheet 之上：不用页内浮层，居中点外可关用模态内自绘遮罩](lesson-009212ca2c691b97d76c.lesson.md)
   - 时机：界面实现阶段，为从底部 sheet 内部触发的二级弹窗（定时、新建输入等）选择承载层时；为从窗口级面板内打开的对话框确定卡片高度上限时
   - 情境：Android 在 BottomSheetDialog 内再 show 居中 DialogFragment（点外可关）；目标底部弹层用 bindSheet；二级弹窗候选有页内 Stack 条件浮层、bindSheet(CENTER)、bindContentCover 与全局自定义弹窗。也包括面板内 show() 的是 MaterialAlertDialog 类对话框，对话框组件由转换器产出、呈现外壳留给后续切片，组件没有自带高度上限。

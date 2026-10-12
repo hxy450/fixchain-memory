@@ -1,6 +1,6 @@
 # 依赖 API 的单位、默认行为或作用范围时读到字段注释与语义说明，不以签名存在推定等价
 
-ID：`lesson-f5cf8413ebea57f3b415` · 版本：2
+ID：`lesson-f5cf8413ebea57f3b415` · 版本：3
 
 [本主题](index.md)
 
@@ -30,7 +30,7 @@ ID：`lesson-f5cf8413ebea57f3b415` · 版本：2
 
 - 只有实现与声明仍有冲突时，局部对照实际用到的字段与结果。
 
-来源支持：10 张卡 · 3 次迁移 · 2 个应用
+来源支持：11 张卡 · 4 次迁移 · 3 个应用
 
 ## 来源（按需复核）
 
@@ -54,3 +54,5 @@ ID：`lesson-f5cf8413ebea57f3b415` · 版本：2
   卡片版本：`0c0854b7bb53f48c15425a1148239e8e459db928eb8f9600f5e5b1e1cc5042f4`
 - [case-77c6596fcdf362f9e832](../../../store/cases/case-77c6596fcdf362f9e832/c81c56fb66d294cfd767c2c43e5bcfb480ef9cccbdcfc212d5d607410c13675a.json) · 结论：recommendation:2
   卡片版本：`c81c56fb66d294cfd767c2c43e5bcfb480ef9cccbdcfc212d5d607410c13675a`
+- [case-f4fef12b5d994df457b2](../../../store/cases/case-f4fef12b5d994df457b2/1df73908a2600045d97b85fa5e386b5b50972e141d1cd5505d5df882f5ebbad2.json) · 结论：recommendation:5
+  卡片版本：`1df73908a2600045d97b85fa5e386b5b50972e141d1cd5505d5df882f5ebbad2`

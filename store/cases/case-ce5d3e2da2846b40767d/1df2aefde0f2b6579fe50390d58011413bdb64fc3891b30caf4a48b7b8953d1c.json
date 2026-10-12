@@ -1,0 +1,224 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-ce5d3e2da2846b40767d",
+  "created_at": "2026-10-11T20:46:57.326379+00:00",
+  "migration_key": "6ccfd659-7ee2-49d9-a90b-a7fa247e4484",
+  "title": "导入导出：把源端运行时/库语义改写成人为上限、严格解析与近似实现",
+  "when": "规格提取与数据层实现阶段，把源端异常兜底、第三方解析库、压缩流和系统选择器返回值映射为目标平台实现时",
+  "description": "Android 导入导出依赖 catch(OutOfMemoryError) 提示文件过大、org.json JSONObject 宽松解析与类型化取值、ZipOutputStream 默认 DEFLATED、Common.getFileName 取 DISPLAY_NAME、EXTRA_ALLOW_MULTIPLE 不限数量；目标使用 ArkTS JSON.parse、DocumentViewPicker URI、手写 ZIP 容器。",
+  "summary": "本问题有三处可分开的起点。\n(1) 规格偏离。规格作者 aae1d2af 写 F012 前已读到 ImportExportTool.java 全文：:424 只在 catch (OutOfMemoryError) 时\n提示 info_file_to_big，源端没有任何大小阈值；:631-632 用 org.json new JSONObject(...) 与 getJSONObject(\"blocks\")。\nF012 映射表却把前者写成「读前长度预检（超阈值拒读并 Toast info_file_to_big）+ try/catch 兜底」，\n把 org.json.JSONObject 写成「JSON.parse + 显式 class」，两行都以「纯语言构造」为依据；AC03 只列非法 JSON、\n缺 blocks、空 blocks 三种失败，未记录 org.json 宽松语法、getJSONObject 的类型校验和 getString 对 null 的取值。\n(2) 实现偏离与传递。Slice 5 实现者 aa49f3 写前完整读了 F012（含上述两行）和 ImportExportTool.java，\n派工也写了「文件大小上限校验（info_file_to_big）」。它读到的旧页面原本只用 try/catch 映射 info_file_to_big\n（注释提到 RangeError），新建 ImportExportService 时却按规格加上 IMPORT_FILE_LIMIT_BYTES = 16 MiB 读前 stat 拒读，\n并沿用 JSON.parse 与 parsedJson['blocks'] as Record<string, string>（blocks 不是对象也不判失败）。\n另有两处偏离出自实现者自己：源端 EXTRA_ALLOW_MULTIPLE 不限数量，实现者明知 picker 上限为 500，仍\n「安全起见」取 100；规格映射行已写「手工组 ZIP 容器，deflate 用 zlib」，ZipOutputStream 也未调用 setMethod\n（默认 DEFLATED），实现者因 zlib.zipFile 不能控制 entry 名/mtime，连压缩一起放弃，写成 STORED 条目，\n并给非普通文件加了 continue 静默跳过（源端 FileInputStream 遇目录会抛异常并提示 info_backup_error）。\n这些片段都在 15:41 那次 Write 中，后续生成期写入只补了 saveImportedFile 和把 maxNumber 改名为 maxSelectNumber，\n到迁移完成快照仍在（migrated ImportExportService.ets:36-43、:183、:525-527、:839-883）。\n(3) 页面文件名。UI 转换者 a5247705 读到 :387 Common.getFileName(file, this)，grep 回执也给出 getFileName 的\njavadoc 和 content scheme 分支开头；它在 L125 计划「取末段并解码」，到 L158 却断定 picker URI 末段「就是」显示名，\n最终写出 fileNameFromUri = baseName(uri.split('?')[0])，没有解码。之后的接线者重写了导入循环，但保留了这个调用\n（migrated ImportExportToolPage.ets:663、:830）。\n修复时 ImportExportService 被整体重写（repair stream-02.jsonl:L3078）：移植 libcore JSONTokener 宽松语法，\n加上 blocks 对象校验和 getString(null)→\"null\"；去掉 16 MiB，只在 RangeError 时报 TOO_BIG；ZIP 改为原始 deflate 流 +\n数据描述符（标志 0x0808），遇非普通文件判失败；maxSelectNumber 改为 500；新增 displayNameFromUri（去 query/fragment\n后对末段 decodeURIComponent），页面重写后改调此函数（stream-02.jsonl:L3497）。\n另外两点：job 所说「key-files/dump-files 顺序不同」与快照不符，修复前后都是 key-files 在前、按名排序；\n修复后备份名多了 localizeDigits，这属于跨页的默认 Locale 数字问题（报告 B6），本卡不单独归因。\n",
+  "recommendations": [
+    "规格提取：源端用 catch(OutOfMemoryError) 兜底时，映射为「照常读取，捕获目标平台的分配失败（如 RangeError）再提示」，不要新增读前大小阈值；确需上限时登记为有意偏离，并写明数值来源。",
+    "规格提取：org.json 等第三方解析库映射到 JSON.parse 时，不要标「纯语言构造」。逐项写明源库的宽松语法、getJSONObject/getString 等取值的类型校验和 null 转换，并为它们各写一条失败/取值 AC。",
+    "数据层实现：源端没有数量限制时（EXTRA_ALLOW_MULTIPLE），直接取目标 API 允许的最大值（DocumentSelectOptions.maxSelectNumber 为 500），不要另定更小的「安全值」。",
+    "数据层实现：系统 zip API 不能控制 entry 时可以手写容器，但压缩方式仍要对齐源端。ZipOutputStream 未调用 setMethod 时按 DEFLATED 实现：用 zlib 产出原始 deflate 流并加数据描述符；不要因为 zipFile 不可用就改成 STORED，也不要给源端会失败的条目加静默跳过。",
+    "实现近似源端 helper（如 Common.getFileName）前，先读完它的实现。picker 返回的 file://docs URI 末段是百分号编码的，显示名要在去掉 query/fragment 后 decodeURIComponent，并用含空格或中文的文件名自测。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/services/ImportExportService.ets",
+        "since": "2026-10-01T17:23:26.037Z",
+        "at": "2026-10-08T12:26:25.614Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/android/MifareClassicTool/app/src/main/java/de/syss/MifareClassicTool/Activities/ImportExportTool.java",
+          "at": "2026-10-01T09:38:43.912Z",
+          "reason": "正常输入：规格作者用 awk 带行号读全文件（agent-aae1d2af2408da406.jsonl:L79-L80），再分段读取持久化回执的 60-619 与 620-949 行（L81-L84）。其中 :424 只在 catch (OutOfMemoryError) 时提示 info_file_to_big，没有大小阈值；:631-632 用 org.json JSONObject 与 getJSONObject(\"blocks\")。这些足以说明：源端是先尝试读、内存耗尽才报错，JSON 走 org.json 语义。"
+        },
+        {
+          "key": "5dce7670-6d33-4372-86d7-d9708672de20:aae1d2af2408da406",
+          "at": "2026-10-01T09:51:43.206Z",
+          "reason": "规格偏离：Write F012（同转录 L161-L162）的映射表把 catch(OutOfMemoryError) 写成「读前长度预检（超阈值拒读并 Toast info_file_to_big）+ try/catch 兜底」，把 org.json.JSONObject 写成「JSON.parse + 显式 class」，两行都以「纯语言构造」为依据；AC03 也没有覆盖宽松语法、blocks 类型校验和 getString(null)。源端没有的阈值和更严格的解析契约就此进入规格。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/spec/baseline/features/F012-import-export.md",
+          "at": "2026-10-01T15:33:48.585Z",
+          "reason": "交付桥梁：实现者 Read F012 全文，回执中第 72 行（org.json→JSON.parse）、第 74 行（手工组 ZIP，deflate 用 zlib）、第 77 行（读前长度预检）都在（agent-aa49f3ce1a4cbe915.jsonl:L24-L25）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/android/MifareClassicTool/app/src/main/java/de/syss/MifareClassicTool/Activities/ImportExportTool.java",
+          "at": "2026-10-01T15:34:27.945Z",
+          "reason": "正常输入：实现者 Read 源文件全文（agent-aa49f3ce1a4cbe915.jsonl:L33、L36）。:858 EXTRA_ALLOW_MULTIPLE 不限数量；:879-893 的 ZipOutputStream 未调用 setMethod（默认 DEFLATED），对 listFiles 的每项直接 new FileInputStream；:632 getJSONObject(\"blocks\")。这些足以确定多选数量、压缩方式和条目失败语义。"
+        },
+        {
+          "key": "5c351e82-95e2-401f-b543-f0184a296f20:aa49f3ce1a4cbe915",
+          "at": "2026-10-01T15:41:33.457Z",
+          "reason": "实现偏离：Write 新建 ImportExportService（同转录 L65-L66）。一是照规格写 IMPORT_FILE_LIMIT_BYTES = 16 MiB 读前 stat 拒读（L64 设计称「16MiB 上限预检 = OOM 等价」），替换了旧页面里更接近源端的 try/catch；二是沿用 JSON.parse 与 as Record 强转，没有落实 getJSONObject 的类型校验。以下两处是它自己的偏离：L63 设计里明知 picker 上限 500 仍取 100；规格写了 deflate 用 zlib，它仍改为 STORED，并对非普通文件 continue 静默跳过。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "规格作者用 Bash awk 带行号读取 ImportExportTool.java 全文（L79），回执为持久化输出（L80），随后分两段 Read 该回执的 60-619 与 620-949 行（L81-L84），其中含 :424 catch(OutOfMemoryError) 与 :631-632 org.json 解析；这是写 F012 前对源文件的真实读取。",
+          "evidence": [
+            {
+              "source": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-aae1d2af2408da406.jsonl",
+              "line": 79
+            },
+            {
+              "source": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-aae1d2af2408da406.jsonl",
+              "line": 80
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 5
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/pages/ImportExportToolPage.ets",
+        "since": "2026-10-01T17:23:26.037Z",
+        "at": "2026-10-08T12:26:25.614Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/android/MifareClassicTool/app/src/main/java/de/syss/MifareClassicTool/Activities/ImportExportTool.java",
+          "at": "2026-10-01T14:11:52.919Z",
+          "reason": "正常输入：UI 转换者 Read 源文件全文（agent-a5247705332ce1ccf.jsonl:L24-L25），:387 用 Common.getFileName(file, this) 取导入文件名，再去扩展名作为落盘名。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/android/MifareClassicTool/app/src/main/java/de/syss/MifareClassicTool/Common.java",
+          "at": "2026-10-01T14:18:52.459Z",
+          "reason": "正常输入（不完整）：grep 回执给出 Common.java 400-450 行，包含 getFileName 的 javadoc 和 content scheme 分支开头（同转录 L132-L133）。此前 L125 的推理已写明 getFileName 通过 content resolver 取显示名，并计划「取末段并解码」，可见显示名语义已经掌握。"
+        },
+        {
+          "key": "5c351e82-95e2-401f-b543-f0184a296f20:a5247705332ce1ccf",
+          "at": "2026-10-01T14:25:00.120Z",
+          "reason": "实现偏离：L158 推理断定 DocumentViewPicker 的 file://docs URI 末段「就是」显示名，放弃了 L125 计划的解码；L160-L161 Write 写出 fileNameFromUri = baseName(uri.split('?')[0])，注释称「Common.getFileName 近似…末段即显示文件名」。中文或空格文件名因此按百分号编码串落盘。后续接线者保留了这个调用，修复时改为 decodeURIComponent。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "UI 转换者用 Bash grep -A50 读取 Common.java 的 readLineByLine（L132），回执列出 400-450 行，含 getFileName 的 javadoc 与 content scheme 分支开头（L133）；这是写页面前对该源文件的真实读取。",
+          "evidence": [
+            {
+              "source": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-a5247705332ce1ccf.jsonl",
+              "line": 132
+            },
+            {
+              "source": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-a5247705332ce1ccf.jsonl",
+              "line": 133
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "派工里的「文件大小上限校验」由主会话写入，本卡未逐行核对它取自 F012 还是另有来源；它与规格同向，不改变 16 MiB 由实现者按规格的读前预检取值这一结论。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-ce5d3e2da2846b40767d",
+  "metadata": {
+    "migration": {
+      "project": "MifareClassicTool",
+      "server_session_id": "6ccfd659-7ee2-49d9-a90b-a7fa247e4484"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5",
+        "claude-sonnet-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.247"
+      ]
+    },
+    "source_set_id": "sources-aa4e59703bcc1d60f854",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos",
+        "at": "2026-10-01T12:05:48.424Z",
+        "ref": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-abba5084389876d39.jsonl:L102",
+        "request_ref": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-abba5084389876d39.jsonl:L101",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos",
+        "at": "2026-10-01T12:05:48.424Z",
+        "ref": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-abba5084389876d39.jsonl:L102",
+        "request_ref": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-abba5084389876d39.jsonl:L101",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-10-01T22:42:23.282Z",
+        "ref": "repair/mifareclassictool-migration-complete-20261008/fix-mifareclassictool-opus/stream-01.jsonl:L60",
+        "request_ref": "repair/mifareclassictool-migration-complete-20261008/fix-mifareclassictool-opus/stream-01.jsonl:L58",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-10-01T22:42:23.282Z",
+        "ref": "repair/mifareclassictool-migration-complete-20261008/fix-mifareclassictool-opus/stream-01.jsonl:L60",
+        "request_ref": "repair/mifareclassictool-migration-complete-20261008/fix-mifareclassictool-opus/stream-01.jsonl:L58",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "6f4879bc-c69f-4670-9167-9b09da20a889"
+      ]
+    }
+  },
+  "revision": "1df2aefde0f2b6579fe50390d58011413bdb64fc3891b30caf4a48b7b8953d1c"
+}

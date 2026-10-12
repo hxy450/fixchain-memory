@@ -1,0 +1,157 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-94be3b6b79f960cfcd2b",
+  "created_at": "2026-10-11T19:36:53.879830+00:00",
+  "migration_key": "6ccfd659-7ee2-49d9-a90b-a7fa247e4484",
+  "title": "出厂扇区尾块的3字节访问位在规格中被缩成2字节，实现补齐长度后整体错位",
+  "when": "规格提取与业务服务实现阶段，把源码中的定长字节数组常量（如MIFARE扇区尾块）转写成规格常量、伪代码并据此实现时",
+  "description": "Android源码用有符号byte[]字面量定义16字节协议块（KeyA 6字节 | 访问位3字节 | GPB 1字节 | KeyB 6字节），规格需要用hex分段串或伪代码重述，目标端用Uint8Array按下标逐字节填充。",
+  "summary": "规格作者 agent-a877596c7451684c4 写F005前全量读取了WriteTag.java，读取结果中有Javadoc\n\"Factory (default) MIFARE Classic Access Conditions are: 0xFF0780XX\"，以及L1491-1494字面量\n{-1×7, 7, -128, 105, -1×6}（末扇区为-68），对应 KeyA FF×6 | 访问位 FF 07 80 | GPB | KeyB FF×6。\n这次Write的常量清单写对了“FFFFFFFFFFFF + FF0780 + GPB(0x69) + FFFFFFFFFFFF”，同一份文件的AC36\n却写成“FFFFFFFFFFFF + 0780 + 69 + FFFFFFFFFFFF”。之后补algo-io节的Edit又写了伪代码\nTRAILER(gpb) = FF×6 || 07 80 || gpb || FF×6，并说“常量 0780/69/BC 为 MIFARE 出厂默认 AC + GPB”。\n这两处都把3字节访问位FF 07 80缩成了2字节，合计只有15字节；lint自检只核AC覆盖面，没有发现\n（agent-a877596c7451684c4.jsonl:L28-L29、L84-L85、L93-L94）。偏差最早出现在源码→规格这一步。\nSlice 16 实现者 agent-a400fc6782a4fccc8 写前读到这份前后矛盾的F005：常量行正确，AC36和伪代码错误\n（L20-L21）。它也全量读取了同一WriteTag.java字面量（L25-L26），页面桩注释还写着“构造 0xFF0780 69/BC\n尾块”（L35-L36）。正确输入已经足够，它在规划中仍照伪代码写“FF×6 + 07 80 + gpb + FF×6”（L97），\nWrite出的factoryTrailer是[0..5]=FF、[6]=0x07、[7]=0x80、[8]=GPB，再把尾部FF循环延伸到下标15，\n凑足16字节；注释仍写“FF×6 | 07 80 | GPB | FF×6”（L99-L100）。于是访问位变成07 80 69（末扇区为\n07 80 BC），GPB位变成FF，KeyA之后整体前移一字节。实现者没有和源字面量逐下标比对，也没有用\n它在同一文件checkAccessConditions里已经调用的CommonService.acBytesToACMatrix校验这组访问位。\n后来同一agent只修了“= =”笔误（L101-L104），编译门只改了attach和hooks的类型，factoryTrailer的字节\n原样保留到生成交付快照。group-closer根据marker清零和S16信封把P-S16-004翻成resolved，没有做字节级核验\n（agent-ac3a1b77550fa1891.jsonl:L92、L96）。修复期registry复核子代理复算发现访问位反码校验不通过：\ncheckDumpAgainstTag遇到第一个尾块就Toast info_ac_format_error并中止，Factory Format整体不可用\n（stream-04.jsonl:L2832）。修复主会话用脚本把factoryTrailer改成[0..6]=FF、[7]=0x07、[8]=0x80、\n[9]=GPB、[10..15]=FF，并同步修正注释（stream-04.jsonl:L4026）。\n",
+  "recommendations": [
+    "规格提取阶段转写源码byte[]常量时，按下标列出全部字节，并写明有符号到无符号的换算（-1→FF、-128→80、105→69、-68→BC）；然后核对总长等于块长，扇区尾块为6+3+1+6=16字节。",
+    "规格中同一常量只保留一种权威写法，例如KeyA FF×6 | AC FF 07 80 | GPB | KeyB FF×6。AC条目和伪代码引用这条权威写法，或逐处与它对齐，不要分别简写成“0780”之类的片段。",
+    "实现阶段若发现规格公式与源码字面量不一致，或公式字节数与目标数组长度不符，以源码字面量为准逐下标实现，并在source-notes里登记这处规格冲突；不要靠延伸填充循环自行凑长度。",
+    "实现协议常量后做最小自检：断言长度为16，与源字面量逐字节相等，并用项目现有的访问位校验（如acBytesToACMatrix(trailer[6..8])非null）确认尾块可写。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/services/WriteTagService.ets",
+        "since": "2026-10-01T17:23:26.037Z",
+        "at": "2026-10-08T12:26:25.614Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/android/MifareClassicTool/app/src/main/java/de/syss/MifareClassicTool/Activities/WriteTag.java",
+          "at": "2026-10-01T09:37:13.218Z",
+          "reason": "正常输入：规格作者整文件Read，读取结果含L1478 Javadoc“Access Conditions are: 0xFF0780XX”和L1491-1494字面量{-1×7, 7, -128, 105/-68, -1×6}，足以确定访问位是3字节FF 07 80，整块16字节（agent-a877596c7451684c4.jsonl:L28-L29）。"
+        },
+        {
+          "key": "agent-a877596c7451684c4.jsonl",
+          "at": "2026-10-01T09:48:17.367Z",
+          "reason": "读到上述字面量后，Write的常量行写对了FF0780，AC36却写成FFFFFFFFFFFF + 0780 + 69 + FFFFFFFFFFFF（L84-L85）；随后Edit加了伪代码TRAILER(gpb) = FF×6 || 07 80 || gpb || FF×6（L93-L94）。访问位少了首字节FF，规格总长只有15字节，偏差最早在这里出现。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/spec/baseline/features/F005-write-tag.md",
+          "at": "2026-10-01T16:38:15.522Z",
+          "reason": "交付桥梁：Slice 16实现者Read F005，读取结果同时含常量行FF0780、AC36的“0780 + 69”和伪代码“FF×6 || 07 80 || gpb || FF×6”，这些错误表述确实交到了实现者手里（agent-a400fc6782a4fccc8.jsonl:L20-L21）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/android/MifareClassicTool/app/src/main/java/de/syss/MifareClassicTool/Activities/WriteTag.java",
+          "at": "2026-10-01T16:38:20.524Z",
+          "reason": "正常输入：实现者也整文件Read了源码，读取结果含同样的0xFF0780XX说明和L1491-1494有符号字面量，可以直接用来逐下标实现，并能识破规格中的15字节写法（agent-a400fc6782a4fccc8.jsonl:L25-L26）。"
+        },
+        {
+          "key": "agent-a400fc6782a4fccc8.jsonl",
+          "at": "2026-10-01T16:49:37.965Z",
+          "reason": "同时收到错误伪代码和正确源字面量，规划里却照搬“FF×6 + 07 80 + gpb + FF×6”（L97）。Write出的factoryTrailer为[0..5]=FF、[6]=07、[7]=80、[8]=GPB，尾部FF延伸到[15]补齐长度，注释仍是15字节写法（L99-L100）。实现者没有核对源码，自行补齐长度，使访问位错成07 80 GPB。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 5
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-94be3b6b79f960cfcd2b",
+  "metadata": {
+    "migration": {
+      "project": "MifareClassicTool",
+      "server_session_id": "6ccfd659-7ee2-49d9-a90b-a7fa247e4484"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5",
+        "claude-sonnet-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.247"
+      ]
+    },
+    "source_set_id": "sources-aa4e59703bcc1d60f854",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos",
+        "at": "2026-10-01T12:05:48.424Z",
+        "ref": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-abba5084389876d39.jsonl:L102",
+        "request_ref": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-abba5084389876d39.jsonl:L101",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos",
+        "at": "2026-10-01T12:05:48.424Z",
+        "ref": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-abba5084389876d39.jsonl:L102",
+        "request_ref": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-abba5084389876d39.jsonl:L101",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-10-01T22:42:23.282Z",
+        "ref": "repair/mifareclassictool-migration-complete-20261008/fix-mifareclassictool-opus/stream-01.jsonl:L60",
+        "request_ref": "repair/mifareclassictool-migration-complete-20261008/fix-mifareclassictool-opus/stream-01.jsonl:L58",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-10-01T22:42:23.282Z",
+        "ref": "repair/mifareclassictool-migration-complete-20261008/fix-mifareclassictool-opus/stream-01.jsonl:L60",
+        "request_ref": "repair/mifareclassictool-migration-complete-20261008/fix-mifareclassictool-opus/stream-01.jsonl:L58",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "6f4879bc-c69f-4670-9167-9b09da20a889"
+      ]
+    }
+  },
+  "revision": "09e2152c8c60598147fc092442eef7d4a9976f42e9d470a88cf834d693e66c16"
+}

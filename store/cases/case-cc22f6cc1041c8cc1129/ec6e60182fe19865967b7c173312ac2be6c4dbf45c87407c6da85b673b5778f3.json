@@ -1,0 +1,250 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-cc22f6cc1041c8cc1129",
+  "created_at": "2026-10-11T21:01:37.344987+00:00",
+  "migration_key": "6ccfd659-7ee2-49d9-a90b-a7fa247e4484",
+  "title": "持久化主题的冷启动恢复被写成未等待的异步调用，清单属性与权限未迁移",
+  "when": "入口与应用级配置阶段：规格提取或实现冷启动时应用持久化外观设置的时机，并把 AndroidManifest 属性与系统服务权限落到 module.json5、窗口配置时",
+  "description": "源入口 Activity 在 onCreate 首行（super.onCreate 之前）按 SharedPreferences 同步设置 DayNight 主题；目标为 HarmonyOS Stage 模型，ApplicationContext.setColorMode 是进程态、偏好仓库只提供异步 init；同时源 manifest 显式 allowBackup=false、未声明 screenOrientation/windowSoftInputMode 而依赖平台缺省，源端读剪贴板无需授权。",
+  "summary": "已绑定分支（主题首帧，图1、图2）：Slice 7 偏好 worker（agent-ae4f417d53ec5e038）写前读到的 F014 规格只规定 Preferences 保存后 applyTheme/setColorMode 即时生效，\n没有冷启动恢复要求（同转录 L27-L28）；它读到的 PreferenceStore 只有 async init(context)（L45-L46），EntryAbility 在 onCreate 同步设 COLOR_MODE_NOT_SET、\n在 onWindowStageCreate 里 loadContent（L50-L51）。它自行发现 setColorMode 是进程态、需跨启动恢复（L71），却把 restoreStartupPreferences 写成\nstatic async ... Promise<void>，内部 await store.init(context) 后才 applyTheme，注释直说“覆盖 EntryAbility 的 NOT_SET 默认态”，并以 HANDOFF 交给 group-closer 在\nEntryAbility.onCreate 调用（L72 Write）。group-closer（agent-abc916bdf4ca30a03）读到该异步签名与 HANDOFF（L28-L29、L37-L38），按原样在 onCreate 里不等待地调用（L57 Edit），\n于是首帧先按系统深浅色绘制，偏好加载完成后才切换主题。这一片段保留到生成交付。修复在 PreferenceStore 增加 initSync（getPreferencesSync），把\nrestoreStartupPreferences 改为同步并在首帧前 applyTheme，EntryAbility.onCreate 同步调用（repair stream-01 L3145、L3151，stream-02 L2982）。\n上游缺口：F002 规格作者读过 MainMenu.onCreate 第110行 setTheme() 位于 super.onCreate 之前（agent-a9b4ed50598d6e1da L41-L42），设计参考分片 design_part4.md 也记录了\n“MainMenu.setTheme() 在 super.onCreate 前调用以首帧生效”（agent-a3490b76dc7803738 L110），但 F002/F014 规格都没有写入冷启动主题时机，Slice 7 也不读这些材料；\n所以 Slice 7 收到的输入里没有“首帧前”这一要求。它已知 onCreate 同步、loadContent 在后，仍选择不等待的异步恢复，具体偏差在这里出现。\n\n已核实但未能连到目标写者的分支（列入 unresolved_targets）：\n1）参考规格 §4.2/§11.4 记录了 allowBackup=false（agent-a3490b76dc7803738 L99），spec 主会话读到后（main-5dce7670 L440-L442）写 feature-base 时，权限声明段写成\n“module.json5 无需 NFC 权限声明（NFC Kit 免权限）；requestPermissions 为空”，没有备份、屏幕方向或软键盘映射（main-5dce7670 L473）。plan 阶段的 D-C13-01 沿用了这一说法（main-5c351e82 L371），\nbase-plan 也没有清单配置任务。backup_config.json 在整个生成期都保持模板值 true，生成期没有写者。\n2）ui-graph 把 21 个 Screen 的 orientation_config 记为 unspecified，20 个 soft_input_mode 记为 unknown（agent-a584f9f487d207c5e L96）；生成材料里没有出现\nKeyboardAvoidMode 或 orientation 映射，module.json5/WindowModel 的生成期写者都没有收到相应要求。\n3）剪贴板读取由各工具页直接调用 pasteboard.getSystemPasteboard().getData()，没有权限声明或申请；feature-base 的 ClipboardManager→@ohos.pasteboard 映射也没有提权限。\nSDK d.ts 在 getData 上标注了 @permission ohos.permission.READ_PASTEBOARD（修复查证见 repair stream-01 L402-L405），但生成期没有任何材料出现 READ_PASTEBOARD。\nmodule.json5 唯一的权限写者 agent-a253fc76af4eeb005 只按 NFC d.ts 补了 NFC_TAG（L120、L189），它的范围不含剪贴板读取。\n4）VIBRATE 源于修复从 Android 框架 View.performLongClick 的隐式触感推出长按震动（D-MM-16），生成期输入里没有这一行为。\n",
+  "recommendations": [
+    "实现入口启动恢复时，把持久化主题放在 EntryAbility.onCreate 的同步路径：用 preferences.getPreferencesSync 读取主题键，并在 onWindowStageCreate 的 loadContent 之前完成 setColorMode。恢复函数若返回 Promise、调用方又不等待，应视为首帧之后才生效。",
+    "为启动恢复写 HANDOFF 时，同时写明时序约束（例如“首帧前同步生效”）；接线者若看到 onCreate 调用的是 async 函数，应先确认它是否需要在首帧前完成，不能只机械补上调用点。",
+    "规格提取读入口 Activity.onCreate 时，super.onCreate/setContentView 之前的调用（如 setTheme()）连同“首帧前生效”的时机都要写进 feature 契约，并指定目标承接位置（EntryAbility.onCreate）；不能只留在设计参考里。",
+    "规格阶段逐项列出 AndroidManifest 的 application/activity 属性及其缺省语义（allowBackup、screenOrientation 未设、windowSoftInputMode 未设），映射到 backup_config.allowToBackupRestore、ability orientation、KeyboardAvoidMode，并为每项指派实现任务；记为 unspecified/unknown 的项也要按平台缺省给出目标值。",
+    "写 HarmonyOS 权限契约前，按每个已映射的系统 API 查 SDK d.ts 中的 @permission（本例 pasteboard.getData 需要 READ_PASTEBOARD，NFC tag 需要 NFC_TAG）。不要因为 Android 端无需运行时权限，就断言 requestPermissions 为空。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/services/PreferenceApplier.ets",
+        "since": "2026-10-01T17:23:26.037Z",
+        "at": "2026-10-08T12:26:25.614Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/spec/baseline/features/F014-preferences.md",
+          "at": "2026-10-01T15:34:02.495Z",
+          "reason": "实际输入：Read 回执给出保存后主题 selectedItemId→ApplicationContext.setColorMode 即时生效，但没有冷启动恢复或首帧时机要求。这是输入缺口，不是错误要求（agent-ae4f417d53ec5e038.jsonl:L27-L28）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/Entry/src/main/ets/preferences/PreferenceStore.ets",
+          "at": "2026-10-01T15:34:20.640Z",
+          "reason": "实际输入（worker 以大写 Entry 路径读取，与 entry 为同一文件）：Base-5 偏好仓库只提供 async init(context)（内部 await preferences.getPreferences）与 isReady()，没有同步初始化入口（agent-ae4f417d53ec5e038.jsonl:L45-L46）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/Entry/src/main/ets/entryability/EntryAbility.ets",
+          "at": "2026-10-01T15:34:31.459Z",
+          "reason": "实际输入：onCreate 同步设 COLOR_MODE_NOT_SET，onWindowStageCreate 里 loadContent('pages/MainPage')。这足以看出启动恢复若异步完成，首帧会先按默认色绘制（agent-ae4f417d53ec5e038.jsonl:L50-L51）。"
+        },
+        {
+          "key": "agent-ae4f417d53ec5e038.jsonl",
+          "at": "2026-10-01T15:38:40.497Z",
+          "reason": "它自行判定主题为进程态、需跨启动恢复（L71），Write 时却把 restoreStartupPreferences 写成 static async，内部 await store.init 后再 applyTheme，注释称“覆盖 EntryAbility 的 NOT_SET 默认态”，并登记 HANDOFF 由 group-closer 在 onCreate 调用（L72-L73）。首帧前生效的时序没有落实，修复改为 initSync 加同步 applyTheme。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/Entry/src/main/ets/services/PreferenceApplier.ets",
+          "at": "2026-10-01T16:21:28.834Z",
+          "reason": "该 worker 写出的文件（大写 Entry 路径，macOS 默认大小写不敏感，与目标 entry 路径是同一文件）。group-closer 的 grep 回执逐行返回其中的 HANDOFF（第100行）与 static async restoreStartupPreferences 签名（第109行），证明读到的就是这次写入（agent-abc916bdf4ca30a03.jsonl:L28-L29）。"
+        },
+        {
+          "key": "agent-abc916bdf4ca30a03.jsonl",
+          "at": "2026-10-01T16:25:03.535Z",
+          "reason": "group-closer 读到异步恢复与 HANDOFF 后，把 HANDOFF 改记为“P-S7-002 已兑现”（L59-L60），异步签名保持不变，并在 EntryAbility 加上不等待的调用（见图2）。本链只确认传递与收口，不另判它独立失职。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": 6,
+          "force": true,
+          "reason": "group-closer 在写前用 Bash grep 扫 entry/src/main/ets，回执逐行返回 PreferenceApplier.ets 第17、100、109行，也就是 Slice 7 worker 写入的 HANDOFF 与异步签名；大小写不同的路径指向同一个文件。",
+          "evidence": [
+            {
+              "source": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-abc916bdf4ca30a03.jsonl",
+              "line": 28
+            },
+            {
+              "source": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-abc916bdf4ca30a03.jsonl",
+              "line": 29
+            }
+          ]
+        },
+        {
+          "from": 6,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/entryability/EntryAbility.ets",
+        "since": "2026-10-01T17:23:26.037Z",
+        "at": "2026-10-08T12:26:25.614Z"
+      },
+      "nodes": [
+        {
+          "key": "agent-ae4f417d53ec5e038.jsonl",
+          "at": "2026-10-01T15:38:40.497Z",
+          "reason": "偏差起点（同图1）：写出异步的 restoreStartupPreferences，并以 HANDOFF 要求在 EntryAbility.onCreate 调用，没有附带首帧前完成的约束（agent-ae4f417d53ec5e038.jsonl:L72-L73）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/Entry/src/main/ets/services/PreferenceApplier.ets",
+          "at": "2026-10-01T16:21:28.834Z",
+          "reason": "交付桥梁：group-closer 的 grep 回执返回该文件中的 HANDOFF 行和 static async restoreStartupPreferences(...): Promise<void> 签名（agent-abc916bdf4ca30a03.jsonl:L28-L29），随后它又用小写 entry 路径 Read 了同一段（L37-L38）。"
+        },
+        {
+          "key": "agent-abc916bdf4ca30a03.jsonl",
+          "at": "2026-10-01T16:25:00.444Z",
+          "reason": "按 HANDOFF 在 onCreate 里加上不等待的 PreferenceApplier.restoreStartupPreferences(this.context)（L57-L58），把异步恢复带进入口；本链只确认传递，不另判它独立失职。修复改为 onCreate 同步调用（repair stream-01 L3151）。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "group-closer 在接线前用 Bash grep 扫 entry/src/main/ets，回执返回 PreferenceApplier.ets 第100行 HANDOFF 与第109行 async 签名，即 Slice 7 worker 写入的内容；大小写不同的路径指向同一个文件。",
+          "evidence": [
+            {
+              "source": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-abc916bdf4ca30a03.jsonl",
+              "line": 28
+            },
+            {
+              "source": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-abc916bdf4ca30a03.jsonl",
+              "line": 29
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/preferences/PreferenceStore.ets",
+      "reason": "已确认修复新增 initSync，用于首帧前的同步读取。生成期写者 Base-5（agent-ab8cb7ef853505574 L87 Write）按 feature-base 偏好段只提供 async init，当时输入里没有同步读取要求，未见该文件独立的偏差输出；被修原因已归入图1的启动恢复分支。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/services/CommonService.ets",
+      "reason": "已确认修复新增 readClipboard（未授权时先申请 READ_PASTEBOARD）与 performLongPressHaptic。生成期 CommonService 没有任何剪贴板或触感片段，读剪贴板写在各工具页内联调用 getData；没有生成期片段可以绑定到本文件。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/state/WindowModel.ets",
+      "reason": "已确认修复新增 keyboardVisible 与 KeyboardAvoidMode.RESIZE 联动（E7b）。ui-graph 把 manifest 缺省的软键盘模式记为 unknown（agent-a584f9f487d207c5e L96，skill schema 只提供 adjustResize|adjustPan|unknown），之后的生成材料里没有 KeyboardAvoidMode；WindowModel 写者 Base-4（agent-abb65c44174c62dcf L97）没有收到该要求。从 manifest 缺省到窗口配置这一步缺少交接。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/module.json5",
+      "reason": "已确认修复新增 orientation auto_rotation_restricted、READ_PASTEBOARD、VIBRATE。权限契约偏差在 feature-base 权限声明段（main-5dce7670 L473：NFC Kit 免权限、requestPermissions 为空，D-C13-01 沿用）；但 module.json5 的生成期写者 agent-a253fc76af4eeb005（L189 仅补 NFC_TAG）、agent-abc916bdf4ca30a03、agent-a90adb2c8ad687e00 都没有读取该段，剪贴板读取页的写盘边界也不含 module.json5。orientation 只在 ui-graph 记为 unspecified，VIBRATE 来自生成输入中没有的框架隐式触感。缺少从偏差输出到本文件的实际交接。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/resources/base/profile/backup_config.json",
+      "reason": "已确认修复把 allowToBackupRestore 从模板值 true 改为 false（对应 allowBackup=false）。参考规格 §4.2/§11.4 已记录 allowBackup=false，feature-base 未映射；但该文件在生成期没有任何写者（模板原值保留到交付），无法绑定生成写入。"
+    }
+  ],
+  "job": "issue-cc22f6cc1041c8cc1129",
+  "metadata": {
+    "migration": {
+      "project": "MifareClassicTool",
+      "server_session_id": "6ccfd659-7ee2-49d9-a90b-a7fa247e4484"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5",
+        "claude-sonnet-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.247"
+      ]
+    },
+    "source_set_id": "sources-aa4e59703bcc1d60f854",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos",
+        "at": "2026-10-01T12:05:48.424Z",
+        "ref": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-abba5084389876d39.jsonl:L102",
+        "request_ref": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-abba5084389876d39.jsonl:L101",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos",
+        "at": "2026-10-01T12:05:48.424Z",
+        "ref": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-abba5084389876d39.jsonl:L102",
+        "request_ref": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-abba5084389876d39.jsonl:L101",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-10-01T22:42:23.282Z",
+        "ref": "repair/mifareclassictool-migration-complete-20261008/fix-mifareclassictool-opus/stream-01.jsonl:L60",
+        "request_ref": "repair/mifareclassictool-migration-complete-20261008/fix-mifareclassictool-opus/stream-01.jsonl:L58",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-10-01T22:42:23.282Z",
+        "ref": "repair/mifareclassictool-migration-complete-20261008/fix-mifareclassictool-opus/stream-01.jsonl:L60",
+        "request_ref": "repair/mifareclassictool-migration-complete-20261008/fix-mifareclassictool-opus/stream-01.jsonl:L58",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "6f4879bc-c69f-4670-9167-9b09da20a889"
+      ]
+    }
+  },
+  "revision": "ec6e60182fe19865967b7c173312ac2be6c4dbf45c87407c6da85b673b5778f3"
+}

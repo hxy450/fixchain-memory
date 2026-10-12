@@ -1,0 +1,438 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-3735da03c6e544339df6",
+  "created_at": "2026-10-11T19:54:08.864802+00:00",
+  "migration_key": "6ccfd659-7ee2-49d9-a90b-a7fa247e4484",
+  "title": "BasicActivity 级 NFC 前台派发被拆散：页面接线无人承接、订阅挂在组件生命周期、标签在场判定收窄为 MIFARE Classic",
+  "when": "NFC 引擎与基类行为迁移阶段，把 Android 基类 BasicActivity 的 onResume/onPause/onNewIntent 前台派发语义分配给服务切片、页面切片和全局状态时",
+  "description": "Android 大多数页面继承 BasicActivity：onResume 设置 pendingComponentName 并启用前台派发，onPause 关闭，onNewIntent 统一 treatAsNewTag，卡或设备不支持时跳 TagInfoTool；Common.mTag 保存任意技术的 Tag。目标 HarmonyOS 的 tag.registerForegroundDispatch 按 UIAbility 注册，页面用 Navigation/NavDestination 组织，迁移按服务切片与页面切片分工。",
+  "summary": "F001 规格已写明 AC08–AC10：BasicActivityMixin.onPageShow 记录 pending 并 registerForeground，onPageHide 注销，\nonNewTag 对 -1/-2 跳 TagInfoTool。Slice 1 写前也完整读到了 BasicActivity.java:43-77。\nSlice 1 派工禁止改 pages/，它在 L132-L135 已查到工程里没有任何 Mixin，ReadTag、WriteTag、KeyMapCreator 也没有调用引擎。\n可它在 NfcSessionManager 里只写了 registerForeground(pageName)/unregisterForeground，并把 pendingPage 赋值合并进 registerForeground；\n收到 tag 后用 notifyTagDiscovered 广播给全部监听者。source-notes 把 onShow/onHide 调用和 onNewIntent 默认跳转写成“归各消费 Slice 3d”，\n回执却称“无新增 placeholder 需登记 registry”，integration_points 6/6 就绪。\n实际上消费切片的 wires 里没有这条边，F005/F003 的 source-notes 又把它推回给 F001；group-01 writeback 只拿服务文件给 F001-AC08/09/10 交账。\n结果生成交付时只有 MainMenu 在 HasNfcEnabled 节点注册，并在 MainMenu onHidden 时注销整个能力级派发；\n其余 BasicActivity 等价页没有页面级开关，也没有默认 onNewIntent。\n另有三处同属该问题的独立偏差：\nTagInfo、UidLog、CloneUid 三个页面转换者都读到 Base-4 的“页面 onShow 期注册，onHide 期 removeTagListener”，却把订阅放进 aboutToAppear/aboutToDisappear，\n被覆盖的页面仍然收卡；UID 日志规格把 onNewIntent 映射成 onActive，Slice 6 照此加了 onShown 刷新；\nBase-1 把 Common.mTag 定义成 MifareClassicTag，Base-4 在此基础上得出 isTagPresent = mTag !== null。\n修复把注册移到 EntryAbility 的 onForeground/onBackground，NfcSessionManager 改用 pageShown/pageHidden 可见页登记表与 deliverTag，\n仿真 onPause→onNewIntent→onResume；各页改为 onShown/onHidden 登记 TagPage，isTagPresent 改按 mLastTagInfo 判断\n（stream-01 L3076-L3091、L3115、L3151、L3672、L3696）。\nstream-04 L12460 的 G1 只修改修复批次自己新增的“无可见页排队”路径，不归生成。\n",
+  "recommendations": [
+    "引擎/服务切片：规格 AC 指向的基类等价物（如 BasicActivityMixin）不存在，而本切片又不能改页面时，应在服务里交付页面可直接调用的入口（如 pageShown/pageHidden 加默认 onNewTag 处理）。还要按 Android 中继承 BasicActivity 的页面清单，逐页登记可追踪的 handoff/placeholder，不能只在笔记里写“归消费切片”就宣告 AC 完成。",
+    "规划/收口：生成 slice 计划时，从源码列出全部继承 BasicActivity 的 Activity，把前台注册、注销和默认 onNewIntent 写进对应页面切片的 wires 或 closer 清单；writeback 交账前核对 AC 声明的目标锚点（Mixin/页面）确实存在。",
+    "平台映射：HarmonyOS 前台派发按 UIAbility 注册，Android 的 Activity 级开关要用“Ability 前后台注册 + 可见顶页登记表”仿真。不要让单个页面的 onHidden 注销整个应用的派发，也不要把 setPendingComponentName 合并进通用的注册函数。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/state/NfcSessionManager.ets",
+        "since": "2026-10-01T17:23:26.037Z",
+        "at": "2026-10-08T12:26:25.614Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/spec/baseline/features/F001-nfc-engine.md",
+          "at": "2026-10-01T15:59:25.827Z",
+          "reason": "正常输入：Slice 1 的 Read 回执给出 F001-AC08/09/10。页面 onShow 时记录 pendingComponentName 并 registerForeground，onHide 时注销，onNewTag 对 -1/-2 跳 TagInfoTool，目标锚点都是 BasicActivityMixin，足以说明每个 BasicActivity 等价页都要有页面级前台派发与默认 tag 处理（agent-a253fc76af4eeb005.jsonl:L31、L34）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/android/MifareClassicTool/app/src/main/java/de/syss/MifareClassicTool/Activities/BasicActivity.java",
+          "at": "2026-10-01T15:59:33.923Z",
+          "reason": "正常输入：Read 回执给出 BasicActivity 全文。onResume 先 setPendingComponentName 再 enableNfcForegroundDispatch，onPause 时 disable，onNewIntent 走 treatAsNewTag，-1/-2 则 startActivity(TagInfoTool)（agent-a253fc76af4eeb005.jsonl:L38-L39）。"
+        },
+        {
+          "key": "agent-a253fc76af4eeb005.jsonl",
+          "at": "2026-10-01T16:15:42.007Z",
+          "reason": "Slice 1 已收到上述输入，L132-L135 又查到工程里没有 Mixin，ReadTag、WriteTag、KeyMapCreator 等页面也没有引擎调用。它写入的 NfcSessionManager 只有 registerForeground(pageName)/unregisterForeground：pendingPage 在注册时直接设为 pageName，tag 经 notifyTagDiscovered 广播给全部监听者，没有可见顶页投递，也没有默认 onNewIntent 入口（L185-L186）。source-notes 把页面调用写成“归各消费 Slice 3d”（L165），回执却称无需登记 placeholder，并把 integration_points 记为 6/6（L248）。偏差在此形成，生成截止前未被补上。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/pages/CloneUidToolPage.ets",
+        "since": "2026-10-01T17:23:26.037Z",
+        "at": "2026-10-08T12:26:25.614Z"
+      },
+      "summary": "CloneUid 页面转换者写前读到 Base-4 NfcSessionManager 的订阅契约：页面 onShow 期 addTagListener，onHide 期 removeTagListener。\n它也读到页面规格与源码中 CloneUidTool 继承 BasicActivity。另外它还读了 TagInfoToolPage，后者已有 aboutToAppear 订阅的写法。\n最终它把 addTagListener 放进 aboutToAppear、removeTagListener 放进 aboutToDisappear，导致 CloneUid 被别的页面覆盖后仍会收卡并推进写块 0 状态机。\n这段写法最早由 TagInfo 转换者在读到同一契约后写出，再被 CloneUid 转换者照抄。Slice 14 后续只在同一段前面加了 controller.attach，订阅位置保留到生成交付。\n修复 stream-01 L3672 起把它改成 TagPage，在 onShown/onHidden 中 pageShown/pageHidden；L3696 又把 onNewIntent 和写入串行化。\n",
+      "recommendations": [
+        "页面实现：Android 在 onResume/onPause 中处理的前台派发订阅，对应 NavDestination 的 onShown/onHidden；aboutToAppear/aboutToDisappear 只对应组件创建和销毁，被覆盖页面不应继续收卡。",
+        "复用既有页面写法前，先对照服务接口注释中的生命周期契约；两者冲突时以契约和源码语义为准，并修正被复制的样例。"
+      ],
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/state/NfcSessionManager.ets",
+          "at": "2026-10-01T12:38:07.222Z",
+          "reason": "正常输入：TagInfo 转换者的 Read 回执里，Base-4 版 addTagListener 注释写明“页面 onShow 期注册，onHide 期 removeTagListener”（agent-a75ec8cb7fb56ebc7.jsonl:L51-L52）。"
+        },
+        {
+          "key": "agent-a75ec8cb7fb56ebc7.jsonl",
+          "at": "2026-10-01T12:46:47.874Z",
+          "reason": "已收到 onShow/onHide 契约，源码 TagInfoTool 也继承 BasicActivity（L19-L20）。Write 却把订阅写进 aboutToAppear、注销写进 aboutToDisappear（L124-L125），这一写法由此进入工程。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/pages/TagInfoToolPage.ets",
+          "at": "2026-10-01T14:43:43.587Z",
+          "reason": "交付桥梁：CloneUid 转换者读取 TagInfoToolPage 的第 120-379 行，回执包含 aboutToAppear 中 addTagListener、aboutToDisappear 中 removeTagListener 的写法（agent-acf0003a75c9ab1a9.jsonl:L57-L58）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/state/NfcSessionManager.ets",
+          "at": "2026-10-01T14:43:25.654Z",
+          "reason": "正常输入：CloneUid 转换者的 Read 回执里，同一契约注释写明“页面 onShow 期注册，onHide 期 removeTagListener”（agent-acf0003a75c9ab1a9.jsonl:L39-L40）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/spec/baseline/ui/page_0018_CloneUidTool.md",
+          "at": "2026-10-01T14:43:04.364Z",
+          "reason": "正常输入：页面规格写明 CloneUidTool 继承 BasicActivity 并自行覆写 onNewIntent 状态机，前台派发生命周期按基类语义处理（agent-acf0003a75c9ab1a9.jsonl:L9-L10）；源码 CloneUidTool extends BasicActivity 见 L15-L16。"
+        },
+        {
+          "key": "agent-acf0003a75c9ab1a9.jsonl",
+          "at": "2026-10-01T14:51:39.243Z",
+          "reason": "写前已有 onShow/onHide 契约和继承 BasicActivity 的规格，Write 仍照 TagInfo 样例，把 addTagListener 放进 aboutToAppear、removeTagListener 放进 aboutToDisappear（L125-L126）。被覆盖时仍收卡的偏差由此进入 CloneUid 页面。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 6
+        },
+        {
+          "from": 4,
+          "to": 6
+        },
+        {
+          "from": 5,
+          "to": 6
+        },
+        {
+          "from": 6,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/pages/TagInfoToolPage.ets",
+        "since": "2026-10-01T17:23:26.037Z",
+        "at": "2026-10-08T12:26:25.614Z"
+      },
+      "summary": "TagInfo 转换者读到 Base-4 的 onShow/onHide 订阅契约，也读到 TagInfoTool 继承 BasicActivity、onNewIntent 先 super 再 updateTagInfo 的源码。\n但它把订阅写进 aboutToAppear/aboutToDisappear，tag 回调直接 updateTagInfo，没有经过基类的默认处理。\nSlice 12 后续只改信息渲染，订阅段保留到生成交付。修复 stream-01 L3672 改为 TagPage afterNewIntent 刷新，并在 onShown/onHidden 中登记。\n",
+      "recommendations": [
+        "页面实现：继承 BasicActivity 的页面，订阅放在 onShown/onHidden；页面自己的 onNewIntent 刷新挂在默认 treatAsNewTag 处理之后，不要直接替代基类处理。"
+      ],
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/state/NfcSessionManager.ets",
+          "at": "2026-10-01T12:38:07.222Z",
+          "reason": "正常输入：Read 回执里的 addTagListener 注释写明“页面 onShow 期注册，onHide 期 removeTagListener”（agent-a75ec8cb7fb56ebc7.jsonl:L51-L52）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/android/MifareClassicTool/app/src/main/java/de/syss/MifareClassicTool/Activities/TagInfoTool.java",
+          "at": "2026-10-01T12:37:40.532Z",
+          "reason": "正常输入：源码回执显示 TagInfoTool extends BasicActivity；onNewIntent 先 super.onNewIntent，在 ACTION_TECH_DISCOVERED 时再 updateTagInfo（agent-a75ec8cb7fb56ebc7.jsonl:L19-L20）。"
+        },
+        {
+          "key": "agent-a75ec8cb7fb56ebc7.jsonl",
+          "at": "2026-10-01T12:46:47.874Z",
+          "reason": "收到上述契约与源码后，Write 把 addTagListener 放进 aboutToAppear、removeTagListener 放进 aboutToDisappear，tag 回调直接 updateTagInfo（L124-L125）。生命周期映射在此偏离。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/pages/UidLogToolPage.ets",
+        "since": "2026-10-01T17:23:26.037Z",
+        "at": "2026-10-08T12:26:25.614Z"
+      },
+      "summary": "UidLogTool.java 只在 onCreate 和 onNewIntent（先 super 再 updateUidLog）刷新日志。\nUI 规格作者读到该源码后，在 page_0020 中把“onNewIntent 刷新”映射为“页面 onActive / NFC 事件回调”。\nF013 规格作者同时读到 page_0020 和源码，仍在 AC03 中写成“源:UidLogTool.onNewIntent → 标:UidLogToolPage.onActive”，并规定订阅在 aboutToDisappear 注销。\nSlice 6 读到 F013 后，引用 F013-AC03 增加 onShown 时的 updateUidLog，于是回到页面就会重读日志（A11）。\n另一条起点是 UidLog 页面转换者：它读到 Base-4 的 onShow/onHide 契约，仍把订阅放进 aboutToAppear/aboutToDisappear（A3）。\n修复 stream-01 L3672 去掉 onShown 刷新，改为 afterNewIntent 刷新，并在 onShown/onHidden 中登记 TagPage。\n",
+      "recommendations": [
+        "规格提取：onNewIntent 应映射为“收到新 tag 事件时”的回调，而不是页面每次可见（onActive/onShown）；写 AC 时注明源端刷新只发生在 onCreate 和 onNewIntent。",
+        "页面实现：AC 的目标锚点与源码生命周期冲突时，以源码中实际的回调时机为准，并把冲突回报给规格方，不要在 onShown 里加兜底刷新。"
+      ],
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/android/MifareClassicTool/app/src/main/java/de/syss/MifareClassicTool/Activities/UidLogTool.java",
+          "at": "2026-10-01T09:25:23.129Z",
+          "reason": "正常输入：UI 规格作者的 Read 回执显示 onCreate 调用 updateUidLog，onNewIntent 先 super 再 updateUidLog，没有 onResume 刷新（agent-a275efc5e8214a938.jsonl:L77-L78）。"
+        },
+        {
+          "key": "agent-a275efc5e8214a938.jsonl",
+          "at": "2026-10-01T09:30:14.376Z",
+          "reason": "page_0020 的 Write 把刷新时机写成“每次 NFC 新标签触碰后回到前台即刷新”，并把 onNewIntent 刷新映射为“页面 onActive / NFC 事件回调触发 updateUidLog”（L125-L126）。最早可核的映射偏差在这里。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/spec/baseline/ui/page_0020_UidLogTool.md",
+          "at": "2026-10-01T09:39:55.889Z",
+          "reason": "交付桥梁：F013 规格作者的读取回执包含“onNewIntent 刷新 | 页面 onActive / NFC 事件回调”（agent-a321f18b243ed7bf7.jsonl:L41-L42）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/android/MifareClassicTool/app/src/main/java/de/syss/MifareClassicTool/Activities/UidLogTool.java",
+          "at": "2026-10-01T09:40:25.946Z",
+          "reason": "正常输入：F013 规格作者也直接读到源码，刷新只在 onCreate 和 onNewIntent 中进行（agent-a321f18b243ed7bf7.jsonl:L61-L62）。"
+        },
+        {
+          "key": "agent-a321f18b243ed7bf7.jsonl",
+          "at": "2026-10-01T09:47:09.830Z",
+          "reason": "已有源码对照，Write/Edit 仍把 F013-AC03 写成“源:UidLogTool.onNewIntent → 标:UidLogToolPage.onActive”，并要求订阅在 aboutToDisappear 注销（L115-L116、L121-L122）。规格层再次固化了这一偏差。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/spec/baseline/features/F013-uid-log.md",
+          "at": "2026-10-01T15:59:53.725Z",
+          "reason": "交付桥梁：Slice 6 的读取回执包含 AC03 的 onActive 映射和 aboutToDisappear 注销（agent-ae433339692714ae6.jsonl:L37-L38）。"
+        },
+        {
+          "key": "agent-ae433339692714ae6.jsonl",
+          "at": "2026-10-01T16:03:12.303Z",
+          "reason": "Slice 6 照规格加入 onShown 时的 updateUidLog，注释引用“F013-AC03 … 回到本页显示时重读”（L115-L116）。本链确认的是传递，不另推定其独立失职；它也读过源码（L31-L32），但没有指出与规格的冲突。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/state/NfcSessionManager.ets",
+          "at": "2026-10-01T12:56:49.724Z",
+          "reason": "正常输入：UidLog 页面转换者的 Read 回执包含“页面 onShow 期注册，onHide 期 removeTagListener”（agent-a76a08a261b9b2245.jsonl:L40-L41）。"
+        },
+        {
+          "key": "agent-a76a08a261b9b2245.jsonl",
+          "at": "2026-10-01T13:03:23.684Z",
+          "reason": "收到 onShow/onHide 契约后，Write 把 addTagListener 放进 aboutToAppear，并注释为“BasicActivity.onResume 注册对应物”，又在 aboutToDisappear 注销（L121-L122）。订阅生命周期在此偏离。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 5
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": 6
+        },
+        {
+          "from": 6,
+          "to": 7
+        },
+        {
+          "from": 7,
+          "to": "target"
+        },
+        {
+          "from": 8,
+          "to": 9
+        },
+        {
+          "from": 9,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/state/GlobalTagState.ets",
+        "since": "2026-10-01T17:23:26.037Z",
+        "at": "2026-10-08T12:26:25.614Z"
+      },
+      "summary": "Base-1 读到 Common.java：mTag 是 android.nfc.Tag，treatAsNewTag 对每张卡都 setTag，之后才判断是否支持 MIFARE Classic。\n它在 TagTypes 中却把 mTag 定义成 tag.MifareClassicTag，注释把 Common.mTag 和 MCReader 包装的连接混为一谈。\nBase-4 按派工引用 TagTypes，在 GlobalTagState 中沿用 MFC 类型，并新建 isTagPresent = mTag !== null。\nSlice 1 的 treatAsNewTag 对非 MFC 卡写入 null，所以非 MFC 卡在场时，TagInfo 显示无卡，CloneUid 也无法预填 UID（A7）。\n修复 stream-01 L3115 把 isTagPresent 改为按 mLastTagInfo 判断。\n",
+      "recommendations": [
+        "类型建模：迁移 Android 全局 Tag 时，“最近发现的卡”（任意技术的 TagInfo）和“MFC 会话”要分成两个载体；在场判定基于前者，不要用 MifareClassicTag 替代 Common.mTag。"
+      ],
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/android/MifareClassicTool/app/src/main/java/de/syss/MifareClassicTool/Common.java",
+          "at": "2026-10-01T12:00:58.447Z",
+          "reason": "正常输入：Base-1 的 Read 回执显示 private static Tag mTag（注释为 Set by treatAsNewTag），treatAsNewTag 中先 setTag(tag) 再检查 MFC，setTag(Tag) 对任意 Tag 赋值（agent-acfaf65d33294087c.jsonl:L36、L38）。"
+        },
+        {
+          "key": "agent-acfaf65d33294087c.jsonl",
+          "at": "2026-10-01T12:06:24.889Z",
+          "reason": "TagTypes 的 Write 把 TagSessionState.mTag 定义为 tag.MifareClassicTag，注释称其为“当前活跃的 MIFARE Classic 标签会话”（L99-L100）。任意技术的 Tag 被收窄为 MFC，偏差起点在这里。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/models/TagTypes.ets",
+          "at": "2026-10-01T12:20:20.270Z",
+          "reason": "交付桥梁：Base-4 的读取回执包含 mTag: tag.MifareClassicTag 的定义；派工要求它“types 引用 models/TagTypes.ets，不重复定义”（agent-abb65c44174c62dcf.jsonl:L1、L31-L32）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/android/MifareClassicTool/app/src/main/java/de/syss/MifareClassicTool/Common.java",
+          "at": "2026-10-01T12:20:13.806Z",
+          "reason": "正常输入：Base-4 也读到 Common.mTag 为 Tag，getTag/setTag 不限技术（agent-abb65c44174c62dcf.jsonl:L25-L26）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/spec/baseline/features/F001-nfc-engine.md",
+          "at": "2026-10-01T12:21:30.941Z",
+          "reason": "正常输入：F001 服务层接口写作 setTag(tag: NfcTagInfo) / getTag(): NfcTagInfo | null（agent-abb65c44174c62dcf.jsonl:L61-L62）。"
+        },
+        {
+          "key": "agent-abb65c44174c62dcf.jsonl",
+          "at": "2026-10-01T12:27:52.277Z",
+          "reason": "沿用 TagTypes，Write 出 GlobalTagState.mTag: MifareClassicTag 和 isTagPresent(){ return mTag !== null }（L93-L94），把收窄后的类型传到目标文件。它受派工约束必须引用 TagTypes，因此本图只确认传递。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 6
+        },
+        {
+          "from": 4,
+          "to": 6
+        },
+        {
+          "from": 5,
+          "to": 6
+        },
+        {
+          "from": 6,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "未逐一核对 group closer 与 final closure 的派工正文是否提到 AC08–AC10 的页面接线；registry 没有对应条目，group-01 writeback 只以服务文件为 F001-AC08/09/10 交账，目前只能确定该缺口没有被可追踪地交接。"
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/entryability/EntryAbility.ets",
+      "reason": "已确认修复（stream-01 L3151）在 onForeground/onBackground 注册/注销能力级前台派发，这是修复期针对 HarmonyOS 按 UIAbility 注册所做的架构选择。生成期规格把注册放在页面 onShow/onHide，相应的缺口已在 NfcSessionManager 图中归因；未发现生成写入 EntryAbility 时有独立偏差，因此不单独画链。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/pages/ReadTagPage.ets",
+      "reason": "已确认修复（stream-01 L3648）为 ReadTag 登记“不开派发”的 TagPage，这是为新的可见页登记表做的接线适配。生成期 ReadTag 本来就不注册前台派发，与 Android ReadTag 不继承 BasicActivity 一致；未见生成偏差。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/viewmodels/CloneUidController.ets",
+      "reason": "已确认修复（stream-01 L3779、L3696）让 onNewIntent 与“继续写入”经 Promise 链串行执行（A12）。生成期由 Slice 14（agent-a903d97c21cbaf2b0）写出、closer（agent-a90adb2c8ad687e00）再改动；尚未核对它们写前是否收到“Android 主线程串行”的要求，生成来源未完成归因。"
+    }
+  ],
+  "job": "issue-3735da03c6e544339df6",
+  "metadata": {
+    "migration": {
+      "project": "MifareClassicTool",
+      "server_session_id": "6ccfd659-7ee2-49d9-a90b-a7fa247e4484"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5",
+        "claude-sonnet-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.247"
+      ]
+    },
+    "source_set_id": "sources-aa4e59703bcc1d60f854",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos",
+        "at": "2026-10-01T12:05:48.424Z",
+        "ref": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-abba5084389876d39.jsonl:L102",
+        "request_ref": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-abba5084389876d39.jsonl:L101",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos",
+        "at": "2026-10-01T12:05:48.424Z",
+        "ref": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-abba5084389876d39.jsonl:L102",
+        "request_ref": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-abba5084389876d39.jsonl:L101",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-10-01T22:42:23.282Z",
+        "ref": "repair/mifareclassictool-migration-complete-20261008/fix-mifareclassictool-opus/stream-01.jsonl:L60",
+        "request_ref": "repair/mifareclassictool-migration-complete-20261008/fix-mifareclassictool-opus/stream-01.jsonl:L58",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-10-01T22:42:23.282Z",
+        "ref": "repair/mifareclassictool-migration-complete-20261008/fix-mifareclassictool-opus/stream-01.jsonl:L60",
+        "request_ref": "repair/mifareclassictool-migration-complete-20261008/fix-mifareclassictool-opus/stream-01.jsonl:L58",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "6f4879bc-c69f-4670-9167-9b09da20a889"
+      ]
+    }
+  },
+  "revision": "38c6e0dfc90fd2fe86eb204ba199a8fd1d8df2fc6b790f9073ac59a0c02a29f8"
+}

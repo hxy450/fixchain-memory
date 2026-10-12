@@ -1,0 +1,381 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-afea6fdc0d6edca2222e",
+  "created_at": "2026-10-11T18:01:19.829958+00:00",
+  "migration_key": "000b5663-bd91-43fd-9509-147b230e6657",
+  "title": "无定位坐标时把附近站点短路为空成功，丢失按城市查询并误显示“附近无站点”",
+  "when": "功能切片实现阶段（数据层与ViewModel），为依赖定位的附近列表确定无坐标、未授权时的查询分支与结果状态时；以及页面接线时排列错误、空态与已有内容的显示优先级时",
+  "description": "源端附近列表在有定位权限时按坐标加半径搜索、无权限或坐标未知时仍按当前城市查询；目标端坐标可能未知（未授权、无缓存坐标、未定位），决策要求失败保持显式错误与最近成功数据、不伪造空成功，页面只有isLoading/errorMessage/items几个状态字段。",
+  "summary": "Stage3 Group2 Slice2 写者（stage3_g2_slice2，agent-01a05ca9）写前实际读到：\nAndroid HomeFragment.startSearch() 以 PoiSearchV2.Query(\"\", POI_TRANSPORT, cacheCityCode) 按当前城市检索公交站，\n仅在定位城市一致且 PermissionUtil.isGrantedLocation() 时才附加 10km SearchBound；地图卡点击无权限时转去选城页\n（agent-01a05ca9-bf3f-7342-9ab9-8d14ca5c9aed.jsonl:L1309-L1310）。同时读到 decision-ledger D-022\n“失败保持显式错误与最近成功数据，不伪造空成功”，其正文明确选定“显式 Result 联合类型 + 最近成功缓存 + 重试”、\n否决“空成功”；F002 规格要求未知坐标附 known=false、不得把 0.0 当真实位置，定位拒绝与失败为不同分支，\n并给出 LocationState（同转录 L1219-L1220）。这些输入已足以决定“坐标未知≠查询成功为空”。\n本次输出却在 HomeRepository.loadNearbyStations() 首行写 `if (!location.isKnown) return []`，只保留按坐标搜索，\n丢掉 Android 无权限时的城市查询（L1483-L1485）；HomeViewModel.nearbyStations() 只 restoreLocation() 读缓存坐标，\nloadContext() 仅在隐私已同意且已授权时定位，否则以未知坐标继续调用并把结果当作成功列表，状态只有\nisLoading/errorMessage/items，没有“定位不可用”分支（L1503-L1505）。随后该写者把 NearbyStationPage\n接到 nearbyStations()（L1539-L1541）、HomePage 接到 onFirstVisible()/refresh()（L1512-L1514），且首页附近入口\n去掉了 Android 的定位权限门槛，于是无缓存坐标时空数组落入两页 b02_nearby/b01_home 预先写好的\n`items.length === 0 → 附近无站点` 空态分支。偏差位于“已有源端分支与失败决策 → 数据层结果契约”这一环；\nslice2 自己的 source-notes 也只把 D-022 用在主查询失败上，未覆盖未知坐标分支（L1546）。\n这些片段保留到 09-03：09-03 高德接入（用户新要求 main-01a06628:L66，页面改动见 L670）只替换了附近页的地图与 Marker 层，\n诊断时读回的 HomeViewModel:133-148、HomeRepository:448-451 仍是生成原文（main-01a06628:L1243-L1244）。\n首页另有一条 UI 起点：b01_home（agent-01a05b8f）写前读到 D-022 一行结论（L206-L207），\n但 stationStateContent() 以 errorMessage 优先分支整块替换站点列表，并在 Refresh 外叠加 isLoading 全屏遮罩\n（L301-L303），使 ViewModel 保留的旧数据在刷新失败时被遮住；该分支保留到修复（agent-01a066a6:L158 删除）。\n最终修复：数据层有坐标按 10km 距离排序、无坐标按城市查询，返回区分 Content/Empty/Partial/Error 的结果\n（agent-01a066a5:L139-L253、L264）；两页改为消费 HomeNearbyState，仅“有效查询+成功返回空”显示“附近无站点”，\n刷新失败保留旧数据与 Marker，移除首页全屏遮罩，并补双语文案（agent-01a066a6:L158-L159）。\n附近站点改走高德 POI、权限申请/永久拒绝/定位关闭等新增状态 UI 属于 09-03 用户接入高德及修复期扩充，\n首页底部 dp16 尾距（agent-01a066d9:L76-L77）是修复中新生问题，均不作为本卡的生成偏差。\n",
+  "recommendations": [
+    "数据层实现前，把源端附近查询按“有权限且有坐标 / 无权限 / 坐标未知 / 定位失败”逐分支列出实际行为（本例 Android 无权限时仍按当前城市 POI 查询、有权限才加 10km 半径），再逐一映射到目标 Repository；不要用 `if (!isKnown) return []` 把整条分支短路。",
+    "对每个 `return []` 自检：只有“查询条件有效且服务成功返回空”才可表示空态；坐标未知、未授权、定位失败要以 Result 联合或状态枚举单独返回，与 D-022 这类“不伪造空成功”决策逐条对照。",
+    "ViewModel 对外暴露的附近状态至少区分定位不可用、加载失败、真空数据与有内容；页面空态文案（如“附近无站点”）只绑定真空数据状态。",
+    "接线时核对源端入口门槛（本例首页附近入口无定位权限时转选城页），确保无坐标状态不会以空列表直接进入附近页。",
+    "页面状态分派时，已有内容优先于刷新错误：失败时保留最近成功列表并以提示条显示错误与重试；刷新加载用局部指示，不用遮住天气、历史等其他分区的全屏遮罩。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/a/Desktop/app_realtime_transportation_harmony/entry/src/main/ets/repositories/HomeRepository.ets",
+        "since": "2026-09-01T13:48:11.692Z",
+        "at": "2026-09-07T04:08:05.293Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/a/Desktop/app-realtime-transportation-android/app/src/main/java/com/hkfybus/mobiletravel/ui/home/HomeFragment.kt",
+          "at": "2026-09-01T11:12:54.957Z",
+          "reason": "正常输入：slice2 用 sed 读取全文，回执含 startSearch() 以 cacheCityCode 建 PoiSearchV2.Query 按城市检索公交站，仅在已授权且同城时附加 10km SearchBound；足以说明无权限/无坐标时仍应按城市查询（agent-01a05ca9-bf3f-7342-9ab9-8d14ca5c9aed.jsonl:L1309-L1310）。"
+        },
+        {
+          "key": "/Users/a/Desktop/app_realtime_transportation_harmony/spec/decision-ledger.md",
+          "at": "2026-09-01T11:10:59.170Z",
+          "reason": "正常输入：回执含 D-022“失败保持显式错误与最近成功数据，不伪造空成功”及正文“选定 A 显式 Result 联合类型 + 最近成功缓存 + 重试；B 空成功被否决”（同转录 L1219-L1220）。"
+        },
+        {
+          "key": "agent-01a05ca9-bf3f-7342-9ab9-8d14ca5c9aed.jsonl",
+          "at": "2026-09-01T11:21:55.798Z",
+          "reason": "已收到上述源码与决策，apply_patch 新建 HomeRepository 时 loadNearbyStations() 首行写 `if (!location.isKnown) return []`，只按坐标 search('公交站')，把坐标未知当作成功空结果并丢掉城市查询分支（同转录 L1483-L1485）。该片段至 09-03 诊断读回仍在（main-01a06628:L1243-L1244，HomeRepository:448-451）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "slice2 以 exec_command 执行 sed -n '1,260p'/'261,503p' 读取 HomeFragment.kt 全文，回执返回 startSearch() 的城市级 PoiSearchV2.Query 与仅授权时附加 SearchBound 的分支；这是写 Repository/ViewModel 前的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/cc1135c5-0205-4975-812a-0690ee9b243c/epoch-0/sessions/agent-01a05ca9-bf3f-7342-9ab9-8d14ca5c9aed.jsonl",
+              "line": 1309
+            },
+            {
+              "source": "runs/cc1135c5-0205-4975-812a-0690ee9b243c/epoch-0/sessions/agent-01a05ca9-bf3f-7342-9ab9-8d14ca5c9aed.jsonl",
+              "line": 1310
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "slice2 以 exec_command 执行 sed 读取 spec/decision-ledger.md 多段并 cat F002，回执含 D-022 一行结论与正文（选定显式 Result + 最近成功缓存，否决空成功）；写前真实读取。",
+          "evidence": [
+            {
+              "source": "runs/cc1135c5-0205-4975-812a-0690ee9b243c/epoch-0/sessions/agent-01a05ca9-bf3f-7342-9ab9-8d14ca5c9aed.jsonl",
+              "line": 1219
+            },
+            {
+              "source": "runs/cc1135c5-0205-4975-812a-0690ee9b243c/epoch-0/sessions/agent-01a05ca9-bf3f-7342-9ab9-8d14ca5c9aed.jsonl",
+              "line": 1220
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/a/Desktop/app_realtime_transportation_harmony/entry/src/main/ets/viewModel/HomeViewModel.ets",
+        "since": "2026-09-01T13:48:11.692Z",
+        "at": "2026-09-07T04:08:05.293Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/a/Desktop/app-realtime-transportation-android/app/src/main/java/com/hkfybus/mobiletravel/ui/home/HomeFragment.kt",
+          "at": "2026-09-01T11:12:54.957Z",
+          "reason": "正常输入：HomeFragment 回执给出无权限时按城市查询、地图卡点击无权限转 SelectCityActivity 的源端分支（agent-01a05ca9-bf3f-7342-9ab9-8d14ca5c9aed.jsonl:L1309-L1310）。"
+        },
+        {
+          "key": "/Users/a/Desktop/app_realtime_transportation_harmony/spec/decision-ledger.md",
+          "at": "2026-09-01T11:10:59.170Z",
+          "reason": "正常输入：D-022 要求失败显式且保留最近成功数据、否决空成功（同转录 L1219-L1220）。"
+        },
+        {
+          "key": "/Users/a/Desktop/app_realtime_transportation_harmony/spec/baseline/features/F002-city-location-home.md",
+          "at": "2026-09-01T11:10:59.170Z",
+          "reason": "正常输入：同一次 cat 回执含 F002“未知坐标须附 known=false，不得把 0.0 当真实位置”“拒绝与失败为不同错误分支”及 LocationState = Idle | Requesting | Located | PermissionDenied | Failed（同转录 L1219-L1220）。"
+        },
+        {
+          "key": "agent-01a05ca9-bf3f-7342-9ab9-8d14ca5c9aed.jsonl",
+          "at": "2026-09-01T11:24:37.061Z",
+          "reason": "已收到上述输入，新建 HomeViewModel 时 nearbyStations() 只 restoreLocation() 读缓存坐标，loadContext() 仅在已同意隐私且已授权时定位，否则以未知坐标继续调用 loadNearbyStations() 并把返回的 [] 作为成功列表；状态只有 isLoading/errorMessage/items，未建定位不可用分支（同转录 L1503-L1505）。生成原文在 09-03 读回时未变（main-01a06628:L1243-L1244，HomeViewModel:133-148、177-210）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4,
+          "force": true,
+          "reason": "slice2 以 exec_command 执行 sed -n '1,260p'/'261,503p' 读取 HomeFragment.kt 全文，回执返回 startSearch() 的城市级 PoiSearchV2.Query 与仅授权时附加 SearchBound 的分支；这是写 Repository/ViewModel 前的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/cc1135c5-0205-4975-812a-0690ee9b243c/epoch-0/sessions/agent-01a05ca9-bf3f-7342-9ab9-8d14ca5c9aed.jsonl",
+              "line": 1309
+            },
+            {
+              "source": "runs/cc1135c5-0205-4975-812a-0690ee9b243c/epoch-0/sessions/agent-01a05ca9-bf3f-7342-9ab9-8d14ca5c9aed.jsonl",
+              "line": 1310
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 4,
+          "force": true,
+          "reason": "slice2 以 exec_command 执行 sed 读取 spec/decision-ledger.md 多段并 cat F002，回执含 D-022 一行结论与正文（选定显式 Result + 最近成功缓存，否决空成功）；写前真实读取。",
+          "evidence": [
+            {
+              "source": "runs/cc1135c5-0205-4975-812a-0690ee9b243c/epoch-0/sessions/agent-01a05ca9-bf3f-7342-9ab9-8d14ca5c9aed.jsonl",
+              "line": 1219
+            },
+            {
+              "source": "runs/cc1135c5-0205-4975-812a-0690ee9b243c/epoch-0/sessions/agent-01a05ca9-bf3f-7342-9ab9-8d14ca5c9aed.jsonl",
+              "line": 1220
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "同一次 exec_command 内 cat spec/baseline/features/F002-city-location-home.md，回执含 known=false 语义、拒绝与失败分支及 LocationState；写前真实读取。",
+          "evidence": [
+            {
+              "source": "runs/cc1135c5-0205-4975-812a-0690ee9b243c/epoch-0/sessions/agent-01a05ca9-bf3f-7342-9ab9-8d14ca5c9aed.jsonl",
+              "line": 1219
+            },
+            {
+              "source": "runs/cc1135c5-0205-4975-812a-0690ee9b243c/epoch-0/sessions/agent-01a05ca9-bf3f-7342-9ab9-8d14ca5c9aed.jsonl",
+              "line": 1220
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/a/Desktop/app_realtime_transportation_harmony/entry/src/main/ets/pages/realtime/NearbyStationPage.ets",
+        "since": "2026-09-01T13:48:11.692Z",
+        "at": "2026-09-07T04:08:05.293Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/a/Desktop/app-realtime-transportation-android/app/src/main/java/com/hkfybus/mobiletravel/ui/home/HomeFragment.kt",
+          "at": "2026-09-01T11:12:54.957Z",
+          "reason": "正常输入：回执显示首页附近入口 station.setOnClickListener 先判 PermissionUtil.isGrantedLocation()，无权限转选城页；附近站点数据来自按城市的 POI 查询（agent-01a05ca9-bf3f-7342-9ab9-8d14ca5c9aed.jsonl:L1309-L1310）。"
+        },
+        {
+          "key": "/Users/a/Desktop/app_realtime_transportation_harmony/spec/decision-ledger.md",
+          "at": "2026-09-01T11:10:59.170Z",
+          "reason": "正常输入：D-022 不伪造空成功（同转录 L1219-L1220）。"
+        },
+        {
+          "key": "agent-01a05ca9-bf3f-7342-9ab9-8d14ca5c9aed.jsonl",
+          "at": "2026-09-01T11:27:06.886Z",
+          "reason": "在已写出只读缓存坐标的 nearbyStations() 后，apply_patch 把 NearbyStationPage 的 aboutToAppear/onRetry 接到 nearbyStations() 并同步 items；无缓存坐标时得到无错误的 []，落入 b02_nearby 预写的 `items.length === 0 → home_no_nearby_station` 分支，把缺少定位显示成“附近无站点”（同转录 L1539-L1541）。09-03 高德接入只替换地图与 Marker 层，该接线与空态分支保留到修复（main-01a06628:L670；agent-01a066a6:L158 删除）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "slice2 以 exec_command 执行 sed -n '1,260p'/'261,503p' 读取 HomeFragment.kt 全文，回执返回 startSearch() 的城市级 PoiSearchV2.Query 与仅授权时附加 SearchBound 的分支；这是写 Repository/ViewModel 前的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/cc1135c5-0205-4975-812a-0690ee9b243c/epoch-0/sessions/agent-01a05ca9-bf3f-7342-9ab9-8d14ca5c9aed.jsonl",
+              "line": 1309
+            },
+            {
+              "source": "runs/cc1135c5-0205-4975-812a-0690ee9b243c/epoch-0/sessions/agent-01a05ca9-bf3f-7342-9ab9-8d14ca5c9aed.jsonl",
+              "line": 1310
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "slice2 以 exec_command 执行 sed 读取 spec/decision-ledger.md 多段并 cat F002，回执含 D-022 一行结论与正文（选定显式 Result + 最近成功缓存，否决空成功）；写前真实读取。",
+          "evidence": [
+            {
+              "source": "runs/cc1135c5-0205-4975-812a-0690ee9b243c/epoch-0/sessions/agent-01a05ca9-bf3f-7342-9ab9-8d14ca5c9aed.jsonl",
+              "line": 1219
+            },
+            {
+              "source": "runs/cc1135c5-0205-4975-812a-0690ee9b243c/epoch-0/sessions/agent-01a05ca9-bf3f-7342-9ab9-8d14ca5c9aed.jsonl",
+              "line": 1220
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/a/Desktop/app_realtime_transportation_harmony/entry/src/main/ets/pages/home/HomePage.ets",
+        "since": "2026-09-01T13:48:11.692Z",
+        "at": "2026-09-07T04:08:05.293Z"
+      },
+      "summary": "首页同时有两个起点。b01_home（agent-01a05b8f）写前读到 D-022“失败保持显式错误与最近成功数据”，\n但 stationStateContent() 用 errorMessage 优先分支整块替换站点列表，并在 Refresh 外叠加 isLoading 全屏遮罩；\nslice2 随后把页面接到只会以 [] 表示无坐标的 HomeViewModel，使首页无坐标时显示“附近无站点”。\n修复改为消费 HomeNearbyState、刷新失败保留旧数据、移除全屏遮罩（agent-01a066a6:L158）；随后底部尾距属修复中新生。\n",
+      "nodes": [
+        {
+          "key": "/Users/a/Desktop/app_realtime_transportation_harmony/spec/decision-ledger.md",
+          "at": "2026-09-01T06:03:01.691Z",
+          "reason": "正常输入：b01_home 读取 ledger 1-125 行，回执决策索引含 D-022“失败保持显式错误与最近成功数据，不伪造空成功”（agent-01a05b8f-e4d6-7af1-9eae-725ce12dc0c3.jsonl:L206-L207）；同会话 page_0034 规格还要求四态且无数据与失败不得混为一态（L214-L215）。"
+        },
+        {
+          "key": "agent-01a05b8f-e4d6-7af1-9eae-725ce12dc0c3.jsonl",
+          "at": "2026-09-01T06:09:14.709Z",
+          "reason": "apply_patch 新建 HomePage：stationStateContent() 以 `if (this.errorMessage.length > 0)` 优先显示错误块、else 才显示列表，并在 Refresh 外加 `if (this.isLoading)` 的 HOME_LOADING_MASK_COLOR 全屏遮罩；刷新失败或加载时遮住已保留的站点与其他分区，偏离 D-022 保留最近成功数据（同转录 L301-L303）。该分支保留到修复删除（agent-01a066a6:L158）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/a/Desktop/app-realtime-transportation-android/app/src/main/java/com/hkfybus/mobiletravel/ui/home/HomeFragment.kt",
+          "at": "2026-09-01T11:12:54.957Z",
+          "reason": "正常输入：slice2 读到 Android 首页无权限仍按城市查询公交站（agent-01a05ca9-bf3f-7342-9ab9-8d14ca5c9aed.jsonl:L1309-L1310）。"
+        },
+        {
+          "key": "/Users/a/Desktop/app_realtime_transportation_harmony/spec/decision-ledger.md",
+          "at": "2026-09-01T11:10:59.170Z",
+          "reason": "正常输入：slice2 读到 D-022 正文否决空成功（agent-01a05ca9-bf3f-7342-9ab9-8d14ca5c9aed.jsonl:L1219-L1220）。"
+        },
+        {
+          "key": "agent-01a05ca9-bf3f-7342-9ab9-8d14ca5c9aed.jsonl",
+          "at": "2026-09-01T11:25:06.947Z",
+          "reason": "apply_patch 把 HomePage 接到 HomeViewModel.onFirstVisible()/refresh() 并同步 isLoading/errorMessage/items；所接 ViewModel 在无坐标时返回无错误的 []，首页因而进入“附近无站点”空态（同转录 L1512-L1514，ViewModel 写入见 L1503-L1505）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "b01_home 以 exec_command 执行 sed -n '1,125p' spec/decision-ledger.md，回执决策索引含 D-022“失败保持显式错误与最近成功数据，不伪造空成功”；写 HomePage 前的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/cc1135c5-0205-4975-812a-0690ee9b243c/epoch-0/sessions/agent-01a05b8f-e4d6-7af1-9eae-725ce12dc0c3.jsonl",
+              "line": 206
+            },
+            {
+              "source": "runs/cc1135c5-0205-4975-812a-0690ee9b243c/epoch-0/sessions/agent-01a05b8f-e4d6-7af1-9eae-725ce12dc0c3.jsonl",
+              "line": 207
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": "target"
+        },
+        {
+          "from": 3,
+          "to": 5,
+          "force": true,
+          "reason": "slice2 以 exec_command 执行 sed -n '1,260p'/'261,503p' 读取 HomeFragment.kt 全文，回执返回 startSearch() 的城市级 PoiSearchV2.Query 与仅授权时附加 SearchBound 的分支；这是写 Repository/ViewModel 前的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/cc1135c5-0205-4975-812a-0690ee9b243c/epoch-0/sessions/agent-01a05ca9-bf3f-7342-9ab9-8d14ca5c9aed.jsonl",
+              "line": 1309
+            },
+            {
+              "source": "runs/cc1135c5-0205-4975-812a-0690ee9b243c/epoch-0/sessions/agent-01a05ca9-bf3f-7342-9ab9-8d14ca5c9aed.jsonl",
+              "line": 1310
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": 5,
+          "force": true,
+          "reason": "slice2 以 exec_command 执行 sed 读取 spec/decision-ledger.md 多段并 cat F002，回执含 D-022 一行结论与正文（选定显式 Result + 最近成功缓存，否决空成功）；写前真实读取。",
+          "evidence": [
+            {
+              "source": "runs/cc1135c5-0205-4975-812a-0690ee9b243c/epoch-0/sessions/agent-01a05ca9-bf3f-7342-9ab9-8d14ca5c9aed.jsonl",
+              "line": 1219
+            },
+            {
+              "source": "runs/cc1135c5-0205-4975-812a-0690ee9b243c/epoch-0/sessions/agent-01a05ca9-bf3f-7342-9ab9-8d14ca5c9aed.jsonl",
+              "line": 1220
+            }
+          ]
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "F002 对接点只给页面 isLoading/errorMessage/items，未列定位状态字段；修复新增的权限申请、永久拒绝、定位关闭等 UI 超出 Android 首页行为，本卡不把它们归为生成偏差。",
+    "未核有坐标时系统地理编码 search('公交站') 的实际返回质量；09-03 诊断聚焦未知坐标分支，改走高德 POI 属新要求。"
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/a/Desktop/app_realtime_transportation_harmony/entry/src/main/ets/services/AmapSdkService.ets",
+      "reason": "修复把附近站点查询改走高德 POI 周边/城市检索；高德接入是 09-03 用户新要求（main-01a06628:L66“参考安卓项目接入高德地图”、L251“全做”），生成期无高德能力，不作为生成偏差归因。"
+    },
+    {
+      "key": "/Users/a/Desktop/app_realtime_transportation_harmony/entry/src/main/ets/services/MapNavigationCapabilities.ets",
+      "reason": "为高德公交站检索新增能力层请求/结果类型，随新要求的高德接入修改，不作为生成偏差归因。"
+    },
+    {
+      "key": "/Users/a/Desktop/app_realtime_transportation_harmony/entry/src/main/resources/base/element/string.json",
+      "reason": "修复为新增定位/加载/部分成功状态补 16 组中文文案；生成期没有对应状态，也无本问题的偏差文案写入可绑定，归因随本卡 HomeViewModel/页面状态契约说明。"
+    },
+    {
+      "key": "/Users/a/Desktop/app_realtime_transportation_harmony/entry/src/main/resources/en_US/element/string.json",
+      "reason": "同上，为新增状态补英文文案；无独立生成偏差片段。"
+    }
+  ],
+  "job": "issue-afea6fdc0d6edca2222e",
+  "metadata": {
+    "migration": {
+      "project": "实时公交",
+      "server_session_id": "000b5663-bd91-43fd-9509-147b230e6657"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "gpt-5.6-sol"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.145.0-alpha.27"
+      ]
+    },
+    "source_set_id": "sources-ed5c7dd4ca4fbc6d1292",
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "c03ec964-fcaf-42ca-95a7-013ee58f3d86"
+      ]
+    }
+  },
+  "revision": "943782f7696306d4b8a9d5148b45d71ab364280f97477d24b7a2b0388027b0b3"
+}

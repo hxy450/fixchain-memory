@@ -1,6 +1,6 @@
 # data/network
 
-网络层：服务地址与环境、运行配置的构建期注入、URL 拼接、拦截器注入的公共请求头、请求体字段与编码（表单或 JSON）、登录凭证来源与失效踢登，加解密工具的前置返回与异常回退、网关加密传输到 cryptoFramework 的移植，以及多路请求聚合结果的缓存写入与命中，拦截器读取的公共参数（设备标识、当前分组）的生产者，网络权限声明，请求通道内会话密钥前置门（ensureKey）的取舍与握手基址，按承载判定计费网络
+网络层：服务地址与环境、运行配置的构建期注入、URL 拼接、拦截器注入的公共请求头、请求体字段与编码（表单或 JSON）、登录凭证来源与失效踢登，加解密工具的前置返回与异常回退、网关加密传输到 cryptoFramework 的移植，以及多路请求聚合结果的缓存写入与命中，拦截器读取的公共参数（设备标识、当前分组）的生产者，网络权限声明，请求通道内会话密钥前置门（ensureKey）的取舍与握手基址，按承载判定计费网络，链接 getter 追加的渠道等运行期参数
 
 [上一级](../index.md)
 
@@ -47,8 +47,11 @@
   - 时机：网络层实现阶段，把 Retrofit 接口迁成自写 HttpClient，确定 baseUrl 常量与各 Service 的 path 如何连成完整 URL 时
   - 情境：源端用 Retrofit 的 baseUrl 加 @GET/@POST 相对路径（多数不带前导 /，少数带），目标端改用 @kit.NetworkKit http 手工拼 URL；参考模板示范 `${baseUrl}${path}` 直接拼接；baseUrl 常量与各 Service 的 path 分散在不同文件里声明。
 - [移植加解密工具时逐分支保留源工具的前置返回与异常回退：空串不进 Cipher，解密失败回退为原文](lesson-4232e195ff42fc63ba43.lesson.md)
-  - 时机：网络层实现阶段，把 Android 请求参数加密与响应解密工具（AESUtil、aesEncrypt/aesDecrypt 一类）移植为 cryptoFramework 封装时
-  - 情境：Android 加密工具开头以 isEmpty 直接返回空串、不调用 Cipher，解密在 catch 中返回原文（明文响应也能通过）；目标用 cryptoFramework 对每个业务值做 AES-CBC，业务参数可能为空（如缺省城市没有经纬度），部分接口返回明文 JSON。
+  - 时机：规格提取与网络层实现阶段，确定响应解密/解码步骤的失败语义，或把 Android 请求参数加密与响应解密工具（AESUtil、aesEncrypt/aesDecrypt 一类）移植为 cryptoFramework 封装时
+  - 情境：Android 加密工具开头以 isEmpty 直接返回空串、不调用 Cipher，解密在 catch 中返回原文（明文响应也能通过）；目标用 cryptoFramework 对每个业务值做 AES-CBC，业务参数可能为空（如缺省城市没有经纬度），部分接口返回明文 JSON。也包括源端在响应转换钩子（如 beforeResponse）里于 release 下无条件调用 aesDecrypt，是否所有接口都返回密文没有抓包证据，规格或台账准备写“解密失败显式报错、不伪造成功”。
+- [迁移源端链接 getter 时按完整返回表达式构造 URL：配置里的基础地址加上 getter 追加的渠道等运行期参数，以“key=”空值结尾的 query 是待补值信号](lesson-da377615b178b2fe0c67.lesson.md)
+  - 时机：功能切片实现阶段，把源端配置读取与链接 getter（协议、隐私、个人信息清单等）迁移成目标 Service 里的 URL 常量或构造方法时
+  - 情境：Android 从 assets JSON 等配置读取基础地址（query 以 aliasCode= 一类空值结尾），由配置类的 getter 在返回时追加启动渠道等运行期参数；目标在 Service 层统一提供受控 WebView 链接，工程已有渠道常量或构建配置。
 - [鉴权失效判定按源响应拦截器实际分支的错误码与动作迁移，不把错误码枚举里的举例成员当触发条件](lesson-bad79e090d2af44d167b.lesson.md)
   - 时机：规格提取与网络层实现阶段，写 token 失效判定、踢登与刷新策略时
   - 情境：源端由响应拦截器按响应体 reasonCode 分支踢登，错误码枚举里同时有多个登录/token 相关成员（LoginExpired、TokenEmpty、TokenExpired、TokenInvalid、RemotingLoginExpired 等）；刷新 token 可能在进入主页的初始化请求里调用，不在拦截器里。

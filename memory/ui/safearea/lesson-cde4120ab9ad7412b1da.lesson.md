@@ -1,6 +1,6 @@
 # 自绘标题栏接入顶部安全区前先判定源端由谁避让：根 fitsSystemWindows 时 inset 放外层、工具栏保持源高；工具栏自带固定顶距时顶距与 inset 只取一份并同步高度
 
-ID：`lesson-cde4120ab9ad7412b1da` · 版本：1
+ID：`lesson-cde4120ab9ad7412b1da` · 版本：2
 
 [本主题](index.md)
 
@@ -26,9 +26,11 @@ ArkUI 固定 height 包含 padding：把 topInset 作为固定高度标题栏的
 2. 工具栏自带固定 paddingTop 为透明状态栏留位：顶距与 topInset 只取一份，常用 max(源 paddingTop, topInset) 替换该内距，高度写成 源高度 − 源 paddingTop + 该值，不再另加外层 inset。
 3. 给固定高度的标题栏加顶部内距前算可见内容高度 = height − paddingTop，小于源工具栏高度就改为外层 inset 或同步增高；从页面根到标题栏的纵向链路只保留一处状态栏避让。
 
-来源支持：1 张卡 · 1 次迁移 · 1 个应用
+来源支持：2 张卡 · 2 次迁移 · 2 个应用
 
 ## 来源（按需复核）
 
 - [case-7b7a48249f269a40a194](../../../store/cases/case-7b7a48249f269a40a194/57c870c2120fd77003685d94f6ed28de21a47a178a298a4d708b33203690ebc5.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3, recommendation:4
   卡片版本：`57c870c2120fd77003685d94f6ed28de21a47a178a298a4d708b33203690ebc5`
+- [case-ee2085c48fe78dbd3a2f](../../../store/cases/case-ee2085c48fe78dbd3a2f/0d5ffa24bf798f0358ab64f71da008ad0e9a55d64c0c62be2089ad430e3160d1.json) · 结论：recommendation:6
+  卡片版本：`0d5ffa24bf798f0358ab64f71da008ad0e9a55d64c0c62be2089ad430e3160d1`

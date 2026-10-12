@@ -1,6 +1,6 @@
 # ui/graphics
 
-图标与图形资源：动画矢量的状态帧、Lottie 动画层的接入、被注释的自定义绘制绑定、系统符号替代、资源迁移中的静态化标注，图标固有尺寸与 scaleType（含 vector 转来的 SVG），整屏背景图的缩放方式，自定义图片组件的形状与裁剪（含被父级自定义 Layout 放置时），自绘图表的坐标原点，按使用场景区分的资源变体映射，自绘视图自适应尺寸公式的参照基数，按产品 flavor 覆盖的 layer-list 根背景逐层落地与位图暂缺时的引用保留，以及多个指标共用的绘制分支按源端通用参数（线宽、描边）统一实现，缺失原图时从 Android 复制且不以近名图标或着色替代，文字字符按钮的字形；自绘 View 移植到 Canvas 的单位、帧循环、位图缓存语义与文字度量见子主题 canvas
+图标与图形资源：动画矢量的状态帧、Lottie 动画层的接入、被注释的自定义绘制绑定、系统符号替代、资源迁移中的静态化标注，图标固有尺寸与 scaleType（含 vector 转来的 SVG），整屏背景图的缩放方式，自定义图片组件的形状与裁剪（含被父级自定义 Layout 放置时），自绘图表的坐标原点，按使用场景区分的资源变体映射，自绘视图自适应尺寸公式的参照基数，按产品 flavor 覆盖的 layer-list 根背景逐层落地与位图暂缺时的引用保留，以及多个指标共用的绘制分支按源端通用参数（线宽、描边）统一实现，缺失原图时从 Android 复制且不以近名图标或着色替代，文字字符按钮的字形；自绘 View 移植到 Canvas 的单位、帧循环、位图缓存语义与文字度量见子主题 canvas；自绘角标与圆点按调用分支推导尺寸（半径与直径）；动画矢量（AVD）两态之间的形变过渡
 
 [上一级](../index.md)
 
@@ -10,22 +10,26 @@
 
 ## 本级经验
 
-- [AnimatedImageVector/animated-vector 按状态分别给出起点帧和终点帧；同名静态 SVG 只是起始帧](lesson-e6b1f9094ec3b905cab5.lesson.md)
-  - 时机：界面实现阶段转换 AnimatedImageVector/animated-vector 图标、决定各状态显示哪一帧时；以及资源迁移阶段遇到 animated-vector 时
-  - 情境：源码用 rememberAnimatedVectorPainter(icon, atEnd)，atEnd 由完成、运行等状态决定；目标资源目录里的同名媒体是资源迁移从 animated-vector 起始帧导出的静态 SVG；页面规格允许资源动画或等价符号，并要求保持可见的状态切换。
+- [AnimatedImageVector/animated-vector 按 atEnd 在起止帧之间实现形变过渡；同名静态 SVG 只是起始帧，两态静态帧或符号切换只在已批准降级时使用](lesson-e6b1f9094ec3b905cab5.lesson.md)
+  - 时机：规格提取与界面实现阶段，为 AnimatedImageVector/animated-vector 图标确定实现方案、各状态显示的帧与状态切换时的过渡时；以及资源迁移阶段遇到 animated-vector 时
+  - 情境：源码用 AnimatedImageVector.animatedVectorResource 与 rememberAnimatedVectorPainter(icon, atEnd)，atEnd 由完成、运行等状态决定，animated-vector 的 objectAnimator 以 pathData 的 valueFrom/valueTo、duration 与 interpolator 描述两态形变；目标没有直接等价组件，资源目录里的同名媒体是资源迁移从起始帧导出的静态 SVG；规格可能允许资源动画或等价符号，或写“图标态切换即可满足”。
+  - 例外：决策记录以编号批准省略形变过渡、差异验收与之一致时，按批准的两态静态帧或等价符号实现，仍按状态分别给出起止帧
 - [android:background 的整屏背景位图按拉伸铺满映射，不默认用 ImageFit.Cover 裁切](lesson-7708f650eb4b55dce045.lesson.md)
   - 时机：界面实现阶段，把源根布局的 android:background 背景图转换为 ArkUI 背景 Image 或背景图属性时
   - 情境：源根容器以 android:background=@drawable/xxx 铺设整屏背景位图，背景上画有需要完整显示的图文；目标用 Stack 底层 Image 或背景图属性重建。
   - 例外：源端是 ImageView 且显式 scaleType=centerCrop 一类裁切语义，按该 scaleType 映射
+- [从源端自绘角标、圆点控件推导目标固定尺寸时，按调用实际进入的分支取尺寸函数，drawCircle 的半径换成直径，密度分支写明所取档](lesson-99fe69fc59afa886750d.lesson.md)
+  - 时机：界面实现阶段（含补齐遗漏元素的返修），把 Android 自定义 BadgeView、红点 View 等按计数与屏幕密度分支计算尺寸的控件改写为固定 vp 的 Circle 或 Text 时
+  - 情境：源端以 setBadgeCount(0) 一类调用显示无数字红点，尺寸由 dp 半径基数、计数分支（无数字、个位数、更多）和密度分支共同决定，绘制用 drawCircle(半径)；目标用固定 vp 的 Circle 复刻，常叠在高度很小的入口 chip 或图标上；协调者可能转述或改写尺寸。
 - [修共享绘制分支里某一指标的显示差异时，按源端通用规则统一实现，不写单 key 特判；先列出落入该分支的全部指标](lesson-17d6e4c04764983be25a.lesson.md)
   - 时机：界面绘制修复阶段，按用户对某一指标的视觉反馈，调整多个指标共用的 Canvas 绘制分支（线宽、描边、填充样式）时
   - 情境：源端同类图形由通用 helper 按统一规则绘制（如 drawBars 中 STROKE/FILL_AND_STROKE 与 strokeWidth ?: 3f 像素），不区分指标 key；目标多个指标经分派落到同一绘制分支，用户只报告其中一个与源端粗细不一致。
 - [图标按源端原始资源与外形落实：检索全部限定词目录，缺失就从 Android 密度目录复制原图；不用文字字形、近名图标、系统符号、二次着色或纯色底替代](lesson-943544ce27bf04f9faf8.lesson.md)
-  - 时机：页面转换与截图对齐修复阶段，把源布局中的 @drawable 引用（头像、图标、装饰图、带透明边缘的头图、行尾箭头）落成 $r('app.media.X') 并确认资源是否已迁移时；为工具栏、菜单行、操作栏与悬浮入口选定图标资源，或在已有页面上把占位符号换成源端图标时
-  - 情境：资源迁移把 drawable-xhdpi 等位图直接复制到 resources/xldpi/media 一类限定词目录，不在 base/media；构建日志对这些图只报“does not have a base resource”警告；工程里还有外观相近的通用图标（如生活指数图标）。 也包括规格或布局已给出原始 drawable 名，目标 media 却只有其他模块的同类近名图标（如带 1/2 后缀的阅读器图标），现有代码用 SymbolGlyph 或 Unicode 字形占位，或工程 skill 要求图标优先用已验证的系统 symbol；以及源端用粗体文字字符（“-”“+”）充当按钮图形。
+  - 时机：页面转换与截图对齐修复阶段，把源布局中的 @drawable 引用（头像、图标、装饰图、带透明边缘的头图、行尾箭头）落成 $r('app.media.X') 并确认资源是否已迁移时；为工具栏、菜单行、操作栏与悬浮入口选定图标资源，或在已有页面上把占位符号换成源端图标时；规格提取阶段为源端图标与界面字符写转换决策时
+  - 情境：资源迁移把 drawable-xhdpi 等位图直接复制到 resources/xldpi/media 一类限定词目录，不在 base/media；构建日志对这些图只报“does not have a base resource”警告；工程里还有外观相近的通用图标（如生活指数图标）。 也包括规格或布局已给出原始 drawable 名，目标 media 却只有其他模块的同类近名图标（如带 1/2 后缀的阅读器图标），现有代码用 SymbolGlyph 或 Unicode 字形占位，或工程 skill 要求图标优先用已验证的系统 symbol；以及源端用粗体文字字符（“-”“+”）充当按钮图形。也包括源端 Text 直接显示 emoji 字符（如 ⭐、☕️），规格或写者按“不把 emoji 塞进 Text 当图标”一类 symbol 规则改成 SymbolGlyph。
 - [图标按资源固有 dp 显示、触摸盒放在外层：centerInside、wrap_content 或未设尺寸的图片不设成盒子尺寸再 Contain，同一 Image 上后写的槽位宽高会覆盖图标尺寸](lesson-bdc493f5950835f9bfcc.lesson.md)
   - 时机：界面实现阶段，把 ImageButton/ImageView 的固定触摸盒与 scaleType、或 wrap_content/drawableLeft 图标翻译成 ArkUI Image 尺寸时；复用已完成页面的控件行时；为不设尺寸的 Compose Image(painterResource) 确定目标尺寸时；把工具栏的文字或系统符号按钮替换为位图 Image，确定图标显示尺寸与点击热区时
-  - 情境：源图标按钮是固定 dp 盒加 scaleType=centerInside，或图标以 wrap_content、TextView drawableLeft/Start 显示，渲染尺寸取决于资源像素与密度目录；映射参考把 centerInside 对到 ImageFit.Contain。也包括 Compose Image(painterResource(vector drawable)) 不设尺寸、按 drawable 声明的 dp 固有尺寸与 ContentScale.Fit 显示，目标 SVG 由 vector drawable 转来。 也包括工具栏按钮原本在组件上链式设置点击区宽高（如 .width(40).height(48)），替换成位图后又在同一 Image 前面写图标宽高；源图标在 drawable-xxhdpi，目标资源放在不分密度的 base/media。 也包括多个列表页共用的推广卡片里，角标 ImageView 为 wrap_content 加 centerInside，位图在 drawable-xxhdpi，媒体留给后续批次拷贝。也包括 ImageView 用 padding 缩小可见图形（如圆形垫底），目标准备换成纯色形状。
+  - 情境：源图标按钮是固定 dp 盒加 scaleType=centerInside，或图标以 wrap_content、TextView drawableLeft/Start 显示，渲染尺寸取决于资源像素与密度目录；映射参考把 centerInside 对到 ImageFit.Contain。也包括 Compose Image(painterResource(vector drawable)) 不设尺寸、按 drawable 声明的 dp 固有尺寸与 ContentScale.Fit 显示，目标 SVG 由 vector drawable 转来。 也包括工具栏按钮原本在组件上链式设置点击区宽高（如 .width(40).height(48)），替换成位图后又在同一 Image 前面写图标宽高；源图标在 drawable-xxhdpi，目标资源放在不分密度的 base/media。 也包括多个列表页共用的推广卡片里，角标 ImageView 为 wrap_content 加 centerInside，位图在 drawable-xxhdpi，媒体留给后续批次拷贝。也包括 ImageView 用 padding 缩小可见图形（如圆形垫底），目标准备换成纯色形状。也包括轮播标题图一类 wrap_content ImageView，位图只在 drawable-xhdpi，目标 Image 只设 objectFit、未设宽高，映射参考写“wrap_content → 无需设置，自动适应”。
 - [无来源、无数据的兜底预览不添加源端没有的装饰：边框、选中态等可选视觉属性在未选择时不由兜底层伪造](lesson-c8909c3cb5f925913407.lesson.md)
   - 时机：界面实现或返修阶段，为编辑页、详情页的预览补无预览源、无数据时的兜底态时
   - 情境：源端预览容器本身是空容器，由运行时填入组件视图；可选视觉属性（如边框）默认未选择，选择后才绘制；目标要为没有预览源的状态写占位，并在其上叠加真实的选中层。

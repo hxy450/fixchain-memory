@@ -1,0 +1,202 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-34903093a988aad52061",
+  "created_at": "2026-10-11T21:57:45.490004+00:00",
+  "migration_key": "acdd6966-d460-4d88-b0a6-5dc0c5262ee5",
+  "title": "前台计时动画用 500ms 定时器并钳制单次增量，退后台回来不按墙钟追平",
+  "when": "计时/动画引擎实现阶段（含派工编排），把 Compose Animatable 帧驱动动画改写为自驱 ticker，确定刷新周期和退后台、回前台时的时间推进方式时",
+  "description": "源端计时进度由 Compose Animatable.animateTo(tween(duration, LinearEasing)) 驱动，帧时钟随宿主 ON_STOP 暂停。同一应用另有后台 Worker 按固定周期 tick（如 500ms tickerFlow + elapsedRealtime）。目标侧需要用 setInterval、displaySync 等自研 ticker 复刻前台进度推进和前后台切换行为。",
+  "summary": "写前输入：Slice 4 实现者 a4922 在 L24 完整读了 F002 规格，映射行写明 Animatable/animateTo(tween(duration, LinearEasing))\n→ “自研 TickerAnimatable（时间戳插值 + 高频 tick 驱动）”，并要求“行为等价”。L28 读到的源 Timer.kt 只有\nAnimatable(0f)/Animatable(Color) 和 animateTo(tween(..., LinearEasing))，没有 ticker，也没有 elapsedRealtime。\n派工却在这里先偏了：execute 主线 main-f254816a 在 L980 派工时写“Timer.kt 全量精读——状态机/ticker/elapsedRealtime 补偿”，\n第三段要求“500ms ticker”“前台 ticker 模型”。500ms 来自主线 L54 读到的 decision-ledger PD-C12。该条替代的是\nTimerWorker（500ms ticker + elapsedRealtime），对应 F008 的后台 tickerFlow，与 F002 前台 Animatable 无关；\n主线派工前没有读 F002 映射行（L954 只 sed 了 anchors）。\n实现者在 L108 思考中已发现派工的 500ms 与规格“高频 tick”矛盾，也知道原版逐帧刷新、500ms 会让进度环和厘秒文本\n每 0.5s 跳一次，最后仍选了“default 500ms per dispatch”。它当时的设计是 elapsed = now − startTime，这样能追平墙钟。\n但 L138 notes 和 L145 Write 改成了增量累加，onTick 与 advanceToWallClock 都写成\ndelta = Math.min(now − lastWallClock, tickMs * 2)。注释称“后台节流/挂起时增量被钳制，进度近似冻结，对齐 Compose\n帧时钟随页面挂起而暂停的语义（F002-AC14 guard 失败分支）”。实际上 Compose 的播放时间 = frameTime − startTime：\n帧时钟暂停只是后台不出帧，回前台首帧按真实流逝时间追平，必要时一帧结束。AC14 只说“计时照常停摆于前台”，\n没写回前台怎样推进，实现者把它读成了丢弃后台时间。\n生成期 TickerAnimatable 只有 L145 这一次写入，500ms setInterval 和 2×tick 钳制保留到生成结束。修复审计 R1:L883\n记为“clamp → must remove; make frame-rate”。修复在 R1:L2544 新建 FrameClock（displaySync 逐 vsync，可 pause/resume），\n在 R1:L2563 把 TickerAnimatable 重写为按 frame − 首帧推进并删除钳制；EntryAbility 改为随宿主可见性暂停/恢复帧时钟\n（R1:L9175）。同次重写还带了 Oklab 颜色插值、缓动等改动，不属于本卡归因。\n",
+  "recommendations": [
+    "派工编排阶段：feature 派工里的技术参数（tick 周期、补偿方式）以该 feature 规格的映射行为准。决策台账里属于其他模块的参数（如替代后台 Worker 的 500ms ticker）不要写进前台引擎派工。概括源码锚点前先核对文件实际内容：本例 Timer.kt 里没有 ticker 或 elapsedRealtime，它们在 TimerWorker.kt。",
+    "实现阶段：派工与规格冲突时（本例派工写 500ms、规格写高频 tick，源码逐帧刷新），按规格和源码行为实现，例如用 displaySync 逐 vsync 刷新；不能确定时回报冲突，不要以派工覆盖规格。",
+    "实现阶段：把 Compose Animatable 改写为自驱计时时，进度按绝对帧时间计算：(frameTime − 首帧时间) / duration。后台可以停止派帧，但回前台第一帧必须按真实流逝时间追平（可能一帧走完），不要对单次增量设上限，也不要逐 tick 累加增量。最小检查：10s 步骤跑 3s 后退后台 4s，回前台进度应约为 0.7，不应停在 0.3–0.4 附近。",
+    "规格提取阶段：描述前后台行为时把“后台期间不推进/不派帧”和“回前台按墙钟追平”分开写清，不要只用“停摆”这类可能被理解成丢弃后台时间的词。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/entry/src/main/ets/timer/TickerAnimatable.ets",
+        "since": "2026-10-01T14:11:08.477Z",
+        "at": "2026-10-01T23:45:55.694Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/spec/decision-ledger.md",
+          "at": "2026-10-01T10:38:13.564Z",
+          "reason": "主线派工的参数来源：Read 回执中 PD-C12 写着被替代功能是 TimerWorker（500ms ticker + elapsedRealtime 补偿 + 常驻通知），替代方案为“前台 500ms ticker；退后台写锚点会话”。这个 500ms 属于后台 Worker/F008 tickerFlow 的替代，没有定义 F002 前台 Animatable 的刷新周期（main-f254816a-2fd5-4687-b493-a2136a7510d9.jsonl:L52-L54）。"
+        },
+        {
+          "key": "main-f254816a-2fd5-4687-b493-a2136a7510d9.jsonl",
+          "at": "2026-10-01T12:03:26.540Z",
+          "reason": "派工偏差：Agent 派发 Slice 4 时写“Timer.kt 全量精读——状态机/ticker/elapsedRealtime 补偿”，第三段要求“500ms ticker”和“前台 ticker 模型”，把 PD-C12/TimerWorker 的后台周期搬进了 F002 前台引擎；本会话派工前未读 F002 映射行，L954 只 sed 了 anchors（同转录 L954、L980-L982）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/spec/baseline/features/F002-brew-timer-engine.md",
+          "at": "2026-10-01T12:03:37.831Z",
+          "reason": "正常输入：实现者 Read 回执中，映射行把 Animatable/animateTo(tween(duration, LinearEasing)) 映射为“自研 TickerAnimatable（时间戳插值 + 高频 tick 驱动）”，并要求“行为等价”，足以排除 500ms 刷新和按增量累加计时。AC14 只写“任一不成立静默不交（计时照常停摆于前台）”，没写回前台怎样推进（agent-a4922dccdd07c887a.jsonl:L21、L24）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Cofi/cofi-share/src/main/java/com/omelan/cofi/share/timer/Timer.kt",
+          "at": "2026-10-01T12:03:42.157Z",
+          "reason": "正常输入：Read 回执给出 :117-119 Animatable(Color)/Animatable(0f) 和 :189-201 animateTo(tween(durationMillis = duration, easing = LinearEasing))。前台进度由 Compose 帧驱动，文件里没有 ticker 或 elapsedRealtime（agent-a4922dccdd07c887a.jsonl:L27-L28）。"
+        },
+        {
+          "key": "agent-a4922dccdd07c887a.jsonl",
+          "at": "2026-10-01T12:19:39.100Z",
+          "reason": "实现偏差：L108 思考中已发现派工 500ms 与规格“高频 tick”矛盾，也承认原版逐帧刷新，仍按派工默认 500ms；最初设计 elapsed = now − startTime。L145 Write 却改为 setInterval(500) 加增量累加，onTick 与 advanceToWallClock 都写 Math.min(now − lastWallClock, tickMs * 2)，并注释成“后台近似冻结、对齐 Compose 帧时钟暂停（AC14 guard 失败分支）”，把帧时钟暂停误当成丢弃后台流逝时间（同转录 L108、L145-L146）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 5
+        },
+        {
+          "from": 3,
+          "to": 5
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/entry/src/main/ets/timer/FrameClock.ets",
+      "reason": "修复时新建的文件（R1:L2544，后续在 R1:L11947、L11959 调整），生成期没有对应文件或写者。生成期缺少帧时钟抽象的原因已在 TickerAnimatable 图中归因，本文件不另画生成链。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/entry/src/main/ets/timer/TimerEngine.ets",
+      "reason": "已确认修改（R1:L2569）：onStop 在 guard 通过后不再调用 pauseAnimations()，改由 FrameClock 冻结。同一脚本还改了 Oklab 颜色、Float 截断等其他问题；R1:L2574 加的是缓动。生成期 a4922 按 F002-AC20“ON_STOP guard 通过后前台 ticker 停止”和状态机“前台停摆 + 会话移交（PD-C12）”写了 onStop 暂停。这属于已批准的 PD-C12 替代方案，修复推翻该决策后才随 FrameClock 一起改写，机制与本卡的 500ms/钳制不同；本卡未追 AC20 文案的规格作者 ac26d607677f04547，不作归因。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/entry/src/main/ets/entryability/EntryAbility.ets",
+      "reason": "已确认修改（R1:L9175）：新增宿主可见性回调，按可见性 FrameClock.pause()/resume()（画中画中不暂停），是新帧时钟的配套接线。生成期 EntryAbility 写者没有收到任何帧时钟暂停/恢复要求，生成工程里也不存在帧时钟；缺失是 TickerAnimatable 设计的连带结果，未找到独立的写前偏差，本卡不另画生成链。"
+    }
+  ],
+  "job": "issue-34903093a988aad52061",
+  "metadata": {
+    "migration": {
+      "project": "Cofi",
+      "server_session_id": "acdd6966-d460-4d88-b0a6-5dc0c5262ee5"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-sonnet-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.247"
+      ]
+    },
+    "source_set_id": "sources-22befa667a51476d2497",
+    "environment": [
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0-alpha17",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos",
+        "at": "2026-10-01T06:38:41.480Z",
+        "ref": "generation/9176a7f7b2203f7a/runs/721fb7c7-0508-4e2f-8b79-cfb906c65d16/epoch-0/sessions/agent-ad0f8989f195b578f.jsonl:L18",
+        "request_ref": "generation/9176a7f7b2203f7a/runs/721fb7c7-0508-4e2f-8b79-cfb906c65d16/epoch-0/sessions/agent-ad0f8989f195b578f.jsonl:L17",
+        "phase": "generation"
+      },
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0-alpha17",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Cofi",
+        "at": "2026-10-01T06:58:28.349Z",
+        "ref": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/main-507b2f1f-5d21-4455-a17e-460566675ced.jsonl:L45",
+        "request_ref": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/main-507b2f1f-5d21-4455-a17e-460566675ced.jsonl:L43",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos",
+        "at": "2026-10-01T08:45:11.210Z",
+        "ref": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/agent-a6b66d337af813fff.jsonl:L63",
+        "request_ref": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/agent-a6b66d337af813fff.jsonl:L62",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos",
+        "at": "2026-10-01T10:50:10.334Z",
+        "ref": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/agent-a099e355ad83c788a.jsonl:L122",
+        "request_ref": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/agent-a099e355ad83c788a.jsonl:L121",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-10-01T14:45:59.485Z",
+        "ref": "repair/cofi-migration-complete-20261007/fix-cofi-opus/stream-01.jsonl:L288",
+        "request_ref": "repair/cofi-migration-complete-20261007/fix-cofi-opus/stream-01.jsonl:L287",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-10-01T14:45:59.485Z",
+        "ref": "repair/cofi-migration-complete-20261007/fix-cofi-opus/stream-01.jsonl:L288",
+        "request_ref": "repair/cofi-migration-complete-20261007/fix-cofi-opus/stream-01.jsonl:L287",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0-alpha17",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": null,
+        "at": "2026-10-01T14:53:18.885Z",
+        "ref": "repair/cofi-migration-complete-20261007/fix-cofi-opus/stream-01.jsonl:L713",
+        "request_ref": "repair/cofi-migration-complete-20261007/fix-cofi-opus/stream-01.jsonl:L712",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "e0dce297-f0f9-4e8e-adb6-f2a8eeef850a"
+      ]
+    }
+  },
+  "revision": "e127c825ec9e70a3c6237159da0b285cf7d81483112e4a883a38d41762f5a5aa"
+}

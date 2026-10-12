@@ -1,0 +1,188 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-65c33c4172d6d208c5a5",
+  "created_at": "2026-10-11T20:25:51.104512+00:00",
+  "migration_key": "6ccfd659-7ee2-49d9-a90b-a7fa247e4484",
+  "title": "把源码中逐处给出的 Toast 时长与文案处理压成统一 LONG 并删去 toLowerCase",
+  "when": "服务层与页面实现阶段，把源端 Toast.makeText 调用翻译成目标 Toast 封装或 showToast 调用、确定每处时长和文案拼接时",
+  "description": "Android 源码在同一文件或同一公共方法中混用 Toast.LENGTH_SHORT 与 Toast.LENGTH_LONG，部分 Toast 文案先取资源串再做 toLowerCase 等字符串加工；目标端用毫秒 duration 的 promptAction.showToast 或自建公共 Toast 桥。",
+  "summary": "三个目标共有同一种实现偏差：写前已读到 Android 源码里逐处写明的 Toast 时长与文案加工，输出却统一成 LONG（3500ms），并删去了文案加工。\n(1) NfcSessionManager / CommonService：Slice 1 引擎实现者 agent-a253fc76af4eeb005 已 Read Common.java 第 1–1299 行\n（agent-a253fc76af4eeb005.jsonl:L42-L43），回执含 treatAsNewTag 的\n\"UID \" + getString(info_copied_to_clipboard).toLowerCase() + ..., Toast.LENGTH_SHORT（777–781），以及新卡 Toast.LENGTH_LONG（789）。\n它先在 source-notes 中写下 D-19“服务层 Toast 3500ms 对齐 LENGTH_LONG”和 D-20“Resource 无法 toLowerCase，目标直接用资源原文”（L165），\n随后在 CommonService 追加只有 message 参数、duration 硬编码 3500 的 showToastString/showToastResource（L181-L182），\n再整文件写出 NfcSessionManager.treatAsNewTag：复制 UID 的 Toast 经该桥变成 LONG，也没有 toLowerCase（L185-L186）。\nD-20 给出的平台限制并不成立：同一段代码已经用 resolveString（resourceManager.getStringSync）把资源取成 string，再插进模板串，完全可以 toLowerCase。\n这两个片段到生成结束前保持未变（迁移完成态快照 CommonService.ets:824-842、NfcSessionManager.ets:232-246）。\n(2) WriteTagPage：页面转换者 agent-aaf1bab76055fff32 已 Read 完整 WriteTag.java（L29-L30），回执中 VTR 地址校验\ninfo_addr_not_hex_byte 是 Toast.LENGTH_SHORT（1431），而且是该文件唯一一处 SHORT。它也读过同项目 KeyMapCreatorPage 的\nTOAST_DURATION_LONG/SHORT 双常量先例（L113）。Write 时却只定义 TOAST_DURATION_LONG，这条 Toast 也写成 LONG（L145-L146）；\n后续 Slice 16 对该页的编辑没有触及此片段，迁移完成态 WriteTagPage.ets:457-461 仍是 LONG。\n修复阶段为 CommonService 增加 TOAST_SHORT 2000 / TOAST_LONG 3500 和 duration 参数，\ntreatAsNewTag 改为 toLowerCase + TOAST_SHORT、新卡 TOAST_LONG（repair stream-01 L3089、L3130），\n并用脚本把 WriteTagPage 中 info_addr_not_hex_byte 单独映射为 TOAST_SHORT（stream-01 L4825）。\n同批修复还加了逐条显示、单应用最多 5 条的 Toast 队列，并让全工程页面都经该队列显示。这是 Android NotificationManagerService 的系统行为，\napp 源码里只是 Toast.show()；生成期 spec、skill 与派工中都没有检索到排队或 MAX_PACKAGE_TOASTS 一类要求，\n所以队列部分按修复期新增的一比一平台行为要求处理，不归为生成偏差。本卡只归因时长与 toLowerCase。\n",
+  "recommendations": [
+    "实现公共 Toast 封装时，把时长做成每次调用的参数（SHORT 2000 / LONG 3500），不要按多数调用硬编码一个值；然后逐个调用点核对源码 LENGTH_*，原样映射。",
+    "写页面或服务前，在对应源文件中 grep Toast.LENGTH_SHORT 与 LENGTH_LONG。源文件两种都有、输出却只定义了一个时长常量时，回到每个 SHORT 调用点补齐。",
+    "以平台限制为由删除源码中的字符串加工（如 toLowerCase）前，先查实际采用的 API 返回类型；getStringSync 等接口取得 string 后应保留源码加工，不能把 Resource 层面的限制套到已经解析出来的字符串上。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/state/NfcSessionManager.ets",
+        "since": "2026-10-01T17:23:26.037Z",
+        "at": "2026-10-08T12:26:25.614Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/android/MifareClassicTool/app/src/main/java/de/syss/MifareClassicTool/Common.java",
+          "at": "2026-10-01T15:59:40.064Z",
+          "reason": "正常输入：Read 回执（limit 1300）含 treatAsNewTag 的 auto_copy_uid 分支，Toast 文案为 \"UID \" + getString(info_copied_to_clipboard).toLowerCase() + \" (\" + fmtUID + \")\"，时长 Toast.LENGTH_SHORT（777-781）；else 分支新卡 Toast.LENGTH_LONG（789）。这足以确定两条 Toast 的文案加工和时长（agent-a253fc76af4eeb005.jsonl:L42-L43）。"
+        },
+        {
+          "key": "agent-a253fc76af4eeb005.jsonl",
+          "at": "2026-10-01T16:15:42.007Z",
+          "reason": "收到上述源码后，source-notes D-20 以“Resource 无法 toLowerCase”为由删去小写加工（L165）；Write 整文件写出 treatAsNewTag，复制 UID 的 Toast 用 resolveString 已取成 string 却不调 toLowerCase，并经只有 3500ms 的 showToastString 显示，SHORT 变成 LONG（L185-L186）。该片段到生成结束未变。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/services/CommonService.ets",
+        "since": "2026-10-01T17:23:26.037Z",
+        "at": "2026-10-08T12:26:25.614Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/android/MifareClassicTool/app/src/main/java/de/syss/MifareClassicTool/Common.java",
+          "at": "2026-10-01T15:59:40.064Z",
+          "reason": "正常输入：同一 Read 回执中，经服务层 Toast 出口的调用既有 isHex、isValidDumpErrorToast 等 LENGTH_LONG，也有 treatAsNewTag 复制 UID 的 LENGTH_SHORT（781）。这说明服务层 Toast 桥需要按调用区分时长（agent-a253fc76af4eeb005.jsonl:L42-L43）。"
+        },
+        {
+          "key": "agent-a253fc76af4eeb005.jsonl",
+          "at": "2026-10-01T16:14:11.537Z",
+          "reason": "source-notes D-19 把服务层 Toast 出口定为“3500ms 对齐 LENGTH_LONG”（L165）；Edit 在 CommonService 追加 showToastResource/showToastString，只有 message 参数，showToast duration 硬编码 3500，没有 SHORT 通道（L181-L182）。随后 treatAsNewTag 的 SHORT Toast 只能经此桥变为 LONG。修复时为该桥加了 TOAST_SHORT/TOAST_LONG 和 duration 参数。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/pages/WriteTagPage.ets",
+        "since": "2026-10-01T17:23:26.037Z",
+        "at": "2026-10-08T12:26:25.614Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/android/MifareClassicTool/app/src/main/java/de/syss/MifareClassicTool/Activities/WriteTag.java",
+          "at": "2026-10-01T11:59:49.338Z",
+          "reason": "正常输入：Read 完整 WriteTag.java 的回执中，VTR 地址校验为 addrText.matches(\"[0-9A-Fa-f]{2}\") 失败时 Toast info_addr_not_hex_byte, Toast.LENGTH_SHORT（1428-1433），前后的 value_too_big/too_small 都是 LENGTH_LONG。这足以确定该条时长（agent-aaf1bab76055fff32.jsonl:L29-L30）。"
+        },
+        {
+          "key": "agent-aaf1bab76055fff32.jsonl",
+          "at": "2026-10-01T12:14:42.633Z",
+          "reason": "收到上述源码，也读过 KeyMapCreatorPage 的 LONG/SHORT 双常量先例（L113），Write WriteTagPage 时却只定义 TOAST_DURATION_LONG=3500，info_addr_not_hex_byte 的 promptAction.showToast 也用 TOAST_DURATION_LONG（L145-L146）。源码中唯一一处 SHORT 被抹平；该片段到生成结束未被后续编辑改动。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-65c33c4172d6d208c5a5",
+  "metadata": {
+    "migration": {
+      "project": "MifareClassicTool",
+      "server_session_id": "6ccfd659-7ee2-49d9-a90b-a7fa247e4484"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5",
+        "claude-sonnet-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.247"
+      ]
+    },
+    "source_set_id": "sources-aa4e59703bcc1d60f854",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos",
+        "at": "2026-10-01T12:05:48.424Z",
+        "ref": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-abba5084389876d39.jsonl:L102",
+        "request_ref": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-abba5084389876d39.jsonl:L101",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos",
+        "at": "2026-10-01T12:05:48.424Z",
+        "ref": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-abba5084389876d39.jsonl:L102",
+        "request_ref": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-abba5084389876d39.jsonl:L101",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-10-01T22:42:23.282Z",
+        "ref": "repair/mifareclassictool-migration-complete-20261008/fix-mifareclassictool-opus/stream-01.jsonl:L60",
+        "request_ref": "repair/mifareclassictool-migration-complete-20261008/fix-mifareclassictool-opus/stream-01.jsonl:L58",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-10-01T22:42:23.282Z",
+        "ref": "repair/mifareclassictool-migration-complete-20261008/fix-mifareclassictool-opus/stream-01.jsonl:L60",
+        "request_ref": "repair/mifareclassictool-migration-complete-20261008/fix-mifareclassictool-opus/stream-01.jsonl:L58",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "6f4879bc-c69f-4670-9167-9b09da20a889"
+      ]
+    }
+  },
+  "revision": "4e791966064653aae211dd9e75146c57c5901190c92a109e0510543ca7268152"
+}

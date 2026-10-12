@@ -1,0 +1,369 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-d923c5dbfc1e66ce5f8b",
+  "created_at": "2026-10-11T20:10:19.223451+00:00",
+  "migration_key": "6ccfd659-7ee2-49d9-a90b-a7fa247e4484",
+  "title": "把清单声明的NFC贴卡拉起入口判为无对等，并把自启动开关改写成前台派发闸门",
+  "when": "规格提取阶段，映射Android清单中的NFC TECH_DISCOVERED系统派发入口及其运行时启停开关时",
+  "description": "源应用用activity-alias/intent-filter声明android.nfc.action.TECH_DISCOVERED（meta-data指向nfc_tech_filter，如NfcA）作为贴卡拉起入口，并在偏好里用PackageManager.setComponentEnabledSetting启停该alias；各Activity另在onResume无条件开启前台派发（enableForegroundDispatch）。",
+  "summary": "规格主线写前已读到AndroidManifest中MainMenuAlias的TECH_DISCOVERED intent-filter与nfc_tech_filter meta-data，\n以及ref §11.3“Foreground Dispatch（NfcA）+ activity-alias TECH_DISCOVERED（可经偏好关闭alias）”、§8.5“开关只控制alias启停”。\n源端事实正确、足以说明存在一条独立于前台派发的系统贴卡拉起入口。规格主线却在feature-base跨栈映射基线中\n把“activity-alias TECH_DISCOVERED（贴卡自启动）”写成“无对等→应用内开关模拟”，并把setComponentEnabledSetting并入同一PD，\n即把“第三方不能运行时启停skill”扩大成“整个系统派发入口无对等”。生成期所有输入（skills、SDK查询、规格）都未出现\nohos.nfc.tag.action.TAG_FOUND或tag-tech，这一无对等判断也没有查证记录。F001规格据此写“贴卡以tag回调事件替代\nACTION_TECH_DISCOVERED Intent”，后续实现只做前台注册：Slice 1读过module.json5后只追加NFC_TAG权限，入口装配只改loadContent，\nmodule.json5始终只有home skill，EntryAbility没有解析贴卡want，也没有onNewWant。\n第二处偏差出现在F014规格：c4-04读到Preferences.java只对MainMenuAlias调setComponentEnabledSetting，ref §8.5也只说控制alias，\n它在AC12中仍正确描述源端行为；但替代方案写成“setDispatchEnabled：true=注册前台tag listener，false=不注册”，\nAC14还要求开关两态下前台贴卡“响应/不响应”。这把只影响系统派发的开关改成了前台派发闸门。\n该契约分两路以setDispatchEnabled接口位传下：Base-5读F014后，在PreferenceStore中注明“setDispatchEnabled消费此值、系统级组件启停不受控”；\nplan主线据spec汇总写入决策账本并派工Base-4，Base-4骨架注明“引擎在tag分发期消费该开关”。\nSlice 1据此在onForegroundTagDiscovered首行写入`if (!this.dispatchEnabled) return`（修前NfcSessionManager.ets:362），\n尽管它写前读过BasicActivity.onResume无条件开启前台派发。Slice 7按F014写出AutostartSimulator→setDispatchEnabled（注释为“前台tag发现注册开关”）\n及启动恢复。修复后module.json5新增TAG_FOUND+tag-tech/NfcA skill；EntryAbility在onCreate/onNewWant取TagInfo交给MainMenu，\n自启动关闭时冷启terminateSelf、热启退回后台；setDispatchEnabled更名为setAutostartEnabled，只拦截系统派发；\nPreferenceApplier改为同步恢复该开关并改调新接口（repair stream-01 L3078、L3145、L3151、L3162）。\n",
+  "recommendations": [
+    "规格提取时，把“清单声明的系统派发入口”和“运行时启停该入口的开关”分成两行映射。前者在HarmonyOS可用module.json5 skills声明actions为ohos.nfc.tag.action.TAG_FOUND、uris为type tag-tech/<源tech-list中的技术>，再在onCreate/onNewWant从want取TagInfo；只有后者才是第三方无法运行时启停的平台差异。",
+    "写“无对等/HARD-DIV”前，先查目标平台NFC与Ability skills文档或SDK，并在映射行写明查证依据；“不能动态禁用”不能推出“整条入口无对等”。",
+    "为平台差异设计替代开关时，先列出源开关实际影响的路径（本例只影响MainMenuAlias的系统派发与Chooser可见性，不影响BasicActivity.onResume的前台派发），替代实现只作用于同一路径，并在PD与AC中写明前台派发不受影响。",
+    "实现者收到“分发开关”类接口位时，对照源端基类是否用该偏好控制前台派发；源端无条件开启时，应把冲突回报给规格，不要在前台回调中加闸门。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/module.json5",
+        "since": "2026-10-01T17:23:26.037Z",
+        "at": "2026-10-08T12:26:25.614Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/android/MifareClassicTool/app/src/main/AndroidManifest.xml",
+          "at": "2026-10-01T09:21:47.525Z",
+          "reason": "正常输入：规格主线用Bash cat读取清单，回执给出MainMenuAlias（targetActivity MainMenu、exported、singleTop）的TECH_DISCOVERED intent-filter和meta-data @xml/nfc_tech_filter，足以确定源应用有独立的系统贴卡拉起入口（main-5dce7670-6d33-4372-86d7-d9708672de20.jsonl:L116-L118）；ref §11.3也把前台派发与alias并列（同转录L440-L442）。"
+        },
+        {
+          "key": "main-5dce7670-6d33-4372-86d7-d9708672de20.jsonl",
+          "at": "2026-10-01T09:35:29.134Z",
+          "reason": "规格主线（a2h-spec）写前在thinking中直接断言“activity-alias TECH_DISCOVERED → 无直接等价（应用内开关模拟）”（L471），随后Write feature-base：TECH_DISCOVERED入口写成“无对等→应用内开关模拟”，setComponentEnabledSetting并入PD-C6-F014-01；没有SDK或文档查证（L473-L475）。系统派发入口从此在规格中消失。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/spec/baseline/feature-base.md",
+          "at": "2026-10-01T09:54:30.651Z",
+          "reason": "交付桥梁：F001规格作者c4-01的Read回执包含该映射行和“检测到卡时自启动……无HarmonyOS等价”（agent-aedadd5e5914d0027.jsonl:L61-L62）。"
+        },
+        {
+          "key": "agent-aedadd5e5914d0027.jsonl",
+          "at": "2026-10-01T10:02:19.342Z",
+          "reason": "c4-01的F001 Write在实现映射中写“贴卡以tag回调事件替代ACTION_TECH_DISCOVERED Intent（依据：feature-base跨栈映射基线）”，只保留前台注册与注销，没有系统派发入口任务（L89-L90）。本链确认传递，不另判独立偏差。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/spec/baseline/features/F001-nfc-engine.md",
+          "at": "2026-10-01T15:59:25.827Z",
+          "reason": "交付桥梁：Slice 1的Read回执包含上述“tag回调事件替代ACTION_TECH_DISCOVERED Intent”映射行（agent-a253fc76af4eeb005.jsonl:L31、L34）。"
+        },
+        {
+          "key": "agent-a253fc76af4eeb005.jsonl",
+          "at": "2026-10-01T16:15:45.872Z",
+          "reason": "Slice 1写前cat到module.json5只有entity.system.home/ohos.want.action.home一个skill（L118-L119），随后Edit只追加ohos.permission.NFC_TAG，没有补TAG_FOUND+tag-tech/NfcA skill（L189-L190）。该缺口一直保留到修复前。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "规格主线的Bash调用直接cat该AndroidManifest.xml的绝对路径，回执原文包含MainMenuAlias的TECH_DISCOVERED intent-filter和nfc_tech_filter meta-data；这是写feature-base前对清单的真实读取。",
+          "evidence": [
+            {
+              "source": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/main-5dce7670-6d33-4372-86d7-d9708672de20.jsonl",
+              "line": 116
+            },
+            {
+              "source": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/main-5dce7670-6d33-4372-86d7-d9708672de20.jsonl",
+              "line": 118
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": 6
+        },
+        {
+          "from": 6,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/entryability/EntryAbility.ets",
+        "since": "2026-10-01T17:23:26.037Z",
+        "at": "2026-10-08T12:26:25.614Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/android/MifareClassicTool/app/src/main/AndroidManifest.xml",
+          "at": "2026-10-01T09:21:47.525Z",
+          "reason": "正常输入：清单回执给出MainMenuAlias TECH_DISCOVERED入口（singleTop，贴卡时以带tag的intent拉起或送达MainMenu）（main-5dce7670-6d33-4372-86d7-d9708672de20.jsonl:L116-L118）。"
+        },
+        {
+          "key": "main-5dce7670-6d33-4372-86d7-d9708672de20.jsonl",
+          "at": "2026-10-01T09:35:29.134Z",
+          "reason": "同一偏差：feature-base把TECH_DISCOVERED入口判为“无对等→应用内开关模拟”，没有要求入口能力解析贴卡want（L471、L473-L475）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/spec/baseline/feature-base.md",
+          "at": "2026-10-01T11:31:29.598Z",
+          "reason": "交付桥梁：plan/execute主线的Read回执包含“activity-alias TECH_DISCOVERED（贴卡自启动）| 无对等 → 应用内开关模拟”（main-5c351e82-95e2-401f-b543-f0184a296f20.jsonl:L80-L82）。"
+        },
+        {
+          "key": "main-5c351e82-95e2-401f-b543-f0184a296f20.jsonl",
+          "at": "2026-10-01T15:00:23.402Z",
+          "reason": "§3a-bis入口装配时，主线Read EntryAbility后Edit：只引入WindowModel并把loadContent改为MainPage，onCreate不读want中的TagInfo，也没有onNewWant（L1292-L1322）。后续group-closer只在onCreate加入restoreStartupPreferences。本链确认传递。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "规格主线的Bash调用直接cat该AndroidManifest.xml的绝对路径，回执原文包含MainMenuAlias的TECH_DISCOVERED入口；这是写feature-base前对清单的真实读取。",
+          "evidence": [
+            {
+              "source": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/main-5dce7670-6d33-4372-86d7-d9708672de20.jsonl",
+              "line": 116
+            },
+            {
+              "source": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/main-5dce7670-6d33-4372-86d7-d9708672de20.jsonl",
+              "line": 118
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/state/NfcSessionManager.ets",
+        "since": "2026-10-01T17:23:26.037Z",
+        "at": "2026-10-08T12:26:25.614Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/android/MifareClassicTool/app/src/main/java/de/syss/MifareClassicTool/Activities/Preferences.java",
+          "at": "2026-10-01T09:40:26.329Z",
+          "reason": "正常输入：c4-04的Read回执显示onSave只对mComponentName（MainMenuAlias）调setComponentEnabledSetting(ENABLED/DISABLED, DONT_KILL_APP)，不涉及前台派发（agent-a321f18b243ed7bf7.jsonl:L63-L64）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/spec/ref/MifareClassicTool_spec.md",
+          "at": "2026-10-01T09:40:11.743Z",
+          "reason": "正常输入：ref §8.5“检测到卡时自启动 | setComponentEnabledSetting(MainMenuAlias) | 控制NFC TECH_DISCOVERED activity-alias启停（Chooser列表可见性）”（agent-a321f18b243ed7bf7.jsonl:L54-L55）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/spec/baseline/feature-base.md",
+          "at": "2026-10-01T09:39:53.311Z",
+          "reason": "上游输入：已有“无对等→应用内开关模拟”的HARD-DIV行，但没有规定模拟开关作用于哪条派发路径（agent-a321f18b243ed7bf7.jsonl:L37-L38）；该上游偏差见module.json5与EntryAbility分支。"
+        },
+        {
+          "key": "agent-a321f18b243ed7bf7.jsonl",
+          "at": "2026-10-01T09:48:06.499Z",
+          "reason": "c4-04收到上述输入后，在thinking中写成“in-app NFC dispatch enable/disable”（L101）；F014 Write的PD替代路径写“NfcSessionManager.setDispatchEnabled（true=注册前台tag listener，false=不注册）”，AC14要求两态下前台贴卡响应/不响应，同文件AC12却仍正确写源端只启停alias（L127-L128）。开关从系统派发移到了前台派发。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/spec/baseline/features/F014-preferences.md",
+          "at": "2026-10-01T12:21:13.231Z",
+          "reason": "交付桥梁：Base-5（PreferenceStore）的Read回执包含替代路径与AC14“false时不注册前台tag listener”（agent-ab8cb7ef853505574.jsonl:L45-L46）。"
+        },
+        {
+          "key": "agent-ab8cb7ef853505574.jsonl",
+          "at": "2026-10-01T12:27:16.754Z",
+          "reason": "Base-5按F014 Write PreferenceStore：autostart_if_card_detected注为“贴卡检测开关（消费方F001 NfcSessionManager.setDispatchEnabled）”，读接口注明“setDispatchEnabled消费此值（系统级组件启停/Chooser可见性不受控）”（L87-L88）。本链确认传递。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/preferences/PreferenceStore.ets",
+          "at": "2026-10-01T16:00:14.545Z",
+          "reason": "交付桥梁：Slice 1的Read回执包含上述“setDispatchEnabled消费此值、系统级组件启停不受控”注释（agent-a253fc76af4eeb005.jsonl:L68-L69）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/spec/decision-ledger.md",
+          "at": "2026-10-01T12:23:09.439Z",
+          "reason": "中继输入：Base-4的grep回执给出PD-C6-F014-01“setComponentEnabledSetting activity-alias贴卡自启动→应用内AutostartSimulator+NfcSessionManager.setDispatchEnabled(boolean)”（agent-abb65c44174c62dcf.jsonl:L67-L68）。该行由plan主线根据spec汇总agent的返回（含F014内容）写入（main-5c351e82-95e2-401f-b543-f0184a296f20.jsonl:L199-L204、L240）；子代理返回不属于文件交接，所以这里只作中继说明。"
+        },
+        {
+          "key": "agent-abb65c44174c62dcf.jsonl",
+          "at": "2026-10-01T12:28:12.163Z",
+          "reason": "Base-4派工要求“提供setDispatchEnabled(boolean)（PD-C6-F014-01决策的接口位）”，它读过上述ledger行后Write NfcSessionManager骨架：dispatchEnabled“贴卡自启动分发开关”默认true，HANDOFF写“Slice 1引擎在tag分发期消费该开关”（L1、L95-L96）。本链确认传递。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/state/NfcSessionManager.ets",
+          "at": "2026-10-01T15:59:55.700Z",
+          "reason": "交付桥梁：Slice 1的Read回执包含dispatchEnabled字段及上述HANDOFF（agent-a253fc76af4eeb005.jsonl:L53-L54）。"
+        },
+        {
+          "key": "agent-a253fc76af4eeb005.jsonl",
+          "at": "2026-10-01T16:15:42.007Z",
+          "reason": "Slice 1 Write引擎实装：onForegroundTagDiscovered首行为`if (!this.dispatchEnabled) return`（注释“贴卡检测开关关闭→不向页面派发”），即修前:362的前台闸门（L185-L186）。它写前读过BasicActivity.onResume无条件开启前台派发（L38-L39），但接口位与PreferenceStore注释已规定在派发期消费；本链确认传递。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": 6
+        },
+        {
+          "from": 6,
+          "to": 7
+        },
+        {
+          "from": 7,
+          "to": 11
+        },
+        {
+          "from": 8,
+          "to": 9,
+          "force": true,
+          "reason": "Base-4的Bash调用grep该decision-ledger.md的绝对路径中的PD-C6-F014-01，回执返回setDispatchEnabled(boolean)这一行。这是写NfcSessionManager骨架前对决策账本的真实读取。",
+          "evidence": [
+            {
+              "source": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-abb65c44174c62dcf.jsonl",
+              "line": 67
+            },
+            {
+              "source": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-abb65c44174c62dcf.jsonl",
+              "line": 68
+            }
+          ]
+        },
+        {
+          "from": 9,
+          "to": 10
+        },
+        {
+          "from": 10,
+          "to": 11
+        },
+        {
+          "from": 11,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "生成期材料中没有TAG_FOUND或tag-tech的任何输入，无法确认规格作者当时能否从可用工具查到该能力；本卡归因为未经查证就断言无对等，而不是明知有对等仍弃用。",
+    "Slice 1写前读过BasicActivity.java，但收到的骨架与HANDOFF已要求“引擎在tag分发期消费该开关”；本卡把它作为传递者，不另判独立失职。"
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos/entry/src/main/ets/services/PreferenceApplier.ets",
+      "reason": "修改已确认（AutostartSimulator/restoreStartupPreferences从setDispatchEnabled改调setAutostartEnabled，注释由“前台tag发现注册开关”改为只管系统派发，并改为同步initSync恢复；repair stream-01 L3145等）。原文已核：生成来源是Slice 7（agent-ae4f417d53ec5e038.jsonl:L27-L28读F014，L72-L73 Write），按F014-AC14写出“前台tag发现注册开关”，成因与NfcSessionManager图的c4-04偏差相同。但这次Write登记在/…/Entry/src/main/…的大写路径键下，与小写目标键不是同一索引文件；对该边加force被检查器以“contradicts indexed operation endpoints”拒绝。group-closer之后只按小写路径读取并标注P-S7-002兑现，没有已登记的文件交接能把c4-04接到小写目标，因此本目标不画图。"
+    }
+  ],
+  "job": "issue-d923c5dbfc1e66ce5f8b",
+  "metadata": {
+    "migration": {
+      "project": "MifareClassicTool",
+      "server_session_id": "6ccfd659-7ee2-49d9-a90b-a7fa247e4484"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5",
+        "claude-sonnet-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.247"
+      ]
+    },
+    "source_set_id": "sources-aa4e59703bcc1d60f854",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos",
+        "at": "2026-10-01T12:05:48.424Z",
+        "ref": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-abba5084389876d39.jsonl:L102",
+        "request_ref": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-abba5084389876d39.jsonl:L101",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/mifareclassictool-hmos",
+        "at": "2026-10-01T12:05:48.424Z",
+        "ref": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-abba5084389876d39.jsonl:L102",
+        "request_ref": "generation/6e60db6a096e7db2/runs/c47e9b98-33ae-420f-b29d-70733f8b0c8f/epoch-0/sessions/agent-abba5084389876d39.jsonl:L101",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-10-01T22:42:23.282Z",
+        "ref": "repair/mifareclassictool-migration-complete-20261008/fix-mifareclassictool-opus/stream-01.jsonl:L60",
+        "request_ref": "repair/mifareclassictool-migration-complete-20261008/fix-mifareclassictool-opus/stream-01.jsonl:L58",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-10-01T22:42:23.282Z",
+        "ref": "repair/mifareclassictool-migration-complete-20261008/fix-mifareclassictool-opus/stream-01.jsonl:L60",
+        "request_ref": "repair/mifareclassictool-migration-complete-20261008/fix-mifareclassictool-opus/stream-01.jsonl:L58",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "6f4879bc-c69f-4670-9167-9b09da20a889"
+      ]
+    }
+  },
+  "revision": "543d2282bb0caf83001b49301e407e5e4256669899f59d4fbf9d64c789925c37"
+}

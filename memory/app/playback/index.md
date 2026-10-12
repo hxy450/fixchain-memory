@@ -1,6 +1,6 @@
 # app/playback
 
-音视频播放：AVPlayer 封装的异步装载并发与停止复位、错误通道与 Promise 拒绝，控制门面同步路径的回退来源，跨实现组合切换步骤时的入口守卫，视频页 surface 绑定与画面比例
+音视频播放：AVPlayer 封装的异步装载并发与停止复位、错误通道与 Promise 拒绝，控制门面同步路径的回退来源，跨实现组合切换步骤时的入口守卫，视频页 surface 绑定与画面比例；短提示音的音频并发（混播/焦点）与播放中重入
 
 [上一级](../index.md)
 
@@ -9,6 +9,10 @@
 - [AVPlayer 错误只经一条通道上报，Promise 调用接 catch 并按状态表调用](lesson-d0736ecd82af68edb87a.lesson.md)
   - 时机：播放服务实现阶段，映射 ExoPlayer 的单次 onPlayerError，并调用 AVPlayer 的 prepare/play/pause/stop/reset 时
   - 情境：AVPlayer 同时有 on('error') 与 stateChange('error') 两条错误通道，控制方法返回 Promise；参考模板可能同时处理两条通道、prepare() 也不接 catch。
+- [MediaPlayer 短提示音迁 AVPlayer 时保留源端隐式语义：未申请音频焦点就与其他音频混播，start() 在播放中调用不重启](lesson-5475edc47af05c1c6a5b.lesson.md)
+  - 时机：规格提取与服务实现阶段，把 MediaPlayer.create(...).start() 一类短提示音映射到 AVPlayer 并写映射行、实现播放封装时
+  - 情境：源端用 MediaPlayer.create(context, R.raw.x) 加 start() 播放计时提示音等短音效，没有调用 requestAudioFocus；同一实例可能在上一次未播完时再次 start()。目标用 AVPlayer 播 rawfile，规格映射行只写“AVPlayer + rawfile，play() 重置重播”。
+  - 例外：源端申请了音频焦点（requestAudioFocus/AudioFocusRequest），此时按其焦点类型映射目标的焦点与打断策略
 - [异步 AVPlayer 装载使用代数令牌与实例归属，停止服务时显式复位](lesson-511385674c16eb68c88c.lesson.md)
   - 时机：播放服务实现阶段，把源端在调用线程同步完成的停止、重建、设源、prepare 改写为含 await 的 AVPlayer 封装，并迁移前台服务停止生命周期时
   - 情境：源播放器在单线程上串行装载，服务停止时 shutdown 置 STOPPED、下次启动重建；目标为常驻单例、方法返回 Promise。

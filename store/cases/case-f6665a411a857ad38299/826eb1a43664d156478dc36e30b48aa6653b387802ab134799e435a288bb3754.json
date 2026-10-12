@@ -1,0 +1,215 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-f6665a411a857ad38299",
+  "created_at": "2026-10-11T21:55:33.951129+00:00",
+  "migration_key": "acdd6966-d460-4d88-b0a6-5dc0c5262ee5",
+  "title": "页面内联计时文本只转写被调组件公式，漏掉调用点的 ×timeMultiplier，并改变 TimerValue 当前值格式与小数位确定时机",
+  "when": "界面实现阶段，把计时区文本组件（TimeText/TimerValue）转写成页面内联方法或公共组件时，确定显示进度实参与当前值格式化方式",
+  "description": "源 Compose 计时区由宿主 Timer 以 progress×timeMultiplier 作为实参调用共享 TimeText/TimerValue，被调组件内部只乘传入的进度；TimerValue 用无键 remember 确定是否显示小数，并把 roundToDecimals 的 Float 直接格式化进字符串资源。目标侧需要页面内联等价实现或重建公共组件。",
+  "summary": "RecipeDetailsPage 分支：页面转换者（首轮 a2h-execute 的 cv-0002 子代理）写前读过两份锚点源码。\napp/components/Timer.kt 的调用点写明 TimeText(animatedProgressValue = animatedProgressValue.value * timeMultiplier)，\nTimerValue 的实参为 calculatedAnimatedProgress = remember { derivedStateOf { animatedProgressValue.value * timeMultiplier } }；\ncofi-share TimerText.kt 写明被调组件内部 TimeText = (time × animatedProgressValue).toInt()，\nTimerValue 当前值 = value×progress×wm + alreadyDone，shouldShowDecimals 由无键 remember 确定，\n当前值为 roundToDecimals() 的 Float 或 roundToInt()。派工也指定这些 anchors 是“样式真源”，\n并要求在 Base-6 公共组件库未完成时“同页内联等价实现优先”，页内分叉由此产生。\n该代理思考中只按被调组件转写（L127、L163），首次 Write 的 timeTextOf 为\ntoStringDuration(step.time * this.progressValue, true)，timerValueTextOf 为\nstep.value * this.progressValue * this.weightMultiplier + alreadyDoneWeight，两处都丢了调用点的 ×timeMultiplier；\n当前值改用 toStringShort(roundToDecimals(current))，会去掉 Float 的“.0”，是否带小数也在每次调用时重新判断。\n这段片段一直保留到生成结束：Slice 8 接线者的派工已写明“显示进度 = progressValue × timeMultiplier”，\n它也读到了 timeTextOf，但只把 progressValue 改接到引擎，没有补乘数（agent-abe21593acb112058.jsonl:L1、L132）。\nF002 规格 AC32 早在 07:54 已写明显示进度换算，但页面派工未引用 F002，页面代理也没有读它；\n页面代理读到的源码已足以给出正确公式，因此本分支停在实现输出。\n修复者审计记下“timeTextOf … (missing ×timeMultiplier)”（R1:L883），随后重写详情页，\n改由共享 RecipeTimer/TimerText 按源公式计算并删除页内分叉（R1:L3924）。\n\nTimerText.ets 分支：续跑中的 Base-6 公共组件代理在 10:43 读到同一份 TimerText.kt，\n10:57 首次 Write 的 TimerValue 用 @Computed currentText，每次渲染都按 targetText.indexOf('.') 重算是否显示小数，\n当前值则以 `${roundToDecimals(current)}` 输出 JS 数字串（12.0 显示为“12”）。\n这与源码中无键 remember 只在步骤首次组合时确定一次、并输出 Float 字符串的行为不同。\n12:23 Slice 4 仅把本地 roundToDecimals 换成 NumberUtils 的 HALF_EVEN 版本，没有改变上述两点。\n该组件在生成态未被页面消费。修复时，R1:L2074 重写为 floatToString(roundToDecimals(...)) 或 roundToInt；\n复审子代理指出小数位随倍率重算（R1:L12072），R1:L13164 再改为每个步骤条目只确定一次 showDecimals。\n",
+  "recommendations": [
+    "迁移被宿主调用的共享组件时，同时转写调用点实参表达式和被调组件内部公式；源码中 progress×timeMultiplier 这类乘数在调用点时，内联到页面方法也要保留。",
+    "写完计时区文本后，按调用链逐项核对每个数值的乘数：TimeText=time×(progress×timeMultiplier)，TimerValue 当前值=value×(progress×timeMultiplier)×weightMultiplier+alreadyDone；可用倍率 2、进度 0.5 的样例检查是否显示满程值。",
+    "转写 Compose remember/derivedStateOf 时先看 key：无键 remember 只在首次组合时求值，对应的 ArkTS 状态要按步骤条目缓存一次，不能写成每次重算的 @Computed。",
+    "源码把 Float 直接放进字符串资源时，按 Kotlin Float.toString 的语义输出（保留“.0”），不要换成 toStringShort 或 JS 模板串。",
+    "派工允许页内内联等价实现时，派工者应附上对应 feature 规格中的显示公式条目（如显示进度换算），或在公共组件就绪后安排页面改用该组件，避免两套实现分叉。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/entry/src/main/ets/pages/RecipeDetailsPage.ets",
+        "since": "2026-10-01T14:11:08.477Z",
+        "at": "2026-10-01T23:45:55.694Z"
+      },
+      "nodes": [
+        {
+          "key": "507b2f1f-5d21-4455-a17e-460566675ced:main",
+          "at": "2026-10-01T08:37:10.272Z",
+          "reason": "派工上下文：Agent 派发 cv-0002，anchors 含 Timer.kt，并写明“Compose 项目：样式真源 = anchors 的 .kt 源码”“公共组件库 Base-6 未完成，同页内联等价实现优先”；页内分叉来自这条派工，但派工没有引用 F002 显示进度条目（main-507b2f1f:L1599-L1601）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Cofi/app/src/main/java/com/omelan/cofi/components/Timer.kt",
+          "at": "2026-10-01T08:37:42.859Z",
+          "reason": "正常输入：Read 回执给出 calculatedAnimatedProgress = remember { derivedStateOf { animatedProgressValue.value * timeMultiplier } }（:100-104）、TimeText(animatedProgressValue = animatedProgressValue.value * timeMultiplier)（:177）、TimerValue(animatedProgressValue = calculatedAnimatedProgress.value)（:207）。这足以说明显示进度要乘 timeMultiplier（agent-a5a172b9d52d8ceb6.jsonl:L38-L39）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Cofi/cofi-share/src/main/java/com/omelan/cofi/share/components/TimerText.kt",
+          "at": "2026-10-01T08:38:04.402Z",
+          "reason": "正常输入：Read 回执给出被调组件公式：TimeText = (time × animatedProgressValue).toInt()；TimerValue 当前值 = value×progress×wm + alreadyDone；shouldShowDecimals 由无键 remember { derivedStateOf { targetString.contains(\".\") } } 确定；当前值为 roundToDecimals() 的 Float 或 roundToInt()（agent-a5a172b9d52d8ceb6.jsonl:L79-L80）。"
+        },
+        {
+          "key": "507b2f1f-5d21-4455-a17e-460566675ced:a5a172b9d52d8ceb6",
+          "at": "2026-10-01T08:50:10.752Z",
+          "reason": "读过上述源码后，思考中只按被调组件写 TimeText = time*progressValue、TimerValue = value*progress*mult（L127、L163）。首次 Write 的 timeTextOf 为 toStringDuration(step.time * this.progressValue, true)，timerValueTextOf 进度也未乘 timeMultiplier，当前值写成 toStringShort(roundToDecimals(current)) 且每次调用重判小数位，丢掉了调用点的 ×timeMultiplier（agent-a5a172b9d52d8ceb6.jsonl:L165-L166）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/entry/src/main/ets/components/common/TimerText.ets",
+        "since": "2026-10-01T14:11:08.477Z",
+        "at": "2026-10-01T23:45:55.694Z"
+      },
+      "summary": "Base-6 公共组件代理读到 TimerText.kt 中无键 remember 确定 shouldShowDecimals，以及当前值为 roundToDecimals() 的 Float。\n首次 Write 的 TimerValue 却用 @Computed currentText 每次按 targetText 重判小数位，并以 `${roundToDecimals(current)}` 输出 JS 数字串。\nSlice 4 后来只替换了舍入实现，两处偏差保留到生成结束。修复先改为 floatToString(roundToDecimals) / roundToInt（R1:L2074），\n复审后再改为每个步骤条目只确定一次小数位（R1:L12072、R1:L13164）。\n",
+      "recommendations": [
+        "重建 TimerValue 等公共组件时，把源码中无键 remember 的“首次组合确定”语义落到按步骤条目缓存的状态里，不要写成每次重算的 @Computed。",
+        "当前值格式按源码 Float 字符串化语义实现（如 12.0 保留“.0”），可用目标 15.5、当前 12.0 的样例核对。"
+      ],
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Cofi/cofi-share/src/main/java/com/omelan/cofi/share/components/TimerText.kt",
+          "at": "2026-10-01T10:43:44.198Z",
+          "reason": "正常输入：Base-6 代理 Read 回执给出 TimerValue 的 val shouldShowDecimals by remember { derivedStateOf { targetString.contains(\".\") } }（无键，只在步骤首次组合时确定），以及 currentValueString: Number = roundToDecimals()（Float）或 roundToInt()（agent-a75b1dce962949479.jsonl:L71-L72）。"
+        },
+        {
+          "key": "f254816a-2fd5-4687-b493-a2136a7510d9:a75b1dce962949479",
+          "at": "2026-10-01T10:57:42.800Z",
+          "reason": "Write 新建 TimerText.ets：TimerValue.currentText 为 @Computed，每次按 targetText.indexOf('.') 重判；当前值写成 `${roundToDecimals(current)}`（JS 数字串，12.0 输出“12”）。无键 remember 的一次性语义和 Float 字符串格式都没有落实（agent-a75b1dce962949479.jsonl:L182-L183）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-f6665a411a857ad38299",
+  "metadata": {
+    "migration": {
+      "project": "Cofi",
+      "server_session_id": "acdd6966-d460-4d88-b0a6-5dc0c5262ee5"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-sonnet-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.247"
+      ]
+    },
+    "source_set_id": "sources-22befa667a51476d2497",
+    "environment": [
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0-alpha17",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos",
+        "at": "2026-10-01T06:38:41.480Z",
+        "ref": "generation/9176a7f7b2203f7a/runs/721fb7c7-0508-4e2f-8b79-cfb906c65d16/epoch-0/sessions/agent-ad0f8989f195b578f.jsonl:L18",
+        "request_ref": "generation/9176a7f7b2203f7a/runs/721fb7c7-0508-4e2f-8b79-cfb906c65d16/epoch-0/sessions/agent-ad0f8989f195b578f.jsonl:L17",
+        "phase": "generation"
+      },
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0-alpha17",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Cofi",
+        "at": "2026-10-01T06:58:28.349Z",
+        "ref": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/main-507b2f1f-5d21-4455-a17e-460566675ced.jsonl:L45",
+        "request_ref": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/main-507b2f1f-5d21-4455-a17e-460566675ced.jsonl:L43",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos",
+        "at": "2026-10-01T08:45:11.210Z",
+        "ref": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/agent-a6b66d337af813fff.jsonl:L63",
+        "request_ref": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/agent-a6b66d337af813fff.jsonl:L62",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos",
+        "at": "2026-10-01T10:50:10.334Z",
+        "ref": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/agent-a099e355ad83c788a.jsonl:L122",
+        "request_ref": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/agent-a099e355ad83c788a.jsonl:L121",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-10-01T14:45:59.485Z",
+        "ref": "repair/cofi-migration-complete-20261007/fix-cofi-opus/stream-01.jsonl:L288",
+        "request_ref": "repair/cofi-migration-complete-20261007/fix-cofi-opus/stream-01.jsonl:L287",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-10-01T14:45:59.485Z",
+        "ref": "repair/cofi-migration-complete-20261007/fix-cofi-opus/stream-01.jsonl:L288",
+        "request_ref": "repair/cofi-migration-complete-20261007/fix-cofi-opus/stream-01.jsonl:L287",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0-alpha17",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": null,
+        "at": "2026-10-01T14:53:18.885Z",
+        "ref": "repair/cofi-migration-complete-20261007/fix-cofi-opus/stream-01.jsonl:L713",
+        "request_ref": "repair/cofi-migration-complete-20261007/fix-cofi-opus/stream-01.jsonl:L712",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "e0dce297-f0f9-4e8e-adb6-f2a8eeef850a"
+      ]
+    }
+  },
+  "revision": "826eb1a43664d156478dc36e30b48aa6653b387802ab134799e435a288bb3754"
+}
