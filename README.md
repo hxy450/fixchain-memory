@@ -11,6 +11,10 @@
 
 当前知识版本以 `store/HEAD.json` 为准；`memory/manifest.json` 记录对应 revision、文件校验和与来源绑定。[MEMORY.md](MEMORY.md) 保留为兼容入口。
 
+## 部署到一次迁移
+
+[deploy/](deploy/README.md) 给任意 a2h 目标工程装上迁移记录（影子 git 快照 + Claude Code hook）和可选的首写 memory 召回，跑完补拷转录、打 `execute-end` 标签、做防抄扫描并打包归档：`python3 deploy/deploy.py install|status|finish --project <工程>`。不绑定 app，Windows / macOS / Linux 通用，部署本身不调用模型。召回读的经验库用部署版导出（见上节），不要直接拿开发版 `memory/`。
+
 ## 更新与历史
 
 每次迁移的调查任务收尾后统一归并，通过机械检查，再更新根目录的 `store/` 与带来源的 `memory/`，由调度器 commit 并 push 一次。推送失败保留本地提交，续跑只补推送，不重跑分析或强推远端。
