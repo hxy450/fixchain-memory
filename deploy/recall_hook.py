@@ -1,8 +1,8 @@
-"""Live first-write recall for an end-to-end migration run (the recall_sweep_digest arm, wired into a real run).
+"""Live first-write recall for a migration run (the recall_sweep_digest arm of a2h-replay-bench, wired into a real run).
 
-PreToolUse hook. At each agent's first explicit write (same rule as the shadow snapshots, harness/writes.py) it
-forks that agent's own transcript into a read-only recall worker (same model, Read/Glob/Grep, empty cwd, its own
-CLAUDE_CONFIG_DIR, so no project hooks, skills or session files of the run are touched), runs the recall steps
+PreToolUse hook. At each agent's first explicit write (same rule as the shadow snapshots, shadow_snapshot.py) it
+forks that agent's own transcript into a read-only recall worker (same model, Read/Glob/Grep, empty cwd, settings
+limited to project/local, so no hooks, skills or CLAUDE.md of the run are loaded), runs the recall steps
 (default sweep3) over the library, and denies that write once with the digest (one line per lesson: title ->
 the worker's reminder, body path). Explicit writes of the same agent issued while its recall runs wait for it
 and are denied with the same digest, so nothing lands before the agent has seen it. Fails open: a worker error,
@@ -16,9 +16,13 @@ holding the pending tool call.
 Everything goes under --root: config.json, state/ (one marker per session+agent), forks/<agent>-<n>/ (worker
 session, prompt, stream, result), recall-index.jsonl (one row per decision), hook-errors.log.
 
+Model access: with no --slot the worker uses the migration session's own endpoint, credentials and model (this
+hook's environment; the forked session file goes into that CLAUDE_CONFIG_DIR). With --slot it gets its own
+endpoint/key from the slot csv and a private config dir, and shares no quota with the migration.
+
 usage:
-  py recall_hook.py install --project P --root R --library L --slot glm-03[,glm-0x] [--method sweep3] [--model glm-5.3[1m]]
-                            [--effort high] [--max-workers 16] [--worker-timeout 1800]
+  py recall_hook.py install --project P --root R --library L [--slot glm-03[,glm-0x] --keys K] [--method sweep3]
+                            [--model M] [--effort high] [--max-workers 16] [--worker-timeout 1800]
   py recall_hook.py hook --root R                      (stdin = hook JSON; what install puts into settings)
   py recall_hook.py test --root R --transcript T --agent-id A --tool-use-id U   (fork + recall once, no hook)
   py recall_hook.py log --root R
@@ -156,6 +160,10 @@ def quota_hit(stream):
 
 def run_with_fallback(cfg, root, *args):
     """Run the worker on the first slot not known to be capped; on a cap, mark the slot and try the next one."""
+    if not cfg["slots"]:   # no slot: the migration session's own endpoint, credentials and model
+        d, res, text = run_worker(dict(cfg, slot=None), root, *args)
+        res["slot"] = "inherit"
+        return d, res, text
     capped_f = root / "capped-slots.json"
     for slot in cfg["slots"]:
         capped = json.loads(capped_f.read_text(encoding="utf-8")) if capped_f.exists() else {}
@@ -172,6 +180,35 @@ def run_with_fallback(cfg, root, *args):
     raise RuntimeError("every recall slot is capped")
 
 
+def inherit_env():
+    """No slot: the worker runs on this hook's environment, i.e. the migration session's endpoint and credentials
+    (and its CLAUDE_CONFIG_DIR, so a login stored there works too). The user's CLAUDE.md files and auto memory are
+    off; user settings and hooks are excluded by --setting-sources on the command line."""
+    drop = ("CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "CLAUDE_PROJECT_DIR", "CLAUDE_CODE_SSE_PORT")
+    env = {k: v for k, v in os.environ.items() if k not in drop}
+    env.update(CLAUDE_CODE_DISABLE_CLAUDE_MDS="1", CLAUDE_CODE_DISABLE_AUTO_MEMORY="1",
+               CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC="1", DISABLE_AUTOUPDATER="1")
+    return env
+
+
+def worker_model(transcript):
+    """The agent's own model: ANTHROPIC_MODEL if set, else the model of its latest reply, with [1m] because a forked
+    transcript can be long; None leaves the choice to Claude Code."""
+    if os.environ.get("ANTHROPIC_MODEL"):
+        return os.environ["ANTHROPIC_MODEL"]
+    model = None
+    for line in Path(transcript).read_text(encoding="utf-8", errors="replace").splitlines():
+        if '"assistant"' not in line:
+            continue
+        try:
+            m = (json.loads(line).get("message") or {}).get("model")
+        except ValueError:
+            continue
+        if m and not m.startswith("<"):
+            model = m
+    return model + "[1m]" if model and "[" not in model else model
+
+
 def run_worker(cfg, root, transcript, tool_use_id, tool, params, label):
     n = 1
     while (root / "forks" / f"{label}-{n}").exists():
@@ -180,7 +217,12 @@ def run_worker(cfg, root, transcript, tool_use_id, tool, params, label):
     cwd = d / "cwd"
     cwd.mkdir(parents=True)
     sid = str(uuid.uuid4())
-    proj = d / "cfg" / "projects" / re.sub(r"[^a-zA-Z0-9]", "-", str(cwd))
+    if cfg.get("slot"):
+        cfg_dir, env = d / "cfg", bench.slot_env(cfg["slot"], d / "cfg")
+    else:
+        env = inherit_env()
+        cfg_dir = Path(env.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude")
+    proj = cfg_dir / "projects" / re.sub(r"[^a-zA-Z0-9]", "-", str(cwd))
     proj.mkdir(parents=True)
     rows, cut, total = fork_rows(transcript, tool_use_id, sid, cwd)
     (proj / f"{sid}.jsonl").write_text("\n".join(rows) + "\n", encoding="utf-8")
@@ -194,10 +236,11 @@ def run_worker(cfg, root, transcript, tool_use_id, tool, params, label):
     (d / "fork.json").write_text(json.dumps({"transcript": str(transcript), "rows_kept": cut, "rows_total": total,
                                              "tool_use_id": tool_use_id}, ensure_ascii=False), encoding="utf-8")
     claude = os.environ.get("CLAUDE_BIN") or shutil.which("claude") or "claude"
-    cmd = [claude, "-p", "--resume", sid, "--model", cfg["model"], "--effort", cfg["effort"],
+    model = cfg["model"] or worker_model(transcript)
+    cmd = [claude, "-p", "--resume", sid] + (["--model", model] if model else []) + [
+           "--effort", cfg["effort"],
            "--tools", "Read,Glob,Grep", "--dangerously-skip-permissions", "--setting-sources", "project,local",
            "--max-turns", "200", "--output-format", "stream-json", "--verbose"]
-    env = bench.slot_env(cfg["slot"], d / "cfg")
     t0, code = time.time(), None
     with (d / "stream.jsonl").open("wb") as out, (d / "stderr.log").open("wb") as err:
         try:
@@ -279,19 +322,22 @@ def handle(root, payload):
 def install(a):
     root, project = Path(a.root), Path(a.project)
     root.mkdir(parents=True, exist_ok=True)
-    slots = [x.strip() for x in a.slot.split(",") if x.strip()]
+    slots = [x.strip() for x in (a.slot or "").split(",") if x.strip()]
+    if not a.library or not (Path(a.library) / "index.md").is_file():
+        raise SystemExit(f"no memory library (index.md) at {a.library}")
     cfg = {"library": str(Path(a.library)), "method": a.method, "model": a.model, "effort": a.effort, "slots": slots,
            "max_workers": a.max_workers, "worker_timeout": a.worker_timeout, "slot_wait": a.slot_wait,
            "project": str(project)}
     if a.method not in bench.RECALL_STEPS:
         raise SystemExit(f"unknown method {a.method}")
-    keys = Path(a.keys).expanduser().resolve()
-    if not keys.is_file():
-        raise SystemExit(f"no key csv at {keys} (--keys or BENCH_KEYS)")
-    cfg["keys"] = str(keys)   # the hook runs in Claude Code's environment, which may not carry BENCH_KEYS
-    bench.KEYS = keys
-    for x in slots:
-        bench.key(x)   # fails early on a missing slot (the key itself is never printed)
+    if slots:
+        keys = Path(a.keys).expanduser().resolve()
+        if not keys.is_file():
+            raise SystemExit(f"no key csv at {keys} (--keys or RECALL_KEYS)")
+        cfg["keys"] = str(keys)   # the hook runs in Claude Code's environment, which may not carry RECALL_KEYS
+        bench.KEYS = keys
+        for x in slots:
+            bench.key(x)   # fails early on a missing slot (the key itself is never printed)
     (root / "config.json").write_text(json.dumps(cfg, ensure_ascii=False, indent=1), encoding="utf-8")
     local = project / ".claude" / "settings.local.json"
     settings = json.loads(local.read_text(encoding="utf-8")) if local.exists() else {}
@@ -314,10 +360,11 @@ def main():
     ap.add_argument("--root", required=True)
     ap.add_argument("--project")
     ap.add_argument("--library", help="install: the memory library workers read (use an isolated copy)")
-    ap.add_argument("--keys", default=str(bench.KEYS), help="slot csv (slot,api_key,base_url); default BENCH_KEYS")
-    ap.add_argument("--slot", default="glm-03", help="worker slot(s), comma-separated: later ones take over when one is capped")
+    ap.add_argument("--keys", default=str(bench.KEYS), help="slot csv (slot,api_key,base_url); default RECALL_KEYS")
+    ap.add_argument("--slot", default="", help="worker key slot(s), comma-separated: later ones take over when one is "
+                    "capped; none = the migration session's own endpoint and credentials")
     ap.add_argument("--method", default="sweep3")
-    ap.add_argument("--model", default="glm-5.3[1m]")
+    ap.add_argument("--model", default="", help="worker model; default = the recalled agent's own model")
     ap.add_argument("--effort", default="high")
     ap.add_argument("--max-workers", type=int, default=16)
     ap.add_argument("--worker-timeout", type=int, default=1800)
