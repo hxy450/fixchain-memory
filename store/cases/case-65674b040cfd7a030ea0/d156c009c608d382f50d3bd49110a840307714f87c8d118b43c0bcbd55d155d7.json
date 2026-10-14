@@ -1,0 +1,175 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-65674b040cfd7a030ea0",
+  "created_at": "2026-10-13T13:04:52.536501+00:00",
+  "migration_key": "colorlines-glm53-aacaafce-bfb1-4c38-ac49-644f016af892",
+  "title": "给Canvas离屏位图自行加3倍超采样，偏离源端按显示尺寸生成位图",
+  "when": "界面转换与渲染功能实现阶段，为Canvas自绘的离屏位图（着色球、网格整图）确定生成分辨率和绘制方式时",
+  "description": "源端自绘View先把资源位图scaleBitmap到格子像素尺寸、按画布宽度createGrid生成网格图，再每帧1:1绘制；目标端用ArkUI OffscreenCanvas离屏生成ImageBitmap，并在定时器帧循环中逐帧drawImage。",
+  "summary": "页面转换agent（a601e4b3）写前读到了BaseAnimationTask.java（agent-a601e4b3dd0fcc681.jsonl:L44-L45）：\nonBeforeDraw用rate=cellSize/cell宽对cell和ball做scaleBitmap，createGrid(canvas.getWidth())按画布像素生成网格，\ndrawBall按缩放后的位图1:1绘制。源端没有任何超采样，这些输入已足以确定位图应按显示尺寸生成。\n它却在思考中把自身agent定义里的布局换算规则“assume 3x density: 1vp ≈ 3px”（用于把快照bounds换算成vp）\n挪作位图采样倍率（同转录L90），在BoardView.ets中写入TINT_SAMPLE_SCALE=3，\n用OffscreenCanvas(ballW×3, ballH×3)生成着色球（L114-L115，注释为“与迁移换算基线1vp≈3px一致，保证高密度屏不糊”）。\n渲染切片实现agent（acef64d0）随后读到这份BoardView.ets（L38-L39）、同一Java源码（L55-L56），\n以及F002规格AC12“cell与ball按rate=cellSize/cell宽缩放、createGrid以cell平铺生成整图缓存”（L30-L31）。\n它把TINT_SAMPLE_SCALE当作已有常量保留，又以“To keep crisp, supersample grid too”为由，\n把同一做法扩展到整盘网格，新增GRID_SAMPLE_SCALE=3（L95思考、L114-L115写入）。\n注释自称“源码ColorMatrix逐像素原位运算无此概念，纯质量项”，即“质量项”是写者自行添加的说法，规格和源码都没有给出依据。\n两名agent都假定OffscreenCanvas的尺寸参数是px，没有核实。返修实测网格图为3×369vp×3.5≈3875px见方，\n球位图为325px见方，而显示尺寸只有1291px和108px；定时器帧循环逐帧缩放绘制这些位图，没有lockCanvas那样的背压，\n渲染服务缓存因此积压直至卡死。\nFV-1收尾agent（a7b16e47）读回这两个常量（L130-L131），并把BoardAssets原样迁到game/BoardAssets.ets（L140），不改行为。\n返修在BoardAssets.ets中删除这两个常量，buildTinted和createGrid改为按显示尺寸生成位图\n（repair fb3def7c:L862-L868；后经CL-19改为以px为单位）。\n",
+  "recommendations": [
+    "实现阶段移植自绘管线时，离屏位图的尺寸直接取源码scaleBitmap和createGrid的目标尺寸（即显示尺寸），不要额外乘采样倍数；先确认OffscreenCanvas尺寸参数的单位（vp还是px，以及LengthMetricsUnit），再按显示像素生成位图。",
+    "像“1vp≈3px”这类密度换算规则只用于把快照或布局尺寸转换成vp，不能拿来当位图采样倍率。源码没有的“质量项”常量不要自行添加；确实要加时，先算出位图像素尺寸×每帧绘制次数的开销，并把它作为偏差记录下来。",
+    "接手已有渲染代码的实现者，保留前序常量前先对照源码确认它有依据；把同一做法推广到更大的位图（如整盘网格）前，先算出最终像素尺寸（格宽×格数×倍数×密度）与显示尺寸之比。",
+    "目标端用定时器驱动Canvas帧循环时没有lockCanvas背压，逐帧缩放大位图会让渲染服务积压；性能敏感路径应按源码一比一的尺寸生成位图，并1:1绘制。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-colorlines-glm5.3/entry/src/main/ets/game/BoardAssets.ets",
+        "since": "2026-10-11T20:20:17.766Z",
+        "at": "2026-10-12T12:03:59.020Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/colorlines-SergeyChelak-e2375e3/ColorLines/app/src/main/java/org/chelak/colorlines/board/BaseAnimationTask.java",
+          "at": "2026-10-11T17:54:35.876Z",
+          "reason": "正常输入：页面转换agent的Read回执给出scaleBitmap(ball, rate)和createGrid(canvas.getWidth())，按格子或画布像素生成位图后1:1绘制，没有超采样。这足以确定离屏位图应按显示尺寸生成（agent-a601e4b3dd0fcc681.jsonl:L44-L45）。"
+        },
+        {
+          "key": "aacaafce-bfb1-4c38-ac49-644f016af892:a601e4b3dd0fcc681",
+          "at": "2026-10-11T18:10:16.043Z",
+          "reason": "收到上述源码后，它把agent定义里用于布局bounds换算的“1vp≈3px”当作采样倍率（L90思考），并写出TINT_SAMPLE_SCALE=3和OffscreenCanvas(outW×3, outH×3)的着色球离屏位图（L114-L115）。超采样在源码到实现这一步引入。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-colorlines-glm5.3/entry/src/main/ets/components/BoardView.ets",
+          "at": "2026-10-11T18:31:53.660Z",
+          "reason": "交付桥梁：a601e4b3在18:10:16写入的这一版BoardView.ets第19-20行含TINT_SAMPLE_SCALE=3及注释“与迁移换算基线1vp≈3px一致”；渲染切片实现者在此时刻Read到的就是这一版（agent-acef64d098de8b72d.jsonl:L38-L39）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/colorlines-SergeyChelak-e2375e3/ColorLines/app/src/main/java/org/chelak/colorlines/board/BaseAnimationTask.java",
+          "at": "2026-10-11T18:32:06.311Z",
+          "reason": "正常输入：渲染切片实现者再次Read同一源码，回执中createGrid按画布像素尺寸生成整图、scaleBitmap按格子尺寸生成球位图（agent-acef64d098de8b72d.jsonl:L55-L56）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-colorlines-glm5.3/spec/baseline/features/F002-board-rendering.md",
+          "at": "2026-10-11T18:31:46.248Z",
+          "reason": "正常输入：F002 AC12要求cell与ball按rate=cellSize/cell宽缩放，createGrid以cell平铺boardSize×boardSize生成整图缓存；实现映射只要求离屏着色，没有超采样要求（agent-acef64d098de8b72d.jsonl:L30-L31）。"
+        },
+        {
+          "key": "aacaafce-bfb1-4c38-ac49-644f016af892:acef64d098de8b72d",
+          "at": "2026-10-11T18:44:23.357Z",
+          "reason": "收到正确的源码和规格后，它保留TINT_SAMPLE_SCALE（L95思考称existing constant, keep），并以“To keep crisp, supersample grid too”为由新增GRID_SAMPLE_SCALE=3，把整盘网格按3倍生成，每帧缩放绘制到画布。注释自称“源码……无此概念，纯质量项”（L114-L115写入）。这是网格分支的独立偏差。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-colorlines-glm5.3/entry/src/main/ets/components/BoardView.ets",
+          "at": "2026-10-11T20:05:03.377Z",
+          "reason": "交付桥梁：acef64d0在18:44:23写入的BoardView.ets同时含TINT_SAMPLE_SCALE=3和GRID_SAMPLE_SCALE=3（第31-34行）。此后只有af143895的一次@Param接线Edit，没有改动这两处；FV-1收尾者在此时刻读到的grep回执仍是这两个常量（agent-a7b16e4750bda2b3d.jsonl:L130-L131）。"
+        },
+        {
+          "key": "aacaafce-bfb1-4c38-ac49-644f016af892:a7b16e4750bda2b3d",
+          "at": "2026-10-11T20:06:11.584Z",
+          "reason": "结构收尾：它grep并读回两常量（agent-a7b16e4750bda2b3d.jsonl:L130-L131），把BallColorFilter和BoardAssets连同两常量原样迁到game/BoardAssets.ets（L140），不改行为。它只是交接者，不是成因。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 6
+        },
+        {
+          "from": 4,
+          "to": 6
+        },
+        {
+          "from": 5,
+          "to": 6
+        },
+        {
+          "from": 6,
+          "to": 7
+        },
+        {
+          "from": 7,
+          "to": 8
+        },
+        {
+          "from": 8,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "子代理的系统提示没有记在转录里。“assume 3x density: 1vp ≈ 3px”来自a601e4b3思考中的引用（L90），并与工程内.claude/agents/a2h-activity-converter.md第179行一致；该规则的原意是做布局尺寸换算。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-65674b040cfd7a030ea0",
+  "metadata": {
+    "migration": {
+      "id": "colorlines-glm53-aacaafce-bfb1-4c38-ac49-644f016af892",
+      "project": "ColorLines"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.296"
+      ]
+    },
+    "source_set_id": "sources-7f536a1e90f9b3ea6808",
+    "environment": [
+      {
+        "name": "toolchain.gradle",
+        "value": "6.1.1",
+        "basis": "configuration",
+        "artifact": "gradle-wrapper.properties",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-colorlines-glm5.3",
+        "at": "2026-10-11T17:05:49.851Z",
+        "ref": "generation/aacaafce-bfb1-4c38-ac49-644f016af892/subagents/agent-af5753d6c5d203c2e.jsonl:L135",
+        "request_ref": "generation/aacaafce-bfb1-4c38-ac49-644f016af892/subagents/agent-af5753d6c5d203c2e.jsonl:L134",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-colorlines-glm5.3",
+        "at": "2026-10-11T17:20:09.569Z",
+        "ref": "generation/aacaafce-bfb1-4c38-ac49-644f016af892.jsonl:L459",
+        "request_ref": "generation/aacaafce-bfb1-4c38-ac49-644f016af892.jsonl:L458",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-colorlines-glm5.3",
+        "at": "2026-10-11T17:20:09.569Z",
+        "ref": "generation/aacaafce-bfb1-4c38-ac49-644f016af892.jsonl:L459",
+        "request_ref": "generation/aacaafce-bfb1-4c38-ac49-644f016af892.jsonl:L458",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "2ca4df8c-ec61-43e1-84c4-c9f80fb84018"
+      ]
+    }
+  },
+  "revision": "d156c009c608d382f50d3bd49110a840307714f87c8d118b43c0bcbd55d155d7"
+}

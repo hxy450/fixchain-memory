@@ -1,0 +1,138 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-ac9700bf91b6d4147967",
+  "created_at": "2026-10-13T13:10:27.052428+00:00",
+  "migration_key": "colorlines-glm53-aacaafce-bfb1-4c38-ac49-644f016af892",
+  "title": "把单次绘制的Paint透明度改成画布全局状态，并靠读回globalAlpha复位",
+  "when": "界面实现阶段，将Android Canvas逐次绘制所用Paint的透明度/颜色滤镜映射为ArkUI Canvas上下文状态时",
+  "description": "源端每次drawBitmap都通过独立Paint（如ColorMatrixColorFilter的α对角元、setAlpha淡出）设置透明度，其他图层（网格、静态球）用各自默认Paint不透明绘制；目标端改用CanvasRenderingContext2D的globalAlpha等共享上下文状态实现，同一画布还要连续画不应受影响的图层。",
+  "summary": "Slice 2（F002棋盘渲染）实现者写前实际读到BaseAnimationTask.java：drawBall每次\nballPaint.setColorFilter(colorFilter.createFilter())后drawBitmap，α只在这一个Paint上；\nonDraw的网格用另一个paint不透明绘制。DisappearDrawTask.java每个待消球都copy滤镜、setAlpha(alpha)再drawBall；\nF002规格也写明drawBall时套用ballPaint.setColorFilter、Disappear用copy+setAlpha动态α。\n这些输入已足够说明：淡出α只作用于单次球绘制，网格和其他球保持不透明。\n实现者最初计划“画前设globalAlpha、画后复位1.0”（agent-acef64d098de8b72d.jsonl:L95），\n随后改成先读context.globalAlpha存prevAlpha、画完写回（L101），写前只确认了“property exists”（L112）。\nL114的Write把这段读回/写回落到BoardView.ets的drawBall，onDraw画网格前也没有设定globalAlpha。\n派工、F002规格和加载的skill都没有提到globalAlpha；项目skills中检索globalAlpha零命中，所以输入没有提示读回不可靠。\n偏差在于：把Paint级的局部属性改成共享画布状态后，复位依赖一个未核实的运行时读回，而不是回到已知默认值1。\n到生成检查点f758d61，这一片段仍原样保留（BoardView.ets:113-116）。返修时临时日志实测这台设备读\ncontext.globalAlpha得到undefined（drawBall alpha=1 prev=undefined after=undefined），写回undefined无效，\n淡出α留在画布状态上。返修CL-21改为首帧整盘、之后save/clip/restore增量重画后，\n现象是消除后整盘网格按0.95半透明，直到下次整盘重画。最终drawBall画完把globalAlpha直接复位为1，\n注释写明原因（fb3def7c…jsonl:L3717-L3737插桩与删除，L3745-L3746最终修改，L3773-L3774 CL-24回执）。\n",
+  "recommendations": [
+    "实现阶段把Android Paint上的α/颜色滤镜映射成globalAlpha等画布状态时，按“只作用于本次绘制”处理：画完把globalAlpha写回已知默认值1，或用成对的save()/restore()包住这一次绘制，不要先读getter再写回。",
+    "源端用独立默认Paint画的图层（如网格整图），目标端在绘制该图层前显式设好所需状态（globalAlpha=1、默认合成模式），使前一任务或前一帧遗留的状态影响不到它。",
+    "最小检查：在.ets中搜索`= context.<属性>`/`= ctx.<属性>`形式的画布状态读回；需要依赖读回时，先在目标设备打一次日志确认返回值不是undefined，并在淡出动画结束后对静态层取样确认不透明。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-colorlines-glm5.3/entry/src/main/ets/components/BoardView.ets",
+        "since": "2026-10-11T20:20:17.766Z",
+        "at": "2026-10-12T12:03:59.020Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/colorlines-SergeyChelak-e2375e3/ColorLines/app/src/main/java/org/chelak/colorlines/board/BaseAnimationTask.java",
+          "at": "2026-10-11T18:32:06.311Z",
+          "reason": "正常输入：Read回执给出drawBall每次ballPaint.setColorFilter(colorFilter.createFilter())后drawBitmap（:104-116），α限于这个Paint、不改画布状态；onDraw网格用独立paint绘制（:134-138）。足以确定淡出α只作用于单次球绘制（agent-acef64d098de8b72d.jsonl:L55-L56）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/colorlines-SergeyChelak-e2375e3/ColorLines/app/src/main/java/org/chelak/colorlines/board/DisappearDrawTask.java",
+          "at": "2026-10-11T18:32:16.608Z",
+          "reason": "正常输入：Read回执给出onTaskDraw先drawBalls(drawList)，再对每个待消球new ColorFilter(copy)、setAlpha(alpha)后drawBall（:57-66），淡出α按球逐个附在滤镜上（agent-acef64d098de8b72d.jsonl:L65-L66）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-colorlines-glm5.3/spec/baseline/features/F002-board-rendering.md",
+          "at": "2026-10-11T18:31:46.248Z",
+          "reason": "正常输入：规格写明着色在drawBall时套用（ballPaint.setColorFilter，:113），DisappearDrawTask用copy+setAlpha动态α（AC21）；没有要求用globalAlpha，也没有给出读回复位做法（agent-acef64d098de8b72d.jsonl:L30-L31）。"
+        },
+        {
+          "key": "aacaafce-bfb1-4c38-ac49-644f016af892:acef64d098de8b72d",
+          "at": "2026-10-11T18:44:23.357Z",
+          "reason": "已收到上述输入。思考中先计划画后复位1.0（L95），后改为prevAlpha=context.globalAlpha读回再写回（L101），只以“property exists”作核对（L112）；L114-L115的Write把Paint级α改成共享globalAlpha，并以未核实的读回复位，onDraw画网格前不设置globalAlpha。该片段到生成结束仍原样保留。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "生成版每帧整盘重画，按代码推断网格会按上一帧遗留的淡出α绘制，但材料中没有生成期设备观察；返修看到的“消除后持续半透明”出现在返修CL-21改成增量重画之后。",
+    "globalAlpha读回undefined只在返修所用设备上由临时日志实测过一次，材料不足以判断它是否为该API版本的普遍行为。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-ac9700bf91b6d4147967",
+  "metadata": {
+    "migration": {
+      "id": "colorlines-glm53-aacaafce-bfb1-4c38-ac49-644f016af892",
+      "project": "ColorLines"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.296"
+      ]
+    },
+    "source_set_id": "sources-7f536a1e90f9b3ea6808",
+    "environment": [
+      {
+        "name": "toolchain.gradle",
+        "value": "6.1.1",
+        "basis": "configuration",
+        "artifact": "gradle-wrapper.properties",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-colorlines-glm5.3",
+        "at": "2026-10-11T17:05:49.851Z",
+        "ref": "generation/aacaafce-bfb1-4c38-ac49-644f016af892/subagents/agent-af5753d6c5d203c2e.jsonl:L135",
+        "request_ref": "generation/aacaafce-bfb1-4c38-ac49-644f016af892/subagents/agent-af5753d6c5d203c2e.jsonl:L134",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-colorlines-glm5.3",
+        "at": "2026-10-11T17:20:09.569Z",
+        "ref": "generation/aacaafce-bfb1-4c38-ac49-644f016af892.jsonl:L459",
+        "request_ref": "generation/aacaafce-bfb1-4c38-ac49-644f016af892.jsonl:L458",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-colorlines-glm5.3",
+        "at": "2026-10-11T17:20:09.569Z",
+        "ref": "generation/aacaafce-bfb1-4c38-ac49-644f016af892.jsonl:L459",
+        "request_ref": "generation/aacaafce-bfb1-4c38-ac49-644f016af892.jsonl:L458",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "2ca4df8c-ec61-43e1-84c4-c9f80fb84018"
+      ]
+    }
+  },
+  "revision": "1c9e5e83417276cfe26322cb58a6713573bdc470dec56df99d24e7f1a0f16ac1"
+}

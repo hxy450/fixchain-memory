@@ -1,0 +1,209 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-3e5c96c55e58edbac2bb",
+  "created_at": "2026-10-13T13:08:51.358404+00:00",
+  "migration_key": "colorlines-glm53-aacaafce-bfb1-4c38-ac49-644f016af892",
+  "title": "把按帧推进的自绘渲染循环迁成33ms定时器并判为行为等价",
+  "when": "规格提取与执行派工阶段，为源端自绘渲染循环确定目标帧驱动方式和帧间隔时",
+  "description": "源端SurfaceView渲染线程在任务队列非空时不休眠，按lockCanvas/屏幕合成节奏逐帧推进；各动画按帧计步（每帧位移1px、每帧透明度-0.05、10帧/15帧完成），只有个别任务另带毫秒节流；目标端用ArkUI Canvas在单UI线程上驱动。",
+  "summary": "规格阶段的生成主会话已经读到源端BoardView.java的run循环：队列非空时直接lockCanvas→队首onDraw→unlockCanvasAndPost，\n只有队列空时才sleep(100)；也读到SelectedBall每帧y+=dir、Appear/Teleport每帧step++直到10/15、Disappear每帧alpha-0.05，\n而BallTrace的time-prevTime>30是唯一按毫秒节流的地方（主转录L72/L78、L84/L85）。这些已经足以说明：源端帧节奏就是合成节奏（约60fps），\n按帧计步的动画速度随帧率变化。\n主会话写feature-base「跨栈映射基线」时，却把渲染线程映射为“setInterval/setTimeout驱动帧循环（~33ms级）”，\n并断言“行为等价（动画时序/队列语义不变）”（L380）。这是最早能核实的偏差。转录里没有给出~33ms这个数的推理。\nF002规格作者agent-aa7c65343eb162fa6读了全部九个board源文件（L38-L39）、feature-base（L62-L63）和逐帧描述的ref §5.9（L68-L69），\n派工也写着“帧循环节奏 30ms/帧 vs 源码尽力渲染”（主转录L408）。它在§render里承认“源码为尽力渲染、无帧率上限”，\n却写成“ArkTS以~30ms定时器驱动（feature-base基线~33ms级）——步长/节流常量不变即行为等价……帧率上限差异不改变队列语义与动画终态”；\n实现映射写“活跃帧~30ms级、空闲档100ms”，AC05把活跃档定为每秒30+次（L115）。按帧计的步长被当成与帧率无关的时序常量，\n偏差由此固化成规格裁定。\n页面转换agent-a601e4b3dd0fcc681先写了30ms setInterval骨架，同时用TODO/P-S2-UNC-003指出该值“需与六个动画任务的逐帧位移量\n（Android端vsync连续循环）对照校准”。转换报告登记了“30ms帧节奏 vs Android vsync连续循环的动画速度对照”（a601 L114、L135），\n主会话读到了这一条（主转录L1194-L1195）。但派发Slice 2时，主会话以“依F002 spec AC（BallTrace 30ms/格为exact_value）确认30ms定值即忠实值\n→ resolved（FRAME_INTERVAL_MS=33帧循环 + 30ms步进节流）”关闭了这个疑点（L1424），把每格移动的节流当作帧间隔的依据，\n已经提出的校准没有做。这是第二个偏差。\n实现者agent-acef64d098de8b72d读了F002（L30-L31）并接受上述派工，整文件重写BoardView.ets：FRAME_INTERVAL_MS=33、IDLE_POLL_MS=100的双档setInterval，\n注释写“feature-base基线~33ms档；源码为lockCanvas尽力渲染无上限，步长常量不变即行为等价”；source-notes第18条注明依据是“spec §render裁定”\n（acef64 L110、L114-L115）。本链确认的是传递，不另推定它独立失职。此后生成期的写者都没有改动帧循环，生成结束时定时器仍在。\n决策台账D-007、D-009 #2（主转录L464、L911）也记了“定时器帧循环（~30ms级）”“30ms/步……0.05/帧逐值复刻”，这是同一判断的重复，\n不在实现者写前的读取路径上。\n返修会话在两端实测帧率：安卓SurfaceView层61.9fps，鸿蒙定时器实际只有21.6fps（返修转录L2086、L2110-L2111）。\n帧循环改为displaySync（期望值和上下限都是60），队列空时停帧、入队时恢复，实测58.8fps（L2124-L2134）。\n60fps整盘重画随机连玩约2分钟后，渲染服务RSImageCache积压到3GB并卡死（L2229-L2231）；于是利用ArkUI Canvas常驻画面，\n改成每个任务首帧整盘画、之后只在dirtyCells内clip重画（L2252-L2269），浸泡通过后记入CL-21检查点（L2406-L2414）。\n增量重画是返修中为承受60fps出现的新负载问题而做的适配，不归因于生成期；临时帧日志已删除。\n",
+  "recommendations": [
+    "规格提取阶段迁移源端自绘渲染循环时，逐个任务标明它是“按帧计步”还是“按时间节流”。本例Selected/Appear/Disappear/Teleport按帧推进，只有BallTrace按>30ms每格节流。只要存在按帧计步的动画，源端实际帧节奏（lockCanvas循环无sleep时约等于屏幕刷新率，约60fps）就是行为契约，应写入规格，不能写成“步长常量不变即行为等价”。",
+    "实现阶段用ArkUI替代按合成节奏推进的渲染线程时，优先用displaySync（setExpectedFrameRateRange设为60）这类逐帧回调驱动，不用固定间隔的setInterval；如果只能用定时器，就按实际帧间隔换算每帧步长，让动画总时长与源端一致（如淡出20帧约0.33s）。",
+    "执行派工阶段处理“帧节奏vs源端”这类不确定项时，不能拿另一个毫秒常量（如每格30ms移动节流）当作帧间隔依据；应回到源码循环确认有没有显式限速，再关闭疑点。",
+    "验收时为按帧计步的动画加一条速度对比：在两端同一场景（如选中球弹跳5秒）计数实际帧数，帧率差超过约10%即判为未等价（本例安卓约62fps、鸿蒙21.6fps）。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-colorlines-glm5.3/entry/src/main/ets/components/BoardView.ets",
+        "since": "2026-10-11T20:20:17.766Z",
+        "at": "2026-10-12T12:03:59.020Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/colorlines-SergeyChelak-e2375e3/ColorLines/app/src/main/java/org/chelak/colorlines/board/BoardView.java",
+          "at": "2026-10-11T17:03:15.511Z",
+          "reason": "正常输入：主会话Bash cat回执返回run循环。队列非空时不sleep、直接lockCanvas→队首onDraw→unlockCanvasAndPost，只有队列空时sleep(100)；同一回执还有SelectedBall每帧y+=dir和BallTrace>30ms节流（主转录L72/L78），Appear/Teleport/Disappear的每帧step++/alpha-0.05在L84/L85。这足以说明源端按合成节奏逐帧推进、动画按帧计步。"
+        },
+        {
+          "key": "aacaafce-bfb1-4c38-ac49-644f016af892:main",
+          "at": "2026-10-11T17:16:38.729Z",
+          "reason": "读到上述源码后，主会话Write feature-base跨栈映射基线，把“SurfaceView渲染线程（lockCanvas循环+空闲sleep 100ms）”映射为“setInterval/setTimeout驱动帧循环（~33ms级）”，并标注“行为等价（动画时序/队列语义不变）”（主转录L380-L381）。没有区分按帧计步与按时间节流，是最早可核的偏差。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-colorlines-glm5.3/spec/baseline/feature-base.md",
+          "at": "2026-10-11T17:18:44.284Z",
+          "reason": "交付桥梁：主会话写入的“~33ms级定时器帧循环、行为等价”基线行。F002作者Read的回执包含该表（agent-aa7c65343eb162fa6 L62-L63），其§render明确引用“feature-base基线~33ms级”。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/colorlines-SergeyChelak-e2375e3/ColorLines/app/src/main/java/org/chelak/colorlines/board/BoardView.java",
+          "at": "2026-10-11T17:18:24.660Z",
+          "reason": "正常输入：F002作者Read同一源文件，回执包含队列非空时不sleep的lockCanvas循环（agent-aa7c65343eb162fa6 L38-L39）；它随后又读了各DrawTask的每帧步进（L46-L54）和逐帧描述的ref §5.9（L68-L69），足以判断帧率会决定动画快慢。"
+        },
+        {
+          "key": "aacaafce-bfb1-4c38-ac49-644f016af892:aa7c65343eb162fa6",
+          "at": "2026-10-11T17:31:05.413Z",
+          "reason": "已读源码、feature-base和ref §5.9。F002的Write在§render承认“源码为尽力渲染、无帧率上限”，却裁定“ArkTS以~30ms定时器驱动——步长/节流常量不变即行为等价，帧率上限差异不改变……动画终态”；实现映射写“活跃帧~30ms级、空闲档100ms”，AC05把活跃档定为每秒30+次（同转录L115-L116）。按帧计的步长被当作与帧率无关的常量，偏差固化为规格。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-colorlines-glm5.3/spec/baseline/features/F002-board-rendering.md",
+          "at": "2026-10-11T18:31:46.248Z",
+          "reason": "交付桥梁：实现者Read的回执包含§render的“步长/节流常量不变即行为等价”和~30ms定时器映射行（agent-acef64d098de8b72d L30-L31）；实现者在source-notes第18条和代码注释中复述了这条裁定（L110、L114）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-colorlines-glm5.3/spec/execution/conversion-reports/page_0002_GameBoardFragment.md",
+          "at": "2026-10-11T18:12:13.895Z",
+          "reason": "纠正线索输入：页面转换agent-a601e4b3dd0fcc681写的报告（a601 L135-L136）登记了P-S2-UNC-003“30ms帧节奏 vs Android vsync连续循环的动画速度对照”，对应BoardView.ets中“需与六任务逐帧位移量对照校准”的TODO（a601 L114）。主会话Bash grep该报告，回执包含此行（主转录L1194-L1195）。"
+        },
+        {
+          "key": "aacaafce-bfb1-4c38-ac49-644f016af892:main",
+          "at": "2026-10-11T18:29:40.741Z",
+          "reason": "已收到UNC-003的校准要求，派发Slice 2的Agent提示仍写“P-S2-UNC-003 30ms帧节奏：依F002 spec AC（BallTrace 30ms/格为exact_value）确认30ms定值即忠实值 → resolved（FRAME_INTERVAL_MS=33帧循环 + 30ms步进节流）”，同一提示还列出每帧±1、每帧-0.05（主转录L1424-L1425）。它把每格移动节流当作帧间隔依据关闭了疑点，是第二个偏差。",
+          "problem": true
+        },
+        {
+          "key": "aacaafce-bfb1-4c38-ac49-644f016af892:acef64d098de8b72d",
+          "at": "2026-10-11T18:44:23.357Z",
+          "reason": "按上述规格和派工整文件Write BoardView.ets：FRAME_INTERVAL_MS=33、IDLE_POLL_MS=100的双档setInterval（scheduleTick），注释写“feature-base基线~33ms档；源码为lockCanvas尽力渲染无上限，步长常量不变即行为等价”（同转录L114-L115；source-notes第18条依据“spec §render裁定”，L110）。这是错误契约到目标文件的传递；此后生成期写者未改帧循环。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "主会话Bash进入安卓源码包目录后cat board/BoardView.java等文件，回执返回run循环全文（队列非空不sleep、lockCanvas逐帧绘制队首任务）和SelectedBall每帧y+=dir；这支持主会话写feature-base前已收到源端帧推进方式。",
+          "evidence": [
+            {
+              "source": "generation/aacaafce-bfb1-4c38-ac49-644f016af892.jsonl",
+              "line": 72
+            },
+            {
+              "source": "generation/aacaafce-bfb1-4c38-ac49-644f016af892.jsonl",
+              "line": 78
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 5
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": 6
+        },
+        {
+          "from": 6,
+          "to": 9
+        },
+        {
+          "from": 7,
+          "to": 8,
+          "force": true,
+          "reason": "主会话Bash进入目标工程后grep spec/execution/conversion-reports/page_0002_GameBoardFragment.md（P-S2-等关键词），回执列出P-S2-UNC-003“BoardView.ets:16（FRAME_INTERVAL_MS）30ms帧节奏 vs Android vsync连续循环的动画速度对照”；这支持主会话派发Slice 2前已收到该校准要求。",
+          "evidence": [
+            {
+              "source": "generation/aacaafce-bfb1-4c38-ac49-644f016af892.jsonl",
+              "line": 1194
+            },
+            {
+              "source": "generation/aacaafce-bfb1-4c38-ac49-644f016af892.jsonl",
+              "line": 1195
+            }
+          ]
+        },
+        {
+          "from": 8,
+          "to": 9
+        },
+        {
+          "from": 9,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "主会话写feature-base前的转录里没有关于~33ms取值的推理文字，无法确认这个数的来源（可能是通用的约30fps定时器惯例）；本卡只归因映射与“行为等价”的断言。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-3e5c96c55e58edbac2bb",
+  "metadata": {
+    "migration": {
+      "id": "colorlines-glm53-aacaafce-bfb1-4c38-ac49-644f016af892",
+      "project": "ColorLines"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.296"
+      ]
+    },
+    "source_set_id": "sources-7f536a1e90f9b3ea6808",
+    "environment": [
+      {
+        "name": "toolchain.gradle",
+        "value": "6.1.1",
+        "basis": "configuration",
+        "artifact": "gradle-wrapper.properties",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-colorlines-glm5.3",
+        "at": "2026-10-11T17:05:49.851Z",
+        "ref": "generation/aacaafce-bfb1-4c38-ac49-644f016af892/subagents/agent-af5753d6c5d203c2e.jsonl:L135",
+        "request_ref": "generation/aacaafce-bfb1-4c38-ac49-644f016af892/subagents/agent-af5753d6c5d203c2e.jsonl:L134",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-colorlines-glm5.3",
+        "at": "2026-10-11T17:20:09.569Z",
+        "ref": "generation/aacaafce-bfb1-4c38-ac49-644f016af892.jsonl:L459",
+        "request_ref": "generation/aacaafce-bfb1-4c38-ac49-644f016af892.jsonl:L458",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-colorlines-glm5.3",
+        "at": "2026-10-11T17:20:09.569Z",
+        "ref": "generation/aacaafce-bfb1-4c38-ac49-644f016af892.jsonl:L459",
+        "request_ref": "generation/aacaafce-bfb1-4c38-ac49-644f016af892.jsonl:L458",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "2ca4df8c-ec61-43e1-84c4-c9f80fb84018"
+      ]
+    }
+  },
+  "revision": "6bb50c22a76ee9622c6ab7037de6ac6422508ba90bb0452d903b24846bc9fb9c"
+}

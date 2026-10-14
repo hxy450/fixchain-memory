@@ -1,0 +1,204 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-ba730daa5a84da1c7a02",
+  "created_at": "2026-10-13T14:13:42.324975+00:00",
+  "migration_key": "colorlines-glm53-aacaafce-bfb1-4c38-ac49-644f016af892",
+  "title": "传送按钮选择器：选中态并入业务字段、按下态照搬同屏按钮",
+  "when": "界面实现与功能接线阶段，把Android按钮selector及setSelected调用点翻译成ArkUI图片状态源，并接入恢复流程时",
+  "description": "源ImageButton各自引用不同state集合的selector（有的含state_pressed，有的只有state_enabled/state_selected）；选中态只在某个方法里经setSelected同步，onResume等恢复路径只回填业务字段；目标用@Local/@Trace状态直接计算图片资源，且没有安卓View跨恢复保留状态的机制。",
+  "summary": "按下态（CL-14）：页面转换agent a601e4b3dd0fcc681写前用同一条Bash读到menu.xml、undo.xml和teleport.xml\n（agent-a601e4b3dd0fcc681.jsonl:L61-L62）：前两者有state_pressed，teleport.xml只有\nstate_enabled=false→teleport_inactive、state_selected→teleport_pressed、默认→teleport_not_pressed。\n它在思考中也写明“for teleport: enabled false first, then selected”，却又因为选中图文件名叫teleport_pressed，\n推断“pressed also uses teleport_pressed”，把两者合并成selected||pressed（L90）。\nWrite给出的GameBoardComponent注释仍是“enabled=false → selected → default”，\n表达式却是(isTeleportMode || teleportPressed)，并用与菜单、撤销按钮共用的trackPressed onTouch跟踪teleportPressed\n（L118-L119）。所以按下态写法确实是从菜单、撤销按钮照搬来的，输入本身已经正确且足够。\n选中态（CL-47）：同一agent写前完整读了GameBoardFragment.java（L39-L40）：setSelected只出现在updateTeleportMode(:190-194)，\nonResume(:332)只给isTeleportMode赋值。它却把isTeleportMode这个业务字段直接当成按钮选中态的数据源\n（“等价updateTeleportMode：传送模式选中态（btnTeleport.setSelected）”），恢复流程则留给Slice 5。\nSlice 5 agent a40a6751fbdbcbfc2写前读了F004规格（L30-L31）、完整的GameBoardFragment.java（L32-L33）\n以及上述组件（L44-L45）。规格写的是“updateTeleportMode — isTeleportMode赋值 + 传送按钮selected态”，\nAC27只列出isTeleportMode=getBoolean，并没有要求恢复时同步按钮；它的“保持选中态”判据只描述了View仍保留的热返回场景。\n该agent新建GameEngineViewModel时，把@Trace isTeleportMode注释为“btnTeleport selected态数据源”，\n并让onResumeRestore直接执行this.isTeleportMode = prefs.getTeleportMode()（L135-L136）。\n它重写组件时又把选中图条件改成viewModel.isTeleportMode || teleportPressed（L139-L140）。\n这样一来，冷启动恢复到传送模式时鸿蒙按钮显示选中，安卓则因View是新建的而显示未选中。\n直到生成结束，两处片段都还在。返修时新增@Trace teleportButtonSelected，只在updateTeleportMode里同步（转屏重建时置false）；\n组件选中图改为读取它，并删除teleportPressed和两处按下跟踪（repair L2807-L2808、L2874-L2875）。\n",
+  "recommendations": [
+    "页面转换时逐个按钮读取其selector实际列出的state属性来建映射：同屏其他按钮有state_pressed，并不代表本按钮也有；drawable文件名里有pressed，也不代表存在state_pressed项。写出的条件表达式必须与注释中的状态顺序一致。",
+    "源码只在少数方法里调用setSelected/setEnabled时，把View态建成独立UI状态，只在这些调用点赋值，不直接复用同名业务字段。可以先用grep对比setSelected调用点与该字段的全部赋值点，两者不一致时必须拆开。",
+    "接线onResume等恢复路径时，逐条核对源恢复代码有没有同时更新View。ArkTS没有安卓View跨暂停保留的状态，冷启动或重建应按全新View（未选中）处理；验收时把冷启动和热返回分成两个场景分别检查。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-colorlines-glm5.3/entry/src/main/ets/components/GameBoardComponent.ets",
+        "since": "2026-10-11T20:20:17.766Z",
+        "at": "2026-10-12T12:03:59.020Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/colorlines-SergeyChelak-e2375e3/ColorLines/app/src/main/res/drawable/teleport.xml",
+          "at": "2026-10-11T17:55:10.955Z",
+          "reason": "正常输入：a601的Bash cat在同一回执里依次返回menu.xml、undo.xml（都有state_pressed）和teleport.xml。后者只有state_enabled=false、state_selected与默认三项，没有按下态，足以判定按住时不换图（agent-a601e4b3dd0fcc681.jsonl:L61-L62）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/colorlines-SergeyChelak-e2375e3/ColorLines/app/src/main/java/org/chelak/colorlines/GameBoardFragment.java",
+          "at": "2026-10-11T17:54:32.127Z",
+          "reason": "正常输入：Read完整返回源文件。setSelected只出现在updateTeleportMode(:190-194)；onResume(:332)只执行this.isTeleportMode=getBoolean，不调用setSelected。足以看出按钮选中态与业务字段在恢复时并不同步（同转录L39-L40）。"
+        },
+        {
+          "key": "aacaafce-bfb1-4c38-ac49-644f016af892:a601e4b3dd0fcc681",
+          "at": "2026-10-11T18:10:49.310Z",
+          "reason": "页面转换agent。思考中已写出teleport选择器的顺序是enabled false→selected，却又以选中图名为teleport_pressed为由，合并成selected||pressed（L90）。Write写出的注释仍为“enabled=false → selected → default”，条件却是(isTeleportMode || teleportPressed)，并照搬菜单、撤销按钮的trackPressed onTouch跟踪teleportPressed。同时把业务字段isTeleportMode直接当作setSelected的等价物（L118-L119）。Slice 5重写时保留了这两处片段，只改成viewModel.isTeleportMode。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "a601用Bash cat直接读取teleport.xml（同一命令还读了menu.xml和undo.xml），回执返回完整选择器：只有state_enabled=false、state_selected和默认三项，没有state_pressed。这支持生成者写前已收到“传送按钮无按下态”的输入。",
+          "evidence": [
+            {
+              "source": "generation/aacaafce-bfb1-4c38-ac49-644f016af892/subagents/agent-a601e4b3dd0fcc681.jsonl",
+              "line": 61
+            },
+            {
+              "source": "generation/aacaafce-bfb1-4c38-ac49-644f016af892/subagents/agent-a601e4b3dd0fcc681.jsonl",
+              "line": 62
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-colorlines-glm5.3/entry/src/main/ets/viewmodels/GameEngineViewModel.ets",
+        "since": "2026-10-11T20:20:17.766Z",
+        "at": "2026-10-12T12:03:59.020Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/colorlines-SergeyChelak-e2375e3/ColorLines/app/src/main/java/org/chelak/colorlines/GameBoardFragment.java",
+          "at": "2026-10-11T17:54:32.127Z",
+          "reason": "正常输入：页面转换agent的Read完整返回源文件，其中setSelected的唯一调用点在updateTeleportMode(:193)，onResume(:332)只回填字段（agent-a601e4b3dd0fcc681.jsonl:L39-L40）。"
+        },
+        {
+          "key": "aacaafce-bfb1-4c38-ac49-644f016af892:a601e4b3dd0fcc681",
+          "at": "2026-10-11T18:10:49.310Z",
+          "reason": "最初的耦合：Write的GameBoardComponent中，@Local isTeleportMode同时用作业务字段和按钮选中图的数据源（注释为“传送模式选中态（btnTeleport.setSelected）”），恢复和持久化则以FWD-REF留给Slice 5（同转录L118-L119）。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-colorlines-glm5.3/entry/src/main/ets/components/GameBoardComponent.ets",
+          "at": "2026-10-11T18:48:10.135Z",
+          "reason": "交付桥梁：Slice 5 agent的Read回执里仍是转换产物，teleportImageRes以(isTeleportMode || teleportPressed)决定选中图（agent-a40a6751fbdbcbfc2.jsonl:L44-L45）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-colorlines-glm5.3/spec/baseline/features/F004-game-interaction.md",
+          "at": "2026-10-11T18:48:01.277Z",
+          "reason": "正常输入：规格写明updateTeleportMode是“isTeleportMode赋值 + 传送按钮selected态”，AC27恢复分支只要求isTeleportMode=getBoolean，没有要求恢复时同步按钮。它的“保持选中态”判据只针对热返回，冷启动没有写到（同转录L30-L31）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/colorlines-SergeyChelak-e2375e3/ColorLines/app/src/main/java/org/chelak/colorlines/GameBoardFragment.java",
+          "at": "2026-10-11T18:48:01.714Z",
+          "reason": "正常输入：Slice 5 agent同样完整读到源文件，可以核对setSelected只在updateTeleportMode里调用、onResume(:332)只回填字段（同转录L32-L33）。"
+        },
+        {
+          "key": "aacaafce-bfb1-4c38-ac49-644f016af892:a40a6751fbdbcbfc2",
+          "at": "2026-10-11T19:06:13.610Z",
+          "reason": "Slice 5功能接线agent。它沿用了组件中的耦合，在新建的VM里把@Trace isTeleportMode注释为“btnTeleport selected态数据源”，并在onResumeRestore中直接执行this.isTeleportMode = prefs.getTeleportMode()，没有单独的选中态。结果冷启动恢复时按钮被点亮，源端却不会setSelected（同转录L135-L136；随后组件重写在L139-L140）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 6
+        },
+        {
+          "from": 4,
+          "to": 6
+        },
+        {
+          "from": 5,
+          "to": 6
+        },
+        {
+          "from": 6,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-ba730daa5a84da1c7a02",
+  "metadata": {
+    "migration": {
+      "id": "colorlines-glm53-aacaafce-bfb1-4c38-ac49-644f016af892",
+      "project": "ColorLines"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.296"
+      ]
+    },
+    "source_set_id": "sources-7f536a1e90f9b3ea6808",
+    "environment": [
+      {
+        "name": "toolchain.gradle",
+        "value": "6.1.1",
+        "basis": "configuration",
+        "artifact": "gradle-wrapper.properties",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-colorlines-glm5.3",
+        "at": "2026-10-11T17:05:49.851Z",
+        "ref": "generation/aacaafce-bfb1-4c38-ac49-644f016af892/subagents/agent-af5753d6c5d203c2e.jsonl:L135",
+        "request_ref": "generation/aacaafce-bfb1-4c38-ac49-644f016af892/subagents/agent-af5753d6c5d203c2e.jsonl:L134",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-colorlines-glm5.3",
+        "at": "2026-10-11T17:20:09.569Z",
+        "ref": "generation/aacaafce-bfb1-4c38-ac49-644f016af892.jsonl:L459",
+        "request_ref": "generation/aacaafce-bfb1-4c38-ac49-644f016af892.jsonl:L458",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-colorlines-glm5.3",
+        "at": "2026-10-11T17:20:09.569Z",
+        "ref": "generation/aacaafce-bfb1-4c38-ac49-644f016af892.jsonl:L459",
+        "request_ref": "generation/aacaafce-bfb1-4c38-ac49-644f016af892.jsonl:L458",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "2ca4df8c-ec61-43e1-84c4-c9f80fb84018"
+      ]
+    }
+  },
+  "revision": "5d42eb38460e35a8b4188509d6638eb71739f097c16bbde3fe9e19d7ecff4b3a"
+}

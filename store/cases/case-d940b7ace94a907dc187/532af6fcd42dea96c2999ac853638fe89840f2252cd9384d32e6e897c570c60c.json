@@ -1,0 +1,269 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-d940b7ace94a907dc187",
+  "created_at": "2026-10-13T14:22:39.814995+00:00",
+  "migration_key": "colorlines-glm53-aacaafce-bfb1-4c38-ac49-644f016af892",
+  "title": "转屏换出棋盘实例时，共享控制器被旧实例清空且缺少重建恢复重画",
+  "when": "规格提取与界面实现阶段，把安卓转屏重建（横竖屏双布局＋onPause存档/onResume读档重画）映射为ArkUI方向if/else分支，并为分支内自绘组件设计控制器绑定与重画时机时",
+  "description": "源端Activity未声明configChanges，竖屏layout与layout-land各有一个SurfaceView棋盘，转屏后Fragment经onPause存档、onResume读档并向新棋盘入队绘制；目标端用mediaquery方向状态在build中if/else切换两套布局，每套各挂一个Canvas自绘组件并共用宿主持有的同一个控制器。",
+  "summary": "两条已核偏差分别落在实现与规格两个环节。\n一、界面实现：页面转换agent（agent-a601e4b3dd0fcc681）写前读到page_0002规格的“竖屏/横屏双XML→isLandscape方向分支”、\nBoardView.java（每个SurfaceView自带任务队列与渲染线程，surfaceDestroyed只停自己的线程）和GameBoardFragment.java\n（getGameBoardView每次从当前Fragment视图findViewById，不存在跨实例共享绑定）。它同一轮写出GameBoardComponent的if/else\n双布局，两处BoardView共用一个boardController；BoardView.ets中BoardViewController.unbind()无条件boundView=null，\n由aboutToDisappear调用（L114写BoardView、L118写组件）。输入没有说明if/else换分支时新旧实例aboutToAppear/aboutToDisappear的先后，\n映射参考也只给onDetachedFromWindow→aboutToDisappear一对一；单槽共享绑定的正确性却完全依赖“旧实例先卸载”这一未核顺序，\n偏差在实现设计。该片段经Slice 2整文件重写（agent-acef64d098de8b72d L114）原样保留到生成结束\n（f758d61 BoardView.ets:489-498）。返修改为unbind(view)仅在boundView===view时清空，并在bind后回调onBind。\n二、规格提取：F004规格作者（agent-a4baae2db849a4e4e）写前用sed读到spec/ref/colorlines_spec.md §5.8.1：\nonResume读档成功即恢复棋面、分数、选中球（重挂选中动画）与传送模式，验收条件为“[旋转屏幕 / 从 Facebook 返回] →\n[棋面、分数、选中弹跳、传送模式保持]”（L64-L65）。它另读到feature-base中只针对Fragment事务/restoreListeners的“无配置重建”（L53-L54），\n写F004时却把整个生命周期映射成“aboutToAppear初始化＋宿主页onPageShow/onPageHide转发onResumeRestore/onPauseSave；无配置重建”，\nAC27判据只剩“切出再进入（或从浏览器返回）”，删掉了旋转触发（L128）。Slice 5（agent-a40a6751fbdbcbfc2）读到这份F004（L30-L31）\n和已建的双BoardView组件，按“in ArkTS no config-recreate → first-build path only”只在首建setTimeout和宿主页显示时恢复，\n方向监听仍只改isLandscape（L135写VM、L139写组件）。于是转屏后新方向BoardView是空画布，也无人向它入队重画。\n返修在GameEngineViewModel新增onConfigurationRecreate（onPauseSave→teleportButtonSelected=false→onResumeRestore；\nteleportButtonSelected是同一返修会话CL-47先加的字段），GameBoardComponent在方向变化时置recreateOnBoardBind，\n并在boardController.onBind中调用它（repair L3306-L3307，CL-48检查点L3357-L3358）。\n",
+  "recommendations": [
+    "界面实现阶段：同一控制器或注册表被条件渲染的多个组件实例共用时，解绑先比较身份，只在当前绑定的是自己时清空；不要让正确性依赖新旧实例aboutToAppear/aboutToDisappear的先后。也可以给每个分支实例各配一个控制器。",
+    "界面实现阶段：按方向用if/else换出Canvas自绘组件时，新实例的画布和任务队列都是空的。新实例挂上（bind）后，要按源端转屏重建路径重新入队绘制（存档→恢复→重画、选中动画），不能只切换布局状态。",
+    "规格提取阶段：源端未声明configChanges时，转屏会走onPause/onResume。目标端写“无配置重建”时，仍要保留源规格里“旋转屏幕”这一验收触发，并写明目标端由哪个事件承接存档→恢复及其可见效果，例如方向变化后新棋盘挂上时重画、选中球继续弹跳、传送按钮选中态复位。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-colorlines-glm5.3/entry/src/main/ets/components/BoardView.ets",
+        "since": "2026-10-11T20:20:17.766Z",
+        "at": "2026-10-12T12:03:59.020Z"
+      },
+      "summary": "页面转换agent已读到双布局方向分支要求，以及安卓每个BoardView各自持有队列和线程、Fragment总是取当前视图的事实。\n它为两处分支实例设计了共享单槽BoardViewController，unbind()却无条件清空，由aboutToDisappear调用。\n转屏时新实例先bind、旧实例后unbind，新绑定就被清掉，此后addAnimationTask全部落空。\n该片段一直保留到生成结束，返修改为unbind(view)按身份清空，并加onBind回调。\n",
+      "recommendations": [
+        "共享控制器的解绑用比较后再清空（boundView===view），或让每个条件分支实例持有独立控制器。"
+      ],
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-colorlines-glm5.3/spec/baseline/ui/page_0002_GameBoardFragment.md",
+          "at": "2026-10-11T17:54:25.356Z",
+          "reason": "正常输入：Read回执给出“竖屏/横屏双XML→方向/断点响应式分支（@Local isLandscape或GridRow）”，以及BoardView为SurfaceView自绘、带animationTasks队列。由此可知目标端会在两套布局中各出现一个棋盘实例（agent-a601e4b3dd0fcc681.jsonl:L18-L19）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/colorlines-SergeyChelak-e2375e3/ColorLines/app/src/main/java/org/chelak/colorlines/GameBoardFragment.java",
+          "at": "2026-10-11T17:54:32.127Z",
+          "reason": "正常输入：Read回执中getGameBoardView()每次都从当前Fragment视图findViewById(R.id.gameBoard)，onResume向该视图入队SelectedBall或StaticBoard任务。源端没有可能被旧视图清掉的共享绑定（同转录L39-L40）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/colorlines-SergeyChelak-e2375e3/ColorLines/app/src/main/java/org/chelak/colorlines/board/BoardView.java",
+          "at": "2026-10-11T17:54:32.576Z",
+          "reason": "正常输入：Read回执显示每个BoardView构造时自建animationTasks，surfaceCreated起自己的渲染线程，surfaceDestroyed只停自己的线程。实例销毁不会影响其他实例（同转录L41-L42）。"
+        },
+        {
+          "key": "agent-a601e4b3dd0fcc681.jsonl",
+          "at": "2026-10-11T18:10:16.043Z",
+          "reason": "收到上述输入后，Write写出BoardViewController单槽boundView，unbind()无条件置null，BoardView.aboutToDisappear调用controller?.unbind()（L114-L115）。随后在GameBoardComponent的portLayout/landLayout两处都传入同一个boardController（L118）。思考中只确认“controller instance created per component instance — good”，没有核对两分支实例交替挂卸的顺序。共享绑定没有身份校验，是本链偏差。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-colorlines-glm5.3/entry/src/main/ets/viewmodels/GameEngineViewModel.ets",
+        "since": "2026-10-11T20:20:17.766Z",
+        "at": "2026-10-12T12:03:59.020Z"
+      },
+      "summary": "参考规格已把“旋转屏幕”列为读档恢复的验收触发。F004规格作者以“无配置重建”为由，只保留切出再进入/从浏览器返回，删掉了旋转触发。\nSlice 5按这份F004只实现首建和页面显示时的onResumeRestore，没有转屏后的存档→恢复入口。\n返修在VM中新增onConfigurationRecreate，组合已有的onPauseSave与onResumeRestore。\n",
+      "recommendations": [
+        "规格提取时，源端转屏会走onPause/onResume的，保留“旋转屏幕”验收触发，并写明目标端承接事件；不要以“目标无配置重建”删去该场景。"
+      ],
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-colorlines-glm5.3/spec/ref/colorlines_spec.md",
+          "at": "2026-10-11T17:19:10.444Z",
+          "reason": "正常输入：规格作者用Bash sed读取§5.8.1，回执中恢复时机规则写明onResume读档成功即恢复棋面、分数、选中球（重新挂选中动画）与传送模式，验收条件为“[旋转屏幕 / 从 Facebook 返回] → [棋面、分数、选中弹跳、传送模式保持]”。这足以要求F004保留旋转后的恢复与重画（agent-a4baae2db849a4e4e.jsonl:L64-L65）。"
+        },
+        {
+          "key": "agent-a4baae2db849a4e4e.jsonl",
+          "at": "2026-10-11T17:27:56.792Z",
+          "reason": "读到上述验收后，Write写出的F004把BaseFragment生命周期映射为“aboutToAppear初始化＋宿主页onPageShow/onPageHide转发onResumeRestore/onPauseSave；无配置重建”。这把feature-base里只针对restoreListeners的说法（L53-L54）扩展到了整个恢复路径。AC27判据只写“切出再进入（或从浏览器返回）”，删去了旋转触发（L128-L129）。源规格到feature规格在此偏离。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-colorlines-glm5.3/spec/baseline/features/F004-game-interaction.md",
+          "at": "2026-10-11T18:48:01.277Z",
+          "reason": "交付桥梁：Slice 5的Read回执中仍是上述“无配置重建”映射，以及只含切出再进入/浏览器返回的AC27（agent-a40a6751fbdbcbfc2.jsonl:L30-L31）。"
+        },
+        {
+          "key": "agent-a40a6751fbdbcbfc2.jsonl",
+          "at": "2026-10-11T19:06:13.610Z",
+          "reason": "读到上述F004后，思考中写下“in ArkTS no config-recreate → first-build path only”（同转录L114）。Write的GameEngineViewModel只有onResumeRestore/onPauseSave，注释对应AC27-AC30，供首建和页面显示/隐藏调用，没有转屏后的存档→恢复入口（L135-L136）。本链确认的是传递，不另推定其独立失职。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "规格作者在写F004之前用Bash sed -n '497,533p;668,755p'打印colorlines_spec.md，回执第520-521行即§5.8.1恢复时机规则及“[旋转屏幕 / 从 Facebook 返回]”验收条件。这说明作者写前已收到旋转触发要求。",
+          "evidence": [
+            {
+              "source": "generation/aacaafce-bfb1-4c38-ac49-644f016af892/subagents/agent-a4baae2db849a4e4e.jsonl",
+              "line": 64
+            },
+            {
+              "source": "generation/aacaafce-bfb1-4c38-ac49-644f016af892/subagents/agent-a4baae2db849a4e4e.jsonl",
+              "line": 65
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-colorlines-glm5.3/entry/src/main/ets/components/GameBoardComponent.ets",
+        "since": "2026-10-11T20:20:17.766Z",
+        "at": "2026-10-12T12:03:59.020Z"
+      },
+      "summary": "同一条规格偏差传到组件。Slice 5按F004只在aboutToAppear中用setTimeout执行setupGameLogic和onResumeRestore，\n方向监听回调仍只写isLandscape。转屏时if/else换出的新BoardView没有任何重画任务。\n返修在方向变化时置recreateOnBoardBind，等新棋盘bind触发onBind后调用viewModel.onConfigurationRecreate()。\n",
+      "recommendations": [
+        "实现方向分支时，把“方向变化”与“新分支中的自绘组件已挂上”串起来，在后者触发时按源端重建路径存档、恢复并重画。"
+      ],
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-colorlines-glm5.3/spec/ref/colorlines_spec.md",
+          "at": "2026-10-11T17:19:10.444Z",
+          "reason": "正常输入：同上，§5.8.1把“旋转屏幕”列为棋面、分数、选中弹跳、传送模式保持的验收触发（agent-a4baae2db849a4e4e.jsonl:L64-L65）。"
+        },
+        {
+          "key": "agent-a4baae2db849a4e4e.jsonl",
+          "at": "2026-10-11T17:27:56.792Z",
+          "reason": "同上：F004把恢复路径写成“无配置重建”下的首建＋页面显示/隐藏，AC27删去旋转触发（L128-L129）。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-colorlines-glm5.3/spec/baseline/features/F004-game-interaction.md",
+          "at": "2026-10-11T18:48:01.277Z",
+          "reason": "交付桥梁：Slice 5的Read回执包含上述映射与AC27（agent-a40a6751fbdbcbfc2.jsonl:L30-L31）。"
+        },
+        {
+          "key": "agent-a40a6751fbdbcbfc2.jsonl",
+          "at": "2026-10-11T19:06:58.047Z",
+          "reason": "读到F004和已建的双BoardView组件（L44）后，Write重写GameBoardComponent：方向监听只写this.isLandscape = result.matches，恢复只放在aboutToAppear的setTimeout(setupGameLogic + onResumeRestore)，aboutToDisappear只做onPauseSave。转屏换出新BoardView时没有存档/恢复/重画入口（L139-L140）。本链确认传递。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "规格作者在写F004之前用Bash sed -n '497,533p;668,755p'打印colorlines_spec.md，回执第520-521行即§5.8.1恢复时机规则及“[旋转屏幕 / 从 Facebook 返回]”验收条件。这说明作者写前已收到旋转触发要求。",
+          "evidence": [
+            {
+              "source": "generation/aacaafce-bfb1-4c38-ac49-644f016af892/subagents/agent-a4baae2db849a4e4e.jsonl",
+              "line": 64
+            },
+            {
+              "source": "generation/aacaafce-bfb1-4c38-ac49-644f016af892/subagents/agent-a4baae2db849a4e4e.jsonl",
+              "line": 65
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "生成期材料没有记录ArkUI if/else换分支时新旧实例生命周期的先后；“新实例先bind、旧实例后unbind”取自返修者的诊断和修复后复测（repair L3263、L3305-L3307）。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-d940b7ace94a907dc187",
+  "metadata": {
+    "migration": {
+      "id": "colorlines-glm53-aacaafce-bfb1-4c38-ac49-644f016af892",
+      "project": "ColorLines"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.296"
+      ]
+    },
+    "source_set_id": "sources-7f536a1e90f9b3ea6808",
+    "environment": [
+      {
+        "name": "toolchain.gradle",
+        "value": "6.1.1",
+        "basis": "configuration",
+        "artifact": "gradle-wrapper.properties",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-colorlines-glm5.3",
+        "at": "2026-10-11T17:05:49.851Z",
+        "ref": "generation/aacaafce-bfb1-4c38-ac49-644f016af892/subagents/agent-af5753d6c5d203c2e.jsonl:L135",
+        "request_ref": "generation/aacaafce-bfb1-4c38-ac49-644f016af892/subagents/agent-af5753d6c5d203c2e.jsonl:L134",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-colorlines-glm5.3",
+        "at": "2026-10-11T17:20:09.569Z",
+        "ref": "generation/aacaafce-bfb1-4c38-ac49-644f016af892.jsonl:L459",
+        "request_ref": "generation/aacaafce-bfb1-4c38-ac49-644f016af892.jsonl:L458",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-colorlines-glm5.3",
+        "at": "2026-10-11T17:20:09.569Z",
+        "ref": "generation/aacaafce-bfb1-4c38-ac49-644f016af892.jsonl:L459",
+        "request_ref": "generation/aacaafce-bfb1-4c38-ac49-644f016af892.jsonl:L458",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "2ca4df8c-ec61-43e1-84c4-c9f80fb84018"
+      ]
+    }
+  },
+  "revision": "532af6fcd42dea96c2999ac853638fe89840f2252cd9384d32e6e897c570c60c"
+}
