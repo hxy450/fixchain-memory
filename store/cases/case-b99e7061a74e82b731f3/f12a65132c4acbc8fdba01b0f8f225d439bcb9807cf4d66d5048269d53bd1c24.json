@@ -1,0 +1,178 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-b99e7061a74e82b731f3",
+  "created_at": "2026-10-14T03:21:37.542902+00:00",
+  "migration_key": "blockinger-glm531-c54518f5-0a64-4778-9630-e5bfe3f912cc",
+  "title": "未声明 configChanges 的静态页只记了 Manifest 事实，没写出重建会丢弃非托管帮助对话框",
+  "when": "规格提取阶段，为每个 Activity 把 Manifest 的 configChanges/screenOrientation 缺省翻译成目标页面生命周期与弹窗状态契约时",
+  "description": "源 Activity 未声明 android:configChanges 且未锁定 screenOrientation（旋转、语言、深浅色等都会重建它），页面用 AlertDialog.Builder.show()/Dialog.show() 直接弹出非托管对话框（不经 DialogFragment、showDialog 或 DialogPreference）；目标端用页内状态驱动浮层承载该对话框，HarmonyOS 页面在旋转等配置变化时不重建。",
+  "summary": "规格作者（b2-01 批页面 spec worker）写 page_0006_HelpActivity 前实际读到：HelpActivity.java 在 onPostCreate 里\nnew AlertDialog.Builder(this)，7 个 Preference 点击后各自 setTitle/setMessage 再 dialog.show()（非托管，\nL84-L85）；Bash grep AndroidManifest.xml 回执显示 HelpActivity 只有 label、没有 configChanges，全文件也没有\nscreenOrientation（L129-L130、L149-L150）。这些事实足以推出：源端旋转（以及语言/深浅色等变化）会重建 HelpActivity，\n直接 show 的帮助对话框随旧窗口消失、重建后不恢复，列表仍在。\n首次写入前它还收到召回注入的 lesson-94715d0df4c03a8fb5a5（v1），标题是“语言、深浅色、字号、显示大小变化会重建它……\n按源端重建时序显式刷新”，提醒只点名“Game页……按'关弹窗→存档→重连→重读'时序写入验收；Main页locale/uiMode未声明仍重建”\n（L146）。它照此把重建时序和“关弹窗”写进 GameActivity 规格，MainActivity 规格也写了 onConfigurationUpdate 刷新，\n但 page_0006 只写“Manifest 事实: 无 configChanges、无 screenOrientation、无 supportsRtl”（L175 Write、L185 Edit）：\n状态接口里 helpDialogVisible 只在 Back、遮罩、返回时置 false，转换决策和验收都没有“配置变化/旋转时关闭帮助对话框”。\nsupportsRtl 同一行被翻成了“显式 Direction.Ltr”的实现要求，configChanges 却停在事实注记，偏差位于源码/Manifest → 页面规格这一环。\n该经验参与了偏差，本应作为输入节点进图（force 证据为 L146）；但 L145-L146 在索引中登记为被拒的 Write page_0001，\npack 回执 invalid_force_source（reviewed relation contradicts indexed operation endpoints），force 不能绕过，\n所以图里不放经验节点，只在规格作者节点和下面的修订建议中写明。\n这条经验的正文其实写了“规格逐个 Activity 读 configChanges……重建时序（关闭对话框→……）”，why 里也提到“除被\nscreenOrientation 锁定的旋转外”都会重建、对话框随旧窗口消失；但注入的一行标题没有列出旋转，也没把“对话框随重建消失”\n作为结论，看起来只是“刷新文案/布局”。提醒又把适用范围限定为 Game/Main 两页，于是没有动态文案的静态偏好页\n（Help 带非托管对话框）就被当成无需处理。\n转换 agent 读到的就是这份规格（L35-L36），在 05:39 Write 出 HelpPage.ets，弹窗用 @Local helpDialogVisible 驱动的页内浮层，\n只在 Back、遮罩、返回键和 aboutToDisappear 时关闭，没有方向或配置变化的关闭路径（L267-L268）。它首写前收到的弹窗类提醒\n也只列了“遮罩点击、onBackPressed 消费、aboutToDisappear 复位”三条关闭路径（L216），没有涉及源端重建；\n它没有收到 lesson-94715，规格里也没有相应要求，所以本链把它记为传递者。后续 Slice 5 等写者\n只改了按压态、导出和接线，未涉及这一项。生成期 EntryAbility 没有声明 orientation，应用不随屏幕旋转（另有 orientation 任务），\n所以该缺口在生成期没有暴露；返修先补了方向（X6），旋转对照后发现帮助对话框仍在（C68）。\n最终修改：HelpPage.ets 新增 lastLandscape 与 onPageAreaChange(width, height)，页面区域横竖翻转时调用 closeHelpDialog()；\n根 Stack 挂 onAreaChange 调用它，注释写明源 HelpActivity 未声明 configChanges、对话框为非托管、重建后不恢复\n（repair L5561、L5576，检查点 C68 afcb242）。\n",
+  "recommendations": [
+    "规格提取时，对每个未声明 configChanges 的 Activity（不论页面是否有动态文案）都列出“重建后哪些可见状态消失、哪些恢复”：直接 AlertDialog.Builder.show()/Dialog.show() 的对话框消失，DialogFragment、showDialog、DialogPreference 托管的对话框会恢复；把消失项写进状态接口的关闭条件和验收，例如“帮助对话框打开时旋转，对话框关闭、列表保留”。",
+    "规格里 Manifest 缺省不能只写成溯源注记：“无 configChanges、无 screenOrientation”这一行要像 supportsRtl→Direction.Ltr 一样，翻成目标端的生命周期要求和负责实现的位置；页面不重建的目标端，用根容器 onAreaChange 判断横竖翻转，或用 onConfigurationUpdate 显式关闭这些浮层。",
+    "实现阶段用页内状态驱动浮层承载源端非托管对话框时，核对该源 Activity 是否会因配置变化重建；如果会，除了 Back、遮罩和返回键，还要补方向/配置变化时的关闭路径，并在两端旋转对照。",
+    "修订 lesson-94715d0df4c03a8fb5a5（版本 1）：标题把“旋转（未被 screenOrientation 锁定时）”列为重建触发，并把“按 Activity 逐页判定：源端非托管对话框（Builder.show()/Dialog.show()）随重建消失，目标端要显式关闭；托管对话框会恢复”放进标题或 how 第一步，写明只有静态列表和弹窗的页面也适用，不只是有动态文案或布局要刷新的页面。判断信号：manifest 的 activity 没有 configChanges 也没有 screenOrientation，源码里对话框直接 show()，不经 DialogFragment 或 showDialog。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-blockinger-glm5.31/entry/src/main/ets/pages/HelpPage.ets",
+        "since": "2026-10-13T10:53:09.711Z",
+        "at": "2026-10-13T22:29:44.396Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/blockinger-vocollapse-8b26057/src/org/blockinger/game/activities/HelpActivity.java",
+          "at": "2026-10-13T03:34:54.397Z",
+          "reason": "正常输入：规格作者 Read 回执给出 onPostCreate 中 new AlertDialog.Builder(this)、setCancelable(true)、neutral Back 只 dismiss，7 个 Preference 点击后 setTitle/setMessage 再 dialog.show()；对话框直接 show，不经 DialogFragment/showDialog 托管（agent-aa19f1861db9aea4a.jsonl:L84-L85）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/blockinger-vocollapse-8b26057/AndroidManifest.xml",
+          "at": "2026-10-13T03:36:06.549Z",
+          "reason": "正常输入：规格作者 Bash grep -A6 各 Activity 声明，回执显示 MainActivity 有 configChanges=orientation|screenLayout|screenSize，HelpActivity 只有 label；随后思考据此区分了 Main 旋转不重建、Game 旋转重建（L129-L131）。与 HelpActivity.java 合起来足以推出旋转重建会丢掉帮助对话框。"
+        },
+        {
+          "key": "agent-aa19f1861db9aea4a.jsonl",
+          "at": "2026-10-13T04:00:48.224Z",
+          "reason": "收到上述源码和 Manifest；首写被拒时又注入 lesson-94715d0df4c03a8fb5a5（v1），标题只列语言/深浅色/字号/显示大小并说“显式刷新”，提醒只点名 Game、Main 页（L146）。随后按提醒只给 Game 页写了“关弹窗→存档→重连→重读”，给 Main 页写了 onConfigurationUpdate 刷新（L147、L157、L159）；page_0006 只写“Manifest 事实: 无 configChanges、无 screenOrientation、无 supportsRtl”，helpDialogVisible 只在 Back/遮罩/返回时置 false，没有写配置变化或旋转时关闭帮助对话框的契约（L175 Write、L185 Edit）。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-blockinger-glm5.31/spec/baseline/ui/page_0006_HelpActivity.md",
+          "at": "2026-10-13T05:08:13.487Z",
+          "reason": "交付桥梁：转换 agent 必读的页面规格，读取回执里第 18 行仍只有“无 configChanges、无 screenOrientation”的事实注记，状态接口没有旋转关闭项（agent-a2ee5c5b94dd74c3e.jsonl:L35-L36）。"
+        },
+        {
+          "key": "agent-a2ee5c5b94dd74c3e.jsonl",
+          "at": "2026-10-13T05:39:31.892Z",
+          "reason": "照规格实现 HelpPage.ets：@Local helpDialogVisible 驱动页内浮层，只在 Back、遮罩、返回键和 aboutToDisappear 时关闭，没有方向或配置变化的关闭路径（L267-L268）。本链确认缺口经此传递，不另推定其独立失职。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "规格作者在源码根 cd 后用 Bash grep -A6 读取 AndroidManifest.xml 的各 Activity 声明，回执列出 MainActivity 的 configChanges 与 HelpActivity 仅有 label；规格溯源行“无 configChanges、无 screenOrientation”就来自这次读取。",
+          "evidence": [
+            {
+              "source": "generation/c54518f5-0a64-4778-9630-e5bfe3f912cc/subagents/agent-aa19f1861db9aea4a.jsonl",
+              "line": 129
+            },
+            {
+              "source": "generation/c54518f5-0a64-4778-9630-e5bfe3f912cc/subagents/agent-aa19f1861db9aea4a.jsonl",
+              "line": 130
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-b99e7061a74e82b731f3",
+  "metadata": {
+    "migration": {
+      "id": "blockinger-glm531-c54518f5-0a64-4778-9630-e5bfe3f912cc",
+      "project": "Blockinger"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.296"
+      ]
+    },
+    "source_set_id": "sources-37319ba0846f9b0a14c5",
+    "environment": [
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-blockinger-glm5.31",
+        "at": "2026-10-13T03:35:43.538Z",
+        "ref": "generation/c54518f5-0a64-4778-9630-e5bfe3f912cc.jsonl:L423",
+        "request_ref": "generation/c54518f5-0a64-4778-9630-e5bfe3f912cc.jsonl:L422",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-blockinger-glm5.31",
+        "at": "2026-10-13T04:09:41.917Z",
+        "ref": "generation/c54518f5-0a64-4778-9630-e5bfe3f912cc/subagents/agent-a189cc44cdb902fa5.jsonl:L124",
+        "request_ref": "generation/c54518f5-0a64-4778-9630-e5bfe3f912cc/subagents/agent-a189cc44cdb902fa5.jsonl:L123",
+        "phase": "generation"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "35",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-blockinger-glm5.31",
+        "at": "2026-10-13T12:06:21.856Z",
+        "ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L296",
+        "request_ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L295",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "17",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-blockinger-glm5.31",
+        "at": "2026-10-13T12:06:21.856Z",
+        "ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L296",
+        "request_ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L295",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "8",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-blockinger-glm5.31",
+        "at": "2026-10-13T12:06:21.856Z",
+        "ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L296",
+        "request_ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L295",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "4795952a-b849-4427-ba3f-0bc9a11c6092"
+      ]
+    }
+  },
+  "revision": "f12a65132c4acbc8fdba01b0f8f225d439bcb9807cf4d66d5048269d53bd1c24"
+}

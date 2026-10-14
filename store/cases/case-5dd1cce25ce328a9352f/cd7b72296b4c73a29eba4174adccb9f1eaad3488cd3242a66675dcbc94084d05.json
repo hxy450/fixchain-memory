@@ -1,0 +1,165 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-5dd1cce25ce328a9352f",
+  "created_at": "2026-10-14T03:23:46.256575+00:00",
+  "migration_key": "blockinger-glm531-c54518f5-0a64-4778-9630-e5bfe3f912cc",
+  "title": "多个按钮各自 onTouch 时，用全屏 touches.length 判首指导致多指漏按、卡按",
+  "when": "规格提取与界面实现阶段，把 Android 多个控件各自的 onTouch 按下/抬起分支映射为 ArkUI onTouch 的首指/末指判定时",
+  "description": "源端多个兄弟控件（如游戏左右移、旋转、软降/硬降按钮）各自 setOnTouchListener，用未掩码 getAction() 判 ACTION_DOWN/UP 驱动按住-释放状态机；应用 targetSdk≥11 且未关闭 splitMotionEvents，窗口默认分指（SPLIT_TOUCH），每个控件只收落在自己身上的指针流；目标为每个按钮各挂 ArkUI .onTouch，而 TouchEvent.touches 列出屏幕上全部手指。",
+  "summary": "源端 GameActivity.java:131-219 为 boardView 与 6 个 ImageButton 各注册一个 OnTouchListener，\n用未掩码 getAction() 只认 ACTION_DOWN/UP；AndroidManifest targetSdkVersion=17，窗口默认分指，\n所以“只跟随首指”是按每个按钮各自计算的：按住左移键时点旋转键，旋转键照样收到自己的 ACTION_DOWN。\n经验 lesson-68023ac5f088c72a775a（v1）的做法第一步是“Down/Up 事件中 event.touches.length > 1 时直接忽略”，\n但它没有写出前提：只有单个视图独占全部手指时，屏幕上的手指数才等于源端该视图收到的指针数。\n该经验先注入主会话（c54518f5-…jsonl:L287，提醒“游戏按钮onTouch未掩码getAction只随首指：ArkUI须过滤touches>1的Down/Up……写进规格映射”）。\n主会话随即在 b2-01 页规格派工里写下“特别要点（来自本项目团队经验库，写进对应页 spec）：游戏按钮 onTouch 未掩码 getAction() 只跟随首指\n→ 目标过滤 touches>1 的非首指 Down/Up，Move 取 touches[0]”（L341，派发回执 L347）。\n页规格作者读过 GameActivity.java（agent-aa19f1861db9aea4a.jsonl:L73-L74），首写前又收到同一经验的注入\n（L146，提醒“目标过滤touches.length>1的Down/Up”），然后在 page_0002 规格的“触控契约”节写下\n“touches.length>1 时非首指的 Down/Up 不进状态机”（L159-L160）。源码里按钮各自注册监听这一结构，没有被用来核对经验的前提。\n偏差首先落在规格：在这一步，“每个视图内的首指”被换成了“全屏手指数”。\nGameActivity 转换者读入该规格（agent-a034662610dda88d2.jsonl:L24-L25）。它首写前收到的同一经验提醒更直接：\n“触控门控：Down/Up 仅 event.touches.length===1 进状态机”（L133）。主会话的派工也照规格写了首指过滤（主会话 L1240）。\n转换者随后 Write 出 GamePage.ets 的 GameIconButton，Down/Up 都以 event.touches.length === 1 为门，\n注释写明“non-first Down / non-last Up are dropped”（L185-L186）。Slice 9 装配者在 09:32 重写该文件时原样保留这段代码，一直到生成结束。\nF003 控制规格只引用“首指过滤……规则归 page_0002”，没有另给多按钮语义。\n该经验参与了偏差，本应作为输入节点入图，force 证据为各次被拒写入的 tool_result（主会话 L287、规格作者 L146、转换者 L133）。\n首稿 pack 回执曾标这些边可 force；带 force 再提交后，L146、L133 都被判 invalid_force_source（reviewed relation contradicts indexed operation endpoints），\n因为这几行在索引里登记的是被拒的 Write/Edit 本身，force 不能绕过。因此图中不放经验节点，只在下方修订建议中点名；\n经验的转达改由主会话派工节点和规格作者节点的 reason 说明。\n返修时，复核代理先把它列为需设备确认的风险。返修者用 uinput 两指注入复现：旋转键按下时 touches.length=2，事件被丢弃；\n左移键的抬起同样被丢弃，按键卡在按下态（返修 L6098-L6103）。\n最终的修改是在 GameIconButton 中按 changedTouches[0].id 记录落在本按钮上的手指集合：Down 时集合为空才按下，Up 移除后集合为空才抬起，\nCancel 清空并抬起（返修 L6115、L6120-L6121，检查点 X11，commit 4d11317）。\n",
+  "recommendations": [
+    "修订 lesson-68023ac5f088c72a775a（版本 1）：把前提写进标题或做法第一步：按 touches.length 过滤只适用于单个视图独占全部手指的情况（如整屏棋盘滑动）。如果源端多个兄弟控件各自 setOnTouchListener，且 targetSdk≥11、没有设 splitMotionEvents=false，安卓默认分指，“首指/末指”按每个控件各自计算；而 ArkUI 的 TouchEvent.touches 包含屏幕上全部手指。这种情况下改为在每个控件内按 changedTouches[0].id 记录落在本控件的手指集合：集合为空时的 Down 算按下，移除后集合为空的 Up 算抬起，Cancel 清空集合。判断信号：源码中有多个 View 分别注册 OnTouchListener，或者用户需要同时按住两个按钮（例如方向键加旋转键）。检查项补一条：按住一个按钮再点另一个按钮，两者各自按下、抬起，不卡按。",
+    "规格提取阶段：映射 onTouch 的首指语义之前，先确认源端由哪个视图接收手指。多个控件各自监听时，在触控契约里写明：安卓分指，每个按钮只收自己的指针流；目标按控件内的 pointer id 集合判断首指/末指，不以全屏 touches 数过滤。不要把单视图经验直接套到多按钮页面。",
+    "界面实现阶段：给按住-释放按钮写 onTouch 时，不要用 event.touches.length 判断本控件的第一根或最后一根手指，改为按 changedTouches[0].id 维护本控件的指针集合。写完后核对两指跨按钮场景：先按住 A 再按 B，然后依次抬起，A、B 应各自恰好产生一次按下和一次抬起。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-blockinger-glm5.31/entry/src/main/ets/pages/GamePage.ets",
+        "since": "2026-10-13T10:53:09.711Z",
+        "at": "2026-10-13T22:29:44.396Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/blockinger-vocollapse-8b26057/src/org/blockinger/game/activities/GameActivity.java",
+          "at": "2026-10-13T03:34:37.661Z",
+          "reason": "正常输入：规格作者 Read 的回执（agent-aa19f1861db9aea4a.jsonl:L73-L74）显示，boardView 与 6 个 ImageButton 各自 setOnTouchListener，每个监听器只按 getAction()==ACTION_DOWN/ACTION_UP 分支，并各自 setPressed。源码本身正确，按按钮分别监听的结构已经清楚。“每个按钮各收自己的指针流”还取决于平台默认分指，源码中没有显式写出。"
+        },
+        {
+          "key": "c54518f5-0a64-4778-9630-e5bfe3f912cc.jsonl",
+          "at": "2026-10-13T03:33:18.771Z",
+          "reason": "派工输入：主会话在 L287 收到 lesson-68023ac5（v1）注入，提醒“游戏按钮onTouch未掩码getAction只随首指：ArkUI须过滤touches>1的Down/Up，Move取touches[0]，写进规格映射”。它在 b2-01 页规格派工的“特别要点（来自本项目团队经验库，写进对应页 spec）”中原样写入“游戏按钮 onTouch 未掩码 getAction() 只跟随首指 → 目标过滤 touches>1 的非首指 Down/Up”（L341，派发回执 L347）。这是转达经验，没有另加判断。"
+        },
+        {
+          "key": "agent-aa19f1861db9aea4a.jsonl",
+          "at": "2026-10-13T03:58:23.760Z",
+          "reason": "收到上述源码和派工要点。首写被拒时又收到 lesson-68023ac5（v1）注入（L146），提醒“目标过滤touches.length>1的Down/Up、Move取touches[0]、Cancel取changedTouches[0]”。随后 Write page_0002 规格的“触控契约”节：先正确描述源端未掩码 getAction() 会丢掉副指的 POINTER 事件，接着写“目标 ArkUI 逐指派发，需显式过滤：touches.length>1 时非首指的 Down/Up 不进状态机”（L159-L160）。它没有用已读到的“按按钮分别注册监听”去核对经验的单视图前提，把每个视图内的首指写成了全屏手指数。偏差在此首次落到文件；主要成因是经验缺前提。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-blockinger-glm5.31/spec/baseline/ui/page_0002_GameActivity.md",
+          "at": "2026-10-13T05:07:45.809Z",
+          "reason": "交付桥梁：转换者 Read 的回执中包含上述触控契约，即 touches.length>1 时非首指 Down/Up 不进状态机（agent-a034662610dda88d2.jsonl:L24-L25）。"
+        },
+        {
+          "key": "agent-a034662610dda88d2.jsonl",
+          "at": "2026-10-13T05:30:21.453Z",
+          "reason": "读入错误规格。派工也写“首指过滤 touches.length>1 非首指 Down/Up 不进状态机”（L1）；首写被拒时的经验注入提醒“触控门控：Down/Up 仅 event.touches.length===1 进状态机”（L133）。随后 Write GamePage.ets：GameIconButton 的 Down/Up 都以 event.touches.length === 1 为门，注释写“follows the first finger — Down/Up enter the state machine only when touches.length === 1 (non-first Down / non-last Up are dropped)”（L185-L186）。本链确认它照规格与经验传递偏差，不另推定其独立失职。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-5dd1cce25ce328a9352f",
+  "metadata": {
+    "migration": {
+      "id": "blockinger-glm531-c54518f5-0a64-4778-9630-e5bfe3f912cc",
+      "project": "Blockinger"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.296"
+      ]
+    },
+    "source_set_id": "sources-37319ba0846f9b0a14c5",
+    "environment": [
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-blockinger-glm5.31",
+        "at": "2026-10-13T03:35:43.538Z",
+        "ref": "generation/c54518f5-0a64-4778-9630-e5bfe3f912cc.jsonl:L423",
+        "request_ref": "generation/c54518f5-0a64-4778-9630-e5bfe3f912cc.jsonl:L422",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-blockinger-glm5.31",
+        "at": "2026-10-13T04:09:41.917Z",
+        "ref": "generation/c54518f5-0a64-4778-9630-e5bfe3f912cc/subagents/agent-a189cc44cdb902fa5.jsonl:L124",
+        "request_ref": "generation/c54518f5-0a64-4778-9630-e5bfe3f912cc/subagents/agent-a189cc44cdb902fa5.jsonl:L123",
+        "phase": "generation"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "35",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-blockinger-glm5.31",
+        "at": "2026-10-13T12:06:21.856Z",
+        "ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L296",
+        "request_ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L295",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "17",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-blockinger-glm5.31",
+        "at": "2026-10-13T12:06:21.856Z",
+        "ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L296",
+        "request_ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L295",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "8",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-blockinger-glm5.31",
+        "at": "2026-10-13T12:06:21.856Z",
+        "ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L296",
+        "request_ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L295",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "4795952a-b849-4427-ba3f-0bc9a11c6092"
+      ]
+    }
+  },
+  "revision": "cd7b72296b4c73a29eba4174adccb9f1eaad3488cd3242a66675dcbc94084d05"
+}

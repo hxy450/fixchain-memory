@@ -24,6 +24,6 @@
 - [按 Android px 公式移植自绘 View 时先定画布上下文单位：用 LengthMetricsUnit.PX 构造，让字号、测宽、几何与触点同域，dp 常量与 vp 输入在边界换算](lesson-7083c6ad69ab19ad17dd.lesson.md)
   - 时机：规格提取与渲染实现阶段，创建 CanvasRenderingContext2D，并为字体串、measureText、几何公式、触点坐标、窗口避让值和 dp 常量确定单位域时
   - 情境：源端是 Android 自定义 View：onSizeChanged 给出 int px 尺寸，Paint.setTextSize/measureText 在 px 域推导字号与派生间距，drawable 圆角等常量以 dp 声明；目标用 ArkUI Canvas 逐式移植，规格或已有代码对画布单位的表述不一致（字体串写 px、映射写 vp、触点写 px 域）。
-- [移植 Paint.ascent/descent 的文字基线修正前实测选 TextMetrics 字段：与字体 hhea 上下伸吻合的字段才等价，不凭 W3C 字段名或先例推定；源式取整原样保留](lesson-f876887b216b6caf9f39.lesson.md)
-  - 时机：渲染实现阶段，把源端 Canvas 文字居中或基线修正（如 (int)((descent+ascent)/2)）移植为 measureText 的 TextMetrics 计算，或决定能否关闭“需实测校正”的字段映射标记时；规格提取阶段写文字基线映射时
-  - 情境：源端以 Paint.ascent()/descent()（字体级上/下伸，ascent 为负）计算基线偏移，供数字、标题、说明等文字使用；目标用 CanvasRenderingContext2D.measureText 返回的 fontBoundingBox*、emHeight*、actualBoundingBox* 取等价度量，并注册了自定义字体。
+- [移植 Paint 文字度量前先按源 API 分层：getTextBounds/Rect 包围盒直接对应 actualBoundingBox*（各自 Math.ceil）；Paint.ascent/descent 字体级基线修正才实测选与 hhea 吻合的 TextMetrics 字段，不凭字段名或先例推定；源式取整原样保留](lesson-f876887b216b6caf9f39.lesson.md)
+  - 时机：渲染实现阶段，把源端 Canvas 文字居中或基线修正（如 (int)((descent+ascent)/2)）移植为 measureText 的 TextMetrics 计算，或决定能否关闭“需实测校正”的字段映射标记时；规格提取阶段写文字基线映射时；把 Paint.getTextBounds 取得的文字高度映射为行高或间距时
+  - 情境：源端以 Paint.ascent()/descent()（字体级上/下伸，ascent 为负）计算基线偏移，供数字、标题、说明等文字使用；目标用 CanvasRenderingContext2D.measureText 返回的 fontBoundingBox*、emHeight*、actualBoundingBox* 取等价度量，并注册了自定义字体。 也包括源端用 Paint.getTextBounds(text, start, end, Rect) 取一段具体字符的墨迹包围盒高度来定行高或间距（如 HUD 标签与数值的行距、自适应字号循环）。

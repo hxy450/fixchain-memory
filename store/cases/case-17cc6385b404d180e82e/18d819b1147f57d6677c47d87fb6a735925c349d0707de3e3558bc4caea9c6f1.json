@@ -1,0 +1,206 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-17cc6385b404d180e82e",
+  "created_at": "2026-10-14T03:31:33.803453+00:00",
+  "migration_key": "blockinger-glm531-c54518f5-0a64-4778-9630-e5bfe3f912cc",
+  "title": "编译修复把 stateStyles 的状态样式写成属性键值对象：编译放行，页面一渲染就崩",
+  "when": "编译修复阶段，处理 .stateStyles 报 10905203（'.stateStyles' doesn't conform standard）并选择替代写法、决定改动范围时；界面实现阶段为行容器写按压态 stateStyles 时同样适用",
+  "description": "ArkUI 容器用 .stateStyles({ pressed: … }) 复刻源端列表选择器等按压反馈。各状态的值只能是本组件 @Styles 方法引用（this.xxx）、全局 @Styles 函数名，或以点号开头的内联样式块 { .backgroundColor(…) }。d.ts 中 StateStyles 字段类型是 any；ets-loader 只检查“单属性对象字面量”这一形状，并把该属性的值当作属性调用来绑定，所以 { backgroundColor: x } 这样的键值对象能通过编译，运行时会报 undefined is not callable。",
+  "summary": "起点：converter（a2h-activity-converter，agent-a2ee5c5b94dd74c3e）在 AboutPage、HelpPage（均为 @ComponentV2）里写了\n@Styles rowPressedStyle() { .backgroundColor(game_button_pressed_overlay) } 和 .stateStyles({ pressed: this.rowPressedStyle })，用来复刻 Holo 偏好行的按压态\n（agent-a2ee5c5b94dd74c3e.jsonl:L263-L268）。这是合法写法；不过 HelpPage 文件里还有 HelpDialog、HelpPage 两个 struct。\nStage-2 Base-7 首道编译门由 hmos-builder（agent-aae826948ffb7e743）执行，下文未注明的 L 号均指该转录，repair 指返修根会话。\n第 2 轮构建日志只在 HelpPage.ets:223:7 报了 10905203；\nAboutPage 只报了 Rollup 找不到 ../utils/LinkHelper（L62-L63）。builder 依次查了 d.ts（StateStyles 字段为 ?any，L112-L113）\n和 ets-loader 的 process_component_build.js：调用点要求单个对象字面量参数（L126-L127）；traverseStateStylesAttr 对每个状态只接受四种值：\n已登记的 this.X、全局 @Styles 名、只含一个 PropertyAssignment 的对象字面量、空对象。其中第三种分支执行的是\nbindComponentAttr(createExpressionStatement(e.initializer.properties[0].initializer))，也就是只把该属性的值当成属性调用表达式绑定，键名不参与（L130-L131）。\n这份源码已经正确且足够说明：{ backgroundColor: $r(…) } 编译后只剩 $r(…) 被当作属性调用，并不会变成 .backgroundColor($r(…))。\nbuilder 先 grep process_struct_componentV2.js，没有搜到 Styles，就推断 @ComponentV2 不会登记成员 @Styles（L146-L152）。\n随后它把第三种分支读成“内联单属性对象 { pressed: { backgroundColor: … } }，内部语句变成 .backgroundColor($r(…))”（L144、L152、L178），\n于 07:46 用 Edit 把 HelpPage 中报错的那一行、以及 AboutPage 中没有报错的同型行（自称“潜伏同型”，L210）都改成了\n.stateStyles({ pressed: { backgroundColor: $r('app.color.game_button_pressed_overlay') } })，原有 @Styles 方法留着不再使用（L203-L206）。\n编译门没有拦下，是因为校验器只看形状：单属性对象字面量都会放行。此后构建成功，builder 回报 PASS（L224、L235）。\n回报中只证明了编译通过，没有打开页面验证。到生成结束，两处仍是这种写法（生成检查点 AboutPage.ets:175、HelpPage.ets:245）。\n返修时从主页溢出菜单进入 About，应用立即崩溃，jscrash 为 TypeError undefined is not callable，位于 AboutPage.ets:175:50，正是 $r( 所在列（repair L786-L787）。\nX3 把 AboutPage 恢复为 this.rowPressedStyle 后可以编译，页面打开、长按均不崩（repair L807、L832，commit d2910ac）。这说明单 struct 的 V2 页面\n原本的写法可用，builder 关于 V2 的推断不成立，改动 AboutPage 也不必要。X4 在 HelpPage 中照样恢复时再次报 10905203（repair L856），\n返修指出该文件有两个 @ComponentV2 struct（L864），改用 ArkUI 内联样式块 { .backgroundColor($r(…)) } 后可以打开（repair L874、L921，commit 52abf10）。\n后来 C60/C61 把两页列表都换成了 PrefTextEntryRow，最终版本里已没有这段 stateStyles。\nbuilder 首次写入前被注入的 lesson-29744eb694376e8acaca（v6）提醒“修错只改报错行与符号，未报错写法原样保留”，内容正确；\nbuilder 改 AboutPage 违背了这条提醒，不是被它误导。lesson-6e558834938be19c04e2（v4）要求核对 d.ts，builder 照做了，偏差出在后续对校验器源码的误读。\n这两条经验都没有参与偏差，所以不画进图。\n",
+  "recommendations": [
+    "编译修复阶段遇到 .stateStyles 报 10905203：只改报错的那一处引用，从三种合法写法里选一种：同组件 @Styles 方法 this.xxx、全局 @Styles function 名、以点号开头的内联样式块 pressed: { .backgroundColor(...) }。不要写 { backgroundColor: value } 这样的键值对象。最小检查：替换后在状态值的花括号内看到的应是以“.”开头的属性方法调用，而不是“名称: 值”。",
+    "引用编译器或 ets-loader 源码论证替代写法时，要沿着转换逻辑核对这条写法最终生成什么（本例 createExpressionStatement(properties[0].initializer) 会丢掉键名），不能只看校验器是否放行。stateStyles、@Styles 这类 UI DSL 构造在 d.ts 中类型为 any，编译通过不代表运行时可用。这类改动在编译门报告里要列为“需打开页面验证”的项，并写明页面入口。",
+    "不要把修复按类比扩散到没有报错的文件（如本例 AboutPage 的“潜伏同型”）。没报错的写法原样保留，下一轮构建的真实结果出来后再判断。基于“未搜到关键字”得出的推断（如“V2 不登记 @Styles”）要先用一个未报错的同型文件反证；本例 AboutPage 的同型写法事后被证实可以编译、运行。",
+    "界面实现阶段为按压态写 stateStyles 时，如果同一 .ets 文件里还有其他 struct（例如页内弹窗组件），优先用内联样式块 { .backgroundColor(...) } 或全局 @Styles，避免引用成员 @Styles。本例中双 struct 的 HelpPage 拒绝了 this.rowPressedStyle，单 struct 的 AboutPage 则接受。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-blockinger-glm5.31/entry/src/main/ets/pages/HelpPage.ets",
+        "since": "2026-10-13T10:53:09.711Z",
+        "at": "2026-10-13T22:29:44.396Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/ets/build-tools/ets-loader/lib/process_component_build.js",
+          "at": "2026-10-13T07:41:03.886Z",
+          "reason": "正常输入：builder 用 Bash grep 取出 traverseStateStylesAttr 全文，回执显示：单 PropertyAssignment 对象字面量分支执行 bindComponentAttr(createExpressionStatement(e.initializer.properties[0].initializer))，即只把属性值当作属性调用绑定、丢弃键名；其余合法分支是已登记的 this.X 或全局 @Styles 名（agent-aae826948ffb7e743.jsonl:L130-L131；调用点见 L126-L127）。这足以判断 { backgroundColor: $r(…) } 不等于 .backgroundColor($r(…))。"
+        },
+        {
+          "key": "agent-aae826948ffb7e743.jsonl",
+          "at": "2026-10-13T07:46:00.438Z",
+          "reason": "hmos-builder（Stage-2 Base-7 编译门）读过上述源码，却把该分支理解为“内联单属性对象，内部语句变成 .backgroundColor($r(…))”（L144、L152）。它用 Edit 把 HelpPage 报 10905203 的 .stateStyles({ pressed: this.rowPressedStyle }) 改成 { pressed: { backgroundColor: $r('app.color.game_button_pressed_overlay') } }（L203-L204）。之后构建 PASS（L224），没有做页面验证；这种写法保留到生成结束，返修 X4 时改为内联样式块。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "builder 写前用 Bash 对该文件执行 grep -o \"function traverseStateStylesAttr.{1400}\"，回执返回该函数全文，含单属性对象分支只绑定 properties[0].initializer 的逻辑；这支持 builder 在改写前已收到这段校验与转换源码。",
+          "evidence": [
+            {
+              "source": "generation/c54518f5-0a64-4778-9630-e5bfe3f912cc/subagents/agent-aae826948ffb7e743.jsonl",
+              "line": 130
+            },
+            {
+              "source": "generation/c54518f5-0a64-4778-9630-e5bfe3f912cc/subagents/agent-aae826948ffb7e743.jsonl",
+              "line": 131
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-blockinger-glm5.31/entry/src/main/ets/pages/AboutPage.ets",
+        "since": "2026-10-13T10:53:09.711Z",
+        "at": "2026-10-13T22:29:44.396Z"
+      },
+      "summary": "AboutPage 这一分支比 HelpPage 多一层偏差：本页 stateStyles 并没有报错（第 2 轮日志对 AboutPage 只报 Rollup 缺 LinkHelper），\nbuilder 依据“V2 不登记 @Styles”这一未经验证的推断，把它当作“潜伏同型”一并改成了键值对象（L205-L206、L210）。\n返修 X3 只是恢复原写法 this.rowPressedStyle，编译和运行都正常（repair L807、L832），说明这次改动本身就不必要。\n崩溃位置 AboutPage.ets:175:50 正是 $r( 所在列（repair L787）。\n",
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-blockinger-glm5.31/build_out.log",
+          "at": "2026-10-13T07:33:12.643Z",
+          "reason": "正常输入：builder Grep 第 2 轮构建日志，回执里 10905203 只指向 HelpPage.ets:223:7，AboutPage 只有 00305015 Rollup 找不到 ../utils/LinkHelper（agent-aae826948ffb7e743.jsonl:L62-L63）。据此 AboutPage 的 stateStyles 不在报错范围内。"
+        },
+        {
+          "key": "C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/ets/build-tools/ets-loader/lib/process_component_build.js",
+          "at": "2026-10-13T07:41:03.886Z",
+          "reason": "正常输入：同一 traverseStateStylesAttr 回执显示，单属性对象分支只绑定属性值、丢弃键名（agent-aae826948ffb7e743.jsonl:L130-L131）。"
+        },
+        {
+          "key": "agent-aae826948ffb7e743.jsonl",
+          "at": "2026-10-13T07:46:01.658Z",
+          "reason": "日志没有报 AboutPage 的 stateStyles，builder 仍按“V2 struct 不登记 @Styles”的推断（L146-L152，仅凭在 process_struct_componentV2.js 中没 grep 到关键字）把它当作“潜伏同型”（L210），并沿用对上述源码的误读，用 Edit 把 .stateStyles({ pressed: this.rowPressedStyle }) 改成 { pressed: { backgroundColor: $r(…) } }（L205-L206）。这种写法保留到生成结束，返修 X3 时恢复原写法。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "builder 写前用 Bash 对该文件执行 grep -o \"function traverseStateStylesAttr.{1400}\"，回执返回该函数全文，含单属性对象分支只绑定 properties[0].initializer 的逻辑；这支持 builder 在改写前已收到这段校验与转换源码。",
+          "evidence": [
+            {
+              "source": "generation/c54518f5-0a64-4778-9630-e5bfe3f912cc/subagents/agent-aae826948ffb7e743.jsonl",
+              "line": 130
+            },
+            {
+              "source": "generation/c54518f5-0a64-4778-9630-e5bfe3f912cc/subagents/agent-aae826948ffb7e743.jsonl",
+              "line": 131
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "未查清 ets-loader 为何在双 struct 的 HelpPage 中拒绝 this.rowPressedStyle。builder 与返修只观察到单 struct 与双 struct 的差异，没有读到对应源码；本卡只把它作为观察到的条件写入建议。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-17cc6385b404d180e82e",
+  "metadata": {
+    "migration": {
+      "id": "blockinger-glm531-c54518f5-0a64-4778-9630-e5bfe3f912cc",
+      "project": "Blockinger"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.296"
+      ]
+    },
+    "source_set_id": "sources-37319ba0846f9b0a14c5",
+    "environment": [
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-blockinger-glm5.31",
+        "at": "2026-10-13T03:35:43.538Z",
+        "ref": "generation/c54518f5-0a64-4778-9630-e5bfe3f912cc.jsonl:L423",
+        "request_ref": "generation/c54518f5-0a64-4778-9630-e5bfe3f912cc.jsonl:L422",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-blockinger-glm5.31",
+        "at": "2026-10-13T04:09:41.917Z",
+        "ref": "generation/c54518f5-0a64-4778-9630-e5bfe3f912cc/subagents/agent-a189cc44cdb902fa5.jsonl:L124",
+        "request_ref": "generation/c54518f5-0a64-4778-9630-e5bfe3f912cc/subagents/agent-a189cc44cdb902fa5.jsonl:L123",
+        "phase": "generation"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "35",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-blockinger-glm5.31",
+        "at": "2026-10-13T12:06:21.856Z",
+        "ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L296",
+        "request_ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L295",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "17",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-blockinger-glm5.31",
+        "at": "2026-10-13T12:06:21.856Z",
+        "ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L296",
+        "request_ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L295",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "8",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-blockinger-glm5.31",
+        "at": "2026-10-13T12:06:21.856Z",
+        "ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L296",
+        "request_ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L295",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "4795952a-b849-4427-ba3f-0bc9a11c6092"
+      ]
+    }
+  },
+  "revision": "18d819b1147f57d6677c47d87fb6a735925c349d0707de3e3558bc4caea9c6f1"
+}

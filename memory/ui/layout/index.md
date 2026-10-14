@@ -13,9 +13,9 @@
 
 ## 本级经验
 
-- [工具栏菜单项按实际生效的 showAsAction 分流到图标位或溢出菜单（AppCompat 下 android:showAsAction 被忽略），可勾选项开启勾选指示；返回箭头只在源端启用 Up 时绘制](lesson-a6121cc7eaf207b702f7.lesson.md)
-  - 时机：界面实现阶段，转换工具栏菜单 XML、自绘 ActionBar 或标题栏，决定图标位、溢出菜单与返回箭头时
-  - 情境：源菜单项带图标与 showAsAction=ifRoom/always，或带 checkable=true。也包括 Activity 基于 AppCompat、菜单 XML 写的是 android:showAsAction（常带 tools:ignore="AppCompatResource"），Manifest 没有 parentActivityName、代码没有 setDisplayHomeAsUpEnabled；目标套用自带返回箭头的标题栏模板或兄弟页标题栏。
+- [工具栏菜单项按实际生效的 showAsAction 分流到图标位或溢出菜单（AppCompat 下 android:showAsAction 被忽略；框架 ActionBar 的 withText 只在窗口宽≥480dp 时显示文字），可勾选项开启勾选指示；返回箭头只在源端启用 Up 时绘制](lesson-a6121cc7eaf207b702f7.lesson.md)
+  - 时机：界面实现阶段，转换工具栏菜单 XML、自绘 ActionBar 或标题栏，决定图标位、溢出菜单与返回箭头时；自绘框架主题提供的 ActionBar（应用图标、Up 尖角、溢出按钮、横竖屏高度与标题字号）时
+  - 情境：源菜单项带图标与 showAsAction=ifRoom/always，或带 checkable=true。也包括 Activity 基于 AppCompat、菜单 XML 写的是 android:showAsAction（常带 tools:ignore="AppCompatResource"），Manifest 没有 parentActivityName、代码没有 setDisplayHomeAsUpEnabled；目标套用自带返回箭头的标题栏模板或兄弟页标题栏。 也包括框架 ActionBar（Theme.Holo 等）带 manifest android:icon、setDisplayHomeAsUpEnabled 与 showAsAction="ifRoom|withText"，目标多个页面各自用 hideTitleBar 自绘标题栏。
 - [源 manifest 未声明 android:supportsRtl 时布局方向恒为 LTR：有顺序或对齐语义的容器逐个显式 Direction.Ltr](lesson-148a3e67bd557bafd722.lesson.md)
   - 时机：规格提取与界面实现阶段，为带多语言资源的应用确定布局方向契约，新建按钮条、对话框面板等有顺序或起止对齐语义的容器时（含返修中用自绘面板替换系统弹窗）
   - 情境：AndroidManifest 的 &lt;application&gt; 未声明 android:supportsRtl（安卓布局方向恒为 LTR）；应用含 fa 等 RTL 语言资源，或可能在 RTL 系统语言下运行；目标用 Row/Column 等容器实现按钮条、对话框或起始对齐的内容，未设 direction。

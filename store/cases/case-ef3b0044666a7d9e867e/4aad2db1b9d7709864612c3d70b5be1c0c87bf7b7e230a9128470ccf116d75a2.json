@@ -1,0 +1,183 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-ef3b0044666a7d9e867e",
+  "created_at": "2026-10-14T03:31:20.089235+00:00",
+  "migration_key": "blockinger-glm531-c54518f5-0a64-4778-9630-e5bfe3f912cc",
+  "title": "把 Java float 单精度算术当成只需复刻 (int) 收窄，APM 与弹字透明度/字号按 double 计算",
+  "when": "规格提取阶段，把源端含 (float) 强转或 f 字面量的算术表达式翻译成目标数值契约、给出验收样例时；引擎实现阶段，按该契约写“先算比值再 (int) 截断”的表达式时",
+  "description": "源端 Java 用 float 完成乘除加（(float) 强转、60000.0f/255.0f/1.0f 字面量、float 返回类型），之后再 (int) 截断；目标 ArkTS number 是 double。照写同一表达式时，中间值不按 float32 舍入，截断结果在少数输入上差 1；规格只写了 float→int 收窄（NaN→0、±∞ 饱和、向零截断）。",
+  "summary": "规格作者（a2h-migration-worker c4-01，agent-a8ce6016e6ca09f78）写前完整读过 GameState.java（L50-L51）：\ngetAPM/getAPMString 为 (int)((float)actions*(60000.0f / gameTime))（:380、:484），\ngetPopupAlpha 为 (int)(255.0f*(1.0f + ((float)(popupAttack + popupSustain - x))/((float)popupDecay)))（:518），\ngetPopupSize 为 (int)(60.0f*(1.0f + ((float)x)/((float)popupAttack)))（:527）。这些输入正确，足以说明每一步都是 IEEE 单精度运算。\n作者的写前规划（L84、L127）只把 Java float 语义理解成“(int) 收窄：向零、±∞→±2147483647、NaN→0”，没有提单精度舍入。\n首次 Write（L129）的实现映射行已写成“(int) float→int 收窄 → Math.trunc + 显式饱和”。这次写入被 hook 拒绝，同时注入 lesson-5bc9af19bedaecaf627c（v1），\n摘要为“AC 里每个期望样例值写入前用源端公式手算复核：AC20 的 85 对应 x=1375（非 1325）”（L130）。\n召回 worker 是按实数心算得出这个 85 的（recall/a8ce6016e6ca09f78-call_c7bb6e7af0014a258036c73e.jsonl:L161-L162）。作者照经验“按源端公式手算”，同样按实数复核，\n算得 255×(1/3)=85.0（L131），于是在 algo-io 写下“x < 1475 → (int)(255.0f*(1.0f + (float)(1175 − x)/300.0f))（……x=1375 → 85）”。\n按 Java float 计算，x=1375 的结果是 84.999992→84。同一份 algo-io 的 APM 表写“正常值 | 向零截断 | Math.trunc 等价”（L140-L141），\n主文件的映射行与 AC20/AC21/AC34 只写去掉 f 的公式和收窄边界（L136-L137）。偏差在源码到规格这一环形成：规格把 float 运算缩成“收窄”，样例又按 double 结果给出。\n实现者（Slice 1，agent-a1efe2943742de071）读到上述规格（L27/L30、L34/L35），也读过 GameState.java 全文（L50-L51），还注意到 getPopupSize 返回 float（L52）。\n写前设计（L89）明确想到“IEEE754 double vs float——60000/gameTime 在 float 下 24 位尾数可能不同”，却以“AC 判据只卡边界值，行为等价可接受；algo-io 已认可此映射”为由放弃复刻。\nWrite GameEngine.ets（L142-L143）时，getAPM 与 getAPMString 各写一遍 javaFloatToInt(this.actions * (60000.0 / this.gameTime))，\ngetPopupAlpha 写 javaFloatToInt(255.0 * (1.0 + (…)/POPUP_DECAY))，getPopupSize 写 javaFloatToInt(60.0 * (1.0 + x / POPUP_ATTACK))，全部为 double；\nsource-notes G10 也只登记“Java (int) float→int 收窄 → javaFloatToInt”（L146）。生成期其他写者（hmos-builder agent-acc5022a3164ec512 只给 multitetris 加初值）没有碰这四个方法，这些写法一直保留到生成检查点 7ffa356。\n后果：APM 在 22 次/22000ms 时安卓 60、鸿蒙 59，29/29000 时安卓 59、鸿蒙 60；弹字透明度在 x=1275/1315/1335/1355/1375/1395 时差 1（如安卓 169、鸿蒙 170）。\n返修中，引擎复核代理指出这一差异（repair L4410 #4）。返修主会话把 getAPMString 改为复用 getAPM，并在 getAPM/getPopupAlpha/getPopupSize 中给每个操作数和每步结果加 Math.fround（L5972）。\n随后用临时 PARITY-DEBUG 自检在设备上得到 apm 60/59/240、alpha 169/135/118/101/84/67、size(62)=89，与 Java 一致（L5983-L5991）；删除临时代码后记录 X9（L5992，commit 3740e85）。改动在最终检查点保留。\nalgo-io 里“x=1375 → 85”的样例和“Math.trunc 等价”一行没有在返修中改动。\nlesson-5bc9af19bedaecaf627c（v1）参与了规格样例的偏差，本应作为输入节点入图（force 证据为 L130）。但 L129-L130 在索引中登记为被拒的 Write F001-game-core.md，\npack 回执为 invalid_force_source（reviewed relation contradicts indexed operation endpoints），force 不能绕过，因此图中不放该经验节点，只在本段与下方修订建议中记录。\n注入实现者的经验没有参与本偏差：实现者放弃 float 复刻的判断（L89）早于注入（L103），同次注入中“规格或派工写法与源码冲突时按源端语义实现”一条方向正确，但实现者没有把它用到这一处。\n",
+  "recommendations": [
+    "规格提取阶段：源表达式出现 (float) 强转、f 后缀字面量或 float 字段/返回值，且结果随后 (int) 截断或参与比较时，在实现映射里把“float 运算”和“float→int 收窄”分成两行。前者写明每个操作数与每步 + − × ÷ 的结果都用 Math.fround 舍入到 float32，后者再写 NaN→0、±∞ 饱和、向零截断。不要写“正常值 Math.trunc 等价”。",
+    "规格提取阶段：验收样例按 float32 逐步计算（Python struct.pack('f')/numpy.float32 或 JS Math.fround），并至少给一个 float 与 double 截断结果不同的样例。本例应为 APM(22,22000)=60（double 得 59）、alpha(x=1375)=84（double 得 85）、alpha(x=1275)=169。",
+    "引擎实现阶段：写前已发现源端 float 与目标 double 的尾数可能不同时，不以“AC 只卡边界值”或“规格已认可映射”为由接受，按源端语义用 Math.fround 逐步复刻，并在 source-notes 登记规格差异供回改。同一公式出现在多个方法（getAPM/getAPMString/终局回调）时只实现一处，其余复用。最小检查：单测断言 apm(22,22000)==60、alpha(1275)==169、alpha(1375)==84。",
+    "修订 lesson-5bc9af19bedaecaf627c（版本 1）：在做法第一步“按源端实现逐步手算”里补上数值类型条件：源式含 (float) 强转、f 字面量或 float 返回类型时，手算与样例要按源端类型逐步舍入（float32 用 Python struct/numpy.float32 或 Math.fround），再按 Java (int) 收窄截断，不用实数或 JS double 心算；“已对齐的目标实现”也要先确认它复刻了 float 舍入。何时使用补上“规格提取写 AC 判据样例时”。判断信号：源表达式出现 (float)、x.0f 字面量或 float 返回值，且结果随后截断或比较；样例落在整数或 .5 边界附近（如 255×(1/3)）时必须按 float32 复核。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-blockinger-glm5.31/entry/src/main/ets/game/engine/GameEngine.ets",
+        "since": "2026-10-13T10:53:09.711Z",
+        "at": "2026-10-13T22:29:44.396Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/blockinger-vocollapse-8b26057/src/org/blockinger/game/components/GameState.java",
+          "at": "2026-10-13T04:06:38.751Z",
+          "reason": "正常输入：规格作者的 Read 回执给出 getAPM/getAPMString 的 (int)((float)actions*(60000.0f / gameTime))（:380、:484）、getPopupAlpha 的 255.0f*(1.0f + (float)…/(float)popupDecay)（:518）与 getPopupSize 的 60.0f*(1.0f + (float)x/(float)popupAttack)（:527）。显式 float 强转与 f 字面量足以确定每步都是单精度运算（agent-a8ce6016e6ca09f78.jsonl:L50-L51）。"
+        },
+        {
+          "key": "agent-a8ce6016e6ca09f78.jsonl",
+          "at": "2026-10-13T04:31:04.236Z",
+          "reason": "读到上述源码后，规划（L84、L127）只把 Java float 语义理解为 (int) 收窄。首写（L129）已把映射行写成“Math.trunc + 显式饱和”；注入后按经验以实数复核 255×(1/3)=85.0（L131）。重写 F001-game-core.md，AC20/AC21 公式去掉 f、AC34 只断言除零两值（L136-L137）；再 Write algo-io，APM 表写“正常值 | 向零截断 | Math.trunc 等价”，弹字样例写 x=1375 → 85（L140-L141）。源码到规格在此偏离。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-blockinger-glm5.31/spec/baseline/features/F001-game-core.md",
+          "at": "2026-10-13T07:50:46.847Z",
+          "reason": "交付桥梁：实现者的 Read 回执中，第 161 行映射写“(int) float→int 收窄 → Math.trunc + 显式饱和”，第 214-215 行 AC20/AC21 公式为 (int)(255×(1+(1175−x)/300))、(int)(60×(1+x/125))，第 232 行 AC34 只断言 gameTime=0 的两个边界值（agent-a1efe2943742de071.jsonl:L27、L30）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-blockinger-glm5.31/spec/baseline/features/F001-game-core.algo-io.md",
+          "at": "2026-10-13T07:50:56.239Z",
+          "reason": "交付桥梁：实现者的 Read 回执中，第 52 行给出 float 公式但样例写 x=1375 → 85（Java float 为 84），第 97-103 行 APM 表把“正常值”定为“向零截断 | Math.trunc 等价”（agent-a1efe2943742de071.jsonl:L34-L35）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/blockinger-vocollapse-8b26057/src/org/blockinger/game/components/GameState.java",
+          "at": "2026-10-13T07:51:23.828Z",
+          "reason": "正常输入：实现者的 Read 回执同样给出 :380/:484/:518/:527 的 (float) 强转与 f 字面量；实现者读后还注意到 getPopupSize 返回 float（agent-a1efe2943742de071.jsonl:L50-L52）。"
+        },
+        {
+          "key": "agent-a1efe2943742de071.jsonl",
+          "at": "2026-10-13T08:30:49.011Z",
+          "reason": "收到上述规格与源码。写前设计（L89）明确写到“IEEE754 double vs float——60000/gameTime 在 float 下 24 位尾数可能不同”，又以“AC 判据只卡边界值，行为等价可接受；algo-io 已认可此映射”为由放弃复刻。Write GameEngine.ets 时，getAPM/getAPMString 各写一遍 javaFloatToInt(this.actions * (60000.0 / this.gameTime))，getPopupAlpha/getPopupSize 也用 double 表达式（L142-L143）；source-notes G10 只登记收窄（L146）。规格偏差在此落到目标，实现者自身也放弃了已识别的差异（判断早于 L103 的经验注入）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 6
+        },
+        {
+          "from": 4,
+          "to": 6
+        },
+        {
+          "from": 5,
+          "to": 6
+        },
+        {
+          "from": 6,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "召回注入只存在于规格作者被拒 Write 的 hook tool_result（L130），索引中没有经验文件到该 agent 的读操作；用该行作 force 证据被判 invalid_force_source（pack-2.out），经验节点未入图。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-ef3b0044666a7d9e867e",
+  "metadata": {
+    "migration": {
+      "id": "blockinger-glm531-c54518f5-0a64-4778-9630-e5bfe3f912cc",
+      "project": "Blockinger"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.296"
+      ]
+    },
+    "source_set_id": "sources-37319ba0846f9b0a14c5",
+    "environment": [
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-blockinger-glm5.31",
+        "at": "2026-10-13T03:35:43.538Z",
+        "ref": "generation/c54518f5-0a64-4778-9630-e5bfe3f912cc.jsonl:L423",
+        "request_ref": "generation/c54518f5-0a64-4778-9630-e5bfe3f912cc.jsonl:L422",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-blockinger-glm5.31",
+        "at": "2026-10-13T04:09:41.917Z",
+        "ref": "generation/c54518f5-0a64-4778-9630-e5bfe3f912cc/subagents/agent-a189cc44cdb902fa5.jsonl:L124",
+        "request_ref": "generation/c54518f5-0a64-4778-9630-e5bfe3f912cc/subagents/agent-a189cc44cdb902fa5.jsonl:L123",
+        "phase": "generation"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "35",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-blockinger-glm5.31",
+        "at": "2026-10-13T12:06:21.856Z",
+        "ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L296",
+        "request_ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L295",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "17",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-blockinger-glm5.31",
+        "at": "2026-10-13T12:06:21.856Z",
+        "ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L296",
+        "request_ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L295",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "8",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-blockinger-glm5.31",
+        "at": "2026-10-13T12:06:21.856Z",
+        "ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L296",
+        "request_ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L295",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "4795952a-b849-4427-ba3f-0bc9a11c6092"
+      ]
+    }
+  },
+  "revision": "4aad2db1b9d7709864612c3d70b5be1c0c87bf7b7e230a9128470ccf116d75a2"
+}

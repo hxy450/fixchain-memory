@@ -1,0 +1,147 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-6f949100d998a4784716",
+  "created_at": "2026-10-14T03:22:16.098249+00:00",
+  "migration_key": "blockinger-glm531-c54518f5-0a64-4778-9630-e5bfe3f912cc",
+  "title": "重载音乐时调用了通道的全清 release()，宿主 context 被清空，背景音乐永不装载",
+  "when": "服务层实现阶段，把源端播放器的释放调用（重载开头丢弃旧实例、宿主销毁时全清）映射到目标封装类的释放方法时",
+  "description": "源端在 loadMusic 等重载方法开头用 player.release(); player = null 只丢弃旧实例，宿主引用只在整体 release() 中置空；目标把播放器实例、宿主 context、代数令牌封装进一个通道类，并由同一类提供释放方法。",
+  "summary": "写前实际收到：Sound.java 全文 Read 回执（agent-a5e6d90b9f1cde291.jsonl:L37-L38）中，\nloadMusic:187-193 开头只做 musicPlayer.release(); musicPlayer = null 丢弃旧 MediaPlayer，\n随后照常按类型 create；host 只在 release():350-366 末段与 audioCEO 一起置 null。\nF004 规格（同转录 L33-L34）AC10 把 loadMusic 第 2 步写为“释放旧实例并置 null”，标的为 MusicPlayer.load，\n服务层注明 load 是“重建式装载”；AC23 才是宿主页销毁的全清（……音乐 release 置 null……置空引用→noFocus=true）。\n这些输入已足以区分“重载时只丢弃实例”和“宿主销毁时全清”，规格也没有要求 MusicPlayer 自持宿主 context。\n本次输出却由音频 worker 给 MusicPlayer 加了自持的 context 字段，release() 写成 token++、destroyPlayer()\n并置 context = null（与同文件 EffectPool.release 的全清写法相同）。MusicPlayer.load 自身已先调用\ndestroyPlayer()，并注明“释放旧实例并置 null（AC10 步 2）”；GameSound.loadMusic 却把同一步又写成\nthis.musicPlayer.release()。load 见 ctx === null 时不记日志、直接 onFailed。于是第一次 startMusic → loadMusic\n就把通道 context 清空，load 静默失败，isMusicReady 一直为 false，主页和对局页都没有音乐。\nL152 思考中的设计是“release(): token++; release player; null”，loadMusic 第 2 步调 musicPlayer.release()；\nL177 首写草稿已含此写法。L178 被拒写入注入的经验没有涉及此处；L181 重写与草稿相比只改注释和一处返回类型，\nrelease/loadMusic 片段不变，因此注入经验不入图。同一 agent 随后的 3 次 Edit（L185、L195、L197）只改返回类型笔误和事件回调。\n影子仓 generation_checkpoint 7ffa356 中 GameSound.ets 的这段与 L181 写入一致，偏差一直保留到返修。\n返修 C49（检查点 d85bda4）：L3564 给 MusicPlayer 新增 releasePlayer()（只做 token++ 和释放当前实例），\nrelease() 改为 releasePlayer() 再置空 context；L3565 把 loadMusic 改调 releasePlayer()。L3681 写入报告并记录检查点。\nL3594、L3634、L3652、L3662 是 PARITY-DEBUG 临时日志，L3667 已删除，不属于保留修改。\n音乐与音效经 url=fd:// 传 HAP 内资源段会以 401 失败，这是 C50（改 fdSrc）的另一问题，本卡只归因 context 被清空这一环。\n",
+  "recommendations": [
+    "服务层实现时，若源端同一个 release() 出现在不同作用域（重载开头只丢弃旧实例、宿主销毁时全清），目标封装类要拆成两个方法：只释放实例并作废令牌的给重载路径，另外清空宿主 context、反注册事件的只给宿主销毁路径。逐个源调用点判断：调用之后该对象是否还要继续 create/load；还要用就不能调全清。",
+    "写完通道类后沿首次播放路径走一遍（startMusic → loadMusic → 释放步 → load），确认释放步之后 load 依赖的 context、factory、handlers 仍非空。load 内已经包含‘释放旧实例’时，调用方不要再调全清方法来重复实现同一步。",
+    "因‘宿主已释放 / context 为空’短路的分支要写 hilog 告警（同文件 EffectPool 已有 'context released' 日志），避免本应可用的通道静默失败，只能靠设备音频流排查。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-blockinger-glm5.31/entry/src/main/ets/game/audio/GameSound.ets",
+        "since": "2026-10-13T10:53:09.711Z",
+        "at": "2026-10-13T22:29:44.396Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/blockinger-vocollapse-8b26057/src/org/blockinger/game/components/Sound.java",
+          "at": "2026-10-13T07:51:22.449Z",
+          "reason": "正常输入：worker 全文 Read 回执显示 loadMusic:187-193 开头只 musicPlayer.release(); musicPlayer = null 丢弃旧实例，之后照常 create/setLooping/seekTo；host=null 只出现在 release():350-366 的全清末段。足以说明重载时不应清宿主引用（agent-a5e6d90b9f1cde291.jsonl:L37-L38）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-blockinger-glm5.31/spec/baseline/features/F004-game-audio.md",
+          "at": "2026-10-13T07:51:21.754Z",
+          "reason": "正常输入：Read 回执中 AC10 第 2 步为“释放旧实例并置 null”，标的为 MusicPlayer.load（服务层注明重建式装载）；AC23 宿主销毁全清才“置空引用”。MusicPlayer 接口不含宿主 context，规格没有把重载释放与全清合并（agent-a5e6d90b9f1cde291.jsonl:L33-L34）。"
+        },
+        {
+          "key": "agent-a5e6d90b9f1cde291.jsonl",
+          "at": "2026-10-13T08:30:21.836Z",
+          "reason": "收到上述输入后，Write 写出 MusicPlayer.release() = token++ + destroyPlayer() + context = null；GameSound.loadMusic 第 2 步调用 this.musicPlayer.release()（注释“释放旧实例并置 null”）。而 load 本身已 destroyPlayer()，并在 ctx === null 时静默 onFailed。重载步骤被映射成全清，音乐通道首次装载即失败（L152 设计、L177 首写草稿、L181-L182 写入）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-6f949100d998a4784716",
+  "metadata": {
+    "migration": {
+      "id": "blockinger-glm531-c54518f5-0a64-4778-9630-e5bfe3f912cc",
+      "project": "Blockinger"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.296"
+      ]
+    },
+    "source_set_id": "sources-37319ba0846f9b0a14c5",
+    "environment": [
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-blockinger-glm5.31",
+        "at": "2026-10-13T03:35:43.538Z",
+        "ref": "generation/c54518f5-0a64-4778-9630-e5bfe3f912cc.jsonl:L423",
+        "request_ref": "generation/c54518f5-0a64-4778-9630-e5bfe3f912cc.jsonl:L422",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-blockinger-glm5.31",
+        "at": "2026-10-13T04:09:41.917Z",
+        "ref": "generation/c54518f5-0a64-4778-9630-e5bfe3f912cc/subagents/agent-a189cc44cdb902fa5.jsonl:L124",
+        "request_ref": "generation/c54518f5-0a64-4778-9630-e5bfe3f912cc/subagents/agent-a189cc44cdb902fa5.jsonl:L123",
+        "phase": "generation"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "35",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-blockinger-glm5.31",
+        "at": "2026-10-13T12:06:21.856Z",
+        "ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L296",
+        "request_ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L295",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "17",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-blockinger-glm5.31",
+        "at": "2026-10-13T12:06:21.856Z",
+        "ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L296",
+        "request_ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L295",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "8",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-blockinger-glm5.31",
+        "at": "2026-10-13T12:06:21.856Z",
+        "ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L296",
+        "request_ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L295",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "4795952a-b849-4427-ba3f-0bc9a11c6092"
+      ]
+    }
+  },
+  "revision": "9e5e7d7ca2943f7af99862db0c2aa407bea195ce80164d3224d9a0d17630f496"
+}

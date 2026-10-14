@@ -49,15 +49,18 @@
   - 时机：页面或数据层实现阶段，规格或派工给出的容器、样式、类型写法、槽位或验收条目与写前读到的源码、主题或映射参考不一致，或验收条目没有列出源码里可见的行为时；重构或模块迁移阶段，规格清单要求改变已与源端一致的现有行为时
   - 情境：实现者同时读到规格或派工与源布局、源码、主题文件、映射参考或 SDK 声明，规格的具体写法（含验收条目里的列表范围、过滤条件、容器类型、要求新建的槽位、所引源布局、列举顺序、启动去向）与源端可观察行为或参考映射不符，或验收条目漏掉了源码对展示内容的加工；规格对该处只有概括性理由或没有提及。也包括规格的 gap 条目写着“源端是 X、规格要求 Y、按规格实现”，而现有目标实现已与源端一致。派工声明“规格为权威”、规格条款（取值、方向、数量等）与源码运行语义矛盾而已有实现恰好符合源码时同样适用。也包括巡检或修复单的修法与决策台账总则（如核心流程必须真实可用）、工程硬性条款或源端行为冲突，修复者写前同时读到了双方。 也包括上游审计或规格写入了源码没有的防护属性（如“有界去重队列”），或摘要漏写源码里的分支（手势专用的动画时长、一次性引导），而实现者写前手里同时有源码。
   - 例外：规格或决策记录（如 decision ledger）对该差异写明了有意取舍（例如只在成功后写缓存、先授权再定位），此时按该决策实现，并在报告里写明与源码的差异
+- [规格把源码资源引用（getColor/getInteger/getDimension(R.x)）转成具体值时，按精确资源名在全部 res/values* 检索：近名资源不合并，限定词覆盖（values-land 等）写成分支并在运行期按配置读取](lesson-0c9e222422d81871b464.lesson.md)
+  - 时机：规格提取阶段，把源码中经资源 ID 读取的颜色、整数、尺寸、布尔值写进验收条目与精确取值表时；实现阶段在规格字面量与运行期资源读取之间选择时
+  - 情境：源方法通过 getColor(R.color.X)、getResources().getInteger(R.integer.X) 等读取资源；工程里有名称相近、用途不同的资源（如 yellow 与 square_yellow），或该资源在 values-land 等限定词目录有覆盖值；目标页面支持横竖屏并在旋转后重算几何。
 - [规格提取写验收条目时实读所引源码段落，照抄比较符、范围与名称变换，条目范围不超出本行源锚点，并给出边界样例](lesson-08854573a81a9fa03746.lesson.md)
   - 时机：规格提取阶段写阈值、列表范围、过滤条件、复制/变换类或持久化类验收条目并标注源码出处时；写“点击 X 进入 Y”的导航条目与对接点时
   - 情境：规格作者依赖预生成参考文档或源码片段写验收条目，并以“源码文件:行号”标注出处；读取可能被截断，或只读了参考文档的目录。也包括源端对同类数据维护多组独立集合（如按页面分别写入的两组收藏），规格按页面拆成多个功能分别写条目。也包括验收条目写“点击 X 进入 Y；源：某 Fragment”，规格作者只做了声明级检索、没有展开监听器函数体；同页有多个入口（Banner 进静态详情、列表子按钮按名称查询后进实时页），规格因存在详情页补出“列表项 → 详情”。
+- [规格提取把 AndroidManifest 声明（含未声明的平台缺省）解析成实际行为与鸿蒙目标值并指派实现：未声明 screenOrientation 时 EntryAbility 写 orientation: auto_rotation_restricted；未声明 windowSoftInputMode 时按是否含可滚动视图取 RESIZE/OFFSET，并写出首屏焦点与是否弹键盘；“默认”不能作目标值](lesson-c1d7ec16bb02aa152c33.lesson.md)
+  - 时机：规格提取阶段，为每个 Activity 整理全屏、方向、软键盘等窗口行为，并整理 application 级属性（备份等）时；把“横竖屏双布局”“默认弹出”这类结论写进决策账本或页面规格时
+  - 情境：窗口方向（如 screenOrientation=sensorLandscape）只声明在 AndroidManifest，Java 源码只见全屏标志一类调用；页面规格模板与元数据可能没有方向字段。也包括 application 显式 allowBackup=false，activity 未声明 screenOrientation、windowSoftInputMode 而依赖平台缺省；界面图谱把它们记为 unspecified/unknown，功能基线与计划都没有对应任务，目标备份配置保持模板值。 也包括各 activity 未声明 screenOrientation、源有 layout-land/values-land，规格只写“横竖屏双布局全支持”，module.json5 的 abilities 没有 orientation；以及未声明 windowSoftInputMode、布局含 EditText 和 ListView/ScrollView（或 Activity 继承 ListActivity），规格只写“无 windowSoftInputMode（默认弹出）”。
 - [规格提取时为每个导航目的地写页面入参契约：参数名、类型、是否可空或默认值与源端读取方式，不只留深链占位](lesson-f4d335605b44a60116b9.lesson.md)
   - 时机：规格提取阶段写导航图与分页页面规格时
   - 情境：源端 nav_graph 为目的地声明 &lt;argument&gt;（必填 id 等）并带 deep link 占位，Fragment 用 requireArguments().getString(ARG_X)、SafeArgs 等读取；规格模板的导航图只列目的地、起始页与深链。
-- [规格提取读取 AndroidManifest 的 application 与 activity 声明（含未声明时的平台缺省），把窗口与应用级属性写成验收条目并指派实现](lesson-c1d7ec16bb02aa152c33.lesson.md)
-  - 时机：规格提取阶段，为每个 Activity 整理全屏、方向、软键盘等窗口行为，并整理 application 级属性（备份等）时
-  - 情境：窗口方向（如 screenOrientation=sensorLandscape）只声明在 AndroidManifest，Java 源码只见全屏标志一类调用；页面规格模板与元数据可能没有方向字段。也包括 application 显式 allowBackup=false，activity 未声明 screenOrientation、windowSoftInputMode 而依赖平台缺省；界面图谱把它们记为 unspecified/unknown，功能基线与计划都没有对应任务，目标备份配置保持模板值。
 - [规格需要的值在上游清单或数据源里取不到时，回源码补全或标“待核”，不用端点计数、枚举举例或自拟值收口](lesson-77ca67f164d77ec63cda.lesson.md)
   - 时机：规格提取阶段，依赖 API 清单等上游产物写网络层、鉴权、服务地址等小节时；上游产物缺失、结果被截断，或所指数据源里没有所需值时
   - 情境：规格模板要求某小节取自上游工具的最终产物（如 api-inventory.json 的 auth_model、common.md），该产物没有落盘，只剩中间文件（如 raw_apis.json）；中间文件只给出键名、标签或计数，没有 host、请求头、错误码等具体值。 也包括 skill 要求先跑 API 清单提取，子代理派发失败后清单从未运行，后续计划的网络层只有一句概述，下游据此自拟基址与路径。

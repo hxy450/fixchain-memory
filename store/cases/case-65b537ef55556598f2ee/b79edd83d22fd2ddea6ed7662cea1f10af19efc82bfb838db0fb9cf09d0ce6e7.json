@@ -1,0 +1,187 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-65b537ef55556598f2ee",
+  "created_at": "2026-10-14T03:20:09.059432+00:00",
+  "migration_key": "blockinger-glm531-c54518f5-0a64-4778-9630-e5bfe3f912cc",
+  "title": "源端未覆写返回的根 Activity 被当成“默认退后台”，主页返回没有体现 finish() 的销毁与复位",
+  "when": "规格提取、编排派工与页面实现阶段，为源端未覆写返回处理的启动（根）Activity 确定栈底返回语义及其生命周期效果时",
+  "description": "源启动 Activity 没有覆写 onBackPressed、onKeyDown 或其他返回处理，返回走 Activity 默认行为。它的 onDestroy 有释放逻辑（音乐 release、数据源 close），页面持有实例态（输入框文字、所选起始等级、菜单音乐播放位置），另有跨 Activity 保留的静态单例（对局状态）。目标用 Navigation + NavDestination 承载，根页在栈深≤1 时接管返回。",
+  "summary": "本项偏差的起点是注入的经验 lesson-efff93743d668b55b55a（版本 2），而不是某个 agent 误读源码。编排主会话采信它，\n第一次把“源 Activity 默认 = 退后台”写成交接内容；图中以主会话和对转换者的那次注入作为偏差起点。\n编排主会话 03:16 已读过 MainActivity.java：没有覆写 onBackPressed，onDestroy 中执行 sound.release()/datasource.close()\n（c54518f5-0a64-4778-9630-e5bfe3f912cc.jsonl:L105）。03:30 首写前注入该经验，标题是“…源端无返回处理就按 Activity 默认\n退到后台，不出栈露出空白首页”，召回提醒是“主页返回键=源Activity默认→退后台，不出栈露空白；游戏页返回=finish”（L287）。\n主会话随即归纳为“Back key: main page → background (not pop)”（L297），并在 b2-01 页规格派工中写入\n“返回键：MainPage 返回=源 Activity 默认（退后台，不出栈露空白）”（L341）。\n规格作者 agent-aa19f1861db9aea4a 读到的 MainActivity.java（L71-L72）显示：没有返回覆写，onDestroy 释放音乐与数据源，\n玩家名 EditText 与 startLevel 都是 Activity 实例态。它照派工认定“Activity default back → app goes to background (doesn't finish)”\n（L141）；首次写入（被 hook 拒，L145）已含“源 Activity 默认行为：退后台”，同一经验注入后（L146），又把提醒“栈深≤1时\nmoveAbilityToBackground不出栈”写成验收项。最终 page_0001_MainActivity.md（Write L157-L158）写的是\n“系统返回键 | 源 Activity 默认：退后台，不出栈露空白（验收项: 栈深≤1 时 moveAbilityToBackground 不 pop）”。同一份规格另写了\n“onDestroy: sound.release”，但没有指出返回会触发 onDestroy、玩家名与等级会回到初值。同批的 GameActivity 返回写成\nfinish() 语义，可见规格作者知道两者有别，只是对根页采用了经验给出的“默认退后台”。\n账本 T-008：主会话 04:39:44 写 spec/decision-ledger.md（L882-L884），把同一说法登记为“T-008：主页面返回键=退后台\n（不出栈露空白 Navigation 首页）；游戏页返回=finish 语义”。这一条没有引用源码行，也没有平台版本依据；F007 派工（L603）\n同样写“返回键=退后台不出栈”。MainPage 转换者没有读账本，T-008 是与页规格同源的并列记录，不在本图的交接链上。\n实现者 agent-a2b1c72dd9409d6e5 写前收到四份输入：派工“返回键=退后台（不出栈）”（L1），page_0001 规格（L15-L17），\nMainActivity.java（L38-L39），以及再次注入的同一经验，提醒为“NavDestination onBackPressed 里栈深<=1 时取 context 调\nmoveAbilityToBackground 并 return true”（L73）。这些输入都没有区分 finish 与退后台。实现者照此写 handleBackPressed：\n弹窗先消费返回，栈深≤1 时只调 moveAbilityToBackground，注释为“源端 Activity 默认返回行为：退后台，不出栈露空白”\n（Write L177-L178）。onDestroy 对应的 releaseMenuMusic 只挂在 aboutToDisappear 上（L194-L196），退后台时不会执行。\n之后切片 8 核对 F007-AC13，记为“返回键退后台（converter 已建，未动）”，该片段保留到生成结束。\n返修时，安卓参照（SDK 37 模拟器）返回后 pid 不变；再次启动为 WARM，玩家名为空、等级为 0，Resume 仍可用\n（repair L2988-L2999、L3394-L3413）。返修先试 terminateSelf，鸿蒙进程被结束、续局丢失（L3007-L3027），于是改为：\n栈底返回先调 resetAsFinished()（释放菜单音乐、名字与等级复位、清焦点、记 recreatePending），再调 moveAbilityToBackground()；\n下次 onShown 时调 recreateAfterFinish()（新建 GameSound 并 startMusic(MENU,0)，刷新高分与初始焦点）（L3040；\n检查点 C17，L3474-L3475）。这些修改保留到 FINAL。\n",
+  "recommendations": [
+    "规格提取阶段：源根 Activity 没有覆写返回时，写返回契约前先列出 finish() 的可观察效果：onPause、onStop、onDestroy 各自做什么（如 sound.release、datasource.close），哪些实例态会回到初值（输入框文字、所选等级、音乐播放位置），哪些静态单例会保留（对局状态）。只有参照设备按实际启动方式实测为移到后台时，才写“退后台、保留实例”；无法确认时，把“返回后再启动时名字、等级、音乐、Resume 的状态”写成待核验收项。",
+    "编排派工阶段：把注入经验转成派工要求时，不把经验的通用结论写成“源 Activity 默认 = …”这类源码事实。保留经验的前提，并附上源码依据：是否覆写 onBackPressed，onDestroy 做了什么。",
+    "页面实现阶段：实现 finish 语义时，栈底返回用 moveAbilityToBackground() 保住进程与静态局面（terminateSelf 会结束鸿蒙进程，续局丢失），同时执行源 onDestroy 的释放，并把页面实例态复位；下次 onShown 重走 onCreate 的初始化（新建菜单音乐从头播放、刷新列表、初始焦点）。onDestroy 的映射不能只挂在 aboutToDisappear 上，退后台时它不会触发。",
+    "修订 lesson-efff93743d668b55b55a（版本 2）：标题与 how 第一步不能把“Activity 默认返回”一律写成退到后台。Activity 未覆写返回时默认 finish()：onDestroy 执行，实例态丢失，进程与静态单例保留，再次启动走 onCreate。本例参照为 SDK 37 模拟器、以 am start -n 启动，实测正是 finish（WARM 重启、pid 不变、输入框与等级回初值）。因此正文“Android 12+ 对任务根启动 Activity 把任务移到后台”须补上前提，不能当无条件结论。做法改为：栈底返回仍用 moveAbilityToBackground，不用 terminateSelf（会丢失静态局面），同时执行 onDestroy 的释放与实例态复位，下次可见时重走 onCreate 初始化；只有参照实测为移到后台（HOT 恢复原实例）时才省略复位。判断信号有三：源 Activity 的 onDestroy 有 release/close；页面有输入框、选择值、背景音乐等实例态；参照设备上返回后再启动是 WARM 还是 HOT。check 中的“进程与局面保留”也要补上“页面实例态按 finish 回到初值”。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-blockinger-glm5.31/entry/src/main/ets/pages/MainPage.ets",
+        "since": "2026-10-13T10:53:09.711Z",
+        "at": "2026-10-13T22:29:44.396Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/blockinger-vocollapse-8b26057/src/org/blockinger/game/activities/MainActivity.java",
+          "at": "2026-10-13T03:34:37.289Z",
+          "reason": "正常输入：规格作者的 Read 回执显示 MainActivity 没有覆写 onBackPressed，onDestroy 执行 sound.release()、sound=null、datasource.close()（L265-L270）；玩家名 EditText 与 startLevel=0 都是 Activity 实例态。返回走 Activity 默认 finish 时，这些效果都可观察（agent-aa19f1861db9aea4a.jsonl:L71-L72）。"
+        },
+        {
+          "key": "c54518f5-0a64-4778-9630-e5bfe3f912cc:main",
+          "at": "2026-10-13T03:33:18.771Z",
+          "reason": "编排主会话 03:16 已读过 MainActivity.java（L105：无返回覆写，onDestroy 释放音乐与数据源）。03:30 首写被拒时注入 lesson-efff93743d668b55b55a，提醒为“主页返回键=源Activity默认→退后台”（L287）；主会话采信后归纳为“Back key: main page → background (not pop)”（L297），没有核对源端生命周期，就在 b2-01 页规格派工中写入“返回键：MainPage 返回=源 Activity 默认（退后台，不出栈露空白）；GamePage 返回=finish 语义”（Agent L341，回执 L347）。经验的通用结论在这里被写成源码事实，成为页规格与账本 T-008 的共同来源。注入那一行被索引绑定为被拒的 gen_snapshots.py 写入，无法作为读边证据，因此经验到主会话的关系只留在说明中。",
+          "problem": true
+        },
+        {
+          "key": "c54518f5-0a64-4778-9630-e5bfe3f912cc:aa19f1861db9aea4a",
+          "at": "2026-10-13T03:57:44.861Z",
+          "reason": "读到上述源码与派工后，思考中认定“Activity default back → app goes to background (doesn't finish)”（L141）。page_0001 Write 写“系统返回键 | 源 Activity 默认：退后台，不出栈露空白（验收项: 栈深≤1 时 moveAbilityToBackground 不 pop）”。同一规格写了 onDestroy: sound.release，却没有把它与返回关联（L157-L158）。首写被拒时（L146）同一经验再次注入，提醒“根页返回=退后台写成可验收项”，验收项措辞由此而来；该注入行被索引绑定为被拒的 page_0001 写入，无法作读边证据，只留在说明中。本链确认传递，不另推定其独立失职。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-blockinger-glm5.31/spec/baseline/ui/page_0001_MainActivity.md",
+          "at": "2026-10-13T05:07:31.526Z",
+          "reason": "交付桥梁：MainPage 转换者的 Read 回执包含“系统返回键 | 源 Activity 默认：退后台…moveAbilityToBackground 不 pop”这一行（agent-a2b1c72dd9409d6e5.jsonl:L15、L17）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-blockinger-glm5.31/.claude/a2h-bench/memory/ui/navigation/back-stack/lesson-efff93743d668b55b55a.lesson.md",
+          "at": "2026-10-13T05:15:06.766Z",
+          "reason": "同一经验在转换者首写被拒时注入，提醒为“返回键：NavDestination onBackPressed 里栈深<=1 时取 context 调 moveAbilityToBackground 并 return true”。转换者照此列为实现要点（agent-a2b1c72dd9409d6e5.jsonl:L73、L74、L94）。",
+          "problem": true
+        },
+        {
+          "key": "c54518f5-0a64-4778-9630-e5bfe3f912cc:a2b1c72dd9409d6e5",
+          "at": "2026-10-13T05:33:49.684Z",
+          "reason": "收到派工“返回键=退后台（不出栈）”（L1）、page_0001 规格与经验提醒，也读过 MainActivity.java（L38-L39）。MainPage Write 中 handleBackPressed 在栈深≤1 时只调 moveAbilityToBackground，注释“源端 Activity 默认返回行为：退后台，不出栈露空白”；onDestroy 映射只挂在 aboutToDisappear 上（Write L177-L178、L194-L196）。该片段保留到生成结束。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 6
+        },
+        {
+          "from": 5,
+          "to": 6,
+          "force": true,
+          "reason": "该经验在 MainPage 转换者首次写入前注入：L73 是被拒写入的 tool_result，列出本经验及提醒“返回键：NavDestination onBackPressed 里栈深<=1 时取 context 调 moveAbilityToBackground 并 return true”。转换者在 L74、L94 把它列为实现要点，随后在 L177 的 MainPage Write 中照写。",
+          "evidence": [
+            {
+              "source": "generation/c54518f5-0a64-4778-9630-e5bfe3f912cc/subagents/agent-a2b1c72dd9409d6e5.jsonl",
+              "line": 73
+            }
+          ]
+        },
+        {
+          "from": 6,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "返修的安卓参照全程用 am start -n 启动（repair L3394、L3400），未核由桌面图标（MAIN/LAUNCHER）启动时 SDK 37 是否同样 finish。经验正文所称 Android 12+ 移到后台的行为，本材料未实测。本卡以 final_checkpoint 保留的 finish 复位为正确参照。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-65b537ef55556598f2ee",
+  "metadata": {
+    "migration": {
+      "id": "blockinger-glm531-c54518f5-0a64-4778-9630-e5bfe3f912cc",
+      "project": "Blockinger"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.296"
+      ]
+    },
+    "source_set_id": "sources-37319ba0846f9b0a14c5",
+    "environment": [
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-blockinger-glm5.31",
+        "at": "2026-10-13T03:35:43.538Z",
+        "ref": "generation/c54518f5-0a64-4778-9630-e5bfe3f912cc.jsonl:L423",
+        "request_ref": "generation/c54518f5-0a64-4778-9630-e5bfe3f912cc.jsonl:L422",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-blockinger-glm5.31",
+        "at": "2026-10-13T04:09:41.917Z",
+        "ref": "generation/c54518f5-0a64-4778-9630-e5bfe3f912cc/subagents/agent-a189cc44cdb902fa5.jsonl:L124",
+        "request_ref": "generation/c54518f5-0a64-4778-9630-e5bfe3f912cc/subagents/agent-a189cc44cdb902fa5.jsonl:L123",
+        "phase": "generation"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "35",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-blockinger-glm5.31",
+        "at": "2026-10-13T12:06:21.856Z",
+        "ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L296",
+        "request_ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L295",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "17",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-blockinger-glm5.31",
+        "at": "2026-10-13T12:06:21.856Z",
+        "ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L296",
+        "request_ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L295",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "8",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-blockinger-glm5.31",
+        "at": "2026-10-13T12:06:21.856Z",
+        "ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L296",
+        "request_ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L295",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "4795952a-b849-4427-ba3f-0bc9a11c6092"
+      ]
+    }
+  },
+  "revision": "b79edd83d22fd2ddea6ed7662cea1f10af19efc82bfb838db0fb9cf09d0ce6e7"
+}

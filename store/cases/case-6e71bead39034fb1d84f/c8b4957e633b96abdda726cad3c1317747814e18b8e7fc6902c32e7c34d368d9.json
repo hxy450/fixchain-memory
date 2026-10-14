@@ -1,0 +1,184 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-6e71bead39034fb1d84f",
+  "created_at": "2026-10-14T03:12:38.065313+00:00",
+  "migration_key": "blockinger-glm531-c54518f5-0a64-4778-9630-e5bfe3f912cc",
+  "title": "把仅在配置重建时非空的 getLastCustomNonConfigurationInstance 译成单例是否存在，导致 New Game 复用旧局",
+  "when": "规格提取与对局页实现阶段，翻译源 Activity.onCreate 中“取回保留实例为空才按启动参数 mode 分支”的建局逻辑时",
+  "description": "源 Activity 未声明 configChanges，用 onRetainCustomNonConfigurationInstance / getLastCustomNonConfigurationInstance 跨配置变化保留对局对象；该对象同时是静态单例（getInstance / getNewInstance，只在退出时 destroy）。目标页面不因配置变化重建，单例跨页面常驻，同一页面有 NEW_GAME / RESUME_GAME 两个入口。",
+  "summary": "F008 规格作者（c4-03 批）写前实读了 GameActivity.java 全文：onCreate:92 先取\ngetLastCustomNonConfigurationInstance()，只有为 null 时才按 intent 的 mode 分支\n（:95-103，NEW_GAME → getNewInstance + setLevel，RESUME_GAME → getInstance）；该值来自\n:314 onRetainCustomNonConfigurationInstance，只在配置变化重建 Activity 时非空。page_0002\n规格也写明“旋转即重建 Activity（onRetain 保 GameState → onCreate 里 getLast… 取回）”；\nGameState.java 虽有 hasInstance()，onCreate 并未使用它。feature-base 跨栈映射行写的是\n“onRetainCustomNonConfigurationInstance → UIAbility 不因旋转重建 → GameState 单例天然续存”，\n仍限定在旋转场景。这些输入已经足够。作者在写前思考中却把语义扩成“页面重建/重进时取回既有\nGameState……game!=null 时跳过 mode 分支”（agent-a5648e8678a6a6736.jsonl:L155）。随后 F008\n规格写成“续存优先: 已有 GameState 实例时 mode/level 全部忽略（直接复用当前局）”，并加了 AC04\n“有实例时传入任意 mode 仍恢复原局、不开新局”（Write L186-187）。源端单例只在菜单 Exit 时\ndestroy（MainActivity.java:180），暂停或打完一局后“已有实例”恒为真。规格就这样把只用于配置\n重建的判定扩到了每一次进入对局页，偏差从源码到规格这一步开始。\nSlice 9 实现者读到该规格（agent-a7606875508fefe6a.jsonl:L27-28）和源码（L32-33），派工里也\n写着“续存实例优先”。实现者在思考中已指出 getLast… 只在配置驱动的重建时返回实例（L98），\n但只核对了“暂停后 Resume 再进入”这一条流程，没有核对“已有旧局时 New Game”。于是照 AC04\n写出 if (!GameEngine.hasInstance()) {按 mode 分支} else {getInstance，注释“续存优先：mode/level\n忽略”}，并注明“hasInstance 即「已有续存局」”（Write L136-137；L155-156 的 Edit 只改 value 的\n类型，判定保留）。该片段一直保留到返修前。两人首写前都注入了经验，其中一条是“未声明\nconfigChanges 时在 onConfigurationUpdate 中按源端重建时序刷新”，只用于 AC23 / onConfigurationUpdate\n路径。上述判断在注入前的思考中已经成形（规格作者 L155 早于 L162 注入；实现者 L98、L115 早于\nL118 注入），注入后也没有改变，所以经验不入图。\n返修 X5 给 applyRoutePayload 增加 configRebuild 参数，判定改为\nif (!configRebuild || !GameEngine.hasInstance())：只有 onConfigurationUpdate 重建\n（assembleSession(…, true)）才复用当前局，onReady 正常进入（assembleSession(…, false)）一律按\nmode 分支（repair 2d743162…jsonl:L4603、L4610；检查点 X5 commit 91c5bae，L4641-L4642）。\n",
+  "recommendations": [
+    "规格提取时，把源端“getLastNonConfigurationInstance / getLastCustomNonConfigurationInstance 为空才读启动参数”写成两种进入方式：配置变化重建时取回当前对象并忽略参数，正常启动时该值恒为 null，必须按 mode 走分支。目标端用“本次是否由配置变化重建”区分（如 onConfigurationUpdate 重建路径的标志），不要用单例 hasInstance 或全局状态是否存在来代替。",
+    "规格写“某实例优先、忽略启动参数”这类 AC 前，先按源端每个入口和前置状态逐一代入源条件：NEW_GAME/RESUME 入口 × 无旧局/有未结束旧局/有已结束旧局，再加上旋转重建，写清哪些组合真的会忽略参数。判据同时给出“已有旧局时 New Game 起始等级 12 → 空棋盘、Level 12”和“旋转后保留当前局”两条。",
+    "实现时，如果规格把源条件换成了另一个目标条件（如 getLast… 非空 → hasInstance），把同一张入口 × 前置状态表分别代入源条件和目标条件；任何组合结果不一致，就按源语义实现，并在 source-notes 中标注与规格的差异。不能只验证一条入口就认可规格。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-blockinger-glm5.31/entry/src/main/ets/pages/GamePage.ets",
+        "since": "2026-10-13T10:53:09.711Z",
+        "at": "2026-10-13T22:29:44.396Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/blockinger-vocollapse-8b26057/src/org/blockinger/game/activities/GameActivity.java",
+          "at": "2026-10-13T04:07:16.735Z",
+          "reason": "正常输入：规格作者 Read 回执给出 onCreate:92 game = getLastCustomNonConfigurationInstance()，仅 game==null 时按 mode 分支（:95-103），以及 :314 onRetainCustomNonConfigurationInstance 返回 game。这足以说明参数分支只在配置重建时被跳过，与单例是否存在无关（agent-a5648e8678a6a6736.jsonl:L70-71）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-blockinger-glm5.31/spec/baseline/feature-base.md",
+          "at": "2026-10-13T04:06:25.269Z",
+          "reason": "上下文输入：跨栈映射行“onRetainCustomNonConfigurationInstance | UIAbility 不因旋转重建 → GameState 单例天然续存（reconnect 语义保留）| 行为等价（更稳）”，只描述旋转场景下的保留机制，没有说正常进入也忽略 mode。“单例天然续存”的措辞被规格作者沿用并扩大（agent-a5648e8678a6a6736.jsonl:L30-31）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-blockinger-glm5.31/spec/baseline/ui/page_0002_GameActivity.md",
+          "at": "2026-10-13T04:07:28.362Z",
+          "reason": "正常输入：页面规格写明源端未声明 configChanges，“旋转即重建 Activity（onRetain 保 GameState → onCreate 里 getLastCustomNonConfigurationInstance 取回 → reconnect …）”，把取回实例限定在重建时序内（agent-a5648e8678a6a6736.jsonl:L83-84，第 26、58 行）。"
+        },
+        {
+          "key": "agent-a5648e8678a6a6736.jsonl",
+          "at": "2026-10-13T04:30:07.484Z",
+          "reason": "收到上述源码和规格后，写前思考把 getLast… 解释成“页面重建/重进时取回既有 GameState，game!=null 时跳过 mode 分支”（L155）。Write F008 时写成“续存优先: 已有 GameState 实例时 mode/level 全部忽略”、AC04“有实例时传入任意 mode 仍恢复原局、不开新局”，映射行写“getLastCustomNonConfigurationInstance → GameState 单例天然续存”（L186-187）。配置重建专用的判定由此被扩成单例存在判定。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-blockinger-glm5.31/spec/baseline/features/F008-game-session.md",
+          "at": "2026-10-13T09:07:03.200Z",
+          "reason": "交付桥梁：实现者 Read 回执包含第 44 行映射、第 79 行“续存优先: 已有 GameState 实例时 mode/level 全部忽略”和第 88 行 AC04（agent-a7606875508fefe6a.jsonl:L27-28）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/blockinger-vocollapse-8b26057/src/org/blockinger/game/activities/GameActivity.java",
+          "at": "2026-10-13T09:07:07.993Z",
+          "reason": "正常输入：实现者写前也 Read 了源码全文，回执含 :92-103 的判空分支与 :314 onRetain（agent-a7606875508fefe6a.jsonl:L32-33）。"
+        },
+        {
+          "key": "agent-a7606875508fefe6a.jsonl",
+          "at": "2026-10-13T09:36:16.626Z",
+          "reason": "实现者读到错误的 AC04 和源码后，在思考中已写出 getLast… 只在配置驱动的重建时返回实例（L98），但只验证了 Resume 再进入这一条流程，就按 AC04 用 GameEngine.hasInstance() 门控 mode 分支，注释“hasInstance 即「已有续存局」”“续存优先：mode/level 忽略”（Write L136-137）。随后的 Edit 保留了该判定（L155-156）。这是实现阶段漏掉了按源条件复核的机会。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": 7
+        },
+        {
+          "from": 6,
+          "to": 7
+        },
+        {
+          "from": 7,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-6e71bead39034fb1d84f",
+  "metadata": {
+    "migration": {
+      "id": "blockinger-glm531-c54518f5-0a64-4778-9630-e5bfe3f912cc",
+      "project": "Blockinger"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.296"
+      ]
+    },
+    "source_set_id": "sources-37319ba0846f9b0a14c5",
+    "environment": [
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-blockinger-glm5.31",
+        "at": "2026-10-13T03:35:43.538Z",
+        "ref": "generation/c54518f5-0a64-4778-9630-e5bfe3f912cc.jsonl:L423",
+        "request_ref": "generation/c54518f5-0a64-4778-9630-e5bfe3f912cc.jsonl:L422",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-blockinger-glm5.31",
+        "at": "2026-10-13T04:09:41.917Z",
+        "ref": "generation/c54518f5-0a64-4778-9630-e5bfe3f912cc/subagents/agent-a189cc44cdb902fa5.jsonl:L124",
+        "request_ref": "generation/c54518f5-0a64-4778-9630-e5bfe3f912cc/subagents/agent-a189cc44cdb902fa5.jsonl:L123",
+        "phase": "generation"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "35",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-blockinger-glm5.31",
+        "at": "2026-10-13T12:06:21.856Z",
+        "ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L296",
+        "request_ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L295",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "17",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-blockinger-glm5.31",
+        "at": "2026-10-13T12:06:21.856Z",
+        "ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L296",
+        "request_ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L295",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "8",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-blockinger-glm5.31",
+        "at": "2026-10-13T12:06:21.856Z",
+        "ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L296",
+        "request_ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L295",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "4795952a-b849-4427-ba3f-0bc9a11c6092"
+      ]
+    }
+  },
+  "revision": "c8b4957e633b96abdda726cad3c1317747814e18b8e7fc6902c32e7c34d368d9"
+}

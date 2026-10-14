@@ -1,0 +1,178 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-f7cfc36e8dc61295fe43",
+  "created_at": "2026-10-14T02:55:50.371151+00:00",
+  "migration_key": "blockinger-glm531-c54518f5-0a64-4778-9630-e5bfe3f912cc",
+  "title": "Holo 主题下的 SeekBar 按“直接映射”写成 ArkUI Slider 加近似配色，没有从平台资源复刻细轨、拇指图和 AbsSeekBar 触摸取值",
+  "when": "页面实现阶段，为源布局中未声明样式的平台可拖动控件（SeekBar 等）选定目标组件、外观和触摸取值方式时；规格提取阶段为这类控件写转换决策行时",
+  "description": "源端 SeekBar 只写了尺寸、权重和 max，没有 style、thumb、progressDrawable，外观由应用主题的框架控件样式提供（Theme.Holo → Widget.Holo.SeekBar：拇指 PNG、细轨道与较粗的进度条、左右 16dp 内边距）。触摸取值由框架 AbsSeekBar 决定。目标端映射参考把 SeekBar→Slider 标成“直接映射”，但同一份参考的外观属性表写着 thumb/thumbOffset“无直接对应、需自定义实现”；ArkUI Slider 只有单一轨道粗细，按压和取值规则也不同。",
+  "summary": "写前实际收到的输入（MainPage 转换者 agent-a2b1c72dd9409d6e5）：\n- 页面规格 page_0001（L15-L17）写明主题链 AppTheme → android:Theme.Holo，转换决策表要求“平台隐式提供的外观写成目标显式样式”，\n  弹窗可见契约逐项给出 seek_bar_dialog 的 16dp / 32dp 行 [8 | SeekBar(max=30, weight=1) | 8 | 32dp 数值 | 8] / 16dp 结构。\n  但它没有为 SeekBar 写外观或触摸取值的决策行，状态表直接写“startLevelDialog 的 Slider（0..30）”。\n- 原子组件映射参考（L28-L29）在组件表写“SeekBar → Slider 直接映射”；SeekBar→Slider 外观属性表又写 android:thumb、thumbOffset\n  “无直接对应，需自定义实现”，只有 track/progressTint 对应 trackColor/selectedColor。\n- 源 seek_bar_dialog.xml（L45-L46）：SeekBar 只有 id、宽 0dp、高 wrap_content、weight=1、max=@integer/levels，外观全部来自主题。\n- 注入经验 lesson-47785524（v6，L73）的摘要是“Holo 隐式外观显式化：暗底背景、未声明字色字号的 Text 按实际提供方（Theme.Holo 白字）\n  逐个写明，取不到精确值标待核”。\n这些输入已经说明该控件的外观来自框架主题、拇指无法靠 Slider 属性直译，并要求按实际提供方取值。\n转换者在 L134 的思考里认出 Holo SeekBar 是“细轨 + 大圆拇指（蓝白发光）”、进度色大约是 #33B5E5，随即写“取不到精确值标待核”，\n决定用 Slider(OutSet) 加三种颜色近似：trackColor 用应用自己的 holo_grey(#FF4D4D4D)，selectedColor 新增 holo_blue_light(#FF33B5E5)，\nblockColor 复用白色文字色 holo_text_primary。它没有查本机 Android SDK 的平台样式、图片或 AbsSeekBar 源码，也没有核对触摸取值，\n只把 Slider.onChange 当作 onProgressChanged 的等价物。生成期没有任何 agent 查过本机 SDK。\nWrite（L177-L178，05:33:49）写出 StartLevelDialogOverlayBuilder 里的 Slider({min:0,max:sliderMax,step:1,style:OutSet}).height(32)\n加上述三色。转换报告（L239）把 holo_blue_light 记为“待核色值（AOSP Holo 近似）”，依据写 lesson 477855。\n该片段此后没人改过，原样留到生成结束（影子仓 7ffa356 MainPage.ets:531-547）。返修看到的是白色圆点、粗灰轨，同比例点按的取值也不同。\n偏差在实现者这一环：输入已经指明外观提供方，它却用内置 Slider 加近似配色代替平台外观，并且没有处理触摸取值。\n注入经验的作用是：它只说依赖库主题去 aar 取值，没有说 Android 框架主题（Theme.Holo 等）的值在本机 SDK 的平台资源里；\n它的“待核”退路和偏 Text/Material 控件的列举，让转换者对 Holo SeekBar 停在“改颜色 + 标待核”，所以经验节点同样标为问题。\n另一条注入经验 lesson-6e558834 的摘要提到“写 Slider 等成员名前查 d.ts”，只管 API 名，不是选 Slider 的原因，不入图。\n规格阶段也有缺口：page_0001 和 F007 都没有 SeekBar 外观或触摸决策行，下面另写规格阶段的建议。\n最终修改（返修 C12 第 2 处）：\n- 读 SDK sources/android-36.1 的 AbsSeekBar.onTouchEvent / trackTouchEvent / startDrag（repair L2838-L2844）。\n- 从 platforms/android-35/data/res/drawable-xxhdpi 复制 scrubber_control_normal_holo.png 和 scrubber_control_pressed_holo.png（L2843）。\n- 新建 components/HoloSeekBar.ets（L2851）：高 32、左右内边距 16；轨道 #80666666 0.76vp，进度 #33B5E5 3.05vp；拇指用图片，拖动时换 pressed 图；\n  按下即跳位，按在拇指范围内时保持偏移，progress = round((x−16)/可用宽×max)。\n- MainPage 的 StartLevelDialogContent 把 Slider 换成 HoloSeekBar，并加 import（L2857）。\n- 两端同比例点按取值一致：50%→15、30%→9，拖到末端→30（L2896-L2897）。\n- 检查点 C12-3 f14d063（L2906-L2907），保留到 FINAL 910d39d。\n设置页滑条行也改用了 HoloSeekBar，那部分归偏好行任务，不在本卡范围。\n",
+  "recommendations": [
+    "页面实现阶段：源端 SeekBar、ProgressBar、RatingBar 等平台控件没有声明 style、thumb、progressDrawable 时，先按主题定位提供外观的框架样式（Theme.Holo → Widget.Holo.SeekBar）。再到本机 SDK（%LOCALAPPDATA%/Android/Sdk 或 ANDROID_HOME 下 platforms/android-<api>/data/res）读 values/styles.xml 和 drawable 里的 scrubber_*_holo，取出高度、左右内边距（thumbOffset）、轨道与进度的粗细和颜色、拇指图。之后才判断 ArkUI Slider 能否表达。轨道与进度粗细不同、拇指是位图时，复制原图做自定义组件，不用 trackColor/selectedColor/blockColor 近似后标“待核”。",
+    "页面实现阶段：迁移可拖动控件时同时对照源端触摸取值，可读本机 SDK sources/android-<api>/android/widget/AbsSeekBar.java。规则是：按下即跳到按下位置；按在当前拇指 thumbOffset 范围内时保持拇指偏移；progress = round((x − paddingLeft) / 可用宽 × max)，越界夹到 0/max；在滚动容器内要越过 touchSlop 才开始拖动。写完用同比例位置点按核对取值，例如本例 max=30 时 50%→15、30%→9。",
+    "规格提取阶段：页面规格的转换决策表给每个未写样式的平台控件单列一行，对话框内容视图里的 SeekBar 也算。行里写清外观提供方（如 Widget.Holo.SeekBar）、从 SDK 平台资源取到的尺寸、颜色和图片名，以及触摸取值规则。不要只在状态表里写“Slider(0..30)”。映射参考的“SeekBar→Slider 直接映射”只覆盖值域和回调；外观表里标“无直接对应”的 thumb/thumbOffset，由源主题隐式提供时同样要处理。",
+    "修订 lesson-47785524c7f132ea7efe（版本 6）：把“Android 框架主题（Theme.Holo/Theme.Black/Theme.Material 等）的隐式外观取值来自本机 SDK platforms/android-<api>/data/res 的 styles/themes 与 drawable，控件行为来自 sources/android-<api>”写进标题或做法第一步。规定先查 SDK、查不到才标待核。适用情境补上框架控件：外观由位图或 9-patch 决定（SeekBar 拇指与双粗细轨道、ImageWell、textfield 等）时，只给 ArkUI 内置组件改颜色不算显式化，要逐项对照几何和触摸语义，复制平台图片或改用自定义组件。判断信号：源控件没有 style/background/thumb 属性，主题父链是 android:Theme.*；映射参考把它标为“直接映射”，外观属性表却写 thumb/progressDrawable“无直接对应”。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-blockinger-glm5.31/entry/src/main/ets/pages/MainPage.ets",
+        "since": "2026-10-13T10:53:09.711Z",
+        "at": "2026-10-13T22:29:44.396Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-blockinger-glm5.31/spec/baseline/ui/page_0001_MainActivity.md",
+          "at": "2026-10-13T05:07:31.526Z",
+          "reason": "输入：Read 回执写明主题 AppTheme → android:Theme.Holo，转换决策表要求“平台隐式提供的外观写成目标显式样式”，弹窗契约给出 seek_bar_dialog 的 16/32/16dp 结构和 SeekBar(max=30)。缺口是没有 SeekBar 的外观或触摸决策行，状态表直接写“startLevelDialog 的 Slider”（agent-a2b1c72dd9409d6e5.jsonl:L15-L17）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-blockinger-glm5.31/.claude/skills/android-ui-graph-query/references/android-to-harmonyOS-ui-atomic-component-mapping-reference.md",
+          "at": "2026-10-13T05:07:44.979Z",
+          "reason": "输入：Read 回执第 887 行写“SeekBar → Slider 直接映射”，第 961-964 行写 android:thumb、thumbTint、thumbOffset“无直接对应，需自定义实现”，只有 track/progressTint 对应 trackColor/selectedColor。足以说明拇指外观不能靠 Slider 属性直译（同转录 L28-L29）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/blockinger-vocollapse-8b26057/res/layout/seek_bar_dialog.xml",
+          "at": "2026-10-13T05:08:05.948Z",
+          "reason": "正常输入：Read 回执中 SeekBar levelseekbar 只有宽 0dp、高 wrap_content、weight=1、max=@integer/levels，没有 style、thumb、progressDrawable，外观全部来自 Theme.Holo 的 Widget.Holo.SeekBar（同转录 L45-L46）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-blockinger-glm5.31/.claude/a2h-bench/memory/ui/theme/lesson-47785524c7f132ea7efe.lesson.md",
+          "at": "2026-10-13T05:15:06.766Z",
+          "reason": "注入经验（v6）。首写被拒的 hook 回执给出摘要“Holo 隐式外观显式化：暗底背景、未声明字色字号的 Text 按实际提供方（Theme.Holo 白字）逐个写明，取不到精确值标待核”（同转录 L73）。正文只给依赖库主题去 aar 取值的方法，没有指出框架主题的实际提供方是本机 SDK 平台资源，控件列举也只到 Text/EditText/Material 控件。转换者对 Holo SeekBar 走了“待核”退路，只给 Slider 改色（L134），报告把 holo_blue_light 的依据记为 lesson 477855（L239）。",
+          "problem": true
+        },
+        {
+          "key": "agent-a2b1c72dd9409d6e5.jsonl",
+          "at": "2026-10-13T05:33:49.684Z",
+          "reason": "L134 已认出 Holo SeekBar 是细轨加大圆拇指、进度约 #33B5E5，仍写“取不到精确值标待核”。没有查 SDK 平台样式、图片或 AbsSeekBar，Write 写出 Slider({min:0,max:sliderMax,step:1,style:OutSet}).height(32)，trackColor 用 holo_grey、selectedColor 用 holo_blue_light、blockColor 用 holo_text_primary，触摸取值交给 Slider 默认（L177-L178）。该片段原样留到生成结束。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 5
+        },
+        {
+          "from": 2,
+          "to": 5
+        },
+        {
+          "from": 3,
+          "to": 5
+        },
+        {
+          "from": 4,
+          "to": 5,
+          "force": true,
+          "reason": "注入不是读文件：converter 首次明确写入（Bash 写 /tmp/strings.txt）被召回 hook 拒绝，tool_result 列出 lesson-477855（v6）摘要“Holo 隐式外观显式化……按实际提供方逐个写明，取不到精确值标待核”。随后 L74 思考逐条记下这条经验，L134 为 Holo SeekBar 选色时照“取不到精确值标待核”只给 Slider 改色，转换报告把 holo_blue_light 等待核色的依据记为 lesson 477855（L239）。",
+          "evidence": [
+            {
+              "source": "generation/c54518f5-0a64-4778-9630-e5bfe3f912cc/subagents/agent-a2b1c72dd9409d6e5.jsonl",
+              "line": 73
+            }
+          ]
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "生成期没有 agent 访问过本机 Android SDK，所以无法直接证明 05:xx 时 platforms/android-35 与 sources/android-36.1 已在本机；返修于同日 13:55 在同一台机器上取到。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-f7cfc36e8dc61295fe43",
+  "metadata": {
+    "migration": {
+      "id": "blockinger-glm531-c54518f5-0a64-4778-9630-e5bfe3f912cc",
+      "project": "Blockinger"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.296"
+      ]
+    },
+    "source_set_id": "sources-37319ba0846f9b0a14c5",
+    "environment": [
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-blockinger-glm5.31",
+        "at": "2026-10-13T03:35:43.538Z",
+        "ref": "generation/c54518f5-0a64-4778-9630-e5bfe3f912cc.jsonl:L423",
+        "request_ref": "generation/c54518f5-0a64-4778-9630-e5bfe3f912cc.jsonl:L422",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-blockinger-glm5.31",
+        "at": "2026-10-13T04:09:41.917Z",
+        "ref": "generation/c54518f5-0a64-4778-9630-e5bfe3f912cc/subagents/agent-a189cc44cdb902fa5.jsonl:L124",
+        "request_ref": "generation/c54518f5-0a64-4778-9630-e5bfe3f912cc/subagents/agent-a189cc44cdb902fa5.jsonl:L123",
+        "phase": "generation"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "35",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-blockinger-glm5.31",
+        "at": "2026-10-13T12:06:21.856Z",
+        "ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L296",
+        "request_ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L295",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "17",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-blockinger-glm5.31",
+        "at": "2026-10-13T12:06:21.856Z",
+        "ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L296",
+        "request_ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L295",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "8",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-blockinger-glm5.31",
+        "at": "2026-10-13T12:06:21.856Z",
+        "ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L296",
+        "request_ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L295",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "4795952a-b849-4427-ba3f-0bc9a11c6092"
+      ]
+    }
+  },
+  "revision": "7d63aa785b53f35366f4612abdaa1069efab993b30c7275bb3167aeb5df45fce"
+}

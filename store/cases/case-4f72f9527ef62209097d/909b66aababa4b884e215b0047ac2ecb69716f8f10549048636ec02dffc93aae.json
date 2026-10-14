@@ -1,0 +1,170 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-4f72f9527ef62209097d",
+  "created_at": "2026-10-14T03:27:37.337856+00:00",
+  "migration_key": "blockinger-glm531-c54518f5-0a64-4778-9630-e5bfe3f912cc",
+  "title": "把 SimpleDateFormat 格式化的对局时间当成纯时长算术，丢掉了构造时的默认时区（含 1970 时刻偏移探测）",
+  "when": "规格提取阶段，把源端 Java 日期格式化或日历调用翻译成目标端显式算术契约时；引擎实现阶段，按该契约手写时间格式化与时区探测时",
+  "description": "源码用没有调用 setTimeZone 的 SimpleDateFormat/GregorianCalendar 格式化一个毫秒值（如 gameTime + hourOffset×3600000）；这个毫秒值语义上像时长，但格式化结果取决于构造时的默认时区。另外还有一段 hack：格式化 1970-01-01T00:01Z，按本地小时位探测偏移。目标端打算不用 Date/Intl，改用手工 h/m/s 补零的兼容算术。",
+  "summary": "规格作者（a2h-migration-worker c4-01，agent-a8ce6016e6ca09f78）写前完整读过 GameState.java（L50-L51）：\nformatter = new SimpleDateFormat(\"HH:mm:ss\", Locale.US)，没有 setTimeZone（:117）；构造时格式化 60000ms，用前缀 23/01 探测 hourOffset（:118-124）；\ngetTimeString 把 gameTime + hourOffset×3600000 设进 GregorianCalendar 后交给同一个 formatter 格式化（:372-375）。这些输入正确，也足以说明显示值是“该时刻在默认时区的本地时分秒”。\n作者写前推理（L127）对探测部分的判断是对的，承认 SimpleDateFormat.format 按默认时区格式化该时刻；到 getTimeString 却改口，认为 gameTime 是时长而非时刻，于是写成“纯时长→字符串、手工算术”。\n探测部分则改用当前 getRawOffset，并认为 1970 年的历史/夏令时差异可以忽略。\n首次 Write（L129）已经写入“getTimeString 为纯时长格式化（手工 h/m/s + 补零）”。这次写入被 hook 拒绝，同时注入 lesson-237091b9b04bc4cd340b（v1），\n摘要为“getTimeString 手工 h/m/s 计算加补零，不用 Date/Intl 模板近似（避免本地化差异）；hourOffset 探测写显式算术式并注明与 SimpleDateFormat 语义的等价域”（L130）。\n该经验正文只把 Calendar/SimpleDateFormat 的区域差异写成周规则与小数点，没有写“未 setTimeZone 时格式化绑定默认时区”。作者把它当作确认（L131“getTimeString manual arithmetic ✓”），\n重写的 F001-game-core.md 实现映射行写成“getTimeString 为纯时长格式化（手工 h/m/s + 补零，不经 Date/Intl）”；AC33 只给出 UTC 偏移 0 的样例 gameTime=3661000 → \"01:01:01\"（L136-L137）。\nalgo-io 写成“(gameTime + hourOffset*3600000) 手工格式化为 HH:mm:ss……不经 Date/Intl（避免本地化差异）”，并断言“SimpleDateFormat 对 1970-01-01T00:01Z 的本地小时位与 rawOffset 在该分类域一致”（L140-L141）。\n偏差在源码到规格这一环形成。该经验在两次注入中都参与了偏差，本应作为输入节点入图（force 证据为两次被拒写入的 tool_result L130、L103）。\n但这两行在索引中登记为 Write F001-game-core.md / EngineTypes.ets 的失败回执，pack 回执为 invalid_force_source，force 不能绕过；因此图中不放经验节点，只在修订建议中点名。\n召回 worker 曾想到用 getOffset(60000)，但只读了 d.ts 里 @since 7/10 的旧注释块，判定其单位未写；它给作者的 lesson-f5cf8413 摘要因此写成“getOffset(date) 注释未写单位”。\n实际上紧邻声明的 @since 12 注释写明单位为毫秒且含夏令时。不过作者在注入前已经选定 rawOffset，所以本卡不把该经验归入偏差链。\n实现者（Slice 1，agent-a1efe2943742de071）读到上述规格（L27/L30、L34/L35），也读过 GameState.java 全文（L50-L51）。写前设计（L89）把 SimpleDateFormat 当作 UTC（“对负 epoch 会显示 23:xx”）。\n注入的同一经验摘要为“SimpleDateFormat/GregorianCalendar 不用 JS Date/Intl 近似：hourOffset 按 algo-io 显式算术（rawOffset 数学取模防 JS 负 %），getTimeString 手工补零格式化含负 epoch 归一化”（L103），实现者视为与自己的设计一致（L104）。\n随后 Write GameEngine.ets（L142-L143）：探测用 i18n.getTimeZone().getRawOffset()，getTimeString 对 gameTime + hourOffset×3600000 取模后直接拆 h/m/s，等于按 UTC 显示。这两段一直保留到生成检查点 7ffa356。\n后果：只有 UTC 偏移 0 时两端一致。hourOffset=0 的大多数时区里，鸿蒙从 00:00:00 起算，安卓显示本地小时（上海 08:00:xx，纽约 19:00:xx）；±1 探测带里则是安卓从 00 起、鸿蒙从 23 或 01 起。\n另外，用当前 rawOffset 探测，会把 1970 年偏移与现在不同的时区判错（如 Europe/London 1970 年为 +1）。\n返修 C43（repair L3782-L3784、L3796，检查点 L3867，commit b3d9e69）的改法：构造时保存 i18n.getTimeZone()，探测改为 getOffset(60000)，getTimeString 改为“时刻 + timeZone.getOffset(时刻)”后再拆时分秒。\n返修在上海时区下两端对照一致（L3805-L3849），改动在最终检查点保留。\n",
+  "recommendations": [
+    "规格提取阶段：源端 SimpleDateFormat/DateFormat/Calendar 没有调用 setTimeZone 时，把 format 的输入当作“时刻”，在构造时的默认时区下取本地字段，即使变量名或用途看起来是时长。翻译成显式算术时，把契约写成 local = instant + tz.getOffset(instant)：tz 在源端构造时机用 i18n.getTimeZone() 取得，再拆 HH/mm/ss。对“格式化 1970-01-01T00:01Z 的本地小时位”这类探测，用 getOffset(该时刻) 复刻当时的历史偏移，不用当前 getRawOffset。",
+    "规格提取阶段：时间显示类验收至少给一个非零偏移时区的样例，不只给 UTC 偏移 0。本例应写：Asia/Shanghai 下 gameTime=0 → 08:00:00；America/New_York → 19:00:00；Europe/London 在 1970 年偏移为 +1，探测得 hourOffset=-1 → 00:00:00。",
+    "引擎实现阶段：规格把源端 formatter.format(...) 写成“纯时长格式化”或“不经 Date/Intl”时，回源核对 formatter 的时区（new SimpleDateFormat(pattern, Locale) 未 setTimeZone 即为默认时区）。不一致时按源端实现，并在 source-notes 登记规格差异。最小检查：UTC+8 下 gameTime=0 时 getTimeString 返回 08:00:00。",
+    "修订 lesson-237091b9b04bc4cd340b（版本 1）：title 或做法第一步补上“SimpleDateFormat/DateFormat/Calendar 未调用 setTimeZone 时绑定构造时的默认时区：兼容函数要显式取 i18n.getTimeZone()，按 getOffset(该时刻 ms) 得到本地字段（含夏令时与历史规则）后再拆分；‘不用 Date/Intl’不等于按 UTC 手工拆 h/m/s，输入值语义上是时长也一样”。正文“区域差异”在周规则、小数点之外补上时区一项。判断信号：源码有 new SimpleDateFormat(...)、GregorianCalendar 或 Calendar.getInstance()，没有 setTimeZone，且 format/get(HOUR_OF_DAY) 作用于毫秒值；或有格式化固定 epoch 时刻、按小时前缀判定的探测代码。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-blockinger-glm5.31/entry/src/main/ets/game/engine/GameEngine.ets",
+        "since": "2026-10-13T10:53:09.711Z",
+        "at": "2026-10-13T22:29:44.396Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/blockinger-vocollapse-8b26057/src/org/blockinger/game/components/GameState.java",
+          "at": "2026-10-13T04:06:38.751Z",
+          "reason": "正常输入：规格作者 Read 回执给出 formatter = new SimpleDateFormat(\"HH:mm:ss\",Locale.US) 且无 setTimeZone（:117）、构造时格式化 60000ms 并按 23/01 前缀定 hourOffset（:118-124）、getTimeString 把 gameTime+hourOffset×3600000 交给同一 formatter（:372-375）。这足以确定显示值是默认时区下的本地时分秒（agent-a8ce6016e6ca09f78.jsonl:L50-L51）。"
+        },
+        {
+          "key": "agent-a8ce6016e6ca09f78.jsonl",
+          "at": "2026-10-13T04:31:04.236Z",
+          "reason": "读到上述源码后，写前推理（L127）承认 SimpleDateFormat 按默认时区格式化，却把 getTimeString 定为“纯时长→字符串”，并把探测映射到当前 getRawOffset。首写（L129）已带此偏差；被拒时注入 lesson-237091b9b04bc4cd340b（v1）摘要“getTimeString 手工 h/m/s 计算加补零，不用 Date/Intl 模板近似（避免本地化差异）”（L130），作者以之作确认（L131），Write F001-game-core.md 的实现映射行“getTimeString 为纯时长格式化（手工 h/m/s + 补零，不经 Date/Intl）”与 AC33（仅 UTC 0 样例，L136-L137），再 Write algo-io“不经 Date/Intl（避免本地化差异）”，并断言 rawOffset 与 1970 本地小时位等价（L140-L141）。源码到规格在此偏离。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-blockinger-glm5.31/spec/baseline/features/F001-game-core.md",
+          "at": "2026-10-13T07:50:46.847Z",
+          "reason": "交付桥梁：实现者的 Read 回执中，第 155 行映射写“getRawOffset……getTimeString 为纯时长格式化（手工 h/m/s + 补零，不经 Date/Intl）”，第 231 行 AC33 只给 UTC 偏移 0 的样例 gameTime=3661000→\"01:01:01\"（agent-a1efe2943742de071.jsonl:L27、L30）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-blockinger-glm5.31/spec/baseline/features/F001-game-core.algo-io.md",
+          "at": "2026-10-13T07:50:56.239Z",
+          "reason": "交付桥梁：实现者的 Read 回执中，第 95-96 行写 rawOffset 与 SimpleDateFormat 的 1970 本地小时位“在该分类域一致”，getTimeString 为“(gameTime + hourOffset*3600000) 手工格式化为 HH:mm:ss……不经 Date/Intl（避免本地化差异）”（agent-a1efe2943742de071.jsonl:L34-L35）。"
+        },
+        {
+          "key": "agent-a1efe2943742de071.jsonl",
+          "at": "2026-10-13T08:30:49.011Z",
+          "reason": "收到上述规格与经验摘要（也读过 GameState.java 全文，L50-L51）。写前设计把 SimpleDateFormat 当 UTC（L89）；首写被拒时注入的 lesson-237091b9b04bc4cd340b（v1）摘要“getTimeString 手工补零格式化含负 epoch 归一化”（L103）被它视为确认（L104）。Write GameEngine.ets 时探测用 getRawOffset，getTimeString 对 gameTime+hourOffset×3600000 取模后直接拆 h/m/s，没有加时区偏移（L142-L143）。本链确认规格偏差传到目标，不另推定其独立失职。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 5
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-4f72f9527ef62209097d",
+  "metadata": {
+    "migration": {
+      "id": "blockinger-glm531-c54518f5-0a64-4778-9630-e5bfe3f912cc",
+      "project": "Blockinger"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.296"
+      ]
+    },
+    "source_set_id": "sources-37319ba0846f9b0a14c5",
+    "environment": [
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-blockinger-glm5.31",
+        "at": "2026-10-13T03:35:43.538Z",
+        "ref": "generation/c54518f5-0a64-4778-9630-e5bfe3f912cc.jsonl:L423",
+        "request_ref": "generation/c54518f5-0a64-4778-9630-e5bfe3f912cc.jsonl:L422",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-blockinger-glm5.31",
+        "at": "2026-10-13T04:09:41.917Z",
+        "ref": "generation/c54518f5-0a64-4778-9630-e5bfe3f912cc/subagents/agent-a189cc44cdb902fa5.jsonl:L124",
+        "request_ref": "generation/c54518f5-0a64-4778-9630-e5bfe3f912cc/subagents/agent-a189cc44cdb902fa5.jsonl:L123",
+        "phase": "generation"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "35",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-blockinger-glm5.31",
+        "at": "2026-10-13T12:06:21.856Z",
+        "ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L296",
+        "request_ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L295",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "17",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-blockinger-glm5.31",
+        "at": "2026-10-13T12:06:21.856Z",
+        "ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L296",
+        "request_ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L295",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "8",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-blockinger-glm5.31",
+        "at": "2026-10-13T12:06:21.856Z",
+        "ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L296",
+        "request_ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L295",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "4795952a-b849-4427-ba3f-0bc9a11c6092"
+      ]
+    }
+  },
+  "revision": "909b66aababa4b884e215b0047ac2ecb69716f8f10549048636ec02dffc93aae"
+}

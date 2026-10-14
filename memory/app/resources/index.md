@@ -18,9 +18,9 @@
 - [adaptive-icon 转 layered-image 时前景与背景生成同尺寸图层，前景先裁出启动器可见区再缩放，不直接拷贝 108dp 全层](lesson-d838f9236f7452b82738.lesson.md)
   - 时机：资源迁移阶段，把 Android adaptive-icon 转成鸿蒙 layered-image 并生成前景、背景图层 PNG 时；核验应用图标或维护资源转换规则时
   - 情境：Android 应用图标是 adaptive-icon：背景为 @color 纯色或 108dp 图层，前景为 mipmap 下 108dp 全层 PNG（启动器只显示中央 72dp）；鸿蒙侧用 layered_image.json 的 foreground/background 两个 $media 图层；转换规则写“mipmap 直接拷贝”“纯色背景任意尺寸（如 1×1 或 108×108）”。
-- [strings.xml 转 string.json 按 aapt2 编译语义计算值：引号外空白折叠、未转义双引号剥离、\\n \\t \\uXXXX \\' \\" 还原；带内联标记的键取完整内容（样式入口存 HTML、纯字符串入口取全部文字），不用 el.text](lesson-f88b9c824280ce239dea.lesson.md)
+- [strings.xml 转 string.json 按 aapt2 编译语义计算值：引号外空白折叠、值中任何位置的未转义双引号都剥离（不只首尾成对，\\" 保留为引号）、\\n \\t \\uXXXX \\' 还原；带内联标记的键取完整内容（样式入口存 HTML、纯字符串入口取全部文字），不用 el.text](lesson-f88b9c824280ce239dea.lesson.md)
   - 时机：资源转换阶段，编写批量脚本把 Android strings.xml 转成 HarmonyOS string.json、确定转义、引号、空白与内联标记的处理规则时
-  - 情境：values*/strings.xml 中有跨行书写（换行加缩进）、\\n、\\t、\\uXXXX 转义、\\' \\" 或成对未转义双引号的字符串，有的键内联 `&lt;b&gt;`/`&lt;i&gt;`/`&lt;a href&gt;`/`&lt;p&gt;` 子元素（值可能以子元素开头）或用 CDATA 包裹 HTML，由 setMessage(resId)、android:text、Html.fromHtml 或 getString/stringResource 消费；目标 string.json 的值在运行时原样显示，不再经过 aapt2；资源转换 skill 的汇总表只写“\\n、\\t → preserved”“CDATA 提取文本”，没写未包 CDATA 的子元素如何取值。
+  - 情境：values*/strings.xml 中有跨行书写（换行加缩进）、\\n、\\t、\\uXXXX 转义、\\' \\" 或未转义双引号（整值包裹，或出现在值中间，如 below "APM"）的字符串，有的键内联 `&lt;b&gt;`/`&lt;i&gt;`/`&lt;a href&gt;`/`&lt;p&gt;` 子元素（值可能以子元素开头）或用 CDATA 包裹 HTML，由 setMessage(resId)、android:text、Html.fromHtml 或 getString/stringResource 消费；目标 string.json 的值在运行时原样显示，不再经过 aapt2；资源转换 skill 的汇总表只写“\\n、\\t → preserved”“CDATA 提取文本”“整值被引号包裹时去外层引号”，没写值中间的引号与未包 CDATA 的子元素如何取值。
 - [values 批量转 element JSON 按目标格式出口：颜色只写 hex 或已定义的 $color:，数组项写成 {value} 对象并映射引用，不可解析值不原样写出](lesson-94a3f7a5ec5ad8f8a3e8.lesson.md)
   - 时机：资源转换阶段，编写并运行把 Android values（colors.xml、arrays.xml 等）转成 HarmonyOS element JSON 的批量脚本，决定无法解析的值与数组项怎样输出时；宣布资源阶段完成、把产物镜像到其他限定目录之前
   - 情境：资源源为 Android res 或反编译 APK；颜色值含 @android:color/* 系统色或指向本次未转换条目的 @color/ 引用，string-array 含 @string/ 引用；转换规则文档已给出目标格式，但转换由自写脚本完成，运行后控制台只报 unresolved 计数。

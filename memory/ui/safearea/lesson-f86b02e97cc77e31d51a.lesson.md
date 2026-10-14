@@ -1,16 +1,16 @@
-# 源页面声明 adjustResize 并用 imePadding 时，在该页显示期间设 KeyboardAvoidMode.RESIZE、离开时还原，不以默认 OFFSET 记作等价
+# 源窗口按 adjustResize 避让软键盘（声明 adjustResize，或未声明 windowSoftInputMode 而窗口含可滚动视图）时设 KeyboardAvoidMode.RESIZE：各页都如此时在窗口级统一设置，否则在该页显示期间设置、离开时还原；不以默认 OFFSET 记作等价
 
-ID：`lesson-f86b02e97cc77e31d51a` · 版本：1
+ID：`lesson-f86b02e97cc77e31d51a` · 版本：2
 
 [本主题](index.md)
 
 ## 何时使用
 
-页面实现阶段，为含文本输入的页面（编辑表单等 NavDestination 子页）落实源端软键盘避让方式时
+页面实现阶段，为含文本输入的页面（编辑表单等 NavDestination 子页）落实源端软键盘避让方式时；为未声明 windowSoftInputMode 的含输入框窗口确定目标避让方式时
 
 ## 适用情境
 
-源 Activity 声明 windowSoftInputMode=adjustResize，页面在滚动内容或尾部用 imePadding 让键盘弹出时内容区收缩、仍可滚到末项；规格或页面元数据写明 adjustResize + imePadding 并要求等价避让；目标未设键盘避让模式，转换者不确定默认行为是否等价。
+源 Activity 声明 windowSoftInputMode=adjustResize，页面在滚动内容或尾部用 imePadding 让键盘弹出时内容区收缩、仍可滚到末项；规格或页面元数据写明 adjustResize + imePadding 并要求等价避让；目标未设键盘避让模式，转换者不确定默认行为是否等价。 也包括源 Activity 未声明 windowSoftInputMode、内容含 ListView/ScrollView（平台隐式 adjustResize），规格只写“默认弹出”，召回因“源端未声明 adjustResize”而排除了本条。
 
 ## 原因
 
@@ -18,13 +18,15 @@ ArkUI 默认的 KeyboardAvoidMode.OFFSET 把页面整体上移以露出焦点输
 
 ## 做法
 
-1. 在该页 NavDestination 的 onShown 中记下当前模式（getKeyboardAvoidMode）并调用 this.getUIContext().setKeyboardAvoidMode(KeyboardAvoidMode.RESIZE)，onHidden 中还原；源 Activity 下各页面都按 resize 避让时可在窗口级统一设置。
+1. 源 Activity 各页都按 resize 避让（含平台隐式 adjustResize）时，在 EntryAbility 的 loadContent 成功回调里经窗口 UIContext 统一调用 setKeyboardAvoidMode(KeyboardAvoidMode.RESIZE)；只有个别页需要时，在该页 NavDestination 的 onShown 中记下当前模式（getKeyboardAvoidMode）并调用 this.getUIContext().setKeyboardAvoidMode(KeyboardAvoidMode.RESIZE)，onHidden 中还原。
 2. 源端 imePadding 加在滚动内容尾部、为末项留出键盘空间时，核对 RESIZE 后末项能滚出键盘；仍被遮挡再按键盘高度补尾部留白，同一边界只避让一次。
 3. 对目标默认模式与源端是否等价不确定时，先查 KeyboardAvoidMode 的 SDK 声明与说明再决定。
 
-来源支持：1 张卡 · 1 次迁移 · 1 个应用
+来源支持：2 张卡 · 2 次迁移 · 2 个应用
 
 ## 来源（按需复核）
 
 - [case-01833db0536ba02ed2ce](../../../store/cases/case-01833db0536ba02ed2ce/19be163e103f323f9d0fb55e1aa2516564a0df2af7f113771337fa3e7f3c8f79.json) · 结论：diagnosis, recommendation:3
   卡片版本：`19be163e103f323f9d0fb55e1aa2516564a0df2af7f113771337fa3e7f3c8f79`
+- [case-c96bdbf4d2e0fb58e797](../../../store/cases/case-c96bdbf4d2e0fb58e797/690e3e8044afac976d280680a439898d1d9c1767283cf4bcd2d13a82c3977cf3.json) · 结论：recommendation:2, recommendation:4
+  卡片版本：`690e3e8044afac976d280680a439898d1d9c1767283cf4bcd2d13a82c3977cf3`

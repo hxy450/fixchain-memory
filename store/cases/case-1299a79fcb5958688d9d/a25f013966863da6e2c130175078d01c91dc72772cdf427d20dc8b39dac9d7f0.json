@@ -1,0 +1,176 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-1299a79fcb5958688d9d",
+  "created_at": "2026-10-14T03:23:27.205720+00:00",
+  "migration_key": "blockinger-glm531-c54518f5-0a64-4778-9630-e5bfe3f912cc",
+  "title": "把 HAP 内 rawfile 资源段拼成 fd:// URL 交给 AVPlayer，未经 fdSrc 传 offset/length",
+  "when": "规格提取阶段，为音频资源加载写平台 API 映射契约时；实现阶段，为 AVPlayer 绑定应用包内 rawfile 音频资源时",
+  "description": "源端用 SoundPool.load(context, R.raw.x) 或 MediaPlayer.create(context, R.raw.x) 播放 res/raw 资源，目标改为 AVPlayer 播 resources/rawfile；resourceManager.getRawFd/getRawFdSync 返回的是整个 HAP 的 fd 加该资源在 HAP 内的 offset/length，AVPlayer 同时有 url 与 fdSrc（AVFileDescriptor）两种设源方式。",
+  "summary": "规格作者（a2h-spec c4-04 批，agent-a189cc44cdb902fa5）写 F004 前读到的 feature-spec-template.md 明确规定：\n实现映射中凡平台 API 跨端传递路径/句柄/URI/描述符的行，契约列必须写明该值的输入/输出域与“哪些下游 API 接受该域”，\n证据只能来自 SDK d.ts 注释、arkts-knowledge-verifier 或参考收录，“禁止凭模型记忆”（L25-L26）；派工也要求“平台 API 行契约列必填引 d.ts 行号”“只在本批已核实范围内下结论”（L1）。\n该 agent 只为 setVolume、audioInterrupt 等查了 media d.ts，没有读 url/fdSrc 的注释，思考中凭记忆认定\n“AVPlayer url supports 'fd://xx' from resourceManager.getRawFd. That's the standard pattern”（L225），\n于是在 SoundPool→AVPlayer 池那一行写下“资源经 getRawFd → url=fd://（rawfile 逻辑名）”，同格内只有 setVolume 带 d.ts 行号（Write L260）。\ngetRawFd 给出的是 HAP 整包 fd 加资源段 offset/length，“url=fd://”这一域契约本身不成立，偏差首先出现在规格的契约列。\n实现者（Slice 2 音频，agent-a5e6d90b9f1cde291）读到这行规格（L33-L34）后，又按派工“SDK 调用先按 d.ts 核对”读了 media d.ts：\nurl 注释只列网络地址与 FD 句柄注意事项，fdSrc 注释写明“This attribute is required when media assets of an application are continuously stored in a file”（L81-L82）；\nrawFileDescriptor.d.ts 也写明 offset 是“the offset from where the raw file starts in the HAP”（L129-L130）。\n它在思考中已判断 fdSrc“exactly the rawfile case… cleaner and typed”，却以“spec explicitly mandates the getRawFd → fd:// url pattern… follow spec”为由，\n自造 d.ts 未记载的 `fd://${fd}?offset=${offset}&length=${length}` 查询串（L85）。Write 写出 rawFileUrl() 并在音效池与音乐通道都用 player.url = rawFileUrl(...)（L181-L182），\n注释直接引用规格该行。首写被召回 hook 拒绝时注入的 8 条经验（L178）都不涉及 rawfile 设源；其中 lesson-d0736ecd 的摘要提到“url仅在新建idle实例上设置”，\n但 url 拼接方案在注入前的首次写入（L177）和 L85 思考中已经定型，经验未参与本偏差。规格作者写前注入的 lesson-f5cf8413（L245）方向正确\n（契约列只写 d.ts 注释核实值），该 agent 只用于 setVolume，未用于设源方式，同样不是偏差来源。\n该片段到生成结束未被其他写者改动（blame 只命中这一 agent 的写入）。返修时 hilog 显示 5 个音效播放器建好即报 401，系统日志“not a fd://+numeric string”；\n修复把 rawFileUrl() 改为 rawFileSource() 返回 media.AVFileDescriptor {fd, offset, length}，两处改为 player.fdSrc = rawFileSource(...)\n（repair L3377-L3380，经 L3479 恢复保留；L3502/L3531 的 PARITY-DEBUG 日志已移除），检查点 C50（commit 6aa2f79，L3554-L3555）。\n另：两侧加载的 arkts-media-playback skill 只写“本地文件必须使用 fd:// + fileIo.openSync 的 fd”，没有 HAP 内 rawfile 段的分支，工程内所有 skill 均无 fdSrc/getRawFd 说明。\n",
+  "recommendations": [
+    "规格提取阶段：音频/视频资源来自应用包 rawfile 时，契约列写成“resourceManager.getRawFd(Sync)(name) → RawFileDescriptor{fd(HAP 整包), offset, length} → AVPlayer.fdSrc = {fd, offset, length}”，依据引 media d.ts 的 fdSrc 注释（适用于资产连续存放在同一文件中）与 rawFileDescriptor.d.ts 的 offset 注释；不要凭记忆写“url=fd://”。同一格里每个跨端传值都要有自己的 d.ts 依据，不能只给其中一个 API 标行号。",
+    "实现阶段：拿到带 offset/length 的描述符时只能经 fdSrc 设源；url 的 fd:// 形式只接受整文件的 fd://<数字>，不要在 url 上拼 d.ts 未记载的 ?offset=&length= 参数。规格写法与写前读到的 d.ts 注释冲突时，按 d.ts 写，并在 source-notes/回报中登记规格该行有误，不以“规格明确要求”覆盖已查到的 API 语义。",
+    "写后自检：grep 本文件中“fd://”与“offset=”同时出现、或 getRawFd 结果流向 .url 的位置，应为零；真机首测看 hilog 是否出现 401 / “not a fd://+numeric string”。",
+    "skill 维护：arkts-media-playback 的“fd:// 本地文件协议”一节补 rawfile 分支——沙箱文件用 fileIo 打开后可 url='fd://'+fd，应用包 rawfile 用 getRawFdSync 后设 fdSrc，并说明多个播放器共享 HAP fd 时不要逐个 closeRawFd。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-blockinger-glm5.31/entry/src/main/ets/game/audio/GameSound.ets",
+        "since": "2026-10-13T10:53:09.711Z",
+        "at": "2026-10-13T22:29:44.396Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-blockinger-glm5.31/.claude/skills/a2h-spec/templates/feature-spec-template.md",
+          "at": "2026-10-13T04:06:41.034Z",
+          "reason": "正常输入：规格作者 Read 回执给出实现映射契约列规则——平台 API 跨端传递路径/句柄/URI/描述符的行必须写值域与“哪些下游 API 接受该域”，证据三选一（d.ts 注释等），禁止凭模型记忆。足以要求它在写设源方式前核对 AVPlayer url/fdSrc 的注释（agent-a189cc44cdb902fa5.jsonl:L25-L26）。"
+        },
+        {
+          "key": "agent-a189cc44cdb902fa5.jsonl",
+          "at": "2026-10-13T04:28:28.834Z",
+          "reason": "已收到上述模板规则及派工“平台 API 行契约列必填引 d.ts 行号”（L1），却只为 setVolume 等查 d.ts，未读 url/fdSrc 注释；思考中凭记忆认定 getRawFd 配 url 'fd://xx' 是标准做法（L225），Write 在 SoundPool→AVPlayer 池行写下“资源经 getRawFd → url=fd://（rawfile 逻辑名）”（L260-L261）。源码到规格契约在此偏离。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-blockinger-glm5.31/spec/baseline/features/F004-game-audio.md",
+          "at": "2026-10-13T07:51:21.754Z",
+          "reason": "交付桥梁：实现者 Read 回执中实现映射第 58 行仍为“资源经 getRawFd → url=fd://（rawfile 逻辑名）”（agent-a5e6d90b9f1cde291.jsonl:L33-L34），实现者后来明确以此行为依据（L85）。"
+        },
+        {
+          "key": "C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/ets/api/@ohos.multimedia.media.d.ts",
+          "at": "2026-10-13T07:53:48.113Z",
+          "reason": "正常输入：实现者 Read 回执给出 url 注释（只列网络地址与 FD 句柄注意事项，无 offset/length 写法）和 fdSrc?: AVFileDescriptor 注释“required when media assets of an application are continuously stored in a file”，足以确定 HAP 内资源段应经 fdSrc 设源（agent-a5e6d90b9f1cde291.jsonl:L81-L82）。"
+        },
+        {
+          "key": "C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/ets/api/global/rawFileDescriptor.d.ts",
+          "at": "2026-10-13T07:56:18.854Z",
+          "reason": "正常输入：Read 回执给出 RawFileDescriptor 的 fd 与“the offset from where the raw file starts in the HAP”，说明 getRawFdSync 返回的是 HAP 内资源段而非独立文件（agent-a5e6d90b9f1cde291.jsonl:L129-L130）。"
+        },
+        {
+          "key": "agent-a5e6d90b9f1cde291.jsonl",
+          "at": "2026-10-13T08:30:21.836Z",
+          "reason": "读完 d.ts 后已判断 fdSrc 正是 rawfile 场景、更清晰且有类型，却以规格“明确要求 url=fd://”为由，自造 fd://N?offset=..&length=.. 查询串（L85）；Write 写出 rawFileUrl() 并在音效池（player.url = rawFileUrl(ctx, name)）与音乐通道两处使用（L181-L182）。已有正确输入未落到输出，规格错误被沿用并扩大。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 6
+        },
+        {
+          "from": 4,
+          "to": 6
+        },
+        {
+          "from": 5,
+          "to": 6
+        },
+        {
+          "from": 6,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-1299a79fcb5958688d9d",
+  "metadata": {
+    "migration": {
+      "id": "blockinger-glm531-c54518f5-0a64-4778-9630-e5bfe3f912cc",
+      "project": "Blockinger"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.296"
+      ]
+    },
+    "source_set_id": "sources-37319ba0846f9b0a14c5",
+    "environment": [
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-blockinger-glm5.31",
+        "at": "2026-10-13T03:35:43.538Z",
+        "ref": "generation/c54518f5-0a64-4778-9630-e5bfe3f912cc.jsonl:L423",
+        "request_ref": "generation/c54518f5-0a64-4778-9630-e5bfe3f912cc.jsonl:L422",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-blockinger-glm5.31",
+        "at": "2026-10-13T04:09:41.917Z",
+        "ref": "generation/c54518f5-0a64-4778-9630-e5bfe3f912cc/subagents/agent-a189cc44cdb902fa5.jsonl:L124",
+        "request_ref": "generation/c54518f5-0a64-4778-9630-e5bfe3f912cc/subagents/agent-a189cc44cdb902fa5.jsonl:L123",
+        "phase": "generation"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "35",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-blockinger-glm5.31",
+        "at": "2026-10-13T12:06:21.856Z",
+        "ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L296",
+        "request_ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L295",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "17",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-blockinger-glm5.31",
+        "at": "2026-10-13T12:06:21.856Z",
+        "ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L296",
+        "request_ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L295",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "8",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-blockinger-glm5.31",
+        "at": "2026-10-13T12:06:21.856Z",
+        "ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L296",
+        "request_ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L295",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "4795952a-b849-4427-ba3f-0bc9a11c6092"
+      ]
+    }
+  },
+  "revision": "a25f013966863da6e2c130175078d01c91dc72772cdf427d20dc8b39dac9d7f0"
+}

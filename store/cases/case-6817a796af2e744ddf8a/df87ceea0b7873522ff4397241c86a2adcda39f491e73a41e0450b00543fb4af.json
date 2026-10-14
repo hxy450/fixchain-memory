@@ -1,0 +1,172 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-6817a796af2e744ddf8a",
+  "created_at": "2026-10-14T03:29:49.329763+00:00",
+  "migration_key": "blockinger-glm531-c54518f5-0a64-4778-9630-e5bfe3f912cc",
+  "title": "在 loadContent 之前经 Window.getUIContext() 取 UIContext 做避让区换算，冷启动抛 1300002",
+  "when": "沉浸式窗口实现阶段，在 EntryAbility.onWindowStageCreate 中安排全屏/系统栏设置、避让区测量与 px2vp 换算相对 loadContent 的执行时机时",
+  "description": "目标在 EntryAbility 里做窗口全屏或系统栏设置，并测量避让区换算成 vp 写入共享窗口模型，换算或其他步骤需要 UIContext；工程模板的 onWindowStageCreate 只在 windowStage.loadContent 中建立 UIContent，沉浸式 skill 只规定 Layer 1 放在 onWindowStageCreate，没有写它与 loadContent 的先后。",
+  "summary": "写前转换器 agent-a2b1c72dd9409d6e5 收到：派工要求按 arkts-immersive-safearea 实施四层架构（同转录 L1）；\nskill 的 Layer 1 只列出在 onWindowStageCreate 中 setWindowLayoutFullScreen、setWindowSystemBarProperties、\ngetWindowAvoidArea、写 WindowModel 与监听，既未提 px2vp，也未写与 loadContent 的先后（L89-L91）。\n首写前注入的 lesson-cf111aadb8804649b578（v2）提醒“getWindowAvoidArea/windowRect 数值是 px：写入 padding 前先 px2vp 再消费”（L73），\n该经验正文 how 第一步写“const ui = mainWindow.getUIContext()”，标题与做法都没有说明 UIContext 要在 loadContent 成功后才可用。\n它读回的模板 EntryAbility 只在 onWindowStageCreate 中调用 loadContent('pages/Index')（L129-L130）。\n推理中它已想到“onWindowStageCreate 时还没有 UIContext”，却只凭 grep d.ts 得到的 Window.getUIContext(): UIContext 签名（L132-L133）判定可用（L131、L134、L140），\n并于 L173 Write 写出：onWindowStageCreate 先同步调用 setupImmersiveWindow(windowStage)，再 loadContent；\nsetupImmersiveWindow 开头即同步执行 mainWindow.getUIContext()，供 px2vp 换算避让区写入 WindowModel。\n偏差位于实现者安排“需要 UIContext 的窗口设置”与 UIContent 建立先后的这一环；经验把 px2vp 的取法交给 mainWindow.getUIContext()，\n却缺少“loadContent 成功之后”这一时机条件，参与了这次写法。同批注入的 lesson-0e1c846868f2683cc280 也要求 px 先转 vp，但未给出 UIContext 的取法，未入图。\n之后主会话入口装配脚本把页面改为 pages/EntryShell（主会话 L1698、L1709），closer a390643eb1c912b0b 增加 onConfigurationUpdate 转发（agent-a390643eb1c912b0b.jsonl:L134-L138），都未改变调用顺序；\n生成结束检查点 7ffa356 中仍是 setupImmersiveWindow 位于 loadContent 之前。生成期只跑了 hvigor 编译门（FV-2 0 错），没有装机运行，未暴露此运行期异常。\n返修会话依据用户给出的 faultlog（repair L5：[window][getUIContext] Uicontent is nullptr，1300002，栈 EntryAbility.ets:88 ← :40），\n把调用移入 loadContent 成功回调（repair L177，检查点 X2/X2-2，commit 9da306a）；C3 再把该函数改写为非全屏的 setupSystemBars，\n最终仍在 loadContent 成功回调中调用，并在同一回调内执行 getUIContext().setKeyboardAvoidMode。\n",
+  "recommendations": [
+    "沉浸式窗口实现阶段：EntryAbility 中凡依赖 UIContext 的步骤（getUIContext、px2vp 换算避让区写入窗口模型、setKeyboardAvoidMode 等）放进 windowStage.loadContent 的成功回调（err.code 为 0 之后）；loadContent 之前只做不依赖 UIContent 的窗口调用。",
+    "核对 SDK 调用时，除成员签名外读该 API 的注释与 @throws；自己已推出“此时可能还没有 UIContext”这类时序疑点时，以文档或模板回调顺序消解，不以成员存在推定此刻可调用。",
+    "无设备运行的生成或收尾批次，改动 EntryAbility 生命周期后静态自检：onWindowStageCreate 中位于 loadContent 调用之前、或在其回调之外同步执行的代码是否调用 getUIContext 或依赖 UIContent。",
+    "修订 lesson-cf111aadb8804649b578（版本 2）：在标题或 how 第一步写明时机——在 windowStage.loadContent 成功回调里取 mainWindow.getUIContext() 再 px2vp 写入窗口模型；在 onWindowStageCreate 中 loadContent 之前调用 getUIContext 会抛 1300002（Uicontent is nullptr）。判断信号：换算代码位于 EntryAbility.onWindowStageCreate，且在 loadContent(...) 调用之前或在其回调之外同步执行。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-blockinger-glm5.31/entry/src/main/ets/entryability/EntryAbility.ets",
+        "since": "2026-10-13T10:53:09.711Z",
+        "at": "2026-10-13T22:29:44.396Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-blockinger-glm5.31/.claude/skills/arkts-immersive-safearea/SKILL.md",
+          "at": "2026-10-13T05:16:19.463Z",
+          "reason": "正常输入：转换器按派工调用 Skill 载入沉浸式 skill（agent-a2b1c72dd9409d6e5.jsonl:L89-L91），Layer 1 规定在 EntryAbility.onWindowStageCreate 中全屏、设系统栏、测 TYPE_SYSTEM/TYPE_NAVIGATION_INDICATOR 并写 WindowModel；没有错误要求，但未提 px2vp，也没写这些步骤与 loadContent 的先后，留下时序由实现者决定。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-blockinger-glm5.31/.claude/a2h-bench/memory/ui/safearea/lesson-cf111aadb8804649b578.lesson.md",
+          "at": "2026-10-13T05:15:06.766Z",
+          "reason": "首写前注入的经验（v2）：提醒“getWindowAvoidArea/windowRect 数值是 px：写入 padding 前先 px2vp 再消费”（agent-a2b1c72dd9409d6e5.jsonl:L73），正文 how 第一步写 const ui = mainWindow.getUIContext()；标题和做法都没写 UIContext 只在 loadContent 成功后可用，缺时机条件。转换器在 L74 推理中记下此条，随后为 EntryAbility 内 px2vp 选用 Window.getUIContext()。",
+          "problem": true
+        },
+        {
+          "key": "agent-a2b1c72dd9409d6e5.jsonl",
+          "at": "2026-10-13T05:33:07.879Z",
+          "reason": "收到 skill 与上述经验后，推理已指出 onWindowStageCreate 时还没有 UIContext（L131），只凭 d.ts 签名 getUIContext(): UIContext（L132-L133）就判定可用；L173 Write 把 setupImmersiveWindow(windowStage) 放在 loadContent 之前同步调用，函数开头执行 mainWindow.getUIContext()，用于 px2vp 换算避让区写入 WindowModel。这正是返修 faultlog 中 EntryAbility.ets:88 ← :40 抛 1300002 的写法，保留到生成结束。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "转换器在本转录中调用 Skill(arkts-immersive-safearea)，回执后同一位置注入该 SKILL.md 全文（Layer 1 放 onWindowStageCreate、步骤①-⑥，未提 px2vp 与 loadContent 先后）；这是写 EntryAbility 前的真实载入。",
+          "evidence": [
+            {
+              "source": "generation/c54518f5-0a64-4778-9630-e5bfe3f912cc/subagents/agent-a2b1c72dd9409d6e5.jsonl",
+              "line": 89
+            },
+            {
+              "source": "generation/c54518f5-0a64-4778-9630-e5bfe3f912cc/subagents/agent-a2b1c72dd9409d6e5.jsonl",
+              "line": 91
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "该 agent 首次明确写入（Bash 写 /tmp）被召回 hook 拒绝，tool_result 注入经验摘要，其中一行为 lesson-cf111aadb8804649b578 标题与提醒“写入 padding 前先 px2vp 再消费”及正文路径；agent 在下一条推理里把它记为第 26 条并据此为 EntryAbility 选用 Window.getUIContext().px2vp。",
+          "evidence": [
+            {
+              "source": "generation/c54518f5-0a64-4778-9630-e5bfe3f912cc/subagents/agent-a2b1c72dd9409d6e5.jsonl",
+              "line": 73
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "未查本机 SDK 中 Window.getUIContext 注释是否列出 1300002；运行期行为以返修 faultlog（repair L5）和修复注释（repair L177）为据。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-6817a796af2e744ddf8a",
+  "metadata": {
+    "migration": {
+      "id": "blockinger-glm531-c54518f5-0a64-4778-9630-e5bfe3f912cc",
+      "project": "Blockinger"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.296"
+      ]
+    },
+    "source_set_id": "sources-37319ba0846f9b0a14c5",
+    "environment": [
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-blockinger-glm5.31",
+        "at": "2026-10-13T03:35:43.538Z",
+        "ref": "generation/c54518f5-0a64-4778-9630-e5bfe3f912cc.jsonl:L423",
+        "request_ref": "generation/c54518f5-0a64-4778-9630-e5bfe3f912cc.jsonl:L422",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-blockinger-glm5.31",
+        "at": "2026-10-13T04:09:41.917Z",
+        "ref": "generation/c54518f5-0a64-4778-9630-e5bfe3f912cc/subagents/agent-a189cc44cdb902fa5.jsonl:L124",
+        "request_ref": "generation/c54518f5-0a64-4778-9630-e5bfe3f912cc/subagents/agent-a189cc44cdb902fa5.jsonl:L123",
+        "phase": "generation"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "35",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-blockinger-glm5.31",
+        "at": "2026-10-13T12:06:21.856Z",
+        "ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L296",
+        "request_ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L295",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "17",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-blockinger-glm5.31",
+        "at": "2026-10-13T12:06:21.856Z",
+        "ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L296",
+        "request_ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L295",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "8",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-blockinger-glm5.31",
+        "at": "2026-10-13T12:06:21.856Z",
+        "ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L296",
+        "request_ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L295",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "4795952a-b849-4427-ba3f-0bc9a11c6092"
+      ]
+    }
+  },
+  "revision": "df87ceea0b7873522ff4397241c86a2adcda39f491e73a41e0450b00543fb4af"
+}
