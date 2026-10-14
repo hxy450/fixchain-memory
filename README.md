@@ -13,7 +13,7 @@
 
 ## 用这个库跑迁移实验
 
-一条命令起一组端到端迁移（无 memory / 有 memory 两种条件，建好目标工程、装好我们的 `.claude`、影子 git 记录和首写召回）在 [a2h-replay-bench](https://github.com/hxy450/a2h-replay-bench) 的 `e2e/`；它带着本库 `memory/multi-app-20261011`（版本 `cc7b238e`）的固定副本。
+一条命令起一组端到端迁移（无 memory / 有 memory 两种条件，建好目标工程、装好我们的 `.claude`、影子 git 记录和首写召回）在 [a2h-replay-bench](https://github.com/hxy450/a2h-replay-bench) 的 `e2e/`。bench 不保存经验库副本，只在 `memory-refs.json` 里按名字固定本库的 commit 与 revision，用到时取出该 commit 的 `memory/` 并核对 revision；经验库的更新都提交到本仓库。
 
 ## 更新与历史
 
@@ -25,7 +25,7 @@
 
 旧版阅读包由 Git 历史保留，不按迁移复制多份。此前的 `runs/` 已退出当前 Git 树，本地的材料、稿件、报告与断点仍保留；原有提交没有改写。此次目录调整不改变卡片内容、经验语义或知识 revision。
 
-当前发布分支：`memory/multi-app-20260929`。工作目录、转录、SQLite、模型日志、提案及本机调度信息不进入正式发布树。
+当前发布分支：`memory/multi-app-20261012`。留出 app ColorLines 的独立评测库在 `memory/colorlines-holdout`，不并入本分支。工作目录、转录、SQLite、模型日志、提案及本机调度信息不进入正式发布树。
 
 机械检查保证格式、引用及所画历史关系符合契约，不等于归因语义认证或泛化效果证明。评测应冻结一个 Git commit / memory revision，在未入库应用上对照。
 
