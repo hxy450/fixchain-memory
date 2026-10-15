@@ -36,11 +36,14 @@ Navigation/@Entry宿主与页面注册（含根 Navigation 默认标题栏与工
 - [根 Navigation 只作路由容器时显式隐藏默认标题栏和工具栏](lesson-69e07207a06a8a8a7ba9.lesson.md)
   - 时机：界面实现阶段，为入口页根 Navigation 编写属性链时
   - 情境：源端外壳没有系统标题栏或工具栏（如 Compose Scaffold 只传自绘 bottomBar 与 snackbarHost），目标以 @Entry 页的 Navigation 作根路由容器，承载 tab 内容和自绘底栏，详情页走 NavDestination。
+- [源 Activity 或其基类 onCreate 调 overridePendingTransition(0,0) 时，“进入无转场”是目的地页的属性：进入该页的每条路由（按钮跳转、引导完成、启动分流、抽屉）都关闭转场](lesson-9886f489045488c8b454.lesson.md)
+  - 时机：规格提取阶段写页面规格与路由契约时；实现阶段写 pushPathByName/replacePathByName 时
+  - 情境：源 Activity 或所继承的基类在 onCreate 调 overridePendingTransition(0,0)；目标用 Navigation 的 push/replace 进入该页，进入路径不止一条，规格可能只把转场禁用挂在抽屉基座等某一条路径上。
 - [源端一个 Composable 内多屏共享的清理，拆成多页面后归属外层生命周期，切屏不释放](lesson-2ed8c21943925bf0ae9a.lesson.md)
   - 时机：规格提取与计划阶段，把源端 DisposableEffect/onDispose 等清理映射成目标多页面的生命周期契约时；实现阶段把共享服务的 stop/dispose 挂到页面回调时
   - 情境：源端单 Activity 在同一个 Composable 里用状态变量切换多个屏幕，播放器等资源和 DisposableEffect 清理挂在这个外层 Composable；目标端拆成 Navigation 下的多个页面，共享服务需要重新确定由哪一层、在什么时机停止和释放。
   - 例外：源端清理本就挂在单个屏幕自己的 Composable 上，切屏即离开组合，此时按该屏对应页面的退出处理
-- [源端在导航目的地内用 LocalLifecycleOwner 观察 ON_STOP/ON_RESUME 时，owner 是返回栈条目：导航离开与退后台都要触发，目标按 onHidden/onShown 接线，销毁前先调停止入口](lesson-19dd006e049c3f9d7563.lesson.md)
-  - 时机：规格提取阶段翻译 LifecycleEventObserver 的 ON_STOP/ON_RESUME 触发契约时；页面实现阶段把引擎或服务暴露的 onStop/onResume 一类入口接到 NavDestination 生命周期时
-  - 情境：源 Composable 用 DisposableEffect(LocalLifecycleOwner.current) 注册 LifecycleEventObserver，ON_STOP 时移交后台服务、暂停或保存，ON_RESUME 时取回；该 Composable 位于 navigation-compose 的目的地内。目标页面是 NavDestination，引擎是普通类，需由页面在 onShown/onHidden/aboutToDisappear 中显式调用入口；规格可能把触发写成“退后台/前后台切换”。
+- [源端在导航目的地内用 LocalLifecycleOwner 观察 ON_STOP/ON_RESUME 时，owner 是返回栈条目：导航离开与退后台都要触发，目标按 onHidden/onShown 接线；销毁前只补调幂等停止入口，源端 onDestroy 不存档就不在 aboutToDisappear 存档或计时](lesson-19dd006e049c3f9d7563.lesson.md)
+  - 时机：规格提取阶段翻译 LifecycleEventObserver 的 ON_STOP/ON_RESUME 触发契约时；页面实现阶段把引擎或服务暴露的 onStop/onResume 一类入口、或源 Activity 的存档时机接到 NavDestination 生命周期时
+  - 情境：源 Composable 用 DisposableEffect(LocalLifecycleOwner.current) 注册 LifecycleEventObserver，ON_STOP 时移交后台服务、暂停或保存，ON_RESUME 时取回；该 Composable 位于 navigation-compose 的目的地内。目标页面是 NavDestination，引擎是普通类，需由页面在 onShown/onHidden/aboutToDisappear 中显式调用入口；规格可能把触发写成“退后台/前后台切换”。也包括源 Activity 只在 onPause、onBackPressed、onSaveInstanceState、Up 存档，onDestroy 不存档，存档按 now − startingTime 累计时长或写统计；目标页可能在隐藏很久后才被清栈销毁（桌面图标重进、popToIndex、replace）。
   - 例外：观察者挂在 Activity 或 ProcessLifecycleOwner 上：只对应应用前后台，按 Ability 或应用前后台回调接线

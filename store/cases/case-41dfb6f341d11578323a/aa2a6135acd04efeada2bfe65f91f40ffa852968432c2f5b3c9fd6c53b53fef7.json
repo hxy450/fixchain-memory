@@ -1,0 +1,296 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-41dfb6f341d11578323a",
+  "created_at": "2026-10-14T14:45:23.867492+00:00",
+  "migration_key": "pf2048-glm531-3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f",
+  "title": "把启动器路由跳板只映射成冷启入口分流，漏掉运行中从桌面图标再次拉起时的再分流",
+  "when": "规格提取阶段，把 LAUNCHER 路由跳板 Activity 及其 Intent flag 映射成目标入口分流时；入口装配阶段据此接线 EntryAbility/入口页时",
+  "description": "源端 LAUNCHER Activity 是按条件 startActivity 后 finish 的无界面跳板，跳往主页时带 FLAG_ACTIVITY_CLEAR_TOP；应用内跳转用 TaskStackBuilder.startActivities 重建任务，使任务根变为主页；manifest 未声明 launchMode。目标为单例 UIAbility 加单个 Navigation，进程存活时再次从桌面拉起只回调 onNewWant/onForeground，页面栈原样保留。",
+  "summary": "写前实际收到：page_0001 规格作者 a953b 读到 SplashActivity.java，非首启分支 mainIntent.addFlags(FLAG_ACTIVITY_CLEAR_TOP)\n（agent-a953b48410b4230e4.jsonl:L80-L81）；MainActivity.java 的 createBackStack 用 TaskStackBuilder.startActivities 进入游戏\n（L74-L75）；AndroidManifest 中 Splash 为 MAIN/LAUNCHER，未声明 launchMode，即缺省 standard（L130-L131）。\nCLEAR_TOP 只在 Main 已经在任务里、Splash 又被启动时才起作用，也就是运行中从桌面图标再次进入：TaskStackBuilder 重建任务后，\n任务根是 MainActivity；启动器 Intent 落到这个已有任务时，会在栈顶新建 SplashActivity 再分流（首启压教程，否则清掉 Main 之上的页面回主菜单）。\n这些输入足以要求规格写出“运行中再次拉起”这一分支。\n本次输出却在 page_0001（L145 Write）只把分流放在“EntryAbility 首帧加载前（loadContent 之前）”选择入口路由，\n并把 CLEAR_TOP 写成“MainPage 为 Navigation 根页，天然栈内唯一｜无需显式清栈即可满足语义”。这句话只在冷启时成立；\n热启重进时 Main 之上还压着 Game 等页面。规格也没写目标单例 UIAbility 被再次拉起时走 onNewWant、页面栈原样保留。\n该映射在经验注入前的被拒稿（L125）里已经存在。\n传递：F005 作者 a222a 读了 page_0001（agent-a222a5afa7769d17e.jsonl:L45-L47），也读过 SplashActivity/MainActivity（L63-L70），\n仍沿用并写成 F005-AC01/AC02（“冷启首帧即教程”“CLEAR_TOP 语义=Main 为 Navigation 根、栈内唯一”）和\n“单 UIAbility 下初始路由选择替代 Activity 栈跳转”（L126）；计划作者 a5208 读 F005（agent-a5208142b268283c6.jsonl:L41-L42）后写出\nslice-03：“EntryAbility.ets onCreate 启动分流接线（…loadContent 前同步读定入口）”（L87）；Group 1 closer acf4d 读了 slice-03\n（agent-acf4d3806abce4063.jsonl:L30-L32），按派工只接冷启分流：EntryAbility（W128）没有 onNewWant，EntryPage（W134）只在\naboutToAppear 调 resolveStartDestination 后 push。此后 Slice 10（ad6457）在 EntryPage.aboutToAppear 叠加冷启 restoreLastRoute，\n并在 EntryAbility.onCreate 注入 AppShell.init；F010 也只写“冷启动（含回收后重入）”和“进程重启再次进入时 onCreate 重走”，没有热启分支。\n生成结束检查点 81f0b13 的 EntryAbility 只有 onForeground 日志，没有 onNewWant。\n修复：返修 C39 用 logcat 证实安卓重进时新建 SplashActivity，再以 flg=CLEAR_TOP 启动 MainActivity。EntryAbility 增加\nonNewWant/onForeground，经 eventHub 发出 AppShellEvents.RELAUNCH/FOREGROUND（AppShell 新增事件名类）；EntryPage.handleRelaunch\n在首启时压入教程，否则 popToIndex(Main) 后 replace 重建主菜单；任务已结束则清栈后全新分流\n（repair/5d9e6180-4c80-4423-a00d-ca7069d9da73.jsonl:L888-L889、L899-L900、L1072-L1073，检查点 b148da2 L1085-L1086）。该修改最终保留。\n经验核对：按 CLAUDE.md 查了链上各 agent 首写前的注入，包括 a953b（L126，含 lesson-0b72c197ea20fbe6f277 v2 路由跳板、\nlesson-c1d7ec16bb02aa152c33 v2 manifest 缺省）、a222a（L123）、a5208（L81）、acf4d（L91，含 lesson-0b72c197ea20fbe6f277、\nlesson-b0405a29415547485ecb v1 回收重建）。a953b L125、a222a L122、acf4d W90 这些注入前的被拒稿已含同样的冷启映射，也同样没有 onNewWant；\n注入后的定稿没有改变这一点，所以经验未参与本偏差，不写进图。库中另有 lesson-39f137ee173e50363f79，写明外部入口 CLEAR_TOP 决定热启动时\n清掉上层页面，并要求在 onNewWant 显式实现，与本问题直接相关；但它的标题限定在底部 tab 与外部深链，本次没有注入给上述任何 agent。\n",
+  "recommendations": [
+    "规格提取阶段：路由跳板的每个 Intent flag 都写出可观察后果。CLEAR_TOP 这类只在目标页已在栈中才生效的 flag，要说明它对应的进入场景（如运行中从桌面图标再次进入），不能用“冷启时根页天然唯一”消解。",
+    "规格提取阶段：入口分流按“冷启 / 进程回收后重入 / 进程存活时从桌面图标再次拉起 / 从最近任务切回”逐种写验收。结合 LAUNCHER Activity 的 launchMode（未声明即 standard），以及 TaskStackBuilder.startActivities、NEW_TASK|CLEAR_TASK 等是否改写任务根，判断源端重进时是否重跑跳板；需要重跑时写明目标单例 UIAbility 的承载点（onNewWant 再分流）。",
+    "入口装配阶段：只在 onCreate/aboutToAppear 接入口分流时，先核对规格有没有“再次拉起”分支；源端会在重进时重跑跳板的，就在 EntryAbility.onNewWant 经 eventHub 通知入口页按同一条件再分流（首启压教程，否则回主页并清掉其上的页面）。检查方法：游戏中按 Home 再点桌面图标，两端都应回到主菜单；从最近任务切回则保持原页。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-pf2048-glm5.31/entry/src/main/ets/entryability/EntryAbility.ets",
+        "since": "2026-10-14T02:47:19.609Z",
+        "at": "2026-10-14T13:11:05.496Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/privacy-friendly-2048-SecUSo-4ee3cf3/app/src/main/java/org/secuso/privacyfriendly2048/activities/SplashActivity.java",
+          "at": "2026-10-13T13:15:50.905Z",
+          "reason": "正常输入：a953b 的 Read 回执给出 onCreate 内首启分流，以及非首启时 mainIntent.addFlags(FLAG_ACTIVITY_CLEAR_TOP) 后 finish（agent-a953b48410b4230e4.jsonl:L80-L81）。CLEAR_TOP 说明 Splash 会在 Main 已在任务中时再次运行。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/privacy-friendly-2048-SecUSo-4ee3cf3/app/src/main/java/org/secuso/privacyfriendly2048/activities/MainActivity.java",
+          "at": "2026-10-13T13:15:41.198Z",
+          "reason": "正常输入：同一 agent 的 Read 回执给出 createBackStack 使用 TaskStackBuilder.addNextIntentWithParentStack + startActivities 进入游戏（L74-L75，第201-203行）。该调用会重建任务，使任务根变为 MainActivity。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/privacy-friendly-2048-SecUSo-4ee3cf3/app/src/main/AndroidManifest.xml",
+          "at": "2026-10-13T13:24:13.614Z",
+          "reason": "正常输入：Read 回执给出 SplashActivity 为 MAIN/LAUNCHER，未声明 launchMode（缺省 standard）（L130-L131）。三者合起来足以推出：运行中从桌面图标进入已有任务时，会新建 Splash 再分流。"
+        },
+        {
+          "key": "3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f:a953b48410b4230e4",
+          "at": "2026-10-13T13:25:05.999Z",
+          "reason": "已收到上述输入，page_0001 的 Write（L145-L146）却只把分流写成“EntryAbility 首帧加载前（loadContent 之前）”选入口路由，并把 FLAG_ACTIVITY_CLEAR_TOP 映射为“MainPage 为 Navigation 根页，天然栈内唯一｜无需显式清栈即可满足语义”。这把只在热启重进时生效的 flag 用冷启语境消解了，也没写单例 UIAbility 再次拉起走 onNewWant。注入前被拒稿 L125 已是同一映射。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-pf2048-glm5.31/spec/baseline/ui/page_0001_SplashActivity.md",
+          "at": "2026-10-13T13:36:53.660Z",
+          "reason": "交付桥梁：F005 作者 Read 回执里仍是“目标端分流逻辑落在 EntryAbility（onCreate 首帧加载前）”和冷启入口路由的写法（agent-a222a5afa7769d17e.jsonl:L45-L47）。"
+        },
+        {
+          "key": "3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f:a222a5afa7769d17e",
+          "at": "2026-10-13T13:53:15.781Z",
+          "reason": "读了 page_0001 后，Write F005（L126-L127）沿用为 F005-AC01/AC02：冷启首帧直达，“CLEAR_TOP 语义=Main 为 Navigation 根、栈内唯一”，resolveStartDestination 在 EntryAbility.onCreate、loadContent 之前调用，没有再次拉起分支。本链只确认传递，不另推定其独立失职。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-pf2048-glm5.31/spec/baseline/features/F005-onboarding-tutorial.md",
+          "at": "2026-10-13T20:08:09.377Z",
+          "reason": "交付桥梁：计划作者的 Read 回执含第40行“CLEAR_TOP 语义=Main 为 Navigation 根天然栈内唯一”、第56行“EntryAbility.onCreate 内、loadContent 之前同步调用”（agent-a5208142b268283c6.jsonl:L41-L42）。"
+        },
+        {
+          "key": "3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f:a5208142b268283c6",
+          "at": "2026-10-13T20:18:53.236Z",
+          "reason": "读了 F005 后，Write slice-03-f005.md（L87-L88），把 EntryAbility 的 cross_slice_edits 定为“onCreate 启动分流接线（resolveStartDestination → Tutorial/Main 入口路由，loadContent 前同步读定入口）”，只派冷启分流。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-pf2048-glm5.31/spec/baseline/plans/slices/slice-03-f005.md",
+          "at": "2026-10-13T22:12:16.356Z",
+          "reason": "交付桥梁：Group 1 closer 的 Read 回执含 EntryAbility 分流接线项与“0001 无页面——分流逻辑归 Step 3d EntryAbility 接线”（agent-acf4d3806abce4063.jsonl:L30-L32）。"
+        },
+        {
+          "key": "3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f:acf4d3806abce4063",
+          "at": "2026-10-13T22:23:02.807Z",
+          "reason": "按 slice-03 和派工接线：EntryAbility Write（W128，L128-L129）只有 onCreate/onConfigurationUpdate/onWindowStageCreate/onForeground 等，没有 onNewWant；EntryPage Write（W134，L134-L135）只在 aboutToAppear 调 resolveStartDestination 后 push。注入前 W90 也没有 onNewWant。本链只确认把冷启分流写入目标。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": 6
+        },
+        {
+          "from": 6,
+          "to": 7
+        },
+        {
+          "from": 7,
+          "to": 8
+        },
+        {
+          "from": 8,
+          "to": 9
+        },
+        {
+          "from": 9,
+          "to": 10
+        },
+        {
+          "from": 10,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-pf2048-glm5.31/entry/src/main/ets/pages/EntryPage.ets",
+        "since": "2026-10-14T02:47:19.609Z",
+        "at": "2026-10-14T13:11:05.496Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/privacy-friendly-2048-SecUSo-4ee3cf3/app/src/main/java/org/secuso/privacyfriendly2048/activities/SplashActivity.java",
+          "at": "2026-10-13T13:15:50.905Z",
+          "reason": "正常输入：a953b 的 Read 回执给出非首启时 addFlags(FLAG_ACTIVITY_CLEAR_TOP) 后 finish（agent-a953b48410b4230e4.jsonl:L80-L81）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/privacy-friendly-2048-SecUSo-4ee3cf3/app/src/main/java/org/secuso/privacyfriendly2048/activities/MainActivity.java",
+          "at": "2026-10-13T13:15:41.198Z",
+          "reason": "正常输入：Read 回执给出 TaskStackBuilder.startActivities 进入游戏，任务根会被重建为 MainActivity（L74-L75）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/privacy-friendly-2048-SecUSo-4ee3cf3/app/src/main/AndroidManifest.xml",
+          "at": "2026-10-13T13:24:13.614Z",
+          "reason": "正常输入：Splash 为 MAIN/LAUNCHER、launchMode 缺省 standard（L130-L131）。"
+        },
+        {
+          "key": "3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f:a953b48410b4230e4",
+          "at": "2026-10-13T13:25:05.999Z",
+          "reason": "page_0001 的 Write（L145-L146）把分流只放在冷启首帧前，把 CLEAR_TOP 写成“天然栈内唯一，无需显式清栈”，漏掉运行中从桌面图标再次进入时的再分流与清栈（注入前稿 L125 已如此）。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-pf2048-glm5.31/spec/baseline/ui/page_0001_SplashActivity.md",
+          "at": "2026-10-13T13:36:53.660Z",
+          "reason": "交付桥梁：F005 作者的 Read 回执含冷启入口分流写法（agent-a222a5afa7769d17e.jsonl:L45-L47）。"
+        },
+        {
+          "key": "3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f:a222a5afa7769d17e",
+          "at": "2026-10-13T13:53:15.781Z",
+          "reason": "沿用为 F005-AC01/AC02 和“初始路由选择替代 Activity 栈跳转”（L126-L127），没有再次拉起分支。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-pf2048-glm5.31/spec/baseline/features/F005-onboarding-tutorial.md",
+          "at": "2026-10-13T20:08:09.377Z",
+          "reason": "交付桥梁：计划作者 Read 回执含 CLEAR_TOP 天然栈内唯一、loadContent 之前分流（agent-a5208142b268283c6.jsonl:L41-L42）。"
+        },
+        {
+          "key": "3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f:a5208142b268283c6",
+          "at": "2026-10-13T20:18:53.236Z",
+          "reason": "slice-03 Write（L87-L88）只派冷启分流接线。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-pf2048-glm5.31/spec/baseline/plans/slices/slice-03-f005.md",
+          "at": "2026-10-13T22:12:16.356Z",
+          "reason": "交付桥梁：closer 的 Read 回执含分流接线项（agent-acf4d3806abce4063.jsonl:L30-L32）。"
+        },
+        {
+          "key": "3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f:acf4d3806abce4063",
+          "at": "2026-10-13T22:23:02.807Z",
+          "reason": "EntryPage Write（W134，L134-L135）只在 aboutToAppear 调 resolveStartDestination 后 pushPathByName，没有任何重进事件处理；后续 Slice 10 只叠加冷启 restoreLastRoute。修复新增 handleRelaunch/handleForeground。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": 6
+        },
+        {
+          "from": 6,
+          "to": 7
+        },
+        {
+          "from": 7,
+          "to": 8
+        },
+        {
+          "from": 8,
+          "to": 9
+        },
+        {
+          "from": 9,
+          "to": 10
+        },
+        {
+          "from": 10,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [
+    {
+      "key": "C:/Users/hongy/projects/transfer-app-pf2048-glm5.31/entry/src/main/ets/services/AppShell.ets",
+      "reason": "已确认修改：C39 在 AppShell 新增 AppShellEvents（RELAUNCH/FOREGROUND 事件名），只作为 EntryAbility.onNewWant/onForeground 到 EntryPage 的 eventHub 通道（repair L888-L889）。生成期写者 ad6457（Slice 10）按 F010/slice-10 实现 init 链与冷启 restoreLastRoute（PD-C9-F010-02），F010 只覆盖冷启与进程回收重入。F010 作者 a47086 写前只读了 Manifest、PF2048.kt 等，没读 SplashActivity/MainActivity（CLEAR_TOP、TaskStackBuilder），无法判定其输入是否足以推出热启再分流；ad6457 写前也没读 page_0001/F005。与上两图同源，但缺少到 AppShell 的实际规格交接，暂不入图。"
+    }
+  ],
+  "job": "issue-41dfb6f341d11578323a",
+  "metadata": {
+    "migration": {
+      "id": "pf2048-glm531-3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f",
+      "project": "Privacy Friendly 2048"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.296",
+        "2.1.299"
+      ]
+    },
+    "source_set_id": "sources-1066f74383c81d5a2cd9",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-pf2048-glm5.31",
+        "at": "2026-10-13T20:25:53.379Z",
+        "ref": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a46a0c49af597d7c3.jsonl:L105",
+        "request_ref": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a46a0c49af597d7c3.jsonl:L104",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-pf2048-glm5.31",
+        "at": "2026-10-13T20:25:53.379Z",
+        "ref": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a46a0c49af597d7c3.jsonl:L105",
+        "request_ref": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a46a0c49af597d7c3.jsonl:L104",
+        "phase": "generation"
+      },
+      {
+        "name": "toolchain.gradle",
+        "value": "8.5",
+        "basis": "configuration",
+        "artifact": "gradle-wrapper.properties",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-pf2048-glm5.31",
+        "at": "2026-10-14T07:57:12.812Z",
+        "ref": "repair/5d9e6180-4c80-4423-a00d-ca7069d9da73.jsonl:L70",
+        "request_ref": "repair/5d9e6180-4c80-4423-a00d-ca7069d9da73.jsonl:L69",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "c16c307d-1222-4fb3-bc92-f319ab51b983"
+      ]
+    }
+  },
+  "revision": "aa2a6135acd04efeada2bfe65f91f40ffa852968432c2f5b3c9fd6c53b53fef7"
+}

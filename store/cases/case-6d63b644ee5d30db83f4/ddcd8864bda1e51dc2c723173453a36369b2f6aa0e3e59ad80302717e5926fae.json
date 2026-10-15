@@ -1,0 +1,259 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-6d63b644ee5d30db83f4",
+  "created_at": "2026-10-14T15:23:56.088347+00:00",
+  "migration_key": "pf2048-glm531-3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f",
+  "title": "把 ?attr/actionBarSize 与 AppCompat 工具栏标题字号定成竖屏单值：横屏 48dp/14sp 的库限定资源未迁",
+  "when": "界面实现阶段（含共享标题栏基座与资源键落地），把依赖 ?attr/actionBarSize 和 AppCompat Toolbar/ActionBar 标题样式的标题栏写成 ArkUI 高度与字号时；以及资源迁移阶段决定是否导出依赖库资源时",
+  "description": "源布局的 Toolbar 高度写 ?attr/actionBarSize，标题没写 textAppearance/textSize，主题继承 Theme.AppCompat.*（DarkActionBar 窗口 ActionBar，或 NoActionBar 加 toolbar.xml）；应用自己的 res 里没有横屏尺寸覆盖，横竖屏差异全部来自 appcompat 库的 values-land（abc_action_bar_default_height_material 48dp、abc_text_size_title_material_toolbar 14dp）；Activity 未锁定方向，目标端用自绘标题栏。",
+  "summary": "写前实际收到：toolbar.xml 的 Toolbar 高度为 ?attr/actionBarSize，styles.xml 的 AppTheme 继承 Theme.AppCompat.DayNight.DarkActionBar，\nbuild.gradle 声明 appcompat 1.7.0 / material 1.12.0，Manifest 未锁定方向。这些输入已经说明高度和标题字号由 AppCompat 主题属性按配置解析，\n写者也都在思考或注释里认出了\"AppCompat 默认\"。它们却只取了竖屏值，没有查库在 values-land 下的 48dp/14dp。\n具体有四处写入：\n(1) Base-6 共享组件写者 agent-a0d3c9957d8d7eea6 Read toolbar.xml 后（L113/L116），思考里写\"actionBarSize height (56dp default → 56vp)\"（L117）。\nL179 计划已定 .height(56) 和标题 fontSize(20)，L213 又引 HelpPage 先例确认。Write（L247-L248）\n把 BasePage 写成 `const TOOLBAR_HEIGHT: number = 56;  // ?attr/actionBarSize，AppCompat 默认 56dp`、标题 `.fontSize(20)`。\n共享标题栏从此成了不随方向变化的常量。\n(2) 统计页转换者 agent-afea60fb5e56686d7 读到同一 toolbar.xml（L61-L62）和 DarkActionBar 主题（L64-L65），也看了统计页的 land 变体（L71）。\n它判定\"Android actionBarSize is a system attr, not app resource\"\"default = 56dp\"（L83、L90），\n只在 base/element/float.json 新建 action_bar_size=56vp（Edit L173），没有横屏限定覆盖。\n(3) 游戏页转换者 agent-aea1f8cd87d32adc5 读了 DarkActionBar 主题（L49-L51），还按 layout-land/activity_game.xml 转了横屏布局（L84-L87）。\n它仍把 ActionBar 代体定为\"actionbar height 56vp, title 20fp\"（L89），在 base float.json 写入 game_actionbar_title_size=20fp（Edit L230），同样只有 base。\n(4) Slice 8 的 agent-a6dced83f303fde17 写前 Read 了 BasePage（L53-L54：TOOLBAR_HEIGHT=56、标题 fontSize(20)），grep 到 action_bar_size（L180-L181）。\nAboutPage 自绘栏高度引用 action_bar_size，标题照 BasePage 写 `.fontSize(20)`（Write L220；L260 自述\"20 title size — mirroring BasePage toolbar.xml provenance values\"）。\n这一步是传递，不另算独立偏差。\n上游缺口：Stage 0 资源迁移的派工只列应用自身 res/values*。resource-mapping.md 写\"source res, no APK build; 本项目零外部资源依赖库\"\n（agent-a46a0c49af597d7c3.jsonl:L216），而 android2hmos_resources_convert 要求先构建 APK、用 apktool 取含依赖库的合并资源，或至少按 build.gradle 标出库资源缺口。\n因此 horizontal 限定目录在生成期从未出现。不过没有任何写者因为读到 Stage 0 的说法才写出 56/20，这条只作背景记录，不入图。\n首写前注入核对：上述各写者的 56/20 决定都早于各自注入\n（a0d3 L117/L179 早于 L184；afea L83/L90 早于 L108；aea1 L89 早于 L93；a6dc L171 早于 L202）。\n注入的经验也没有一条涉及工具栏横屏尺寸或配置限定词，所以经验没有参与本偏差，不入图。\n返修 C15 在临时旋转钩子下实测：安卓横屏工具栏 126px=48dp、标题约 14sp（repair L4535-L4561）。\nc15_edit.py（L4562-L4570）做了这些改动：新增 resources/horizontal/element/float.json（action_bar_size 48vp、toolbar_title_size 14fp、game_actionbar_title_size 14fp）；\nbase float.json 增加 toolbar_title_size 20fp；BasePage 删去 TOOLBAR_HEIGHT，高度改引 action_bar_size、标题改引 toolbar_title_size（另 Edit 删孤儿注释 L4574/L4577）；\nAboutPage 标题改引 toolbar_title_size。检查点 C15 为 1e8de22（L4710-L4716）。最终文件保留这些改动。\n",
+  "recommendations": [
+    "界面实现阶段：标题栏高度写 ?attr/actionBarSize、标题未写 textAppearance 时，先按主题提供方（AppCompat/Material 版本）列出各配置限定词下的值，再落实。AppCompat 的 actionBarSize 竖屏 56dp、values-land 48dp、sw600dp 64dp；Toolbar/ActionBar 标题 abc_text_size_title_material_toolbar 竖屏 20dp、values-land 14dp。这些值用 base + horizontal 同名 float 资源承载，代码只写 $r，不写成 TS 常量或 .fontSize(20) 字面量。写后 grep 标题栏 .height(56)/常量 56/.fontSize(20)，并确认 resources/horizontal/element/float.json 覆盖了所用键。",
+    "界面实现阶段：已在转 layout-land 横屏变体的页面，也要检查共享标题栏和 ActionBar 代体在横屏下的尺寸。应用 res 没有横屏覆盖，只说明差异可能来自依赖库，不能据此认定两向同值；无法查证时，在报告里把横屏工具栏尺寸标为待核。",
+    "界面实现阶段：复用 BasePage 等共享件的标题栏数值作先例前，先看该值是否引用了带限定目录的资源键。先例是字面量时，改成引用同一资源键，不复制字面量。",
+    "资源迁移阶段：build.gradle 声明 appcompat/material 等 UI 库时，不写“零外部资源依赖库”。按 android2hmos_resources_convert 先构建 APK、用 apktool 取合并资源；构建不了时，从 Gradle 缓存的 aar 取 res/values-land 等目录里被布局主题属性引用的尺寸（abc_action_bar_default_height_material、abc_text_size_title_material_toolbar），导出到 base/horizontal，并在映射表列出这些库资源键供页面引用。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-pf2048-glm5.31/entry/src/main/ets/components/common/BasePage.ets",
+        "since": "2026-10-14T02:47:19.609Z",
+        "at": "2026-10-14T13:11:05.496Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/privacy-friendly-2048-SecUSo-4ee3cf3/app/src/main/res/layout/toolbar.xml",
+          "at": "2026-10-13T21:00:18.079Z",
+          "reason": "正常输入：Base-6 写者 Bash cat 的回执给出 Toolbar android:layout_height=\"?attr/actionBarSize\"，说明高度来自 AppCompat 主题属性、按配置解析，不是固定 dp（agent-a0d3c9957d8d7eea6.jsonl:L113/L116）。同一会话中 styles.xml 的 AppTheme 继承 Theme.AppCompat（L141-L142）。"
+        },
+        {
+          "key": "agent-a0d3c9957d8d7eea6.jsonl",
+          "at": "2026-10-13T21:17:48.873Z",
+          "reason": "已认出 actionBarSize 是 AppCompat 属性，思考却写“56dp default → 56vp”（L117）。L179 计划 .height(56) 与标题 fontSize(20)，L213 以 HelpPage 先例确认。Write 写出 const TOOLBAR_HEIGHT = 56（注释“AppCompat 默认 56dp”）与 .fontSize(20)（L247-L248），横屏 48dp/14sp 无处承载。这些决定早于 L184 的首写注入，注入经验未涉及此项。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "Base-6 写者在 Bash 中 cd 到源工程 app/src/main 后 cat res/layout/toolbar.xml，回执返回 Toolbar layout_height=?attr/actionBarSize；这是写 BasePage 前对该输入的真实读取。",
+          "evidence": [
+            {
+              "source": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a0d3c9957d8d7eea6.jsonl",
+              "line": 113
+            },
+            {
+              "source": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a0d3c9957d8d7eea6.jsonl",
+              "line": 116
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-pf2048-glm5.31/entry/src/main/resources/base/element/float.json",
+        "since": "2026-10-14T02:47:19.609Z",
+        "at": "2026-10-14T13:11:05.496Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/privacy-friendly-2048-SecUSo-4ee3cf3/app/src/main/res/layout/toolbar.xml",
+          "at": "2026-10-13T20:44:10.020Z",
+          "reason": "正常输入：统计页转换者 Read 回执给出 ?attr/actionBarSize（agent-afea60fb5e56686d7.jsonl:L61-L62）。随后 Read styles.xml 得到 AppTheme 继承 Theme.AppCompat.DayNight.DarkActionBar（L64-L65）。"
+        },
+        {
+          "key": "agent-afea60fb5e56686d7.jsonl",
+          "at": "2026-10-13T21:03:04.523Z",
+          "reason": "判定“actionBarSize is a system attr, not app resource”“default = 56dp”（L83、L90），只在 base float.json 新建 action_bar_size=56vp（Edit L173-L174），没有 horizontal 覆盖。GamePage、AboutPage 随后复用该键，横屏仍是 56vp。决定早于 L108 的首写注入。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/privacy-friendly-2048-SecUSo-4ee3cf3/app/src/main/res/values/styles.xml",
+          "at": "2026-10-13T20:43:37.490Z",
+          "reason": "正常输入：游戏页转换者 Bash cat 回执给出 AppTheme parent=Theme.AppCompat.DayNight.DarkActionBar，GameActivity 用窗口 ActionBar，标题样式来自 AppCompat（agent-aea1f8cd87d32adc5.jsonl:L49/L51）。它随后还读了 layout-land/activity_game.xml（L84-L87）。"
+        },
+        {
+          "key": "agent-aea1f8cd87d32adc5.jsonl",
+          "at": "2026-10-13T21:18:21.223Z",
+          "reason": "已在转横屏布局，ActionBar 代体却定为“actionbar height 56vp, title 20fp”（L89）。它在 base float.json 写入 game_actionbar_title_size=20fp（Edit L230-L231），横屏没有 14fp 覆盖。决定早于 L93 的首写注入。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "游戏页转换者用 Bash cat 源工程 res/values/styles.xml，回执返回 AppTheme parent=Theme.AppCompat.DayNight.DarkActionBar；这是写 game_actionbar_title_size 前对主题输入的真实读取。",
+          "evidence": [
+            {
+              "source": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-aea1f8cd87d32adc5.jsonl",
+              "line": 49
+            },
+            {
+              "source": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-aea1f8cd87d32adc5.jsonl",
+              "line": 51
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-pf2048-glm5.31/entry/src/main/ets/pages/AboutPage.ets",
+        "since": "2026-10-14T02:47:19.609Z",
+        "at": "2026-10-14T13:11:05.496Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/privacy-friendly-2048-SecUSo-4ee3cf3/app/src/main/res/layout/toolbar.xml",
+          "at": "2026-10-13T21:00:18.079Z",
+          "reason": "正常输入：同 BasePage 分支，Toolbar 高度为 ?attr/actionBarSize（agent-a0d3c9957d8d7eea6.jsonl:L113/L116）。"
+        },
+        {
+          "key": "agent-a0d3c9957d8d7eea6.jsonl",
+          "at": "2026-10-13T21:17:48.873Z",
+          "reason": "在 BasePage 写死 TOOLBAR_HEIGHT=56 与标题 .fontSize(20)（L247-L248），成为后续自绘标题栏的先例。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-pf2048-glm5.31/entry/src/main/ets/components/common/BasePage.ets",
+          "at": "2026-10-13T22:01:21.797Z",
+          "reason": "交付桥梁：Slice 8 写前 Read BasePage，回执包含 TOOLBAR_HEIGHT = 56 与标题 .fontSize(20)（agent-a6dced83f303fde17.jsonl:L53-L54）。"
+        },
+        {
+          "key": "agent-a6dced83f303fde17.jsonl",
+          "at": "2026-10-13T22:17:26.036Z",
+          "reason": "兑现 AboutPage 自绘标题栏时，高度引用 action_bar_size，标题照 BasePage 写 .fontSize(20)（Write L220-L221；L260 自述 mirroring BasePage）。本链只确认传递，计划（L171）早于 L202 注入，不另推定独立失职。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "Base-6 写者在 Bash 中 cd 到源工程 app/src/main 后 cat res/layout/toolbar.xml，回执返回 Toolbar layout_height=?attr/actionBarSize；这是写 BasePage 前对该输入的真实读取。",
+          "evidence": [
+            {
+              "source": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a0d3c9957d8d7eea6.jsonl",
+              "line": 113
+            },
+            {
+              "source": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a0d3c9957d8d7eea6.jsonl",
+              "line": 116
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "未核实生成期写者能否访问本机 Gradle 缓存中的 appcompat aar；本卡只归因“把配置相关主题属性写成单值”，不声称写者已拿到 48dp/14dp 后仍写错。"
+  ],
+  "unresolved_targets": [
+    {
+      "key": "C:/Users/hongy/projects/transfer-app-pf2048-glm5.31/entry/src/main/resources/horizontal/element/float.json",
+      "reason": "已确认由返修 c15_edit.py 新建（repair L4562-L4570），生成期没有任何写者写过该文件，无可绑定的生成写入。缺失成因与 base float.json 图相同：action_bar_size 和 game_actionbar_title_size 只写了 base。背景上，Stage 0 自称“零外部资源依赖库”，没有导出 appcompat values-land（agent-a46a0c49af597d7c3.jsonl:L216）。"
+    }
+  ],
+  "job": "issue-6d63b644ee5d30db83f4",
+  "metadata": {
+    "migration": {
+      "id": "pf2048-glm531-3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f",
+      "project": "Privacy Friendly 2048"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.296",
+        "2.1.299"
+      ]
+    },
+    "source_set_id": "sources-1066f74383c81d5a2cd9",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-pf2048-glm5.31",
+        "at": "2026-10-13T20:25:53.379Z",
+        "ref": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a46a0c49af597d7c3.jsonl:L105",
+        "request_ref": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a46a0c49af597d7c3.jsonl:L104",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-pf2048-glm5.31",
+        "at": "2026-10-13T20:25:53.379Z",
+        "ref": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a46a0c49af597d7c3.jsonl:L105",
+        "request_ref": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a46a0c49af597d7c3.jsonl:L104",
+        "phase": "generation"
+      },
+      {
+        "name": "toolchain.gradle",
+        "value": "8.5",
+        "basis": "configuration",
+        "artifact": "gradle-wrapper.properties",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-pf2048-glm5.31",
+        "at": "2026-10-14T07:57:12.812Z",
+        "ref": "repair/5d9e6180-4c80-4423-a00d-ca7069d9da73.jsonl:L70",
+        "request_ref": "repair/5d9e6180-4c80-4423-a00d-ca7069d9da73.jsonl:L69",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "c16c307d-1222-4fb3-bc92-f319ab51b983"
+      ]
+    }
+  },
+  "revision": "ddcd8864bda1e51dc2c723173453a36369b2f6aa0e3e59ad80302717e5926fae"
+}

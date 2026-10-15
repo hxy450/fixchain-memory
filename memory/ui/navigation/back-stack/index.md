@@ -6,12 +6,12 @@
 
 ## 本级经验
 
-- [唯一页面被压在空的 Navigation 首页之上时由根页接管返回键：栈底返回用 moveAbilityToBackground 退后台、不出栈露出空白首页；源端未覆写返回时按 Activity finish() 同时执行 onDestroy 的释放并复位页面实例态，参照设备实测为 HOT 恢复时才保留实例](lesson-efff93743d668b55b55a.lesson.md)
-  - 时机：规格提取与入口装配阶段，为单 Activity 应用确定根页面的返回语义、搭建 Navigation 入口壳并决定首页放在 Navigation 内容区还是首次 push 时；把注入经验转成派工要求、确定栈底返回的生命周期效果时
+- [唯一页面被压在空的 Navigation 首页之上时，由栈底 NavDestination 自身的 onBackPressed 接管返回（不写在 @Entry 页，@Entry.onBackPress 收不到）：size()&lt;=1 时 moveAbilityToBackground 退后台、不出栈露出空白宿主；源端未覆写返回时按 Activity finish() 同时执行 onDestroy 的释放并复位页面实例态，参照设备实测为 HOT 恢复时才保留实例](lesson-efff93743d668b55b55a.lesson.md)
+  - 时机：规格提取与入口装配阶段，为单 Activity 应用确定根页面的返回语义、搭建 Navigation 入口壳并决定首页放在 Navigation 内容区还是首次 push 时；页面转换阶段为首启引导页、主菜单等可能成为栈底的页面接返回时；把注入经验转成派工要求、确定栈底返回的生命周期效果时
   - 情境：安卓启动 Activity 未覆写 onBackPressed，也没有 OnBackPressedDispatcher、BackHandler 或 KEYCODE_BACK 处理（含 Compose NavHost 的起始目的地），返回键走 Activity 默认行为：默认 finish()，onDestroy 执行（如释放音乐、关闭数据源），实例态（输入框文字、所选值、播放位置）丢失，进程与静态单例保留；部分 Android 12+ 设备与启动方式下任务根 Activity 改为移到后台、onPause 存档、onResume 读档，以参照设备实测为准。目标按 Navigation + NavDestination 模板，用内容为空的 Navigation 首页在启动时 pushPathByName 压入唯一页面，或启动页已生成为 NavDestination、入口只能首次 push。
-- [底部 tab 的 popUpTo(start){saveState} 与外部入口的 CLEAR_TOP 要拆出返回栈后果写成验收，并在 onBackPress、onNewWant 显式实现](lesson-39f137ee173e50363f79.lesson.md)
-  - 时机：规格提取阶段描述底部 tab 切换和外部深链入口，以及实现阶段核对导航壳差异时
-  - 情境：源端 tab 切换用 navigate { popUpTo(startDestination){ saveState }; launchSingleTop; restoreState }，桌面卡片、通知等外部入口用带 FLAG_ACTIVITY_CLEAR_TOP/NEW_TASK 的 Intent 拉起主 Activity；目标端用单 Navigation 加下标或条件渲染切 tab，NavPathStack 承载详情页。
+- [底部 tab 的 popUpTo(start){saveState}、外部入口的 CLEAR_TOP，以及进程存活时从桌面图标再次拉起触发的路由跳板再分流，要拆出返回栈后果写成验收，并在 onBackPress、onNewWant 显式实现](lesson-39f137ee173e50363f79.lesson.md)
+  - 时机：规格提取阶段描述底部 tab 切换和外部深链入口，或把 LAUNCHER 路由跳板 Activity（启动页按条件分流）映射为入口分流时；入口装配与实现阶段核对导航壳差异、接线 EntryAbility 与入口页时
+  - 情境：源端 tab 切换用 navigate { popUpTo(startDestination){ saveState }; launchSingleTop; restoreState }，桌面卡片、通知等外部入口用带 FLAG_ACTIVITY_CLEAR_TOP/NEW_TASK 的 Intent 拉起主 Activity；目标端用单 Navigation 加下标或条件渲染切 tab，NavPathStack 承载详情页。也包括 LAUNCHER 路由跳板 Activity（未声明 launchMode 即 standard）按条件跳主页并带 CLEAR_TOP，任务根已被 TaskStackBuilder 等改写成主页：进程存活时从桌面图标再次进入，源端在任务顶新建跳板并重跑分流（首启进引导，否则清掉主页之上的页面回主页），从最近任务切回才保持原页；目标单例 UIAbility 再次拉起只回原页面栈。
 - [源端 popUpTo(根){inclusive=true} 加 navigate(根) 映射为 NavPathStack 重建，不用 pop() 代替](lesson-96c890012b26b5cb32cd.lesson.md)
   - 时机：接线阶段实现删除、克隆等操作完成后的导航时
   - 情境：源端在操作完成后 navigate 到列表并 popUpTo 列表 inclusive，重建返回栈；目标用 Navigation + NavPathStack，列表是 Navigation 根内容。
@@ -25,10 +25,13 @@
 - [源端用 NavController.handleDeepLink 处理外部拉起的深链时，目标清空 NavPathStack 并合成“起始页 + 目标页”返回栈，不在当前栈上 push](lesson-69229aa8c7b051229f26.lesson.md)
   - 时机：规格提取与入口接线阶段，把源端 handleDeepLink/navDeepLink 迁成 want 解析后的导航动作、决定打开深链后的返回栈时
   - 情境：源 Activity 在 onCreate、onNewIntent 或 LaunchedEffect(intent) 中调用 navController.handleDeepLink(intent)，目的地以 navDeepLink(uriPattern) 注册；外部链接经 VIEW intent 以新任务（FLAG_ACTIVITY_NEW_TASK）拉起宿主。目标由 UIAbility 的 onCreate/onNewWant 解析 want.uri 后操作 Navigation 的 NavPathStack；规格可能写成“在当前栈上 pushPathByName、目标已在栈顶则只更新参数”。
-- [被 @Entry 页或壳页直接组合的子组件要拦截返回键时，由宿主的返回处理转调子组件登记的处理函数；多个登记方按后进先出分发](lesson-803ba029eea852122e77.lesson.md)
+- [源端经 TaskStackBuilder.addNextIntentWithParentStack(...).startActivities() 跳转时，按 Manifest 父链清栈重建 \[父…, 目标\]：目标 NavPathStack 先 clear 再依次 push 父页与目标，返回落到父页而非来源页](lesson-2986423250986124d039.lesson.md)
+  - 时机：规格提取与基座实现阶段，把基类的父栈跳转方法（抽屉导航等）翻译成 NavPathStack 操作与返回验收时
+  - 情境：源基类被多个页面继承，抽屉等跳转经 TaskStackBuilder 发起，Manifest 为目标声明 parentActivityName 或 PARENT_ACTIVITY；目标是单个 Navigation + NavPathStack，跳转可从栈底以外的任意宿主页发起；页面规格里可能有“pushPathByName（主页为根天然在栈底）”一类只在来源页是主页时成立的映射。
+- [被 @Entry 页直接组合、未进入 Navigation 栈的子组件要拦截返回键时，由 @Entry.onBackPress 转调子组件登记的处理函数，多个登记方后进先出；@Entry 承载 Navigation 且栈内有 NavDestination 时，挂载点改为栈顶 NavDestination.onBackPressed](lesson-803ba029eea852122e77.lesson.md)
   - 时机：页面转换与接线阶段，为源端非根 Composable 里的 BackHandler/PredictiveBackHandler，或把 OnBackPressedDispatcher 的多级回调映射到 ArkUI 返回键钩子时
   - 情境：源端在抽屉宿主等非 Activity 根的 Composable 中按状态条件拦截返回（例如抽屉打开时先关抽屉）；目标端该组件不是 @Entry，由唯一的 @Entry 页直接组合，没有作为页面驻留在 Navigation 路由栈内。也包括源端 OnBackPressedDispatcher 按后登记先问分发（Activity 只登记壳层回调，选择模式等另登记回调），目标壳页的返回处理是封闭分支、嵌入的子页没有登记入口。
-  - 例外：组件本身就是 @Entry 页时，直接实现 onBackPress；组件作为 NavDestination 驻留在 Navigation 栈内时，返回由 NavDestination.onBackPressed 处理；来源实测只覆盖被直接组合、未入栈的情况
+  - 例外：组件本身就是 @Entry 页、且没有承载内有页面的 Navigation 时，直接实现 onBackPress；组件位于 NavDestination 内容中（含被页面组合的 BasePage 等共享基座）时，返回先交该 NavDestination.onBackPressed，返回 false 即出栈，@Entry.onBackPress 不会被调用；由该 NavDestination 的 onBackPressed 转调基座的裁决函数，不在 @Entry 上兑现
 - [返回按钮与系统返回共用同一处理分支，按源端启动来源标志执行 onBackPressed 的逻辑，不默认 pop](lesson-f19632971e470d55c543.lesson.md)
   - 时机：页面转换阶段，把 Activity 的返回按钮点击与 onBackPressed 翻译成 NavDestination 的返回处理时
   - 情境：源 Activity 按启动来源标志（如 isFromSplash）改变返回行为：首启进入时返回会先执行补救动作（如添加默认城市）再进主页，其他来源才 finish；目标页用 NavPathStack 管理，返回按钮默认写成 pop()，系统返回未处理。

@@ -13,6 +13,9 @@ ConstraintLayout/RelativeLayout的锚点、叠放与默认对齐（含 Compose C
   - 时机：界面实现与视觉返修阶段，把 RelativeLayout 或 FrameLayout 内的多个子 View（如两条曲线、图层）翻译成 ArkUI 容器时
   - 情境：源 item 在固定高度的 RelativeLayout 中放置多个子 View，它们没有 below/above/toEndOf 等相对规则，只有相同的 margin 或对齐，实际重叠绘制在同一区域；目标沿用了上一版的 Column 顺序结构。
   - 例外：子 View 之间写有 layout_below/above/toStartOf 等相对规则，此时按规则排布
+- [RelativeLayout 设了 android:gravity 时，测量末尾把全部子项（ignoreGravity 除外）作为一组按 gravity 平移：alignParentTop 的子项同样随 center_vertical 居中，目标让整组居中并保留组内相对偏移](lesson-c7eccff80bac02281029.lesson.md)
+  - 时机：界面实现阶段，把带 android:gravity 的 RelativeLayout 映射为 ArkUI 容器对齐时
+  - 情境：源 RelativeLayout 设 gravity=center_vertical 等，子项同时声明 alignParentTop/alignParentStart 等对齐规则；映射参考只写“容器级 gravity 无直接对应”。
 - [Stack 中内容尺寸的子项按 alignContent 定位：子项自身的 .align() 不改变它在父容器中的位置，需要的对齐用满尺寸容器或显式 position](lesson-92aee54a305ea0bde363.lesson.md)
   - 时机：界面转换与巡检修复阶段，把 Compose 自定义 Layout 或 Box 中的文字改写为 ArkUI Stack 子节点并确定纵向位置时；修复或编译清理删除 height('100%')、.align() 等居中手段时；把 FrameLayout 中按 layout_gravity 叠放的角标、重叠头像翻译成 Stack 时；把 Compose Box 中以 Modifier.align(BottomCenter 等) 定位的子项翻成 Stack 子节点时；把 FrameLayout/CoordinatorLayout 的 layout_gravity、RelativeLayout 的 alignParent*/centerInParent 翻译为 Stack 中 FAB、多选浮层、工具栏、装饰条的定位并确定叠层次序时；把 ConstraintLayout 标题栏（左返回、居中标题、右侧操作）转换为 ArkUI 或抽取公共标题栏组件时
   - 情境：源端自定义 Layout 用 placeRelative(x, (maxHeight - height) / 2) 把定宽文字纵向居中，或 Box 中文字按居中对齐放置；目标用 Stack({ alignContent: Alignment.TopStart }) 同时容纳文字与图片等对齐需求不同的子项。也包括源端固定尺寸 FrameLayout 中的小角标以 layout_gravity=end|bottom 贴右下，目标写成 Stack({ alignContent: Alignment.TopStart }) 并只给角标加 .align(Alignment.BottomEnd)。也包括源 Box 中部分子项用 Modifier.align 放到非默认位置（如贴底的购买栏），目标 Stack 设了统一的 alignContent(TopStart)，规格写着“底部对齐”。也包括映射参考或兄弟页把 layout_gravity 写成 .align(Alignment.X)，工具栏、浮层、FAB 于是落在父 Stack 中部。也包括标题栏：返回图标约束到父 start、右侧入口约束到 end、标题 0dp 加左右 margin 居中，目标写成 Stack({ alignContent: Alignment.Center }) 并只给返回图标加 .align(Alignment.Start)，后写的页面与公共标题栏组件以它为模板复制。

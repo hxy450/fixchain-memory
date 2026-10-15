@@ -1,6 +1,6 @@
-# 由内容定尺寸的父级（列表行、wrap_content 头部、FIT_CONTENT 半模态）里不写 width/height('100%')：描边背景画在节点自身，行内撑满用 Stretch；源端描边不改尺寸时注意 .border() 计入测量
+# 由内容定尺寸的父级（列表行、wrap_content 头部、FIT_CONTENT 半模态）里不写 width/height('100%')：描边背景画在节点自身，行内撑满用 Stretch；源端描边不改尺寸时注意 .border() 计入测量（定尺寸遮罩中的居中弹卡不在此列，宽度按源窗口规则）
 
-ID：`lesson-a58ebfe7a4c55b041b14` · 版本：5
+ID：`lesson-a58ebfe7a4c55b041b14` · 版本：6
 
 [本主题](index.md)
 
@@ -15,6 +15,7 @@ ID：`lesson-a58ebfe7a4c55b041b14` · 版本：5
 ## 例外与边界
 
 - 父节点有确定的宽高（显式数值，或已被外层约束定死）时，百分比层按该尺寸解析，可以使用
+- 页面根 Stack 等定尺寸遮罩里的居中弹窗卡片：父级已定尺寸，宽度按源端窗口规则写（框架 AlertDialog 为屏宽 95% 减左右各 16dp），不适用本条，也不从本条取固定 vp 估值
 
 ## 原因
 
@@ -36,7 +37,7 @@ ArkUI 的百分比尺寸在由内容定尺寸的父级里会向上取到最近�
 - 源端描边不改尺寸而有疑问时，用 dumpLayout 核对带描边容器的 bounds 与内容子项一致。
 - 行或头部出现整屏高、或弹层被撑到上限时，检索该子树中的 '100%' 高度并确认其父级是否定高
 
-来源支持：8 张卡 · 5 次迁移 · 4 个应用
+来源支持：9 张卡 · 6 次迁移 · 5 个应用
 
 ## 来源（按需复核）
 
@@ -54,5 +55,7 @@ ArkUI 的百分比尺寸在由内容定尺寸的父级里会向上取到最近�
   卡片版本：`d6a6fd477dc2843095f41c2605944d99e05dcc8babde979368d788f5c16dad20`
 - [case-9058ac868b6feb3a04e0](../../../../store/cases/case-9058ac868b6feb3a04e0/d8e013afe2706da7f1b19c1a0d603c05f971b4ebc0c4542f6fb5e8a956b3ebc4.json) · 结论：recommendation:2
   卡片版本：`d8e013afe2706da7f1b19c1a0d603c05f971b4ebc0c4542f6fb5e8a956b3ebc4`
+- [case-dadda7b6820516f5f415](../../../../store/cases/case-dadda7b6820516f5f415/550a74cac527a7a37d9d1cb7aae1e487f44b8b49eb75ea53d1918d9a05d3ca0b.json) · 结论：recommendation:6
+  卡片版本：`550a74cac527a7a37d9d1cb7aae1e487f44b8b49eb75ea53d1918d9a05d3ca0b`
 - [case-fc6df865cb042aec7af1](../../../../store/cases/case-fc6df865cb042aec7af1/725333df04b7bf7ef507cb28acc9e956d4e070ff49905447493a6f27eec530f2.json) · 结论：diagnosis, recommendation:2
   卡片版本：`725333df04b7bf7ef507cb28acc9e956d4e070ff49905447493a6f27eec530f2`

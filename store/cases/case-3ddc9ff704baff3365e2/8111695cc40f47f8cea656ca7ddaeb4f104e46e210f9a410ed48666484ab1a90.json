@@ -1,0 +1,146 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-3ddc9ff704baff3365e2",
+  "created_at": "2026-10-14T14:51:07.972278+00:00",
+  "migration_key": "pf2048-glm531-3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f",
+  "title": "把源端 onPause/onSaveInstanceState 存档译成 aboutToDisappear 等价钩子，页面销毁时多存一次，后台时长计入游戏时长",
+  "when": "规格提取阶段，把源 Activity 的存档触发点映射到目标页面生命周期回调时；页面实现阶段，为存档、计时类方法选择调用位（onHidden、onBackPressed、aboutToDisappear）时",
+  "description": "源 Activity 只在 onPause、onBackPressed、onSaveInstanceState 和 Up 调 save()，没有 onDestroy 存档；save() 有非幂等副作用（按 now−startingTime 累计游戏时长、写统计）。目标页是 Navigation 下的 NavDestination，可能在隐藏（退后台）很久之后才被销毁，例如桌面图标重进时清栈。",
+  "summary": "页面规格作者（a2h-migration-worker b2-01，agent-a953b48410b4230e4）写前完整读到 GameActivity.java：\nonPause（134-140）、onBackPressed（243-246）、onSaveInstanceState（1106-1111）各调 save()，Up（1089-1090）也调，\n全文没有 onDestroy 覆写（L69-L70）。同一份规格里它还写了“重建前 onSaveInstanceState→save() 落盘”，\n并把配置重建映射到 onConfigurationUpdate（page_0008 第 23、62 行）。可是第 58 行的转换决策把 save() 的三处触发\n写成“页面 onHide/onBackPressed/aboutToDisappear 等价钩子”：只在退后台或重建前触发的 onSaveInstanceState\n被换成组件销毁回调，多出一个源端没有的“销毁时存档”（L160 Write）。\n页面转换者（a2h-activity-converter，agent-aea1f8cd87d32adc5）读到了这一行（L16-L17），也读到源码里同样的三处存档（L25、L28）。\n注入前，它的推理已经收敛到只用 NavDestination.onHidden 存档（L89）。首写前注入的 lesson-19dd006e049c3f9d7563（v1）提醒\n“源 onPause 存档→save 钩子挂 NavDestination onHidden（退后台+被覆盖）与 aboutToDisappear，不只接应用前后台”（L93）。\n转换者在 L95、L212 引用这句话，决定两个都挂，并认为多出的一次 save 因为 startingTime 每次重置，只会多加约 0 秒，无害。\nL213 Write 写出 aboutToDisappear(){ this.saveGame() }（saveGame 当时是 FWD-REF 空壳）；L280 的转换报告把\n“onHidden+aboutToDisappear 双挂钩”列为已应用的经验。\n这条经验来自 Compose LocalLifecycleOwner 的导航目的地场景，正文做法 2 是“离开路径要销毁引擎时（出栈、aboutToDisappear），\n先调用停止或移交入口”。召回 worker 读正文后，把它压缩成上面那条存档提醒\n（recall/aea1f8cd87d32adc5-call_7da1709bdb6c4304baaa8d15.jsonl:L269-L274、L310）。正文和提醒都没写两点：源端 onDestroy 里不做的存档、计时，\n不能挂到 aboutToDisappear；页面可能在 onHidden 之后很久才被销毁，这时多一次非幂等的 save 会把中间这段时间也算进去。\n正文例外“观察者挂在 Activity 上只对应应用前后台”也没有进提醒。\n偏差位于“源端存档触发点 → 目标生命周期钩子”的映射：规格先写错，转换者在经验推动下照做，写进了目标文件。\nSlice 5（agent-a011f89ca98ef9833）整文件重写 GamePage 时，以“already in Stage-1 code”为由保留了这段调用，\n并把 saveGame 接到 persistOnSave 的五步序。它在 source-notes D14 里以“多一次的时间累计 delta≈0（startingTime 每 save 重置）”\n为由保留三重 save（L117、L171、L214），额外存档从这时起实际累计时间。这一步没有改变本问题的片段，因此不单独画进图。\n返修 C36 确认：C39 桌面重进清栈时 GamePage 被销毁，aboutToDisappear 再存一次，把 Home 之后在后台的时间计入 timePlayed；\n源端 onDestroy 不存档。修复删除了 aboutToDisappear 及其中的 saveGame 调用，头注释改为“onHidden/onBackPressed → save()…；\n源端 onDestroy 不存档”。两端开新局 → Home → 等 45 秒 → 桌面图标重进 → 统计页，均为 0.00 h\n（repair 5d9e6180…jsonl:L1088-L1104，检查点 C36 262ff90），终稿保留了这次修改。\n",
+  "recommendations": [
+    "规格提取阶段：把源端存档触发点逐个映射到目标回调，按触发时机对齐：onPause 对应页面隐藏或退后台，onBackPressed 对应返回拦截，onSaveInstanceState 对应配置重建或系统回收前（本例已有 onConfigurationUpdate），Up 对应标题栏返回。同时写出源端不存档的回调（本例 onDestroy）。只有源端在 onDestroy 或 finish 路径里存档时，才把 aboutToDisappear 写成存档钩子。",
+    "页面实现阶段：给存档、计时、计数这类非幂等方法增加调用位之前，先在源码里找同一时机的调用，源端没有就不加。判断“多调一次无害”时，至少走一遍“页面已经隐藏（退后台）、很久以后才被销毁”的路径（桌面图标重进清栈、popToIndex、replace），不能只看返回出栈时几个回调连续触发的情况。",
+    "接线自检：grep 页面中的 aboutToDisappear，逐个对照源 Activity 的 onDestroy，源端 onDestroy 不做的副作用就删掉。设备上开新局 → Home → 等 N 秒 → 桌面图标重进 → 打开统计页，确认游戏时长和安卓一致。",
+    "修订 lesson-19dd006e049c3f9d7563（版本 1）：补前提和例外。aboutToDisappear 里只补调幂等的停止或移交入口，用来收掉仍在运行、还没经 onHidden 处理的任务；不能借它新增源端在 onDestroy 里不做的存档、计时、统计等非幂等副作用。源端在 Activity 的 onPause/onSaveInstanceState 存档时，按 onHidden（退后台、被覆盖）、onBackPressed、onConfigurationUpdate 接线，不挂 aboutToDisappear；正文例外“观察者挂在 Activity 上只对应应用前后台”要能出现在提醒里。标题末句“销毁前先调停止入口”改为“销毁前只补调幂等停止入口；源端 onDestroy 不存档就不在 aboutToDisappear 存档”，做法第一步先判断源端 onDestroy 做不做该副作用。判断信号：源端 save() 只出现在 onPause/onBackPressed/onSaveInstanceState/Up，onDestroy 没有；save 按 now−startingTime 累计时长或写统计；目标页可能在隐藏后被清栈销毁（桌面重进、popToIndex、replace）。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-pf2048-glm5.31/entry/src/main/ets/pages/GamePage.ets",
+        "since": "2026-10-14T02:47:19.609Z",
+        "at": "2026-10-14T13:11:05.496Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/privacy-friendly-2048-SecUSo-4ee3cf3/app/src/main/java/org/secuso/privacyfriendly2048/activities/GameActivity.java",
+          "at": "2026-10-13T13:15:35.207Z",
+          "reason": "正常输入：规格作者 Read 回执给出完整 GameActivity.java。onPause（134-140）、onBackPressed（243-246）、onSaveInstanceState（1106-1111）各调 save()，Up（1089-1090）也调；全文没有 onDestroy 覆写。足以确定源端只在离开前台、返回、重建或回收前存档，页面销毁本身不存档（agent-a953b48410b4230e4.jsonl:L69-L70）。"
+        },
+        {
+          "key": "agent-a953b48410b4230e4.jsonl",
+          "at": "2026-10-13T13:29:07.930Z",
+          "reason": "读到上述源码后，Write 写出 page_0008：第 23 行自述“重建前 onSaveInstanceState→save() 落盘”，第 62 行把配置重建映射到 onConfigurationUpdate；第 58 行却把 save() 的三处触发写成“页面 onHide/onBackPressed/aboutToDisappear 等价钩子”，把 onSaveInstanceState 对应到组件销毁回调，加出源端没有的销毁时存档（同转录 L160-L161）。它首写前注入的经验（L126）没有涉及销毁时存档，这里不画经验节点。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-pf2048-glm5.31/spec/baseline/ui/page_0008_GameActivity.md",
+          "at": "2026-10-13T20:42:56.457Z",
+          "reason": "交付桥梁：转换者的 Read 回执里，第 58 行仍是“页面 onHide/onBackPressed/aboutToDisappear 等价钩子”（agent-aea1f8cd87d32adc5.jsonl:L16-L17），派工也把这份 spec 列为必读。注入前，转换者据此列出“aboutToDisappear/onHide save hooks (onPause/onSaveInstanceState equivalents)”（L80）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/privacy-friendly-2048-SecUSo-4ee3cf3/app/src/main/java/org/secuso/privacyfriendly2048/activities/GameActivity.java",
+          "at": "2026-10-13T20:43:06.426Z",
+          "reason": "正常输入：转换者 Read 回执同样给出 onPause、onSaveInstanceState 中的 save()，没有 onDestroy（agent-aea1f8cd87d32adc5.jsonl:L25、L28）。"
+        },
+        {
+          "key": "agent-aea1f8cd87d32adc5.jsonl",
+          "at": "2026-10-13T21:17:26.985Z",
+          "reason": "写前读到错误规格和正确源码。注入前它已推理出只用 onHidden 存档（L89）。首写前注入（L93，被拒 Edit 的 tool_result，2026-10-13T21:04:49.756Z）的 lesson-19dd006e049c3f9d7563（v1）提醒“源 onPause 存档→save 钩子挂 NavDestination onHidden（退后台+被覆盖）与 aboutToDisappear”，正文缺“源端 onDestroy 不存档就不在 aboutToDisappear 存档”这一前提；注入后，L95 写“Attach both onHidden and aboutToDisappear”，L212 写“Lesson: … Add both”，并判断多一次 save 因 startingTime 每次重置只多约 0 秒。L213 Write 写出 aboutToDisappear(){ this.saveGame() }，与 .onHidden、onBackPressed 共用 saveGame（当时是 FWD-REF 空壳）；L280 转换报告把“onHidden+aboutToDisappear 双挂钩”列为已应用的经验。这是 C36 所删片段在目标文件中的首次写入。经验节点按 CLAUDE.md 试过普通边与 force 边，检查器返回 invalid_force_source（注入行已索引为对 placeholder-registry 的写操作），因此按环境说明从图中删去，经验的作用记录在此。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 5
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-3ddc9ff704baff3365e2",
+  "metadata": {
+    "migration": {
+      "id": "pf2048-glm531-3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f",
+      "project": "Privacy Friendly 2048"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.296",
+        "2.1.299"
+      ]
+    },
+    "source_set_id": "sources-1066f74383c81d5a2cd9",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-pf2048-glm5.31",
+        "at": "2026-10-13T20:25:53.379Z",
+        "ref": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a46a0c49af597d7c3.jsonl:L105",
+        "request_ref": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a46a0c49af597d7c3.jsonl:L104",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-pf2048-glm5.31",
+        "at": "2026-10-13T20:25:53.379Z",
+        "ref": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a46a0c49af597d7c3.jsonl:L105",
+        "request_ref": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a46a0c49af597d7c3.jsonl:L104",
+        "phase": "generation"
+      },
+      {
+        "name": "toolchain.gradle",
+        "value": "8.5",
+        "basis": "configuration",
+        "artifact": "gradle-wrapper.properties",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-pf2048-glm5.31",
+        "at": "2026-10-14T07:57:12.812Z",
+        "ref": "repair/5d9e6180-4c80-4423-a00d-ca7069d9da73.jsonl:L70",
+        "request_ref": "repair/5d9e6180-4c80-4423-a00d-ca7069d9da73.jsonl:L69",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "c16c307d-1222-4fb3-bc92-f319ab51b983"
+      ]
+    }
+  },
+  "revision": "8111695cc40f47f8cea656ca7ddaeb4f104e46e210f9a410ed48666484ab1a90"
+}

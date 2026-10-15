@@ -1,0 +1,148 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-deff0a401e40f1faa419",
+  "created_at": "2026-10-14T15:35:58.875846+00:00",
+  "migration_key": "pf2048-glm531-3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f",
+  "title": "measureTextSize 的 constraintWidth 把 vp 列宽再 vp2px，折行判定永远测成一行",
+  "when": "界面实现或返修阶段，用 ArkUI 文本测量 API 推算 wrap_content 文本的行数和高度，再据此绝对定位后续视图时",
+  "description": "源端 TextView 为 wrap_content 高，文字在列宽内折行后自身变高并把后续视图下推；目标改用 getUIContext().getMeasureUtils().measureTextSize 按列宽测折行，列宽和布局常量都以 vp 计算，测量返回值是 px。",
+  "summary": "写前实际收到：返修会话在 C42 前读了 fragment_stats1.xml（repair/5d9e6180-4c80-4423-a00d-ca7069d9da73.jsonl:L2131-L2132、L2141-L2142、L2156-L2157）。\n回执显示右列 8 个 TextView 都是 layout_width/height=wrap_content，父 LinearLayout weightSum=6，下块各行同为 wrap_content。\n这足以说明右列文字在列宽内折行时 TextView 会变高，并把下面的值行下推。会话据此设计 textViewHeight()：\n先测单行高，再按列宽测折行高，两者相除得行数（L2392、L2398-L2399）。这部分建模方向正确。\n偏差在测量参数的单位上。L2399 写 scratchpad 的 statscard_build.ets，L2408 的 Bash 脚本把它拼进 StatsCard.ets（C42，4dfc5fa）：\nmeasureTextSize({ ..., constraintWidth: ui.vp2px(width) })，而 width 是 vp 列宽（w * 0.4）。\nMeasureOptions.constraintWidth 以 number 传入时和组件长度一样按 vp 解析，测量返回的 width/height 才是 px。\n传入 vp2px 后约束宽被放大约 3.5 倍（本机密度），任何标签都测成一行，折行分支形同虚设。\nC42 之前，会话从未读过 measureTextSize 或 MeasureOptions 的声明或文档：本会话第一次出现 measureTextSize 就是 L2399 这次写入。\n本地 SDK 的 @ohos.measure.d.ts 只写了 constraintWidth?: number | string | Resource（“Text display area of width”），没有单独注明单位。\n会话把“返回值是 px”套到了输入参数上。后来 L5002 写 textWidth() 时，它对返回值用 px2vp，这一处是对的。\nC42 的验证（L2413-L2425）只截了英文 7X7 统计页，英文标签在右列都不折行，所以这个分支没有被触发。\n生成结束版本（81f0b13）的 StatsCard 没有任何测量，用 layoutWeight + maxLines(1)。这个片段由 C42 新引入，属于修复中新生问题。\n之后 C42 第二次检查点（4b86ea1）、X6（6531b45）、C44（b70f312）都改过 StatsCard，但这一行没有变；L4879 读回时它仍在。\n俄语巡检时，“Использование отмены”在右列折成两行，下面的“0”压在第二行上（L5356-L5372）。\nX8 用 sed 把参数改为 constraintWidth: width（L5392、L5398），俄语截图里标签两行、“0”在其下，并记检查点 f25f0e2（L5411-L5413）。\nFINAL 9b47c75 保留 constraintWidth: width。\n经验：返修会话 5d9e6180 没有收到经验注入。memory-injections.json 的 44 次注入都在生成会话 3b2b2c62，返修转录中也没有“首次明确写入前的经验提示”回执。本项不涉及经验节点。\n",
+  "recommendations": [
+    "界面实现或返修阶段：用 measureTextSize / MeasureUtils 按宽度判断折行时，constraintWidth 直接传布局里的 vp 宽（number 按 vp 解析，与 .width(number) 相同），不要先 vp2px。返回的 width/height 是 px：行数用两次返回值的比值，或 px2vp 后再和 vp 常量比较。拿不准参数单位时，先查 SDK 声明和 API 文档，或者传带单位的字符串（如 `${width}vp`）消除歧义。",
+    "验证阶段：为折行、多行这类条件分支写的测量逻辑，要用能触发该分支的输入验收。本任务里就是右列宽度下最长的本地化标签（俄语“Использование отмены”）。只截默认英文界面不能证明折行分支正确。最小检查：临时打印已知必折行字符串算出的 lines，结果应大于 1。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-pf2048-glm5.31/entry/src/main/ets/components/common/StatsCard.ets",
+        "since": "2026-10-14T02:47:19.609Z",
+        "at": "2026-10-14T13:11:05.496Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/privacy-friendly-2048-SecUSo-4ee3cf3/app/src/main/res/layout/fragment_stats1.xml",
+          "at": "2026-10-14T09:34:29.747Z",
+          "reason": "正常输入：返修会话用 Bash cat 和 Python ET 解析读取，回执（repair/5d9e6180-4c80-4423-a00d-ca7069d9da73.jsonl:L2131-L2132、L2141-L2142、L2156-L2157）给出右列 8 个 TextView 均为 wrap_content、weightSum=6。由此可确定文字折行时 TextView 会变高并下推后续视图，需要按列宽测折行后的高度。这份输入只决定“要测折行”；测量 API 的参数单位不在其中，会话也没有另外查。"
+        },
+        {
+          "key": "5d9e6180-4c80-4423-a00d-ca7069d9da73:main",
+          "at": "2026-10-14T09:48:53.424Z",
+          "reason": "读到上述源布局后，L2399 写出 textViewHeight()，L2408 的 Bash 脚本把它拼进 StatsCard.ets（回执 L2409，C42 检查点 4dfc5fa 见 L2426-L2427）。这里给 measureTextSize 传了 constraintWidth: ui.vp2px(width)，width 是 vp 列宽，而这个参数以 number 传入时本就按 vp 解析，约束宽被放大约 3.5 倍，所有标签都测成一行。写前没有查 MeasureOptions 的声明或文档（本会话首次出现 measureTextSize 即 L2399）。C42 验证只截了不折行的英文界面（L2413-L2425）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "返修会话在源仓 res 目录用 Bash cat layout/fragment_stats1.xml（L2131，回执 L2132），又用 Python ET.parse 按完整路径解析同一文件（L2156，回执 L2157）。回执列出右列 8 个 TextView 都是 wrap_content、weightSum=6。这些是 C42 写入前对该源布局的真实读取。",
+          "evidence": [
+            {
+              "source": "repair/5d9e6180-4c80-4423-a00d-ca7069d9da73.jsonl",
+              "line": 2131
+            },
+            {
+              "source": "repair/5d9e6180-4c80-4423-a00d-ca7069d9da73.jsonl",
+              "line": 2132
+            },
+            {
+              "source": "repair/5d9e6180-4c80-4423-a00d-ca7069d9da73.jsonl",
+              "line": 2156
+            },
+            {
+              "source": "repair/5d9e6180-4c80-4423-a00d-ca7069d9da73.jsonl",
+              "line": 2157
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": "target",
+          "force": true,
+          "reason": "C42 的 Bash 脚本（L2408）用 Python 读取 scratchpad 的 statscard_build.ets（L2399 写入，含 constraintWidth: ui.vp2px(width)），拼上常量段后 io.open(p,'w') 写入 entry/src/main/ets/components/common/StatsCard.ets。回执 L2409 返回 ok 和新文件头，说明写入已完成。",
+          "evidence": [
+            {
+              "source": "repair/5d9e6180-4c80-4423-a00d-ca7069d9da73.jsonl",
+              "line": 2408
+            },
+            {
+              "source": "repair/5d9e6180-4c80-4423-a00d-ca7069d9da73.jsonl",
+              "line": 2409
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-deff0a401e40f1faa419",
+  "metadata": {
+    "migration": {
+      "id": "pf2048-glm531-3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f",
+      "project": "Privacy Friendly 2048"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.296",
+        "2.1.299"
+      ]
+    },
+    "source_set_id": "sources-1066f74383c81d5a2cd9",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-pf2048-glm5.31",
+        "at": "2026-10-13T20:25:53.379Z",
+        "ref": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a46a0c49af597d7c3.jsonl:L105",
+        "request_ref": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a46a0c49af597d7c3.jsonl:L104",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-pf2048-glm5.31",
+        "at": "2026-10-13T20:25:53.379Z",
+        "ref": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a46a0c49af597d7c3.jsonl:L105",
+        "request_ref": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a46a0c49af597d7c3.jsonl:L104",
+        "phase": "generation"
+      },
+      {
+        "name": "toolchain.gradle",
+        "value": "8.5",
+        "basis": "configuration",
+        "artifact": "gradle-wrapper.properties",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-pf2048-glm5.31",
+        "at": "2026-10-14T07:57:12.812Z",
+        "ref": "repair/5d9e6180-4c80-4423-a00d-ca7069d9da73.jsonl:L70",
+        "request_ref": "repair/5d9e6180-4c80-4423-a00d-ca7069d9da73.jsonl:L69",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "c16c307d-1222-4fb3-bc92-f319ab51b983"
+      ]
+    }
+  },
+  "revision": "01aa104a1dc162efa931752102cd5466e8c021daa1c90803852be9bb7fc4109a"
+}

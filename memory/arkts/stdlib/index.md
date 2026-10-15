@@ -6,9 +6,9 @@ Java 标准库与语言语义到 ArkTS 的等价实现：读行、split/trim、B
 
 ## 本级经验
 
-- [DecimalFormat、BigDecimal 舍入与 Float 转字符串按源 API 语义复刻：HALF_EVEN、区域小数点、Float.toString 的十进制串与“.0”，不用 Math.round、toFixed 或模板串顶替](lesson-ae093dedda604fddf17e.lesson.md)
+- [DecimalFormat、BigDecimal 舍入与 Float 转字符串按源 API 语义复刻：HALF_EVEN，小数点与数字符号取应用偏好语言（Locale.getDefault 跟随应用语言，不是系统区域），Float.toString 的十进制串与“.0”；不用 Math.round、toFixed、无参 intl.NumberFormat 或模板串顶替](lesson-ae093dedda604fddf17e.lesson.md)
   - 时机：实现阶段把 Kotlin/Android 的数值转文本函数（DecimalFormat 模式串、Float.toBigDecimal().setScale、Float 的 toString 或字符串模板）翻译成 ArkTS 共享工具或页面内函数时；规格提取阶段为这些格式化函数写映射与验收判例时；修改已有共享数值工具时
-  - 情境：源端用 android.icu.text.DecimalFormat 或 java.text.DecimalFormat（"0.#"、"0.00" 等模式）生成显示文本，用 Float.toBigDecimal().setScale(n, RoundingMode.HALF_EVEN).toFloat() 舍入，或把 Float 值直接 toString、写进字符串模板或字符串资源参数（如 (value ?: 0).toString()）；目标 number 为双精度，准备用 Math.round(v*10)/10、toFixed(n) 或模板字符串实现；共享数值工具与页面可能各有一份同名函数。
+  - 情境：源端用 android.icu.text.DecimalFormat 或 java.text.DecimalFormat（"0.#"、"0.00"、",##0.00" 等模式）生成显示文本且未传 Locale，用 Float.toBigDecimal().setScale(n, RoundingMode.HALF_EVEN).toFloat() 舍入，或把 Float 值直接 toString、写进字符串模板或字符串资源参数；应用可单独设置应用语言；目标 number 为双精度，准备用 Math.round(v*10)/10、toFixed(n)、无参 intl.NumberFormat 或模板字符串实现；共享数值工具与页面可能各有一份同名函数。
 - [Java 文本读行、split/trim、BOM、String.format、SimpleDateFormat/Calendar 的时区与周规则不用同名 JS API 近似：按 Java 语义集中实现兼容函数，未 setTimeZone 的格式化按构造时默认时区取本地字段](lesson-237091b9b04bc4cd340b.lesson.md)
   - 时机：页面转换和服务/VM 抽取阶段，把 Java 标准库的读行、切分、去空白、解码、数值格式化与日历计算翻译成 ArkTS 时；把 SimpleDateFormat 格式化毫秒值（含语义像时长的值）或格式化固定 epoch 的偏移探测翻译成显式算术时
   - 情境：源码用 BufferedReader.readLine、String.split/trim、FileReader/InputStreamReader、String.format("%.2f", float) 或 Calendar.getInstance() 的 WEEK_OF_YEAR 处理文件行、编辑框文本、百分比与日期；目标准备用 JS 的 split/trim/toFixed、TextDecoder 或手写 ISO 周换算；派工可能写“与 readFileLineByLine 等价”“数值域同 Android”。 也包括 new SimpleDateFormat(pattern, Locale) 或 Calendar 未调用 setTimeZone 就格式化一个毫秒值（变量语义像时长，如 gameTime + hourOffset×3600000），或格式化 1970-01-01T00:01Z 按本地小时位探测偏移；目标准备“不经 Date/Intl”按 UTC 手工拆 h/m/s。

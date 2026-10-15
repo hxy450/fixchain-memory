@@ -1,0 +1,220 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-a8413b6eae04f3be7d9d",
+  "created_at": "2026-10-14T14:41:12.668736+00:00",
+  "migration_key": "pf2048-glm531-3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f",
+  "title": "把进程回收后的任务栈重建写成每次冷启动只恢复最后一页且强制续局",
+  "when": "规格提取阶段，为 Android 框架在进程回收后重建任务栈这一平台行为铸差异决策、写目标端恢复契约时；入口装配阶段按该决策实现冷启动路由恢复时",
+  "description": "源应用以无界面的 SplashActivity 作 LAUNCHER 按首启分流，页面经 TaskStackBuilder.addNextIntentWithParentStack 或 PARENT_ACTIVITY 组成 [Main, X] 任务栈，跳转 Intent extras 区分新局与续局（new=true/false）；源码没有显式保存导航，进程在后台被系统回收后由框架重建任务栈。目标端为 UIAbility + 单 Navigation/NavPathStack，冷启动默认进入口页，需手动持久化并恢复路由栈。",
+  "summary": "写决策前，生成主会话已读到三处正确源码：MainActivity.java 新局 putExtra(\"new\", true)、续玩 new=false，\ncreateBackStack 以 TaskStackBuilder.addNextIntentWithParentStack 建 [Main, Game]（3b2b2c62…jsonl L126-L127）；\nSplashActivity.java 作为启动器按首启分流 Tutorial/Main+CLEAR_TOP（L128-L129）；GameActivity.java 中\nstatic createNewGame=true，initializeState 按 extra \"new\"（缺省 true）决定新局或读档（L136-L137）。\nF010 规格作者 a47086 也已把“进程回收后重建”单列为待决策差异，AC01 把冷启动与回收重建分开写（主会话 L830-L831 读回）。\n主会话在 L837 的思考中凭记忆断定“原始 Intent 以 new=false 重投递”，随后在 L839 编辑 F010 铸 PD-C9-F010-02，\n内容为“冷启动（含回收后重入）读取并恢复至最后路由（Game 场景 GameParam{n, isNew=false, filename}）”，\n并补了实现映射 HARD-DIV 行与 AC12（L847、L859）；14:20 写决策台账（L970）时自批为 approved。\n这里与输入有三处偏离：一是把恢复条件扩到每次冷启动，而源端强停、从最近任务划掉、覆盖安装后任务已清空，再启动会走 Splash 分流；\n二是只恢复最后一页，源端是 [Main, X] 整栈；三是 isNew 被强制为 false，而源端新局 Intent 是 new=true。\nSlice 10 实现者 ad6457 读了 F010（agent-ad6457…jsonl L26-L27）和台账中的 PD（L30-L31），派工也照写了这个 PD。\n它没有读 GameActivity 或 SplashActivity，而是按 PD 写 AppShell.restoreLastRoute：无条件读 last_route，只 push 一页，\n并写 restored.isNew=false。这些内容首稿 L153 已有，终稿见 L161-L162。EntryAbility.onCreate 只加了 AppShell.init(this.context)，\n没有把 launchParam 交给恢复逻辑（L167-L168）；source-notes 还写了“Android 任务栈恢复同样不区分崩溃/手动杀”（L191）。\n返修 C40 实测：强停的退出原因为 NORMAL，覆盖安装为 UPGRADE。修复新增 setLastExitReason，只有 PERFORMANCE_CONTROL/RESOURCE_CONTROL 才允许恢复；\ndidShow 改为持久化整栈（getAllPathName/getParamByIndex），恢复时重建整栈并保留入栈时的 isNew；EntryAbility.onCreate 传入\nlaunchParam.lastExitReason（repair L868-L869、L881-L883、L937-L938、L1059-L1060），最终保留。\n经验核对：偏差起点主会话首写时注入了 35 条经验（L204），其中没有进程回收恢复类经验。lesson-9c973e50（替代方案只作用于源端同一路径）\n和 lesson-7827e070（未查证的平台差异保持待批）若被照做本可避免此偏差，但主会话没有采用，所以它们不是成因。F010 作者 a47086\n被注入的 lesson-b0405a29（v1）提醒“单列回收后重建，AC01 区分冷启回起始页与栈恢复”，a47086 照做后产出的是正确输入。\n实现者 ad6457 也被注入了同一条经验（L154，提醒“按已批 PD 走 preferences 手动持久化，不用 recoverable”），但无条件恢复、\n只恢复单页、isNew=false 在注入前的首稿 L153 中已经存在，这条经验只影响了恢复机制的取舍说明，没有参与本偏差，故不入图。\n",
+  "recommendations": [
+    "规格提取阶段为“进程回收后任务栈重建”铸替代决策时，把触发条件写成“仅系统回收进程且任务仍在”：强停、从最近任务划掉、覆盖安装、崩溃后任务已清空，再启动走 Splash 分流；目标端在 EntryAbility.onCreate 以 launchParam.lastExitReason ∈ {PERFORMANCE_CONTROL, RESOURCE_CONTROL} 判定，不写“冷启动（含回收后重入）恢复”。",
+    "写恢复契约时按源端实际任务栈恢复整栈（TaskStackBuilder.addNextIntentWithParentStack/PARENT_ACTIVITY 构成的 [Main, X]），每页参数保留入栈时的原值：新局 Intent 为 new=true，新进程中 createNewGame 静态缺省 true 会再开新局；写“原始 Intent 值”前对照已读的 putExtra 行逐项核对，不推定 new=false。",
+    "无人值守主线程自批 C9 平台行为决策前，把 PD 中每条源端断言（触发条件、栈形、参数值）对回写前已读的源码行；上游规格已登记“区分冷启回起始页与栈恢复”时，决策不得把两条路径合并为一条。",
+    "入口装配阶段按此类决策实现路由恢复时，把 onCreate 的 launchParam 交给恢复逻辑，并确认恢复后栈底有父页。最小检查：在游戏页执行 aa force-stop 或覆盖安装后重启应落主菜单（退出原因实测为 NORMAL/UPGRADE）；放开恢复路径时，返回键不应露出空的 Navigation 宿主页。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-pf2048-glm5.31/entry/src/main/ets/services/AppShell.ets",
+        "since": "2026-10-14T02:47:19.609Z",
+        "at": "2026-10-14T13:11:05.496Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/privacy-friendly-2048-SecUSo-4ee3cf3/app/src/main/java/org/secuso/privacyfriendly2048/activities/MainActivity.java",
+          "at": "2026-10-13T12:59:23.747Z",
+          "reason": "正常输入（主会话 Read）：addListener 新局 putExtra(\"new\", true)、续玩 putExtra(\"new\", false)，createBackStack 用 TaskStackBuilder.addNextIntentWithParentStack 建出 [Main, Game] 栈；足以确定游戏页的原始 Intent 不一定是 new=false，且源端栈底有主菜单（3b2b2c62…jsonl L126-L127）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/privacy-friendly-2048-SecUSo-4ee3cf3/app/src/main/java/org/secuso/privacyfriendly2048/activities/SplashActivity.java",
+          "at": "2026-10-13T12:59:24.401Z",
+          "reason": "正常输入（主会话 Read）：LAUNCHER 入口每次 onCreate 按 isFirstTimeLaunch 分流 Tutorial 或 Main+FLAG_ACTIVITY_CLEAR_TOP 后 finish；任务被清空后的冷启动走此分流（3b2b2c62…jsonl L128-L129）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/privacy-friendly-2048-SecUSo-4ee3cf3/app/src/main/java/org/secuso/privacyfriendly2048/activities/GameActivity.java",
+          "at": "2026-10-13T12:59:32.429Z",
+          "reason": "正常输入（主会话 Read）：public static boolean createNewGame = true；onCreate 在 firstTime 且 getBooleanExtra(\"new\", true) 时置新局；initializeState 按 extra new 决定新局或 readStateFromFile；重建的 GameActivity 按原始 Intent 行事，不会强制续局（3b2b2c62…jsonl L136-L137）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-pf2048-glm5.31/spec/baseline/features/F010-app-shell.md",
+          "at": "2026-10-13T14:03:48.466Z",
+          "reason": "正常输入（主会话 Read 回 a47086 13:59 写的版本）：迁移关注点把“进程回收后重建”列为待决策差异（Navigation recoverable/栈持久化 vs 回起始页），AC01 写“冷启动（回收后重建情形见迁移关注点待决策项）”，把冷启动与回收重建分开（3b2b2c62…jsonl L830-L831）。"
+        },
+        {
+          "key": "3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f:main",
+          "at": "2026-10-13T14:04:51.936Z",
+          "reason": "已读上述源码与规格。L837 思考凭记忆断定“ORIGINAL intent is redelivered with new=false”，并选择“restore”；L839 Edit 在 F010 写入 PD-C9-F010-02 替代路径：“冷启动（含回收后重入）读取并恢复至最后路由（Game 场景 GameParam{n, isNew=false, filename}）”，L847、L859 补实现映射 HARD-DIV 行与 AC12（“恢复至最后路由”）。恢复条件、栈形、isNew 三处都与已读源码不符，源码到规格在此偏离；14:20 又写台账并自批 approved（L970）。首写注入（L204）不含相关经验。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-pf2048-glm5.31/spec/baseline/features/F010-app-shell.md",
+          "at": "2026-10-14T01:17:12.846Z",
+          "reason": "交付桥梁：Slice 10 实现者 Read 回执仍含 PD-C9-F010-02 的“冷启动（含回收后重入）……恢复至最后路由”“GameParam{n, isNew=false, filename}”与 AC12（agent-ad6457bc54ce20a28.jsonl L26-L27）；台账 PD 亦经 Grep 读到（L30-L31）。"
+        },
+        {
+          "key": "3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f:ad6457bc54ce20a28",
+          "at": "2026-10-14T01:36:59.094Z",
+          "reason": "按 PD 实现：AppShell.restoreLastRoute 每次冷启动无条件读 last_route、只 pushPathByName 一页、restored.isNew = false（注释“恢复=读档续局语义”），persistRoute 只存最后一个路由；首稿 L153 已含这些内容，L154 注入后 L161 重写、L162 落盘。本链确认 PD 被传到目标，不另推定其独立失职；它未读 Game/Splash 源码，source-notes 另写“Android 任务栈恢复同样不区分崩溃/手动杀”（L191）。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 5
+        },
+        {
+          "from": 2,
+          "to": 5
+        },
+        {
+          "from": 3,
+          "to": 5
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": 6
+        },
+        {
+          "from": 6,
+          "to": 7
+        },
+        {
+          "from": 7,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-pf2048-glm5.31/entry/src/main/ets/entryability/EntryAbility.ets",
+        "since": "2026-10-14T02:47:19.609Z",
+        "at": "2026-10-14T13:11:05.496Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/privacy-friendly-2048-SecUSo-4ee3cf3/app/src/main/java/org/secuso/privacyfriendly2048/activities/SplashActivity.java",
+          "at": "2026-10-13T12:59:24.401Z",
+          "reason": "正常输入（主会话 Read）：启动器入口每次按首启分流 Tutorial 或 Main+CLEAR_TOP；任务清空后的冷启动不回到上次页面（3b2b2c62…jsonl L128-L129）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-pf2048-glm5.31/spec/baseline/features/F010-app-shell.md",
+          "at": "2026-10-13T14:03:48.466Z",
+          "reason": "正常输入：a47086 版本把“进程回收后重建”列为待决策差异，AC01 把冷启动与回收重建分开（3b2b2c62…jsonl L830-L831）。"
+        },
+        {
+          "key": "3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f:main",
+          "at": "2026-10-13T14:04:51.936Z",
+          "reason": "L839 在 F010 铸 PD-C9-F010-02：“冷启动（含回收后重入）读取并恢复至最后路由”，不区分退出原因；因而入口无须取启动参数判定是否恢复。分流与回收重建两路径被合并，偏差起点同 AppShell 图。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-pf2048-glm5.31/spec/baseline/features/F010-app-shell.md",
+          "at": "2026-10-14T01:17:12.846Z",
+          "reason": "交付桥梁：Slice 10 实现者读回 PD 与 AC12（agent-ad6457bc54ce20a28.jsonl L26-L27）。"
+        },
+        {
+          "key": "3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f:ad6457bc54ce20a28",
+          "at": "2026-10-14T01:37:15.921Z",
+          "reason": "按 PD 在 EntryAbility.onCreate(want, launchParam) 最早处只插入 AppShell.init(this.context)，launchParam 未交给恢复逻辑，路由恢复不判退出原因（L167-L168）；返修 C40 在其后补 AppShell.setLastExitReason(launchParam.lastExitReason)。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-a8413b6eae04f3be7d9d",
+  "metadata": {
+    "migration": {
+      "id": "pf2048-glm531-3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f",
+      "project": "Privacy Friendly 2048"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.296",
+        "2.1.299"
+      ]
+    },
+    "source_set_id": "sources-1066f74383c81d5a2cd9",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-pf2048-glm5.31",
+        "at": "2026-10-13T20:25:53.379Z",
+        "ref": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a46a0c49af597d7c3.jsonl:L105",
+        "request_ref": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a46a0c49af597d7c3.jsonl:L104",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-pf2048-glm5.31",
+        "at": "2026-10-13T20:25:53.379Z",
+        "ref": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a46a0c49af597d7c3.jsonl:L105",
+        "request_ref": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a46a0c49af597d7c3.jsonl:L104",
+        "phase": "generation"
+      },
+      {
+        "name": "toolchain.gradle",
+        "value": "8.5",
+        "basis": "configuration",
+        "artifact": "gradle-wrapper.properties",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-pf2048-glm5.31",
+        "at": "2026-10-14T07:57:12.812Z",
+        "ref": "repair/5d9e6180-4c80-4423-a00d-ca7069d9da73.jsonl:L70",
+        "request_ref": "repair/5d9e6180-4c80-4423-a00d-ca7069d9da73.jsonl:L69",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "c16c307d-1222-4fb3-bc92-f319ab51b983"
+      ]
+    }
+  },
+  "revision": "e49afbd8b4932f80f352dd1810b83550d39997cd137f5bdbb32886ffc5496c67"
+}

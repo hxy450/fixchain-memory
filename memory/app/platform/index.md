@@ -32,6 +32,9 @@
 - [接入 identifier.getOAID 时同批声明 APP_TRACKING_CONSENT 并在隐私同意后申请；全零串按未授权处理](lesson-2b00c4ffaeb442d87e5e.lesson.md)
   - 时机：服务层实现阶段，把源端 OAID（MSA 或厂商通道）采集迁到鸿蒙 identifier.getOAID 时
   - 情境：源端在隐私协议同意后静默采集 OAID，写缓存、上送归因接口并发布就绪事件；鸿蒙 getOAID 需要 user_grant 权限 ohos.permission.APP_TRACKING_CONSENT，未授权时返回全零串；Android 端没有对应的运行期授权。
+- [源端 Activity 对自身 getWindow() 加的标志（FLAG_KEEP_SCREEN_ON、FLAG_SECURE 等）随该 Activity 窗口失效；映射到应用共享的 UIAbility 主窗口时按页面可见性成对开关（onShown 开、onHidden 关）](lesson-ea9a6cfecca9e091c7ea.lesson.md)
+  - 时机：规格提取与页面实现阶段，把 Activity 的窗口标志映射为鸿蒙窗口 API 并写验收时
+  - 情境：源端某个 Activity 在 onCreate 给 getWindow() 加标志且没有清除代码，靠该 Activity 不可见或 finish 时随窗口失效；目标各页以 Navigation/NavDestination 共用一个主窗口，经 window.getLastWindow 调 setWindowKeepScreenOn 等窗口级 API。
 - [源端 Activity 画中画映射到 @ohos.PiPWindow：可用性用 isPiPEnabled，自动进入用 setAutoStartEnabled，画中画状态由 PiPController 的 stateChange 驱动](lesson-a45be20055d942e12052.lesson.md)
   - 时机：规格提取与实现阶段，迁移源端画中画（PictureInPictureParams 自动进入、onUserLeaveHint、onPictureInPictureModeChanged、画中画精简 UI 与设置开关）时
   - 情境：源 Activity 设置 PictureInPictureParams 或在 onUserLeaveHint 进入画中画，按 onPictureInPictureModeChanged 在完整 UI 与精简 UI 间切换；设置页有画中画开关，并检查系统是否允许。目标为 HarmonyOS 手机应用，项目 SDK 含 @ohos.PiPWindow.d.ts。

@@ -1,0 +1,164 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-42fb1284b2edc857b78b",
+  "created_at": "2026-10-14T14:59:21.648843+00:00",
+  "migration_key": "pf2048-glm531-3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f",
+  "title": "把 Activity 自身窗口的 FLAG_KEEP_SCREEN_ON 映射成应用主窗口常亮且只开不关",
+  "when": "规格提取与页面实现阶段，把源端 Activity 自身窗口上的标志（如 getWindow().addFlags(FLAG_KEEP_SCREEN_ON)）映射为鸿蒙窗口 API、并写验收条目时",
+  "description": "源端某个 Activity 在 onCreate 里给 getWindow() 加 FLAG_KEEP_SCREEN_ON 等窗口标志，没有清除代码，靠该 Activity 不可见或 finish 时随窗口自动失效；目标端各页面以 Navigation/NavDestination 共用 UIAbility 的同一个主窗口，通过 window.getLastWindow 拿到窗口后调用 setWindowKeepScreenOn 等窗口级 API。",
+  "summary": "源端 GameActivity.onCreate 第 160-161 行是 if (sharedPref.getBoolean(\"settings_display\", true)) getWindow().addFlags(FLAG_KEEP_SCREEN_ON)：\n标志只加在 GameActivity 自己的窗口上，返回或 Up 回到 MainActivity 时 GameActivity 结束，常亮随窗口一起解除，所以源码不需要清除代码。\n只看这段源码，就能确定常亮只在游戏页可见期间生效。鸿蒙端所有页面共用 UIAbility 的主窗口，setWindowKeepScreenOn(true) 会一直作用于整个应用，直到显式设为 false。\n页面规格写者 a953b48410b4230e4 读到了这段源码（L69-L70），13:29 写 page_0008 时把它译成“settings_display=true → FLAG_KEEP_SCREEN_ON | 窗口 setWindowKeepScreenOn(true)（onCreate 时机读取）”（L160）。\n这一行没写作用范围，也没写离开页面时关闭。主会话 13:33 在 feature-base 跨栈基线里也只写了“FLAG_KEEP_SCREEN_ON | window.setWindowKeepScreenOn | —”。\nF001 规格写者 a938d51cc8941f53f 读到了基线行（L29-L30）、page_0008 的这一行（L31-L32）和同一段源码（L38-L39），写出两处：\n映射行“FLAG_KEEP_SCREEN_ON（onCreate 读 settings_display）| window.setWindowKeepScreenOn(true) | —（基线行）”（L94），\n以及 F001-AC38“目标端 onCreate 时机 window.setWindowKeepScreenOn(true)——设置页开关任意状态均常亮”（L98）。\nAC38 的设备判据只有“进入游戏页屏幕均不自动熄灭”，没有检查离开游戏页后是否恢复熄屏。\n分析器的参考规格 spec/ref/privacyfriendly2048_spec.md 写过“无移除逻辑，页面销毁自然失效”，但上面几位写者和后来的实现者都没有读它。\n页面转换者 aea1f8cd87d32adc5 在 21:17 写 GamePage 时，在 aboutToAppear 里留了前向占位注释“Slice 5: 读偏好键 settings_display（默认 true）→ window.setWindowKeepScreenOn(true)”。\nSlice 5 实现者 a011f89ca98ef9833 依次读了 F001（L26-L27）、page_0008（L35-L36）、GameActivity.java（L41-L44）和带占位的 GamePage（L49-L50），\n22:38 Write GamePage（L171）：aboutToAppear 调 applyKeepScreenOn()，经 getLastWindow 后 setWindowKeepScreenOn(true)；onHidden 和 aboutToDisappear 都没有关闭。\n偏差在规格提取环节：源端窗口作用域没有翻译成目标端的页面可见期，实现者照规格写入。本卡不另认定实现者独立失职。\n这段代码保留到生成结束检查点 81f0b13。返修 C35 用 hidumper 看到，回到主菜单后鸿蒙仍持有 windowLock_32，Android 的 SCREEN_BRIGHT_WAKE_LOCK 已释放（repair L3125-L3149）。\n修复把它改成 setKeepScreenOn(on)：NavDestination onShown 时传 true，onHidden 时传 false（repair L3150-L3151，检查点 9b36a7e 见 L3159-L3161）。\n注入经验已逐一核对：页面规格写者 L126、F001 写者 L91、Slice 5 L140 的注入里，提到常亮的有三条。\nlesson-4d0f0176b3d09c33f1eb（v3）讲偏好的运行期消费方；lesson-14411595fd9ac1e17683（v2）讲照搬键名缺陷导致的“恒常亮”；lesson-6e558834938be19c04e2（v4）讲按 d.ts 核对 setWindowKeepScreenOn 签名。三条都不涉及窗口作用范围。\n而且常亮映射在注入前已经定下：meta.json 的 semantic_notes、F001 注入前草稿 L90、派工里的 P-S5-010 与转换者占位。注入后的思考（F001 L92、Slice 5 L141）也没有改动常亮的写法。\n因此这些经验没有参与本偏差，不写进图。\n",
+  "recommendations": [
+    "规格提取阶段，源端 Activity 对 getWindow() 加标志（FLAG_KEEP_SCREEN_ON、FLAG_SECURE 等）且没有清除代码时，先写明该效果的作用范围是这个 Activity 可见或存活期间；再映射到鸿蒙 UIAbility 主窗口 API。映射行和验收要写成成对开关：NavDestination onShown 时 setWindowKeepScreenOn(true)，onHidden 时 false。本例 GameActivity 应写成游戏页可见时常亮，回主菜单、设置等页后恢复系统熄屏，不能写成“onCreate 时机 setWindowKeepScreenOn(true)”。",
+    "规格的设备判据要覆盖离开页面这一侧：除“进入游戏页后不熄屏”外，加一条“返回主菜单后按系统超时熄屏”。可用 hidumper -s PowerManagerService 查本应用的 windowLock 在离开页面后是否已释放。",
+    "跨栈基线表里“FLAG_KEEP_SCREEN_ON → window.setWindowKeepScreenOn”这类窗口级映射行，备注写明“目标窗口为全应用共享，须随页面可见性成对开关”，避免下游规格和实现只抄 API 名。",
+    "页面实现阶段，通过 window.getLastWindow 调窗口级 API 前，核对源端调用的是哪个 Activity 的 getWindow()。源端只作用于单个 Activity 窗口时，在页面 onShown 与 onHidden 里成对设置；不要只在 aboutToAppear 打开，即使规格只写了“onCreate 时机”也一样。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-pf2048-glm5.31/entry/src/main/ets/pages/GamePage.ets",
+        "since": "2026-10-14T02:47:19.609Z",
+        "at": "2026-10-14T13:11:05.496Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/privacy-friendly-2048-SecUSo-4ee3cf3/app/src/main/java/org/secuso/privacyfriendly2048/activities/GameActivity.java",
+          "at": "2026-10-13T13:15:35.207Z",
+          "reason": "正常输入：页面规格写者 Read 回执里有 onCreate 第 160-161 行 getWindow().addFlags(FLAG_KEEP_SCREEN_ON)。标志作用于 GameActivity 自身窗口，源码没有清除代码，回主菜单时该 Activity 结束、常亮随之解除；足以确定作用范围是游戏页可见期间（agent-a953b48410b4230e4.jsonl:L69-L70）。"
+        },
+        {
+          "key": "agent-a953b48410b4230e4.jsonl",
+          "at": "2026-10-13T13:29:07.930Z",
+          "reason": "读到上述源码后，Write page_0008 第 60 行把它写成“settings_display=true → FLAG_KEEP_SCREEN_ON | 窗口 setWindowKeepScreenOn(true)（onCreate 时机读取）”。该行没写目标窗口是全应用共享的，也没写离开游戏页时关闭；源端 Activity 窗口的作用范围在这里丢失（同转录 L160-L161）。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-pf2048-glm5.31/spec/baseline/ui/page_0008_GameActivity.md",
+          "at": "2026-10-13T22:12:51.749Z",
+          "reason": "交付桥梁：Slice 5 实现者的 Read 回执第 60 行仍是这条只开不关的映射（agent-a011f89ca98ef9833.jsonl:L35-L36）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/privacy-friendly-2048-SecUSo-4ee3cf3/app/src/main/java/org/secuso/privacyfriendly2048/activities/GameActivity.java",
+          "at": "2026-10-13T13:36:01.082Z",
+          "reason": "正常输入：F001 规格写者 Read 回执里同样有 onCreate 第 160-161 行 getWindow().addFlags(FLAG_KEEP_SCREEN_ON)，没有清除代码（agent-a938d51cc8941f53f.jsonl:L38-L39）。该写者同时读到的 feature-base 基线行（L29-L30）和 page_0008 行（L31-L32）都没写作用范围。"
+        },
+        {
+          "key": "agent-a938d51cc8941f53f.jsonl",
+          "at": "2026-10-13T13:56:32.335Z",
+          "reason": "读到源码后，L94 Write 映射行“FLAG_KEEP_SCREEN_ON（onCreate 读 settings_display）| window.setWindowKeepScreenOn(true) | —（基线行）”；L98 Edit 写入 F001-AC38“目标端 onCreate 时机 window.setWindowKeepScreenOn(true)”，设备判据只有“进入游戏页屏幕均不自动熄灭”。离开页面时关闭和对应验收都没写，验收标准由此固定为只开不关（同转录 L94-L99）。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-pf2048-glm5.31/spec/baseline/features/F001-game-core.md",
+          "at": "2026-10-13T22:12:43.077Z",
+          "reason": "交付桥梁：派工把 Slice 5 的常亮任务指向 F001（slice-05 Step 3c）。实现者的 Read 回执中仍有该映射行及“onCreate 时机 setWindowKeepScreenOn(true)”（agent-a011f89ca98ef9833.jsonl:L24-L27）。"
+        },
+        {
+          "key": "agent-a011f89ca98ef9833.jsonl",
+          "at": "2026-10-13T22:38:23.178Z",
+          "reason": "读到 F001、page_0008 和源码（L41-L44），以及转换者在 aboutToAppear 留的占位“→ window.setWindowKeepScreenOn(true)”（L49-L50）后，Write GamePage：aboutToAppear 调 applyKeepScreenOn()，getLastWindow 后 setWindowKeepScreenOn(true)，onHidden 和 aboutToDisappear 不关闭（同转录 L171-L172）。本节点确认规格传到了目标文件，不另认定独立失职。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 7
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": 6
+        },
+        {
+          "from": 6,
+          "to": 7
+        },
+        {
+          "from": 7,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-42fb1284b2edc857b78b",
+  "metadata": {
+    "migration": {
+      "id": "pf2048-glm531-3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f",
+      "project": "Privacy Friendly 2048"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.296",
+        "2.1.299"
+      ]
+    },
+    "source_set_id": "sources-1066f74383c81d5a2cd9",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-pf2048-glm5.31",
+        "at": "2026-10-13T20:25:53.379Z",
+        "ref": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a46a0c49af597d7c3.jsonl:L105",
+        "request_ref": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a46a0c49af597d7c3.jsonl:L104",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-pf2048-glm5.31",
+        "at": "2026-10-13T20:25:53.379Z",
+        "ref": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a46a0c49af597d7c3.jsonl:L105",
+        "request_ref": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a46a0c49af597d7c3.jsonl:L104",
+        "phase": "generation"
+      },
+      {
+        "name": "toolchain.gradle",
+        "value": "8.5",
+        "basis": "configuration",
+        "artifact": "gradle-wrapper.properties",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-pf2048-glm5.31",
+        "at": "2026-10-14T07:57:12.812Z",
+        "ref": "repair/5d9e6180-4c80-4423-a00d-ca7069d9da73.jsonl:L70",
+        "request_ref": "repair/5d9e6180-4c80-4423-a00d-ca7069d9da73.jsonl:L69",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "c16c307d-1222-4fb3-bc92-f319ab51b983"
+      ]
+    }
+  },
+  "revision": "1ec9ca3305bf0aaf2592d3df82c58adfa8db844dc2f0f12c41ad008281976b71"
+}

@@ -1,0 +1,144 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-bb0be060a6707e9f23d3",
+  "created_at": "2026-10-14T14:24:36.804826+00:00",
+  "migration_key": "pf2048-glm531-3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f",
+  "title": "仓储去掉源端落盘守卫后，调用侧 save 链漏判 saveState，败局选 NO 后存档被写回",
+  "when": "切片实现阶段，把源端 save()/落盘链迁到目标引擎并决定局存档写入的抑制条件时",
+  "description": "源端落盘方法在方法体首行自带标志守卫（saveStateToFile 内 if(saveState)），目标端仓储改为纯服务、契约写明该抑制判定移到调用侧；退出分支在置抑制标志之前调用了会重置其他标志的初始化（initialize() 把 createNewGame 置回 false），使另一标志无法替代该守卫。",
+  "summary": "Slice 5 写者 agent-a011f89ca98ef9833 首写前实际读到：GameActivity.java 全文（L41/L44），含 save() 只判 !createNewGame 后调用\nsaveStateToFile、saveStateToFile 首行 if (saveState)（1113-1114）、initialize() 末尾 createNewGame = false（333），以及败局 NO 分支\ncreateNewGame=true → initialize() → deleteStateFile() → saveState=false → onBackPressed()（1051-1056）；Slice 1 产出的 GameSaveStore.ets\n注释写明「saveState=false 抑制判定在 GamePage.save() 调用侧（AC09）」，store 的 saveState() 本身不判标志（L51/L52）；\nslice-01-f002-source-notes 记下「if (saveState) 抑制在方法内首行」，并把「save() 五步序（saveState 抑制判定、…）；失败弹窗 No → deleteState + saveState=false」\n列为 Slice 5 的接线义务（L88/L89）；F001 规格 AC22 要求 NO 后「返回上级且 state 文件已删除」（L26/L27）；派工也写了「save() 五步序（state 抑制/createNewGame 判定/…）」（L1）。\n这些输入正确且足以决定：调用侧必须同时判 saveState。\n写者推理时认为 NO 分支里「createNewGame==true → skips saveStateToFile (and saveState=false anyway)」「saveState=false is the belt」（L117、L126），\n漏看 initialize() 已把 createNewGame 置回 false，于是把 saveState 当成冗余。被注入钩子拦下的首稿 W139 与实际落盘的 W167（L167/L168，22:37:08）\n都写成 persistOnSave() 中的 if (!this.session.createNewGame && this.session.gameState !== null)，没有 saveState 条件；而同一文件的\nprepareLostExit() 依次执行 createNewGame=true → initialize()（目标端第 242 行同样置 createNewGame=false）→ deleteState → saveState=false。\n所以页面随后调用 persistOnSave 时会把刚删除的 state{n}.txt 写回，主菜单 CONTINUE 仍可用。它自己写的 slice-05 源码笔记还记有「saveState(1114) 抑制局存档写入」，\n五步序却只写了 !createNewGame。偏差在「已拿到守卫要求 → 实现调用侧条件」这一环，生成期没有其他写者再改动这一片段\n（返修 L2987-L2988 的 sed 输出仍是原条件）。\n返修 5d9e6180 在 L2987-L2988 把条件改为 !createNewGame && saveState && gameState !== null，并注释「saveStateToFile 内部先判 saveState」；\n设备复测确认 NO 后只剩 statistics4.txt（L3029-L3030）；L3042-L3043 记为检查点 C33（46b2a4e），最终版本保留了这一改动。\n经验核对：该 agent 首写前（L140，22:33:05）注入了 18 条经验，其中包括 lesson-14411595fd9ac1e17683 v2「源端看似缺陷的可观察行为照原样迁移」。\n缺陷条件在注入前的 W139 首稿中已经存在；注入后写者只按 SDK d.ts 核对了成员，并在 onPageCreate 补了 boardInitialized 重置（L141、L161-L163），\npersistOnSave 没有改动。这条经验要求照搬源端行为，并未导致删去守卫。注入的经验都没有参与本偏差，因此不入图，也不提出修订。\n",
+  "recommendations": [
+    "切片实现时，凡目标仓储契约写有「某抑制判定在调用侧」，就把源端被调方法体内的每个守卫（如 saveStateToFile 的 if(saveState)）逐条对应到目标调用点的条件里。写完后 grep 调用点，确认 createNewGame 与 saveState 两个条件都在。",
+    "某个标志看似是另一标志之外的冗余保险时，按实际调用序模拟各退出路径在 save() 时刻的标志值，不能只看分支开头的赋值；要特别检查中途调用的 initialize/reset 是否把前一个标志改回去（本例 initialize() 把 createNewGame 置回 false）。至少对败局 NO、胜局 NO、系统返回、onHide 四条路径列出标志值表。",
+    "规格的验收条目（F001-AC22「NO 后 state 文件已删除」、F002-AC09「saveState=false 后 state 不被重建」）要在实现自检时对照落盘函数条件逐条走查；不能编译、不能上设备的批次，也要写一条按标志序列模拟的断言说明。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-pf2048-glm5.31/entry/src/main/ets/viewmodels/GameEngine.ets",
+        "since": "2026-10-14T02:47:19.609Z",
+        "at": "2026-10-14T13:11:05.496Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/privacy-friendly-2048-SecUSo-4ee3cf3/app/src/main/java/org/secuso/privacyfriendly2048/activities/GameActivity.java",
+          "at": "2026-10-13T22:12:56.052Z",
+          "reason": "正常输入：Read 回执含 save() 232-235（!createNewGame → saveStateToFile）、initialize() 333 createNewGame=false、败局 NO 1051-1056（initialize 后 deleteStateFile、saveState=false、onBackPressed），以及 saveStateToFile 1113-1114 的 if (saveState) 守卫。足以说明 NO 后阻止写回的是 saveState，而不是 createNewGame（agent-a011f89ca98ef9833.jsonl:L41/L44）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-pf2048-glm5.31/entry/src/main/ets/services/GameSaveStore.ets",
+          "at": "2026-10-13T22:13:02.144Z",
+          "reason": "正常输入：Slice 1 仓储的 Read 回执写明 saveState(state, filename) 不判标志，「saveState=false 抑制判定在 GamePage.save() 调用侧（AC09）」，即守卫已明确交给消费方（agent-a011f89ca98ef9833.jsonl:L51/L52）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-pf2048-glm5.31/spec/execution/source-understanding/slice-01-f002-source-notes.md",
+          "at": "2026-10-13T22:13:30.204Z",
+          "reason": "正常输入：Read 回执记录「if (saveState) 抑制在方法内首行」，契约表写「saveState=false 抑制在调用侧」，消费方接线账要求 Slice 5 的 save() 五步序包含「saveState 抑制判定」（agent-a011f89ca98ef9833.jsonl:L88/L89）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-pf2048-glm5.31/spec/baseline/features/F001-game-core.md",
+          "at": "2026-10-13T22:12:43.077Z",
+          "reason": "正常输入：本切片功能规格 AC22 写明失败弹窗 No 走「initialize、删档（deleteStateFile）、saveState=false、onBackPressed 删档退出」，验收为「No 返回上级且 state 文件已删除」（agent-a011f89ca98ef9833.jsonl:L26/L27）。"
+        },
+        {
+          "key": "agent-a011f89ca98ef9833.jsonl",
+          "at": "2026-10-13T22:37:08.041Z",
+          "reason": "收到上述输入后，推理中误以为 NO 链在 save() 时 createNewGame 仍为 true、saveState 只是「belt」（L117、L126），漏看 initialize() 会把 createNewGame 置回 false。Write（L167，回执 L168）的 persistOnSave 只判 !createNewGame && gameState !== null，没有判 saveState；同文件 prepareLostExit 先 initialize 再置 saveState=false，导致 NO 后删除的存档被写回。注入前首稿 W139 已是同一条件，注入的经验未参与。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 5
+        },
+        {
+          "from": 2,
+          "to": 5
+        },
+        {
+          "from": 3,
+          "to": 5
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-bb0be060a6707e9f23d3",
+  "metadata": {
+    "migration": {
+      "id": "pf2048-glm531-3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f",
+      "project": "Privacy Friendly 2048"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.296",
+        "2.1.299"
+      ]
+    },
+    "source_set_id": "sources-1066f74383c81d5a2cd9",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-pf2048-glm5.31",
+        "at": "2026-10-13T20:25:53.379Z",
+        "ref": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a46a0c49af597d7c3.jsonl:L105",
+        "request_ref": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a46a0c49af597d7c3.jsonl:L104",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-pf2048-glm5.31",
+        "at": "2026-10-13T20:25:53.379Z",
+        "ref": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a46a0c49af597d7c3.jsonl:L105",
+        "request_ref": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a46a0c49af597d7c3.jsonl:L104",
+        "phase": "generation"
+      },
+      {
+        "name": "toolchain.gradle",
+        "value": "8.5",
+        "basis": "configuration",
+        "artifact": "gradle-wrapper.properties",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-pf2048-glm5.31",
+        "at": "2026-10-14T07:57:12.812Z",
+        "ref": "repair/5d9e6180-4c80-4423-a00d-ca7069d9da73.jsonl:L70",
+        "request_ref": "repair/5d9e6180-4c80-4423-a00d-ca7069d9da73.jsonl:L69",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "c16c307d-1222-4fb3-bc92-f319ab51b983"
+      ]
+    }
+  },
+  "revision": "033d529a5b81379c2713d4a4c1097165b3e862b6c20dd9abf4b7d19c2ca65a86"
+}

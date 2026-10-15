@@ -1,0 +1,511 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-ad0ab84cef0e7cbc3696",
+  "created_at": "2026-10-14T14:22:18.824372+00:00",
+  "migration_key": "pf2048-glm531-3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f",
+  "title": "备份链按推断与框架误读定契约：子模块格式被反推定稿、SQLiteOpenHelper 构造当建库、设置页默认值与恢复暂存语义丢失",
+  "when": "规格提取阶段，为依赖未检出子模块或 Android 框架隐式行为的备份/存储链路写验收契约时；以及实现阶段把这些契约落成 relationalStore/preferences 代码时",
+  "description": "源端备份流由 git 子模块（.gitmodules 有 URL、目录为空）里的 DatabaseUtil/PreferenceUtil 写出，app 侧只见调用点；数据库 helper 继承 SQLiteOpenHelper，构造后无人调 getReadable/WritableDatabase；设置页由带 android:defaultValue 的 PreferenceScreen XML 挂载；恢复用 SharedPreferences.Editor 累积、末尾一次 commit。",
+  "summary": "本问题四处偏差分属三个成因。\n（1）database 段格式：F009 规格作者（agent-a47086e537352df95）写前读到 BackupCreator/BackupRestorer，两者都把库内容的写/读交给 backup-api 的\nDatabaseUtil.writeDatabase / readDatabaseContent（L57-L60）；它自己确认子模块未检出、.gitmodules 指向 GitHub 仓库（L92-L93），\n协调者又在 L106 插播“已从 GitHub SecUSo/privacy-friendly-backup-api master 取到 BackupAPI/src/main/res/values/colors.xml 原文”。\n即上游源码当场可取，读侧也没有给出 content 的行结构。首写前注入的 lesson-c0f990ea57a901951ba8（v1）提醒是\n“backup-api 未检出的写侧流格式由读侧严格校验反推：AC01/02 判据标注‘推断（读侧源码实证）’置信，不写成硬决策”（L146）。\n该作者照此在 F009 写“其工具函数语义按读侧反推并标注推断置信”，把 content 定成 SAMPLE_DATA 四列扁平行数组，并写成\nAC02“库内 N 行→content N 行、四字段值全等”（L160、L172）。经验只覆盖“生成期无法核验”，没写“缺的是可取回的源码时先取源”，\n也没限制“推断不得落成字段级 AC”；推断标签挡不住下游照做。（按 CLAUDE.md 画的“经验 → 该 agent”force 边以注入回执 L146 为证据，\n被检查器以 invalid_force_source 拒绝，所以经验节点不入图，作用记在该 agent 节点和本段。）实现者 agent-a6bd2e553671139fe 读到这份 F009（L26-L27）\n后在 BackupService 写出扁平行数组写/读（L221，注释仍称“按读侧严格名序反推，推断置信登记于 source-notes”）。\n返修取回子模块，按 DatabaseUtil 改为 {tableName, createSql, values} 表数组。\n（2）启动即建库：主会话写前用 cat 读过 FirstLaunchManager.java（构造里只有 new PFASQLiteHelper(context)）和\nPFASQLiteHelper.java（extends SQLiteOpenHelper，构造只调 super），见主转录 L178-L182。SQLiteOpenHelper 构造不建库，\n首个 getReadable/WritableDatabase 才建；本 app 的 DAO 无调用方，所以正常使用中库文件不存在。主会话却在 feature-base\n写“忠实复刻口径：空库照建（FirstLaunchManager 构造即建库）”（L568），并在 C4 规格、Base-2 数据库和 Slice 3 派工里\n一路下发（L620、L1343、L1686）。于是 PFASQLiteHelper（agent-a4666f76812dfc4d0）把 init 注释成“等价源 SQLiteOpenHelper\n构造建库链”，FirstLaunchService（agent-a1c9736f8ab430e58）构造里 fire-and-forget 调 init 建库，F009 也写了“空库照建”\n和“空库导出空 content”。a6bd2e553671139fe 因此在 BackupService 构造里起 rdbReadyTask 建库，在 EntryBackupAbility 里\n先 await rdbReadyTask。结果是鸿蒙备份总能成功，安卓则因库不存在而备份失败。返修去掉启动建库，新增\ndatabaseFileExists/openDatabaseRaw，库文件不存在时 writeBackup 失败。\n（3）设置页默认值：F004 规格作者同一 agent 写前读过 SettingsActivity（PreferenceFragment + addPreferencesFromResource）\n和 pref_general.xml 的四个 android:defaultValue（L49-L50、L75-L76），却只把 defaultValue 写成读取缺省（F004-AC01，L156），\n没写“偏好挂上时缺键即持久化默认值”这一框架行为。实现者 agent-a38439bb508f38621 照此在 aboutToAppear 只 getSync\n回默认值（L121），返修在设置页出现时按 XML 顺序补写四键（新增 PreferencesService.persistDefaultIfAbsent）。\n（4）恢复非原子：F009 已写“任一异常→无半份写入（commit 原子性照搬）”，a6bd2e553671139fe 也读到 BackupRestorer 的\nEditor 累积与末尾 commit（L33-L34）。它把“Editor 未 commit 前对实例不可见”误当成“putSync 写进内存实例、只是未 flush”\n（L112 思考、L221 写入），恢复中途失败时已解析的值留在共享偏好实例里。返修改为暂存表，finishRestore 时再 put+flush。\n一并核对了首写前注入的 org.json 序列化（lesson-0caaa4efc70dad90a15f、lesson-5034b56be6fd828164c9）和 relationalStore\n类经验（lesson-a6f300f9295ba538f23b、lesson-a078efd3361b4abe58e3、lesson-5c101b4b3f08ab317202），以及启动 init\n经验 lesson-8a881c2e07f80f83447c。它们的提醒分别管 JsonWriter 转义、版本号、事务接口、自增主键和 BackupService.init\n接线，都没有导致上述四处偏差，不入图。\n",
+  "recommendations": [
+    "规格提取阶段，源端关键实现在未检出的子模块或外部库里时（.gitmodules 有 URL、目录为空），先取源：在副本里 git submodule update --init，或按 URL 取对应文件（本次协调者已从同一仓库取到 colors.xml）。取不到时把格式登记为未知缺口并写明阻塞，不按调用点反推字段结构，也不把推断写成逐字段相等的 AC。",
+    "规格提取阶段，把 Android 框架的隐式时机写进契约：SQLiteOpenHelper 构造不建库，首个 getReadable/WritableDatabase 才建，DAO 无调用即库文件不存在；备份读侧按“库文件缺失即失败”。目标端不要在启动 init 里 getRdbStore 预建库，备份和恢复按源路径打开。",
+    "规格提取与设置页实现阶段：PreferenceScreen 由 addPreferencesFromResource 挂载时，缺持久值的偏好会写入 android:defaultValue。规格要写明“进入设置页后偏好文件含这些键”，实现要在设置页出现时按 XML 顺序缺键写默认并落盘，不能只在读取时回退默认值。",
+    "实现阶段迁移 SharedPreferences.Editor 累积后 commit 的流程时：Editor 的 put 在 commit 前对实例不可见，ArkTS putSync 却立即改共享实例。所以要先放进暂存表，全部校验通过后再 put 并 flushSync；验证时注入中途失败，再 getSync 核对实例未变。",
+    "修订 lesson-c0f990ea57a901951ba8（版本 1）：适用条件要排除“缺的是可取回的源码”。标题或做法第一步写成：结论依赖未检出子模块、外部库或远端仓库的源码时，先按 .gitmodules URL 或依赖坐标取源核对，只有设备度量这类生成期确实拿不到的才标置信度；推断出的数据格式不写成字段级相等的 AC，在规格里登记为阻塞缺口并指定核验方式（取源比对或真机导出比对）。判断信号：规格里出现“未检出”“按读侧/调用点反推”“推断（源码实证）”，同时 .gitmodules 或依赖声明能给出源码位置。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-pf2048-glm5.31/entry/src/main/ets/services/BackupService.ets",
+        "since": "2026-10-14T02:47:19.609Z",
+        "at": "2026-10-14T13:11:05.496Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/privacy-friendly-2048-SecUSo-4ee3cf3/app/src/main/java/org/secuso/privacyfriendly2048/backup/BackupRestorer.kt",
+          "at": "2026-10-13T13:37:01.849Z",
+          "reason": "正常输入：F009 规格作者的 Read 回执显示 readDatabase 只校验 version/content 两个名字，content 交给 DatabaseUtil.readDatabaseContent，不在本仓；BackupCreator 同样调 DatabaseUtil.writeDatabase（agent-a47086e537352df95.jsonl:L57-L60）。读侧没有给出行结构。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/privacy-friendly-2048-SecUSo-4ee3cf3/app/src/main/java/org/secuso/privacyfriendly2048/helpers/FirstLaunchManager.java",
+          "at": "2026-10-13T13:00:05.235Z",
+          "reason": "正常输入：主会话 cat 回执显示构造里只有 dbHandler = new PFASQLiteHelper(context)，之后 dbHandler 无任何调用（3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f.jsonl:L178-L179）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/privacy-friendly-2048-SecUSo-4ee3cf3/app/src/main/java/org/secuso/privacyfriendly2048/database/PFASQLiteHelper.java",
+          "at": "2026-10-13T13:00:12.204Z",
+          "reason": "正常输入：主会话 cat 回执显示 PFASQLiteHelper extends SQLiteOpenHelper，构造只调 super(context, DATABASE_NAME, null, 1)；按框架语义，构造不建库，首次 getReadable/WritableDatabase 才建（主转录 L181-L182）。"
+        },
+        {
+          "key": "3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f.jsonl",
+          "at": "2026-10-13T13:36:08.902Z",
+          "reason": "读到上述源码后，主会话把 new PFASQLiteHelper 误读为建库：feature-base 写“忠实复刻口径：空库照建（FirstLaunchManager 构造即建库）”（L568），C4 派工又写“PF_EXAMPLE_DB 空库照建（FirstLaunchManager 构造）”（L620-L621）。启动建库前提从这里形成。",
+          "problem": true
+        },
+        {
+          "key": "agent-a47086e537352df95.jsonl",
+          "at": "2026-10-13T13:59:53.711Z",
+          "reason": "写前已知 content 由子模块写出、子模块可从 GitHub 取（L92-L93；协调者 L106 已取到同仓 colors.xml）。首写前注入的 lesson-c0f990ea57a901951ba8（v1）“生成期无法核验的规格结论标明置信度与核验方法”提醒“backup-api 未检出的写侧流格式由读侧严格校验反推：AC01/02 判据标注‘推断（读侧源码实证）’置信，不写成硬决策”（L146 被拒写入回执）。它照此在 F009 写“按读侧反推并标注推断置信”，把 content 定为 SAMPLE_DATA 四列扁平行，AC02 判据写成“四字段值全等”，并沿用派工的“空库照建”和“空库导出空 content”（L160 Write、L172 Edit）。格式偏差在这里形成。经验节点的 force 边被检查器以 invalid_force_source 拒绝，所以只记在此处。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-pf2048-glm5.31/spec/baseline/features/F009-backup.md",
+          "at": "2026-10-13T22:12:51.115Z",
+          "reason": "交付桥梁：实现者 Read 回执包含 AC02 扁平行格式、AC11“空库照建”及“任一异常→无半份写入（commit 原子性照搬）”（agent-a6bd2e553671139fe.jsonl:L26-L27）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/privacy-friendly-2048-SecUSo-4ee3cf3/app/src/main/java/org/secuso/privacyfriendly2048/backup/BackupRestorer.kt",
+          "at": "2026-10-13T22:12:58.094Z",
+          "reason": "正常输入：实现者 Read 回执显示 readPreferences 往 SharedPreferences.Editor 里 put，末尾才 preferences.commit()，异常直接返回 false（agent-a6bd2e553671139fe.jsonl:L33-L34）。Editor 未提交的值对实例不可见，足以要求恢复先暂存。"
+        },
+        {
+          "key": "agent-a6bd2e553671139fe.jsonl",
+          "at": "2026-10-13T22:45:08.159Z",
+          "reason": "按 F009 写出扁平行数组写/读，构造里起 rdbReadyTask 调 getPFASQLiteHelper().init 建库，属沿用。恢复偏好是它自己的偏差：把 Editor 累积等同为 putSync 逐键写入共享实例、finishRestore 再 flushSync（L112 思考，L221 Write），中途失败时已解析值留在实例里。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 2,
+          "to": 4,
+          "force": true,
+          "reason": "主会话 Bash 进入源码包目录 cat helpers/FirstLaunchManager.java，回执含构造 dbHandler = new PFASQLiteHelper(context)；这是主会话写 feature-base 与派工前对该源文件的真实读取。",
+          "evidence": [
+            {
+              "source": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f.jsonl",
+              "line": 178
+            },
+            {
+              "source": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f.jsonl",
+              "line": 179
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "主会话 Bash cat database/PFASQLiteHelper.java，回执含 extends SQLiteOpenHelper 与构造 super(context, DATABASE_NAME, null, DATABASE_VERSION)；这是主会话写建库前提之前对该源文件的真实读取。",
+          "evidence": [
+            {
+              "source": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f.jsonl",
+              "line": 181
+            },
+            {
+              "source": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f.jsonl",
+              "line": 182
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 1,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": 6
+        },
+        {
+          "from": 6,
+          "to": 8
+        },
+        {
+          "from": 7,
+          "to": 8
+        },
+        {
+          "from": 8,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-pf2048-glm5.31/entry/src/main/ets/services/FirstLaunchService.ets",
+        "since": "2026-10-14T02:47:19.609Z",
+        "at": "2026-10-14T13:11:05.496Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/privacy-friendly-2048-SecUSo-4ee3cf3/app/src/main/java/org/secuso/privacyfriendly2048/helpers/FirstLaunchManager.java",
+          "at": "2026-10-13T13:00:05.235Z",
+          "reason": "正常输入：构造里只有 new PFASQLiteHelper(context)，dbHandler 此后无调用（主转录 L178-L179）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/privacy-friendly-2048-SecUSo-4ee3cf3/app/src/main/java/org/secuso/privacyfriendly2048/database/PFASQLiteHelper.java",
+          "at": "2026-10-13T13:00:12.204Z",
+          "reason": "正常输入：SQLiteOpenHelper 子类，构造只调 super，不打开库（主转录 L181-L182）。"
+        },
+        {
+          "key": "3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f.jsonl",
+          "at": "2026-10-13T21:52:08.584Z",
+          "reason": "主会话把构造误读为建库，写进 feature-base（L568“空库照建（FirstLaunchManager 构造即建库）”）。Slice 3 派工又要求“isFirstTimeLaunch()（含 PFASQLiteHelper.init 建库副作用——照源 FirstLaunchManager 构造）”（L1686-L1687）。",
+          "problem": true
+        },
+        {
+          "key": "agent-a1c9736f8ab430e58.jsonl",
+          "at": "2026-10-13T22:07:14.179Z",
+          "reason": "收到派工和同一口径的 F005-AC03“构造后库文件存在、SAMPLE_DATA 表为空”，在构造里写 this.dbInitTask = getPFASQLiteHelper().init(context)，注释称“建库副作用”（L136 Write）。本链确认这一前提被传到目标，不另推定其独立失职。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "主会话 Bash 进入源码包目录 cat helpers/FirstLaunchManager.java，回执含构造 dbHandler = new PFASQLiteHelper(context)；这是主会话写 feature-base 与派工前对该源文件的真实读取。",
+          "evidence": [
+            {
+              "source": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f.jsonl",
+              "line": 178
+            },
+            {
+              "source": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f.jsonl",
+              "line": 179
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "主会话 Bash cat database/PFASQLiteHelper.java，回执含 extends SQLiteOpenHelper 与构造 super(context, DATABASE_NAME, null, DATABASE_VERSION)；这是主会话写建库前提之前对该源文件的真实读取。",
+          "evidence": [
+            {
+              "source": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f.jsonl",
+              "line": 181
+            },
+            {
+              "source": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f.jsonl",
+              "line": 182
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-pf2048-glm5.31/entry/src/main/ets/database/PFASQLiteHelper.ets",
+        "since": "2026-10-14T02:47:19.609Z",
+        "at": "2026-10-14T13:11:05.496Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/privacy-friendly-2048-SecUSo-4ee3cf3/app/src/main/java/org/secuso/privacyfriendly2048/helpers/FirstLaunchManager.java",
+          "at": "2026-10-13T13:00:05.235Z",
+          "reason": "正常输入：构造里只有 new PFASQLiteHelper(context)（主转录 L178-L179）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/privacy-friendly-2048-SecUSo-4ee3cf3/app/src/main/java/org/secuso/privacyfriendly2048/database/PFASQLiteHelper.java",
+          "at": "2026-10-13T13:00:12.204Z",
+          "reason": "正常输入：SQLiteOpenHelper 构造只调 super，建库发生在首次打开（主转录 L181-L182）。"
+        },
+        {
+          "key": "3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f.jsonl",
+          "at": "2026-10-13T20:54:41.101Z",
+          "reason": "Base-2 Database 派工要求“空库行为照搬；消费方=FirstLaunchManager 构造建库（F005）+ BackupCreator 全量导出（F009）”（L1343-L1344），前提来自主会话 feature-base 的“空库照建”（L568）。",
+          "problem": true
+        },
+        {
+          "key": "agent-a4666f76812dfc4d0.jsonl",
+          "at": "2026-10-13T21:02:23.083Z",
+          "reason": "照派工把模块契约写成“F005 FirstLaunchManager 构造建库：init(context)（空库照建）”“F009 全量导出：init 后经 getStore()”，并把 init 注释为“等价源 SQLiteOpenHelper 构造建库链”。备份和恢复只能走会建库、跑 onCreate 的 init，没有不建库的打开路径（L68 Write）。返修补上 databaseFileExists/openDatabaseRaw。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "主会话 Bash 进入源码包目录 cat helpers/FirstLaunchManager.java，回执含构造 dbHandler = new PFASQLiteHelper(context)；这是主会话写 feature-base 与派工前对该源文件的真实读取。",
+          "evidence": [
+            {
+              "source": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f.jsonl",
+              "line": 178
+            },
+            {
+              "source": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f.jsonl",
+              "line": 179
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "主会话 Bash cat database/PFASQLiteHelper.java，回执含 extends SQLiteOpenHelper 与构造 super(context, DATABASE_NAME, null, DATABASE_VERSION)；这是主会话写建库前提之前对该源文件的真实读取。",
+          "evidence": [
+            {
+              "source": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f.jsonl",
+              "line": 181
+            },
+            {
+              "source": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f.jsonl",
+              "line": 182
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-pf2048-glm5.31/entry/src/main/ets/entrybackupability/EntryBackupAbility.ets",
+        "since": "2026-10-14T02:47:19.609Z",
+        "at": "2026-10-14T13:11:05.496Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/privacy-friendly-2048-SecUSo-4ee3cf3/app/src/main/java/org/secuso/privacyfriendly2048/helpers/FirstLaunchManager.java",
+          "at": "2026-10-13T13:00:05.235Z",
+          "reason": "正常输入：构造里只有 new PFASQLiteHelper(context)（主转录 L178-L179）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/privacy-friendly-2048-SecUSo-4ee3cf3/app/src/main/java/org/secuso/privacyfriendly2048/database/PFASQLiteHelper.java",
+          "at": "2026-10-13T13:00:12.204Z",
+          "reason": "正常输入：SQLiteOpenHelper 构造不建库（主转录 L181-L182）。"
+        },
+        {
+          "key": "3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f.jsonl",
+          "at": "2026-10-13T13:36:08.902Z",
+          "reason": "C4 派工下发“PF_EXAMPLE_DB 空库照建（FirstLaunchManager 构造）”（L620-L621），源自 feature-base 的误读（L568）。",
+          "problem": true
+        },
+        {
+          "key": "agent-a47086e537352df95.jsonl",
+          "at": "2026-10-13T13:59:53.711Z",
+          "reason": "把派工前提写进 F009：AC11“空库照建”、AC02“空库导出空 content（非 null）”，即备份时库总存在（L160、L172）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-pf2048-glm5.31/spec/baseline/features/F009-backup.md",
+          "at": "2026-10-13T22:12:51.115Z",
+          "reason": "交付桥梁：实现者 Read 回执包含上述“空库照建”契约（agent-a6bd2e553671139fe.jsonl:L26-L27）。"
+        },
+        {
+          "key": "agent-a6bd2e553671139fe.jsonl",
+          "at": "2026-10-13T22:45:22.695Z",
+          "reason": "按“库由 init 建出”的前提，在 onBackup/onRestore 里先 await service.rdbReadyTask，失败才跳过，随后同步调 writeBackup/restoreBackup（L226 Write）。返修去掉这段等待，改为 await 异步备份/恢复，由 writeBackup 自己判断库文件是否存在。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "主会话 Bash 进入源码包目录 cat helpers/FirstLaunchManager.java，回执含构造 dbHandler = new PFASQLiteHelper(context)；这是主会话写 feature-base 与派工前对该源文件的真实读取。",
+          "evidence": [
+            {
+              "source": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f.jsonl",
+              "line": 178
+            },
+            {
+              "source": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f.jsonl",
+              "line": 179
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "主会话 Bash cat database/PFASQLiteHelper.java，回执含 extends SQLiteOpenHelper 与构造 super(context, DATABASE_NAME, null, DATABASE_VERSION)；这是主会话写建库前提之前对该源文件的真实读取。",
+          "evidence": [
+            {
+              "source": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f.jsonl",
+              "line": 181
+            },
+            {
+              "source": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f.jsonl",
+              "line": 182
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": 6
+        },
+        {
+          "from": 6,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-pf2048-glm5.31/entry/src/main/ets/pages/SettingsPage.ets",
+        "since": "2026-10-14T02:47:19.609Z",
+        "at": "2026-10-14T13:11:05.496Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/privacy-friendly-2048-SecUSo-4ee3cf3/app/src/main/java/org/secuso/privacyfriendly2048/activities/SettingsActivity.java",
+          "at": "2026-10-13T13:36:51.709Z",
+          "reason": "正常输入：Read 回执显示 GeneralPreferenceFragment extends PreferenceFragment，onCreate 里 addPreferencesFromResource(R.xml.pref_general)（agent-a47086e537352df95.jsonl:L49-L50）。偏好挂上时，框架会把缺失键写成 defaultValue。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/privacy-friendly-2048-SecUSo-4ee3cf3/app/src/main/res/xml/pref_general.xml",
+          "at": "2026-10-13T13:37:16.295Z",
+          "reason": "正常输入：cat 回执列出四个偏好及 android:defaultValue（system/true/true/1）（agent-a47086e537352df95.jsonl:L75-L76）。"
+        },
+        {
+          "key": "agent-a47086e537352df95.jsonl",
+          "at": "2026-10-13T13:58:02.518Z",
+          "reason": "F004 只把 defaultValue 写成读取缺省（AC01“默认 \"system\"/true/true/\"1\"”及读取点表），漏了“进入设置页即持久化缺失默认值”这一可观察行为（L156 Write）。偏差在规格提取环节。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-pf2048-glm5.31/spec/baseline/features/F004-settings-theme.md",
+          "at": "2026-10-13T21:52:28.477Z",
+          "reason": "交付桥梁：实现者 Read 回执包含只有读取缺省、没有写回默认值的 F004（agent-a38439bb508f38621.jsonl:L36-L37）。"
+        },
+        {
+          "key": "agent-a38439bb508f38621.jsonl",
+          "at": "2026-10-13T22:05:25.862Z",
+          "reason": "照 F004 在 aboutToAppear 里只用 getSync 回默认值装载四键，注释“缺键回默认值”，不写入偏好文件（L121 Write）。它也读过同一源码（L59-L60、L77-L78），本链确认规格缺口被传到目标。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "F004 作者 Bash 进入 app/src/main 后 cat res/xml/pref_general.xml，回执列出四个偏好及 android:defaultValue；这是写 F004 前对该文件的真实读取。",
+          "evidence": [
+            {
+              "source": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a47086e537352df95.jsonl",
+              "line": 75
+            },
+            {
+              "source": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a47086e537352df95.jsonl",
+              "line": 76
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [
+    {
+      "key": "C:/Users/hongy/projects/transfer-app-pf2048-glm5.31/entry/src/main/ets/preferences/PreferencesService.ets",
+      "reason": "C57 只新增 persistDefaultIfAbsent，供设置页补写默认值调用，生成期该文件没有被改动的偏差片段；成因已在 SettingsPage 分支（F004 漏写默认值持久化）说明，未单独追 ac639d2a0f8a5aa4c 的写前输入。"
+    },
+    {
+      "key": "C:/Users/hongy/projects/transfer-app-pf2048-glm5.31/entry/src/main/ets/services/AppShell.ets",
+      "reason": "C57 只把注释里的“BackupService.rdbReadyTask fire-and-forget 不拦”改成“BackupService 构造只预载偏好、不开库”，没有行为改动；这句注释描述的是 BackupService 启动建库，成因见 BackupService 分支，未单列 ad6457bc54ce20a28 的输入链。"
+    }
+  ],
+  "job": "issue-ad0ab84cef0e7cbc3696",
+  "metadata": {
+    "migration": {
+      "id": "pf2048-glm531-3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f",
+      "project": "Privacy Friendly 2048"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.296",
+        "2.1.299"
+      ]
+    },
+    "source_set_id": "sources-1066f74383c81d5a2cd9",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-pf2048-glm5.31",
+        "at": "2026-10-13T20:25:53.379Z",
+        "ref": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a46a0c49af597d7c3.jsonl:L105",
+        "request_ref": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a46a0c49af597d7c3.jsonl:L104",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-pf2048-glm5.31",
+        "at": "2026-10-13T20:25:53.379Z",
+        "ref": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a46a0c49af597d7c3.jsonl:L105",
+        "request_ref": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a46a0c49af597d7c3.jsonl:L104",
+        "phase": "generation"
+      },
+      {
+        "name": "toolchain.gradle",
+        "value": "8.5",
+        "basis": "configuration",
+        "artifact": "gradle-wrapper.properties",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-pf2048-glm5.31",
+        "at": "2026-10-14T07:57:12.812Z",
+        "ref": "repair/5d9e6180-4c80-4423-a00d-ca7069d9da73.jsonl:L70",
+        "request_ref": "repair/5d9e6180-4c80-4423-a00d-ca7069d9da73.jsonl:L69",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "c16c307d-1222-4fb3-bc92-f319ab51b983"
+      ]
+    }
+  },
+  "revision": "b67e5270653520686cfc682fd7a954c250b884a3978419e2129673ba05bb9202"
+}

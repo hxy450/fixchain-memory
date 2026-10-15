@@ -6,9 +6,9 @@
 
 ## 本级经验
 
-- [Activity 级 onKeyDown 映射到页面根节点（NavDestination 或 @Entry 根）的 onKeyEvent，不挂在需先获焦的子组件上](lesson-80e1d2c095a3698a7156.lesson.md)
+- [Activity 级 onKeyDown 映射到页面根节点（NavDestination 或 @Entry 根）的 onKeyEvent，并确认页内至少有一个可获焦组件让焦点链经过本页（源端缺省可获焦的 ImageButton/Button 对应件设 focusable(true)）；不把 onKeyEvent 挂在需先抢焦点的子组件上](lesson-80e1d2c095a3698a7156.lesson.md)
   - 时机：页面实现与输入接线阶段，为源端 Activity 级硬件按键回调（onKeyDown、dispatchKeyEvent）选择 ArkUI onKeyEvent 的挂载节点时；接收“焦点获取归本任务”一类移交时
-  - 情境：安卓源在 Activity 上覆写 onKeyDown 或 dispatchKeyEvent 处理方向键、MENU 等，不依赖某个 View 持有焦点；目标页面是 Navigation 下的 NavDestination 或 @Entry 页，交互由内部 Canvas 或自绘子组件承载。
+  - 情境：安卓源在 Activity 上覆写 onKeyDown 或 dispatchKeyEvent 处理方向键、MENU、Ctrl+Z 等，不依赖某个 View 持有焦点；目标页面是 Navigation 下的 NavDestination 或 @Entry 页，交互由内部 Canvas、自绘子组件或 Image + onClick 承载。也包括页内没有 Button/TextInput 或 focusable(true) 组件，源端按键控件是缺省可获焦的 ImageButton/Button。
 - [Button 内按状态切换图标时写成一个 if/else 或单个 Image 按状态选资源，不写两个互斥的独立 if](lesson-ed5556325b6d8f510e2f.lesson.md)
   - 时机：界面实现阶段，为播放/暂停一类两态按钮编写 Button 的子内容时
   - 情境：源端按钮按状态切换图标，目标用 Button() { ... } 包裹图标，准备按两个状态分别写条件分支。
@@ -34,10 +34,10 @@
 - [根级键盘快捷键不假定聚焦的输入框会吞掉全部按键事件](lesson-a10cde3d336eee4eebe7.lesson.md)
   - 时机：实现根级硬件键盘快捷键（媒体控制、导航），并要求输入框聚焦时放行时
   - 情境：源 onKeyUp 在当前焦点为 EditText 时放行；目标在入口页根组件 onKeyEvent 统一处理按键。
-- [源端 onTouch 用未掩码的 getAction 只跟随首指时，先看手指由谁接收：单个视图独占全部手指才按 touches.length 过滤；多个兄弟控件各自监听（安卓默认分指）时按控件内 pointer id 集合判首指与末指](lesson-68023ac5f088c72a775a.lesson.md)
+- [源端 onTouch 自己按未掩码 getAction 只跟随首指时，先看手指由谁接收再过滤 ArkUI 逐指派发：Up 事件的 touches 仍含正在抬起的手指（末指抬起为 touches.length === 1）；单个视图独占全部手指才按 touches 计数，兄弟控件各自监听时按 pointer id 集合；源端交给 GestureDetector 时按其触发路径复刻](lesson-68023ac5f088c72a775a.lesson.md)
   - 时机：输入控制的规格提取与实现阶段，把 Android onTouch 的 MotionEvent 动作分支和坐标读取映射为 ArkUI onTouch 的 TouchType 分支与触点来源时
-  - 情境：源端 OnTouchListener 用未掩码的 event.getAction() 只匹配 ACTION_DOWN/MOVE/UP，以无索引的 getX()/getY()（指针索引 0）读坐标，附加手指的 POINTER_DOWN/UP 不进入任何分支；目标 ArkUI .onTouch 对每根手指都派发 TouchType.Down/Up，TouchEvent 同时提供 touches（在屏触点）与 changedTouches（本次变化的触点）。 也包括源端多个兄弟控件（方向键、旋转键等）各自 setOnTouchListener，targetSdk≥11 且未设 splitMotionEvents=false，窗口默认分指，每个控件只收落在自己身上的指针流；目标每个按钮各挂 .onTouch，而 TouchEvent.touches 列出屏幕上全部手指。
-  - 例外：源端用 getActionMasked() 处理 POINTER_DOWN/UP，或按 pointerId 跟踪多指时，按源端的多指语义逐指映射
+  - 情境：源端 OnTouchListener 用未掩码的 event.getAction() 只匹配 ACTION_DOWN/MOVE/UP，以无索引的 getX()/getY()（指针索引 0）读坐标，附加手指的 POINTER_DOWN/UP 不进入任何分支；目标 ArkUI .onTouch 对每根手指都派发 TouchType.Down/Up，TouchEvent 同时提供 touches（含本次抬起手指在内的全部触点）与 changedTouches（本次变化的触点）。也包括源端多个兄弟控件（方向键、旋转键等）各自 setOnTouchListener，targetSdk≥11 且未设 splitMotionEvents=false，窗口默认分指，每个控件只收落在自己身上的指针流；目标每个按钮各挂 .onTouch，而 TouchEvent.touches 列出屏幕上全部手指。也包括源端 onTouch 只 return gestureDetector.onTouchEvent(event)，方向写在 SimpleOnGestureListener.onFling/onScroll 中。
+  - 例外：源端用 getActionMasked() 处理 POINTER_DOWN/UP，或按 pointerId 跟踪多指时，按源端的多指语义逐指映射；源端 onTouch 只把事件交给 GestureDetector（new GestureDetector、extends SimpleOnGestureListener、return gestureDetector.onTouchEvent(event)）时不套用本条的计数过滤，按做法第 3 步复刻 GestureDetector 的触发路径
 - [源端可点击容器自带的按压反馈（Compose clickable、Card(onClick)，View 体系主题 listSelector 的列表行）在 ArkUI onClick 上不会自动出现：用通用属性 stateStyles 的 pressed 态补状态层（stateEffect 只属于 Button），不可点击时不显示](lesson-fde79829831c2269e925.lesson.md)
   - 时机：界面实现阶段，把带 Modifier.clickable/toggleable/selectable，或 Card、Surface(onClick) 的 Compose 容器转成挂 onClick 的 ArkUI 容器时；把 ListView、PreferenceActivity 中由主题 listSelector 提供按压态的可点击行转成 ArkUI 列表行时
   - 情境：源端容器经 clickable/toggleable（可带 role = Button、Switch）或 Card/Surface(onClick) 响应点击，没有把 indication 设为 null，按压时由主题提供涟漪或状态层；目标用 Column/Row/Stack 加 .onClick 实现，ArkUI 通用容器默认没有按压反馈（Button 自带的按压效果除外）。 也包括 View 体系的 ListView、PreferenceActivity 行没有把 background 或 listSelector 设为 null，按压态由主题选择器（如 Holo 暗色 list_selector_holo_dark）提供；写者在 d.ts 里找不到通用容器的 stateEffect，就放弃了按压态。
@@ -49,6 +49,10 @@
   - 时机：1:1 对齐审计与修复阶段，判定目标端交互接线是否与安卓运行态一致，或重写组件时决定是否保留随行的 onClick 时
   - 情境：安卓控件注册了 setOnClickListener，但回调体被整段注释（如选图调用被注释），XML 也可能写着 clickable；目标端按规格集成点把它接成可用功能，代码注释自述源码为死码并写着“裁定/集成点”；项目要求 1:1 忠实复刻（含源码缺陷）。
   - 例外：项目决策明确要求启用该功能，且用户已知并接受与源端不同
+- [源端禁用态只靠代码换背景、文字色固定时，不用 ArkUI .enabled(false)（会对整个组件降透明）：显式切换背景与投影，用 hitTestBehavior(HitTestMode.None) 或回调内判态拦截点击](lesson-99080bd3bfc1bcbb9c5f.lesson.md)
+  - 时机：规格提取阶段为 setEnabled/android:enabled 切换的控件写转换决策时；界面实现阶段落实控件禁用态外观与点击拦截时
+  - 情境：源端在 setEnabled(false) 的同时 setBackgroundResource 换成没有 state_enabled 分支的灰色 drawable，textColor 是固定颜色而非 ColorStateList（AppCompat 按钮禁用时投影另归零）；映射参考把 setEnabled(false)/android:enabled 一律对到 .enabled(false)。
+  - 例外：源端禁用外观本身来自 state_enabled 选择器或半透明（ColorStateList 的 disabled 项、Compose 组件默认禁用色）时，按源端色值显式写出；目标默认禁用透明度恰与源值一致时才直接用 .enabled()
 - [点击事件挂在源端真正持有点击的节点上：源端只绑整栏就挂外层，只绑行内子 View 就只挂该子控件；带文字的 CheckBox/RadioButton 拆成勾选控件加 Text 时整体可点、命中区按源宽度](lesson-fd3add7128663eb9998f.lesson.md)
   - 时机：界面实现与返修阶段，为由多个子控件拼成的搜索栏、入口条或设置行决定 onClick 挂在哪一层，或清理、重写其中的点击绑定时；把带文字的 CheckBox/RadioButton 拆成 ArkUI 勾选控件加 Text 时
   - 情境：源布局只在整条容器上绑定点击（如 LinearLayout 的 onClick 或 DataBinding 点击），内部图标、提示文字、“搜索”字样只负责展示；目标用 Row + Image + Text 模拟占位搜索框（不是 TextInput），点击后压栈进入目标页。也包括源端 Java 只对行内某个子 View（如右侧值文本）setOnClickListener，同页其他行绑定整行 layout；目标用 Row 承载这些设置行。也包括带文字的 CheckBox/RadioButton（XML 声明或代码动态创建，宽度来自 wrap_content、match_parent、alignParentLeft 加 toLeftOf 两端锚定或父容器默认 LayoutParams），目标 Checkbox/Radio 不带文字、需另配 Text；为折行给 Text 加 layoutWeight(1) 时连同点击挂在整行上。

@@ -1,6 +1,6 @@
-# 自绘标题栏接入顶部安全区前先判定源端由谁避让：根 fitsSystemWindows 时 inset 放外层、工具栏保持源高；工具栏自带固定顶距时顶距与 inset 只取一份并同步高度
+# 自绘标题栏接入顶部安全区前先判定源端由谁避让：根 fitsSystemWindows 时 inset 放包住工具栏的主内容列（DrawerLayout 下不包抽屉，NavigationView 头部画到状态栏下并叠 insetForeground）、工具栏保持源高；工具栏自带固定顶距时顶距与 inset 只取一份并同步高度
 
-ID：`lesson-cde4120ab9ad7412b1da` · 版本：2
+ID：`lesson-cde4120ab9ad7412b1da` · 版本：3
 
 [本主题](index.md)
 
@@ -10,7 +10,7 @@ ID：`lesson-cde4120ab9ad7412b1da` · 版本：2
 
 ## 适用情境
 
-Android 全屏页工具栏为固定 dp 高度，状态栏避让由根布局 fitsSystemWindows=true 承担，或由工具栏自身的固定 paddingTop（如 80dp 高、40dp 顶距，根无 fitsSystemWindows）承担；目标页以窗口模型的 topInset 做前景避让，标题栏写固定 .height()。
+Android 全屏页工具栏为固定 dp 高度，状态栏避让由根布局 fitsSystemWindows=true 承担，或由工具栏自身的固定 paddingTop（如 80dp 高、40dp 顶距，根无 fitsSystemWindows）承担；目标页以窗口模型的 topInset 做前景避让，标题栏写固定 .height()。也包括根为 DrawerLayout、NavigationView android:fitsSystemWindows="true" 且有 app:headerLayout，目标用同时承载抽屉与工具栏的共享基座（SideBarContainer）。
 
 ## 例外与边界
 
@@ -18,15 +18,15 @@ Android 全屏页工具栏为固定 dp 高度，状态栏避让由根布局 fits
 
 ## 原因
 
-ArkUI 固定 height 包含 padding：把 topInset 作为固定高度标题栏的内距，可见工具栏被压成 height − inset；源顶距本已承担状态栏留位时再加外层 inset，又叠出两份避让。沉浸式 skill 的 TitleBar 示意写作固定 height 加 padding top（避让值 + N），照搬同样会压缩。来源两页分别出现压缩与叠加，页面规格都已给出源端避让方式，其中一页还写明“禁止重复内边距”。
+ArkUI 固定 height 包含 padding：把 topInset 作为固定高度标题栏的内距，可见工具栏被压成 height − inset；源顶距本已承担状态栏留位时再加外层 inset，又叠出两份避让。沉浸式 skill 的 TitleBar 示意写作固定 height 加 padding top（避让值 + N），照搬同样会压缩。来源两页分别出现压缩与叠加，页面规格都已给出源端避让方式，其中一页还写明“禁止重复内边距”。另一来源中“inset 放外层”被召回成“放在包 BasePage 的外层 Column”，整个侧边栏容器被推到状态栏下，抽屉头部随之下移。
 
 ## 做法
 
-1. 根布局 fitsSystemWindows=true（避让在工具栏之外）：把 topInset 放在包住标题栏的外层容器 padding，标题栏保持源高度（如 52dp→52vp）。
+1. 根布局 fitsSystemWindows=true（避让在工具栏之外）：把 topInset 放在包住标题栏的主内容列 padding，标题栏保持源高度（如 52dp→52vp）。根是 DrawerLayout、NavigationView 也 fitsSystemWindows 且带 headerLayout 时，“外层”不能是同时包住抽屉的 SideBarContainer 或共享抽屉基座的外层：抽屉面板从窗口顶开始画，头部延伸到状态栏下并叠 insetForeground（默认 #44000000），主内容列顶部用状态栏高的 colorPrimaryDark 占位。
 2. 工具栏自带固定 paddingTop 为透明状态栏留位：顶距与 topInset 只取一份，常用 max(源 paddingTop, topInset) 替换该内距，高度写成 源高度 − 源 paddingTop + 该值，不再另加外层 inset。
 3. 给固定高度的标题栏加顶部内距前算可见内容高度 = height − paddingTop，小于源工具栏高度就改为外层 inset 或同步增高；从页面根到标题栏的纵向链路只保留一处状态栏避让。
 
-来源支持：2 张卡 · 2 次迁移 · 2 个应用
+来源支持：3 张卡 · 3 次迁移 · 3 个应用
 
 ## 来源（按需复核）
 
@@ -34,3 +34,5 @@ ArkUI 固定 height 包含 padding：把 topInset 作为固定高度标题栏的
   卡片版本：`57c870c2120fd77003685d94f6ed28de21a47a178a298a4d708b33203690ebc5`
 - [case-ee2085c48fe78dbd3a2f](../../../store/cases/case-ee2085c48fe78dbd3a2f/0d5ffa24bf798f0358ab64f71da008ad0e9a55d64c0c62be2089ad430e3160d1.json) · 结论：recommendation:6
   卡片版本：`0d5ffa24bf798f0358ab64f71da008ad0e9a55d64c0c62be2089ad430e3160d1`
+- [case-eebe8e71adf555fca84f](../../../store/cases/case-eebe8e71adf555fca84f/b184689b889e0899496674801311e4fead883962b5e3789e02538c5e89259f87.json) · 结论：diagnosis, recommendation:5
+  卡片版本：`b184689b889e0899496674801311e4fead883962b5e3789e02538c5e89259f87`

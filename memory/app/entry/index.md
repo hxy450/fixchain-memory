@@ -25,9 +25,9 @@
 - [源端在入口 onCreate 首帧前按偏好设主题时，目标在 EntryAbility.onCreate 同步读取偏好并在 loadContent 前 setColorMode；恢复函数返回 Promise 而调用方不等待，就是首帧后才生效](lesson-dcb3c5e66dec2d126234.lesson.md)
   - 时机：入口与应用级配置阶段，规格提取或实现冷启动时应用持久化外观设置（深浅色等）的时机，并为启动恢复写移交或接线时
   - 情境：源入口 Activity 在 onCreate 首行（super.onCreate 之前）按 SharedPreferences 同步设置 DayNight 主题；目标 ApplicationContext.setColorMode 是进程态，偏好仓库只提供异步 init；功能规格只写“保存后即时生效”，没有冷启动恢复要求；恢复函数由一个任务写成 async，并以 HANDOFF 交给入口接线者调用。
-- [源端返回栈靠 rememberNavController 或 savedInstanceState 在进程回收后恢复时，规格单列“回收后重建”分支，目标显式开启 UIAbility 恢复与 Navigation recoverable](lesson-b0405a29415547485ecb.lesson.md)
-  - 时机：规格提取阶段为宿主 Activity 生命周期与导航容器编写验收项时；入口装配阶段实现 UIAbility 与根 Navigation 时
-  - 情境：源 Activity 在 onCreate(savedInstanceState) 接收存档，或用 Compose rememberNavController + NavHost（以及 Fragment 返回栈）承载页面；源码里没有显式保存代码，进程在后台被系统回收后，返回栈与路由参数由框架恢复。目标为 UIAbility + Navigation/NavDestination + NavPathStack，页面栈恢复默认不开启，入口每次 loadContent 首页并在空栈时 push 起始页；规格只写“冷启进入起始页”。
+- [源端返回栈靠框架在进程回收后重建（rememberNavController、savedInstanceState、Activity 任务栈）时，规格单列“回收后重建”分支：只在系统回收后恢复整栈并保留各页原参数，强停、划掉、覆盖安装后按冷启分流；目标显式开启 UIAbility 恢复与 Navigation recoverable](lesson-b0405a29415547485ecb.lesson.md)
+  - 时机：规格提取阶段为宿主 Activity 生命周期与导航容器编写验收项、为“进程回收后重建”铸平台差异决策时；入口装配阶段实现 UIAbility 与根 Navigation 的恢复路由时
+  - 情境：源 Activity 在 onCreate(savedInstanceState) 接收存档，或用 Compose rememberNavController + NavHost（以及 Fragment 返回栈）承载页面；源码里没有显式保存代码，进程在后台被系统回收后，返回栈与路由参数由框架恢复。也包括 View 体系的 Activity 任务栈（TaskStackBuilder 建出 \[主页, X\]、页面参数来自 Intent extra）：只有进程被系统回收而任务仍在时框架才重建整栈，重建页拿原始 Intent；强停、从最近任务划掉、覆盖安装、崩溃后任务已清空，再启动走启动页分流。目标为 UIAbility + Navigation/NavDestination + NavPathStack，页面栈恢复默认不开启；规格可能只写“冷启进入起始页”，或把回收重入合并进每次冷启动。
 - [源端靠依赖注入或全局静态工具就绪的基础设施改成需显式 init 的封装后，在入口 onCreate 最早处调用，并确认启动期读写都晚于初始化](lesson-8a881c2e07f80f83447c.lesson.md)
   - 时机：网络、键值存储等基础设施实现与入口接线阶段：新建必须先 init 才能用的封装，或改写 EntryAbility.onCreate、宣告基础层完成时
   - 情境：源端网络 baseUrl 由 DI 模块在注入时带上、键值工具（SpUtils/MMKV 一类）全局静态可用，Application.onCreate 里看不到对应的初始化；目标端改为静态 HttpClient（baseUrl 默认空串）加 NetworkConfig.init()、偏好封装需先传入上下文；入口 Ability 由编排会话维护，Flutter 插件 onAttachedToEngine 等回调里也能拿到上下文。也包括网络层以静态运行期配置承接构建期注入值（configure 写入、未配置即 throw），基础模块不得改入口，启动接线者不知道这条调用义务。
