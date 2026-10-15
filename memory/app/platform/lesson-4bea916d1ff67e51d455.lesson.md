@@ -1,6 +1,6 @@
-# 打开系统设置的显式 Want 包名随设备与系统版本变化：写前在目标设备核对，直达子页带该页参数，启动失败要可观察
+# 打开系统设置的显式 Want 包名随设备与系统版本变化：写前在目标设备核对，启动失败要可观察，不照抄参考里标“已验证”的值
 
-ID：`lesson-4bea916d1ff67e51d455` · 版本：3
+ID：`lesson-4bea916d1ff67e51d455` · 版本：1
 
 [本主题](index.md)
 
@@ -14,15 +14,13 @@ ID：`lesson-4bea916d1ff67e51d455` · 版本：3
 
 ## 原因
 
-系统设置应用的包名是与设备、系统版本相关的常量：旧版 EMUI/HarmonyOS 与 HarmonyOS NEXT 的设置应用包名不同，参考里的“已验证”只对其当时的设备成立；startAbility 被拒后若只在 catch 里记日志，按钮在用户看来就是点了没反应。直达应用详情或权限页的 Want 除包名与 Ability 名外还带页面参数，改包名时这些参数要一并核对。
+系统设置应用的包名是与设备、系统版本相关的常量，参考里的“已验证”只对其当时的设备成立；startAbility 被拒后若只在 catch 里记日志，按钮在用户看来就是点了没反应。来源中实现者照抄参考中的 com.huawei.settings，HarmonyOS NEXT 真机上的设置应用为 com.huawei.hmos.settings，两个权限页的“打开设置”都失效，直到视觉验证才发现。
 
 ## 做法
 
-1. 有设备时写前用 hdc shell bm dump -a 查找设置应用包名，再用 bm dump -n <包名> 取 Ability 名（例：HarmonyOS NEXT 手机为 com.huawei.hmos.settings / com.huawei.hmos.settings.MainAbility）；要直达应用详情或权限页时，Want 另带该设置页接受的 uri 与 parameters（例：应用信息页的 action.settings.app.info 与 page=permission 一类参数），在设备上一并核对。
-2. 源端打开设置只为让用户重新授予本应用被拒的 user_grant 权限时，优先用 abilityAccessCtrl.requestPermissionOnSetting 拉起授权弹窗（@ohos.abilityAccessCtrl.d.ts：@since 12，列表须是已声明、被用户拒绝过的同组权限），不依赖设置应用包名。
-3. 生成期无法连接设备核对时，在交付报告或验证清单登记“打开设置需真机确认”，写明所用包名对应的系统版本与设备，以及影响（包名不符时该入口在目标设备上打不开设置）。
-4. startAbility 失败要让调用方可观察（返回结果或给用户提示），不只 hilog 后吞掉。
-5. 维护参考文档时为系统应用包名注明验证时的系统版本与设备，HarmonyOS NEXT 与旧版 EMUI/HarmonyOS 分开写。
+1. 有设备时写前用 hdc shell bm dump -a 查找设置应用包名，再用 bm dump -n <包名> 取 Ability 名（来源 HarmonyOS NEXT 手机为 com.huawei.hmos.settings / com.huawei.hmos.settings.MainAbility）；生成期无法核对时，在交付报告或验证清单登记“打开设置需真机确认”。
+2. startAbility 失败要让调用方可观察（返回结果或给用户提示），不只 hilog 后吞掉。
+3. 维护参考文档时为系统应用包名注明验证时的系统版本与设备，HarmonyOS NEXT 与旧版 EMUI/HarmonyOS 分开写。
 
 来源支持：1 张卡 · 1 次迁移 · 1 个应用
 

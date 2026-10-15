@@ -1,6 +1,6 @@
 # VectorDrawable 转 SVG 时 viewBox 取 viewport，width/height 取显示尺寸
 
-ID：`lesson-4e306a66aba5f1d76fdf` · 版本：2
+ID：`lesson-4e306a66aba5f1d76fdf` · 版本：1
 
 [本主题](index.md)
 
@@ -19,7 +19,7 @@ ID：`lesson-4e306a66aba5f1d76fdf` · 版本：2
 ## 做法
 
 1. 两组值分开传：viewBox 为 0 0 viewportWidth viewportHeight，width/height 取 dp 值。
-2. fillColor 引用主题属性（?attr/…）时，先沿主题父链到项目、依赖库与 SDK platforms/*/data/res 解析出具体色写入；确需随运行时主题变色时，单色图标交代码层整体 fillColor 着色，各路径引用不同主题属性的多色图标逐路径解析颜色或按主题分别生成资源；不写 fill=none。
+2. 主题属性无法解析时用可见默认色并在映射文档列出，由代码层 fillColor 按主题着色，不写 fill=none。
 3. 页面阶段发现资源属转换器的同类缺陷时，回执写明系统性根因，安排全量审计或修正脚本后重跑，不只修当前页引用的文件。
 
 ## 可选检查

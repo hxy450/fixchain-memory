@@ -1,6 +1,6 @@
-# 改写 getCurrencyInstance() 为 intl.NumberFormat 时显式传 currency 代码，不靠 locale 推导币种
+# ArkTS intl.NumberFormat 用 style: 'currency' 时必须给 currency 代码，不会像 Java getCurrencyInstance 那样按 locale 推导币种
 
-ID：`lesson-19cedec8ad1bc4b08b2c` · 版本：2
+ID：`lesson-19cedec8ad1bc4b08b2c` · 版本：1
 
 [本主题](index.md)
 
@@ -14,20 +14,20 @@ ID：`lesson-19cedec8ad1bc4b08b2c` · 版本：2
 
 ## 例外与边界
 
-- 应用需要多币种或按用户地区切换币种时，不能用固定符号拼接代替格式化器
+- 应用需要多币种或按用户地区切换币种时，不能用固定前缀代替格式化器
 
 ## 原因
 
-Java 的 getCurrencyInstance() 按 locale 推导币种；ES Intl 规定 style 为 currency 时必须给 currency（缺省抛 TypeError），@ohos.intl.d.ts 则把 currency 声明为可选、不写缺省行为，已观察到的运行时省略后退化为不带货币符号的普通数字。同一 ISO 币种在不同系统地区下的显示形式也不同（如 $ 与 US$），只看格式化器配置定不了最终字符串。
+ES Intl 与 @ohos.intl 声明都规定 style 为 currency 时必须提供 ISO-4217 的 currency，没有默认值；省略后当前运行时退化为普通数字（4.99），不是本地货币串。补上 USD 后，在非美区系统语言下又可能显示 US$ 而不是基线的 $。来源中巡检修复者已读到这两处声明，也确认查不到 region→币种接口，仍删掉 currency 来表示“随 locale”，价格从此没有货币符号；返修先补 USD 得到 US$，最后按基线显示改为固定 $ 前缀加两位小数。
 
 ## 做法
 
 1. style: 'currency' 时总是显式传 currency（ISO-4217）；需求要求随 locale 选币种而 SDK 没有推导接口时，写明 region→币种映射，或把无法推导的缺口回报给派工者，不以省略参数表示已满足。
-2. 金额的最终显示形式以当前迁移基线或规格的可观察字符串为准，所有价格入口共用同一个格式化函数；单一币种应用在目标系统地区下得不到基线形式时，在该函数内按基线字符串定形。
+2. 金额的最终显示形式（$4.99、US$4.99 等）以当前迁移基线或规格的可观察字符串为准，所有价格入口共用同一个格式化函数；单一币种应用在目标系统语言下拿不到基线形式时，可按基线直接格式化（来源最终采用 $ 前缀加 toFixed(2)）。
 
 ## 可选检查
 
-- 无法运行时，用一个样例金额对照基线期望字符串核对格式化结果，样例写明币种与 locale。
+- 无法运行时，用一个样例值（如 499 分）对照基线期望字符串核对格式化结果。
 
 来源支持：1 张卡 · 1 次迁移 · 1 个应用
 

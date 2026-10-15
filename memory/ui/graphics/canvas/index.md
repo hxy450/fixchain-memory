@@ -18,18 +18,12 @@
 - [View.invalidate 迁成唯一的“请求下一帧绘制一次”入口：待决标志合并请求，用 postFrameCallback 调度，只在动画活跃时续帧](lesson-27d9e16a099c2fb437eb.lesson.md)
   - 时机：渲染与动画实现阶段，为 Canvas 自绘视图确定帧循环、invalidate 重绘入口与停止条件时
   - 情境：源端自定义 View 在 onDraw 尾部按动画状态 invalidate()（加 tick）自续帧，业务层也用 invalidate() 请求重绘；目标在 ArkUI Canvas 上全量重绘，需要选下一帧调度 API，并处理同帧多次请求、动画结束停止和页面销毁。
-- [getTextBounds 取的文字高度按 actualBoundingBox 两项各自 ceil 映射，不用 fontBoundingBox 行框](lesson-d525795f545b1b16e77a.lesson.md)
-  - 时机：规格提取阶段写 Paint 文字度量到 TextMetrics 的映射行时；渲染实现阶段按映射计算 Canvas 文字行高、行距或自适应字号时
-  - 情境：源端自绘 View 用 Paint.getTextBounds(text, start, end, Rect) 取一段具体字符的墨迹包围盒，再用 rect.height() 定行高或间距（如标签与数值的行距、自适应字号循环）；目标用 CanvasRenderingContext2D.measureText 返回的 TextMetrics 计算。
-  - 例外：源端用的是 Paint.ascent()/descent()/getFontMetrics() 的字体级度量：按字体级基线修正实测选字段
-- [把预烘焙位图改为每帧矢量绘制前，保留位图隐含的取值时机与缩放语义：烘焙时读取的状态留快照，拉伸的全部属性按比例缩放](lesson-046c8bbb304684669060.lesson.md)
+- [把预烘焙位图改为每帧矢量绘制前，保留位图隐含的取值时机与缩放语义：烘焙时读取的状态留快照，setBounds 拉伸的全部属性按比例缩放](lesson-046c8bbb304684669060.lesson.md)
   - 时机：渲染实现阶段，用每帧矢量绘制替代源端预渲染的背景位图或 tile 位图缓存，并准备声称“行为等价”时
-  - 情境：源端在 onSizeChanged 等时机把受状态字段控制的元素（如说明文案、提示层）和圆角底、文字等烘焙进 Bitmap，onDraw 只 drawBitmap，或在缩放类动画中用 setBounds((int)…) 整体拉伸位图、按 int 位移绘制；这些状态在位图生成后仍会被其他流程改写；目标改为 Canvas 每帧 roundRect、fillText 等矢量绘制。
-  - 例外：只涉及每帧起始画面（是否清屏、透明区文字叠画变粗）：按画布跨帧保留与每帧清屏的规则处理
+  - 情境：源端在 onSizeChanged 等时机把受状态字段控制的元素（如首启说明）和圆角底、数字等烘焙进 Bitmap，onDraw 只贴图，或在出生、合并动画中用 setBounds((int)…) 整体拉伸、按 int 位移绘制；这些状态在位图生成后仍会被其他流程改写；目标改为 Canvas 每帧 roundRect、fillText 等矢量绘制。
 - [按 Android px 公式移植自绘 View 时先定画布上下文单位：用 LengthMetricsUnit.PX 构造，让字号、测宽、几何与触点同域，dp 常量与 vp 输入在边界换算](lesson-7083c6ad69ab19ad17dd.lesson.md)
   - 时机：规格提取与渲染实现阶段，创建 CanvasRenderingContext2D，并为字体串、measureText、几何公式、触点坐标、窗口避让值和 dp 常量确定单位域时
   - 情境：源端是 Android 自定义 View：onSizeChanged 给出 int px 尺寸，Paint.setTextSize/measureText 在 px 域推导字号与派生间距，drawable 圆角等常量以 dp 声明；目标用 ArkUI Canvas 逐式移植，规格或已有代码对画布单位的表述不一致（字体串写 px、映射写 vp、触点写 px 域）。
-- [源端用 Paint.ascent/descent 做文字基线修正时，实测选与 hhea 吻合的 TextMetrics 字段，源式取整原样保留](lesson-f876887b216b6caf9f39.lesson.md)
-  - 时机：渲染实现阶段，把源端 Canvas 文字居中或基线修正（如 (int)((descent+ascent)/2)）移植为 measureText 的 TextMetrics 计算，或决定能否关闭“需实测校正”的字段映射标记时；规格提取阶段写字体级基线映射时
-  - 情境：源端以 Paint.ascent()/descent()（字体级上/下伸，ascent 为负）或 getFontMetrics() 计算基线偏移，供数字、标题、说明等文字使用；目标用 CanvasRenderingContext2D.measureText 返回的 fontBoundingBox*、emHeight*、actualBoundingBox* 取等价度量，并注册了自定义字体。
-  - 例外：源端用 Paint.getTextBounds(…, Rect) 或 rect.height() 取一段字符的墨迹包围盒：直接对应 actualBoundingBox*，不做 hhea 实测
+- [移植 Paint 文字度量前先按源 API 分层：getTextBounds/Rect 包围盒直接对应 actualBoundingBox*（各自 Math.ceil）；Paint.ascent/descent 字体级基线修正才实测选与 hhea 吻合的 TextMetrics 字段，不凭字段名或先例推定；源式取整原样保留](lesson-f876887b216b6caf9f39.lesson.md)
+  - 时机：渲染实现阶段，把源端 Canvas 文字居中或基线修正（如 (int)((descent+ascent)/2)）移植为 measureText 的 TextMetrics 计算，或决定能否关闭“需实测校正”的字段映射标记时；规格提取阶段写文字基线映射时；把 Paint.getTextBounds 取得的文字高度映射为行高或间距时
+  - 情境：源端以 Paint.ascent()/descent()（字体级上/下伸，ascent 为负）计算基线偏移，供数字、标题、说明等文字使用；目标用 CanvasRenderingContext2D.measureText 返回的 fontBoundingBox*、emHeight*、actualBoundingBox* 取等价度量，并注册了自定义字体。 也包括源端用 Paint.getTextBounds(text, start, end, Rect) 取一段具体字符的墨迹包围盒高度来定行高或间距（如 HUD 标签与数值的行距、自适应字号循环）。

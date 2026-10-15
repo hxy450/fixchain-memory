@@ -1,6 +1,6 @@
 # 本地文件路径接到 ArkUI Video 前规范成 file:// URI，并分清缓存接口返回的是路径还是播放地址
 
-ID：`lesson-2b3d45c1a89dc1ead7e3` · 版本：3
+ID：`lesson-2b3d45c1a89dc1ead7e3` · 版本：1
 
 [本主题](index.md)
 
@@ -14,7 +14,7 @@ ID：`lesson-2b3d45c1a89dc1ead7e3` · 版本：3
 
 ## 原因
 
-ArkUI Video 播放本地文件需要 URI；裸沙箱路径传入后页面没有视频，补 file:// 前缀后正常播放。映射参考里 Video({ src: '/sdcard/video.mp4' }) 这类裸路径示例会误导；缓存接口同时提供“文件路径”与“播放地址”两个方法时，接线容易取错。
+ArkUI Video 播放本地文件需要 URI；裸沙箱路径传入不报错，只是不渲染。映射参考里 Video({ src: '/sdcard/video.mp4' }) 这类裸路径示例会误导。来源中页面写者当时还看不到缓存接口，后来的接线者读到了“路径与播放地址”的接口说明，仍把返回裸路径的方法接进参数。
 
 ## 做法
 

@@ -8,7 +8,7 @@
 
 - [Kit API 的 catch 值按 BusinessError 取 message 与 code，网络失败按错误码映射源错误类型](lesson-b19162077a2ab886d809.lesson.md)
   - 时机：规格提取与服务实现阶段，迁移源端按异常类型分类、以 getMessage() 记录详情的 catch 分支时
-  - 情境：目标 catch 到的是网络、文件、数据库等 Kit API 抛出或拒绝的 BusinessError：@ohos.base.d.ts 声明它 extends Error，运行时可能是 Error 实例，也可能是只含 code、message 的普通对象；源端按 IllegalArgumentException、SocketTimeoutException、UnknownHostException 等异常类型分支；@ohos.net.http 的失败码为 2300000 加 libcurl 码。
+  - 情境：目标 catch 到的是网络、文件、数据库等 Kit API 抛出或拒绝的 BusinessError（含 code、message 的普通对象，不是 Error 实例）；源端按 IllegalArgumentException、SocketTimeoutException、UnknownHostException 等异常类型分支；@ohos.net.http 的失败码为 2300000 加 libcurl 码。
 - [单线程写执行器改为 Promise 串行队列时，为重入调用提供不经队列的内部版本](lesson-cdc6de4ebcdeeadc287c.lesson.md)
   - 时机：数据层实现阶段，把源端单线程 Executor（调用方已在执行线程即同步内联）移植为异步串行队列时
   - 情境：源端写方法在已处于执行线程时直接内联执行嵌套调用（如按线程名判断后 runnable.run()）；目标队列任务体内会再调用同类公开写方法。
@@ -26,4 +26,4 @@
   - 情境：源端在同一方法里依次同步调用两个平台方法且后者依赖前者已生效（如 Vibrator.cancel() 后立刻 vibrate(pattern)）；目标 API（如 vibrator.stopVibration/startVibration）返回 Promise，网关接口按规格声明为 void，调用方仍按源顺序逐个调用。
 - [需授权、需初始化或依赖定位坐标的仓库方法，前置条件缺失时按源端分支处理（改走其他查询，或走与声明一致的错误通道），不静默返回空集合](lesson-5c703b4b1128e37dbef5.lesson.md)
   - 时机：数据层实现阶段，为依赖上下文与运行时权限的枚举、查询类仓库方法编写前置失败分支（上下文未初始化、未授权、枚举失败）时；为依赖定位的附近列表确定无坐标、未授权时的查询分支与结果状态时
-  - 情境：仓库方法依赖 UIAbilityContext 与运行时权限（如媒体读取）；规格或源端要求失败时由调用方显示错误提示，调用方靠捕获异常区分“出错”与“确实为空”的空态引导；方法还会把结果写入缓存。也包括依赖定位的附近列表：源端有权限且有坐标时按坐标加半径搜索，无权限或坐标未知时改按当前城市等条件查询；目标坐标可能未知，决策要求失败保持显式错误、不伪造空成功，而目标页面没有区分“出错”与“真空”的状态，空列表直接进入空态文案。
+  - 情境：仓库方法依赖 UIAbilityContext 与运行时权限（如媒体读取）；规格或源端要求失败时由调用方显示错误提示，调用方靠捕获异常区分“出错”与“确实为空”的空态引导；方法还会把结果写入缓存。也包括依赖定位的附近列表：源端有权限且有坐标时按坐标加半径搜索，无权限或坐标未知时仍按当前城市查询；目标坐标可能未知，决策要求失败保持显式错误、不伪造空成功，页面只有加载中、错误信息与列表三个状态，空列表落入预写的“附近无站点”空态。

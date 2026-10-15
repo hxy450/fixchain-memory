@@ -1,6 +1,6 @@
-# 单视图对父居中、兄弟单向悬挂时（单向约束、layout_below）用 RelativeContainer 或下挂层复刻，不用 Column 整组居中
+# 单视图对父容器居中、兄弟单向悬挂时（ConstraintLayout 单向约束、RelativeLayout layout_below），用 RelativeContainer 或不占行高的下挂层复刻，不用 Column 整组居中
 
-ID：`lesson-e607a28fcd91acd2b40f` · 版本：5
+ID：`lesson-e607a28fcd91acd2b40f` · 版本：4
 
 [本主题](index.md)
 
@@ -15,11 +15,10 @@ ID：`lesson-e607a28fcd91acd2b40f` · 版本：5
 ## 例外与边界
 
 - 兄弟之间有双向约束构成 chain 时，按 chain 语义（chainStyle）另行转换，不适用本条
-- 子视图以 constraintBottom_toBottomOf=parent 贴底，或以 constraintBottom_toTopOf 锚在兄弟上方（不是居中）时，按锚点边距的规则转换
 
 ## 原因
 
-只有相邻视图互相双向约束才构成 chain；单向悬挂的兄弟不参与居中，被居中的只有锚定 parent 的那个视图。改成 Column 整组居中后，该视图中心会上移 (间距 + 兄弟高度) / 2；把同时约束到 parent 首尾的信息块放进带 Blank() 的 Row，又会被推到一侧。
+只有相邻视图互相双向约束才构成 chain；单向悬挂的兄弟不参与居中，被居中的只有锚定 parent 的那个视图。改成 Column 整组居中后，该视图中心会上移 (间距 + 兄弟高度) / 2。来源中规格把这种布局概括成“垂直居中链”：结构段写对了锚点，决策表却选了 Column 居中，项目级映射基线也写成“居中约束链 → Column 居中”，实现照做。另一应用中，城市卡的天气图标与描述块同时约束到 parent 的 start 与 end、在整卡中居中，转换者却把它放进 Row 里 Blank() 之后，天气信息被推到右侧、挨着温度。
 
 ## 做法
 

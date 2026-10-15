@@ -1,6 +1,6 @@
-# 共享组件挂到哪些页面，以源码里的实际挂载为准（含布局声明的 Fragment 与导航图）；模板示例和上游说法不是依据
+# 共享组件挂到哪些页面，以源码里的宿主容器与 replace/add 调用为准；模板示例和上游说法不是依据
 
-ID：`lesson-34c8ac69ad849f8c24e1` · 版本：4
+ID：`lesson-34c8ac69ad849f8c24e1` · 版本：1
 
 [本主题](index.md)
 
@@ -10,7 +10,7 @@ ID：`lesson-34c8ac69ad849f8c24e1` · 版本：4
 
 ## 适用情境
 
-源端共享组件只被个别宿主挂载：宿主代码把 Fragment replace/add 进自己布局的容器 id，主布局没有对应容器；流水线模板示例、功能索引或派工里写着“主页(某组件)常驻”一类通用说法。
+源端共享组件只被个别 Activity 布局的容器 replace/add 挂载；流水线模板示例、功能索引或派工里写着“主页(某组件)常驻”一类通用说法。
 
 ## 原因
 
@@ -18,8 +18,8 @@ ID：`lesson-34c8ac69ad849f8c24e1` · 版本：4
 
 ## 做法
 
-1. 每条“组件 → 页面”关系先在源码中找到实际挂载，以下都算：宿主代码对容器 id 的 replace/add 调用；布局里的静态 <fragment>，由 FragmentManager 按 class 或 android:name 直接实例化（android-36.1 android/app/FragmentManager.java 的 onCreateView）；AndroidX FragmentContainerView 的 android:name，加载布局时由框架创建该 Fragment 并提交添加事务（androidx-main FragmentContainerView.kt 类注释，2026-10-15 访问）。android:name 是 NavHostFragment 时，沿 app:navGraph 或代码里的 setGraph 找到导航图，再按导航调用和实际可达路径确定各目的地挂在哪个宿主；图里声明了目的地只说明导航关系，不代表它常驻在宿主的每个页面。都找不到才不写。
-2. 上游索引或派工声称某页有某组件、源码却找不到对应挂载时，登记为待决冲突交裁决；不要把验收锚点改挂到无关源行来保住这条要求。
+1. 每条“组件 → 页面”关系都先在源码中找到宿主布局的容器 id 与 replace/add 调用再写；找不到就不写。
+2. 上游索引或派工声称某页有某组件、源布局却没有对应容器时，登记为待决冲突交裁决；不要把验收锚点改挂到无关源行来保住这条要求。
 3. 页面转换时派工要求的槽位在源布局中不存在，在回报里列为冲突并请求确认，不自行放到“常见位置”。
 
 来源支持：1 张卡 · 1 次迁移 · 1 个应用

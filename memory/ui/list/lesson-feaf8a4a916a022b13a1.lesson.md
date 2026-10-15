@@ -1,6 +1,6 @@
 # 列表项滑动操作挂在 ListItem 上；把行内容抽成 @Builder 时核对容器专属属性实际接在哪个组件
 
-ID：`lesson-feaf8a4a916a022b13a1` · 版本：2
+ID：`lesson-feaf8a4a916a022b13a1` · 版本：1
 
 [本主题](index.md)
 
@@ -14,7 +14,7 @@ ID：`lesson-feaf8a4a916a022b13a1` · 版本：2
 
 ## 原因
 
-swipeAction 是 ListItem 的属性，接在 builder 根节点（Row 等）的属性链末尾时编译报 Property 'swipeAction' does not exist on type 'RowAttribute'；计划或规格写对了宿主，不代表输出也接在 ListItem 上。
+swipeAction 是 ListItem 的属性，接在 builder 根节点（Row 等）的属性链末尾时编译报 Property 'swipeAction' does not exist on type 'RowAttribute'。来源的规格、映射参考与写者自己的计划都是 ListItem() { row }.swipeAction(...)，输出却接在了 builder 的根 Row 上；自检只核了 SwipeActionItem 的字段形状，没核挂载宿主。
 
 ## 做法
 

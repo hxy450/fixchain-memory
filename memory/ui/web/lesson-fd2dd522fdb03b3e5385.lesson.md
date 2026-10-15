@@ -1,6 +1,6 @@
-# 整页 ScrollView 内 wrap_content WebView：高度首选 layoutMode(FIT_CONTENT)，自身不滚另行锁定
+# 整页 ScrollView 内的 wrap_content WebView 转 ArkWeb：分别实现“高度跟随文档”和“Web 自身不滚”，锁 H5 滚动并对后加载内容复测
 
-ID：`lesson-fd2dd522fdb03b3e5385` · 版本：3
+ID：`lesson-fd2dd522fdb03b3e5385` · 版本：1
 
 [本主题](index.md)
 
@@ -14,13 +14,12 @@ ID：`lesson-fd2dd522fdb03b3e5385` · 版本：3
 
 ## 原因
 
-整页 ScrollView 以 UNSPECIFIED 测量子项，wrap_content WebView 的高度因此等于文档高度，文档级没有可滚范围；wrap_content 只是测量约束，H5 内 overflow 可滚的元素仍会自己滚。目标里 nestedScroll(PARENT_FIRST) 只决定父子滚动的先后，外层滚到边界后 Web 仍可内滚；onPageEnd 只触发一次，图片等后加载内容撑高文档后不会再测，固定高度或单次测高都会留下 Web 内部滚动区。
+wrap_content 同时意味着高度等于内容、Web 不消费滚动。nestedScroll(PARENT_FIRST) 只决定父子滚动的先后，外层滚到边界后 Web 仍可内滚；onPageEnd 只触发一次，图片等后加载内容撑高文档后不会再测，固定高度或单次测高都会留下 Web 内部滚动区。来源中修复者读到了源布局并自述“自身永不内滚”，首轮只在 onPageEnd 测一次高并设 PARENT_FIRST，注释称会多次触发；用户随后报告资讯区单独滑动、有滚动条，第二轮加锁滚动与多次复测才解决（竞态时序为修复者推断）。
 
 ## 做法
 
-1. 高度跟随首选 Web.layoutMode(WebLayoutMode.FIT_CONTENT)（API 11 起）配 nestedScroll，并按 web.d.ts 列出的限制判断能否采用：宽或高超过 7680 px 需创建时指定 RenderMode.SYNC_RENDER，创建后不能切换 layoutMode，不支持下拉加载更多的瀑布流页面，不能再用 height 属性改高度。
-2. 不能用 FIT_CONTENT 时手动测高：为后加载内容安排复测或持续跟踪文档高度变化，取最大值更新高度，不只在 onPageEnd 测一次；写“多次自适应”一类注释前先核对事件语义。
-3. Web 自身不滚另行落实：在 H5 侧锁定文档滚动（如注入脚本给 html/body 设 overflow:hidden），并查 H5 内部是否有 overflow 可滚元素、按源端行为处理；nestedScroll(PARENT_FIRST) 不能代替不自滚。
+1. 把两条约束分别实现：高度取文档高度并随内容变化更新；同时在 H5 侧锁定滚动（如注入脚本给 html/body 设 overflow:hidden）或用其他方式关闭 Web 自身滚动。nestedScroll(PARENT_FIRST) 不能代替不自滚。
+2. 用 onPageEnd + scrollHeight 测高时，为后加载内容安排复测（如 0/1000/2500ms 取最大值）或持续跟踪；写“多次自适应”一类注释前先核对事件语义。
 
 ## 可选检查
 

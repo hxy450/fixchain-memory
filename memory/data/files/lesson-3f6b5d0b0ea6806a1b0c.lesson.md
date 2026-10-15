@@ -1,6 +1,6 @@
 # fileIo.mkdirSync 对已存在目录会抛 13900015：翻译“确保目录存在”时先判断或只放过该错误码，覆盖写先处理已存在目标
 
-ID：`lesson-3f6b5d0b0ea6806a1b0c` · 版本：3
+ID：`lesson-3f6b5d0b0ea6806a1b0c` · 版本：1
 
 [本主题](index.md)
 
@@ -14,12 +14,12 @@ ID：`lesson-3f6b5d0b0ea6806a1b0c` · 版本：3
 
 ## 原因
 
-mkdirSync(dir, true) 的“递归”不等于“已存在即成功”：@ohos.file.fs.d.ts 中 mkdirSync(path, recursion) 声明 13900015 File exists，目录已存在时传 true 也会抛出。移动与复制的覆盖行为由 mode 决定：同一 d.ts 中 moveFileSync 的 mode 默认 0、覆盖同名文件，传 1 才在目标存在时抛错；copyFileSync 只支持 mode 0（覆盖）。参考模板常把裸 mkdirSync(dir, true) 写成幂等步骤；建目录、删旧文件、移动放在同一个 try 里时，第二次执行会因建目录抛错走进失败分支。
+mkdirSync(dir, true) 的“递归”不等于“已存在即成功”，目录已存在时抛 13900015；moveFileSync 默认模式对已存在目标也会失败。建目录、删旧文件、移动放在同一个 try 里时，第二次执行必然走进失败分支（报“下载失败”）。来源中生成者读到的源码表明目录会复用，但所加载的下载 skill 把裸 mkdirSync(dir, true) 写成标准步骤，错误码表只列了目录不存在的情况。
 
 ## 做法
 
 1. 翻译“确保目录存在”时先用 fileIo.accessSync(dir) 判断，或只在捕获 code 13900015 时继续，不把 mkdirSync(dir, true) 当作幂等调用。
-2. 源端是覆盖写入时，移动或复制前确认已存在目标的处理：moveFileSync 保持 mode 0（默认覆盖），不改成 1；源端先删后写时先 unlinkSync 目标。把建目录、删旧、移动分开处理和记录，避免一个 catch 把可恢复的“已存在”判为整链失败。
+2. 源端是覆盖写入时，移动或复制前显式处理已存在目标（unlinkSync 或确认 mode 语义）；把建目录、删旧、移动分开处理和记录，避免一个 catch 把可恢复的“已存在”判为整链失败。
 3. 在固定目录里重复执行的下载、设置链，写完按“第二次执行、目录与同名文件都已存在”走查一遍。
 
 来源支持：1 张卡 · 1 次迁移 · 1 个应用

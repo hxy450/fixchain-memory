@@ -1,26 +1,25 @@
-# 源端图片用 LightingColorFilter(mul, 0) 压暗时按通道乘色实现，不以半透明遮罩近似；同链路的模糊变换按源参数换算
+# 源端图像模糊、乘法压暗与折叠态着色按参数等价实现
 
-ID：`lesson-55cac970ada4ca8fd3f1` · 版本：3
+ID：`lesson-55cac970ada4ca8fd3f1` · 版本：1
 
 [本主题](index.md)
 
 ## 何时使用
 
-界面实现阶段，迁移对背景图或封面使用 LightingColorFilter 乘色压暗（常与图片模糊变换一起）的页面时
+界面实现阶段，迁移折叠头部等使用图片模糊、LightingColorFilter 压暗和按折叠状态切换工具栏图标颜色的页面时
 
 ## 适用情境
 
-源端对 ImageView 或图片加载库载入的图片 setColorFilter(LightingColorFilter(mul, add))，add 为 0，常配合 BlurTransformation 一类模糊变换；目标用 Image 组件显示同一图片。
+源背景图经模糊变换与 LightingColorFilter(mul, 0) 处理，工具栏图标由专门的着色管理类按折叠阈值切换颜色。
 
 ## 原因
 
-LightingColorFilter 按通道计算 R' = R × mul.R / 255 + add.R（G、B 同理），不改 alpha（android/graphics/LightingColorFilter.java 注释）。纯黑覆盖层 opacity = 1 − m/255 只在 mul 三通道相等（R=G=B=m）且被盖区域不透明时等价：彩色乘数会丢掉色偏，透明像素也会被压暗，覆盖层还会压暗叠在图上的其他内容。以“无对等能力”为由只用半透明遮罩近似，视觉明显偏离且不易被后续发现。
+以“无对等图片模糊链”为由只用半透明遮罩近似、用固定次要色代替状态着色，视觉明显偏离且不易被后续发现。
 
 ## 做法
 
-1. 对 Image 用 colorFilter 的 4×5 颜色矩阵逐通道乘色：new ColorFilter([r/255,0,0,0,0, 0,g/255,0,0,0, 0,0,b/255,0,0, 0,0,0,1,0])，r、g、b 取 mul 的三个通道，alpha 行保持不变（image.d.ts 的 colorFilter、units.d.ts 的 ColorFilter）。
-2. mul 为灰色（R=G=B=m）且图片区域不透明时，也可用 opacity = 1 − m/255 的纯黑覆盖层，覆盖层只盖图片，不盖叠在图上的文字与按钮。
-3. 同一图片还有模糊变换时用 blur 实现，参数取自源模糊变换，数值单位按同主题 Modifier.blur 单位经验先核。
+1. 模糊用 blur；LightingColorFilter(mul, 0) 用 opacity = 1 − mul/255 的纯黑覆盖层表达乘法压暗。
+2. 写前读取规格锚点中的状态着色实现类，移植折叠阈值与展开、折叠两态颜色。
 
 来源支持：2 张卡 · 1 次迁移 · 1 个应用
 

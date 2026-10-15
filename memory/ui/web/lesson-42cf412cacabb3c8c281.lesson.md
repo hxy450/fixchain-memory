@@ -1,6 +1,6 @@
-# 源 WebView 未设 WebViewClient 时外链交给外部浏览器：Want 带 browsable 实体，失败再由 Web 加载
+# 源 WebView 未设 WebViewClient 时链接按 Android 默认交给外部浏览器：拦截非本地 URL，用 viewData + entity.system.browsable 拉起，失败再由 Web 自行加载；页内锚点与本地资源放行
 
-ID：`lesson-42cf412cacabb3c8c281` · 版本：2
+ID：`lesson-42cf412cacabb3c8c281` · 版本：1
 
 [本主题](index.md)
 
@@ -10,15 +10,15 @@ ID：`lesson-42cf412cacabb3c8c281` · 版本：2
 
 ## 适用情境
 
-源 Activity 只 findViewById 后 loadUrl 本地 asset HTML，没有 setWebViewClient，公共基类与初始化工具也没有安装 Client；HTML 含页内锚点与外部 http(s) 链接；目标拦截外链后用 startAbility 打开，工程其他页面可能照抄同一个外链函数。
+源 Activity 只 findViewById 后 loadUrl 本地 asset HTML，没有 setWebViewClient；HTML 含页内锚点与外部 http(s) 链接；目标拦截外链后用 startAbility 打开，工程其他页面可能照抄同一个外链函数。
 
 ## 例外与边界
 
-- 源端设置了 WebViewClient（含不覆写 shouldOverrideUrlLoading 的默认实例，此时链接在 WebView 内加载），或公共基类、初始化工具装了 Client：按实际实现处理；覆写了 shouldOverrideUrlLoading 的见同主题导航拦截经验
+- 源端设置了 WebViewClient 并覆写 shouldOverrideUrlLoading：按其逻辑实现
 
 ## 原因
 
-Android WebView 没有 WebViewClient 时，跨文档链接交给能处理 BROWSABLE 的外部应用，没有可处理的应用时才由 WebView 自行加载；目标 Web 默认在组件内导航。外链 Want 缺少 browsable 实体，不是拉起默认浏览器的标准写法，被其他页面“对齐”复用后同样带出。
+Android WebView 没有 WebViewClient 时，跨文档链接交给能处理 BROWSABLE 的外部应用，没有可处理的应用时才由 WebView 自行加载；目标 Web 默认在组件内导航。外链 Want 缺少 browsable 实体，不是拉起默认浏览器的标准写法，被其他页面“对齐”复用后同样带出。来源中帮助页已拦截 http(s) 并交给 viewData Want，但没有 browsable 实体、也没有失败回退，另一页面按“与该页对齐”原样复用。
 
 ## 做法
 

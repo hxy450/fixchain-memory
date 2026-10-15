@@ -1,6 +1,6 @@
 # “页面零硬编码色值”只禁止字面色值，不禁止用 $r 引用语义色
 
-ID：`lesson-2e4279c4b82f06af64fd` · 版本：3
+ID：`lesson-2e4279c4b82f06af64fd` · 版本：1
 
 [本主题](index.md)
 
@@ -14,7 +14,7 @@ ID：`lesson-2e4279c4b82f06af64fd` · 版本：3
 
 ## 原因
 
-“零硬编码”的目的是把色值集中在 base/dark 资源里切换，$r('app.color.x') 引用恰好满足它。把它读成“不得设置颜色属性”，控件就退回平台默认色。
+“零硬编码”的目的是把色值集中在 base/dark 资源里切换，$r('app.color.x') 引用恰好满足它。把它读成“不得设置颜色属性”，控件就退回平台默认色。来源中实现者已注意到按钮默认蓝与源端紫不同，却因这条约束放弃设置颜色。
 
 ## 做法
 
@@ -25,5 +25,5 @@ ID：`lesson-2e4279c4b82f06af64fd` · 版本：3
 
 ## 来源（按需复核）
 
-- [case-97a40a9d2dce65dc9f9c](../../../store/cases/case-97a40a9d2dce65dc9f9c/6f204ffd524b55f7ea8cef5e4a2e75cc8330004f202fd635570857c43cef5a2a.json) · 结论：diagnosis, recommendation:2, recommendation:3, recommendation:1
+- [case-97a40a9d2dce65dc9f9c](../../../store/cases/case-97a40a9d2dce65dc9f9c/6f204ffd524b55f7ea8cef5e4a2e75cc8330004f202fd635570857c43cef5a2a.json) · 结论：diagnosis, recommendation:2, recommendation:3
   卡片版本：`6f204ffd524b55f7ea8cef5e4a2e75cc8330004f202fd635570857c43cef5a2a`

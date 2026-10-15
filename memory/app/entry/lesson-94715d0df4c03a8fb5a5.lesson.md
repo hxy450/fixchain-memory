@@ -1,39 +1,38 @@
-# 源 Activity 未声明 configChanges 时，目标在配置变化回调里按源端重建时序刷新资源文案与一次性状态
+# 源 Activity 未声明 configChanges 时，旋转（未被 screenOrientation 锁定）、语言、深浅色、字号、显示大小变化都会重建它：目标 UIAbility 与页面不重建，逐页按源端重建时序显式处理——直接 show() 的非托管对话框关闭、托管对话框保留、文案与一次性状态刷新
 
-ID：`lesson-94715d0df4c03a8fb5a5` · 版本：4
+ID：`lesson-94715d0df4c03a8fb5a5` · 版本：2
 
 [本主题](index.md)
 
 ## 何时使用
 
-规格提取阶段把 Activity 生命周期回调与 Manifest 属性映射为目标生命周期契约时；实现阶段接线 UIAbility、页面生命周期与资源文案、一次性状态的缓存时
+规格提取阶段把 Activity 生命周期回调与 Manifest 属性映射为目标生命周期契约时；实现阶段接线 UIAbility、页面生命周期，以及资源文案与一次性状态的缓存时；为只有静态列表与弹窗的页面写配置变化行为时
 
 ## 适用情境
 
-源 Activity 在 AndroidManifest 中未声明 android:configChanges（或声明里缺 locale、uiMode、fontScale、density 等项），实现了 onSaveInstanceState/savedInstanceState 恢复分支，或在 View 构造、onSizeChanged、绘制时读取资源文案与 firstRun 等一次性状态；目标 HarmonyOS UIAbility 在语言、深浅色、字号、显示大小变化时不重建，只回调 onConfigurationUpdate 或发出 display 'change'。
-
-## 例外与边界
-
-- 源 Activity 已在 configChanges 中声明对应项、在 onConfigurationChanged 自行处理时（ActivityInfo.configChanges：声明的项由 Activity 自行处理、不重建），按其处理代码迁移
-- 边界：直接 show() 的非托管对话框在配置变化时的关闭路径见非托管对话框一条；深浅色切换中的命令式取色、系统栏与画布重解析按应用内主题切换的经验；跟随系统字号的 configuration 声明按大字体裁定的经验
+源 Activity 在 AndroidManifest 中未声明 android:configChanges，实现了 onSaveInstanceState/savedInstanceState 恢复分支，或在 View 构造、onSizeChanged、绘制时读取资源文案与 firstRun 等一次性状态；目标 HarmonyOS UIAbility 在语言、深浅色、字号、显示大小变化时不重建，只回调 onConfigurationUpdate 或发出 display 'change'。 也包括页面用 AlertDialog.Builder.show()/Dialog.show() 直接弹出非托管对话框（不经 DialogFragment、showDialog 或 DialogPreference），目标用页内状态驱动的浮层承载，页面没有动态文案。
 
 ## 原因
 
-未声明 configChanges 时，除被 screenOrientation 锁定的旋转外，语言、uiMode、fontScale、densityDpi、mcc/mnc 变化都会销毁并重建 Activity：旧实例先存档（onSaveInstanceState，含托管对话框状态），再销毁并关闭窗口，新实例重新构造 View、重置一次性状态，再读档并按新配置重读文案、重算布局（Android SDK sources/android-36.1 的 ActivityThread.handleRelaunchActivityInner 与 Activity.performSaveInstanceState）。目标 UIAbility 与页面不重建；把 onSaveInstanceState 只当作进程回收恢复，或假设切语言会触发尺寸回调，切换后仍显示旧文案与旧状态。
+未声明 configChanges 时，除被 screenOrientation 锁定的旋转外，语言、uiMode、fontScale、densityDpi、mcc/mnc 变化都会销毁并重建 Activity：旧实例存档，新 View 重新构造并重置一次性状态，再读档、按新配置重读文案与重算布局，对话框随旧窗口消失。把 onSaveInstanceState 只当作进程回收恢复，或假设切语言会触发尺寸回调，目标端切语言后仍显示旧文案与旧状态。重建后直接 show() 的非托管对话框随旧窗口消失，DialogFragment、showDialog、DialogPreference 托管的对话框会恢复；目标页面旋转时不重建，页内浮层状态一直为真，对话框残留。规格只把“无 configChanges、无 screenOrientation”记成溯源事实时，没有人写关闭路径。
 
 ## 做法
 
-1. 规格逐个 Activity 读 configChanges 与 screenOrientation，把未声明的配置变化写成生命周期验收，并写明源端重建时序：存档（含托管对话框状态）→ 旧实例销毁、窗口关闭 → 新实例重建一次性状态 → 读档 → 按新配置重读资源、重算布局。
-2. 实现时在 EntryAbility.onConfigurationUpdate 比较相关字段（language、colorMode、fontSizeScale、fontWeightScale、screenDensity、mcc/mnc），显示大小变化另订阅 display.on('change') 比较密度，变化时显式通知页面按上述时序刷新。
-3. 源 View 在构造、尺寸变化或绘制时读取的资源文案与一次性状态，在映射中标注“随配置重建刷新”，由上述通知触发，不靠尺寸回调顺带刷新。
+1. 规格逐个 Activity（不论页面是否有动态文案）读 configChanges 与 screenOrientation；未声明时把旋转与上述配置变化即重建写成生命周期验收：列出重建后哪些可见状态消失（直接 show() 的对话框）、哪些恢复（托管对话框），并写明重建时序（关闭对话框 → 存档 → 重建一次性状态 → 读档 → 重读资源、重算布局）。
+2. 实现时在 EntryAbility.onConfigurationUpdate 比较相关字段（language、colorMode、fontSizeScale、fontWeightScale、screenDensity、mcc/mnc），显示大小变化另订阅 display.on('change') 比较密度，变化时显式通知页面按上述时序刷新；字号变化只有在应用声明跟随系统字号后才会下发。
+3. 源 View 在构造、尺寸变化或绘制时读取的资源文案与一次性状态，在映射中标注“随配置重建刷新”，不靠尺寸回调顺带刷新。
+4. 页内状态驱动的浮层承载源端非托管对话框时补配置变化关闭路径：页面根容器 onAreaChange 判断横竖翻转，或由 onConfigurationUpdate 通知页面，关闭这些浮层并保留列表等其余状态。
 
 ## 可选检查
 
-- 运行中分别切换系统语言、深浅色、字号与显示大小，对照两端的画布文案、帮助文案与状态栏底色。
+- 运行中分别切换系统语言、深浅色、字号与显示大小，对照两端的画布文案、帮助文案、对话框与状态栏底色。
+- 说明对话框打开时旋转，两端都只剩列表、对话框关闭。
 
-来源支持：1 张卡 · 1 次迁移 · 1 个应用
+来源支持：2 张卡 · 2 次迁移 · 2 个应用
 
 ## 来源（按需复核）
 
+- [case-b99e7061a74e82b731f3](../../../store/cases/case-b99e7061a74e82b731f3/f12a65132c4acbc8fdba01b0f8f225d439bcb9807cf4d66d5048269d53bd1c24.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3, recommendation:4
+  卡片版本：`f12a65132c4acbc8fdba01b0f8f225d439bcb9807cf4d66d5048269d53bd1c24`
 - [case-f879e05d3c9a16396341](../../../store/cases/case-f879e05d3c9a16396341/69fa6f457f66c6ff881053653eea36550ebf3f4dae7c5dcc206a8258a65007ef.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
   卡片版本：`69fa6f457f66c6ff881053653eea36550ebf3f4dae7c5dcc206a8258a65007ef`

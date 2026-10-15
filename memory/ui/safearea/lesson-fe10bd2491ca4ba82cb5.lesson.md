@@ -1,6 +1,6 @@
 # 状态栏实色避让带挂在只承担避让的外层 Column：宿主是 Tabs 时把 Tabs 包进该 Column，不在 Tabs 上挂 padding 加背景色
 
-ID：`lesson-fe10bd2491ca4ba82cb5` · 版本：2
+ID：`lesson-fe10bd2491ca4ba82cb5` · 版本：1
 
 [本主题](index.md)
 
@@ -12,14 +12,9 @@ ID：`lesson-fe10bd2491ca4ba82cb5` · 版本：2
 
 源 Activity 基类在 onCreate 设置实色状态栏；目标全屏布局，用测得的顶部避让值做 padding；宿主页的避让 padding 写在 Tabs（或 Swiper）上，TabContent 是满铺白底子页；工程其他页面已用“padding + 背景色挂在只包标题条的普通 Column”实现同一色带。
 
-## 例外与边界
-
-- 要补的是底部或普通容器上的避让时，按 lesson-0e1c846868f2683cc280 把 padding 挂在实际占据该边的层
-- 源端给根视图设状态栏 padding 并自绘底色、弹窗遮罩需压暗状态栏区时，按 lesson-baf0ca22a69e7b76f636 由页面容器承载
-
 ## 原因
 
-在 Tabs 上同时设 padding(top) 与 backgroundColor，padding 区不一定露出 Tabs 自身背景：已观察到同一构建中，用普通 Column 包裹层的页面真机显示状态栏色带，而在 Tabs 上挂 padding 与背景的宿主顶部仍是白带。具体原因（TabContent 满铺覆盖或通用背景未绘制）尚未确认，影响是这类特殊容器上的写法结果不可预期，因此沿用已验证的包裹层写法。
+在 Tabs 上同时设 padding(top) 与 backgroundColor，padding 区不一定露出 Tabs 自身背景：来源同一构建中，用包裹层写法的子页真机显示蓝色状态带，主框架顶部仍是白带；改为外层 Column 承担 padding 与背景后才显示连续色带。具体原因（TabContent 满铺覆盖或通用背景未绘制）材料未定论。写者写前已读到源端状态栏色与工程内已验证的包裹层写法，却以“与给 Tabs 设背景语义相同”否决了包裹层，该批只过了编译门。
 
 ## 做法
 

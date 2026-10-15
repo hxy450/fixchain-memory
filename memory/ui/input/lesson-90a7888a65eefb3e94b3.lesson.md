@@ -1,6 +1,6 @@
 # 透明 TextInput 叠在掩码格上时，输入层铺满格区并显式获焦，多段输入各用独立节点
 
-ID：`lesson-90a7888a65eefb3e94b3` · 版本：3
+ID：`lesson-90a7888a65eefb3e94b3` · 版本：1
 
 [本主题](index.md)
 
@@ -14,7 +14,7 @@ ID：`lesson-90a7888a65eefb3e94b3` · 版本：3
 
 ## 原因
 
-透明 TextInput 不显式设尺寸时，实际边界未必覆盖整个格区；掩码层设 HitTestMode.None 放行后，落在输入框边界外的点按会被外层卡片吞点击的 onClick 接住。defaultFocus 设定的是页面创建时的默认焦点（common.d.ts），条件挂载的子树出现时不能靠它获焦，键盘不会自动弹出。
+透明 TextInput 不设宽高时按内容宽度约为 0，掩码层设 HitTestMode.None 放行后点击仍落不到输入框，被外层卡片吞掉；defaultFocus 对条件挂载的子树不生效，键盘不会自动弹出。来源修复中还观察到持焦状态下再点输入框不会重新拉起输入法、多段共用一个受控节点并在 onChange 同拍清空会失联（未单独验证）。
 
 ## 做法
 

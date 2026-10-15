@@ -1,6 +1,6 @@
 # AVPlayer 错误只经一条通道上报，Promise 调用接 catch 并按状态表调用
 
-ID：`lesson-d0736ecd82af68edb87a` · 版本：3
+ID：`lesson-d0736ecd82af68edb87a` · 版本：1
 
 [本主题](index.md)
 
@@ -18,12 +18,12 @@ AVPlayer 同时有 on('error') 与 stateChange('error') 两条错误通道，控
 
 ## 做法
 
-1. 只用 on('error')（带具体原因）发错误事件，stateChange('error') 只做状态处理；按装载代数去重：同一次装载（及其实例）只上报一次，新的装载出现的故障照常上报。
-2. Promise 调用都接 .catch，已由 on('error') 上报的拒绝不在 catch 里重复上报；设 url/fdSrc 前确保处于 idle（否则先 reset），stop 只在 prepared/playing/paused/completed 下调用。
+1. 只用 on('error')（带具体原因）发错误事件，stateChange('error') 只做状态处理；同一实例只上报一次。
+2. 对已由 on('error') 上报的 Promise 调用接 .catch；设 url/fdSrc 前确保处于 idle（否则先 reset），stop 只在 prepared/playing/paused/completed 下调用。
 
 来源支持：1 张卡 · 1 次迁移 · 1 个应用
 
 ## 来源（按需复核）
 
-- [case-0b0bf6cdf94608e17cbb](../../../store/cases/case-0b0bf6cdf94608e17cbb/dd2e8bf60efdf5837f24bc9a7ed3431911662580e1b814ee514fb8c78df9d3e0.json) · 结论：recommendation:2, recommendation:3, diagnosis
+- [case-0b0bf6cdf94608e17cbb](../../../store/cases/case-0b0bf6cdf94608e17cbb/dd2e8bf60efdf5837f24bc9a7ed3431911662580e1b814ee514fb8c78df9d3e0.json) · 结论：recommendation:2, recommendation:3
   卡片版本：`dd2e8bf60efdf5837f24bc9a7ed3431911662580e1b814ee514fb8c78df9d3e0`
