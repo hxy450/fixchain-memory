@@ -1,6 +1,6 @@
-# 源端在入口 onCreate 首帧前按偏好设主题时，目标在 EntryAbility.onCreate 同步读取偏好并在 loadContent 前 setColorMode；恢复函数返回 Promise 而调用方不等待，就是首帧后才生效
+# 源端首帧前按偏好设主题时，入口 onCreate 同步读偏好并在 loadContent 前 setColorMode，不用不等待的异步恢复
 
-ID：`lesson-dcb3c5e66dec2d126234` · 版本：1
+ID：`lesson-dcb3c5e66dec2d126234` · 版本：2
 
 [本主题](index.md)
 
@@ -14,11 +14,11 @@ ID：`lesson-dcb3c5e66dec2d126234` · 版本：1
 
 ## 原因
 
-不等待的异步恢复在 loadContent 之后才完成，首帧先按系统深浅色绘制再切换；接线者只看到“请在 onCreate 调用”，按原样补调用点不会发现时序问题。源端把主题放在 super.onCreate 之前正是为了首帧生效，这一时机若只留在设计参考里、没写进功能契约，下游就收不到。来源中偏好 worker 自己注意到 setColorMode 是进程态、需跨启动恢复，仍写成 async 恢复并交接，收口者不等待地调用。
+ApplicationContext.setColorMode 是进程态，每次启动都要恢复；不等待的异步恢复与 loadContent、首帧之间没有声明的先后关系，可能在首帧之后才完成，界面先按系统深浅色绘制再切换。接线者只看到“请在 onCreate 调用”，按原样补调用点不会发现时序问题；源端把主题放在 super.onCreate 之前正是为了首帧生效，这一时机只留在设计参考里时下游收不到。
 
 ## 做法
 
-1. 在 EntryAbility.onCreate 的同步路径用 preferences.getPreferencesSync 读取主题键，并在 onWindowStageCreate 的 loadContent 之前完成 setColorMode。
+1. 在 EntryAbility.onCreate 的同步路径用 preferences.getPreferencesSync 读取主题键（@ohos.data.preferences.d.ts；getPreferences 返回 Promise），并在 onWindowStageCreate 的 loadContent 之前完成 setColorMode。
 2. 规格提取读入口 Activity.onCreate 时，把 super.onCreate/setContentView 之前的调用（如 setTheme）连同“首帧前生效”的时机写进功能契约，并指定目标承接位置。
 3. 为启动恢复写移交时写明时序约束（如“首帧前同步生效”）；接线者看到 onCreate 调用的是 async 函数时，先确认它是否须在首帧前完成，不只机械补调用点。
 

@@ -10,9 +10,13 @@
   - 时机：实现与收口阶段，把源端含 BuildConfig.DEBUG 的可见性或行为条件转换为 ArkTS 时
   - 情境：目标为 hvigor 构建的工程，源码目录内尚无 BuildProfile 引用，模块根目录也没有 BuildProfile.ets；规格或已批准决策写着“DEBUG 构建 || X”一类条件。
   - 例外：代码位于 HAR 模块时，裸模块名 'BuildProfile' 只在宿主 HAP 可解析，构建模式改由壳层入口注入
-- [HAR 模块不引用宿主 BuildProfile：构建模式由壳层入口注入，跨模块只从包名入口导入](lesson-6bd9ae0de39cecc06744.lesson.md)
-  - 时机：多模块拆分、插桩或结构修复阶段，把代码迁入或写入 HAR 模块、需要 DEBUG 等构建模式常量，或调整跨模块导入时
-  - 情境：工程拆为 products 壳 HAP 与 features/components 等 HAR 模块；迁移或新增的 HAR 代码需要构建模式常量（裸模块名 'BuildProfile' 只在宿主 HAP 可解析，每个 HAR 另有自己生成的 BuildProfile），或宿主页要使用其他模块的类；整包 assembleHap 能通过，IDE 按模块做 ArkTS 检查。
+- [HAR 里需要构建模式时不引用宿主的 BuildProfile：用本模块生成的 BuildProfile，须与宿主构建模式一致时由壳层入口注入](lesson-6bd9ae0de39cecc06744.lesson.md)
+  - 时机：多模块拆分、插桩或结构修复阶段，把含 DEBUG 等构建模式判断的代码迁入或写入 HAR 模块时
+  - 情境：工程拆为 products 壳 HAP 与 features/components 等 HAR 模块；迁移或新增的 HAR 代码需要构建模式常量，源端或壳层写法是 import { DEBUG } from 'BuildProfile'（裸模块名只在宿主 HAP 可解析）；每个 HAR 在模块根另有自己生成的 BuildProfile.ets；整包 assembleHap 能通过，IDE 按模块做 ArkTS 检查。
+  - 例外：代码位于 HAP 模块时，直接从宿主的 'BuildProfile' 读 DEBUG（生成文件同时导出 DEBUG 常量和兼容用的默认类 BuildProfile，hvigor-ohos-plugin 6.23.6），见 BuildConfig.DEBUG 映射一条
+- [多模块工程跨模块使用类只从模块包名入口导入：静态检测误报时不改成跨模块相对路径](lesson-de57dd7aa272b8dd8248.lesson.md)
+  - 时机：多模块工程的实现、插桩或结构修复阶段，宿主页或其他模块要使用某个 HAR 的类，或为通过静态检测调整导入路径时
+  - 情境：工程拆为壳 HAP 与多个 HAR，HAR 在 Index.ets 导出对外的类，并在使用方的 oh-package.json5 中声明依赖；结构检测或孤儿文件扫描不解析模块名，把合法的包名导入报为未使用或孤儿。
 - [规划业务模块拆分时按页面归属建表，不把功能编号或源端包分组一对一当作模块边界](lesson-99b35920e77ae01076ea.lesson.md)
   - 时机：架构重构规划阶段，确定业务模块划分及各页面、模型、服务、ViewModel 的归属时；执行搬迁时判断页面去向时
   - 情境：目标工程要从单模块拆成多个业务模块；基线功能清单或源工程按历史包名分组，同一业务对象（列表、新增、详情、编辑与数据层）分散在不同功能组或包里，详情页只经路由从另一业务的列表进入。

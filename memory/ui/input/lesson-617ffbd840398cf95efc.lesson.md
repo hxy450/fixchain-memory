@@ -1,6 +1,6 @@
-# 源端受控输入框的拒绝条件要阻止文本显示：长度上限用 TextInput.maxLength，其他拒绝条件在 onWillChange 返回 false，不靠 onChange 里不写回
+# 源端受控输入框在 onValueChange 拒绝写回时，用 onWillChange 返回 false 或 maxLength 阻止显示
 
-ID：`lesson-617ffbd840398cf95efc` · 版本：2
+ID：`lesson-617ffbd840398cf95efc` · 版本：4
 
 [本主题](index.md)
 
@@ -12,19 +12,23 @@ ID：`lesson-617ffbd840398cf95efc` · 版本：2
 
 源端 Compose TextField/OutlinedTextField 以 value = 状态受控，在 onValueChange 中按条件决定是否写回（如 if (it.length <= N) name = it，或数值格式不合法时直接 return、不回调上层）；目标端用 TextInput({ text: this.x }) 加 onChange 实现同一个输入框，可能由父组件持有值并以“父值不变即回退”设计公共输入组件。
 
+## 例外与边界
+
+- 源端的约束来自 EditText 的 digits、InputFilter 或 maxLength 等非受控过滤：按这些过滤器的语义映射
+
 ## 原因
 
-Compose 输入框只显示状态值，拒绝写回就等于拒绝输入；ArkUI TextInput 以 text 单向初始化后自己维护编辑内容，onChange 中不写回只让状态停住，输入框仍可显示超出的字符。来源两处生成者都读到了源码条件，把它原样搬进 onChange；生成期参考只给出 EditText → TextInput 与“onChange 写回加校验”的示例，没有受控语义或 maxLength 的对照。修复加 .maxLength(N) 后设备实测追加字符被拒；修复前没有做设备复现。
+Compose 输入框只显示状态值，拒绝写回就等于拒绝整次输入；ArkUI TextInput 以 text 单向初始化后自己维护编辑内容，onChange 中不写回只让状态停住，输入框仍显示被拒的字符。
 
 ## 做法
 
-1. 长度上限写成 .maxLength(N)，N 取源码条件中的值；onChange 只负责同步状态。字符集类限制可用 inputFilter。
-2. 长度与字符集之外的拒绝条件（数值格式、第二个小数点、取值范围等），在 onWillChange 中用与源码相同的判断返回 false 拒绝本次变更，框内保持宿主值；不靠父组件“不更新值”回退。
-3. 逐条列出源码 onValueChange 中的拒绝条件，确认每条在 ArkUI 侧都有能阻止输入显示的属性或回调，而不只是让状态不更新。
+1. 逐条列出源码 onValueChange 中的拒绝条件。长度上限（如 if (it.length <= N) 才写回）：.maxLength(N) 能阻止逐字输入超过 N；源端对一次超长输入（如粘贴）是整次拒绝，而 maxLength 遇超长粘贴是截断还是拒绝，text_input.d.ts 没有说明，要保持整次拒绝时，在 onWillChange（text_input.d.ts，API 15 起）里用与源码相同的判断返回 false。长度按源端 length 的计数单位（UTF-16 码元）比较。
+2. 长度之外的拒绝条件（如数值格式不合法时直接 return）在 onWillChange 中返回 false，框内保持宿主值；不靠父组件“不更新值”回退。字符集类限制可用 inputFilter，onChange 只负责同步状态。
+3. 确认每条拒绝条件在 ArkUI 侧都有能阻止输入显示的属性或回调，而不只是让状态不更新；目标 API 低于 15 时把无法整次拒绝的条件写进差异登记。
 
 ## 可选检查
 
-- 能上设备时输入 N+1 个字符，核对 TextInput 文本长度；格式类条件再输入一个非法字符（如字母或第二个小数点），核对框内文本不变。
+- 能上设备时输入 N+1 个字符，核对 TextInput 文本长度；只用 maxLength 时再粘贴一段超过 N 的文本，核对是否与源端整次拒绝一致；格式类条件再输入一个非法字符（如字母或第二个小数点），核对框内文本不变。
 
 来源支持：2 张卡 · 2 次迁移 · 2 个应用
 

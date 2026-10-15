@@ -1,6 +1,6 @@
 # 源布局有按状态切换的 Lottie 动画层时接入 @ohos/lottie 并迁移动画 JSON，不以静态兜底图静默替代
 
-ID：`lesson-ea55fe23fea47c1cfca3` · 版本：1
+ID：`lesson-ea55fe23fea47c1cfca3` · 版本：3
 
 [本主题](index.md)
 
@@ -10,16 +10,17 @@ ID：`lesson-ea55fe23fea47c1cfca3` · 版本：1
 
 ## 适用情境
 
-Android 页面在静态背景 ImageView 之上叠加 LottieAnimationView，代码按天气、昼夜等状态选择 assets/json 中的动画文件；目标工程尚无 lottie 依赖，静态兜底图已迁移。
+Android 页面在静态背景 ImageView 之上叠加 LottieAnimationView，代码按业务状态（如天气、昼夜）调用 setAnimation 选择 assets/json 中的动画文件；目标工程尚无 lottie 依赖，静态兜底图已迁移。
 
 ## 原因
 
-只迁静态兜底图、不接动画层，页面在所有状态下都显示同一张静态图，与源端的动态头图明显不符，且不会被编译或结构检查发现。来源中转换者读到 LottieAnimationView 叠层与 setBgAnimationByStatus 调用，派工还要求检测到动画信号时转入动画迁移流程，输出仍只有一张静态图，没有依赖、没有迁移 JSON、没有占位，报告也没提动画层；返修重建又改成固定夜景图，直到后来补上 lottie 组件。
+只迁静态兜底图、不接动画层，页面在所有状态下都显示同一张静态图，与源端的动态头图明显不符，且编译与结构检查都发现不了。
 
 ## 做法
 
-1. 看到 LottieAnimationView 或 setAnimation("json/...") 时，在 oh-package.json5 接入 @ohos/lottie，把 assets/json 动画文件迁入工程，并复刻状态到动画文件的选择表；静态图只作加载前或失败时的兜底。
-2. 本文件完成不了动画层时登记占位并在报告写明，不以静态图静默替代。
+1. 看到 LottieAnimationView 或 setAnimation("json/...") 时，在 oh-package.json5 接入 @ohos/lottie，把源端 assets/json 中用到的动画 JSON 迁入工程；放置目录、path 写法与加载、释放接口按安装后 oh_modules/@ohos/lottie 的 README 与类型声明确定，不凭记忆写参数。状态切换时按复刻的“状态 → 动画文件”选择表换加载的文件。
+2. 静态图按源布局保留为动画层下方的底图，不以它静默替代动画层。
+3. 先接入依赖并迁移可获得的动画 JSON；只有跨文件分工导致本文件不能接线时，才登记写明负责方与完成条件的缺口。
 
 来源支持：1 张卡 · 1 次迁移 · 1 个应用
 

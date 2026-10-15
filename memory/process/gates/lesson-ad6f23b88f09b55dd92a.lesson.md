@@ -1,6 +1,6 @@
 # 用共享组件替换页面已实现片段前（关闭孤儿组件检查或按计划收口），完整读取被替换片段并逐项比对源码视觉；组件不符先修组件，不覆写参数保留旧外观
 
-ID：`lesson-ad6f23b88f09b55dd92a` · 版本：3
+ID：`lesson-ad6f23b88f09b55dd92a` · 版本：5
 
 [本主题](index.md)
 
@@ -12,9 +12,13 @@ ID：`lesson-ad6f23b88f09b55dd92a` · 版本：3
 
 结构检查报告若干公共组件没有被任何页面引用，或计划要求页面改用某个共享组件（如统一弹窗组件）；修复者或收口者准备把页面里自写的标题行、图片、弹窗操作区等片段换成共享组件调用；共享组件与页面片段由不同 agent 生成，样式和变体完整度可能不一致，替换者可能只读了页面的部分行段。
 
+## 例外与边界
+
+- 共享件尚未就绪、页面先写页内等价实现：按待收敛项登记处理；本条用于执行替换时
+
 ## 原因
 
-“被引用”只说明接线存在，不说明组件与源码一致：替换会把组件里的偏差带进原本正确的页面，或者为保持页面旧外观给组件传覆盖参数，改掉源码的形状。来源中同一修复者两次如此：用标题缺品牌色与尾部箭头的共享集合组件替换了页面自带的正确标题；把矩形 Image 换成默认圆形的共享图片组件时，又显式传 cornerRadius: 0 维持矩形。替换前只读页面的部分行段时，看不到局部实现比共享组件更完整之处，替换会直接删掉正确实现，让共享组件里有缺陷的变体成为运行时实际显示的版本。
+“被引用”只说明接线存在，不说明组件与源码一致：替换会把组件里的偏差带进原本正确的页面；为维持页面旧外观给共享组件传覆盖参数，又会改掉源码在该调用点的形状。替换前只读页面的部分行段时，看不到局部实现比共享组件更完整之处，替换会直接删掉正确实现，让共享组件里有缺陷的变体成为实际显示的版本。
 
 ## 做法
 
@@ -26,11 +30,11 @@ ID：`lesson-ad6f23b88f09b55dd92a` · 版本：3
 
 ## 来源（按需复核）
 
-- [case-036361d8949e7daf5247](../../../store/cases/case-036361d8949e7daf5247/c13fd2d3c873845a6b80e49b91ae8bf21a59ba21b8c781410440623289dcfa79.json) · 结论：recommendation:2
+- [case-036361d8949e7daf5247](../../../store/cases/case-036361d8949e7daf5247/c13fd2d3c873845a6b80e49b91ae8bf21a59ba21b8c781410440623289dcfa79.json) · 结论：recommendation:1, recommendation:2
   卡片版本：`c13fd2d3c873845a6b80e49b91ae8bf21a59ba21b8c781410440623289dcfa79`
 - [case-5adfa1aabec5f52b2744](../../../store/cases/case-5adfa1aabec5f52b2744/8d73f1f55f7e5d92563cd9bff885e8803e2cdc7f766006a6e4539d1560ef5cbb.json) · 结论：recommendation:4
   卡片版本：`8d73f1f55f7e5d92563cd9bff885e8803e2cdc7f766006a6e4539d1560ef5cbb`
-- [case-a3404675917f8a352eb9](../../../store/cases/case-a3404675917f8a352eb9/251cba380648c037ead6cf198430233a569adb360f6b3ef5ae66404b79cb74ab.json) · 结论：recommendation:3
+- [case-a3404675917f8a352eb9](../../../store/cases/case-a3404675917f8a352eb9/251cba380648c037ead6cf198430233a569adb360f6b3ef5ae66404b79cb74ab.json) · 结论：diagnosis, recommendation:3
   卡片版本：`251cba380648c037ead6cf198430233a569adb360f6b3ef5ae66404b79cb74ab`
-- [case-ed8b01a83bca9f70218f](../../../store/cases/case-ed8b01a83bca9f70218f/89421e3e5a72a2c844dc265044e86267d70a2e8a32d19b7d3e344b71719f3611.json) · 结论：recommendation:3
+- [case-ed8b01a83bca9f70218f](../../../store/cases/case-ed8b01a83bca9f70218f/89421e3e5a72a2c844dc265044e86267d70a2e8a32d19b7d3e344b71719f3611.json) · 结论：diagnosis, recommendation:3
   卡片版本：`89421e3e5a72a2c844dc265044e86267d70a2e8a32d19b7d3e344b71719f3611`

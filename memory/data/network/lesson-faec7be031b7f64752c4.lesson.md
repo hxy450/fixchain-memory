@@ -1,6 +1,6 @@
-# 源端声明 INTERNET（及 ACCESS_NETWORK_STATE）且目标有网络请求时，在 module.json5 声明 ohos.permission.INTERNET（及 GET_NETWORK_INFO），并让这项声明有确定的写者
+# 源端声明 INTERNET 且目标发网络请求时，module.json5 声明 ohos.permission.INTERNET 并指定写入任务
 
-ID：`lesson-faec7be031b7f64752c4` · 版本：2
+ID：`lesson-faec7be031b7f64752c4` · 版本：3
 
 [本主题](index.md)
 
@@ -14,7 +14,7 @@ ID：`lesson-faec7be031b7f64752c4` · 版本：2
 
 ## 原因
 
-HarmonyOS 应用发起网络请求需要在 module.json5 声明 ohos.permission.INTERNET；生成期只读不写 module.json5 时，问题要到联调才暴露。来源中生成者读到源 Manifest 的 INTERNET 声明，也两次读取 module.json5，网络层落地时仍未声明，后续对接接口时才补上。规格已写明必配时，若计划拆分没有任务引用权限段、网络层 worker 又不能写 module.json5，这项要求就没有承接者；之后首次创建 requestPermissions 的接线任务只按单个切片草稿落地了其他权限。
+HarmonyOS 应用发起网络请求需要在 module.json5 声明 ohos.permission.INTERNET；生成期只读不写 module.json5 时，问题要到联调才暴露。计划拆分没有任务引用规格的权限段、网络层任务又不能写 module.json5 时，这项要求就没有承接者；之后首次创建 requestPermissions 的任务若只按单个切片草稿落地，网络权限仍会漏掉。
 
 ## 做法
 

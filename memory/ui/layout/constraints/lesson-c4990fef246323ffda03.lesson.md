@@ -1,25 +1,28 @@
-# 摘要行、价格行一类 Row 组：自定义组件不靠 Flex 基线对齐，内距逐行复制，靠右标签补文本对齐
+# Compose Row 以 alignBy(LastBaseline) 对齐文本与自定义组件时，改用 Row 居中对齐，不用 Flex 基线对齐
 
-ID：`lesson-c4990fef246323ffda03` · 版本：1
+ID：`lesson-c4990fef246323ffda03` · 版本：3
 
 [本主题](index.md)
 
 ## 何时使用
 
-页面转换阶段，翻译摘要行、价格行等由若干 Row 组成的列表块时
+页面转换阶段，翻译 Compose Row 中以 alignBy(LastBaseline)/alignByBaseline 对齐的文本与自定义组件（数量选择器等）时
 
 ## 适用情境
 
-源 Row 用 alignBy(LastBaseline) 对齐文本与自定义组件（如数量选择器）；各子 Row 各自 padding(horizontal)，分隔线在行外全宽；标签用 weight(1) + wrapContentWidth(End) 靠右。
+源 Row 的子项用 alignBy(LastBaseline) 对齐，其中一端是自定义组件或不含文本基线的控件；目标准备写 Flex/Row 的 ItemAlign.Baseline。
+
+## 例外与边界
+
+- 两端都是 Text（都有文本基线）时，可以用 Flex 的 ItemAlign.Baseline（enums.d.ts：Flex 容器内按文本基线对齐）
 
 ## 原因
 
-自定义组件没有可对齐的文本基线，来源改用 Flex 基线对齐后把它挤到了下一行；把各行 padding 上提到公共父容器会让分隔线跟着缩进；wrapContentWidth(End) 的靠右效果在权重布局里需要文本对齐补回。
+ArkUI 自定义组件取不到可对齐的文本基线，Flex ItemAlign.Baseline 对它的结果不可预期，可能把控件排到文本下方；Flex 默认 FlexWrap.NoWrap（flex.d.ts:118），出现换行时另查 wrap 与宽度设置。
 
 ## 做法
 
-1. 单行文本与自定义控件对齐时，用 Row + alignItems(Center) + layoutWeight(1) 近似基线对齐（来源复核误差约 0.5dp），不直接用 Flex 的基线对齐。
-2. 逐行复制 padding，不上提到外层；weight(1) + wrapContentWidth(End) 写成 layoutWeight 或 flexGrow 加 textAlign(End)。
+1. 单行文本与自定义控件对齐时，用 Row + alignItems(VerticalAlign.Center)，文本侧 layoutWeight(1) 占剩余宽；不用 Flex 的 ItemAlign.Baseline 了事。
 
 ## 可选检查
 
@@ -29,5 +32,5 @@ ID：`lesson-c4990fef246323ffda03` · 版本：1
 
 ## 来源（按需复核）
 
-- [case-83dafcc0eaba740bd9c0](../../../../store/cases/case-83dafcc0eaba740bd9c0/63799a14d87533825a0449dd85653c66535fbb31296be482c5feada55b5522a6.json) · 结论：recommendation:5, recommendation:6
+- [case-83dafcc0eaba740bd9c0](../../../../store/cases/case-83dafcc0eaba740bd9c0/63799a14d87533825a0449dd85653c66535fbb31296be482c5feada55b5522a6.json) · 结论：recommendation:5, diagnosis
   卡片版本：`63799a14d87533825a0449dd85653c66535fbb31296be482c5feada55b5522a6`

@@ -1,6 +1,6 @@
 # 平台差异只收敛确实做不到的那一步：写“无对等”前查证并记录，替代方案只作用于源端同一路径，其余出口、分支与回退照源端保留
 
-ID：`lesson-9c973e50aaea054facdc` · 版本：2
+ID：`lesson-9c973e50aaea054facdc` · 版本：4
 
 [本主题](index.md)
 
@@ -14,16 +14,16 @@ ID：`lesson-9c973e50aaea054facdc` · 版本：2
 
 ## 例外与边界
 
-- 决策记录明确批准了更大范围的收敛，并写明理由与用户可见影响
+- 差异决策已完成平台查证、并由用户明确批准了更大范围的收敛（无人值守的自动批准不算）：按该决策执行
 
 ## 原因
 
-“不能动态禁用”推不出“整条入口无对等”，“不能查询他包状态”推不出“不需要商店跳转”，“检测手段没有同名 API”推不出“行为删除”，“没有现成组件或同名 API”也推不出“只能简化”；差异范围一旦写大，下游会照单删掉源端仍可实现的出口、分支和回退，或把开关接到错误路径（关掉开关后前台功能也失效）。未执行的查证、子代理标为存疑的推断和汇总行里的泛化，经过转述都会被后续阶段当作已批准事实。来源中一个应用三处如此：清单声明的贴卡拉起入口被判为无对等、自启动开关改成了前台派发闸门；商店、设置深链与拉起他应用的出口被收敛为说明文本，“有 NFC 无 MFC”与“无 NFC”合并成同一分支；只涉及外跳出口的差异被扩大成正文链接都不实现。另一应用的计划汇总行把仅限认证、广告、微信的降级写成“地图执行已批准不可用”。
+“不能动态禁用”推不出“整条入口无对等”，“不能查询他包状态”推不出“不需要商店跳转”，“检测手段没有同名 API”推不出“行为删除”，“没有现成组件或同名 API”也推不出“只能简化”；差异范围一旦写大，下游会照单删掉源端仍可实现的出口、分支和回退，或把开关接到错误路径（关掉开关后前台功能也失效）。未执行的查证、子代理标为存疑的推断和汇总行里的泛化，经过转述都会被后续阶段当作已批准事实。
 
 ## 做法
 
 1. 平台差异只收敛做不到的那一步（如他包状态恒为未知），源端按钮出口与回退链原样保留为“尝试 + 失败回退”（如 market:// 失败转 https 网页、设置子页失败退设置首页、拉起失败静默）；源码自带版本门槛或“不支持时回退”分支的能力，映射为“能力探测 + 原回退”，相关设置项的可用状态绑定探测结果。
-2. 写“无对等/HARD-DIV/已查证”前，实际查项目 SDK 的 d.ts（ets/api、hms/ets/api 与 kits 导出，按能力关键词检索）、平台 skills 与能力文档，以及工程内现有的 startAbility、viewData 用法；把检索词、命中模块及其 @since、@deprecated、@systemapi、@permission 标注写进映射行。查不到就登记待定、交决策关口，不引用未执行的查证。只命中已弃用、仅系统可用或需权限的接口时，在决策中写出风险、失败回退与真机验证项，供审批在“降级”与“该接口 + 回退”之间选择，不写成无对等。决策关口收口时核对依据真实存在，并与同类裁决保持一致。
+2. 写“无对等/HARD-DIV/已查证”前，实际查项目 SDK 的 d.ts（openharmony/ets/api、hms/ets/api 与 kits 导出，按能力关键词检索）、平台 skills 与能力文档，以及工程内现有的 startAbility、viewData 用法；把检索词、命中模块及其 @since、@deprecated、@systemapi、@permission 标注写进映射行，检索为空时写明检索词与路径。最接近的能力只剩已弃用的公开 API、替代接口仅系统可用时，在决策中写出弃用风险、失败回退与真机验证项，供审批在“降级”与“弃用 API + 回退”之间选择，不写成无对等，也不把仅系统可用的接口列为方案（本机 DevEco SDK HarmonyOS 6.1.0/API 23 的 openharmony/ets、hms/ets 不收录系统接口，grep 不到 @systemapi 条目）。查不到就登记待定、交决策关口，不引用未执行的查证；决策关口收口时核对依据真实存在，并与同类裁决保持一致。
 3. 目标只是没有现成组件或同名 API 时，先核对能否用通用能力组合实现（滚动回调加高度动画、Canvas/Path 自绘与动画、锚点加纯计算）；能实现就写成实现项并附源端参数，不登记平台差异。源端判定手段没有同名对应时，先写出用户可观察的条件与效果，再找目标上能观察到同一状态的信号。
 4. 子代理回执标为“存疑/待定夺”的平台结论，以及上游 skip-list 或台账里的一句“无 API”，在写入台账、升级为 HARD-DIV 或引作本文依据之前自己补查一次；依据只引用本次实际读到的 d.ts 段落、skill 原文或参考条目，不把转述改写成“d.ts 无对应条款”。
 5. 为平台差异设计替代开关或替换探测机制时，先列出源开关、源判据实际影响的路径与各返回分支的副作用；替代只作用于同一路径，只换判据、不合并分支，并在差异条目与验收中写明哪些路径不受影响。
@@ -46,9 +46,9 @@ ID：`lesson-9c973e50aaea054facdc` · 版本：2
   卡片版本：`0fcbb858330dc0692a5ef76947e2ee1aae9990c5195f78148938c87b3ce94fe8`
 - [case-7e6984a7fa6d5845737b](../../../store/cases/case-7e6984a7fa6d5845737b/28061d97667de8051e1a704ca4104b16d7db6a03989478ec6a0298430dae5dba.json) · 结论：diagnosis, recommendation:3
   卡片版本：`28061d97667de8051e1a704ca4104b16d7db6a03989478ec6a0298430dae5dba`
-- [case-8e426a5be8a17ead231c](../../../store/cases/case-8e426a5be8a17ead231c/4e2dc4057a637cdf01596cbbb248f5a8d6aa8a12596c92a5d3f1caacb17504b0.json) · 结论：recommendation:1, recommendation:4
+- [case-8e426a5be8a17ead231c](../../../store/cases/case-8e426a5be8a17ead231c/4e2dc4057a637cdf01596cbbb248f5a8d6aa8a12596c92a5d3f1caacb17504b0.json) · 结论：recommendation:1, recommendation:4, recommendation:3
   卡片版本：`4e2dc4057a637cdf01596cbbb248f5a8d6aa8a12596c92a5d3f1caacb17504b0`
-- [case-a78ca40d4f9b42be76bb](../../../store/cases/case-a78ca40d4f9b42be76bb/7d12da37377f7c970931508bbb172dfde97532993727638bbbfba2a8f413f627.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:4
+- [case-a78ca40d4f9b42be76bb](../../../store/cases/case-a78ca40d4f9b42be76bb/7d12da37377f7c970931508bbb172dfde97532993727638bbbfba2a8f413f627.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:4, recommendation:3
   卡片版本：`7d12da37377f7c970931508bbb172dfde97532993727638bbbfba2a8f413f627`
 - [case-ac823e7436e1b08612ba](../../../store/cases/case-ac823e7436e1b08612ba/001e12d63eb0e435e0b1844db82cdbae78fc17a4ab6d1e93e6e523d3d5f4f174.json) · 结论：recommendation:1
   卡片版本：`001e12d63eb0e435e0b1844db82cdbae78fc17a4ab6d1e93e6e523d3d5f4f174`

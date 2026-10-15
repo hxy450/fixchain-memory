@@ -1,6 +1,6 @@
-# 落地应用显示名时同时改 AppScope 的 app_name 与入口 Ability 的 label 字符串，值取 Android 的应用名；资源迁移合并而不覆盖模板 string.json
+# 落地应用显示名时同时改 AppScope 与入口 Ability 的 label 字符串，资源迁移合并而不覆盖模板 string.json
 
-ID：`lesson-55f44e2efdc1a49ac387` · 版本：4
+ID：`lesson-55f44e2efdc1a49ac387` · 版本：5
 
 [本主题](index.md)
 
@@ -18,13 +18,13 @@ ID：`lesson-55f44e2efdc1a49ac387` · 版本：4
 
 ## 原因
 
-显示名有两个入口：应用级 label 读 AppScope 资源里的 app_name，入口 Ability 的 label 读 entry 模块资源里的另一个键（脚手架默认 EntryAbility_label）。只改其中一处，另一处显示的仍是脚手架名，编译与结构检查都发现不了。来源两例出自同一流水线：执行规范把身份落地划给编排者在资源阶段之后单独调用，编排者推进阶段时漏掉。一例中资源迁移任务整文件重写 entry string.json 时只改了 app_name，EntryAbility_label 保留脚手架值；另一例中资源迁移无视“合并、不覆盖”规则，只用 Android 字符串重建该文件，删掉了 module.json5 引用的三个身份键，编译修复者上下文里没有应用名，就按工程目录名自造了入口标签。两例的 AppScope app_name 都保持脚手架值，直到 App 身份校验才修。
+显示名有两个入口：应用级 label 读 AppScope 资源里的 app_name，入口 Ability 的 label 读 entry 模块资源里的另一个键（脚手架默认 EntryAbility_label）。只改其中一处，另一处显示的仍是脚手架名，编译与结构检查都发现不了。资源迁移整文件重写模板 string.json 时，会删掉 module.json5 引用的身份键，编译修复只能另造一个值补回。
 
 ## 做法
 
 1. 从 AppScope/app.json5 的 label 和 module.json5 里入口 Ability 的 label 各解析出 $string 键，分别在 AppScope/resources/base/element/string.json 与 entry/src/main/resources/base/element/string.json 中改值；值取 Android 实际应用名（build.gradle 的 resValue 优先于 strings.xml，否则取被 android:label 引用的字符串）。
 2. 资源迁移写已有模板的 element 文件时合并新条目，写完确认 module.json5、app.json5 引用的 $string 键仍然存在。
-3. 编译修复补回缺失的身份字符串时，值从 Android 应用名或身份步骤的产物取；取不到就登记占位并回报，不按工程目录名自造用户可见名称。
+3. 编译修复补回缺失的身份字符串时，值从 Android 应用名取：按当前构建变体解析合并后 Manifest 的 android:label 引用的字符串或 build.gradle 的 resValue；label 确由工程外注入、源码内查不到时，写明缺哪一项交编排者确认，不按工程目录名自造用户可见名称。
 4. 身份落地时 grep 全部 resources/*/element/string.json（含 en_US 等语言目录）里的 EntryAbility_label、app_name 等同名键并同步；i18n 审计报语言目录缺少脚手架身份键时，不以 'label'、'description' 等模板值补齐让审计通过，从 base 或源端真值派生，并在身份落地后复核。
 5. 改完读回各 string.json，确认 AppScope、entry base 与各语言目录中的值都等于 Android 应用名或其译名，没有残留脚手架工程名或 'label' 一类模板值。
 

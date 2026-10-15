@@ -1,6 +1,6 @@
-# 从组件外的共享函数打开自定义弹窗时，用 wrapBuilder + ComponentContent 交给 openCustomDialog(content)：不在 options.builder 闭包里直接调用全局 @Builder
+# 组件外的函数打开弹窗时，把 wrapBuilder 包好的内容建成 ComponentContent 再 openCustomDialog
 
-ID：`lesson-a3ac761b0d52a6bccb9f` · 版本：1
+ID：`lesson-a3ac761b0d52a6bccb9f` · 版本：3
 
 [本主题](index.md)
 
@@ -14,7 +14,7 @@ ArkTS V2（@ComponentV2）工程中，把 BottomSheetDialog/DialogFragment 一�
 
 ## 原因
 
-SDK 声明要求 openCustomDialog 的 builder 写成 () => { this.xxx() } 调用组件内的 @Builder，全局 @Builder 须在组件内的 builder 中调用；模块级函数里的闭包直接调用全局 @Builder 并创建 V2 组件时缺少这层构建上下文，点击入口即崩溃，而编译与文本契约都能通过。项目参考只用组件内示例展示了这个前提，没有写成显式规则。
+本机 @ohos.promptAction.d.ts 的 CustomDialogOptions 只声明 builder: CustomBuilder，没有写“须以 () => { this.xxx() } 调用组件内 @Builder、全局 @Builder 须在组件内 builder 中调用”这类约束，类型检查与编译都不会拦。模块级函数里的闭包不属于任何组件实例，直接调用全局 @Builder 并创建 V2 组件时缺少组件构建上下文，点击入口即崩溃，而编译与契约测试都能通过。
 
 ## 做法
 

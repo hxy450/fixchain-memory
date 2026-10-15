@@ -1,6 +1,6 @@
-# 从图库选图用系统 PhotoViewPicker 并复制进应用目录：一次性处理放缓存，要写进持久配置的复制到 filesDir 并校验非空；不以申请 READ_IMAGEVIDEO 读媒体库或经权限未接通的自建相册页实现
+# 从相册选图导入时用系统 PhotoViewPicker 并复制进应用目录，不申请 READ_IMAGEVIDEO 读媒体库
 
-ID：`lesson-ad1db0aa0434c2e766fd` · 版本：2
+ID：`lesson-ad1db0aa0434c2e766fd` · 版本：3
 
 [本主题](index.md)
 
@@ -10,7 +10,7 @@ ID：`lesson-ad1db0aa0434c2e766fd` · 版本：2
 
 ## 适用情境
 
-源端经媒体库查询（MediaStore，或 photo_manager 一类插件）列出并读取相册图片，依赖媒体库读写权限；目标应用为普通应用，功能只需用户主动选择的图片。 也包括选出的图片要作为背景等持久配置反复读取，而工程里另有依赖 getAlbums 全量查询、带未完成权限或相册绑定 TODO 的自建选择页。
+源端经媒体库查询（MediaStore，或 photo_manager 一类插件）列出并读取相册图片，依赖媒体库读写权限；目标应用为普通应用，功能只需用户主动选择的图片。也包括选出的图片要作为背景等持久配置反复读取，而工程里另有依赖 getAlbums 全量查询、带未完成权限或相册绑定 TODO 的自建选择页。
 
 ## 例外与边界
 
@@ -18,12 +18,12 @@ ID：`lesson-ad1db0aa0434c2e766fd` · 版本：2
 
 ## 原因
 
-经 photoAccessHelper 读取媒体库需要 READ_IMAGEVIDEO/WRITE_IMAGEVIDEO；未声明时请求被拒、图库界面不出现，表现为点击无反应；来源环境中普通应用签名声明该权限后安装直接失败（9568289 grant request permissions failed）。系统选择器只授予用户所选文件的访问，不需要该权限。
+经 photoAccessHelper 读取媒体库需要 READ_IMAGEVIDEO/WRITE_IMAGEVIDEO；未声明时请求被拒、图库界面不出现，表现为点击无反应；普通应用签名声明该受限权限后安装直接失败（9568289 grant request permissions failed）。系统选择器只授予用户所选文件的访问，不需要该权限。
 
 ## 做法
 
-1. 选图入口用 PhotoViewPicker（Flutter 中可复用已适配 OHOS、按图片类型选择的 file_picker）；一次性导入、预览或编辑的图片把返回的 URI 复制到应用缓存，后续都用缓存路径；用户取消时按原接口的“无结果”返回。
-2. 上层期待原选图 API 的对象（如 AssetEntity）时，在兼容层用缓存路径构造该对象，并为依赖它的原生读取方法（原图、缩略图、文件）补本地路径分支。
+1. 选图入口用 photoAccessHelper.PhotoViewPicker（@ohos.file.picker 中的同名类自 API 12 标为 deprecated）；Flutter 中可复用已适配 OHOS、按图片类型选择的 file_picker，在本地兼容包中实现时保持原 Dart API 与返回类型。一次性导入、预览或编辑的图片把返回的 URI 复制到应用缓存，后续都用缓存路径；用户取消时按原接口的“无结果”返回。
+2. 上层期待原选图 API 的对象（如 AssetEntity）时，在兼容层用缓存路径构造该对象，并按消费方补齐宽高、方向等元数据（读文件头，见 lesson-e85bdb26fa6acc0cc9f7），不只填路径；为依赖它的原生读取方法（原图、缩略图、文件）补本地路径分支。
 3. 结果要写进会被保存、之后重新读取的配置时，复制到 context.filesDir 下的应用目录并校验非空后再写 file:// 路径，不保存 picker 的临时授权 URI 或 cacheDir 中间副本；取消保留旧值，失败给出可见错误，不留空 catch。
 4. 复用自建相册页前确认 module.json5 已声明对应媒体权限、运行时确能授权且页面没有未完成的权限 TODO，否则改用 PhotoViewPicker；收口前在设备上走一遍“选图 → 回填”。
 

@@ -1,6 +1,6 @@
-# 源对话框带目标系统弹窗没有的槽位（setView 注入的复选框等自定义布局、Compose AlertDialog 的 icon）时改用自定义弹窗承载，不写成 AlertDialog.show 的参数，也不自行省略
+# 源对话框有 setView 自定义布局或 icon 槽时改用自定义弹窗承载，不写进 AlertDialog.show 参数也不省略
 
-ID：`lesson-18fca50f9c801cb282ec` · 版本：3
+ID：`lesson-18fca50f9c801cb282ec` · 版本：5
 
 [本主题](index.md)
 
@@ -18,17 +18,17 @@ ID：`lesson-18fca50f9c801cb282ec` · 版本：3
 
 ## 原因
 
-AlertDialog.show 的参数只有标题、副标题、必填的 message、按钮等字段，没有承载自定义组件树的 builder，也没有图标槽；选它就等于删掉源端图标，把自定义视图写进不存在的字段还会让编译解析失败并引发大面积连锁错误。来源转换者写前已判断“自定义内容需 openCustomDialog”，落盘时又凭记忆假定存在带 builder 的参数形态；修复者删掉 builder 以通过编译，复选框及其偏好写入随之丢失。
+AlertDialog.show 的参数（component/alert_dialog.d.ts 的 AlertDialogParam）只有标题、副标题、必填的 message、按钮与外观等字段，没有承载自定义组件树的 builder，也没有图标槽；选它就等于删掉源端图标。把自定义视图写进不存在的字段会让编译解析失败并引发连锁错误，为通过编译删掉 builder 时，复选框及其偏好写入随之丢失。
 
 ## 做法
 
 1. 先看源对话框是否调用 setView、加载自定义布局或传入 icon：都没有时才考虑 AlertDialog.show（按钮槽位与外观取舍见例外）；有则用自定义弹窗，在同一个自定义构建里放图标、标题、正文、复选框与按钮，确认回调读取复选状态后再执行源端的偏好写入与后续动作。
-2. V1 页面可用 @CustomDialog + CustomDialogController；@ComponentV2 页面用 UIContext.getPromptAction().openCustomDialog 或状态驱动浮层，不用 CustomDialogController 承载 V2 组件。
-3. 只能先落简化弹窗时，把丢失的交互或视觉元素（控件、偏好写入、图标）登记为占位与回补点，并在报告中列为与源端的差异；有决策台账时先查台账，未命中就作为决策缺口上报，不以“仅视觉降级”或兄弟页先例自行定案，也不以不存在的参数假装等价。
+2. V1 页面可用 @CustomDialog + CustomDialogController；@ComponentV2 页面的载体选择见 lesson-3f3e1ff0a4d0e0299bda。
+3. 确实只能先落简化弹窗时，把丢失的交互或视觉元素（控件、偏好写入、图标）按占位规则登记并写明回补方案，在报告中列为与源端的差异；有决策台账时先查台账，未命中就作为决策缺口上报，不以“仅视觉降级”或兄弟页先例自行定案，也不以不存在的参数假装等价。其余情况一律按第 1 步用自定义弹窗实现。
 
 ## 依赖经验
 
-- [@ComponentV2 页面的弹窗不用 CustomDialogController 承载 V2 组件，改用状态驱动浮层、半模态或 openCustomDialog](lesson-3f3e1ff0a4d0e0299bda.lesson.md)
+- [@ComponentV2 页面不用 CustomDialogController 承载弹窗，改用 openCustomDialog、半模态或状态驱动浮层](lesson-3f3e1ff0a4d0e0299bda.lesson.md)
 
 来源支持：3 张卡 · 3 次迁移 · 3 个应用
 

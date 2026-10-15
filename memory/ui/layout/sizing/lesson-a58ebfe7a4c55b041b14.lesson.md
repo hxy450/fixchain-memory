@@ -1,43 +1,41 @@
-# 由内容定尺寸的父级（列表行、wrap_content 头部、FIT_CONTENT 半模态）里不写 width/height('100%')：描边背景画在节点自身，行内撑满用 Stretch；源端描边不改尺寸时注意 .border() 计入测量（定尺寸遮罩中的居中弹卡不在此列，宽度按源窗口规则）
+# 由内容定尺寸的父级（列表行、wrap_content 头部、FIT_CONTENT 半模态）里不写 100% 尺寸：背景画在节点自身，撑满用 Stretch
 
-ID：`lesson-a58ebfe7a4c55b041b14` · 版本：6
+ID：`lesson-a58ebfe7a4c55b041b14` · 版本：9
 
 [本主题](index.md)
 
 ## 何时使用
 
-界面实现与规格映射阶段，翻译用 fillMaxSize()、matchContentSize 贴合内容的选中指示器、描边或背景，为高度由内容决定的行加铺满的背景层（滑删进度背景等），或把 Compose Modifier.border 这类只绘制、不改测量的修饰符落到 ArkUI 容器上时；把 match_parent 高度翻译到 ListItem、列表行组件、折叠头部背景层或 bindSheet 内容根时；转换将被宿主嵌入的子组件（Fragment 转子组件）、确定根节点及各状态视图的高度约束时
+界面实现与规格映射阶段，翻译用 fillMaxSize()、matchContentSize 贴合内容的选中指示器、描边或背景，为高度由内容决定的行加铺满的背景层（滑删进度背景等），或把 match_parent 高度翻译到 ListItem、列表行组件、折叠头部背景层或 bindSheet 内容根时
 
 ## 适用情境
 
-源端指示器或背景层以 fillMaxSize、matchContentSize 贴合某个由内容定尺寸的格子；目标准备在 Stack/Row 里叠一层 width/height('100%') 的节点来画描边或背景。也包括列表行里的 Stack 没有确定高度，准备放一层宽高 100% 的背景子节点；或源 border 画在调用方已定尺寸的盒内侧，目标容器自身不设宽高、尺寸由槽内容决定。也包括源 match_parent 子视图位于 wrap_content 的行、AppBar 或 BottomSheet 容器中，实际随内容或兄弟高度；目标放进 List、ListItem、Scroll 或 FIT_CONTENT 半模态，准备直译为 height('100%')。也包括被宿主嵌入的子组件：源布局根节点与空态容器都是 wrap_content，在宿主 NestedScrollView 的 wrap_content 槽位里按内容取高；目标根 Column 与 loading/empty/error 各分支写 height('100%')，宿主把它放进 Scroll 内未设高度的 Column。
+源端指示器或背景层以 fillMaxSize、matchContentSize 贴合由内容定尺寸的格子；源 match_parent 子视图位于 wrap_content 的行、AppBar 或 BottomSheet 容器中，实际随内容或兄弟高度。目标准备在 Stack/Row、List、ListItem、Scroll 或 FIT_CONTENT 半模态里叠一层或直译为 width/height('100%') 的节点。
 
 ## 例外与边界
 
 - 父节点有确定的宽高（显式数值，或已被外层约束定死）时，百分比层按该尺寸解析，可以使用
-- 页面根 Stack 等定尺寸遮罩里的居中弹窗卡片：父级已定尺寸，宽度按源端窗口规则写（框架 AlertDialog 为屏宽 95% 减左右各 16dp），不适用本条，也不从本条取固定 vp 估值
+- 页面根 Stack 等定尺寸遮罩里的居中弹窗卡片：父级已定尺寸，宽度按源端窗口规则写。框架 Material AlertDialog 的最小宽取主题 windowMinWidthMinor/Major（SDK platforms/android-<api>/data/res/values/dimens.xml 的 dialog_min_width_minor 竖屏 95%、dialog_min_width_major 横屏 65%，android-36 中如此），背景 drawable/dialog_background_material.xml 另有 16dp inset；不适用本条，也不从本条取固定 vp 估值
+- 占剩余高度的内容区或被宿主嵌入的满高组件，按宿主有界槽位的规则处理
 
 ## 原因
 
-ArkUI 的百分比尺寸在由内容定尺寸的父级里会向上取到最近的确定尺寸，把格子撑大（工程迁移陷阱表与设备实测一致）。来源中选中格内的 height('100%') 描边层解析到被撑高的 Tab 行高度，选中格变成约 299×597vp；与横向 Scroll 未定高叠加后，首帧只看得到前两项。列表行里的 100% 背景层同样会按更大的约束铺开，把行撑到整屏高。另一方面，在没有显式宽高的容器上写 .border()，来源 dump 显示描边计入了容器测量，盒子比内容大出描边宽度、后续卡片随之错位；Compose 的 Modifier.border 只在已定尺寸的盒内绘制，不改尺寸。源 match_parent 直译成 height('100%') 时，单行或折叠头部会撑满整个 List 视口，半模态内容根会把 FIT_CONTENT 弹层撑到上限。被嵌子组件根节点的 '100%' 在 Scroll 的无界父链里会解析成视口高度，把首屏后续区块挤出。
+ArkUI 的百分比尺寸在由内容定尺寸的父级里会向上取到最近的确定尺寸，把格子、行或头部撑大：选中格被撑到行高，列表行与折叠头部撑满整个 List 视口，半模态内容根把 FIT_CONTENT 弹层撑到上限。
 
 ## 做法
 
 1. 描边、背景直接写在内容节点上（.border()、.backgroundColor()、.borderRadius()），描边与内容的间距用 padding 表达；源端描边相对内容有内缩时，把内缩量拆到外层与内容节点的 padding 里。
 2. 选中与未选中两态保留同样宽度的描边，未选中用 Color.Transparent，切换时尺寸不变。
-3. 写完 grep width('100%') 与 height('100%')，逐处确认父级有确定尺寸。
-4. 行或卡片的铺满背景改用 .background(builder) 画在容器自身，或用列表项自带的滑动操作（ListItem.swipeAction）。
-5. 源端描边只绘制、不改尺寸时，先写明目标盒尺寸由谁决定：能拿到调用方尺寸就把宽高提升到带描边的节点上；尺寸只能由内容决定时，改用按 onSizeChange 回读的数值宽高叠一层 position({ x: 0, y: 0 }) + hitTestBehavior(HitTestMode.None) 的描边层（首帧会缺描边），规格验收写明“描边不改变盒尺寸”。
-6. 行内交叉轴撑满（如行首竖条、拖拽柄随行高）用 alignSelf(ItemAlign.Stretch) 或明确尺寸；头部背景或遮罩层按源可见区域给显式高度（如工具栏高加头部块），或把背景画在容器自身。
-7. 半模态内容根的 Scroll/Column 不写 height('100%')，由弹层上限约束后滚动。
-8. 被嵌子组件按源布局根节点与各状态容器的 layout_height 映射：wrap_content 不写 height('100%')，空态居中用内容高度或 constraintSize 最小高度；宿主向无高度槽位嵌入组件前，读被嵌组件 build() 根与各状态分支的高度修饰，有百分比高度就先改组件或在槽位按源端尺寸给显式高度，再核对首屏后续区块仍可见。
+3. 行或卡片的铺满背景改用 .background(builder) 画在容器自身，或用列表项自带的滑动操作（ListItem.swipeAction）。
+4. 行内交叉轴撑满（如行首竖条、拖拽柄随行高）用 alignSelf(ItemAlign.Stretch) 或明确尺寸；行本身未定高时，Stretch 子项会取到更外层的确定尺寸并把行与卡片撑开，先给行定高再让子项撑满（按钮行竖分隔线见 lesson-2a07020daf9a7d8a60a3）；头部背景或遮罩层按源可见区域给显式高度（如工具栏高加头部块），或把背景画在容器自身。
+5. 半模态内容根的 Scroll/Column 不写 height('100%')，由弹层上限约束后滚动。
+6. 写完检索 width('100%') 与 height('100%')，逐处确认父级有确定尺寸。
 
 ## 可选检查
 
-- 源端描边不改尺寸而有疑问时，用 dumpLayout 核对带描边容器的 bounds 与内容子项一致。
-- 行或头部出现整屏高、或弹层被撑到上限时，检索该子树中的 '100%' 高度并确认其父级是否定高
+- 行或头部出现整屏高、或弹层被撑到上限时，检索该子树中的 '100%' 高度并确认其父级是否定高。
 
-来源支持：9 张卡 · 6 次迁移 · 5 个应用
+来源支持：8 张卡 · 5 次迁移 · 5 个应用
 
 ## 来源（按需复核）
 
@@ -49,12 +47,10 @@ ArkUI 的百分比尺寸在由内容定尺寸的父级里会向上取到最近�
   卡片版本：`87b0c345ca3fa21bf70b01c74e3a2714a0880c4a2e5531942fe4d81a24d85b98`
 - [case-4f627840679361f165a3](../../../../store/cases/case-4f627840679361f165a3/8b0f7cc40d821777a77dc3bf68c6739f335039023414e9bcb04404d5b4ac02e8.json) · 结论：recommendation:1
   卡片版本：`8b0f7cc40d821777a77dc3bf68c6739f335039023414e9bcb04404d5b4ac02e8`
-- [case-77c4d0c99ad4a6486b79](../../../../store/cases/case-77c4d0c99ad4a6486b79/0c0854b7bb53f48c15425a1148239e8e459db928eb8f9600f5e5b1e1cc5042f4.json) · 结论：diagnosis, recommendation:1, recommendation:2
-  卡片版本：`0c0854b7bb53f48c15425a1148239e8e459db928eb8f9600f5e5b1e1cc5042f4`
-- [case-821ade66a5ad47cdea22](../../../../store/cases/case-821ade66a5ad47cdea22/d6a6fd477dc2843095f41c2605944d99e05dcc8babde979368d788f5c16dad20.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
-  卡片版本：`d6a6fd477dc2843095f41c2605944d99e05dcc8babde979368d788f5c16dad20`
 - [case-9058ac868b6feb3a04e0](../../../../store/cases/case-9058ac868b6feb3a04e0/d8e013afe2706da7f1b19c1a0d603c05f971b4ebc0c4542f6fb5e8a956b3ebc4.json) · 结论：recommendation:2
   卡片版本：`d8e013afe2706da7f1b19c1a0d603c05f971b4ebc0c4542f6fb5e8a956b3ebc4`
+- [case-bf55dc1aedfb0f2a965e](../../../../store/cases/case-bf55dc1aedfb0f2a965e/bcb7663fe953c49cc6b18f293ae448fe649838e3a6f0e8e0e2d31020c4836d2d.json) · 结论：diagnosis, recommendation:2
+  卡片版本：`bcb7663fe953c49cc6b18f293ae448fe649838e3a6f0e8e0e2d31020c4836d2d`
 - [case-dadda7b6820516f5f415](../../../../store/cases/case-dadda7b6820516f5f415/550a74cac527a7a37d9d1cb7aae1e487f44b8b49eb75ea53d1918d9a05d3ca0b.json) · 结论：recommendation:6
   卡片版本：`550a74cac527a7a37d9d1cb7aae1e487f44b8b49eb75ea53d1918d9a05d3ca0b`
 - [case-fc6df865cb042aec7af1](../../../../store/cases/case-fc6df865cb042aec7af1/725333df04b7bf7ef507cb28acc9e956d4e070ff49905447493a6f27eec530f2.json) · 结论：diagnosis, recommendation:2

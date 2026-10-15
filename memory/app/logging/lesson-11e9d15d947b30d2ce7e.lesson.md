@@ -1,12 +1,12 @@
 # 新增错误日志沿用工程的 hilog 约定，不写 console.*
 
-ID：`lesson-11e9d15d947b30d2ce7e` · 版本：2
+ID：`lesson-11e9d15d947b30d2ce7e` · 版本：4
 
 [本主题](index.md)
 
 ## 何时使用
 
-功能实现阶段，在服务层、ViewModel 或页面的 catch 分支里为新增的错误处理选择日志写法时
+功能实现阶段，在服务层或 ViewModel 的 catch 分支里为新增的错误处理选择日志写法时
 
 ## 适用情境
 
@@ -14,7 +14,7 @@ ID：`lesson-11e9d15d947b30d2ce7e` · 版本：2
 
 ## 原因
 
-源端没有可映射的日志，生成规则与迁移期静态检查也没有 console.* → hilog 的要求，写码者就按通用 TypeScript 习惯写 console.error，直到 ECAT 静态检查才被检出。来源两个应用都如此：一处写码 agent 批量读 skill 时输出被截断，含 hilog 导入映射的 skill 没进上下文；另一处生成期规则只禁止 console.info('TODO') 这类假实现，返修时才统一改成 hilog。
+源端没有可映射的日志，生成规则与迁移期静态检查也不要求把 console.* 换成 hilog，新增的 catch 里就会写成 console.error，日志出口与工程已有的 hilog 约定不一致，直到专门检查 console.* 的静态规则才被检出。
 
 ## 做法
 

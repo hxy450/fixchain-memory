@@ -1,6 +1,6 @@
-# 手写 getString/String.format 的位置参数插入时，不把用户数据作为 String.replace 的替换串：用 split/join 或替换回调字面插入
+# 手写 %1$s 位置参数插入时字面插入，不把用户数据作为 String.replace 的替换串
 
-ID：`lesson-ecbaa1723e2beb9b1aec` · 版本：1
+ID：`lesson-ecbaa1723e2beb9b1aec` · 版本：3
 
 [本主题](index.md)
 
@@ -14,11 +14,11 @@ ID：`lesson-ecbaa1723e2beb9b1aec` · 版本：1
 
 ## 原因
 
-JS 的 String.replace 会解释替换串里的 $$、$&、$`、$' 等模式，参数含这些字符时插入结果与原文不同；Android 的格式化按字面插入参数。
+JS 的 String.replace 会解释替换串里的 $$、$&、$`、$' 等模式，参数含这些字符时插入结果与原文不同；Android 的 getString 按字面插入参数。
 
 ## 做法
 
-1. 字面插入：s.split('%1$s').join(arg)，或 s.replace('%1$s', () => arg)（回调返回值不做模式解释）；格式串有多个占位时按序号逐个处理。若本地 SDK 声明提供带格式化参数的取串接口（如 resourceManager.getStringSync(resId, ...args)），可直接用它。
+1. 占位用 s.split('%1$s').join(arg) 或 s.replace('%1$s', () => arg)（回调返回值不做模式解释）字面插入。也可直接用带格式化参数的重载 resourceManager.getStringSync(resId, ...args)（@ohos.resourceManager.d.ts），不再手写插入。
 2. 复用工程已有的格式化 helper 前，核对它是否把参数当替换串插入，是就一并改正。
 
 来源支持：1 张卡 · 1 次迁移 · 1 个应用

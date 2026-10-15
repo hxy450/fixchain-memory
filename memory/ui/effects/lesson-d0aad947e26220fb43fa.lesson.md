@@ -1,6 +1,6 @@
 # elevation 投影写入 ShadowOptions 时按 px 换算，并集中到一个按 elevation 推导的共享函数
 
-ID：`lesson-d0aad947e26220fb43fa` · 版本：2
+ID：`lesson-d0aad947e26220fb43fa` · 版本：3
 
 [本主题](index.md)
 
@@ -18,9 +18,9 @@ ID：`lesson-d0aad947e26220fb43fa` · 版本：2
 
 ## 做法
 
-1. radius、offsetX、offsetY 用 uiContext.vp2px(源 dp 值) 换算，把单位和换算写进公式本身，集中到一个按 elevation 推导的共享函数；各页面不另写与 elevation 无关的“视觉近似”常量，也不用预置 ShadowStyle 代替源端的具体高程。
+1. 共享函数先按 elevation 求出 radius、offsetX、offsetY 各自的 dp 值（三者按校准映射分别计算，不照抄 elevation 本身），再分别经 uiContext.vp2px 换算写入 ShadowOptions；已是 px 的输出不重复换算。各页面不另写与 elevation 无关的“视觉近似”常量，也不用预置 ShadowStyle 代替源端的具体高程。
 2. 源端平台阴影由环境光和屏幕顶端主光两层组成，投影随元素位置变化，单层 ShadowOptions 只能近似：有源端截图时按多档高程实测校准共享函数的常量，没有时登记为需截图校准的视觉近似项，不在注释里写成等价映射。
-3. 写 shadow 前先看源视图是否真的投影：elevation 需同时看 outlineProvider 与背景，无背景时不产生阴影，不按映射表直译。
+3. 写 shadow 前先看源视图是否真的投影：outlineProvider 为 BACKGROUND（View 默认）时由背景给出轮廓，无背景就不投影；BOUNDS、PADDED_BOUNDS 或自定义 provider 按实际轮廓投影，不按映射表直译。
 
 ## 可选检查
 

@@ -1,6 +1,6 @@
-# stateStyles 各状态只写 @Styles 方法引用、全局 @Styles 函数名或以点号开头的内联样式块，不写 { 属性名: 值 } 对象：后者编译放行、页面渲染即崩
+# stateStyles 各状态只写 @Styles 引用或以点号开头的内联样式块，不写 { 属性名: 值 } 对象
 
-ID：`lesson-39d1dee415d4a252fc5c` · 版本：1
+ID：`lesson-39d1dee415d4a252fc5c` · 版本：2
 
 [本主题](index.md)
 
@@ -14,7 +14,7 @@ ArkUI 容器用 .stateStyles({ pressed: … }) 复刻源端列表选择器等按
 
 ## 原因
 
-{ backgroundColor: x } 这类键值对象能通过编译，转换时键名被丢弃，渲染该页即报 undefined is not callable；只看构建结果、不打开页面的编译门发现不了。来源中修复者读了 ets-loader 源码，只看校验器是否放行就选了键值对象。同一应用里，多 struct 文件引用成员 @Styles 报过 10905203，单 struct 文件则正常。
+{ backgroundColor: x } 这类键值对象能通过编译，转换时键名被丢弃，渲染该页即报 undefined is not callable；只看构建结果、不打开页面的编译门发现不了。同一 .ets 文件含多个 struct 时，引用成员 @Styles 可能报 10905203，单 struct 文件则正常。
 
 ## 做法
 

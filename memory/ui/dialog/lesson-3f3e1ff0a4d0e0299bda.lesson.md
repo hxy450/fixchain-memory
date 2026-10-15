@@ -1,6 +1,6 @@
-# @ComponentV2 页面的弹窗不用 CustomDialogController 承载 V2 组件，改用状态驱动浮层、半模态或 openCustomDialog
+# @ComponentV2 页面不用 CustomDialogController 承载弹窗，改用 openCustomDialog、半模态或状态驱动浮层
 
-ID：`lesson-3f3e1ff0a4d0e0299bda` · 版本：1
+ID：`lesson-3f3e1ff0a4d0e0299bda` · 版本：3
 
 [本主题](index.md)
 
@@ -14,7 +14,7 @@ ID：`lesson-3f3e1ff0a4d0e0299bda` · 版本：1
 
 ## 原因
 
-CustomDialogController 的 builder 约定是 @CustomDialog 组件；把 @ComponentV2 struct 当 builder 传入时，结构体构造语法不会被转译，运行时报 TypeError: class constructor cannot called without 'new'，页面打开或首次状态更新即崩溃或冻结。编译能通过，自检若只查“有没有混用 V1/V2 装饰器”也发现不了。来源中第一位写者没有采用规格给出的可用载体，第二位写者看到这个先例后推断“builder 接受任意组件”并照抄。
+CustomDialogController 的 builder 约定是 @CustomDialog 组件；把 @ComponentV2 struct 当 builder 传入时，运行时在 builder 调用处报 TypeError: class constructor cannot called without 'new'，页面打开即崩溃或卡在加载态。编译能通过，自检若只查“有没有混用 V1/V2 装饰器”也发现不了；同工程已有这样写的先例时，照抄会让问题扩散。
 
 ## 做法
 

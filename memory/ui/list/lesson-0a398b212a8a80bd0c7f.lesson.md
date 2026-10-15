@@ -1,6 +1,6 @@
-# SmartRefreshLayout 的加载更多转成 onReachEnd 时，显式建立“加载中不重入、刷新中不派发”的门闩
+# SmartRefreshLayout 刷新与加载更多转成 Refresh + onReachEnd 时建立互斥门闩：加载不重入、刷新中不派发加载
 
-ID：`lesson-0a398b212a8a80bd0c7f` · 版本：1
+ID：`lesson-0a398b212a8a80bd0c7f` · 版本：3
 
 [本主题](index.md)
 
@@ -12,19 +12,24 @@ ID：`lesson-0a398b212a8a80bd0c7f` · 版本：1
 
 源页面由 SmartRefreshLayout 驱动分页（setOnLoadMoreListener、观察者里 finishRefresh/finishLoadMore），页面本身没有 isLoading 变量；ViewModel 的页码在响应成功后才自增；目标用 Refresh + onReachEnd 并以 concat 追加。
 
+## 例外与边界
+
+- Refresh 的 refreshing 被程序置真引起的重复刷新，按刷新入口单飞的规则处理；多个页面入口共用单例 ViewModel 的请求去重按共享加载的规则处理
+
 ## 原因
 
-SmartRefreshLayout 自带“加载中不重入、刷新与加载互斥”的状态机，页面代码里看不到；onReachEnd 在首帧空列表或快速滚动时会连续触发，与首刷或上一次加载并发，页码未自增时同一页被请求两次并各自追加，出现整页重复（刷新后消失）。把 finishLoadMore 映射成 isRefreshing 复位，或规格只写“Refresh 官方等价”，都会丢掉这层状态。
+SmartRefreshLayout 自带“加载中不重入、刷新与加载互斥”的状态机，页面代码里看不到；onReachEnd 在首帧空列表或快速滚动时会连续触发，与首刷或上一次加载并发，页码未自增时同一页被请求两次并各自追加，出现整页重复。把 finishLoadMore 映射成 isRefreshing 复位，或规格只写“Refresh 官方等价”，都会丢掉这层状态。
 
 ## 做法
 
-1. onReachEnd 处理函数入口：isLoadingMore 或 isRefreshing 为真即返回；发请求前置位，响应无论成功失败都复位。
-2. finishLoadMore 映射为“加载更多进行中”的结束，不并入 isRefreshing；首屏 aboutToAppear 刷新与事件触发的刷新都经过同一个刷新入口并置 isRefreshing。
-3. 规格提取时，凡启用加载更多的页面，在竞态或状态契约里写明这两条互斥，并与“无重复 id”类验收绑定。
+1. onReachEnd 处理函数入口：isLoadingMore 或 isRefreshing 为真即返回；发请求前置位，响应无论成功失败都在 finally 复位。
+2. 刷新入口同样与加载更多互斥串行（源端 SmartRefreshLayout 的单飞语义），所有路径在 finally 复位各自的标志。
+3. finishLoadMore 映射为“加载更多进行中”的结束，不并入 isRefreshing；首屏 aboutToAppear 刷新与事件触发的刷新都经过同一个刷新入口并置 isRefreshing。
+4. 规格提取时，凡启用加载更多的页面，在竞态或状态契约里写明“加载中不重入、刷新中不派发加载更多”，并与“无重复 id”类验收绑定。
 
 ## 可选检查
 
-- 逐个查看含 onReachEnd 的处理函数，确认都有门闩与互斥，且复位点覆盖 Promise 的所有分支。
+- 逐个查看含 onReachEnd 的处理函数与刷新入口，确认都有门闩与互斥，且复位点覆盖 Promise 的所有分支。
 
 来源支持：1 张卡 · 1 次迁移 · 1 个应用
 

@@ -1,6 +1,6 @@
 # NFC 能力前置检查按源端三分支迁移：不支持、已关闭（打开系统 NFC 设置）、可用分别建模，不用一个布尔可用门折叠
 
-ID：`lesson-5a140e45ecb578dd61ed` · 版本：1
+ID：`lesson-5a140e45ecb578dd61ed` · 版本：3
 
 [本主题](index.md)
 
@@ -20,7 +20,7 @@ Android 入口先判 NfcAdapter 是否为 null（设备不支持，提示后不�
 
 1. 规格按源码分支逐一写服务接口、状态与验收：不支持 → 原提示且不导航；已关闭 → 打开系统 NFC 设置页并提示返回后再试；可用 → 进入读卡。标注“源:某函数()”的条款对照该函数全部 if/else 写全；设备只观察到部分分支时，其余仍按源码契约保留。
 2. 服务层拆成可区分的结果（如 isSupported() 与开关状态、openSettings()，或返回 unsupported/disabled/available），调用异常单独处理；ViewModel 为每种结果设独立状态与反馈，不复用“不支持”文案。
-3. 关闭分支用目标 SDK 的设置页接口实现（来源在 API 24 用 settings.openNfcSettingsPage）；实现时发现规格缺这一分支，按源码实现或作为阻塞缺口写进回执交裁决，不并入相邻分支。
+3. 关闭分支按目标 compatibleSdkVersion 选接口：先在项目 SDK 的 @ohos.settings.d.ts 查 settings.openNfcSettingsPage 及其 @since（已观察在 API 24 环境可用；本机 API 23 的声明中没有该接口，确切 @since 以项目 SDK 为准），不低于该版本时用它打开 NFC 设置页；低于时没有这一接口，作为阻塞缺口写进回执交裁决；裁决改用显式 Want 拉起系统设置时，按 lesson-4bea916d1ff67e51d455 在目标设备核对包名（该路径未在 NFC 场景验证）。实现时发现规格缺这一分支，按源码实现，不并入相邻分支。
 
 来源支持：1 张卡 · 1 次迁移 · 1 个应用
 

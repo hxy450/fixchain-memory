@@ -6,9 +6,14 @@
 
 ## 本级经验
 
+- [V1 服务卡片页里由状态派生的值写成 build 内调用的普通方法，不写 struct 的 get 访问器](lesson-1baf94e39d4a01043d9e.lesson.md)
+  - 时机：服务卡片实现阶段，在 V1 @Entry 卡片页里由尺寸等状态派生布局值或样式时
+  - 情境：目标为 ArkTS 服务卡片的 V1 卡片页（@Entry struct + @LocalStorageProp），实现者准备在 struct 里写 get 访问器（如 get layoutSize()）派生档位或样式。
 - [form_config 的规格、默认规格、缩放与刷新从源 appwidget-provider 换算，不凭默认档位填写](lesson-bc48518f40742add0054.lesson.md)
   - 时机：编排或服务卡片实现阶段，写 form_config 的 supportDimensions、defaultDimension、resizable、刷新与预览配置时
   - 情境：源端 appwidget-provider 与 dimens 声明目标格数、最小/最大尺寸、可调尺寸、缩放模式和刷新周期，决策账本可能已批准静态预览；上游回报只说“具体档位待回填”。
-- [服务卡片按实际宽高选布局：由 FormExtensionAbility 取尺寸下发，V1 卡片页的派生值写成普通方法](lesson-7ad5a7d149de5bcec7da.lesson.md)
-  - 时机：服务卡片实现阶段，卡片需要按实际宽高选择布局档位，或在 V1 @Entry 卡片页里由尺寸等状态派生布局值时
+  - 例外：卡片运行时按实际宽高选布局属于另一条（FormExtensionAbility 取尺寸下发）；静态档位不等于实际宽高
+- [服务卡片按实际宽高选布局：由 FormExtensionAbility 取尺寸经 updateForm 下发，不用通用尺寸事件或档位硬映射](lesson-7ad5a7d149de5bcec7da.lesson.md)
+  - 时机：服务卡片实现阶段，卡片需要按实际宽高选择布局档位时
   - 情境：源端 Glance AppWidget 用 SizeMode.Exact/LocalSize 按卡片实际宽高选布局（宽度断点、按高度显示标题栏等）；目标为 ArkTS 服务卡片（V1 卡片页 + FormExtensionAbility + form_config 离散规格），实现者准备在卡片页用通用尺寸事件取宽高，或只按 FormDimension 档位一档对一形态。
+  - 例外：form_config 的 supportDimensions、defaultDimension 等静态规格从源 appwidget-provider 换算，见 form_config 一条；本条只管运行时的实际尺寸与布局选择

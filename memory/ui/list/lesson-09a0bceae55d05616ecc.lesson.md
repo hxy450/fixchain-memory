@@ -1,6 +1,6 @@
-# 会换位或增删的列表，位置相关值（首尾标记、序号、上移/下移可用态、首尾圆角）在渲染时按当前位置计算，不取 ForEach/Repeat 生成时的闭包 index
+# 会换位或增删的列表，位置相关值按当前位置计算：ForEach 不取闭包 index，Repeat 在构建表达式里直接读 ri.index
 
-ID：`lesson-09a0bceae55d05616ecc` · 版本：1
+ID：`lesson-09a0bceae55d05616ecc` · 版本：3
 
 [本主题](index.md)
 
@@ -10,15 +10,21 @@ ID：`lesson-09a0bceae55d05616ecc` · 版本：1
 
 ## 适用情境
 
-源端每次重组把当前 index 传给条目（isFirst/isLast、序号、首尾行形状、移动按钮可用态）；目标 ForEach/Repeat 以实例 id 或内容为键（不含位置），在 itemGenerator 中用闭包 index 计算这些值并作为子组件的构造参数。
+源端每次重组把当前 index 传给条目（isFirst/isLast、序号、首尾行形状、移动按钮可用态）；目标 ForEach/Repeat 以实例 id 或内容为键（不含位置），在 itemGenerator 中用闭包 index 计算这些值并作为子组件的构造参数，或改用 Repeat 后以 RepeatItem.index 传值。
+
+## 例外与边界
+
+- 键本身随位置变化（如以位置拼键），换位即重建、生成函数随之重跑时，不需要另算位置
+- 条目显示的内容（不是位置）在对象替换后不刷新：按列表键与对象替换的规则处理
 
 ## 原因
 
-键不含位置时，换位或增删后同键的项被复用、不重跑生成函数，闭包 index 和由它传入的 @Param 都停在旧位置；Compose 重组总按当前 index 重算，源端没有这个问题。来源中写者已读到“同键复用旧子组件、不重派 @Param”的说明，仍认为换位后闭包会随新 index 重建；修复期改用 Repeat 的 index 后上移仍然无效，按当前位置求值后才正确。
+ForEach 键不含位置时，换位或增删后同键的项被复用、不重跑生成函数，闭包 index 和由它传入的 @Param 都停在旧位置。Repeat 换位时会更新 RepeatItem.index（SDK previewer 内嵌 stateMgmt 的 RepeatItem.updateIndex）：@ComponentV2 下它是可观察字段，构建中直接读取就会刷新；@Component(V1) 下 index 没有渲染依赖时不更新，只在事件回调里读或先存成局部常量都会停在旧值。Compose 重组总按当前 index 重算，源端没有这个问题。
 
 ## 做法
 
-1. 位置相关值由依赖当前数组的表达式在渲染时求出（如 this.items.indexOf(item) 与 length 比较），不把生成函数参数里的 index 固化进子组件参数或行样式。
+1. ForEach：位置相关值放在属性表达式或子组件 @Param 实参里，按稳定 id 求当前位置（如 this.items.findIndex(x => x.id === item.id)）再与 length 比较，不把生成函数参数里的 index 固化进子组件参数或行样式；数组元素会被替换或有重复值时不用 indexOf(item)。
+2. Repeat：在 build 表达式里直接读 ri.index（向子组件传完整 RepeatItem，或在属性链里读），不先存成局部常量、不只在事件回调里读；V1 组件的事件回调需要位置时，按当前数组求位置。按此读取后换位仍过期时，改按稳定 id 求当前位置（同上一步）。
 
 ## 可选检查
 

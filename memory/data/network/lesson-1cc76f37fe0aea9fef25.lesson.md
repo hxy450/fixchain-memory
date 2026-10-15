@@ -1,30 +1,27 @@
-# 按源端 Retrofit 实际选中的重载确定请求体编码：post(url, Map)/@FieldMap 用表单，只有 @Body 用 JSON
+# 迁移 Retrofit POST 时按源方法注解定请求体编码：@FormUrlEncoded 发表单，@Body 看 Converter
 
-ID：`lesson-1cc76f37fe0aea9fef25` · 版本：1
+ID：`lesson-1cc76f37fe0aea9fef25` · 版本：3
 
 [本主题](index.md)
 
 ## 何时使用
 
-接口层实现、模块抽取或把调用搬到平台适配层时，为每个 POST 端点确定请求体编码；发现同类编码偏差后确定修复范围时
+接口层实现、模块抽取或把调用搬到平台适配层时，为每个 POST 端点确定请求体编码与 Content-Type；发现同类编码偏差后确定修复范围时
 
 ## 适用情境
 
-Android 通过 Retrofit 通用 post(url, Map) 包装或 @FormUrlEncoded + @FieldMap/@Field 发送参数；目标端点目录的默认 post 是 application/json，另有 formPost/formBody 一类表单写法；目标里已有端点定义或 jsonBody 调用可以直接沿用；规格或 API 清单只列参数名、不写 Content-Type。
-
-## 例外与边界
-
-- 服务端契约已确认同一端点也接受 JSON（接口文档或抓包证明），且当前决策选择 JSON
+源端经 Retrofit ApiService 发请求，调用点可能先经项目自己的 post(url, Map) 一类包装，最终选中的方法带 @FormUrlEncoded + @FieldMap/@Field、@Multipart + @Part 或 @Body；目标 HTTP 层默认以 application/json 发送，另有表单写法；规格或 API 清单只列参数名、不写 Content-Type，目标里可能已有沿用下来的 JSON 端点。
 
 ## 原因
 
-@FormUrlEncoded 请求以 key=value 表单发出，服务端按表单字段读参数；同一字段以 JSON 发送时服务端读不到（表现为缺少关键词、查询无结果），编译和调用都不报错。规格或清单常只列参数名，沿用既有 JSON 端点会把偏差原样带入。来源中模块抽取者按现状搬迁 JSON 搜索请求，读到 formPost/formBody 与默认 post 并存却没有对照源端调用；更早一次审计已确认源端通用 post(url, Map) 为表单编码并建议全量改用表单，但修复只改了当时审计的一个适配器文件。
+@FormUrlEncoded 请求以 application/x-www-form-urlencoded 的 key=value 体发出，服务端按表单字段读参数；同一字段以 JSON 发送时服务端读不到（表现为缺参数、查询无结果），编译和调用都不报错。@Body 参数经 Converter.convert 转成 RequestBody，参数本身是 okhttp3.RequestBody 时原样透传，所以 @Body 的编码由 Retrofit.Builder 注册的 Converter.Factory（Gson、Moshi 为 JSON）或所传 RequestBody 的 MediaType 决定，不能一律当 JSON。规格常只列参数名，沿用既有端点会把偏差原样带入。
 
 ## 做法
 
-1. 为每个 POST 端点找到源端调用点与它选中的 ApiService 重载：@FormUrlEncoded/@FieldMap/@Field 用 formPost + formBody；@Body 才用 JSON。在端点目录与 API 清单里为端点记录 Content-Type，不只列参数名。
-2. 搬迁或复用既有端点与 jsonBody 调用时，把它们当作未核验的现状，按上一条核对编码，不一致就在交接里列为待修。
-3. 发现一处表单被迁成 JSON 后，按模式检索全仓 jsonBody/默认 post 调用及对应源端 post(url, Map) 调用点，覆盖所有适配器和端点目录，不只修当前模块。
+1. 为每个 POST 端点追到源端调用点实际选中的 ApiService 方法（经过项目包装函数时逐层追到带注解的重载），按注解定编码：@FormUrlEncoded + @Field/@FieldMap 发 key=value 表单体；@Multipart + @Part 发 multipart/form-data；@Body 按 Retrofit.Builder 的 addConverterFactory 或所传 RequestBody 的 MediaType 定 Content-Type。
+2. 用目标 HTTP 层对应的表单或 multipart 写法发送（例：目标封装提供 formPost/formBody 时用它，不用默认 JSON post）；在端点目录与 API 清单里为每个端点记录 Content-Type，不只列参数名。
+3. 搬迁或复用既有端点与 JSON 调用时，把它们当作未核验的现状，按第 1 步核对编码，不一致就在交接里列为待修。
+4. 发现一处表单被迁成 JSON 后，检索全仓默认 JSON post 调用及对应源端调用点，覆盖所有适配器和端点目录，不只修当前模块。
 
 来源支持：1 张卡 · 1 次迁移 · 1 个应用
 

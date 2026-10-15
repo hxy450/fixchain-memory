@@ -1,6 +1,6 @@
-# 字符串语言限定目录与键集按源端实际存在的 values-<语言> 镜像：源端有几种语言就迁几种，限定词粒度照源（values-zh→zh），单语源不合成译文，源 locale 缺键保持缺失、回落 base
+# 字符串语言目录与键集按源端实际存在的 values-<语言> 镜像：不合成译文、不缩减语言、限定词粒度照源，源 locale 缺键回落 base
 
-ID：`lesson-b58df29f032cc6a8c9d6` · 版本：4
+ID：`lesson-b58df29f032cc6a8c9d6` · 版本：6
 
 [本主题](index.md)
 
@@ -14,12 +14,12 @@ Android 源只有默认 res/values/strings.xml（常为英文），没有 values
 
 ## 例外与边界
 
-- 规格或决策明确要求本轮新增本地化语言；此时按批准的译文来源生成，并在报告中注明源端没有该语言
-- 源端引用 android.R.string.* 等框架字符串：译文由系统按设备语言提供，按系统字符串的经验为已有语言补框架译文（必要时补地区目录）
+- 规格或任务明确要求本轮新增语言或补译时，按其要求生成
+- 源端引用 android.R.string.* 等框架字符串：译文由系统按设备语言提供，见 lesson-ff19b09146b57d0f91a8
 
 ## 原因
 
-HarmonyOS 在中文系统语言下优先取 zh_CN，合成的中文译文让界面显示中文或中英混排，而同一设备上的 Android 源应用显示默认英文；按键集合一致的检查发现不了取值差异。限定词改粒度同样改变匹配范围：仅语言的 values-zh 在 Android 服务所有中文 locale，改写成 zh_CN 后只匹配中国大陆地区，其他中文地区的设备取不到这份译文。来源中资源代理已读到规格“默认文案为英文、迁移不擅自翻译”和只有 values/ 的源清单，仍按 skill 的双语规则用脚本写出整张中文译表；后续写者按键一致继续补中文值，直到视觉验收在 zh-Hans 设备上逐页发现文案不符。缩减语言范围后，应用内选择其他语言只显示英文；为源 locale 缺失的键补写译文，目标会显示源端没有的文案，而 Android 对这些键回落默认 values。
+HarmonyOS 在中文系统语言下优先取 zh_CN，合成的中文译文让界面显示中文或中英混排，而同一设备上的 Android 源应用显示默认英文；按键集合一致的检查发现不了取值差异。限定词改粒度同样改变匹配范围：仅语言的 values-zh 改写成带地区的 zh_CN，目标的匹配范围就与源端不一致。缩减语言范围后，应用内选择其他语言只显示英文；为源 locale 缺失的键补写译文，目标会显示源端没有的文案，而 Android 对这些键回落默认 values。
 
 ## 做法
 
@@ -28,7 +28,7 @@ HarmonyOS 在中文系统语言下优先取 zh_CN，合成的中文译文让界�
 3. 流程确需保留第二语言目录（例如只放脚手架的 app/ability 键）时，业务键省略以回落 base，或取值与 base 完全一致。
 4. 按源 res 下全部 `values-<locale>` 登记迁移范围；没有用户或任务明确裁剪时不自设缩减默认值，项目约定与资源 skill 硬规则冲突时先核对约定的来源，无来源按源端全集执行或作为冲突上报。
 5. 源 locale 缺少的键保持缺失，让平台回落 base；不按键集一致规则补写机器翻译，除非任务明确要求补译。
-6. 目标限定词按源限定词的粒度映射：仅语言的 values-zh → zh/，带地区的 values-zh-rCN → zh_CN/、values-zh-rTW → zh_TW/；skill 的“最少生成 zh_CN”一类规则不用来改写源端已有的限定词；skill 正文与逐项映射表说法不一时以逐项表为准，并在映射报告写明。
+6. 目标限定词按源限定词的粒度映射：仅语言的 values-zh → zh/，带地区的 values-zh-rCN → zh_CN/、values-zh-rTW → zh_TW/；skill 的“最少生成 zh_CN”是缺中文时的补齐规则，不用来改写源端已有的限定词。
 
 ## 可选检查
 
@@ -42,5 +42,5 @@ HarmonyOS 在中文系统语言下优先取 zh_CN，合成的中文译文让界�
   卡片版本：`ab46ecccf22e52f446c55f852f10ee3fea2a941b95c71c7a416d4e85f7cd2f06`
 - [case-8a522021d6d10fded125](../../../store/cases/case-8a522021d6d10fded125/695193a757e708a77ef3560a9f73b4caf829f00fdfad9ee70368e51f842a04f9.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
   卡片版本：`695193a757e708a77ef3560a9f73b4caf829f00fdfad9ee70368e51f842a04f9`
-- [case-bf53fdebb87671d9eba3](../../../store/cases/case-bf53fdebb87671d9eba3/cb56b1662aea796547436b8d3cee96766e78d87283d49a367635d37b39107c2f.json) · 结论：diagnosis, recommendation:3
+- [case-bf53fdebb87671d9eba3](../../../store/cases/case-bf53fdebb87671d9eba3/cb56b1662aea796547436b8d3cee96766e78d87283d49a367635d37b39107c2f.json) · 结论：diagnosis, recommendation:3, recommendation:4
   卡片版本：`cb56b1662aea796547436b8d3cee96766e78d87283d49a367635d37b39107c2f`

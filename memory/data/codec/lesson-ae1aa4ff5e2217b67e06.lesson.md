@@ -1,6 +1,6 @@
 # 手写 proto3 编解码时按字段 wire type 成对实现读写；int32 负值按 64 位补码逐组拆成 10 字节 varint
 
-ID：`lesson-ae1aa4ff5e2217b67e06` · 版本：1
+ID：`lesson-ae1aa4ff5e2217b67e06` · 版本：2
 
 [本主题](index.md)
 
@@ -14,13 +14,14 @@ ID：`lesson-ae1aa4ff5e2217b67e06` · 版本：1
 
 ## 原因
 
-wire type 决定线上字节数：wire 0 的 varint 长度可变，负 int32 在线上是 64 位符号扩展后的 10 字节 varint；用 4 字节定长方法读 varint 字段，会让该字段之后的整条消息错位。用 32 位位运算拼负数字节时，跨 32 位边界的第 5 组（bit28..34）只有 bit32..34 来自高位，凭“剩余高位全为 1”写常量只对 ≥ -2^28 的值成立。来源中生成者已读到字段表写明 rx_rssi 为 wire 0 INT32，编码写 int32，解码却选了读端唯一返回有符号数的 4 字节 fixed32()；同一编码器把负值第 5 字节写死为 0xFF，INT32_MIN 一类取值直到设备单测才暴露。
+wire type 决定线上字节数：wire 0 的 varint 长度可变，负 int32 在线上是 64 位符号扩展后的 10 字节 varint；用 4 字节定长方法读 varint 字段，会让该字段之后的整条消息错位。用 32 位位运算拼负数字节时，跨 32 位边界的第 5 组（bit28..34）只有 bit32..34 来自高位，凭“剩余高位全为 1”写常量只对 ≥ -2^28 的值成立；JS 移位按 32 取模，读端按 7×k 继续左移会把高组回绕进低位。
 
 ## 做法
 
 1. 按字段表的 wire type 选读写方法，不按值是否有符号选：wire 0 用 varint 族（int32/uint32/enum/bool），wire 5 用 fixed32/sfixed32/float，wire 1 用 fixed64 族。
 2. 基座为每个写方法提供同名、同 wire type 的读方法（writer.int32 ↔ reader.int32，sfixed32 ↔ sfixed32），方法名与 proto 标量类型一致；每个 message 写完，逐字段对照 encode 中的 w.xxx(N, …) 与 decode 中 field === N 分支的 r.xxx()。
-3. int32 负值编码时取 lo = value >>> 0、hi = 0xFFFFFFFF：前 4 组取 lo 的 bit0..27，第 5 组取 (lo >>> 28) | ((hi & 0x0f) << 4)，其后依次取 hi >>> 3、10、17、24 的 7 位分组，末字节为 hi >>> 31（即 0x01），除末字节外都置续位 0x80；读端按 32 位窗口累加 7 位组后用 value | 0 还原符号。
+3. int32 负值编码按 64 位补码公式取 lo = value >>> 0、hi = 0xFFFFFFFF：前 4 组取 lo 的 bit0..27，第 5 组取 (lo >>> 28) | ((hi & 0x07) << 4)，其后依次取 hi >>> 3、10、17、24 的 7 位分组，末字节为 hi >>> 31（即 0x01），除末字节外都置续位 0x80。
+4. 读端：前 5 组拼低 32 位（第 k 组左移 7k，第 5 组只取低 4 位），其后各组只读续位、不并入数值，最多读 10 字节，最后 value | 0 还原有符号 int32。
 
 ## 可选检查
 

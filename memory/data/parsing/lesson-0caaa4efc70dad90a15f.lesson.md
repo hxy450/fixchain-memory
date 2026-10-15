@@ -1,6 +1,6 @@
-# 以 org.json 构造并输出 JSON（备份、导出）时按库语义序列化：put(null) 删除键、toString 把 “/” 转义为 “\/”；不以 JSON.stringify 直出，也不从 Kotlin 可空字段推出“保留 null 键”
+# 源端用 org.json 构造导出 JSON 时按库语义序列化：put(null) 删键、“/” 转义，不以 JSON.stringify 直出
 
-ID：`lesson-0caaa4efc70dad90a15f` · 版本：1
+ID：`lesson-0caaa4efc70dad90a15f` · 版本：2
 
 [本主题](index.md)
 
@@ -10,7 +10,7 @@ ID：`lesson-0caaa4efc70dad90a15f` · 版本：1
 
 ## 适用情境
 
-源端 serialize() 对可空值直接 put（如 put(key, steps?.serialize())、put(key, time)），再以 JSONObject/JSONArray 的 toString() 或 toString(indent) 写文件；对应 Kotlin 字段声明为可空；目标准备用 DTO 加 JSON.stringify(obj, null, n) 输出，规格可能写“null 字段输出 JSON null（键保留）”。
+源端 serialize() 用 Android 平台 org.json 对可空值直接 put（如 put(key, steps?.serialize())、put(key, time)），再以 JSONObject/JSONArray 的 toString() 或 toString(indent) 写文件；对应 Kotlin 字段声明为可空；目标准备用 DTO 加 JSON.stringify(obj, null, n) 输出，规格可能写“null 字段输出 JSON null（键保留）”。
 
 ## 原因
 
@@ -18,8 +18,8 @@ org.json 的 put 值为 null 时删除该键（只有 JSONObject.NULL 才写出 
 
 ## 做法
 
-1. 规格按库语义写序列化契约：put 的值为 null 时不输出该键，只有显式 put(JSONObject.NULL) 才输出 null 值；toString 转义 “/”；其余值类型照源端 put 的类型输出。不由字段可空性推出“null 键保留”。
-2. 实现封装或移植与 org.json 等价的序列化工具（跳过 null 值、转义 “/”、缩进照源端 toString(n)），模型 toJson 与导出服务统一调用，不直接用 JSON.stringify。
+1. 规格按库语义写序列化契约：JSONObject.put 的值为 Java null 时不输出该键，显式 put(JSONObject.NULL) 才输出 null 值；JSONArray 中的 null 元素输出 null；toString 转义 “/”；其余值类型照源端 put 的类型输出。不由字段可空性推出“null 键保留”。
+2. 实现封装或移植与 org.json 等价的序列化工具（JSONObject 的 Java null 删键、JSONObject.NULL 与数组 null 元素输出 null、转义 “/”、缩进照源端 toString(n)），模型 toJson 与导出服务统一调用，不直接用 JSON.stringify。
 
 ## 可选检查
 

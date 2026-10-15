@@ -1,6 +1,6 @@
 # 横向滚动容器给交叉轴写数值高度，按内容算出，不写 'auto' 也不留空
 
-ID：`lesson-2d7c6de68f604ae77caf` · 版本：3
+ID：`lesson-2d7c6de68f604ae77caf` · 版本：5
 
 [本主题](index.md)
 
@@ -10,15 +10,19 @@ ID：`lesson-2d7c6de68f604ae77caf` · 版本：3
 
 ## 适用情境
 
-源端横向滚动行的高度由子项固有高度决定；目标用 Scroll(ScrollDirection.Horizontal) 或横向 List/Grid 实现，所在父容器在纵向上还有剩余空间。
+源端横向滚动行（Compose LazyRow、horizontalScroll、可滚动 Tab 行）的高度由子项固有高度决定；目标用 Scroll(ScrollDirection.Horizontal) 或横向 List/Grid 实现，所在父容器在纵向上还有剩余空间。
+
+## 例外与边界
+
+- 横向滚动容器放在已定高的父槽位里（父级给出确定高度）时，交叉轴随父级即可
 
 ## 原因
 
-在来源所用工具链中，ArkUI 滚动容器的交叉轴不随内容收缩，横向不设高度时会撑满父级剩余高度；工程迁移陷阱表记有同一条，纵向缺宽度同理。来源的 Tab 行写了 .height('auto') 并注释为“自适应内容”，设备实测（API 12 模拟器）Scroll 仍被撑到约 597vp，行内选中格跟着放大，后几项被挤出视口。生成者没读到陷阱表里这一条，只凭另一个组件属性注释中的 auto 字样推断可用。
+在已观察的工具链中（target SDK 5.0.0(12) 工程的设备实测），ArkUI 滚动容器的交叉轴不随内容收缩：横向 Scroll/List 不设高度会撑满父级剩余高度，写 height('auto') 也不收缩；行内选中格等百分比子层随之放大，后续项被挤出视口。
 
 ## 做法
 
-1. 交叉轴高度取最高子项高度加上下内边距或外边距：单行文本项可按字号对应的单行高度加上下 padding 计算，已有设备测量值时以测量值为准。 将确定的数值写到横向滚动容器的.height(...)，不以'auto'代替内容高度约束。
+1. 交叉轴高度取最高子项高度加上下内边距或外边距：单行文本项按字号对应的单行行高加上下 padding 计算（字号与 padding 取当前源样式），已有设备测量值时以测量值为准；把算出的数值写到横向滚动容器的 .height(...)，不以 'auto' 代替。
 
 ## 可选检查
 
@@ -28,5 +32,5 @@ ID：`lesson-2d7c6de68f604ae77caf` · 版本：3
 
 ## 来源（按需复核）
 
-- [case-2018daf21990f553ec22](../../../../store/cases/case-2018daf21990f553ec22/28ef980edd82e29589d8923bf1fff263161ff6975ab9fe8a33e7149e781419c0.json) · 结论：diagnosis, recommendation:1
+- [case-2018daf21990f553ec22](../../../../store/cases/case-2018daf21990f553ec22/28ef980edd82e29589d8923bf1fff263161ff6975ab9fe8a33e7149e781419c0.json) · 结论：diagnosis, recommendation:1, recommendation:3
   卡片版本：`28ef980edd82e29589d8923bf1fff263161ff6975ab9fe8a33e7149e781419c0`
