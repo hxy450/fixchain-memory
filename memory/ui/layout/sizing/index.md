@@ -24,9 +24,9 @@
 - [LinearLayout gravity=center 的 wrap_content 子项组转 Row 时保留居中与按内容定宽，中间输入框不加权重](lesson-02b2fcd7d157d97f95c8.lesson.md)
   - 时机：界面实现阶段，把数量步进器（减号、数量框、加号）一类居中的 wrap_content 子项组翻译成 ArkUI Row 时
   - 情境：源端 LinearLayout 设 gravity=center 与固定外边距，子项是 wrap_content 的按钮与 EditText；控件可能叠在带装饰的背景图（票券存根、竖虚线）上。
-- [LinearLayout 的 weightSum 与子权重和不等或 wrap_content 子项带权重时，按源码逐项分配余量，不归一化](lesson-adad817f2c3c8f1eaa09.lesson.md)
+- [LinearLayout 的 weightSum 与子权重和不等或 wrap_content 子项带权重时，按源码逐项分配余量（余量为负也照算），不归一化](lesson-adad817f2c3c8f1eaa09.lesson.md)
   - 时机：界面实现阶段，把 Android LinearLayout 的 layout_weight/weightSum 分配翻译成 ArkUI 尺寸时；规格提取阶段写权重布局时
-  - 情境：源布局声明 weightSum 且与子权重之和不等（例：根 weightSum=10 而子权重 4/1/9；一列 weightSum=6 而 8 个 wrap_content 子项各权重 1），或 wrap_content 子项带权重、自然尺寸各不相同。
+  - 情境：源布局声明 weightSum 且与子权重之和不等（例：根 weightSum=10 而子权重 4/1/9；一列 weightSum=6 而 8 个 wrap_content 子项各权重 1），或 wrap_content 子项带权重、自然尺寸各不相同，子项自然尺寸之和可能超过可用尺寸（横屏、小屏）。
 - [Row 中位于定宽兄弟之后的 wrap_content 多行文字要加 flexShrink(1)（或 layoutWeight(1)）才会在剩余宽度内折行：Row 设了满宽，子项也默认不收缩](lesson-8566839cffc9e9e7fa30.lesson.md)
   - 时机：界面实现阶段，把横向 LinearLayout 中位于固定尺寸兄弟之后的 wrap_content 文字转成 ArkUI Row 子项时
   - 情境：源横向 LinearLayout（常见于 layout-land）中，固定 dp 的 ImageView 之后跟 wrap_content 宽、带左右 padding 的多行 TextView；文本长于剩余宽度时 Android 以 AT_MOST 取行内剩余宽折行。目标 Row 本身可能已设 width('100%')。
@@ -64,7 +64,7 @@
   - 例外：公式本来作用于 Dp 常量（固定间距、固定尺寸），不涉及 constraints 或 placeable 时，按原单位保留
 - [由内容定尺寸的父级（列表行、wrap_content 头部、FIT_CONTENT 半模态）里不写 100% 尺寸：背景画在节点自身，撑满用 Stretch](lesson-a58ebfe7a4c55b041b14.lesson.md)
   - 时机：界面实现与规格映射阶段，翻译用 fillMaxSize()、matchContentSize 贴合内容的选中指示器、描边或背景，为高度由内容决定的行加铺满的背景层（滑删进度背景等），或把 match_parent 高度翻译到 ListItem、列表行组件、折叠头部背景层或 bindSheet 内容根时
-  - 情境：源端指示器或背景层以 fillMaxSize、matchContentSize 贴合由内容定尺寸的格子；源 match_parent 子视图位于 wrap_content 的行、AppBar 或 BottomSheet 容器中，实际随内容或兄弟高度。目标准备在 Stack/Row、List、ListItem、Scroll 或 FIT_CONTENT 半模态里叠一层或直译为 width/height('100%') 的节点。
+  - 情境：源端指示器或背景层以 fillMaxSize、matchContentSize 贴合由内容定尺寸的格子；源 match_parent 子视图位于 wrap_content 的行、AppBar 或 BottomSheet 容器中，实际随内容或兄弟高度。目标准备在 Stack/Row、List、ListItem、Scroll 或 FIT_CONTENT 半模态里叠一层或直译为 width/height('100%') 的节点；或为了让条目里的铺满层有确定父尺寸，准备用 aspectRatio、固定 vp 给由内容定高的网格项或列表项定高。
   - 例外：父节点有确定的宽高（显式数值，或已被外层约束定死）时，百分比层按该尺寸解析，可以使用；页面根 Stack 等定尺寸遮罩里的居中弹窗卡片：父级已定尺寸，宽度按源端窗口规则写。框架 Material AlertDialog 的最小宽取主题 windowMinWidthMinor/Major（SDK platforms/android-&lt;api&gt;/data/res/values/dimens.xml 的 dialog_min_width_minor 竖屏 95%、dialog_min_width_major 横屏 65%，android-36 中如此），背景 drawable/dialog_background_material.xml 另有 16dp inset；不适用本条，也不从本条取固定 vp 估值；占剩余高度的内容区或被宿主嵌入的满高组件，按宿主有界槽位的规则处理
 - [网格里跨列数不同的卡片要同行等高时，用实际列宽与留边推导宽卡比例；组件自身的原生宽高比只用于卡内内容缩放](lesson-4fc212d401ac7b2a4218.lesson.md)
   - 时机：列表或首页网格的界面实现阶段，为不同尺寸规格（如 2x2、4x2）的卡片确定外框高度或 aspectRatio 时

@@ -1,19 +1,15 @@
 # ui/graphics
 
-图标与图形资源：动画矢量的状态帧、Lottie 动画层的接入、被注释的自定义绘制绑定、系统符号替代、资源迁移中的静态化标注，图标固有尺寸与 scaleType（含 vector 转来的 SVG），整屏背景图的缩放方式，自定义图片组件的形状与裁剪（含被父级自定义 Layout 放置时），自绘图表的坐标原点，按使用场景区分的资源变体映射，自绘视图自适应尺寸公式的参照基数，按产品 flavor 覆盖的 layer-list 根背景逐层落地与位图暂缺时的引用保留，以及多个指标共用的绘制分支按源端通用参数（线宽、描边）统一实现，缺失原图时从 Android 复制且不以近名图标或着色替代，文字字符按钮的字形；自绘 View 移植到 Canvas 的单位、帧循环、位图缓存语义与文字度量见子主题 canvas；自绘角标与圆点按调用分支推导尺寸（半径与直径）；动画矢量（AVD）两态之间的形变过渡
+图标与图形资源：动画矢量的状态帧、Lottie 动画层的接入、被注释的自定义绘制绑定、系统符号替代、资源迁移中的静态化标注，图标固有尺寸与 scaleType（含 vector 转来的 SVG，受限父级中只夹紧受限的一轴），整屏背景图的缩放方式与可见性（被铺满的 SurfaceView 遮住时不建背景层），自定义图片组件的形状与裁剪（含被父级自定义 Layout 放置时），自绘图表的坐标原点，按使用场景区分的资源变体映射，自绘视图自适应尺寸公式的参照基数，按产品 flavor 覆盖的 layer-list 根背景逐层落地与位图暂缺时的引用保留，以及多个指标共用的绘制分支按源端通用参数（线宽、描边）统一实现，缺失原图时从 Android 复制且不以近名图标或着色替代，文字字符按钮的字形；自绘 View 移植到 Canvas 的单位、帧循环、位图解码与缓存语义、文字度量见子主题 canvas；自绘角标与圆点按调用分支推导尺寸（半径与直径）；动画矢量（AVD）两态之间的形变过渡
 
 [上一级](../index.md)
 
 ## 子主题
 
-- [canvas](canvas/index.md) — 自绘 View（onDraw、Paint）移植到 ArkUI Canvas：上下文单位域与跨域换算，invalidate 与帧循环，每帧起始画面（清屏），预烘焙位图改每帧绘制时的取值时机与缩放语义，字体串格式与字体就绪，文字基线度量与段落方向
+- [canvas](canvas/index.md) — 自绘 View（onDraw、Paint）移植到 ArkUI Canvas：上下文单位域与跨域换算，invalidate 自续帧的帧入口，SurfaceView 自建线程循环的实例数、vsync 节拍与 surface 失效，每帧起始画面（清屏），位图按密度解码与预缩放的采样，预烘焙位图改每帧绘制时的取值时机与缩放语义，字体串格式与字体就绪，文字基线度量与段落方向
 
 ## 本级经验
 
-- [android:background 的整屏背景是普通位图时按拉伸铺满映射，不默认用 ImageFit.Cover 裁切](lesson-7708f650eb4b55dce045.lesson.md)
-  - 时机：界面实现阶段，把源根布局的 android:background 背景图转换为 ArkUI 背景 Image 或背景图属性时
-  - 情境：源根容器以 android:background=@drawable/xxx 铺设整屏背景，该 drawable 是普通位图（png/jpg，或未设 gravity/tileMode 的 &lt;bitmap&gt;，BitmapDrawable.java 默认 gravity=FILL），背景上画有需要完整显示的图文；目标用 Stack 底层 Image 或背景图属性重建。
-  - 例外：源端是 ImageView 且显式 scaleType=centerCrop 一类裁切语义，按该 scaleType 映射；背景是设了 gravity 或 tileMode 的 &lt;bitmap&gt;：按其定位或平铺映射（common.d.ts 的 backgroundImagePosition、backgroundImage 的 ImageRepeat）；背景是 .9.png：按九宫格拉伸，用 Image.resizable（image.d.ts）或 backgroundImageResizable（common.d.ts）按源 .9 的拉伸区设 slice；背景是 layer-list 或按产品 flavor 覆盖：按生效版本逐层落成组件
 - [animated-vector 按 atEnd 在起止帧之间实现过渡；同名静态 SVG 只是起始帧，不当作完整实现](lesson-e6b1f9094ec3b905cab5.lesson.md)
   - 时机：规格提取与界面实现阶段，为 AnimatedImageVector/animated-vector 图标确定实现方案、各状态显示的帧与状态切换时的过渡时；以及资源迁移阶段遇到 animated-vector 时
   - 情境：源码用 AnimatedImageVector.animatedVectorResource 与 rememberAnimatedVectorPainter(icon, atEnd)，atEnd 由完成、运行等状态决定，animated-vector 的 objectAnimator 以 pathData 的 valueFrom/valueTo 描述两态之间的形变，带 duration 与 interpolator；目标没有直接等价组件，资源目录里的同名媒体可能是资源迁移从起始帧导出的静态 SVG；规格可能允许资源动画或等价符号，或写“图标态切换即可满足”。
@@ -24,7 +20,7 @@
 - [位图图标按资源固有 dp 显示、触摸盒放在外层：centerInside、wrap_content 图标不设成盒子尺寸再 Contain](lesson-bdc493f5950835f9bfcc.lesson.md)
   - 时机：界面实现阶段，把 ImageButton/ImageView 的固定触摸盒与 scaleType、或 wrap_content/drawableLeft 图标翻译成 ArkUI Image 尺寸时；复用已完成页面的控件行时；把工具栏的文字或系统符号按钮替换为位图 Image，确定图标显示尺寸与点击热区时
   - 情境：源图标按钮是固定 dp 盒加 scaleType=centerInside，或图标以 wrap_content、TextView drawableLeft/Start 显示，渲染尺寸取决于资源像素与密度目录；映射参考把 centerInside 对到 ImageFit.Contain，或写“wrap_content → 无需设置，自动适应”。也包括工具栏按钮原本在组件上链式设置点击区宽高，替换成位图后又在同一 Image 上写图标宽高；多个列表页共用的推广角标；媒体留给后续批次拷贝；ImageView 用 padding 缩小可见图形、目标准备换成纯色形状。
-  - 例外：图片位于权重行或定尺寸父格中、固有尺寸大于父级可给的空间时：按父级给出的上限夹紧图片盒并等比缩小（FIT_CENTER/Contain），不按固有尺寸溢出，也不填经验值；写后与源端截图核对盒位置；资源是 vector drawable 转来的 SVG：固有尺寸取源 drawable 的 android:width/height（dp），不按密度目录换算
+  - 例外：图片位于权重行、列表或网格条目等只在一个轴上受限的父级中、固有尺寸超出该轴可给的空间时：ImageView 未设 adjustViewBounds（默认 false）时只夹紧超限的那一轴，另一轴保持密度缩放后的固有尺寸，盒子不等比收缩，FIT_CENTER/centerInside 只让位图在盒内等比缩小绘制；GridView/ListView 条目宽由列宽定死、高按 UNSPECIFIED 量出，格高＝固有高＋条目 padding。不为套用夹紧补宽高比（如 aspectRatio(1)）、不填经验值；只有 adjustViewBounds=true 时盒子才按宽高比收缩。查值：布局 XML 的 adjustViewBounds、layout_width/height、scaleType，res/drawable-&lt;密度&gt; 下的像素，固有像素＝(px×设备dpi＋目录dpi/2)/目录dpi（Bitmap.scaleFromDensity），Adapter.getView 的 setLayoutParams/setPadding；机制见 ImageView.onMeasure 与 GridView 对子项的 UNSPECIFIED 测量。写后与源端截图核对盒位置；资源是 vector drawable 转来的 SVG：固有尺寸取源 drawable 的 android:width/height（dp），不按密度目录换算
 - [修共享绘制分支里某一指标的显示差异时，按源端通用规则统一实现，不写单 key 特判；先列出落入该分支的全部指标](lesson-17d6e4c04764983be25a.lesson.md)
   - 时机：界面绘制修复阶段，按用户对某一指标的视觉反馈，调整多个指标共用的 Canvas 绘制分支（线宽、描边、填充样式）时
   - 情境：源端同类图形由通用 helper 按统一规则绘制（如按 Paint.Style 与默认 strokeWidth 统一绘制），不区分指标 key；目标多个指标经分派落到同一绘制分支，用户只报告其中一个与源端粗细不一致。
@@ -42,6 +38,10 @@
 - [源布局有按状态切换的 Lottie 动画层时接入 @ohos/lottie 并迁移动画 JSON，不以静态兜底图静默替代](lesson-ea55fe23fea47c1cfca3.lesson.md)
   - 时机：界面实现阶段，转换含 LottieAnimationView 或 setAnimation("json/...") 的页面头图、背景等动画层时
   - 情境：Android 页面在静态背景 ImageView 之上叠加 LottieAnimationView，代码按业务状态（如天气、昼夜）调用 setAnimation 选择 assets/json 中的动画文件；目标工程尚无 lottie 依赖，静态兜底图已迁移。
+- [源端可见的整屏 android:background 普通位图按拉伸铺满映射；被铺满且未置顶的 SurfaceView 遮住时不建背景层](lesson-7708f650eb4b55dce045.lesson.md)
+  - 时机：规格提取与界面实现阶段，把源根布局或容器的 android:background 背景图转换为 ArkUI 背景 Image 或背景图属性时
+  - 情境：源根容器以 android:background=@drawable/xxx 铺设整屏背景，该 drawable 是普通位图（png/jpg，或未设 gravity/tileMode 的 &lt;bitmap&gt;，BitmapDrawable.java 默认 gravity=FILL），背景上画有需要完整显示的图文，且在源端最终渲染中可见；目标用 Stack 底层 Image 或背景图属性重建。也包括容器里放了铺满的 SurfaceView 自绘视图，规格仍按布局属性给画布下加背景层。
+  - 例外：容器内有铺满的 SurfaceView/GLSurfaceView/VideoView 且源码没有 setZOrderOnTop(true)：窗口在该区域打洞，父容器背景不可见，可见的是 surface 自身内容（清成透明即为黑）；不建背景层，底色取 surface 的实际可见色。ArkUI Canvas 的 clearRect 会露出下层组件，不能把源容器背景当作画布下的底层 Image；源端是 ImageView 且显式 scaleType=centerCrop 一类裁切语义，按该 scaleType 映射；背景是设了 gravity 或 tileMode 的 &lt;bitmap&gt;：按其定位或平铺映射（common.d.ts 的 backgroundImagePosition、backgroundImage 的 ImageRepeat）；背景是 .9.png：按九宫格拉伸，用 Image.resizable（image.d.ts）或 backgroundImageResizable（common.d.ts）按源 .9 的拉伸区设 slice；背景是 layer-list 或按产品 flavor 覆盖：按生效版本逐层落成组件
 - [源端按使用场景返回不同资源变体时，按取值字段分别映射，不用一个映射覆盖所有场景](lesson-c65e8e59008a5e31bcad.lesson.md)
   - 时机：界面实现与返修阶段，把源端“编码 → 资源”的映射函数（如状态编码到图标）迁移为 $r 资源映射，并为各使用处选择资源时
   - 情境：源端一个编码对应多种资源（白色图标、背景图、另一色系图标等），经不同的映射函数或字段分别取用，页面不同位置（顶部、卡片、选中/非选中、列表）绑定不同字段。也包括同一选项在列表与主预览分别取自固定 drawable 和按尺寸挑选的素材。

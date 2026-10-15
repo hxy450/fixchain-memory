@@ -26,10 +26,6 @@
 - [依附式弹窗（AttachPopup）的宿主按锚点视图所在页面确定：提示挂在锚点页、按锚点实测坐标定位，弹出条件包含锚点可见](lesson-29f62d177a17d08b4e4f.lesson.md)
   - 时机：迁移审计与实现阶段，判定依附式弹窗的宿主归属、改写触发它的子页逻辑时
   - 情境：源端弹窗由子 Fragment 触发 show，但 atView 是父 Fragment 标题栏里的按钮，且只在该按钮可见、一次性标记未写入时显示；目标端已有一个画在子页内部、按固定边距定位的同文案浮层。
-- [只靠平台默认外观的 AlertDialog.Builder 对话框迁移前，按实际对话框主题从平台资源写出完整可见契约，按钮按角色核对槽位](lesson-9c4de55af3c1ecd8eaa4.lesson.md)
-  - 时机：规格提取阶段为代码中 AlertDialog.Builder 构造的系统对话框写转换决策时，以及界面实现阶段按该决策落地 ArkUI 系统弹窗或自定义弹窗时
-  - 情境：源码用 AlertDialog.Builder 内联构造确认框，只设 title、message、setPositiveButton、setNegativeButton（可有 setView），无自定义样式，外观由主题的平台默认警告框决定；目标准备用 ArkUI AlertDialog.show(primaryButton/secondaryButton) 等系统弹窗替代，项目要求与源端逐屏一致。也包括应用主题为 Theme.Holo 等框架主题，多个对话框共用同一平台外观；规格只写了“标题左对齐、负左正右、遮罩、cancelable”几项，各页写者凭记忆或兄弟页先例自绘面板。
-  - 例外：项目明确接受目标系统弹窗的固有外观、只要求文案与按键行为一致；此时仍按角色核对按钮槽位；android.preference 偏好页弹出的 DialogPreference/ListPreference 对话框：外观契约同本条，按钮集合、内容布局与提交语义另按偏好框架默认推导，见 lesson-3f95e9d0ad81b3c431e9
 - [同页多个工具面板逐个按源端容器类型、锚点与交互步骤实现：形态不同的面板不共用一个弹窗组件](lesson-21db515a505be4845497.lesson.md)
   - 时机：界面实现与对齐阶段，为同页多个工具面板（如阅读页的设置、更多、发弹幕）确定容器、锚点与交互步骤，或准备用一个共享弹窗组件承载多个面板时
   - 情境：源端同页多个工具面板容器各不相同（底部 PopupWindow 面板、锚定在标题栏右上角带箭头的弹出菜单、先编辑再在内容上拖动定位的多步弹层）；目标现有实现用一个固定高度、带拖动条与关闭按钮的 bindSheet 承载全部面板，或准备按类型切换内容合并成一个弹窗。
@@ -37,6 +33,10 @@
   - 时机：规格提取阶段把 Android Dialog/BottomSheet 的呈现方式映射到 ArkUI 承载方式、工程有路由统一约束时；实现阶段按这类规格落地弹窗时
   - 情境：Android 入口经 bottomDialog/Dialog 在当前 Activity 上 show 全宽底部面板（遮罩下仍见宿主页、点背景关闭、不入返回栈）；目标工程有“路由统一使用某路由框架（如 HMRouter）”的约束，且已有同名路由页可复用；规格援引该约束写成“用路由页承载等价弹层”。
   - 例外：规格选用路由页或独立窗口承载，且已确认该机制保留宿主页可见与点背景关闭、并在验收中写明对应检查时（见 how 第 2 步）
+- [平台默认外观的 AlertDialog 迁移前按对话框样式的 layout 与面板资源写可见契约：按钮按角色核槽位，返回键与点外部两条取消路径分别核对](lesson-9c4de55af3c1ecd8eaa4.lesson.md)
+  - 时机：规格提取阶段为代码中 AlertDialog.Builder 构造的系统对话框写转换决策时，以及界面实现阶段按该决策落地 ArkUI 系统弹窗或自定义弹窗时
+  - 情境：源码用 AlertDialog.Builder 内联构造确认框，只设 title、message、setPositiveButton、setNegativeButton（可有 setView），无自定义样式，外观由主题的平台默认警告框决定；目标准备用 ArkUI AlertDialog.show(primaryButton/secondaryButton) 等系统弹窗替代，项目要求与源端逐屏一致。也包括应用主题为 Theme.Holo 等框架主题，多个对话框共用同一平台外观；规格只写了“标题左对齐、负左正右、遮罩、cancelable”几项，或把取消方式写成“仅返回键可关闭”，各页写者凭记忆或兄弟页先例自绘面板；源端会同时叠放多个对话框。
+  - 例外：项目明确接受目标系统弹窗的固有外观、只要求文案与按键行为一致；此时仍按角色核对按钮槽位；android.preference 偏好页弹出的 DialogPreference/ListPreference 对话框：外观契约同本条，按钮集合、内容布局与提交语义另按偏好框架默认推导，见 lesson-3f95e9d0ad81b3c431e9
 - [弹窗确认区是可点击的复合容器（勾选或图标加多行文案）时，整体转成复合按钮，不用只收单个 label 的按钮 builder](lesson-f7f9b40bf3d0e1b62d1f.lesson.md)
   - 时机：界面实现与收口阶段，转换弹窗里带点击事件、内含勾选控件或图标与多行文本的确认区，或用一个共享弹窗组件承载多个弹窗变体时
   - 情境：源确认区是带形状背景、可点击的 LinearLayout/Shape 容器（勾选控件＋主文案＋小字号次文案）；目标准备复用只收单个文字 label 的主题按钮 builder；或一个共享弹窗组件承载普通、严格等多个变体，只有某个变体有显式勾选状态；源端还可能在勾选后延时再回调。

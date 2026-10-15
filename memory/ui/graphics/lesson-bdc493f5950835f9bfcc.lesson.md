@@ -1,6 +1,6 @@
 # 位图图标按资源固有 dp 显示、触摸盒放在外层：centerInside、wrap_content 图标不设成盒子尺寸再 Contain
 
-ID：`lesson-bdc493f5950835f9bfcc` · 版本：11
+ID：`lesson-bdc493f5950835f9bfcc` · 版本：12
 
 [本主题](index.md)
 
@@ -14,7 +14,7 @@ ID：`lesson-bdc493f5950835f9bfcc` · 版本：11
 
 ## 例外与边界
 
-- 图片位于权重行或定尺寸父格中、固有尺寸大于父级可给的空间时：按父级给出的上限夹紧图片盒并等比缩小（FIT_CENTER/Contain），不按固有尺寸溢出，也不填经验值；写后与源端截图核对盒位置
+- 图片位于权重行、列表或网格条目等只在一个轴上受限的父级中、固有尺寸超出该轴可给的空间时：ImageView 未设 adjustViewBounds（默认 false）时只夹紧超限的那一轴，另一轴保持密度缩放后的固有尺寸，盒子不等比收缩，FIT_CENTER/centerInside 只让位图在盒内等比缩小绘制；GridView/ListView 条目宽由列宽定死、高按 UNSPECIFIED 量出，格高＝固有高＋条目 padding。不为套用夹紧补宽高比（如 aspectRatio(1)）、不填经验值；只有 adjustViewBounds=true 时盒子才按宽高比收缩。查值：布局 XML 的 adjustViewBounds、layout_width/height、scaleType，res/drawable-<密度> 下的像素，固有像素＝(px×设备dpi＋目录dpi/2)/目录dpi（Bitmap.scaleFromDensity），Adapter.getView 的 setLayoutParams/setPadding；机制见 ImageView.onMeasure 与 GridView 对子项的 UNSPECIFIED 测量。写后与源端截图核对盒位置
 - 资源是 vector drawable 转来的 SVG：固有尺寸取源 drawable 的 android:width/height（dp），不按密度目录换算
 
 ## 原因
@@ -34,7 +34,7 @@ centerInside 只缩不放，小于盒子的图标按固有尺寸居中；Contain
 
 - dumpLayout 读取图标 bounds 除以屏幕密度，与 Android 固有 dp 逐项对比。
 
-来源支持：9 张卡 · 8 次迁移 · 8 个应用
+来源支持：11 张卡 · 9 次迁移 · 9 个应用
 
 ## 来源（按需复核）
 
@@ -42,10 +42,14 @@ centerInside 只缩不放，小于盒子的图标按固有尺寸居中；Contain
   卡片版本：`87b0c345ca3fa21bf70b01c74e3a2714a0880c4a2e5531942fe4d81a24d85b98`
 - [case-4e7e0e12d7b6b08c08b0](../../../store/cases/case-4e7e0e12d7b6b08c08b0/01e35fad86da84ee72ab8dae4e42ffdfe63b5ab1b816e24b5614e9d185c42115.json) · 结论：recommendation:2
   卡片版本：`01e35fad86da84ee72ab8dae4e42ffdfe63b5ab1b816e24b5614e9d185c42115`
+- [case-50d5978491b9ba48b899](../../../store/cases/case-50d5978491b9ba48b899/1d0dc9fa70cf068c678afcbb27308a85366c39290f03c618b36fc6bcf443b897.json) · 结论：diagnosis, recommendation:1, recommendation:3
+  卡片版本：`1d0dc9fa70cf068c678afcbb27308a85366c39290f03c618b36fc6bcf443b897`
 - [case-747484a613e86334516d](../../../store/cases/case-747484a613e86334516d/c17375c37c6410806f89e51707baf458f2a7269ddea6fe33e4ea348696489ff9.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3, recommendation:5
   卡片版本：`c17375c37c6410806f89e51707baf458f2a7269ddea6fe33e4ea348696489ff9`
 - [case-84754321501fb68838ca](../../../store/cases/case-84754321501fb68838ca/3f3463ed3d961b5111a1ac32e6c7a95587c06d7746f3ab9a54fe09afe015fd8a.json) · 结论：diagnosis, recommendation:1
   卡片版本：`3f3463ed3d961b5111a1ac32e6c7a95587c06d7746f3ab9a54fe09afe015fd8a`
+- [case-85db2e28957bc67387d9](../../../store/cases/case-85db2e28957bc67387d9/20bff0cc2958613a8fe30f66317dc6e21b1990b04b3a795803527480b673f1a3.json) · 结论：diagnosis, recommendation:3
+  卡片版本：`20bff0cc2958613a8fe30f66317dc6e21b1990b04b3a795803527480b673f1a3`
 - [case-9d7fa754a567e2ecec7e](../../../store/cases/case-9d7fa754a567e2ecec7e/08068dd456a4c32cc1327c39f339215b49dab4ffc8f5a25dc8024b7112ebbd28.json) · 结论：recommendation:4
   卡片版本：`08068dd456a4c32cc1327c39f339215b49dab4ffc8f5a25dc8024b7112ebbd28`
 - [case-ae26f8358584821ce4d4](../../../store/cases/case-ae26f8358584821ce4d4/739279181a7edf61aaddc81bc6550a650a12740e302f5bf7fdd385d674e76364.json) · 结论：diagnosis, recommendation:1, recommendation:2

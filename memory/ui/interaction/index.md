@@ -1,6 +1,6 @@
 # ui/interaction
 
-点击命中与手势：Stack/弹窗覆盖层对下层点击的影响（含按钮上叠的进度环）、hitTestBehavior与防穿透、事件绑定和点击副作用、侧滑行的手势归属与滑删方向，以及事件触发时的坐标与锚点取值；含状态按钮的内容分支；源端监听回调被注释（死按钮）时的迁移与审计；根级硬件键盘快捷键与聚焦输入框的事件归属，Activity 级按键回调的挂载节点；源端只跟随首指的触控分支对 ArkUI 逐指派发的过滤。；带文字的勾选控件拆成勾选框加文字时的可点范围；Compose 点击修饰符默认按压指示的补齐，combinedClickable 长按自带的系统触感；点击时的按键音与振动，确认类点击的切态加可取消延时，GestureDetector 的 onFling 条件复刻
+点击命中与手势：Stack/弹窗覆盖层对下层点击的影响（含按钮上叠的进度环）、hitTestBehavior与防穿透、事件绑定和点击副作用、侧滑行的手势归属与滑删方向，以及事件触发时的坐标与锚点取值；含状态按钮的内容分支；源端监听回调被注释（死按钮）时的迁移与审计；根级硬件键盘快捷键与聚焦输入框的事件归属，Activity 级按键回调的挂载节点；源端只跟随首指的触控分支对 ArkUI 逐指派发的过滤；带文字的勾选控件拆成勾选框加文字时的可点范围；点击容器与列表行默认按压反馈的补齐（Compose 点击指示、View 体系 listSelector 画在内容下方），combinedClickable 长按自带的系统触感；点击时的按键音与振动，确认类点击的切态加可取消延时，GestureDetector 的 onFling 条件复刻
 
 [上一级](../index.md)
 
@@ -46,13 +46,13 @@
   - 时机：输入控制的规格提取与实现阶段，把 Android onTouch 的 MotionEvent 动作分支和坐标读取映射为 ArkUI onTouch 的 TouchType 分支与触点来源时
   - 情境：源端 OnTouchListener 用未掩码的 event.getAction() 只匹配 ACTION_DOWN/MOVE/UP，以无索引的 getX()/getY()（指针索引 0）读坐标，附加手指的 POINTER_DOWN/UP 不进入任何分支；目标 ArkUI .onTouch 对每根手指都派发 TouchType.Down/Up，TouchEvent 同时提供 touches（含本次抬起手指在内的全部触点）与 changedTouches（本次变化的触点）。也包括源端多个兄弟控件（方向键、旋转键等）各自 setOnTouchListener，targetSdk≥11 且未设 splitMotionEvents=false，窗口默认分指，每个控件只收落在自己身上的指针流；目标每个按钮各挂 .onTouch，而 TouchEvent.touches 列出屏幕上全部手指。
   - 例外：源端用 getActionMasked() 处理 POINTER_DOWN/UP，或按 pointerId 跟踪多指时，按源端的多指语义逐指映射；源端 onTouch 只把事件交给 GestureDetector（new GestureDetector、extends SimpleOnGestureListener、return gestureDetector.onTouchEvent(event)）：按 GestureDetector 的触发条件复刻，不套用本条的计数过滤
-- [源端可点击容器自带的按压反馈在 ArkUI onClick 容器上不会自动出现：用 stateStyles 的 pressed 态补状态层](lesson-fde79829831c2269e925.lesson.md)
-  - 时机：界面实现阶段，把带 Modifier.clickable/toggleable/selectable，或 Card、Surface(onClick) 的 Compose 容器转成挂 onClick 的 ArkUI 容器时；把 ListView、PreferenceActivity 中由主题 listSelector 提供按压态的可点击行转成 ArkUI 列表行时
-  - 情境：源端容器经 clickable/toggleable（可带 role = Button、Switch）或 Card/Surface(onClick) 响应点击，没有把 indication 设为 null，按压时由主题提供涟漪或状态层；目标用 Column/Row/Stack 加 .onClick 实现，ArkUI 通用容器默认没有按压反馈（Button 自带的按压效果除外）。 也包括 View 体系的 ListView、PreferenceActivity 行没有把 background 或 listSelector 设为 null，按压态由主题选择器（如 Holo 暗色 list_selector_holo_dark）提供；写者在 d.ts 里找不到通用容器的 stateEffect，就放弃了按压态。
-  - 例外：源端显式 indication = null 或自定义 indication 时，按源端写法处理；目标用自带按压效果的 Button 承载点击时，不再叠加
 - [源端在触发瞬间读取锚点窗口位置时，目标在点击回调里即时取坐标，onAreaChange 缓存只作兜底；锚点取源端传入的同一元素](lesson-963bf871aa4e910a8fc8.lesson.md)
   - 时机：界面实现与修复阶段，为从点击处发出的动效或气泡（完成彩纸、锚点提示）确定起点坐标与锚点元素时
   - 情境：源端在动效或弹窗被调用时用 getLocationInWindow 读取传入锚点 View 的当下窗口中心；目标列表项存在 translate 平移、LazyForEach/Repeat 节点复用或弹层内滚动，写者准备用 onAreaChange 缓存控件位置。
+- [源端点击容器或列表行自带的按压反馈用 stateStyles 补：View 体系列表按 listSelector 取色画在内容下方，不用 opacity](lesson-fde79829831c2269e925.lesson.md)
+  - 时机：界面实现阶段，把带 Modifier.clickable/toggleable/selectable，或 Card、Surface(onClick) 的 Compose 容器转成挂 onClick 的 ArkUI 容器时；把 ListView、GridView、PreferenceActivity 中由主题 listSelector 提供按压态的可点击行或格子转成 ArkUI 列表行或网格项时
+  - 情境：源端容器经 clickable/toggleable（可带 role = Button、Switch）或 Card/Surface(onClick) 响应点击，没有把 indication 设为 null，按压时由主题提供涟漪或状态层；目标用 Column/Row/Stack 加 .onClick 实现，ArkUI 通用容器默认没有按压反馈（Button 自带的按压效果除外）。 也包括 View 体系的 ListView、GridView、PreferenceActivity 行没有把 background 或 listSelector 设为 null，按压态由主题选择器（如 Holo 暗色 list_selector_holo_dark）提供，主题代际要按 res/values-vNN 的 parent 链判断；写者在 d.ts 里找不到通用容器的 stateEffect 就放弃按压态，或取不到颜色就改用 opacity 整体变暗。
+  - 例外：源端显式 indication = null 或自定义 indication 时，按源端写法处理；目标用自带按压效果的 Button 承载点击时，不再叠加
 - [源端监听回调体或 Adapter 数据绑定被注释时按未启用行为迁移；审计不因“已裁定/集成点”注释放行与源端运行态相背的接线](lesson-f3e614f295aa409485fd.lesson.md)
   - 时机：界面实现阶段，转换带点击监听的控件或 item 布局中由 Adapter 绑定的自定义绘制 View 时；1:1 对齐审计与修复阶段，判定目标端交互接线或数据绑定是否与安卓运行态一致，或重写组件时决定是否保留随行的 onClick 时
   - 情境：安卓控件注册了 setOnClickListener，但回调体被整段注释（如选图调用被注释），XML 也可能写着 clickable；或 Adapter 对自定义绘制 View（曲线、进度、图表）的数据绑定整段被注释，只剩 XML 静态属性，ViewModel 仍计算着可能用于绑定的值。目标端按规格集成点把它接成可用功能，或据注释代码、ViewModel 中间值重建动态效果；代码注释可能自述源码为死码并写着“裁定/集成点”；项目要求 1:1 忠实复刻（含源码缺陷）。

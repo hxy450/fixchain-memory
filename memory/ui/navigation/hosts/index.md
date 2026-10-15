@@ -1,11 +1,15 @@
 # ui/navigation/hosts
 
-Navigation/@Entry宿主与页面注册（含根 Navigation 默认标题栏与工具栏）、嵌入页取栈、单 Activity 壳内 loadChildFragment 子页的壳内回退栈与嵌入承载、半透明卡片式 Activity 的透明 DIALOG 路由、路由跳板和跨页面共享生命周期，外部入口（推送、快捷方式）宿主导航执行器的可用性守卫；NavHost 四向自定义转场到 customNavContentTransition 与页面绑定，导航目的地内 LocalLifecycleOwner 的 ON_STOP/ON_RESUME 接到 onHidden/onShown；LAUNCHER 路由跳板在进程存活后从桌面重进的再分流，.navDestination 直接传 @Builder，只在 onPause/onSaveInstanceState 存档时接 onHidden
+Navigation/@Entry宿主与页面注册（含根 Navigation 默认标题栏与工具栏）、嵌入页取栈、单 Activity 壳内 loadChildFragment 子页的壳内回退栈与嵌入承载、半透明卡片式 Activity 的透明 DIALOG 路由、路由跳板和跨页面共享生命周期，外部入口（推送、快捷方式）宿主导航执行器的可用性守卫；Activity 切换转场按源端迁移（overridePendingTransition(0,0) 关闭，未调用时按主题默认窗口动画），NavHost 四向自定义转场到 customNavContentTransition 与页面绑定，导航目的地内 LocalLifecycleOwner 的 ON_STOP/ON_RESUME 接到 onHidden/onShown；LAUNCHER 路由跳板在进程存活后从桌面重进的再分流，.navDestination 直接传 @Builder，只在 onPause/onSaveInstanceState 存档时接 onHidden
 
 [上一级](../index.md)
 
 ## 本级经验
 
+- [Activity 切换转场按源端迁移：overridePendingTransition(0,0) 时各进入路由关闭，未调用时按主题默认窗口动画写转场](lesson-9886f489045488c8b454.lesson.md)
+  - 时机：规格提取阶段写页面规格与路由契约、决定页面切换动画时；实现阶段写 pushPathByName/replacePathByName 或 router.pushUrl 页的 pageTransition 时
+  - 情境：源 Activity 或所继承的基类在 onCreate 调 overridePendingTransition(0,0)；目标用 Navigation 的 push/replace 进入该页，进入路径不止一条，规格可能只把转场禁用挂在抽屉基座等某一条路径上。也包括多个 Activity 只用 startActivity/finish 切换，源码没有 overridePendingTransition、styles 也没覆盖 windowAnimationStyle，目标 @Entry 页或 NavDestination 没有转场设置。
+  - 例外：目的地以复用实例进入（singleTop、CLEAR_TOP 回到已有实例，只走 onNewIntent）时不执行 onCreate，该路径不受此约束
 - [LAUNCHER 入口是路由跳板且任务根被改写时，进程存活后从桌面图标重进要在 onNewWant 按同一条件再分流](lesson-16375a31f9d9cfe6cd55.lesson.md)
   - 时机：规格提取阶段把 LAUNCHER 路由跳板 Activity 映射为入口分流时；入口装配阶段接线 EntryAbility.onNewWant 与入口页时
   - 情境：源端 LAUNCHER Activity 是按条件 startActivity 后 finish 的无界面跳板（未声明 launchMode 即 standard），跳往主页时带 FLAG_ACTIVITY_CLEAR_TOP；应用内跳转用 TaskStackBuilder.startActivities 或 NEW_TASK|CLEAR_TASK 重建任务，使任务根变为主页。目标为单例 UIAbility 加单个 Navigation，进程存活时再次从桌面拉起只回调 onNewWant/onForeground，页面栈原样保留。
@@ -41,10 +45,6 @@ Navigation/@Entry宿主与页面注册（含根 Navigation 默认标题栏与工
 - [根 Navigation 只作路由容器时显式隐藏默认标题栏和工具栏](lesson-69e07207a06a8a8a7ba9.lesson.md)
   - 时机：界面实现阶段，为入口页根 Navigation 编写属性链时
   - 情境：源端外壳没有系统标题栏或工具栏（如 Compose Scaffold 只传自绘 bottomBar 与 snackbarHost），目标以 @Entry 页的 Navigation 作根路由容器，承载 tab 内容和自绘底栏，详情页走 NavDestination。
-- [源 Activity 或其基类 onCreate 调 overridePendingTransition(0,0) 时，进入该页的每条路由都关闭转场](lesson-9886f489045488c8b454.lesson.md)
-  - 时机：规格提取阶段写页面规格与路由契约时；实现阶段写 pushPathByName/replacePathByName 时
-  - 情境：源 Activity 或所继承的基类在 onCreate 调 overridePendingTransition(0,0)；目标用 Navigation 的 push/replace 进入该页，进入路径不止一条，规格可能只把转场禁用挂在抽屉基座等某一条路径上。
-  - 例外：目的地以复用实例进入（singleTop、CLEAR_TOP 回到已有实例，只走 onNewIntent）时不执行 onCreate，该路径不受此约束
 - [源壳在内容容器内以 hide+add+addToBackStack 打开子页、底栏仍可见时，子页留在壳内并由壳维护回退栈](lesson-7bcb44f0e376ec67e5a8.lesson.md)
   - 时机：壳层导航实现与页面形态决策阶段，为源端在主 Activity 内容区压栈加载的子 Fragment 确定承载方式、返回与底部导航选中语义时
   - 情境：源主 Activity 在内容容器内用 FragmentTransaction 的 hide(当前) + add(子页) + addToBackStack 打开详情、搜索等子页（项目封装名如 loadChildFragment），子页期间底栏、迷你播放条等壳元素仍在，工具栏随回退栈深度显示上箭头，可能按子页标签同步底栏选中；另有 replace 并清栈的切页入口（如 loadFragment）。目标同时有 Navigation 路由与壳内容槽。

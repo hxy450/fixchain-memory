@@ -1,0 +1,173 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-4a352d41e71bd8f199f0",
+  "created_at": "2026-10-15T11:43:23.664808+00:00",
+  "migration_key": "bubbleshooter-glm531-215b442f-adc8-42c4-a2cd-a215e38988c9",
+  "title": "把跟 vsync 走的 lockCanvas 游戏循环写成 setInterval(16ms)，实际约39帧/秒，下压与子弹变慢",
+  "when": "规格提取与架构决策阶段，把源端游戏线程帧循环映射为目标帧驱动方式、写跨栈映射行、races 节和 C7 候选项时；实现阶段按规格落地帧循环句柄时",
+  "description": "源端 SurfaceView 游戏线程 while(isRunning) 循环里没有 sleep，每轮 lockCanvas → update → onDraw → unlockCanvasAndPost，节拍由显示 vsync 决定；子弹速度、下压周期、下落动画都按“每帧”计（无 delta-time）。目标在 ArkUI Canvas 上用单一帧回调串行执行 update+render。",
+  "summary": "规格作者（生成主会话）写前已读到源 GameLoop.java：run() 为 while(isRunning) 循环，每轮 sHolder.lockCanvas() 后\n在 synchronized 内 updateGame、onDraw，再判 --Downperiod<0 下压，finally unlockCanvasAndPost，全程没有 sleep（主会话 L73-L74）；\n分析器的参考规格缺陷表也写明“帧率不限、弹速/下压节奏随设备帧率漂移（帧计数时间基准）”（L562-L563）。主会话自己在规格里写出\n“源循环无 sleep（受 lockCanvas vsync 节流 ~60fps）”，说明源端节拍＝显示刷新已被认识，输入足以要求目标也由 vsync 回调驱动。\n首次写入被钩子暂缓时（L178），注入的 lesson-27d9e16a099c2fb437eb（版本 1）提醒写“GameLoop 线程→单一帧循环句柄（setInterval/postFrameCallback）”，\n把定时器与下一帧回调并列成可选项；该经验正文第 2 步也写“只能用定时器时用 setTimeout…用 setInterval 必须以同一句柄 clearInterval”，\n没有说明定时器不跟 vsync、实际频率可能远低于 1000/周期，也没有覆盖“源端是 lockCanvas 忙循环、逻辑按帧计数”这一情境。\n主会话把它记为 playbook 第 6 条（L189），随后在 feature-base 跨栈映射写“单一帧循环句柄（setInterval ~16ms）”（L327），\n在 F001 实现映射行写 setInterval(16ms) 帧循环句柄、数据流写“帧循环句柄（~16ms）”（L374），races 节写“单一帧循环句柄（setInterval 16ms）”（L441），\n推理时认定“setInterval 16ms ≈ same（vsync ~60fps）”（L565），并在 render 节写“帧率不限漂移：源循环无 sleep（受 lockCanvas vsync 节流 ~60fps）\n→ 目标 setInterval 16ms 等价节流”（L620-L621）；D-010 候选 A 也写 setInterval(16ms) 单帧循环句柄，依据栏点名 lesson-27d9e16a（L979、L985）。\n全程没有查 displaySync 或 postFrameCallback 的 d.ts，也没有在目标设备上计帧。偏差在“源端 vsync 节拍 → 目标帧驱动”的规格映射这一环。\nSlice1 引擎 worker 读到 F001（agent-a657166dd000a47ae.jsonl:L37-L38）与已批准的 D-010（L45-L46），派工红线第 3 条也写“帧循环: setInterval(16ms) 单句柄”（L1），\n于是写出 FRAME_INTERVAL_MS=16，注释“lockCanvas vsync 节流 ~60fps → 16ms 等价节流”，startLoop 用 setInterval(…, FRAME_INTERVAL_MS)（L242-L243）。\n该片段一直保留到生成结束。返修在 Pura 90 模拟器（60Hz）上发现 setInterval(16) 实际约 39 帧/秒，安卓约 60 帧/秒（repair L621），\n把 startLoop 改为 @kit.ArkGraphics2D 的 displaySync.create()、setExpectedFrameRateRange{60,60,60}、on('frame') 驱动（repair L2470-L2471）；\n改后第 2 关从点击到下压崩溃约 13.8s，与安卓冷启动后测得的 13.65–13.89s 一致（L2484-L2485、L2647-L2648），记为检查点 C33（L2660-L2661）。\n之后 C41 把共享 vsync 迁入 GameLoop.ets 的 ensureVsync，GameEngine.ets 不再含 setInterval。\n",
+  "recommendations": [
+    "修订 lesson-27d9e16a099c2fb437eb（版本 1）：当前版本 1（2fc387dd 未改）仍把定时器当作可接受的退路。缺的前提：源端帧节拍由显示刷新决定时（SurfaceHolder.lockCanvas/unlockCanvasAndPost 的无 sleep 忙循环、Choreographer.postFrameCallback、onDraw 尾部 invalidate 自续帧），且速度、周期、动画步进按“每帧”计、没有 delta-time，目标必须用 vsync 回调驱动：@ohos.graphics.displaySync（@kit.ArkGraphics2D）create → setExpectedFrameRateRange({min,max,expected} 取源端刷新率) → on('frame') → start/stop，或每帧重投的 UIContext.postFrameCallback；不能用 setInterval/setTimeout(16) 代替。机制：定时器回调排在 UI 线程任务队列里，不对齐 vsync，有最小粒度和排队延迟，实际频率会明显低于 1000/周期，按帧计数的逻辑因此整体变慢。建议把这个条件放进标题前半句（如“源端帧循环跟 vsync（lockCanvas 忙循环/Choreographer/invalidate 自续帧）时用 displaySync 或 postFrameCallback 驱动，不用 setInterval(16)”），做法第 1 步先判断这一信号；第 2 步的定时器写法只留给源端本就按固定周期 tick 的逻辑（Handler.postDelayed、Timer、带 sleep 的循环）。判断信号：源循环体内没有 Thread.sleep/SystemClock 等待、每轮调用 lockCanvas，或逻辑量的单位是 px/帧、N 帧。查值位置：本地 SDK ets/api/@ohos.graphics.displaySync.d.ts（create、setExpectedFrameRateRange、on('frame')）、ets/component/common.d.ts 的 ExpectedFrameRateRange、ets/api/@ohos.arkui.UIContext.d.ts 的 postFrameCallback；设备刷新率用 hidumper -s RenderService -a screen 的 refreshRate。可选检查：在帧回调里计 2 秒帧数，与源端同场景帧率比较。",
+    "规格提取阶段写帧循环映射时，如果要写“与源端等价节流”，先写出源端节拍来源（vsync 还是固定周期）和目标的驱动 API，并附 d.ts 查证；不要只凭“16ms≈60fps”推定等价。races 节与 C7 候选要把 vsync 驱动（displaySync/postFrameCallback）列为候选并写取舍。",
+    "本应用：GameLoop.run() 无 sleep、每轮 lockCanvas，子弹 25px/帧、下压每 101 帧一行。F001 实现映射、races 节、render 备注和 D-010 应写成 displaySync 期望 60 帧（min/max/expected=60）驱动 frame()，stopLoop 时 stop 并 off('frame')、令牌校验丢弃迟到回调。返修 C33 按此修改后，第 2 关从点击到下压崩溃约 13.8s，与安卓冷启动后测得的 13.65–13.89s 一致。",
+    "实现阶段落地帧循环后，如果规格声称“定时器与源端 vsync 节拍等价”，在帧回调里计 1–2 秒实际帧率并与源端比较；不一致时回报规格方复核，不只核对句柄启停与迟到回调丢弃。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-bubbleshooter-glm5.31/entry/src/main/ets/engine/GameEngine.ets",
+        "since": "2026-10-15T07:01:36.043Z",
+        "at": "2026-10-15T10:37:17.179Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/bubble-shooter-ashroof7-c601d2e/src/com/bubbleshooter/GameLoop.java",
+          "at": "2026-10-15T03:38:53.951Z",
+          "reason": "正常输入：主会话 Read 回执给出 run() 的 while(isRunning) 循环：每轮 sHolder.lockCanvas()、synchronized 内 updateGame 与 onDraw、--Downperiod<0 下压，finally unlockCanvasAndPost，没有 sleep。源端节拍由 lockCanvas 跟随显示刷新，逻辑按帧计数，足以要求目标也由 vsync 回调驱动（215b442f…jsonl:L73-L74）。"
+        },
+        {
+          "key": "215b442f-adc8-42c4-a2cd-a215e38988c9.jsonl",
+          "at": "2026-10-15T04:20:58.835Z",
+          "reason": "规格作者已读到源端无 sleep 的 lockCanvas 循环，并自己写出“受 lockCanvas vsync 节流 ~60fps”。首次写入被暂缓时（L178）注入的 lesson-27d9e16a099c2fb437eb（版本 1）提醒“GameLoop 线程→单一帧循环句柄（setInterval/postFrameCallback）”，正文第 2 步允许“只能用定时器时”用 setTimeout/setInterval，未说明定时器不跟 vsync、不适用于 lockCanvas 忙循环（经验本身缺前提，见 unknown）。它把该提醒记为 playbook 第 6 条（L189），随后把帧循环写成 setInterval：feature-base 映射“单一帧循环句柄（setInterval ~16ms）”（L327）；F001 实现映射行与数据流写 setInterval(16ms)/~16ms（L374），races 节写“单一帧循环句柄（setInterval 16ms）”（L441）；推理认定“setInterval 16ms ≈ same”（L565）；render 备注写“目标 setInterval 16ms 等价节流”（L620-L621）；D-010 候选 A 写 setInterval(16ms)，依据点名 lesson-27d9e16a（L979、L985）。未查 displaySync/postFrameCallback 的 d.ts，也未计帧。源端 vsync 节拍到规格帧驱动的映射在这里偏离。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-bubbleshooter-glm5.31/spec/baseline/features/F001-game-engine.md",
+          "at": "2026-10-15T05:18:56.638Z",
+          "reason": "交接桥梁：Slice1 引擎 worker 的 Read 回执包含实现映射行“Canvas 组件 + … + setInterval(16ms) 帧循环句柄”、races 节“单一帧循环句柄（setInterval 16ms）”以及“帧率不限漂移…目标 setInterval 16ms 等价节流”，派工把 F001 定为实现权威（agent-a657166dd000a47ae.jsonl:L37-L38）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-bubbleshooter-glm5.31/spec/decision-ledger.md",
+          "at": "2026-10-15T05:18:59.371Z",
+          "reason": "交接桥梁：同一 worker 读到已批准的 D-010，候选 A 为“px 域 Canvas + setInterval(16ms) 单帧循环句柄”，并选定 A（agent-a657166dd000a47ae.jsonl:L45-L46）。"
+        },
+        {
+          "key": "agent-a657166dd000a47ae.jsonl",
+          "at": "2026-10-15T05:45:16.577Z",
+          "reason": "实现者读到 F001、D-010 和派工红线第 3 条“帧循环: setInterval(16ms) 单句柄”（同转录 L1）后，Write 出 GameEngine.ets：FRAME_INTERVAL_MS=16，注释“源 while 循环无 sleep，lockCanvas vsync 节流 ~60fps → 16ms 等价节流”，startLoop 用 setInterval(…, FRAME_INTERVAL_MS)（L242-L243）。本链只确认它按规格传递了帧驱动选型，不另推定实现者失职。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 5
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "经验 lesson-27d9e16a099c2fb437eb（版本 1）经注入参与了偏差：主会话 L178 的提醒原文、L189 的采纳与 D-010 依据栏点名（L979）都已核实，经验本身缺“源端节拍跟 vsync 时不能用定时器”这一前提，应标 problem。但它未能作为图节点提交：注入只出现在 L178 这条被暂缓写入的 tool_result 中，索引把它登记为主会话对 page_0001 meta.json 的失败 Write，带 evidence 的 force 边返回 invalid_force_source（reviewed relation contradicts indexed operation endpoints）。因此经验的作用写在主会话节点 reason、summary 和“修订 lesson-…”建议中；带经验节点的稿件保留为 draft-1.yaml（普通边）与 draft-2.yaml（force 边）。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-4a352d41e71bd8f199f0",
+  "metadata": {
+    "migration": {
+      "id": "bubbleshooter-glm531-215b442f-adc8-42c4-a2cd-a215e38988c9",
+      "project": "Bubble Shooter"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.300"
+      ]
+    },
+    "source_set_id": "sources-73c606e991f7899a0d19",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-bubbleshooter-glm5.31",
+        "at": "2026-10-15T04:35:29.626Z",
+        "ref": "generation/215b442f-adc8-42c4-a2cd-a215e38988c9/subagents/agent-ac02dc809a0314c48.jsonl:L42",
+        "request_ref": "generation/215b442f-adc8-42c4-a2cd-a215e38988c9/subagents/agent-ac02dc809a0314c48.jsonl:L41",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-bubbleshooter-glm5.31",
+        "at": "2026-10-15T04:35:29.626Z",
+        "ref": "generation/215b442f-adc8-42c4-a2cd-a215e38988c9/subagents/agent-ac02dc809a0314c48.jsonl:L42",
+        "request_ref": "generation/215b442f-adc8-42c4-a2cd-a215e38988c9/subagents/agent-ac02dc809a0314c48.jsonl:L41",
+        "phase": "generation"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "36",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-bubbleshooter-glm5.31",
+        "at": "2026-10-15T08:10:26.715Z",
+        "ref": "repair/74bab117-5770-4198-a61f-f8af8748fade.jsonl:L204",
+        "request_ref": "repair/74bab117-5770-4198-a61f-f8af8748fade.jsonl:L203",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "35",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-bubbleshooter-glm5.31",
+        "at": "2026-10-15T08:10:26.715Z",
+        "ref": "repair/74bab117-5770-4198-a61f-f8af8748fade.jsonl:L204",
+        "request_ref": "repair/74bab117-5770-4198-a61f-f8af8748fade.jsonl:L203",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "8",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-bubbleshooter-glm5.31",
+        "at": "2026-10-15T08:10:26.715Z",
+        "ref": "repair/74bab117-5770-4198-a61f-f8af8748fade.jsonl:L204",
+        "request_ref": "repair/74bab117-5770-4198-a61f-f8af8748fade.jsonl:L203",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "cbf73939-4b90-490a-a37c-bfc2bcc8a05e"
+      ]
+    }
+  },
+  "revision": "bfb25822a981031a8ca464a470972396d768323577afd20d17f7b84d67d5cc0d"
+}

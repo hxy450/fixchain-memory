@@ -1,0 +1,255 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-21e1e83afaa8d814dc37",
+  "created_at": "2026-10-15T11:39:21.216958+00:00",
+  "migration_key": "bubbleshooter-glm531-215b442f-adc8-42c4-a2cd-a215e38988c9",
+  "title": "平台默认 AlertDialog 的点外部取消被规格写成“仅返回键关闭”，自绘遮罩吞掉外部点击",
+  "when": "规格提取阶段为平台默认 AlertDialog 写取消方式契约（返回键、点对话框外部）时；界面实现阶段用页内遮罩复刻这类对话框、决定遮罩点击是关闭对话框还是只吞掉点击时",
+  "description": "源端 AlertDialog.Builder 没有调用 setCancelable(false) 或 setCanceledOnTouchOutside，取消方式由框架默认与对话框主题决定（targetSdk≥11、应用主题继承 Theme.Holo 等框架主题，对话框主题带 windowCloseOnTouchOutside）；目标用页内遮罩加自绘面板复刻，同时要防止点击穿透到下层画面。",
+  "summary": "源端 winGame/loseGame 用 AlertDialog.Builder 构造结算框，没有调用 setCancelable 或 setCanceledOnTouchOutside（analyzer 读 GameLoop.java，agent-acc4a122e8a95c01c.jsonl:L35-L36）；\n应用主题 FullscreenTheme 在 v11 继承 Theme.Holo，对话框主题 Theme.Holo.Dialog.Alert → BaseAlert → Theme.Holo.Dialog。\nanalyzer 首写前收到注入的 lesson-9c4de55（ee0bcdc0 版本 2），提醒是“对话框写完整可见契约：…槽位角色…、默认 cancelable 返回键可关”（L106）；\n正文做法第 1 步把取消行为也限定为“每个对话框的 setCancelable 与返回键行为”，没有点外部这一路。\n随后它 grep 本机 SDK 的 themes_holo.xml，回执里有 Theme.Holo.Dialog 的 windowCloseOnTouchOutside=@bool/config_closeDialogWhenTouchOutside（L130-L131），之后的思考没有再提这一项（L133、L143、L147）。\nL149 的 Write 只写了“对话框为平台默认可取消（cancelable），系统返回键可关闭”，平台缺省表也只有“系统返回键”一行，点外部取消在这里丢失。\n主 agent 用 grep 读回 ref 第 482 行（215b442f…jsonl:L554-L555），在思考里断定“touching outside cancels only if canceledOnTouchOutside set — for AlertDialog default false”（L565），\nL601 把 F001-AC36 写成“弹窗返回键取消…Won 关闭后 Lost（若在）露出且也仅可返回键关闭”，判据只测返回手势。偏差在这里从遗漏变成了排他的错误契约。\nSlice1 写者读到 AC36（agent-a657166dd000a47ae.jsonl:L37-L38）。它在 L173 的思考里其实想到“For classic AlertDialog created with Builder, touching outside dismisses it”，\n却以“spec 只要求返回键、判据只测返回手势”为由决定点外部不做任何事；L201 决定给遮罩加空 onClick 吞掉点击。\nL217 注入的 lesson-cf018b76 提醒只讲 Block 放在无子控件的遮罩层，这时决定已经做出，它没有参与本偏差，图中不画。\nL250 写 GameResultDialog：遮罩层 hitTestBehavior(Block) 加空 onClick，注释称“源 AlertDialog 模态语义——外触不 dismiss”（L377 再改注释措辞）；\nL325 写 GamePage：onBackPress 逐层关闭（这部分正确），dialogLayerSlot 直接叠放两个 GameResultDialog，宿主没有点外部关闭；handback 的 decision_gaps 为空（L390）。\n返修在安卓实测点外部两次依次关掉 Won、Lost（repair/74bab117…jsonl:L761-L782），鸿蒙点外部无反应（C39）。\n返修删掉 GameResultDialog 自带的 Block 遮罩（L3167-L3169），GamePage 变暗层 onClick 关闭最上层，onBackPress 改为在对话框栈上关闭最上层（L3185-L3186），\n实测点外部与返回键都是 2→1→0（L3220-L3221），检查点 C37/C39（L3244-L3245）。onBackPress 在生成期已满足返回键逐层关闭，最终版本只是随 C37/C41 的对话框栈重构改写，本项真正缺的是点外部关闭。\n",
+  "recommendations": [
+    "修订 lesson-9c4de55af3c1ecd8eaa4（版本 2）：当前版本 4 做法第 2 步的取消契约仍只写“每个对话框的 setCancelable 与返回键行为”，缺点对话框外部取消这一路，要补。平台对话框有两条互相独立的默认取消路径：返回键（setCancelable，未调用时为 true）和点窗口外部（Dialog.setCanceledOnTouchOutside；未调用时取对话框主题的 windowCloseOnTouchOutside，targetSdk≥11 才生效）。查值顺序：先看源码对 Builder 或 dialog 实例有没有调用这两个方法；没调用时，到本机 SDK platforms/android-<api>/data/res/values/themes_*.xml 沿实际对话框主题的父链（如 Theme.Holo.Dialog.Alert → BaseAlert → Theme.Holo.Dialog）找 windowCloseOnTouchOutside，再到 values/config.xml 解析它引用的 config_closeDialogWhenTouchOutside。契约对两条路径分别写“关闭哪一层、关闭后的状态”；除非源码显式 setCanceledOnTouchOutside(false) 或 setCancelable(false)，不写“仅返回键可关”。这一项要放进标题前半句，例如“平台默认 AlertDialog 迁移前写出可见与取消契约：外观取平台资源，返回键和点外部两条取消路径分别按源码调用与对话框主题核对”。",
+    "规格整合阶段把参考文档里的“返回键可关闭”改写成验收条目时，不能凭记忆补成“仅可返回键关闭”这类排他句。排他结论要有源码显式调用或平台资源回执，没有就标待核；验收判据同时覆盖返回键和点对话框外部两种操作。",
+    "实现阶段用页内遮罩复刻源端对话框时，遮罩的点击行为按源端点外部取消契约决定：可取消就在遮罩 onClick 里关闭最上层，并与返回键走同一个取消处理；源端不可取消时才吞掉点击、不关闭。自己对平台默认的判断与规格冲突时写进 handback 的 decision_gaps 回报规格，不以“判据只测返回键”为由按窄规格实现，也不在注释里把规格的限制写成源端语义。",
+    "本应用（targetSdk 17，FullscreenTheme 继承 Theme.Holo，win/lose 结算框没有调用 setCancelable/setCanceledOnTouchOutside）：AC36 应写成返回键和点面板外部都关闭最上层对话框（Won 先、Lost 后），关闭后停留在冻结画面。依据是 android-30 themes_holo.xml 第 916 行的 windowCloseOnTouchOutside 指向 config_closeDialogWhenTouchOutside（values/config.xml 中为 true），以及返修的安卓实测 an_12~14。实现上 GamePage 宿主变暗层的 onClick 和 onBackPress 共用“关闭最上层”，GameResultDialog 只画面板，不带吞点击的遮罩。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-bubbleshooter-glm5.31/entry/src/main/ets/components/GameResultDialog.ets",
+        "since": "2026-10-15T07:01:36.043Z",
+        "at": "2026-10-15T10:37:17.179Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/bubble-shooter-ashroof7-c601d2e/src/com/bubbleshooter/GameLoop.java",
+          "at": "2026-10-15T03:41:59.902Z",
+          "reason": "正常输入：analyzer 的 Read 回执显示 winGame/loseGame 用 AlertDialog.Builder 构造并 show()，没有调用 setCancelable 或 setCanceledOnTouchOutside，所以两条取消路径都取框架与主题默认（agent-acc4a122e8a95c01c.jsonl:L35-L36）。"
+        },
+        {
+          "key": "/c/Users/hongy/AppData/Local/Android/Sdk/platforms/android-30/data/res/values/themes_holo.xml",
+          "at": "2026-10-15T03:57:46.981Z",
+          "reason": "正常输入：analyzer 用 Bash grep 本机 SDK 的 themes_holo.xml，回执给出 Theme.Holo.Dialog 第 916 行 windowCloseOnTouchOutside=@bool/config_closeDialogWhenTouchOutside（L130-L131），L137-L141 又确认 Theme.Holo.Dialog.Alert 继承 BaseAlert。这足以说明结算框有“点外部关闭”的主题默认项，需要写进取消契约。"
+        },
+        {
+          "key": "agent-acc4a122e8a95c01c.jsonl",
+          "at": "2026-10-15T04:01:30.501Z",
+          "reason": "analyzer 首写前收到注入的 lesson-9c4de55af3c1ecd8eaa4（ee0bcdc0 版本 2），提醒是“对话框写完整可见契约：…槽位角色（win=正+负、lose 仅正）、默认 cancelable 返回键可关”，（L106，被暂缓写入的 tool_result；analyzer 没有打开正文，正文做法第 1 步同样只列“每个对话框的 setCancelable 与返回键行为”）。它又读到 Theme.Holo.Dialog 的 windowCloseOnTouchOutside（L130-L131），L149 的 Write 却只写“对话框为平台默认可取消（cancelable），系统返回键可关闭；关闭后停留在冻结画面”，平台缺省表也只有“系统返回键”一行，没有点外部取消。默认取消契约从这里开始缺项。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-bubbleshooter-glm5.31/spec/ref/bubble-shooter_spec.md",
+          "at": "2026-10-15T04:07:52.945Z",
+          "reason": "交付桥梁：第 482 行只写“对话框为平台默认可取消（cancelable），系统返回键可关闭”。主 agent 用 Bash grep 读回了这一行（215b442f-adc8-42c4-a2cd-a215e38988c9.jsonl:L554-L555），L565 的思考直接引用了它。"
+        },
+        {
+          "key": "215b442f-adc8-42c4-a2cd-a215e38988c9.jsonl",
+          "at": "2026-10-15T04:10:13.173Z",
+          "reason": "主 agent 读到 ref 第 482 行后，在思考里断定“touching outside cancels only if canceledOnTouchOutside set — for AlertDialog default false”（L565），没有查主题。L601 的 Edit 新增 F001-AC36“弹窗返回键取消（cancelable 缺省 true）…Won 关闭后 Lost（若在）露出且也仅可返回键关闭”，判据只测返回手势。参考文档的遗漏在这里变成了排他的错误契约。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-bubbleshooter-glm5.31/spec/baseline/features/F001-game-engine.md",
+          "at": "2026-10-15T05:18:56.638Z",
+          "reason": "交付桥梁：Slice1 写者的 Read 回执第 126 行是 AC36 的“也仅可返回键关闭”，D-005 与派工红线 9 只讲外观和返回键（agent-a657166dd000a47ae.jsonl:L1、L37-L38、L45-L46），没有任何地方提到点外部关闭。"
+        },
+        {
+          "key": "agent-a657166dd000a47ae.jsonl",
+          "at": "2026-10-15T05:46:30.511Z",
+          "reason": "写者在 L173 的思考里想到“For classic AlertDialog created with Builder, touching outside dismisses it”，却以 AC36 只要求返回键、判据只测返回手势为由决定点外部不做任何事；L201 决定给遮罩加空 onClick 吞掉点击。L250 的 Write 在遮罩层写 hitTestBehavior(Block) 加空 onClick，注释写“源 AlertDialog 模态语义——外触不 dismiss”，L377 只改了注释措辞；handback 的 decision_gaps 为空（L390）。它照搬了规格的错误，同时压下了自己发现的冲突。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "analyzer 用 Bash 对本机 SDK 的 themes_holo.xml 执行 grep -A 14/-A 10，回执返回 Theme.Holo.Dialog 第 906-916 行，其中第 916 行是 windowCloseOnTouchOutside=@bool/config_closeDialogWhenTouchOutside。这是 analyzer 写 ref 之前真实读到的平台资源。",
+          "evidence": [
+            {
+              "source": "generation/215b442f-adc8-42c4-a2cd-a215e38988c9/subagents/agent-acc4a122e8a95c01c.jsonl",
+              "line": 130
+            },
+            {
+              "source": "generation/215b442f-adc8-42c4-a2cd-a215e38988c9/subagents/agent-acc4a122e8a95c01c.jsonl",
+              "line": 131
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 5,
+          "force": true,
+          "reason": "主 agent 用 Bash 对 spec/ref/bubble-shooter_spec.md 执行 grep -n（含 Retry），回执返回第 482 行“对话框为平台默认可取消（cancelable），系统返回键可关闭；关闭后停留在冻结画面”；L565 的思考以“Line 482”引用了这句话。",
+          "evidence": [
+            {
+              "source": "generation/215b442f-adc8-42c4-a2cd-a215e38988c9.jsonl",
+              "line": 554
+            },
+            {
+              "source": "generation/215b442f-adc8-42c4-a2cd-a215e38988c9.jsonl",
+              "line": 555
+            }
+          ]
+        },
+        {
+          "from": 5,
+          "to": 6
+        },
+        {
+          "from": 6,
+          "to": 7
+        },
+        {
+          "from": 7,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-bubbleshooter-glm5.31/entry/src/main/ets/pages/GamePage.ets",
+        "since": "2026-10-15T07:01:36.043Z",
+        "at": "2026-10-15T10:37:17.179Z"
+      },
+      "summary": "宿主页这一支的成因与 GameResultDialog 相同：AC36 把取消方式限定为“仅可返回键关闭”，写者按此实现。\nL325 的 Write 里，onBackPress 先关 Won 再关 Lost，这部分符合源端；dialogLayerSlot 只把 Lost、Won 两个 GameResultDialog 叠进 Stack，\n宿主没有任何点外部关闭，点外部交给组件内的 Block 遮罩吞掉。返修把变暗层上移到 GamePage，onClick 关闭最上层对话框，\nonBackPress 改为在对话框栈上关闭最上层（repair/74bab117-5770-4198-a61f-f8af8748fade.jsonl:L3185-L3186、L3220-L3221、L3244-L3245）。\n",
+      "nodes": [
+        {
+          "key": "215b442f-adc8-42c4-a2cd-a215e38988c9.jsonl",
+          "at": "2026-10-15T04:10:13.173Z",
+          "reason": "主 agent 断定 AlertDialog 默认点外部不取消（L565），L601 把 AC36 写成“也仅可返回键关闭”，判据只测返回手势。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-bubbleshooter-glm5.31/spec/baseline/features/F001-game-engine.md",
+          "at": "2026-10-15T05:18:56.638Z",
+          "reason": "交付桥梁：写者的 Read 回执里，AC36 只规定返回键逐层关闭，并写明“也仅可返回键关闭”（agent-a657166dd000a47ae.jsonl:L37-L38）。"
+        },
+        {
+          "key": "agent-a657166dd000a47ae.jsonl",
+          "at": "2026-10-15T05:49:27.173Z",
+          "reason": "写者在 L173 已想到 Builder 构造的对话框点外部会关闭，仍按 AC36 只做返回键。L325 的 Write 中 onBackPress 逐层关闭（正确），dialogLayerSlot 直接叠放两个 GameResultDialog，宿主没有点外部关闭的处理；handback 的 decision_gaps 为空（L390）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "注入的 lesson-9c4de55af3c1ecd8eaa4（版本 2）参与了 analyzer 的遗漏：L106 的提醒原文和 L149 照它只写返回键一路都已核实。但它没能作为图节点提交：注入只出现在 L106 这条被暂缓写入的 tool_result 里，索引把它登记成 analyzer 对 ref 的一次失败 Write，经验→analyzer 的 force 边返回 invalid_force_source。带经验节点的稿件保留为 draft-2.yaml，经验的作用写在 analyzer 节点的 reason、summary 和“修订 lesson-…”建议中。",
+    "analyzer 拿到 windowCloseOnTouchOutside 这一行之后的思考（L133、L143、L147）没有提到它，无法判断是看漏了，还是认为它不影响契约；本卡只确认它收到了这行回执，写出的契约里没有点外部取消。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-21e1e83afaa8d814dc37",
+  "metadata": {
+    "migration": {
+      "id": "bubbleshooter-glm531-215b442f-adc8-42c4-a2cd-a215e38988c9",
+      "project": "Bubble Shooter"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.300"
+      ]
+    },
+    "source_set_id": "sources-73c606e991f7899a0d19",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-bubbleshooter-glm5.31",
+        "at": "2026-10-15T04:35:29.626Z",
+        "ref": "generation/215b442f-adc8-42c4-a2cd-a215e38988c9/subagents/agent-ac02dc809a0314c48.jsonl:L42",
+        "request_ref": "generation/215b442f-adc8-42c4-a2cd-a215e38988c9/subagents/agent-ac02dc809a0314c48.jsonl:L41",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-bubbleshooter-glm5.31",
+        "at": "2026-10-15T04:35:29.626Z",
+        "ref": "generation/215b442f-adc8-42c4-a2cd-a215e38988c9/subagents/agent-ac02dc809a0314c48.jsonl:L42",
+        "request_ref": "generation/215b442f-adc8-42c4-a2cd-a215e38988c9/subagents/agent-ac02dc809a0314c48.jsonl:L41",
+        "phase": "generation"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "36",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-bubbleshooter-glm5.31",
+        "at": "2026-10-15T08:10:26.715Z",
+        "ref": "repair/74bab117-5770-4198-a61f-f8af8748fade.jsonl:L204",
+        "request_ref": "repair/74bab117-5770-4198-a61f-f8af8748fade.jsonl:L203",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "35",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-bubbleshooter-glm5.31",
+        "at": "2026-10-15T08:10:26.715Z",
+        "ref": "repair/74bab117-5770-4198-a61f-f8af8748fade.jsonl:L204",
+        "request_ref": "repair/74bab117-5770-4198-a61f-f8af8748fade.jsonl:L203",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "8",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-bubbleshooter-glm5.31",
+        "at": "2026-10-15T08:10:26.715Z",
+        "ref": "repair/74bab117-5770-4198-a61f-f8af8748fade.jsonl:L204",
+        "request_ref": "repair/74bab117-5770-4198-a61f-f8af8748fade.jsonl:L203",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "cbf73939-4b90-490a-a37c-bfc2bcc8a05e"
+      ]
+    }
+  },
+  "revision": "ca414833340bf1b9bc1cc58bf84fee86761e2d34439da34c71d729729161668a"
+}

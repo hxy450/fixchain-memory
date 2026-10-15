@@ -21,9 +21,9 @@
   - 时机：派工与界面实现阶段，向子页、页内浮层下发状态栏高度参数，或把浮层挂进从窗口顶起的宿主 Stack 时
   - 情境：宿主页采用“子页自理”分工，以组件参数下发状态栏高度；子页或浮层（遮罩 + 居中卡片、铺满父容器）与列表、顶栏同挂一个 Stack；派工或槽位契约可能只列出回调参数，或写“接收但本页不使用”。
   - 例外：目标父容器已替该层加了顶部避让，且能指出对应代码位置
-- [开全屏前逐边核对源窗口：源窗口延伸到系统栏下才全屏沉浸，否则保持非全屏；只沉浸状态栏时保留导航栏底色](lesson-b0c7fc0e8053f24a4e08.lesson.md)
-  - 时机：规格提取与入口窗口实现阶段，决定目标窗口是否 setWindowLayoutFullScreen(true)、各边背景是否延伸、系统栏底色与是否做内容避让时；规格模板或页面元数据按页面类型默认标注全屏页、需要沉浸式安全区时
-  - 情境：源 Activity 主题链与代码决定窗口是否延伸到系统栏下：windowFullscreen、windowTranslucentStatus/Navigation、FLAG_FULLSCREEN、SYSTEM_UI_FLAG_LAYOUT_*、setDecorFitsSystemWindows(false)/enableEdgeToEdge、targetSdk≥35 的强制 edge-to-edge，或者都没有（Theme.Holo/Theme.Black 等低 targetSdk 主题；requestWindowFeature(FEATURE_NO_TITLE) 只去标题栏）。也包括只用 SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN 加透明 statusBarColor、没有 navigationBarColor、windowTranslucentNavigation、HIDE_NAVIGATION 且 targetSdk≤34 的只沉浸状态栏页面；目标规格模板或沉浸式 skill 默认全屏、两栏透明。
+- [开全屏前逐边核对源窗口：FLAG_FULLSCREEN 只隐藏状态栏，导航栏、旧应用挖孔边与宽高比上限都在窗口外；源窗口延伸到的边才沉浸](lesson-b0c7fc0e8053f24a4e08.lesson.md)
+  - 时机：规格提取与入口窗口实现阶段，决定目标窗口是否 setWindowLayoutFullScreen(true)、隐藏哪些系统栏、各边背景是否延伸、系统栏底色与是否做内容避让时；源端以 DisplayMetrics 取应用窗口宽高作几何基准时；规格模板或页面元数据按页面类型默认标注全屏页、需要沉浸式安全区时
+  - 情境：源 Activity 主题链与代码决定窗口是否延伸到系统栏下：windowFullscreen、windowTranslucentStatus/Navigation、FLAG_FULLSCREEN、SYSTEM_UI_FLAG_LAYOUT_*、setDecorFitsSystemWindows(false)/enableEdgeToEdge、targetSdk≥35 的强制 edge-to-edge，或者都没有（Theme.Holo/Theme.Black 等低 targetSdk 主题；requestWindowFeature(FEATURE_NO_TITLE) 只去标题栏）。也包括只用 SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN 加透明 statusBarColor、没有 navigationBarColor、windowTranslucentNavigation、HIDE_NAVIGATION 且 targetSdk≤34 的只沉浸状态栏页面；目标规格模板或沉浸式 skill 默认全屏、两栏透明，或把 FLAG_FULLSCREEN 当作整窗沉浸。低 targetSdk 的旧应用全屏窗口还受挖孔模式与最大宽高比限制。
 - [根为 DrawerLayout 且 NavigationView 自带 fitsSystemWindows 时，状态栏避让只给主内容列，抽屉头部画到状态栏下](lesson-84bcbad22600d3763029.lesson.md)
   - 时机：界面实现与共享件收敛阶段，为抽屉页补状态栏避让、把 DrawerLayout + NavigationView + Toolbar 收进共享抽屉基座（SideBarContainer）时；规格提取阶段写抽屉页的沉浸与安全区段时
   - 情境：源布局根是 DrawerLayout fitsSystemWindows=true，内容列（Toolbar + 主内容）在状态栏之下；NavigationView 自身 android:fitsSystemWindows="true" 并带 app:headerLayout。目标用共享抽屉基座（SideBarContainer 同时承载抽屉面板和工具栏/内容列），页面用窗口模型的顶部避让值做前景避让。

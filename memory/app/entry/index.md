@@ -19,10 +19,10 @@
   - 时机：规格提取阶段为每个 Activity 把 configChanges/screenOrientation 缺省翻译成页面生命周期与弹窗状态契约时；实现阶段用页内状态驱动的浮层承载源端对话框时
   - 情境：源 Activity 未声明 android:configChanges 且未锁定 screenOrientation（旋转、语言、深浅色等都会重建它），页面用 AlertDialog.Builder.show()/Dialog.show() 直接弹出非托管对话框，不经 DialogFragment、showDialog 或 DialogPreference；目标用页内状态驱动的浮层承载该对话框，HarmonyOS 页面在旋转等配置变化时不重建。页面只有静态列表与弹窗、没有动态文案时同样适用。
   - 例外：对话框经 DialogFragment、Activity.showDialog 或 DialogPreference 托管时，源端重建后会恢复，目标保持浮层显示；源 Activity 在 configChanges 中声明了 orientation、screenSize 等并自行处理时，按其处理代码迁移
-- [源 Activity 未声明 configChanges 时，目标在配置变化回调里按源端重建时序刷新资源文案与一次性状态](lesson-94715d0df4c03a8fb5a5.lesson.md)
+- [源 Activity 的 configChanges 未覆盖某项配置（只写 screenSize 时包括旋转）时，目标按源端重建时序刷新资源文案与一次性状态](lesson-94715d0df4c03a8fb5a5.lesson.md)
   - 时机：规格提取阶段把 Activity 生命周期回调与 Manifest 属性映射为目标生命周期契约时；实现阶段接线 UIAbility、页面生命周期与资源文案、一次性状态的缓存时
-  - 情境：源 Activity 在 AndroidManifest 中未声明 android:configChanges（或声明里缺 locale、uiMode、fontScale、density 等项），实现了 onSaveInstanceState/savedInstanceState 恢复分支，或在 View 构造、onSizeChanged、绘制时读取资源文案与 firstRun 等一次性状态；目标 HarmonyOS UIAbility 在语言、深浅色、字号、显示大小变化时不重建，只回调 onConfigurationUpdate 或发出 display 'change'。
-  - 例外：源 Activity 已在 configChanges 中声明对应项、在 onConfigurationChanged 自行处理时（ActivityInfo.configChanges：声明的项由 Activity 自行处理、不重建），按其处理代码迁移；边界：直接 show() 的非托管对话框在配置变化时的关闭路径见非托管对话框一条；深浅色切换中的命令式取色、系统栏与画布重解析按应用内主题切换的经验；跟随系统字号的 configuration 声明按大字体裁定的经验
+  - 情境：源 Activity 在 AndroidManifest 中未声明 android:configChanges，或声明里缺 locale、uiMode、fontScale、density、orientation 等项（只写 screenSize 时旋转同样重建），实现了 onSaveInstanceState/savedInstanceState 恢复分支，或在 View 构造、onSizeChanged、绘制时读取资源文案与 firstRun 等一次性状态，或在监听器里用 setBackgroundResource 一类调用改了视图属性；目标 HarmonyOS UIAbility 在语言、深浅色、字号、显示大小变化与旋转时不重建，只回调 onConfigurationUpdate、发出 display 'change' 或改变窗口尺寸。
+  - 例外：源 Activity 已在 configChanges 中声明对应项、在 onConfigurationChanged 自行处理时（ActivityInfo.configChanges：声明的项由 Activity 自行处理、不重建），按其处理代码迁移；边界：直接 show() 的非托管对话框在配置变化时的关闭路径见非托管对话框一条；深浅色切换中的命令式取色、系统栏与画布重解析按应用内主题切换的经验；跟随系统字号的 configuration 声明按大字体裁定的经验；SurfaceView 自建渲染线程在重建时的结果见 lesson-25731279fbe14dcecc69
 - [源端按 getLastNonConfigurationInstance 是否为空决定是否读启动参数时，目标按“是否配置变化重建”区分](lesson-ed571550c44efdeb321e.lesson.md)
   - 时机：规格提取与页面实现阶段，翻译源 Activity.onCreate 中“取回保留实例为空才读启动参数”的建局或建状态逻辑时
   - 情境：源 Activity 未声明 configChanges，用 onRetain(Custom)NonConfigurationInstance 与 getLast(Custom)NonConfigurationInstance 跨配置变化保留对象，该对象可能同时是静态单例（只在退出时 destroy）；目标页面不因配置变化重建，单例跨页面常驻，同一页面有多个入口模式（如新开与续局）。
@@ -42,7 +42,7 @@
 - [迁移深链 intent-filter 时同时声明 module.json5 的 skills，并用隐式 Want 验收](lesson-d77baa7494930d485425.lesson.md)
   - 时机：入口与导航接线阶段，把源端 Activity 的 VIEW/BROWSABLE intent-filter 迁成 UIAbility 的 Want 接收与路由解析时；以及规格提取阶段描述深链映射时
   - 情境：源 AndroidManifest 在启动 Activity 上声明 VIEW+BROWSABLE、http/https 与固定 host 的 intent-filter；目标 module.json5 的入口 Ability skills 仍是脚手架默认的 HOME 一项。 也包括 intent-filter 带 android:autoVerify="true"（App Links），或决策写明 https 由域名校验的 App Linking 承载。也包括导航图 navDeepLink 的 uriPattern 或分享/复制链接由常量拼接（如 "$baseUrl/item/{id}"），深链规格的源码锚点没有列入 AndroidManifest。
-- [验收或任务明确要求全局未捕获异常观察时，在入口 Ability 注册 errorManager 观察器，源端没有对应代码也要补](lesson-c6132bf52c26ec226788.lesson.md)
+- [验收或任务明确要求全局未捕获异常观察、且规格没有保留源端崩溃退出时，在入口 Ability 注册 errorManager 观察器](lesson-c6132bf52c26ec226788.lesson.md)
   - 时机：入口装配阶段，改写 EntryAbility（或 AbilityStage）的 onCreate/onDestroy，且本次验收或任务要求存在全局异常观察时
-  - 情境：目标为 HarmonyOS Stage 模型应用，入口 UIAbility 由模板改写而来；Android 源没有可对照的全局异常处理，按源码迁移不会产生这段代码，而本次验收（如 ECAT crash_risk 规则）或任务明确要求存在全局异常观察。
-  - 例外：本次任务与验收都没有全局异常观察要求：按源码迁移，不默认新增观察器；工程已在 AbilityStage 或其他入口注册了 errorManager 观察器或等效的崩溃监听
+  - 情境：目标为 HarmonyOS Stage 模型应用，入口 UIAbility 由模板改写而来；Android 源没有可对照的全局异常处理，按源码迁移不会产生这段代码，而本次验收（如 ECAT crash_risk 规则）或任务明确要求存在全局异常观察。“任务明确要求”只认验收规则或用户需求原文；规格、plan、派工里引用本经验而来的条目不算独立要求。
+  - 例外：本次任务与验收都没有全局异常观察要求：按源码迁移，不默认新增观察器；规格保留了源端未捕获异常导致的崩溃退出（照源复刻的缺陷或崩溃验收项）：不注册；验收又同时要求全局异常观察时，作为差异决策登记，写明这些崩溃路径在目标端的结果；工程已在 AbilityStage 或其他入口注册了 errorManager 观察器或等效的崩溃监听

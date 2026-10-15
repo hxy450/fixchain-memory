@@ -1,6 +1,6 @@
 # ui/layout/scrolling
 
-ScrollView/NestedScrollView 与 weight 剩余区列表的滚动范围（固定头部留在外、剩余区空态居中）、LazyRow/横向滚动行的交叉轴尺寸、Lazy 列表 contentPadding 的内容偏移、带高度上限的滚动卡片、连续折叠顶栏与滚动区内跟随等高。，ScrollView 越界回弹的默认值（IF_CONTENT_SCROLLS）；LazyRow 摘要行转可横滑容器，程序滚动到某项的对齐方式（animateScrollToItem → ScrollAlign.START）
+ScrollView/NestedScrollView 与 weight 剩余区列表的滚动范围（固定头部留在外、剩余区空态居中）、LazyRow/横向滚动行的交叉轴尺寸、Lazy 列表 contentPadding 的内容偏移、带高度上限的滚动卡片、连续折叠顶栏与滚动区内跟随等高；可滚动视图（ScrollView、GridView/ListView）越界效果与滚动条的平台默认值（IF_CONTENT_SCROLLS、进页先亮再淡出）；LazyRow 摘要行转可横滑容器，程序滚动到某项的对齐方式（animateScrollToItem → ScrollAlign.START）
 
 [上一级](../index.md)
 
@@ -14,15 +14,15 @@ ScrollView/NestedScrollView 与 weight 剩余区列表的滚动范围（固定�
   - 时机：规格提取与界面实现阶段，把 Compose LazyRow（含只放几个固定 item 的摘要行、信息行）映射为 ArkUI 容器，确定是否可滚动、排列方式与条件项写法时
   - 情境：源端用 LazyRow(horizontalArrangement = Arrangement.SpaceEvenly 等) 放少量固定 item，每个 item 恒在、显隐由 item 内部的 AnimatedVisibility 或条件控制；窄屏或大字号下内容可能超出行宽；映射表或规格可能把它写成“Row + 若干子项”。
   - 例外：源端是普通 Row（没有 LazyRow 或 horizontalScroll），超宽时按源端的裁切或压缩处理
-- [ScrollView 未写 overScrollMode 时按 IF_CONTENT_SCROLLS 映射，边缘效果 alwaysEnabled 为 false](lesson-80dd4e626e1c207028e6.lesson.md)
-  - 时机：界面转换阶段，把 ScrollView/NestedScrollView（含对话框内的滚动区）转换为 ArkUI Scroll 并设置边缘效果时
-  - 情境：源 ScrollView/NestedScrollView 没有声明 overScrollMode（View.java 默认 OVER_SCROLL_IF_CONTENT_SCROLLS：内容可滚时才显示越界效果；该效果在 API 31 起的设备上为拉伸、更早为光晕，EdgeEffect.java）；映射参考只列显式 overScrollMode，且把 ifContentScrolls 与 always 都映射为不带选项的 EdgeEffect.Spring；目标 Scroll 默认 EdgeEffect.None，选项 alwaysEnabled 默认 true（scroll.d.ts）。
 - [heightIn(max) 紧接 verticalScroll 的卡片拆成多节点时，把高度上限挂在 Scroll 上](lesson-420023d472f48bed8ef9.lesson.md)
   - 时机：界面实现阶段，把 heightIn(max) 紧接 verticalScroll 的卡片拆成“外层容器 + Scroll + 内容”结构时
   - 情境：源 Modifier 链里 heightIn(max = H) 紧接 verticalScroll，同一节点还带圆角、背景；目标需要拆成外层卡片包 Scroll 的多节点结构；迁移陷阱表有“滚动容器须显式给交叉轴尺寸”一类条目。
 - [scrollToItem、animateScrollToItem 映射 scrollToIndex(…, ScrollAlign.START)：项对齐视口起点](lesson-f0a40d990c62738fc04e.lesson.md)
   - 时机：界面实现阶段，把 Compose LazyListState 的程序滚动（scrollToItem、animateScrollToItem）翻译成 ArkUI Scroller.scrollToIndex 并选择对齐方式时
   - 情境：源端调用 animateScrollToItem(index) 或 scrollToItem(index)（scrollOffset 默认 0），同一函数可能还折叠顶栏等；目标 List 绑定 Scroller，scrollToIndex 的 align 可选 START、CENTER、END、AUTO。
+- [可滚动视图未写 overScrollMode 与滚动条属性时按平台默认映射：越界效果仅在内容可滚时出现，列表网格的滚动条进页先亮再淡出](lesson-80dd4e626e1c207028e6.lesson.md)
+  - 时机：界面转换阶段，把 ScrollView/NestedScrollView（含对话框内的滚动区）、GridView/ListView 转换为 ArkUI Scroll、Grid、List 并设置边缘效果与滚动条时
+  - 情境：源 ScrollView/NestedScrollView、GridView/ListView 没有声明 overScrollMode（View.java 默认 OVER_SCROLL_IF_CONTENT_SCROLLS：内容可滚时才显示越界效果；该效果在 API 31 起的设备上为拉伸、更早为光晕，EdgeEffect.java）；映射参考只列显式 overScrollMode，且把 ifContentScrolls 与 always 都映射为不带选项的 EdgeEffect.Spring；目标 Scroll 默认 EdgeEffect.None，选项 alwaysEnabled 默认 true（scroll.d.ts），Grid 同样默认 EdgeEffect.None、滚动条 BarState.Auto（grid.d.ts）。源列表或网格显示时由 View.initialAwakenScrollBars 先亮滚动条（scrollBarDefaultDelayBeforeFade×4，ViewConfiguration 默认 300ms，即约 1.2s）再淡出，滚动时再出现。
 - [横向滚动容器给交叉轴写数值高度，按内容算出，不写 'auto' 也不留空](lesson-2d7c6de68f604ae77caf.lesson.md)
   - 时机：界面实现阶段，把 Compose 可滚动 Tab 行、LazyRow、horizontalScroll 等按内容定高的横向滚动行翻译成 ArkUI 滚动容器时
   - 情境：源端横向滚动行（Compose LazyRow、horizontalScroll、可滚动 Tab 行）的高度由子项固有高度决定；目标用 Scroll(ScrollDirection.Horizontal) 或横向 List/Grid 实现，所在父容器在纵向上还有剩余空间。

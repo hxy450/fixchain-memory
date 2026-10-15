@@ -15,12 +15,12 @@
 - [同步读取改成异步 initialize 后，失败分支要复位状态并让页面离开加载态](lesson-338f11844f0010e46bc3.lesson.md)
   - 时机：功能实现阶段（ViewModel 与页面接线），把源端同步读取的设置或数据改成异步加载，并给页面加“加载完成前不显示或不可交互”的门时
   - 情境：源端在首帧前用 SharedPreferences 等同步接口读取（缺键用默认值），界面没有加载态或失败态；目标端改为 async 读取，ViewModel 暴露返回 Promise 的 initialize()，页面在 aboutToAppear 中调用，并用“已加载”标志在 LoadingProgress 与正式内容之间切换。
-- [异步初始化里，用户可编辑的输入状态在第一个 await 之前写入初值](lesson-843a70afd7e08bfed97c.lesson.md)
-  - 时机：ViewModel 实现阶段，编排页面初始化方法中异步存储/SDK 绑定与输入状态初值的先后顺序时
-  - 情境：源页面在初始化时同步写入关键词或输入框文本，操作读取实时输入；目标输入框双向绑定 ViewModel 字段，初始化方法内含 await（存储、历史、SDK 绑定），页面生命周期回调以不等待的方式调用它。
 - [源 API 用返回值表示“被拒”、用异常表示故障，而目标 SDK 两者都 reject 时，用一个单次原语适配器还原三态，所有重试与返回码路径都经它](lesson-47faf26b44bb4075b0d2.lesson.md)
   - 时机：服务或引擎实现阶段，把以 boolean 返回业务结果、以异常表示 I/O 失败或目标丢失的源 API（如 MIFARE 扇区认证）映射到只以 Promise reject 报错的 SDK，并实现带重试或返回码的上层方法时
   - 情境：源方法返回 false 表示被拒并据此按偏好重试，只有 IOException、TagLostException 等才立即失败；目标方法返回 Promise&lt;void&gt;，被拒与 I/O、状态异常都以 BusinessError reject，d.ts 只列错误码、不说明各码对应哪种情形；同一文件里可能已有区分两者的单次函数，却只被部分路径调用。
+- [源端初始化本就同步时目标也同步执行（用 Sync 接口、不加输入门控）；确需异步时，用户可编辑的输入状态在第一个 await 之前写入初值](lesson-843a70afd7e08bfed97c.lesson.md)
+  - 时机：页面、自绘组件或 ViewModel 实现阶段，把源端构造器或 onCreate 中的初始化移到目标生命周期回调、决定是否异步，并编排异步步骤与输入状态初值的先后时
+  - 情境：源端在 Activity.onCreate 或自定义 View 构造器里同步完成初始化（取尺寸、解码位图、建局面、写入关键词或输入框文本）后才接收输入；目标准备在 aboutToAppear 等生命周期回调里调用不被等待的 async 方法（异步解码、存储、SDK 绑定），可能用 try/catch 只记日志，或以 booted/ready 标志忽略初始化完成前的输入；输入框双向绑定 ViewModel 字段。
 - [源端连续的同步平台调用（先取消再振动、先停止再启动）映射到返回 Promise 的 API 时，在网关内串行发出或改用同步变体，不各自 fire-and-forget](lesson-ba0cb144aa48f9584060.lesson.md)
   - 时机：功能实现阶段封装平台能力网关，把源端依赖先后生效的连续同步系统调用映射为返回 Promise 的目标 API 时；规格提取阶段为这类映射写契约时
   - 情境：源端在同一方法里依次同步调用两个平台方法且后者依赖前者已生效（如 Vibrator.cancel() 后立刻 vibrate(pattern)）；目标 API（如 vibrator.stopVibration/startVibration）返回 Promise，网关接口按规格声明为 void，调用方仍按源顺序逐个调用。

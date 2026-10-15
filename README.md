@@ -25,7 +25,7 @@
 
 旧版阅读包由 Git 历史保留，不按迁移复制多份。此前的 `runs/` 已退出当前 Git 树，本地的材料、稿件、报告与断点仍保留；原有提交没有改写。此次目录调整不改变卡片内容、经验语义或知识 revision。
 
-当前发布分支：`memory/multi-app-20261012`。留出 app ColorLines 的独立评测库在 `memory/colorlines-holdout`，不并入本分支。工作目录、转录、SQLite、模型日志、提案及本机调度信息不进入正式发布树。
+当前发布分支：`memory/multi-app-20261012`（部署基线）。本分支 `memory/review-refactor-20261015` 只保存评审重构及其上的归并，不作部署基线。留出 app ColorLines 的独立评测库在 `memory/colorlines-holdout`，不并入本分支。工作目录、转录、SQLite、模型日志、提案及本机调度信息不进入正式发布树。
 
 机械检查保证格式、引用及所画历史关系符合契约，不等于归因语义认证或泛化效果证明。评测应冻结一个 Git commit / memory revision，在未入库应用上对照。
 
