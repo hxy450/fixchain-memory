@@ -1,6 +1,6 @@
 # ui/navigation/hosts
 
-Navigation/@Entry宿主与页面注册（含根 Navigation 默认标题栏与工具栏）、嵌入页取栈、单 Activity 壳内 loadChildFragment 子页的壳内回退栈与嵌入承载、半透明卡片式 Activity 的透明 DIALOG 路由、路由跳板和跨页面共享生命周期，外部入口（推送、快捷方式）宿主导航执行器的可用性守卫；NavHost 四向自定义转场到 customNavContentTransition 与页面绑定，导航目的地内 LocalLifecycleOwner 的 ON_STOP/ON_RESUME 接到 onHidden/onShown
+Navigation/@Entry宿主与页面注册（含根 Navigation 默认标题栏与工具栏）、嵌入页取栈、单 Activity 壳内 loadChildFragment 子页的壳内回退栈与嵌入承载、半透明卡片式 Activity 的透明 DIALOG 路由、路由跳板和跨页面共享生命周期，外部入口（推送、快捷方式）宿主导航执行器的可用性守卫；NavHost 四向自定义转场到 customNavContentTransition 与页面绑定，导航目的地内 LocalLifecycleOwner 的 ON_STOP/ON_RESUME 接到 onHidden/onShown；Activity 切换转场（overridePendingTransition(0,0) 与未调用时的主题默认窗口动画）
 
 [上一级](../index.md)
 
@@ -36,9 +36,9 @@ Navigation/@Entry宿主与页面注册（含根 Navigation 默认标题栏与工
 - [根 Navigation 只作路由容器时显式隐藏默认标题栏和工具栏](lesson-69e07207a06a8a8a7ba9.lesson.md)
   - 时机：界面实现阶段，为入口页根 Navigation 编写属性链时
   - 情境：源端外壳没有系统标题栏或工具栏（如 Compose Scaffold 只传自绘 bottomBar 与 snackbarHost），目标以 @Entry 页的 Navigation 作根路由容器，承载 tab 内容和自绘底栏，详情页走 NavDestination。
-- [源 Activity 或其基类 onCreate 调 overridePendingTransition(0,0) 时，“进入无转场”是目的地页的属性：进入该页的每条路由（按钮跳转、引导完成、启动分流、抽屉）都关闭转场](lesson-9886f489045488c8b454.lesson.md)
-  - 时机：规格提取阶段写页面规格与路由契约时；实现阶段写 pushPathByName/replacePathByName 时
-  - 情境：源 Activity 或所继承的基类在 onCreate 调 overridePendingTransition(0,0)；目标用 Navigation 的 push/replace 进入该页，进入路径不止一条，规格可能只把转场禁用挂在抽屉基座等某一条路径上。
+- [源 Activity 或其基类 onCreate 调 overridePendingTransition(0,0) 时，“进入无转场”是目的地页的属性：进入该页的每条路由（按钮跳转、引导完成、启动分流、抽屉）都关闭转场；未调用时按主题默认窗口动画写目标转场，不留目标默认横滑](lesson-9886f489045488c8b454.lesson.md)
+  - 时机：规格提取阶段写页面规格与路由契约时；实现阶段写 pushPathByName/replacePathByName 时；规格提取阶段把 startActivity/finish 映射为路由契约、决定页面切换动画时
+  - 情境：源 Activity 或所继承的基类在 onCreate 调 overridePendingTransition(0,0)；目标用 Navigation 的 push/replace 进入该页，进入路径不止一条，规格可能只把转场禁用挂在抽屉基座等某一条路径上。 也包括源端多个 Activity 用 startActivity 线性跳转、按返回 finish，源码没有 overridePendingTransition，styles 也没覆盖 windowAnimationStyle；目标 router.pushUrl 的 @Entry 页或 Navigation 页未写转场，系统默认横向滑入滑出。
 - [源端一个 Composable 内多屏共享的清理，拆成多页面后归属外层生命周期，切屏不释放](lesson-2ed8c21943925bf0ae9a.lesson.md)
   - 时机：规格提取与计划阶段，把源端 DisposableEffect/onDispose 等清理映射成目标多页面的生命周期契约时；实现阶段把共享服务的 stop/dispose 挂到页面回调时
   - 情境：源端单 Activity 在同一个 Composable 里用状态变量切换多个屏幕，播放器等资源和 DisposableEffect 清理挂在这个外层 Composable；目标端拆成 Navigation 下的多个页面，共享服务需要重新确定由哪一层、在什么时机停止和释放。

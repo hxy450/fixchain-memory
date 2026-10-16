@@ -1,21 +1,21 @@
 # app/playback
 
-音视频播放：AVPlayer 封装的异步装载并发与停止复位、错误通道与 Promise 拒绝，应用包 rawfile 资源经 fdSrc 设源，封装类释放方法按重载与宿主销毁分开，控制门面同步路径的回退来源，跨实现组合切换步骤时的入口守卫，视频页 surface 绑定与画面比例；短提示音的音频并发（混播/焦点）与播放中重入
+音视频播放：AVPlayer 封装的异步装载并发与停止复位、错误通道与 Promise 拒绝，应用包 rawfile 资源经 fdSrc 设源，封装类释放方法按重载与宿主销毁分开，控制门面同步路径的回退来源，跨实现组合切换步骤时的入口守卫，视频页 surface 绑定与画面比例；短提示音的音频并发（混播/焦点）与播放中重入；源端 SoundPool 短音效改用 media.SoundPool
 
 [上一级](../index.md)
 
 ## 本级经验
 
-- [AVPlayer 播放应用包内 rawfile 资源时用 getRawFd(Sync) 的 {fd, offset, length} 设 fdSrc，不把描述符拼成 fd://N?offset= 形式的 url](lesson-1267d6cabb117824c67a.lesson.md)
-  - 时机：规格提取阶段为音视频资源加载写平台 API 契约时；播放服务实现阶段为 AVPlayer 绑定应用包内 rawfile 资源时
-  - 情境：源端用 SoundPool.load(context, R.raw.x) 或 MediaPlayer.create(context, R.raw.x) 播放 res/raw 资源，目标改为 AVPlayer 播放 resources/rawfile；resourceManager.getRawFd/getRawFdSync 返回整个 HAP 的 fd 加该资源在 HAP 内的 offset/length；AVPlayer 有 url 与 fdSrc（AVFileDescriptor）两种设源方式。
+- [AVPlayer 播放应用包内 rawfile 资源时用 getRawFd(Sync) 的 {fd, offset, length} 设 fdSrc，不把描述符拼成 fd://N?offset= 形式的 url；源端 SoundPool 短音效改用 media.SoundPool，三个字段传给 load](lesson-1267d6cabb117824c67a.lesson.md)
+  - 时机：规格提取阶段为音视频资源加载写平台 API 契约时；播放服务实现阶段为 AVPlayer 绑定应用包内 rawfile 资源时；为源端短音效选择目标播放 API 时
+  - 情境：源端用 SoundPool.load(context, R.raw.x) 或 MediaPlayer.create(context, R.raw.x) 播放 res/raw 资源，资源迁到 resources/rawfile：MediaPlayer 与较长音频目标用 AVPlayer，SoundPool 预加载的短音效目标用 media.SoundPool；resourceManager.getRawFd/getRawFdSync 返回整个 HAP 的 fd 加该资源在 HAP 内的 offset/length；AVPlayer 有 url 与 fdSrc（AVFileDescriptor）两种设源方式。 SoundPool.load 有 uri 与 (fd, offset, length) 两种重载。
 - [AVPlayer 错误只经一条通道上报，Promise 调用接 catch 并按状态表调用](lesson-d0736ecd82af68edb87a.lesson.md)
   - 时机：播放服务实现阶段，映射 ExoPlayer 的单次 onPlayerError，并调用 AVPlayer 的 prepare/play/pause/stop/reset 时
   - 情境：AVPlayer 同时有 on('error') 与 stateChange('error') 两条错误通道，控制方法返回 Promise；参考模板可能同时处理两条通道、prepare() 也不接 catch。
-- [MediaPlayer 短提示音迁 AVPlayer 时保留源端隐式语义：未申请音频焦点就与其他音频混播，start() 在播放中调用不重启](lesson-5475edc47af05c1c6a5b.lesson.md)
+- [MediaPlayer 短提示音迁 AVPlayer 时保留源端隐式语义：未申请音频焦点就与其他音频混播，start() 在播放中调用不重启；源端为 SoundPool 时不适用](lesson-5475edc47af05c1c6a5b.lesson.md)
   - 时机：规格提取与服务实现阶段，把 MediaPlayer.create(...).start() 一类短提示音映射到 AVPlayer 并写映射行、实现播放封装时
-  - 情境：源端用 MediaPlayer.create(context, R.raw.x) 加 start() 播放计时提示音等短音效，没有调用 requestAudioFocus；同一实例可能在上一次未播完时再次 start()。目标用 AVPlayer 播 rawfile，规格映射行只写“AVPlayer + rawfile，play() 重置重播”。
-  - 例外：源端申请了音频焦点（requestAudioFocus/AudioFocusRequest），此时按其焦点类型映射目标的焦点与打断策略
+  - 情境：源端用 MediaPlayer.create(context, R.raw.x) 加 start() 播放计时提示音等短音效，没有调用 requestAudioFocus；同一实例可能在上一次未播完时再次 start()。目标用 AVPlayer 播 rawfile，规格映射行只写“AVPlayer + rawfile，play() 重置重播”。 不包括源端 SoundPool（先 load 预解码、事件时 play、maxStreams 多路叠播）。
+  - 例外：源端申请了音频焦点（requestAudioFocus/AudioFocusRequest），此时按其焦点类型映射目标的焦点与打断策略；源端用 android.media.SoundPool（new SoundPool(...) 或 SoundPool.Builder，load 与 play 分开调用）播放短音效：目标用 media.createSoundPool，按 lesson-1267d6cabb117824c67a 的 SoundPool 分支处理，不用“每次播放新建 AVPlayer 实例”模拟叠播
 - [异步 AVPlayer 装载使用代数令牌与实例归属，停止服务时显式复位](lesson-511385674c16eb68c88c.lesson.md)
   - 时机：播放服务实现阶段，把源端在调用线程同步完成的停止、重建、设源、prepare 改写为含 await 的 AVPlayer 封装，并迁移前台服务停止生命周期时
   - 情境：源播放器在单线程上串行装载，服务停止时 shutdown 置 STOPPED、下次启动重建；目标为常驻单例、方法返回 Promise。

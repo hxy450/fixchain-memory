@@ -25,9 +25,9 @@
 - [依附式弹窗（AttachPopup）的宿主按锚点视图所在页面确定：提示挂在锚点页、按锚点实测坐标定位，弹出条件包含锚点可见](lesson-29f62d177a17d08b4e4f.lesson.md)
   - 时机：迁移审计与实现阶段，判定依附式弹窗的宿主归属、改写触发它的子页逻辑时
   - 情境：源端弹窗由子 Fragment 触发 show，但 atView 是父 Fragment 标题栏里的按钮，且只在该按钮可见、一次性标记未写入时显示；目标端已有一个画在子页内部、按固定边距定位的同文案浮层。
-- [只靠平台默认外观的 AlertDialog（含 DialogPreference 弹出的偏好对话框）迁移前写出完整可见契约：标题字号色与标题线、消息、按钮条与按钮集合、框体、宽度规则与进出场从源主题的平台资源取值；按钮按角色核对槽位，要求一比一时用共享自定义弹窗复刻](lesson-9c4de55af3c1ecd8eaa4.lesson.md)
-  - 时机：规格提取阶段为源端系统对话框（代码中 AlertDialog.Builder 构造，或 PreferenceActivity 中 EditTextPreference、ListPreference 等点击弹出）写转换决策时，以及界面实现阶段按该决策落地 ArkUI 系统弹窗或自定义弹窗时
-  - 情境：源码用 AlertDialog.Builder 内联构造确认框，只设 title、message、setPositiveButton、setNegativeButton，无自定义布局或样式，外观由应用主题继承的平台默认警告框决定；目标准备用 ArkUI AlertDialog.show(primaryButton/secondaryButton) 等系统弹窗替代，项目要求与源端逐屏一致。 也包括应用主题为 Theme.Holo 等框架主题，多个对话框都由 Builder 或 DialogPreference 构造、没有自定义样式；规格只按经验摘要写了“标题左对齐、负左正右、遮罩、cancelable”几项，各页写者凭记忆或兄弟页先例自绘面板。
+- [只靠平台默认外观的 AlertDialog（含 DialogPreference 弹出的偏好对话框）迁移前写出完整可见契约：标题字号色与标题线、消息、按钮条与按钮集合、框体、宽度规则与进出场从源主题的平台资源取值；按钮按角色核对槽位，要求一比一时用共享自定义弹窗复刻；按钮排位与面板读对话框样式的 layout 资源，返回键与点外部两条取消路径分别核对](lesson-9c4de55af3c1ecd8eaa4.lesson.md)
+  - 时机：规格提取阶段为源端系统对话框（代码中 AlertDialog.Builder 构造，或 PreferenceActivity 中 EditTextPreference、ListPreference 等点击弹出）写转换决策时，以及界面实现阶段按该决策落地 ArkUI 系统弹窗或自定义弹窗时；规格整合时在几条来源之间裁定按钮排位、面板样式与取消方式时；页内复刻多个同时显示的对话框、安排遮罩与遮罩点击时
+  - 情境：源码用 AlertDialog.Builder 内联构造确认框，只设 title、message、setPositiveButton、setNegativeButton，无自定义布局或样式，外观由应用主题继承的平台默认警告框决定；目标准备用 ArkUI AlertDialog.show(primaryButton/secondaryButton) 等系统弹窗替代，项目要求与源端逐屏一致。 也包括应用主题为 Theme.Holo 等框架主题，多个对话框都由 Builder 或 DialogPreference 构造、没有自定义样式；规格只按经验摘要写了“标题左对齐、负左正右、遮罩、cancelable”几项，各页写者凭记忆或兄弟页先例自绘面板。 也包括 targetSdk≤20 或 values-v11/v14 中应用主题继承 Theme.Holo/Theme 的旧应用：Builder 未调用 setCancelable、setCanceledOnTouchOutside，源端可能同时叠放两个以上对话框；目标用页内遮罩加自绘面板复刻，同时要防止点击穿透到下层画面。
   - 例外：项目明确接受目标系统弹窗的固有外观、只要求文案与按键行为一致；此时仍按角色核对按钮槽位
 - [按源弹层类型逐个选呈现形态：居中 CustomDialog/AlertDialog（含框架生成的 ListPreference 选项框：无确定钮、留 CANCEL）用居中卡片，底部面板才用 bindSheet，锚定菜单按锚点弹出；形态不同的面板不共用一个弹窗；定长密码框输满即校验](lesson-21db515a505be4845497.lesson.md)
   - 时机：页面接线与界面实现阶段，为源端 DialogHelper 一类函数弹出的确认或输入弹窗选择承载形态与校验触发方式时；对齐同页多个工具面板（如阅读页的设置、更多、发弹幕）的容器、锚点与交互步骤时

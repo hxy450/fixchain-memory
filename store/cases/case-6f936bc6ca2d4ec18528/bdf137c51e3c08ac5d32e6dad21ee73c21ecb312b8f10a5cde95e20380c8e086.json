@@ -1,0 +1,282 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-6f936bc6ca2d4ec18528",
+  "created_at": "2026-10-15T11:53:19.534292+00:00",
+  "migration_key": "bubbleshooter-glm531-215b442f-adc8-42c4-a2cd-a215e38988c9",
+  "title": "把未自定义的 Activity 切换当成无转场：多 Activity 跳转映射成 router.pushUrl 时漏了主题默认切换动画，三页没写 pageTransition",
+  "when": "规格提取阶段，把源端 Activity 之间的 startActivity 跳转和返回 finish 映射成目标页面路由契约、决定页面切换动画时",
+  "description": "源端有多个 Activity，用 startActivity 线性跳转，按返回键 finish 返回。代码里没有 overridePendingTransition，styles 也没有覆盖 windowAnimationStyle，所以切换动画完全来自主题 parent 链指向的平台默认 Activity 动画（activity_open/close_enter/exit），具体效果随参照机系统版本变化。目标用 router.pushUrl 的 @Entry 页；页面不写 pageTransition 时，鸿蒙用默认的横向滑入滑出。",
+  "summary": "写前实际收到：规格提取前，主 agent 已读到三个 Activity 的源码（generation 主转录 L52-L57）。MainMenuActivity.java:36、LevelChooserActivity.java:35 只调用 startActivity，\n三个类都没有 overridePendingTransition。manifest（L42-L43）给三个 Activity 都设了 FullscreenTheme，没有任何 Activity 级动画属性。\n因此源端打开新页、按返回 finish 时，播放的都是主题提供的平台默认 Activity 切换动画（API 11+ 上 FullscreenTheme 继承 Theme.Holo，\n其 windowAnimationStyle=Animation.Holo.Activity，后者继承 Animation.Activity）。这已经足以说明：源端页面切换“有默认动画”，不是“没有转场”。\n偏差：a2h-spec 模板里页面规格的导航关系表只有“触发 / 目标页面 / 类型”三列，ui-manifest 也只要求写导航架构（L202-L205）。\n主 agent 在 L232 的 ui-manifest 写“startActivity 线性跳转 → ArkUI router（router.pushUrl）三页平铺；无 Navigation 组件需求（无嵌套子页/共享转场）”；\nL248、L250、L261 三份页面规格的导航关系只写“router.pushUrl 页面跳转”或“无外跳”。源端切换动画和 pageTransition 目标值都没有出现。\nL539 写 ui-graph 导航边时，transition_anim 也一律填了 \"none\"（builder schema 规定填 @anim 引用或 \"unknown\"）。\n并行的 analyzer 在 ref design §3.4.6 写“无 res/anim XML、无 ObjectAnimator……其余可见动效：AlertDialog 进出场 = 框架默认 Dialog 动画”，\n把框架默认动画只算到对话框，漏了 Activity 切换（agent-acc4a122e8a95c01c.jsonl:L156）。spec 和 plan 都没有把页面切换动画列为可观察行为。\n交付：三个页面写者拿到的规格和派工都只有 router.pushUrl（派工写“play onClick → router.pushUrl('pages/LevelChooserPage')”，agent-a9b4b1ec566e91a39.jsonl:L1）。\nMainMenuPage（同转录 L164）、LevelChooserPage（agent-a9eb7103c9950ed76.jsonl:L206）、GamePage（agent-abd3f5720e97291a0.jsonl:L183）都没写 pageTransition()，\n进出页面沿用 router 默认横滑。后来 Slice2 给选关页接上 pushUrl（agent-a937ad41b7a6b6680.jsonl:L77-L98），Slice1 重写 GamePage（agent-a657166dd000a47ae.jsonl:L325），\n都没有补转场；这个状态一直保留到返修。\n经验：各写者首写前注入的经验里，没有一条讲 Activity 切换动画。库里与转场相关的只有 lesson-9886f489045488c8b454，\n它的标题以“源 Activity 或其基类 onCreate 调 overridePendingTransition(0,0) 时”开头。主菜单写者的召回 worker 以“MainMenuActivity 无此调用……不适用”把它排除\n（recall/a9b4b1ec566e91a39-call_8384d81202904c80978121c1.jsonl:L120）。注入的经验没有参与本偏差，所以图里不放经验节点。\n修复：返修在 Android 12 参照机上录屏（repair/74bab117-5770-4198-a61f-f8af8748fade.jsonl:L1246-L1269 首次记录，L4085-L4134 逐帧量取）。\n量得打开时新页快速变为不透明、约 0.95→1 放大，旧页放大到约 1.05；返回时顶页约 60ms 淡出缩小，露出的页从约 1.05 回到 1。\n返修新增 common/PageTransitionSpec.ets（L4157），三页各加 pageTransition()，按 RouteType.Push/Pop 分别写 Enter/Exit（L4158；MainMenuPage 的分号问题在 L4172 修好，编译通过），\n并记检查点 C4（L4209-L4210）。\n",
+  "recommendations": [
+    "规格提取阶段，把 Activity 跳转映射成目标路由时，把页面切换动画当作可观察行为，逐条写进导航契约。源端没有 overridePendingTransition、主题也没覆盖 windowAnimationStyle，结论应是“平台默认 Activity 动画”，不是“无转场”。沿主题 parent 链（含 values-v11、values-v14 等限定目录）找到 windowAnimationStyle，按参照机 API 版本从 SDK 读 activity_open_enter、open_exit、close_enter、close_exit 四段参数，写成每个目标页 pageTransition 在 Push/Pop × Enter/Exit 下的目标值。ui-graph 的 transition_anim 写“platform-default(主题名)”，不写 none。",
+    "界面实现阶段，给 router.pushUrl 的 @Entry 页写跳转前，先看规格有没有给切换动画。没给时查源端的 overridePendingTransition 和主题 windowAnimationStyle，按源端写 pageTransition；查不到目标值就作为规格缺口回报，不要默认保留鸿蒙横滑。",
+    "本应用：三个 Activity 都用 FullscreenTheme，API 11+ 上它继承 Theme.Holo（windowAnimationStyle=Animation.Holo.Activity→Animation.Activity）。Android 12 参照机实测：打开时新页 1~2 帧内变为不透明，约 0.95→1 放大（约 250~300ms，先快后慢），旧页同时放大到约 1.05；返回时顶页约 50~60ms 淡出并缩小，露出的页从约 1.05 回到 1。把这些值放进 common/PageTransitionSpec.ets（300ms、60ms、cubic-bezier(0.05, 0.7, 0.1, 1)、0.95/1.05），三页的 pageTransition() 用 PageTransitionEnter/Exit 按 RouteType.Push/Pop 写四段；写完连拍确认没有横移。",
+    "修订 lesson-9886f489045488c8b454（版本 1）：本次没有注入它。召回时它的标题前提是“onCreate 调 overridePendingTransition(0,0)”，源端没有这个调用，召回 worker 判为不适用（recall a9b4b1ec566e91a39-call_8384d81202904c80978121c1.jsonl:L120）；当前版本 2 也仍只覆盖 (0,0) 这一种情况。缺的前提：源端没调用 overridePendingTransition 时，Activity 切换仍有动画，由主题 windowAnimationStyle 决定；主题没覆盖时沿 parent 链落到平台 Animation.Activity 的 activity_open_enter、open_exit、close_enter、close_exit，具体动画随系统版本变化（本机 SDK android-30 为缩放加淡入，android-34 为 10% 横移加淡入）。鸿蒙 router 页不写 pageTransition、Navigation 不配自定义转场时，用的是系统默认横向滑动，与源端不等价。所以“没调用”不能当成“无转场”，也不能留着目标默认值。建议标题前半句改为“Activity 切换转场按源端实际迁移：overridePendingTransition(0,0) 时关闭，未调用时按主题默认窗口动画写 pageTransition”，做法第 1 步改为对每个 Activity 同时查 overridePendingTransition 和主题 windowAnimationStyle。判断信号：多个 Activity 用 startActivity/finish 切换，源码没有 overridePendingTransition，styles 没有 windowAnimationStyle，目标 @Entry 页或 NavDestination 没有转场设置。查值位置：应用 res/values*/styles.xml 的主题 parent 链（含 values-v11/v14）；Android SDK platforms/android-<参照机API>/data/res/values/themes*.xml 的 windowAnimationStyle、values/styles*.xml 的 Animation.Activity 与 Animation.Holo.Activity、anim/activity_{open,close}_{enter,exit}.xml；目标端 SDK ets/component/page_transition.d.ts 的 PageTransitionEnter/Exit（type: RouteType.Push/Pop，duration、curve，scale、opacity）。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-bubbleshooter-glm5.31/entry/src/main/ets/pages/MainMenuPage.ets",
+        "since": "2026-10-15T07:01:36.043Z",
+        "at": "2026-10-15T10:37:17.179Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/bubble-shooter-ashroof7-c601d2e/src/com/bubbleshooter/MainMenuActivity.java",
+          "at": "2026-10-15T03:38:44.344Z",
+          "reason": "正常输入：主 agent 的 Read 回执（generation 主转录 L52-L53）显示，play 的 onClick 只调用 startActivity(levelChooser)；onCreate 只设全屏和布局；整个类没有 overridePendingTransition。可见源端打开选关页、返回主菜单时用的都是主题提供的默认 Activity 切换动画，目标路由需要带上这项契约。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/bubble-shooter-ashroof7-c601d2e/AndroidManifest.xml",
+          "at": "2026-10-15T03:38:23.330Z",
+          "reason": "正常输入：主 agent 用 Bash cat 读到 manifest（L42-L43），三个 Activity 都是 android:theme=@style/FullscreenTheme，没有 Activity 级动画设置。切换动画由这个主题链的 windowAnimationStyle 决定。"
+        },
+        {
+          "key": "215b442f-adc8-42c4-a2cd-a215e38988c9.jsonl",
+          "at": "2026-10-15T03:52:09.561Z",
+          "reason": "主 agent 读到上述输入后，L232 的 ui-manifest 写“startActivity 线性跳转 → ArkUI router（router.pushUrl）三页平铺；无 Navigation 组件需求（无嵌套子页/共享转场）”，L248 的 page_0001 导航关系只写“play 图标 onClick → page_0002 router.pushUrl 页面跳转”。两处都没记录源端切换动画，也没给 pageTransition 目标值；模板的导航关系表本来就只有触发、目标、类型三列（L204-L205）。源端的平台默认动画在这里丢掉，目标只剩 router 默认横滑。L539 写导航边时，transition_anim 也填了 \"none\"。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-bubbleshooter-glm5.31/spec/baseline/ui/page_0001_MainMenuActivity.md",
+          "at": "2026-10-15T04:37:52.130Z",
+          "reason": "交付桥梁：写者的 Read 回执（agent-a9b4b1ec566e91a39.jsonl:L23-L24）里，导航关系只有 router.pushUrl 页面跳转；派工（同转录 L1）也只写“play onClick → router.pushUrl('pages/LevelChooserPage')”，没提切换动画。"
+        },
+        {
+          "key": "agent-a9b4b1ec566e91a39.jsonl",
+          "at": "2026-10-15T04:54:49.819Z",
+          "reason": "写者按规格和派工实现。L164 的 Write 中，play.onClick 调用 router.pushUrl({ url: LEVEL_CHOOSER_URL })，整个 @Entry struct 没有 pageTransition()，进出主菜单都沿用 router 默认横滑。它在 L31 读过 MainMenuActivity.java，但规格、派工以及它读的交互映射参考前 120 行（L76-L78）都没讲默认 Activity 动画；它的召回 worker 也因为源端没有 overridePendingTransition(0,0) 调用，排除了唯一相关的转场经验。本链只确认偏差被传递，不另推定写者失职（L164-L165）。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "主 agent 先 cd 到 Android 源码根，再用 Bash 执行 cat AndroidManifest.xml；回执列出三个 activity 都是 android:theme=@style/FullscreenTheme，没有 Activity 级动画属性。这是它写 ui-manifest 和页面规格之前真实读到的 manifest。",
+          "evidence": [
+            {
+              "source": "generation/215b442f-adc8-42c4-a2cd-a215e38988c9.jsonl",
+              "line": 42
+            },
+            {
+              "source": "generation/215b442f-adc8-42c4-a2cd-a215e38988c9.jsonl",
+              "line": 43
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-bubbleshooter-glm5.31/entry/src/main/ets/pages/LevelChooserPage.ets",
+        "since": "2026-10-15T07:01:36.043Z",
+        "at": "2026-10-15T10:37:17.179Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/bubble-shooter-ashroof7-c601d2e/src/com/bubbleshooter/LevelChooserActivity.java",
+          "at": "2026-10-15T03:38:45.026Z",
+          "reason": "正常输入：主 agent 的 Read 回执（主转录 L56-L57）显示，onItemClick 设好 MainGame.ROWS 后调用 startActivity(intent) 进入游戏页，没有 overridePendingTransition。本页由主菜单 startActivity 打开、按返回 finish 关闭，进出都用主题默认的 Activity 动画。"
+        },
+        {
+          "key": "215b442f-adc8-42c4-a2cd-a215e38988c9.jsonl",
+          "at": "2026-10-15T03:52:22.645Z",
+          "reason": "主 agent 的 ui-manifest（L232）全局只写 router.pushUrl 三页平铺；L250 的 page_0002 导航关系只写“grid_levels 第 position 项 onItemClick → page_0003 router.pushUrl 页面跳转（先置 MainGame.ROWS=position+6）”，本页进出的切换动画没有记录，也没有 pageTransition 目标值。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-bubbleshooter-glm5.31/spec/baseline/ui/page_0002_LevelChooserActivity.md",
+          "at": "2026-10-15T04:37:57.798Z",
+          "reason": "交付桥梁：写者的 Read 回执（agent-a9eb7103c9950ed76.jsonl:L18-L19）里，导航关系同样只有 router.pushUrl 页面跳转，没有切换动画。"
+        },
+        {
+          "key": "agent-a9eb7103c9950ed76.jsonl",
+          "at": "2026-10-15T04:55:08.001Z",
+          "reason": "写者按规格实现。L206 的 Write 写出 @Entry LevelChooserPage，出口契约注释为“router.pushUrl({ url: 'pages/GamePage' })”，由 Slice 2 接线，整页没有 pageTransition()。后来 Slice2（agent-a937ad41b7a6b6680.jsonl:L77-L98）只接上 pushUrl，转场一直缺到返修。本链只确认偏差被传递（L206-L207）。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-bubbleshooter-glm5.31/entry/src/main/ets/pages/GamePage.ets",
+        "since": "2026-10-15T07:01:36.043Z",
+        "at": "2026-10-15T10:37:17.179Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/bubble-shooter-ashroof7-c601d2e/src/com/bubbleshooter/GameActivity.java",
+          "at": "2026-10-15T03:38:44.665Z",
+          "reason": "正常输入：主 agent 的 Read 回执（主转录 L54-L55）显示，onCreate 只设全屏、setContentView 和 addView(MainGame)，没有 overridePendingTransition。本页由 LevelChooserActivity.startActivity 打开（L56-L57），按返回 finish 关闭，进出都用主题默认的 Activity 动画。"
+        },
+        {
+          "key": "215b442f-adc8-42c4-a2cd-a215e38988c9.jsonl",
+          "at": "2026-10-15T03:52:43.468Z",
+          "reason": "主 agent 的 ui-manifest（L232）全局只写 router.pushUrl 三页平铺；L261 的 page_0003 导航关系只写“（无外跳；弹窗内按钮均本页重开/停帧）”。本页被打开和关闭时的切换动画没有记录，也没有 pageTransition 目标值。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-bubbleshooter-glm5.31/spec/baseline/ui/page_0003_GameActivity.md",
+          "at": "2026-10-15T04:38:25.705Z",
+          "reason": "交付桥梁：写者的 Read 回执（agent-abd3f5720e97291a0.jsonl:L41-L42）里，导航关系是“无外跳”，没有进出本页的切换动画。"
+        },
+        {
+          "key": "agent-abd3f5720e97291a0.jsonl",
+          "at": "2026-10-15T04:51:32.985Z",
+          "reason": "写者按规格实现。L183 的 Write 写出 @Entry GamePage，注释写明是 router 独立 @Entry 页，没有 pageTransition()。Slice1 后来重写本页（agent-a657166dd000a47ae.jsonl:L325），也没有补。本链只确认偏差被传递（L183-L184）。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "主 agent 只读了 res/values 下的 styles.xml（主转录 L87-L88），没读 values-v11，所以 ui-manifest 把父主题写成 Theme.NoTitleBar。它当时是否知道 API 11+ 上主题是 Theme.Holo，没有材料能确认。本归因不依赖这一点：无论哪个父主题，没调用 overridePendingTransition 时都有平台默认 Activity 动画。"
+  ],
+  "unresolved_targets": [
+    {
+      "key": "C:/Users/hongy/projects/transfer-app-bubbleshooter-glm5.31/entry/src/main/ets/common/PageTransitionSpec.ets",
+      "reason": "这是返修新建的转场参数文件（repair/74bab117-5770-4198-a61f-f8af8748fade.jsonl:L4157，检查点 C4 在 L4209-L4210）。生成期没有这个文件，也就没有可以连接的生成期写入。漏掉转场的成因已经在三张页面图里归因。"
+    }
+  ],
+  "job": "issue-6f936bc6ca2d4ec18528",
+  "metadata": {
+    "migration": {
+      "id": "bubbleshooter-glm531-215b442f-adc8-42c4-a2cd-a215e38988c9",
+      "project": "Bubble Shooter"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.300"
+      ]
+    },
+    "source_set_id": "sources-73c606e991f7899a0d19",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-bubbleshooter-glm5.31",
+        "at": "2026-10-15T04:35:29.626Z",
+        "ref": "generation/215b442f-adc8-42c4-a2cd-a215e38988c9/subagents/agent-ac02dc809a0314c48.jsonl:L42",
+        "request_ref": "generation/215b442f-adc8-42c4-a2cd-a215e38988c9/subagents/agent-ac02dc809a0314c48.jsonl:L41",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-bubbleshooter-glm5.31",
+        "at": "2026-10-15T04:35:29.626Z",
+        "ref": "generation/215b442f-adc8-42c4-a2cd-a215e38988c9/subagents/agent-ac02dc809a0314c48.jsonl:L42",
+        "request_ref": "generation/215b442f-adc8-42c4-a2cd-a215e38988c9/subagents/agent-ac02dc809a0314c48.jsonl:L41",
+        "phase": "generation"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "36",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-bubbleshooter-glm5.31",
+        "at": "2026-10-15T08:10:26.715Z",
+        "ref": "repair/74bab117-5770-4198-a61f-f8af8748fade.jsonl:L204",
+        "request_ref": "repair/74bab117-5770-4198-a61f-f8af8748fade.jsonl:L203",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "35",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-bubbleshooter-glm5.31",
+        "at": "2026-10-15T08:10:26.715Z",
+        "ref": "repair/74bab117-5770-4198-a61f-f8af8748fade.jsonl:L204",
+        "request_ref": "repair/74bab117-5770-4198-a61f-f8af8748fade.jsonl:L203",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "8",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-bubbleshooter-glm5.31",
+        "at": "2026-10-15T08:10:26.715Z",
+        "ref": "repair/74bab117-5770-4198-a61f-f8af8748fade.jsonl:L204",
+        "request_ref": "repair/74bab117-5770-4198-a61f-f8af8748fade.jsonl:L203",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "cbf73939-4b90-490a-a37c-bfc2bcc8a05e"
+      ]
+    }
+  },
+  "revision": "bdf137c51e3c08ac5d32e6dad21ee73c21ecb312b8f10a5cde95e20380c8e086"
+}

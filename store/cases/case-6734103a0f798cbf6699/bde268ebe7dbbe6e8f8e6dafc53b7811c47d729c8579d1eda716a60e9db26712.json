@@ -1,0 +1,174 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-6734103a0f798cbf6699",
+  "created_at": "2026-10-15T11:23:25.073849+00:00",
+  "migration_key": "bubbleshooter-glm531-215b442f-adc8-42c4-a2cd-a215e38988c9",
+  "title": "源端预加载的 SoundPool 短音效被规格映射成每次新建 AVPlayer 的实例池，发声延迟约290ms",
+  "when": "规格提取与架构决策阶段，为源端短音效播放 API 选择目标平台播放器并写跨栈映射行、C7 候选项时",
+  "description": "源端用 android.media.SoundPool 在构造或初始化时 load 若干 res/raw 短音效，事件发生时 play（可多路叠播、要求即时发声）；目标为 HarmonyOS ArkTS，需决定用哪个媒体 API 承载这些音效。",
+  "summary": "规格作者（生成主会话，a2h-spec 与 grill#2 阶段）写前已读到源 GameLoop.java：L88 new SoundPool(2, STREAM_MUSIC, 100)，\nL89-90 在构造时 load 两个 res/raw 音效，碰撞与消除时 play（主会话 L73-L74）。源端是“预加载样本、事件触发即时发声”的 SoundPool 模型，\n足以要求先在目标 SDK 查同类 API。首次写入前注入的两条经验却把这两个音效引向 AVPlayer（主会话 L178）：\nlesson-5475（标题只讲 MediaPlayer 短提示音迁 AVPlayer）的提醒写“SoundPool 语义=无焦点混播+重叠发声…连续命中音效须可叠播（每次播放新实例或池）”；\nlesson-1267 的提醒写“ballhit/score.wav 迁 rawfile，getRawFdSync 的 {fd,offset,length} 设 fdSrc”，其正文适用情境也把“源端用 SoundPool.load”直接写成“目标改为 AVPlayer 播放 rawfile”。\n主会话把这些提醒当作本项目 playbook（L189），随后在 feature-base 跨栈映射写 SoundPool(2, STREAM_MUSIC, 100) → AVPlayer 实例池（每次播放新实例）+ fdSrc（L327），\n在 F003 服务层、实现映射与 races 节写“每次调用新建 AVPlayer 实例，prepared 后 start，播完 release”（L390），\n又在 D-011（L977、L979）只列 AVPlayer 实例池、单 AVPlayer 复用、audio 低层流三个候选并选定实例池，未列 HarmonyOS 自带的 media.SoundPool；\n同一次编辑写入的 grill#2 消解记录还称 SoundPool 已有“含 d.ts 查证”的等价映射。实际全程没有查 @ohos.multimedia.media.d.ts 的 createSoundPool，\n工程 .claude/skills 中也没有 media.SoundPool 的指引。本项偏差在源端 API 到规格的平台选型这一环。\nSlice3 音效 worker 读到 F003（agent-ae63f5628334592e9.jsonl:L32-L33）和已批准的 D-011（L47-L51），按派工红线写出 SoundService：\n每次 playHit/playScore 都走 media.createAVPlayer → fdSrc → initialized 设 rendererInfo → prepare → prepared 后 play（L236-L237）。\n这一结构一直保留到生成结束。返修用 hilog 测得从 createAVPlayer 到 playing 约 290ms（repair L4407-L4418），\n随后把 SoundService 改为 media.createSoundPool(2, MUSIC)、构造时 load 两个 rawfile、play 用默认参数，并删除无人调用的 release()（L4475-L4477）；\n实测出声约 40ms（L4504-L4525），记为检查点 C43（L4538-L4539）。\n",
+  "recommendations": [
+    "修订 lesson-5475edc47af05c1c6a5b（版本 1）：在标题前半句限定适用范围：只适用于“源端用 MediaPlayer 单实例播放提示音”。补一条例外：源端是 SoundPool（先 load 预解码、事件触发时 play、maxStreams 多路叠播）时本条不适用，目标用 @ohos.multimedia.media 的 media.createSoundPool，不要用“每次播放新建 AVPlayer 实例”模拟叠播。原因：AVPlayer 每次发声都要走 create → 设源 → prepare → play 的状态机，等 prepare 完成才出声，启动延迟明显，对不上 SoundPool 预加载后即时发声的效果。判断信号：源码有 import android.media.SoundPool、new SoundPool(...) 或 SoundPool.Builder，且 load 和 play 分开调用。查值位置：本地 SDK ets/api/@ohos.multimedia.media.d.ts 的 createSoundPool(maxStreams, audioRenderInfo)，以及 ets/api/multimedia/soundPool.d.ts 的 load(fd, offset, length)、play(soundID, PlayParameters)、setInterruptMode。",
+    "修订 lesson-1267d6cabb117824c67a（版本 1）：当前版本 2 的适用情境仍写着“源端用 SoundPool.load(...) 或 MediaPlayer.create(...)，目标改为 AVPlayer 播放 rawfile”，等于把 SoundPool 源默认映射成 AVPlayer。建议把前提写进标题前半句：只在目标已确定用 AVPlayer 时适用（源为 MediaPlayer 或较长音频）。同时补一条例外：源为 SoundPool 短音效时先选 media.createSoundPool，getRawFdSync 返回的 fd/offset/length 三个字段原样传给 SoundPool.load(fd, offset, length)，同样不拼成 url。查值位置：@ohos.resourceManager.d.ts 的 getRawFdSync，以及 multimedia/soundPool.d.ts 的 load 重载。",
+    "规格提取阶段为源端平台 API 写跨栈映射行和 C7 候选项之前，先按源类名和职责在本地 SDK d.ts 中 grep 目标同类 API（如 createSoundPool、SoundPool），把查到的同类 API 列为候选并写明取舍。经验提醒和技能模板里给出的目标类只作参考，不能代替这次查证；消解记录里写“含 d.ts 查证”时，要附上对应的查询回执。",
+    "本应用：GameLoop 在构造时 new SoundPool(2, STREAM_MUSIC, 100) 并 load ballhit 和 score，碰撞与消除时 play。F003 与 D-011 应写成：media.createSoundPool(2, rendererInfo{usage: STREAM_USAGE_MUSIC})，构造时用 getRawFdSync('ballhit.wav'/'score.wav') 的 fd/offset/length 调 load，play 用默认参数并允许同音叠播。返修 C43 按这一做法实现后，出声延迟从约 290ms 降到约 40ms。",
+    "短音效服务交付前，在真机分别记录源端和目标端从触发到出声的时间（hilog 中 play 调用到 renderer 启动），差距明显时回报规格与决策方复核选型，不只核对“能否发声、能否叠播”。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-bubbleshooter-glm5.31/entry/src/main/ets/engine/SoundService.ets",
+        "since": "2026-10-15T07:01:36.043Z",
+        "at": "2026-10-15T10:37:17.179Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/bubble-shooter-ashroof7-c601d2e/src/com/bubbleshooter/GameLoop.java",
+          "at": "2026-10-15T03:38:53.951Z",
+          "reason": "正常输入：主会话 Read 回执给出 L88 new SoundPool(2, AudioManager.STREAM_MUSIC, 100)、L89-90 构造即 load ballhit/score，以及 L171/210/245 碰撞和消除时的 play。这说明源端是预加载样本、事件触发即时发声的模型，足以要求先查目标平台的同类 API（215b442f…jsonl:L73-L74）。"
+        },
+        {
+          "key": "215b442f-adc8-42c4-a2cd-a215e38988c9.jsonl",
+          "at": "2026-10-15T04:20:58.835Z",
+          "reason": "规格作者已读到源端的 SoundPool 预加载模型。首次写入被钩子暂缓时（L178），它收到两条经验提醒：lesson-5475（版本 1，标题只讲 MediaPlayer 迁 AVPlayer）提醒“SoundPool 语义=无焦点混播+重叠发声…连续命中音效须可叠播（每次播放新实例或池）”；lesson-1267（版本 1，正文适用情境把 SoundPool.load 写成目标改为 AVPlayer）提醒“ballhit/score.wav … getRawFdSync 的 {fd,offset,length} 设 fdSrc”。L189 把它们记为 playbook 第 10、11 条。之后它在 feature-base 跨栈映射写 SoundPool(2, STREAM_MUSIC, 100) → AVPlayer 实例池（每次播放新实例）+ fdSrc（L327），在 F003 服务层和实现映射写“每次调用新建 AVPlayer 实例，播完释放”（L390），D-011 只列 AVPlayer 实例池、单 AVPlayer 复用、audio 低层流三个候选并选定实例池（L977、L979）。全程未查 d.ts 中的 createSoundPool。源端 API 到规格的选型在这里偏离。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-bubbleshooter-glm5.31/spec/baseline/features/F003-sound.md",
+          "at": "2026-10-15T05:19:14.071Z",
+          "reason": "交接桥梁：Slice3 的 Read 回执包含“依赖: feature-base（SoundPool→AVPlayer 实例池）”、服务层“每次调用新建 AVPlayer 实例，播完释放”以及实现映射行，派工把它定为实现权威（agent-ae63f5628334592e9.jsonl:L32-L33）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-bubbleshooter-glm5.31/spec/decision-ledger.md",
+          "at": "2026-10-15T05:19:23.436Z",
+          "reason": "交接桥梁：Slice3 用 grep 和 Read 读到 D-011 已批准，选定 A（AVPlayer 实例池，“唯一保叠播语义的等价实现”），候选项中没有 media.SoundPool（agent-ae63f5628334592e9.jsonl:L47-L51）。"
+        },
+        {
+          "key": "agent-ae63f5628334592e9.jsonl",
+          "at": "2026-10-15T05:35:24.934Z",
+          "reason": "实现者读到 F003 与带编号的已批准决策 D-011 后，按派工红线 2 写出 SoundService：spawn() 每次都 media.createAVPlayer → fdSrc → initialized 设 rendererInfo → prepare → prepared 后 play，播完 release 出池（同转录 L236-L237）。本链只确认它沿用并传递了上游选型，不另推定实现者失职。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 5
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "经验 lesson-5475edc47af05c1c6a5b 与 lesson-1267d6cabb117824c67a 经注入参与了偏差（主会话 L178 的提醒原文与 L189 的采纳都已核实），但未能作为图节点提交：注入只出现在 L178 这条被暂缓写入的 tool_result 中，索引把它登记为主会话对 page_0001 meta.json 的失败 Write，force 校验返回 invalid_force_source（reviewed relation contradicts indexed operation endpoints）。因此两条经验的作用只写在主会话节点 reason、summary 和“修订 lesson-…”建议中，带经验节点的稿件保留为 draft-2.yaml。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-6734103a0f798cbf6699",
+  "metadata": {
+    "migration": {
+      "id": "bubbleshooter-glm531-215b442f-adc8-42c4-a2cd-a215e38988c9",
+      "project": "Bubble Shooter"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.300"
+      ]
+    },
+    "source_set_id": "sources-73c606e991f7899a0d19",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-bubbleshooter-glm5.31",
+        "at": "2026-10-15T04:35:29.626Z",
+        "ref": "generation/215b442f-adc8-42c4-a2cd-a215e38988c9/subagents/agent-ac02dc809a0314c48.jsonl:L42",
+        "request_ref": "generation/215b442f-adc8-42c4-a2cd-a215e38988c9/subagents/agent-ac02dc809a0314c48.jsonl:L41",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-bubbleshooter-glm5.31",
+        "at": "2026-10-15T04:35:29.626Z",
+        "ref": "generation/215b442f-adc8-42c4-a2cd-a215e38988c9/subagents/agent-ac02dc809a0314c48.jsonl:L42",
+        "request_ref": "generation/215b442f-adc8-42c4-a2cd-a215e38988c9/subagents/agent-ac02dc809a0314c48.jsonl:L41",
+        "phase": "generation"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "36",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-bubbleshooter-glm5.31",
+        "at": "2026-10-15T08:10:26.715Z",
+        "ref": "repair/74bab117-5770-4198-a61f-f8af8748fade.jsonl:L204",
+        "request_ref": "repair/74bab117-5770-4198-a61f-f8af8748fade.jsonl:L203",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "35",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-bubbleshooter-glm5.31",
+        "at": "2026-10-15T08:10:26.715Z",
+        "ref": "repair/74bab117-5770-4198-a61f-f8af8748fade.jsonl:L204",
+        "request_ref": "repair/74bab117-5770-4198-a61f-f8af8748fade.jsonl:L203",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "8",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-bubbleshooter-glm5.31",
+        "at": "2026-10-15T08:10:26.715Z",
+        "ref": "repair/74bab117-5770-4198-a61f-f8af8748fade.jsonl:L204",
+        "request_ref": "repair/74bab117-5770-4198-a61f-f8af8748fade.jsonl:L203",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "cbf73939-4b90-490a-a37c-bfc2bcc8a05e"
+      ]
+    }
+  },
+  "revision": "bde268ebe7dbbe6e8f8e6dafc53b7811c47d729c8579d1eda716a60e9db26712"
+}

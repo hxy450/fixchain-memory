@@ -1,0 +1,231 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-bc452cbde49f74ef19a3",
+  "created_at": "2026-10-15T11:38:50.229444+00:00",
+  "migration_key": "bubbleshooter-glm531-215b442f-adc8-42c4-a2cd-a215e38988c9",
+  "title": "把源端构造器里的同步初始化改成异步启动并用try/catch只记日志，吞掉了规格要求照搬的第1关越界崩溃",
+  "when": "切片实现阶段，把源端自定义View构造器里的同步初始化（取尺寸、initGame、位图解码）移植到组件生命周期，并决定是否异步、怎样处理异常时",
+  "description": "源端在Activity.onCreate里构造自定义View，构造器同步完成displayDims→initGame→resizeBitmaps；其中一条路径按规格要照搬为未捕获异常导致的崩溃（如数组负下标）。目标SDK对位图解码、取窗口同时提供Promise与Sync接口，游戏组件在aboutToAppear里启动。",
+  "summary": "写前输入已经正确、足够。派工红线6写明startEmptyRows>ROWS时map[负索引]“天然崩溃——直接按源公式写即等价，勿加防护”，\n红线15写明“GamePage aboutToAppear → initGame(GameEngine.ROWS)+startLoop”（agent-a657166dd000a47ae.jsonl:L1）。\nF001-AC35写“抛出数组越界异常等价物（throw）崩溃（源缺陷照搬）”（L38），D-006写“崩溃路径以throw等价复刻（可观察行为=应用崩溃）”（L46）。\n写者读到的MainGame.java构造器按displayDims→initGame(ROWS)→resizeBitmaps同步执行（L57）。\n它查image d.ts时，回执里createPixelMapSync和createPixelMap并列（L128-L129）。\n写者在首写之前就定了异步启动：L135选了await createPixelMap()，L173定下bootAsync，里面是try{await measureDisplay; await loadBubbles; initGame}catch{log}。\nL201它核对过AC34的除零发生在onTouch里，确认“没有try-catch吞掉”。可AC35的抛出点在bootAsync的try里，它没有对这一处做同样的检查，接着写了“bootAsync error handling: try-catch with hilog”。\n首写被拒时注入了15条经验（L217，05:41）。lesson-843a70a（版本1）的提醒是“boot（测几何+解码位图+initGame）未完成前的 onTouch 直接忽略，防异步初始化与触摸输入竞态”。\n这条提醒是召回worker按写者已有的异步方案写的，它默认异步窗口没有问题，只让写者拦输入。\n这条经验的正文第1步本来要求把源端同步设置的状态放到第一个await之前，提醒里没有这层意思；写者也没有打开正文。\n写者照提醒在L219加了booted门控，在MainGameView的onTouch里写“if (!this.booted) return”。\n所以异步启动和catch是写者自己的决定，不是来自skill、计划或经验。这条经验让异步窗口留了下来，又加上了拦输入的门控。\nlesson-14411595也在这次注入里，但它的提醒只讲了双弹窗；写者没有拿它去检查boot的异常处理，它没有参与这次偏差。\nL242（GameEngine.ets）写了static async measureDisplay（await window.getLastWindow）、static async loadBubbles（await source.createPixelMap()）和isCanvasAttached。\ninitGame里AC35的天然抛错照规格保留，注释写着“勿加防护”。\nL246写MainGameView时，路径少了“.31”。L272-L273用mv移到正确路径，L278又在正确路径上改过一次。\n写进去的内容是：aboutToAppear调用this.bootAsync()但不等待；整段包在try里，catch只写hilog.error('boot failed. Cause: %{public}s', JSON.stringify(err))。\n交接L390写的是“AC34-AC35 全量”，decision_gaps为空。\n生成期后来的写者只改了SoundService接线（agent-acfc1d27cecc52a8a.jsonl:L60-L69）、windowRect和导入（agent-aa92f01525a277c15.jsonl:L130-L132），没有动这两段。返修开始时读回仍是原样（74bab117…jsonl:L133）。\n返修在第1关看到：startEmptyRows(7)>ROWS(6)，initGame抛出TypeError，被catch吞掉。\nTypeError经JSON.stringify只剩“{}”，所以日志只有“boot failed. Cause: {}”。booted一直是false，画面只有背景，点屏没有反应。\n安卓在MainGame.java:94抛ArrayIndexOutOfBoundsException，进程崩溃。\n修复（L2351-L2352、L2376-L2377、L2390-L2391，检查点C20 L2404-L2405）：aboutToAppear同步执行measureDisplay→firstDraw→initGame→loadBubbles，不捕获；loadBubbles改用createPixelMapSync；删除booted/startPending和isCanvasAttached。\n修复后设备上进程退出，hilog栈为initGame (GameEngine.ets:198) ← aboutToAppear (MainGameView.ets:40)（L2391）。\n全局errorManager观察器是另一项问题（C36，L2303-L2304先删）；即使没有观察器，bootAsync里的catch也会吞掉这条异常。\n",
+  "recommendations": [
+    "切片实现阶段：规格把某条源端异常定为照搬崩溃时，从抛出函数沿调用链一直核到生命周期入口。中间不新加try/catch、Promise.catch，也不放进不被等待的async包装。写完在设备上触发这条路径，确认hilog出现“about to exit due to”、进程退出，而不是只多一条错误日志。",
+    "切片实现阶段：源端在构造器或onCreate里同步完成的初始化，目标在aboutToAppear里按源顺序同步执行。SDK同时有Promise和Sync变体时用Sync变体（写前在d.ts同一interface里查）；不为接口的异步形式引入初始化窗口，也不加源端没有的“初始化完成前忽略输入”门控。",
+    "本应用：MainGame构造器顺序为displayDims→initGame(ROWS)→resizeBitmaps。MainGameView.aboutToAppear同步执行measureDisplay→initGame(GameEngine.ROWS)→位图装载，不捕获，位图用ImageSource.createPixelMapSync。第1关startEmptyRows(7)>ROWS(6)时，应在initGame（对应MainGame.java:94）抛出并退出进程；核对hilog栈initGame←aboutToAppear。",
+    "修订 lesson-843a70afd7e08bfed97c（版本 1）：当前版本4仍然只讲“已有异步初始化时，输入初值写在第一个await之前”，没有先问初始化能不能保持同步。建议标题前半句写成“源端初始化本就同步时目标也同步执行（用Sync接口）；确需异步时……”，并把下面几点放进做法第1步。(1) 前提与例外：先看源端初始化是否在构造器或onCreate里同步做完，之后才接收输入。如果是，就在目标生命周期回调里按源顺序同步执行；SDK同时有Promise和Sync变体时用Sync变体，不引入异步窗口，也不加“初始化完成前忽略输入”的门控。源端没有丢弃输入的行为，这种门控只是把异步窗口藏了起来。(2) 机制：把同步初始化改成生命周期回调里不等待的async函数后，里面抛出的异常变成被拒绝的Promise，不再沿回调同步抛出。如果再包一层只写日志的catch，源端会崩溃的路径就变成空白页面，ready标志永远不置位，输入全部被丢弃。(3) 判断信号：源端初始化方法里没有回调、线程或Future；目标草稿里出现aboutToAppear调用、但不await的private async方法，catch里只写日志，还有booted/ready标志拦输入。(4) 查证位置：本地SDK ets/api/@ohos.multimedia.image.d.ts的ImageSource接口（createPixelMapSync与createPixelMap并列）、@ohos.resourceManager.d.ts的getMediaContentSync、@ohos.window.d.ts的WindowStage.getMainWindowSync；源端顺序看Activity.onCreate和自定义View构造器。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-bubbleshooter-glm5.31/entry/src/main/ets/components/MainGameView.ets",
+        "since": "2026-10-15T07:01:36.043Z",
+        "at": "2026-10-15T10:37:17.179Z"
+      },
+      "nodes": [
+        {
+          "key": "215b442f-adc8-42c4-a2cd-a215e38988c9.jsonl",
+          "at": "2026-10-15T05:18:45.859Z",
+          "reason": "正常输入（派工）：主会话Agent派发Slice 1，红线6写明AC35负索引“天然崩溃——直接按源公式写即等价，勿加防护”，红线15写明页面aboutToAppear→initGame(GameEngine.ROWS)+startLoop（215b442f…jsonl:L1854；写者收到的同文在agent-a657166dd000a47ae.jsonl:L1）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-bubbleshooter-glm5.31/spec/baseline/features/F001-game-engine.md",
+          "at": "2026-10-15T05:18:56.638Z",
+          "reason": "正常输入：写者Read回执第125行F001-AC35写明startEmptyRows>ROWS时访问map[负索引]“抛出数组越界异常等价物（throw）崩溃（源缺陷照搬）”，H节标题写“忠实复刻——本轮零修正”（agent-a657166dd000a47ae.jsonl:L37-L38）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-bubbleshooter-glm5.31/spec/decision-ledger.md",
+          "at": "2026-10-15T05:18:59.371Z",
+          "reason": "正常输入：写者Read回执中D-006已批准“源端10项已知缺陷全部忠实复刻（含2处崩溃路径）”“崩溃路径以throw等价复刻（可观察行为=应用崩溃）”（agent-a657166dd000a47ae.jsonl:L45-L46）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/bubble-shooter-ashroof7-c601d2e/src/com/bubbleshooter/MainGame.java",
+          "at": "2026-10-15T05:19:04.408Z",
+          "reason": "正常输入：写者Read回执给出构造器第136-139行同步取displayDims→initGame(ROWS)→resizeBitmaps()，第93-94行rows-startEmptyRows为负时Arrays.fill(map[i])越界；源端没有catch（agent-a657166dd000a47ae.jsonl:L56-L57）。"
+        },
+        {
+          "key": "agent-a657166dd000a47ae.jsonl",
+          "at": "2026-10-15T05:47:28.087Z",
+          "reason": "偏差起点：上述输入都已收到，写者在首写前（L135、L173、L201）自行把构造器序列改成aboutToAppear里不等待的bootAsync，整段包在try里，catch只记hilog。L201只核了AC34在onTouch里没被吞，漏了AC35就在try里。注入后照lesson-843a70a的提醒加了“if (!this.booted) return”（L219、L245）。内容在L246写出（路径少了.31），L272-L273用mv移到目标路径，L278在目标路径上Edit。交接L390写的是“AC34-AC35 全量”，decision_gaps为空。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 5
+        },
+        {
+          "from": 2,
+          "to": 5
+        },
+        {
+          "from": 3,
+          "to": 5
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-bubbleshooter-glm5.31/entry/src/main/ets/engine/GameEngine.ets",
+        "since": "2026-10-15T07:01:36.043Z",
+        "at": "2026-10-15T10:37:17.179Z"
+      },
+      "nodes": [
+        {
+          "key": "215b442f-adc8-42c4-a2cd-a215e38988c9.jsonl",
+          "at": "2026-10-15T05:18:45.859Z",
+          "reason": "正常输入（派工）：红线6要求AC35负索引照源天然崩溃、勿加防护，红线15要求页面创建时同步initGame(GameEngine.ROWS)（215b442f…jsonl:L1854；agent-a657166dd000a47ae.jsonl:L1）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/bubble-shooter-ashroof7-c601d2e/src/com/bubbleshooter/MainGame.java",
+          "at": "2026-10-15T05:19:04.408Z",
+          "reason": "正常输入：构造器同步执行displayDims→initGame(ROWS)→resizeBitmaps()，resizeBitmaps用decodeResource和createScaledBitmap同步解码（agent-a657166dd000a47ae.jsonl:L56-L57）。"
+        },
+        {
+          "key": "C:/Users/hongy/AppData/Local/OpenHarmony/Sdk/23/ets/api/@ohos.multimedia.image.d.ts",
+          "at": "2026-10-15T05:21:06.528Z",
+          "reason": "正常输入：写者用Bash grep本地SDK的ImageSource接口，回执第296行列出createPixelMapSync(options?: DecodingOptions): PixelMap，和Promise版的createPixelMap并列；同步解码的接口已经拿到（agent-a657166dd000a47ae.jsonl:L128-L129）。"
+        },
+        {
+          "key": "agent-a657166dd000a47ae.jsonl",
+          "at": "2026-10-15T05:45:16.577Z",
+          "reason": "偏差起点：写者在L135选了await createPixelMap()，并在L242写下static async measureDisplay（await window.getLastWindow）、static async loadBubbles（await source.createPixelMap()）和isCanvasAttached（只为异步启动与onReady的先后竞争服务）。这让MainGame构造器里的同步序列只能放进MainGameView的异步bootAsync。initGame里AC35的天然抛错照规格保留（同一Write）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "写者用Bash对本地SDK的@ohos.multimedia.image.d.ts做grep（SDK=$LOCALAPPDATA/OpenHarmony/Sdk/23，F=$SDK/ets/api/@ohos.multimedia.image.d.ts），回执列出ImageSource的createPixelMap(Promise)与createPixelMapSync(options?: DecodingOptions): PixelMap；这支持写者写loadBubbles前已经看到同步解码接口。",
+          "evidence": [
+            {
+              "source": "generation/215b442f-adc8-42c4-a2cd-a215e38988c9/subagents/agent-a657166dd000a47ae.jsonl",
+              "line": 128
+            },
+            {
+              "source": "generation/215b442f-adc8-42c4-a2cd-a215e38988c9/subagents/agent-a657166dd000a47ae.jsonl",
+              "line": 129
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "arkts-component-builder skill清单里有“aboutToAppear() 中使用 DBReader/Service 真实调用 + try-catch 空数组兜底”（agent-a657166dd000a47ae.jsonl:L8），EntryAbility也用catch加hilog的写法（L80）。写者的推理没有引用这两处，无法确认它们是否影响了加catch的决定。",
+    "返修没有单独试“异步但不捕获”能否让进程退出，本卡只依据“同步且不捕获”之后的设备实测。",
+    "注入经验lesson-843a70afd7e08bfed97c（版本1）参与了这次偏差：它的提醒让写者保留异步启动，又加了booted输入门控。依据是写者首写被拒的tool_result（agent-a657166dd000a47ae.jsonl:L217）和随后的L219、L245。检查器把这一行登记为一次失败的原生Write，经验到agent的force边被判为invalid_force_source（见本目录draft-2.yaml与work/pack-2.out）。所以经验节点没有入图，它的作用写在agent节点reason、summary和“修订 lesson-843a70afd7e08bfed97c”建议里。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-bc452cbde49f74ef19a3",
+  "metadata": {
+    "migration": {
+      "id": "bubbleshooter-glm531-215b442f-adc8-42c4-a2cd-a215e38988c9",
+      "project": "Bubble Shooter"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.300"
+      ]
+    },
+    "source_set_id": "sources-73c606e991f7899a0d19",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-bubbleshooter-glm5.31",
+        "at": "2026-10-15T04:35:29.626Z",
+        "ref": "generation/215b442f-adc8-42c4-a2cd-a215e38988c9/subagents/agent-ac02dc809a0314c48.jsonl:L42",
+        "request_ref": "generation/215b442f-adc8-42c4-a2cd-a215e38988c9/subagents/agent-ac02dc809a0314c48.jsonl:L41",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-bubbleshooter-glm5.31",
+        "at": "2026-10-15T04:35:29.626Z",
+        "ref": "generation/215b442f-adc8-42c4-a2cd-a215e38988c9/subagents/agent-ac02dc809a0314c48.jsonl:L42",
+        "request_ref": "generation/215b442f-adc8-42c4-a2cd-a215e38988c9/subagents/agent-ac02dc809a0314c48.jsonl:L41",
+        "phase": "generation"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "36",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-bubbleshooter-glm5.31",
+        "at": "2026-10-15T08:10:26.715Z",
+        "ref": "repair/74bab117-5770-4198-a61f-f8af8748fade.jsonl:L204",
+        "request_ref": "repair/74bab117-5770-4198-a61f-f8af8748fade.jsonl:L203",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "35",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-bubbleshooter-glm5.31",
+        "at": "2026-10-15T08:10:26.715Z",
+        "ref": "repair/74bab117-5770-4198-a61f-f8af8748fade.jsonl:L204",
+        "request_ref": "repair/74bab117-5770-4198-a61f-f8af8748fade.jsonl:L203",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "8",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-bubbleshooter-glm5.31",
+        "at": "2026-10-15T08:10:26.715Z",
+        "ref": "repair/74bab117-5770-4198-a61f-f8af8748fade.jsonl:L204",
+        "request_ref": "repair/74bab117-5770-4198-a61f-f8af8748fade.jsonl:L203",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "cbf73939-4b90-490a-a37c-bfc2bcc8a05e"
+      ]
+    }
+  },
+  "revision": "356f44bb0d18710202e08df16ee23f96071833deedaa6a4599dce9af2f5d2086"
+}
