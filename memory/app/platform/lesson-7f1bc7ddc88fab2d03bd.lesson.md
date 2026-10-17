@@ -1,6 +1,6 @@
 # 源端定时提醒迁 reminderAgentManager 时按其自身 d.ts 映射按钮与贪睡，并写出发布失败、条数上限与到点无回调的回退
 
-ID：`lesson-7f1bc7ddc88fab2d03bd` · 版本：2
+ID：`lesson-7f1bc7ddc88fab2d03bd` · 版本：3
 
 [本主题](index.md)
 
@@ -23,7 +23,7 @@ ID：`lesson-7f1bc7ddc88fab2d03bd` · 版本：2
 ## 做法
 
 1. 写替代路径前逐字段对照目标模块自己的 d.ts：reminderAgentManager.ActionButton 在项目 SDK 中三方可用的字段与 ActionButtonType 枚举（带 @systemapi 的成员不算可用）；按钮跳转所需的 wantAgent 在 notificationManager 的 NotificationActionButton 上，不跨模块嫁接字段。
-2. 在同一映射行写出平台事实，再决定是否需要应用侧回退：贪睡用 ReminderRequest 的 timeInterval（单位秒、最少 30 秒，源端分钟偏好×60）与 snoozeTimes（默认 0 次），两者不适用于倒计时提醒（HarmonyOS 文档 js-apis-reminderagentmanager，访问于 2026-10-17）；单个普通应用有效提醒上限 API 25 及以下为 30 个、API 26.0.0 起为 64 个（HarmonyOS 文档 agent-powered-reminder，访问于 2026-10-17）；publishReminder 的失败错误码（201 权限拒绝、1700001 通知未开启、1700002 提醒数超限，HarmonyOS 文档 js-apis-reminderagentmanager，访问于 2026-10-17）及 ohos.permission.PUBLISH_AGENT_REMINDER 权限，未开通代理提醒能力的设备上发布可能恒失败（部分设备对代理提醒加了管控，需向华为侧申请代理提醒权限，新申请的权限在 HarmonyOS 5.1.1(19) 及之前版本不生效，HarmonyOS 文档 agent-powered-reminder，访问于 2026-10-17）；到点不回调应用；按钮状态回调用 subscribeReminderState（API 23 起，需同一权限，应用进程存在时回报用户点击的系统按钮类型，不能实现打开条目按钮；本机 SDK API 24 @ohos.reminderAgentManager.d.ts）。
+2. 在同一映射行写出平台事实，再决定是否需要应用侧回退：贪睡用 ReminderRequest 的 timeInterval（单位秒、最少 30 秒，源端分钟偏好×60）与 snoozeTimes（默认 0 次），两者不适用于倒计时提醒（HarmonyOS 文档 js-apis-reminderagentmanager，访问于 2026-10-17）；单个普通应用有效提醒上限 API 25 及以下为 30 个、API 26.0.0 起为 64 个（HarmonyOS 文档 agent-powered-reminder，访问于 2026-10-17）；publishReminder 的失败错误码（201 权限拒绝、1700001 通知未开启、1700002 提醒数超限，HarmonyOS 文档 js-apis-reminderagentmanager，访问于 2026-10-17）及 ohos.permission.PUBLISH_AGENT_REMINDER 权限，未开通代理提醒能力的设备上发布可能恒失败（部分设备对代理提醒加了管控，需向华为侧申请代理提醒权限，新申请的权限在 HarmonyOS 5.1.1(19) 及之前版本不生效，HarmonyOS 文档 errorcode-reminderagentmanager 的 1700002 处理步骤，访问于 2026-10-17）；到点不回调应用；按钮状态回调用 subscribeReminderState（API 23 起，需同一权限，应用进程存在时回报用户点击的系统按钮类型，不能实现打开条目按钮；本机 SDK API 24 @ohos.reminderAgentManager.d.ts）。
 3. 源端按钮要路由到应用（打开条目、延后选时间）时，走 notificationManager 本地通知的 NotificationActionButton.wantAgent，或项目 d.ts 提供的提醒按钮状态订阅；不以系统 SNOOZE/CLOSE 按钮代替应用侧动作。
 4. publishReminder 失败或超出条数上限时回退到应用侧调度与本地通知，并保留源端的链式重挂（只发布最近一次发生时，在触发或回前台时补挂下一次）；回退与上限处理写进验收，按钮路由做不到时把相关验收标为阻塞，不只记 GAP。
 5. 源端按钮经透明跳板 Activity 处理时，保留其拦截与前后台语义（应用在前台时的模态选择、取消或过去时刻的提示、离开时释放），不只在入口 onCreate/onNewWant 加一行分发。

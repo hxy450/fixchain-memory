@@ -1,6 +1,6 @@
 # WebView 排版与缩放按源端 WebSettings（未做设置时取 Android WebView 默认值）在 ArkWeb 中显式落实：HTML 声明 viewport，缩放与 JS 逐项对齐
 
-ID：`lesson-65ebab594a9dabe77ac2` · 版本：4
+ID：`lesson-65ebab594a9dabe77ac2` · 版本：5
 
 [本主题](index.md)
 
@@ -14,7 +14,7 @@ ID：`lesson-65ebab594a9dabe77ac2` · 版本：4
 
 ## 原因
 
-ArkWeb 无 viewport 时按桌面宽排版再整体缩小，正文字极小（默认视口宽度 980px，overviewModeAccess 未调用时默认开启概览模式；HarmonyOS 文档 arkts-basic-components-web-attributes，访问于 2026-10-17）；规格笼统标“行为等价”时，这些设置不会传到 HTML 产出方。源端未做设置时，目标行为就是 Android WebView 的全部默认值：按 WebView 宽度排版（useWideViewPort=false）、没有缩放手势、JS 关闭；ArkWeb 在页面没有 viewport meta 时不按组件宽度排版，zoomAccess 默认为 true。
+ArkWeb 无 viewport 时按桌面宽排版再整体缩小，正文字极小（overviewModeAccess 未调用时默认开启概览模式；HarmonyOS 文档 arkts-basic-components-web-attributes，访问于 2026-10-17）；规格笼统标“行为等价”时，这些设置不会传到 HTML 产出方。源端未做设置时，目标行为就是 Android WebView 的全部默认值：按 WebView 宽度排版（useWideViewPort=false）、没有缩放手势、JS 关闭；ArkWeb 在页面没有 viewport meta 时不按组件宽度排版，zoomAccess 默认为 true。
 
 ## 做法
 

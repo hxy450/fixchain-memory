@@ -1,6 +1,6 @@
 # 源端自写触摸状态机或用框架手势类时，按源阈值、跟手与取消逐项复刻，不以 onClick/SwipeGesture/PinchGesture 识别器代替
 
-ID：`lesson-b9f5cb5d3ae174e5bf70` · 版本：2
+ID：`lesson-b9f5cb5d3ae174e5bf70` · 版本：3
 
 [本主题](index.md)
 
@@ -18,7 +18,7 @@ ID：`lesson-b9f5cb5d3ae174e5bf70` · 版本：2
 
 ## 原因
 
-识别器在识别成功时一次性回调：SwipeGesture 识别即触发，只有速度阈值（默认 100vp/s），没有跟手位移、位移阈值与回弹，与 PanGesture（默认 5vp 距离）同绑时先达条件者触发（HarmonyOS 文档 arkts-gesture-events-single-gesture，访问于 2026-10-17）；onClick 不含源端“移动超过阈值取消点击”的规则，也不保证与 Swiper 拖动互斥。映射表只给组件候选，阈值与时序在源方法体和框架默认参数里。
+识别器在识别成功时一次性回调：SwipeGesture 识别即触发，只有速度阈值（默认 100vp/s），没有跟手位移、位移阈值与回弹，与 PanGesture（默认 5vp 距离）以默认方式或互斥方式同绑时先达条件者触发（HarmonyOS 文档 arkts-gesture-events-single-gesture，访问于 2026-10-17）；onClick 不含源端“移动超过阈值取消点击”的规则，也不保证与 Swiper 拖动互斥。映射表只给组件候选，阈值与时序在源方法体和框架默认参数里。
 
 ## 做法
 

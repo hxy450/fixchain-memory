@@ -1,6 +1,6 @@
 # ViewPager（含三方库封装的）迁 Swiper 只是结构对应：释放定页阈值、归位时长与曲线按 ViewPager 规则落实
 
-ID：`lesson-fc05d6dfe9844a88815b` · 版本：2
+ID：`lesson-fc05d6dfe9844a88815b` · 版本：3
 
 [本主题](index.md)
 
@@ -19,7 +19,7 @@ ID：`lesson-fc05d6dfe9844a88815b` · 版本：2
 
 ## 原因
 
-ViewPager 的抬手定页与归位动画是框架固定实现，不在应用源码里；Swiper 缺省的定页阈值与回弹曲线不同；它只开放 curve 与 duration（默认弹簧插值曲线 interpolatingSpring(-1, 1, 328, 34)、400ms，可传 ICurve 自定义曲线；HarmonyOS 文档 ts-container-swiper，访问于 2026-10-17），不开放释放定页阈值，时长也不随抬手速度变化，直接替换后慢拖、快划与末页越界的结果都与源端不一致。
+ViewPager 的抬手定页与归位动画是框架固定实现，不在应用源码里；Swiper 缺省的定页阈值与回弹曲线不同；它只开放 curve 与 duration：默认曲线 interpolatingSpring(-1, 1, 328, 34) 下动画时长由弹簧参数与离手位置、速度决定，不受 duration 控制；duration（默认 400ms）只对非弹簧曲线生效；可传 ICurve 自定义曲线；拖动未达子元素宽度一半时回弹（HarmonyOS 文档 ts-container-swiper，访问于 2026-10-17）。它不开放释放定页阈值，也不能按 ViewPager 的速度公式设定归位时长，直接替换后慢拖、快划与末页越界的结果都与源端不一致。
 
 ## 做法
 

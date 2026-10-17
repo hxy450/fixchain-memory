@@ -35,8 +35,9 @@
 
 - **归并**（`ace057cc5e202b60bdf117b28276aff3b4a687e7cdfe4db7977883f64ac41bc5`）：入卡 46 张（669 → 715），active 经验 521 → 550；新增 29、修订 27（纠错 2、增量 25，其中 8 条兼呈现）、只补证 26、退役 0。两次会话都没有加载经验，没有召回或使用失败记录。
 - **官方文档纠错**（`e8c7b39b112a0f2f8acff7bfdea743cf6d5977d195ee6f30342409e7b95ccb0c`）：用鸿蒙开发者知识 MCP 核对本次新增与修订的 82 条经验中的 192 条平台断言，查出 13 处错误（11 条经验：4 处在本次新增经验、2 处在本次修订句、7 处是起点版本已有文本），全部按纠错修改并在句旁注明文档出处；42 条经验改动。卡片、经验 ID、evidence 不变。
+- **修订后复核与第二轮纠错**（`212330c62ac0d763caeb25e4d181395c0f03c4642c8756ada2eb7450bb9d5e55`）：对 42 条修订经验重新核对，13 处纠错中 12 处与文档一致、1 处部分解决；修订新增约 64 处出处中查出 2 处新错误（ArkWeb「默认视口 980px」、Swiper 弹簧曲线下 duration 不生效）与 4 处出处精度问题，改动 6 条经验。
 
-两个状态各是一个提交，可分别检出对照。评测规则、任务集与结果见 [fuxi-ailabs/memory-eval](https://github.com/fuxi-ailabs/memory-eval) 的 `runs/omni-notes-20261017`。本分支未并入 memory/multi-app-20261012。
+三个状态各是一个提交，可分别检出对照。评测规则、任务集与结果见 [fuxi-ailabs/memory-eval](https://github.com/fuxi-ailabs/memory-eval) 的 `runs/omni-notes-20261017`。本分支未并入 memory/multi-app-20261012。
 
 ## 2026-09-30：阅读减负与制卡模型来源
 
