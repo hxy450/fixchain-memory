@@ -1,6 +1,6 @@
 # 多字重字族按“族-字重”逐文件 registerFont，排版样式引用注册名，入口调用一次注册
 
-ID：`lesson-046baeb5ffbb10a6abc5` · 版本：2
+ID：`lesson-046baeb5ffbb10a6abc5` · 版本：3
 
 [本主题](index.md)
 
@@ -18,7 +18,7 @@ registerFont 的一个 familyName 只绑定一个文件；把整族注册成一�
 
 ## 做法
 
-1. 每个字体文件注册独立的 familyName（如“族-字重”）：registerFont({ familyName, familySrc: $rawfile('fonts/<file>.ttf') })；排版样式引用注册名，fontWeight 设为该文件本身的字重。
+1. 每个字体文件注册独立的 familyName（如“族-字重”）：this.getUIContext().getFont().registerFont({ familyName, familySrc: $rawfile('fonts/<file>.ttf') })（全局 font.registerFont 自 API 18 废弃，改经 UIContext 取得的 Font 对象注册；HarmonyOS 文档 js-apis-font，访问于 2026-10-17）；排版样式引用注册名，fontWeight 设为该文件本身的字重。
 2. 注册函数由应用入口页 aboutToAppear 调用一次；收尾检索 registerFont，确认有真实调用。
 3. 源布局按字体文件指定字族时，确认 rawfile/fonts 下有该 ttf，注册后在对应 Text 上写 fontFamily(注册名)；不用 fontWeight(Bold) 代替粗体字族文件，注释里的字体名不算已应用。
 

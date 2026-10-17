@@ -1,6 +1,6 @@
 # LazyForEach 换数据时不重新赋值数据源对象：保持同一 IDataSource 宿主并通知重载，行键跨数据集唯一
 
-ID：`lesson-40efd2d02a5ea9554a95` · 版本：1
+ID：`lesson-40efd2d02a5ea9554a95` · 版本：2
 
 [本主题](index.md)
 
@@ -18,7 +18,7 @@ ID：`lesson-40efd2d02a5ea9554a95` · 版本：1
 
 ## 原因
 
-LazyForEach 经数据源上注册的 DataChangeListener 获知变化；把状态字段换成另一个数据源对象，列表不会按新对象整体重载，排序或换列表后行不刷新。数据集切换后若行键与旧数据集重合，旧行会被复用。
+LazyForEach 经数据源上注册的 DataChangeListener 获知变化；把状态字段换成另一个数据源对象，列表不会按新对象整体重载，排序或换列表后行不刷新（文档明言重新赋值 dataSource 会导致异常，dataSource 为状态变量时其改变不触发 LazyForEach 刷新；HarmonyOS 文档 arkts-rendering-control-lazyforeach，访问于 2026-10-17）。数据集切换后若行键与旧数据集重合，旧行会被复用。
 
 ## 做法
 

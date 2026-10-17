@@ -1,6 +1,6 @@
 # Fragment 事务与 finish() 迁到 NavPathStack 时逐调用点按分支映射，不压成一次同步 pop/push
 
-ID：`lesson-9a113ce21ae30365ea5b` · 版本：1
+ID：`lesson-9a113ce21ae30365ea5b` · 版本：2
 
 [本主题](index.md)
 
@@ -23,7 +23,7 @@ Fragment 事务的每个分支有不同的实例与返回栈后果：replace 恒
 ## 做法
 
 1. 先把源端每个事务和退出调用点按分支列表：replace+addToBackStack、popBackStackImmediate+replace、popBackStack、finish()，连同触发条件（偏好、栈深判断）与前后副作用（Toast、标题栏恢复、发给宿主的事件），逐条写进规格验收。
-2. 恒建新实例的跳转用 pushPath(info, { launchMode: LaunchMode.NEW_INSTANCE })；同帧先 pop 再按名压入同名页时，已观察到 ArkUI 复用栈中实例、新页 onReady 不触发。
+2. 恒建新实例的跳转用 pushPath(info, { launchMode: LaunchMode.NEW_INSTANCE })（LaunchMode 为 API 12 起）；同帧先 pop 再按名压入同名页时，ArkUI 忽略中间过程、只看最终栈结果，视为无变化而沿用栈中实例，新页 onReady 不触发（HarmonyOS 文档 ts-basic-components-navigation，访问于 2026-10-17）。
 3. popBackStack 映射为排到下一轮执行的出栈，栈只剩根页时为空操作；依赖出栈后栈深的副作用（恢复标题栏、通知宿主）在出栈完成后按实际栈深执行。
 4. finish() 按它结束的承载映射：外部入口独占的 UIAbility 用 terminateSelf；源端先 Toast 再 finish 的，等 Toast 时长结束后再结束，期间屏蔽输入；不写成 pop。
 5. 注释写“退化为 pop”“由 NavPathStack 天然保留”而没有实现对应分支时，登记为占位与缺口，不算等价实现。

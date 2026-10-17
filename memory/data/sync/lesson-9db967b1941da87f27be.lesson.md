@@ -1,6 +1,6 @@
 # EventBus 迁移先核投递契约：emitter 异步且序列化 data，需同步按引用投递时自建订阅表，保留 priority 与嵌套 post 排队
 
-ID：`lesson-9db967b1941da87f27be` · 版本：1
+ID：`lesson-9db967b1941da87f27be` · 版本：2
 
 [本主题](index.md)
 
@@ -18,7 +18,7 @@ ID：`lesson-9db967b1941da87f27be` · 版本：1
 
 ## 原因
 
-greenrobot EventBus 默认线程模式 POSTING 在 post 的线程内同步按引用回调，按 priority 降序、同级按注册序投递，投递中再 post 的事件排队到当前事件投递完。@ohos.events.emitter 异步投递并序列化 data：类实例到达后丢原型，实例方法与 instanceof 失效，post 返回时回调尚未执行；订阅接口也没有 priority 形参，订阅方之间的顺序依赖随之丢失。
+greenrobot EventBus 默认线程模式 POSTING 在 post 的线程内同步按引用回调，按 priority 降序、同级按注册序投递，投递中再 post 的事件排队到当前事件投递完。@ohos.events.emitter 异步投递并按跨线程传输规格序列化 data：类实例到达后丢原型，实例方法与 instanceof 失效，@State、@Observed 等装饰器修饰的复杂数据不支持传输（HarmonyOS 文档 js-apis-emitter，访问于 2026-10-17），post 返回时回调尚未执行；订阅接口也没有 priority 形参，订阅方之间的顺序依赖随之丢失。
 
 ## 做法
 

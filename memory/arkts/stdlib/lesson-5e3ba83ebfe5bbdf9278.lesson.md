@@ -1,6 +1,6 @@
 # 平台库调用不以形似 JS 内建加“等价”注释收口：ICU 正则字符类、码点切分、List.remove、Base64/Uri 逐项按源语义移植
 
-ID：`lesson-5e3ba83ebfe5bbdf9278` · 版本：1
+ID：`lesson-5e3ba83ebfe5bbdf9278` · 版本：2
 
 [本主题](index.md)
 
@@ -24,7 +24,7 @@ ID：`lesson-5e3ba83ebfe5bbdf9278` · 版本：1
 
 1. 写替换前把每个源调用的语义点列成对照（字符单位、空白与字母字符集所属引擎、大小写折叠方式、删除首个还是全部、解码容错、路径解析、未知值默认），逐项决定按源算法移植或登记差异；Java 文本读行与 split/trim、集合迭代序、float 运算按对应经验处理。
 2. 常用写法：ICU 字符类用 u 标志与 Unicode 属性写全（\s → \p{White_Space}，\p{L} 不并入 \p{M}）；split("") 与字符计数用 Array.from 或 for…of 按码点；compareToIgnoreCase 逐码点 toUpperCase 再 toLowerCase 后比较；List.remove(Object) 用 indexOf + splice(i, 1)；Base64.decode 与 Uri.parse().getPath() 按 AOSP 源码逐状态移植；getType 未知扩展名回落 application/octet-stream 再按源端归类。
-3. 注释写“等价/直迁”前，用一组边界输入对照源端结果（emoji、全角空格、大小写变体、尾随分隔符、含非法字符的 Base64、file:// 或含百分号的路径、未知扩展名），对不上就按源算法移植，不以近似实现加注释收口。
+3. 注释写“等价/直迁”前，用一组边界输入对照源端结果（emoji、全角空格、大小写变体、尾随分隔符、含非法字符的 Base64、file:// 或含百分号的路径、未知扩展名），对不上就按源算法移植，不以近似实现加注释收口。目标侧结果在设备的 ArkTS 运行时上取，不只按 ECMAScript 规范推断：运行时正则的 \b 会把部分非 ASCII 字符当作 ASCII 处理，/ui 对非 BMP 字符的大小写折叠也与预期不一致（HarmonyOS 文档 arkts-runtime-faq，访问于 2026-10-17）。
 4. 源码依赖的三方库源文件不在工程内时，按依赖坐标取发布版源码，从真实正则与常量移植，不从单元测试用例反推契约。
 
 来源支持：1 张卡 · 迁移数未记录 · 应用数未记录

@@ -1,6 +1,6 @@
 # 按 EditText 对齐 TextInput 时，未声明 background 的输入框按主题状态背景（editTextBackground 的 9-patch，随聚焦切换并取其内边距）复刻，并显式关闭源端没有的 ArkUI 默认装饰：填充底与圆角、Password 显隐图标、清除按钮，核默认高度
 
-ID：`lesson-1150c0c721e6dc0dede4` · 版本：3
+ID：`lesson-1150c0c721e6dc0dede4` · 版本：4
 
 [本主题](index.md)
 
@@ -24,8 +24,8 @@ ArkUI 的 Password 输入框默认显示显隐图标（showPasswordIcon 默认 t
 
 1. 源 EditText 未声明 background 时外观是主题的状态背景：从本机 SDK 平台资源取 editTextBackground 选择器各状态的 9-patch，随 onFocus/onBlur 切换，padding 取 9-patch 内容区，高度按 wrap_content 结果（内边距 + 文字行高）设置，光标色按 textCursorDrawable；不用 border bottom 加猜测色近似。TextInput 改透明底时同时显式 borderRadius(0)。
 2. 源端密码框没有显隐切换时，在 .type(InputType.Password) 旁写 .showPasswordIcon(false)；数字掩码的验证码框同样处理。
-3. 单行 EditText 未写 imeOptions 时动作键由框架决定：下方还有可编辑框为 Next（回车移到下一框），否则为 Done（本机 android-36.1 TextView.onCreateInputConnection）；TextInput 默认 EnterKeyType.Done（text_input.d.ts）。按源端顺序逐框写 enterKeyType(EnterKeyType.Next)，最后一框写 Done，并在 onSubmit 把焦点移到下一框。
-4. 对齐 TextInput 时，除源 XML 写出的属性外，逐项核源端没有、ArkUI 却默认带出的外观：默认填充底、圆角与内边距、默认高度、密码显隐图标、输入时的清除按钮（可用 cancelButton 设为 INVISIBLE）、光标样式；源端没有对应项就显式关闭或覆盖。
+3. 单行 EditText 未写 imeOptions 时动作键由框架决定：下方还有可编辑框为 Next（回车移到下一框），否则为 Done（本机 android-36.1 TextView.onCreateInputConnection）；TextInput 默认 EnterKeyType.Done（text_input.d.ts）。按源端顺序逐框写 enterKeyType(EnterKeyType.Next)，最后一框写 Done，并在 onSubmit 把焦点移到下一框；非 TV 设备按回车默认失焦并收起键盘，逐框 Next 时在 OnSubmitCallback 里调用 event.keepEditableState() 保持键盘（HarmonyOS 文档 ts-basic-components-textinput，访问于 2026-10-17）。
+4. 对齐 TextInput 时，除源 XML 写出的属性外，逐项核源端没有、ArkUI 却默认带出的外观：默认填充底、圆角与内边距（默认 padding 为上下 8vp、左右 16vp，下划线模式为上下 12vp、左右 0）、默认高度、密码显隐图标（非 TV 设备默认显示）、输入时的清除按钮（cancelButton 默认 CancelButtonStyle.INPUT 即有内容时显示，可设为 INVISIBLE；HarmonyOS 文档 ts-basic-components-textinput，访问于 2026-10-17）、光标样式；源端没有对应项就显式关闭或覆盖。
 5. 修一处后在工程内检索 InputType.Password 等同类字段一并处理，不等用户逐页报告。
 
 ## 可选检查

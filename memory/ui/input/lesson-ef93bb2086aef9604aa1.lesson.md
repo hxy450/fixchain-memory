@@ -1,6 +1,6 @@
 # 源端同一控件既可编辑又分段着色（EditText + Spannable、Compose TextField 的 visualTransformation）时用 RichEditor 承载，不拆成只读着色与单色编辑两态，也不降级成纯文本；整体重建与焦点恢复照源实现
 
-ID：`lesson-ef93bb2086aef9604aa1` · 版本：3
+ID：`lesson-ef93bb2086aef9604aa1` · 版本：4
 
 [本主题](index.md)
 
@@ -18,7 +18,7 @@ TextArea 不承载 Span，组件选择与着色要求自相矛盾；改成“着
 
 ## 做法
 
-1. 映射到能同时编辑与承载样式片段的组件：RichEditor 配控制器按段 addTextSpan，内容变化后按源端规则重设各段样式（如 URL 段着色）；写入前核对所选组件是否支持子 Span 或样式，不写“TextArea + Span”，也不在核对 RichEditor 之前把编辑态着色判为平台受限。
+1. 映射到能同时编辑与承载样式片段的组件：RichEditor 配控制器按段 addTextSpan，内容变化后按源端规则重设各段样式（如 URL 段着色）；写入前核对所选组件是否支持子 Span 或样式，不写“TextArea + Span”，也不在核对 RichEditor 之前把编辑态着色判为平台受限。源端控件按内容测宽时，按源 padding 覆盖 RichEditor 默认 padding（水平 16vp、竖直 8vp，HarmonyOS 文档 ts-basic-components-richeditor，访问于 2026-10-17）。
 2. 实现阶段发现规格组件满足不了源行为时，先查同平台的可编辑富文本组件，不自行拆成双态；确需降级时在规格与占位登记中列出丢失的行为，不在注释中声称等价。
 3. 迁移“删除并重建整个编辑器再恢复焦点”的逻辑时保留重建语义（错误单元随数据消失、按子项序号恢复焦点），不以原地刷新代替。
 

@@ -1,6 +1,6 @@
 # 源页面在每次可见时、或由事件订阅与结果回调触发的重新加载，要迁成可见性回调或订阅：Navigation 根页、Tab 内容或经 router 返回的 @Entry 页在子页返回时不会再走 aboutToAppear
 
-ID：`lesson-b3bb0bc33f4caded78a2` · 版本：5
+ID：`lesson-b3bb0bc33f4caded78a2` · 版本：6
 
 [本主题](index.md)
 
@@ -20,7 +20,7 @@ aboutToAppear 只在组件创建时执行；子页 pop 返回时根页组件没�
 
 1. 把源页面所有重新加载的入口列成清单（生命周期回调、事件订阅、结果回调），在目标 ViewModel 为每项写对应订阅（如会话状态订阅、应用事件总线订阅），并确认发布方存在：保存、删除等成功处发布刷新事件。
 2. 需要“返回后刷新”时用订阅或 NavDestination 的 onShown 等可见性回调，不依赖 aboutToAppear；订阅在销毁时注销，不因页面暂时不可见的标志而丢弃事件；经 router 返回的 @Entry 页用 onPageShow 重载，并区分首次加载与返回刷新的 loading 状态。重写占位页时不沿用占位版的生命周期写法。
-3. onStart/onResume 中的初始化按每次可见映射到 onWillShow/onShown，从后台回前台另由 onShown 的 APP_STATE 原因处理，用“进入子页再返回”“切后台再回前台”两条路径自查；只在可见时应接收的监听在 onShown 登记、onHidden 注销。
+3. onStart/onResume 中的初始化按每次可见映射到 onWillShow/onShown，从后台回前台另由 onShown 的 APP_STATE 原因处理（VisibilityChangeReason API 21 起；HarmonyOS 文档 ts-basic-components-navdestination，访问于 2026-10-17；更低版本用 UIAbility 的 onForeground 区分），用“进入子页再返回”“切后台再回前台”两条路径自查；只在可见时应接收的监听在 onShown 登记、onHidden 注销。
 4. 按覆盖类型区分源回调：被同一 Activity 的另一 Fragment 替换→onPause+onDestroyView，返回时重走视图创建与初始化；被全屏 Activity 覆盖→onPause+onStop；对话框式或外部 Activity 覆盖→只 onPause；回到本页→onResume。目标用 navDestinationSwitch 的目标页名、窗口焦点事件与可见性变化原因（项目 SDK 提供时）区分；onPostCreate 只在首显执行一次，onResume 每次前台，onStop 单独落点，不合并进同一个显示回调。
 
 ## 可选检查

@@ -6,7 +6,7 @@
 
 ## 本级经验
 
-- [module.json5 skills 逐条对应 intent-filter：SEND_MULTIPLE、SEARCH 分别登记，分享写 utd，源端没有的不加](lesson-daba8a5b555e6657d085.lesson.md)
+- [intent-filter 逐条映射 module.json5 skills：分享类登记 sendData，多文件用 maxFileSupported](lesson-daba8a5b555e6657d085.lesson.md)
   - 时机：规格提取与入口配置阶段，把入口 Activity 的 intent-filter 映射为 module.json5 skills，并为外部 Want 的载荷确定解析键时
   - 情境：源入口 Activity 有多条非深链 intent-filter（SEARCH、SEND、SEND_MULTIPLE、PROCESS_TEXT、AUTO_SEND 等），源码按 Intent.EXTRA_SUBJECT、EXTRA_TEXT、EXTRA_STREAM 读载荷；技能参考可能声称调用某系统能力（如 cameraPicker）须声明对应的 skill。
 - [只经桌面快捷方式或通知点击进入的页面：module.json5 快捷方式声明、EntryAbility 的 Want 分支与目标页参数都要有确定写者](lesson-c46f182cf1d01a97e05f.lesson.md)

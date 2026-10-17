@@ -1,6 +1,6 @@
 # Stack 上层全尺寸容器和页面级遮罩会参与命中测试：不处理点击的覆盖层显式 Transparent，贴底内容栏直接锚定而不套全屏壳，条件遮罩与一次性动效层用根 Stack 条件子节点
 
-ID：`lesson-4a4f8d845a204ffa244b` · 版本：6
+ID：`lesson-4a4f8d845a204ffa244b` · 版本：7
 
 [本主题](index.md)
 
@@ -21,7 +21,7 @@ ArkUI 中没有 onClick 的容器同样参与命中测试（HitTestMode.Default 
 1. 按最终声明顺序逐层检查：位于可点击兄弟之上、覆盖其区域且自身不处理点击的容器，显式写 hitTestBehavior(HitTestMode.Transparent)；重排子节点或修改对齐与几何后重新核对。
 2. 源端按内容定高、align(BottomCenter) 贴底的底栏，在 Stack 中保持自身尺寸并直接锚到底部（position 的 bottom 边或 RelativeContainer 的对齐规则），不用满屏 Column + Blank 作定位壳；确需全屏壳时给壳设 Transparent，或让可点击的覆盖控件最后声明、提高 zIndex。
 3. 页面级全屏遮罩用无 padding 的根 Stack 条件子节点实现（条件为假时不产生节点），不在带 padding 的容器上用 .overlay() 挂条件 builder；复用同仓遮罩时连同挂载层级一起复用。
-4. 一次性全屏动效（彩纸、提示动画）按源端生命周期只在播放期间条件渲染，结束或取消回调里移除；不要让全屏组件常驻，只靠内部子节点的 HitTestMode.None 放行。经 OverlayManager.addComponentContent 挂的窗口级层（如拖拽阴影）同样只在源端显示时段挂载、结束即 removeComponentContent；确需常驻时根用 Stack 等系统容器并随交互态切换命中模式，自定义组件作 ComponentContent 根时外层代理节点按缺省命中，内层 None 不起作用。
+4. 一次性全屏动效（彩纸、提示动画）按源端生命周期只在播放期间条件渲染，结束或取消回调里移除；不要让全屏组件常驻，只靠内部子节点的 HitTestMode.None 放行。经 OverlayManager.addComponentContent 挂的窗口级层（如拖拽阴影）同样只在源端显示时段挂载、结束即 removeComponentContent；确需常驻时根用 Stack 等系统容器并随交互态切换命中模式，自定义组件作 ComponentContent 根时外层代理节点按缺省命中，内层 None 不起作用（Builder 根为自定义组件或 if/else 等语法节点时会额外生成不能设属性的 BuilderProxyNode，文档给出的绕法是用容器组件包裹并给容器设 HitTestMode.Transparent；HarmonyOS 文档 arkts-user-defined-arktsnode-buildernode，访问于 2026-10-17）。
 5. 按钮上叠的进度环、加载层同样逐个决定命中：纯展示节点设 Transparent，或把 onClick 挂在整个 Stack 容器上，不只挂在最底层图片。
 
 ## 可选检查

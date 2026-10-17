@@ -1,6 +1,6 @@
 # ViewPager（含三方库封装的）迁 Swiper 只是结构对应：释放定页阈值、归位时长与曲线按 ViewPager 规则落实
 
-ID：`lesson-fc05d6dfe9844a88815b` · 版本：1
+ID：`lesson-fc05d6dfe9844a88815b` · 版本：2
 
 [本主题](index.md)
 
@@ -19,12 +19,12 @@ ID：`lesson-fc05d6dfe9844a88815b` · 版本：1
 
 ## 原因
 
-ViewPager 的抬手定页与归位动画是框架固定实现，不在应用源码里；Swiper 缺省的定页阈值与回弹曲线不同，且不开放这些参数，直接替换后慢拖、快划与末页越界的结果都与源端不一致。
+ViewPager 的抬手定页与归位动画是框架固定实现，不在应用源码里；Swiper 缺省的定页阈值与回弹曲线不同；它只开放 curve 与 duration（默认弹簧插值曲线 interpolatingSpring(-1, 1, 328, 34)、400ms，可传 ICurve 自定义曲线；HarmonyOS 文档 ts-container-swiper，访问于 2026-10-17），不开放释放定页阈值，时长也不随抬手速度变化，直接替换后慢拖、快划与末页越界的结果都与源端不一致。
 
 ## 做法
 
 1. 规格写出 ViewPager 的定页与归位规则（androidx ViewPager.java 的 determineTargetPage 与 smoothScrollTo）：抬手位移超过 25dp（MIN_DISTANCE_FOR_FLING）且速度超过 400dp/s（MIN_FLING_VELOCITY）时按速度方向翻页，否则目标页 = 当前页 + (int)(页内偏移 + 截断量)，向后翻取 0.4、回退取 0.6；归位时长有速度时为 4 × round(1000 × |distance / velocity|) ms，否则为 (pageDelta + 1) × 100 ms，上限 600ms（MAX_SETTLE_DURATION），插值为 (t − 1)^5 + 1；offscreenPageLimit 一并写出。
-2. Swiper 无法设定这些阈值与曲线时，改用横向 Scroll 加手势跟手，停止拖动时按上式定页，再按上式时长与曲线滚动归位；只保留源 offscreenPageLimit 范围内的页。
+2. Swiper 无法设定释放定页阈值与随速度变化的归位时长，需逐手势复刻时，改用横向 Scroll 加手势跟手，停止拖动时按上式定页，再按上式时长与曲线滚动归位；只保留源 offscreenPageLimit 范围内的页。
 3. 三方翻页库仓内无源码时，先从依赖缓存或 AAR 反编译确认其容器是否原生 ViewPager、有无自定义 Scroller，再选规则。
 4. 实现者收到只写“ViewPager → Swiper”的规格时，按第一步补定页与归位，或把缺口回报规格。
 

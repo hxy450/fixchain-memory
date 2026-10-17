@@ -1,6 +1,6 @@
 # 固定桌面快捷方式（requestPinShortcut）迁 AppGallery Kit productViewManager，不判“无三方 pin API”
 
-ID：`lesson-fe5cf66672ce205ee0d7` · 版本：1
+ID：`lesson-fe5cf66672ce205ee0d7` · 版本：2
 
 [本主题](index.md)
 
@@ -19,7 +19,7 @@ ID：`lesson-fe5cf66672ce205ee0d7` · 版本：1
 ## 做法
 
 1. 固定：productViewManager.checkPinShortcutPermitted(context, shortcutId, want, label, icon…) 取得结果中的 tid，再 requestNewPinShortcut(context, tid)；用户拒绝（1006620007）、已存在（1006620003）、数量已达上限（1006620004）按源端提示分支处理（SDK @hms.core.appgalleryservice.productViewManager.d.ts，5.0.2(14) 起）。
-2. 移除：源端删除条目时禁用快捷方式的，用 getPinShortcutInfos 查已固定项并 removePinShortcut(context, shortcutId)（同一 d.ts，6.1.1(24) 起，801 表示设备不支持）；工程最低 API 低于 24 时登记版本门槛与回退。
+2. 移除：源端删除条目时禁用快捷方式的，用 getPinShortcutInfos 查已固定项并 removePinShortcut(context, shortcutId)（同一 d.ts，6.1.1(24) 起，801 表示设备不支持；快捷方式 ID 不存在 1006620010、用户拒绝删除 1006620013 也要分支处理）；工程最低 API 低于 24 时登记版本门槛与回退。
 3. 快捷方式 want 中的 bundleName 与 uri 用运行时 bundleName 生成，不写字面量。
 
 来源支持：1 张卡 · 迁移数未记录 · 应用数未记录

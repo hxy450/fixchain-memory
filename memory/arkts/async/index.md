@@ -8,7 +8,7 @@
 
 - [Kit API 的 catch 取 BusinessError 的 message 与 code，code 先经 Number() 归一再比较，网络失败按码映射](lesson-b19162077a2ab886d809.lesson.md)
   - 时机：规格提取与服务实现阶段，迁移源端按异常类型分类、以 getMessage() 记录详情的 catch 分支时；为 Kit 接口的 BusinessError 写错误码分支（如定位开关关闭时等待还是失败）时
-  - 情境：目标 catch 到的是网络、文件、数据库等 Kit API 抛出或拒绝的 BusinessError（含 code、message 的普通对象，不是 Error 实例）；源端按 IllegalArgumentException、SocketTimeoutException、UnknownHostException 等异常类型分支；@ohos.net.http 的失败码为 2300000 加 libcurl 码。
+  - 情境：目标 catch 到的是网络、文件、数据库等 Kit API 抛出或拒绝的 BusinessError（d.ts 声明为 extends Error，但部分 Kit 运行时 reject 的是只含 code、message 的普通对象，可能不是 Error 实例；本机 SDK API 24 @ohos.base.d.ts）；源端按 IllegalArgumentException、SocketTimeoutException、UnknownHostException 等异常类型分支；@ohos.net.http 的失败码为 2300000 加 libcurl 码。
 - [单线程写执行器改为 Promise 串行队列时，为重入调用提供不经队列的内部版本](lesson-cdc6de4ebcdeeadc287c.lesson.md)
   - 时机：数据层实现阶段，把源端单线程 Executor（调用方已在执行线程即同步内联）移植为异步串行队列时
   - 情境：源端写方法在已处于执行线程时直接内联执行嵌套调用（如按线程名判断后 runnable.run()）；目标队列任务体内会再调用同类公开写方法。

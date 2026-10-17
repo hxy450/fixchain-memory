@@ -1,6 +1,6 @@
 # 由内容定尺寸的父级（列表行、wrap_content 头部、FIT_CONTENT 半模态）里不写 width/height('100%')：描边背景画在节点自身，行内撑满用 Stretch；源端描边不改尺寸时注意 .border() 计入测量（定尺寸遮罩中的居中弹卡不在此列，宽度按源窗口规则）
 
-ID：`lesson-a58ebfe7a4c55b041b14` · 版本：8
+ID：`lesson-a58ebfe7a4c55b041b14` · 版本：9
 
 [本主题](index.md)
 
@@ -19,7 +19,7 @@ ID：`lesson-a58ebfe7a4c55b041b14` · 版本：8
 
 ## 原因
 
-ArkUI 的百分比尺寸在由内容定尺寸的父级里会向上取到最近的确定尺寸，把格子撑大（工程迁移陷阱表与设备实测一致）。来源中选中格内的 height('100%') 描边层解析到被撑高的 Tab 行高度，选中格变成约 299×597vp；与横向 Scroll 未定高叠加后，首帧只看得到前两项。列表行里的 100% 背景层同样会按更大的约束铺开，把行撑到整屏高。另一方面，在没有显式宽高的容器上写 .border()，来源 dump 显示描边计入了容器测量，盒子比内容大出描边宽度、后续卡片随之错位；Compose 的 Modifier.border 只在已定尺寸的盒内绘制，不改尺寸。源 match_parent 直译成 height('100%') 时，单行或折叠头部会撑满整个 List 视口，半模态内容根会把 FIT_CONTENT 弹层撑到上限。被嵌子组件根节点的 '100%' 在 Scroll 的无界父链里会解析成视口高度，把首屏后续区块挤出。 为了让 100% 子层有确定父尺寸而用宽高比或经验值给行补高度，行高会与源端测量不符。
+ArkUI 的百分比尺寸在由内容定尺寸的父级里会向上取到最近的确定尺寸，把格子撑大（工程迁移陷阱表与设备实测一致；文档明文：百分比尺寸参考最近设置了固定大小的祖先节点，HarmonyOS 文档 ts-universal-attributes-size，访问于 2026-10-17）。来源中选中格内的 height('100%') 描边层解析到被撑高的 Tab 行高度，选中格变成约 299×597vp；与横向 Scroll 未定高叠加后，首帧只看得到前两项。列表行里的 100% 背景层同样会按更大的约束铺开，把行撑到整屏高。另一方面，在没有显式宽高的容器上写 .border()，来源 dump 显示描边计入了容器测量，盒子比内容大出描边宽度、后续卡片随之错位；Compose 的 Modifier.border 只在已定尺寸的盒内绘制，不改尺寸。源 match_parent 直译成 height('100%') 时，单行或折叠头部会撑满整个 List 视口，半模态内容根会把 FIT_CONTENT 弹层撑到上限。被嵌子组件根节点的 '100%' 在 Scroll 的无界父链里会解析成视口高度，把首屏后续区块挤出。 为了让 100% 子层有确定父尺寸而用宽高比或经验值给行补高度，行高会与源端测量不符。
 
 ## 做法
 
@@ -29,7 +29,7 @@ ArkUI 的百分比尺寸在由内容定尺寸的父级里会向上取到最近�
 4. 行或卡片的铺满背景改用 .background(builder) 画在容器自身，或用列表项自带的滑动操作（ListItem.swipeAction）。
 5. 源端描边只绘制、不改尺寸时，先写明目标盒尺寸由谁决定：能拿到调用方尺寸就把宽高提升到带描边的节点上；尺寸只能由内容决定时，改用按 onSizeChange 回读的数值宽高叠一层 position({ x: 0, y: 0 }) + hitTestBehavior(HitTestMode.None) 的描边层（首帧会缺描边），规格验收写明“描边不改变盒尺寸”。
 6. 行内交叉轴撑满（如行首竖条、拖拽柄随行高）用 alignSelf(ItemAlign.Stretch) 或明确尺寸；头部背景或遮罩层按源可见区域给显式高度（如工具栏高加头部块），或把背景画在容器自身。父容器在某轴 wrap_content、且并非全部子项都是 match_parent 时，父尺寸只由非 match_parent 子项决定（LinearLayout.measureVertical/measureHorizontal 用 alternativeMaxWidth 排除 match_parent 子项，再以所得尺寸 EXACTLY 重量它们）：目标先由定尺寸兄弟算出父尺寸，再让 match_parent 子项按它取值（Stretch 或显式数值）；自定义 View 的偏好长度只在 AT_MOST/UNSPECIFIED 下生效，不参与父尺寸。
-7. 半模态内容根的 Scroll/Column 不写 height('100%')，由弹层上限约束后滚动。
+7. 半模态内容根的 Scroll/Column 不写 height('100%')，由弹层上限约束后滚动（FIT_CONTENT 下 builder 根节点的高度不能使用百分比，HarmonyOS 文档 ts-universal-attributes-sheet-transition，访问于 2026-10-17）。
 8. 被嵌子组件按源布局根节点与各状态容器的 layout_height 映射：wrap_content 不写 height('100%')，空态居中用内容高度或 constraintSize 最小高度；宿主向无高度槽位嵌入组件前，读被嵌组件 build() 根与各状态分支的高度修饰，有百分比高度就先改组件或在槽位按源端尺寸给显式高度，再核对首屏后续区块仍可见。
 
 ## 可选检查

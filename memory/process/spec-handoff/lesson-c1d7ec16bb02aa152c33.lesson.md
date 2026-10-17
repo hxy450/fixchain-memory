@@ -1,6 +1,6 @@
 # 规格提取把 AndroidManifest 声明（含未声明的平台缺省）解析成实际行为与鸿蒙目标值并指派实现：未声明 screenOrientation 时 EntryAbility 写 orientation: auto_rotation_restricted；未声明 windowSoftInputMode 时按是否含可滚动视图取 RESIZE/OFFSET，并写出首屏焦点与是否弹键盘；“默认”不能作目标值
 
-ID：`lesson-c1d7ec16bb02aa152c33` · 版本：4
+ID：`lesson-c1d7ec16bb02aa152c33` · 版本：5
 
 [本主题](index.md)
 
@@ -14,13 +14,13 @@ ID：`lesson-c1d7ec16bb02aa152c33` · 版本：4
 
 ## 原因
 
-只读 Java 源码会漏掉 manifest 属性；规格与页面元数据都没有方向字段时，实现者会以“规格未覆盖”跳过。记为 unspecified/unknown 的项没有目标值，下游没有写者，模板默认值（如允许备份）会保留到交付。鸿蒙 EntryAbility 不写 orientation 就不随传感器旋转，只迁两套布局时横屏分支永不出现；未声明 windowSoftInputMode 时安卓缺省 adjustUnspecified 由系统按窗口是否含可滚动视图取 adjustResize 或 adjustPan，而 ArkUI 缺省 OFFSET 整页上推；状态半 stateUnspecified 让首个可获焦视图为 EditText 时自动弹键盘，ArkUI 不会自动给输入框焦点。另一应用中注入的一行提醒只剩“无screenOrientation=跟随旋转”“无windowSoftInputMode（默认）”，写者照写安卓语义就算交差，目标值没有进入任何任务。
+只读 Java 源码会漏掉 manifest 属性；规格与页面元数据都没有方向字段时，实现者会以“规格未覆盖”跳过。记为 unspecified/unknown 的项没有目标值，下游没有写者，模板默认值（如允许备份）会保留到交付。鸿蒙 EntryAbility 不写 orientation 时取 UNSPECIFIED：直板机默认竖屏且不旋转，只迁两套布局时横屏分支不会出现，平板则可随系统旋转（HarmonyOS 文档 window-rotation，访问于 2026-10-17）；未声明 windowSoftInputMode 时安卓缺省 adjustUnspecified 由系统按窗口是否含可滚动视图取 adjustResize 或 adjustPan，而 ArkUI 缺省 OFFSET 整页上推；状态半 stateUnspecified 让首个可获焦视图为 EditText 时自动弹键盘，ArkUI 不会自动给输入框焦点（页面默认焦点在根容器上，可用 defaultFocus 改，HarmonyOS 文档 arkts-common-events-focus-event，访问于 2026-10-17）。
 
 ## 做法
 
 1. 逐个 activity 列出 manifest 属性，把未声明项解析成实际行为再写鸿蒙目标值，“默认/按系统缺省”不能作结论：未声明 screenOrientation（随系统旋转）时，module.json5 的 EntryAbility 写 orientation: auto_rotation_restricted，与权限并列为 module.json5 必做项；sensorLandscape 等锁定值写成“进入页 setPreferredOrientation(对应方向)、离开恢复”的验收条目。
-2. 未声明 windowSoftInputMode 且含 EditText 时拆成两条验收并各自指派：调整方式——窗口含 ListView/ListActivity/ScrollView 等可滚动视图为 adjustResize（目标窗口级 setKeyboardAvoidMode(KeyboardAvoidMode.RESIZE)），否则为 adjustPan（OFFSET）；状态——首屏焦点给布局顺序中第一个可获焦视图（AdapterView 只在有数据时可获焦），写清各数据分支谁获焦、是否自动弹键盘。
-3. application 级属性同样逐项映射（如 allowBackup → allowToBackupRestore）并为每项指派实现任务，不留 unknown。
+2. 未声明 windowSoftInputMode 且含 EditText 时拆成两条验收并各自指派：调整方式——窗口含 ListView/ListActivity/ScrollView 等可滚动视图为 adjustResize（目标窗口级 setKeyboardAvoidMode(KeyboardAvoidMode.RESIZE)），否则为 adjustPan（OFFSET）；状态——首屏焦点给布局顺序中第一个可获焦视图（AdapterView 只在有数据时可获焦），写清各数据分支谁获焦、是否自动弹键盘（要复刻自动弹出时给该输入框设 defaultFocus(true)）。
+3. application 级属性同样逐项映射（如 allowBackup → allowToBackupRestore：它在 backup 类型 extensionAbility 的 metadata 引用的 resources/base/profile/backup_config.json 中，缺省为 false；源为 allowBackup=false 时改成 false 或移除该扩展；HarmonyOS 文档 app-file-backup-extension，访问于 2026-10-17）并为每项指派实现任务，不留 unknown。
 
 ## 可选检查
 

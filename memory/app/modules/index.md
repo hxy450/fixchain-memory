@@ -9,7 +9,7 @@
 - [BuildConfig.DEBUG 映射为 hvigor 生成的 BuildProfile.DEBUG，不因源码目录检索不到就删 DEBUG 分支](lesson-3af52968ce5762501cd3.lesson.md)
   - 时机：实现与收口阶段，把源端含 BuildConfig.DEBUG 的可见性或行为条件转换为 ArkTS 时
   - 情境：目标为 hvigor 构建的工程，源码目录内尚无 BuildProfile 引用，模块根目录也没有 BuildProfile.ets；规格或已批准决策写着“DEBUG 构建 || X”一类条件。
-  - 例外：代码位于 HAR 模块时，裸模块名 'BuildProfile' 只在宿主 HAP 可解析，构建模式改由壳层入口注入
+  - 例外：代码位于 HAR 模块时，用 HAR 自己的 BuildProfile：import BuildProfile from './BuildProfile'（文件生成在 HAR 模块根目录，经 Build &gt; Make Module 或 hvigorw GenerateBuildProfile 生成，同样含 DEBUG），不必由壳层入口注入（HarmonyOS 文档 ide-hvigor-get-build-profile-para-guide，访问于 2026-10-17）
 - [HAR 模块不引用宿主 BuildProfile：构建模式由壳层入口注入，跨模块只从包名入口导入](lesson-6bd9ae0de39cecc06744.lesson.md)
   - 时机：多模块拆分、插桩或结构修复阶段，把代码迁入或写入 HAR 模块、需要 DEBUG 等构建模式常量，或调整跨模块导入时
   - 情境：工程拆为 products 壳 HAP 与 features/components 等 HAR 模块；迁移或新增的 HAR 代码需要构建模式常量（裸模块名 'BuildProfile' 只在宿主 HAP 可解析，每个 HAR 另有自己生成的 BuildProfile），或宿主页要使用其他模块的类；整包 assembleHap 能通过，IDE 按模块做 ArkTS 检查。

@@ -1,6 +1,6 @@
 # 源端以杀进程实现“重启应用”时用 ApplicationContext.restartApp，不译成 terminateSelf 退出
 
-ID：`lesson-73618bb856a8a7dfe7fc` · 版本：1
+ID：`lesson-73618bb856a8a7dfe7fc` · 版本：2
 
 [本主题](index.md)
 
@@ -23,7 +23,7 @@ ID：`lesson-73618bb856a8a7dfe7fc` · 版本：1
 ## 做法
 
 1. 先 grep 该方法的全部调用方并读方法注释，确认期望终态；多个规格对同一方法口径不一时，以描述用户可见终态的验收（重启进入主页、界面状态保留）为准修正服务层契约。
-2. 重启用 ApplicationContext.restartApp(want) 拉起入口 UIAbility；该接口只能在主线程、应用处于前台时调用（不在顶层报 16000053，3 秒内重复报 16000064，见 SDK application/ApplicationContext.d.ts，API 12 起），后台触发时推迟到窗口重新激活（windowStageEvent ACTIVE）再调用，失败时以 terminateSelf 兜底。
+2. 重启用 ApplicationContext.restartApp(want) 拉起入口 UIAbility；该接口只能在主线程、应用处于获焦状态时调用（不在顶层报 16000053，3 秒内重复调用它或 UIAbilityContext.restartApp 报 16000064，见 SDK application/ApplicationContext.d.ts，API 12 起；HarmonyOS 文档 js-apis-inner-application-applicationcontext，访问于 2026-10-17）；重启不触发 Ability 的 onDestroy，依赖 onDestroy 落盘的数据在调用前保存；后台触发时推迟到窗口重新激活（windowStageEvent ACTIVE）再调用，失败时以 terminateSelf 兜底。
 3. 源端依赖系统重建保留的界面状态（抽屉开合、列表位置、搜索条件）经 Want 参数带到新进程并在入口恢复；重启后的冷启动入口仍经过源端的验密等前置门。
 4. 实现者读到源注释与规格契约相反时，登记差异并回报，不沉默沿用规格。
 
