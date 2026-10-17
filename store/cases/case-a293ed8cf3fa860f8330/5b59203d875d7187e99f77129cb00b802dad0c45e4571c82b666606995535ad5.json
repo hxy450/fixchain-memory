@@ -1,0 +1,337 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-a293ed8cf3fa860f8330",
+  "created_at": "2026-10-17T05:54:55.441481+00:00",
+  "migration_key": "/private/tmp/claude-502/-Users-fengyi-Workspace-migbot-set-l123-cc-glm53/a9f6942f-6659-40bd-bc16-6616949070fb/scratchpad/distill/pool2",
+  "title": "把 greenrobot EventBus 换成 emitter 异步序列化投递，并用缓存态、单例弹窗句柄与「先回滚后验密」改写源时序",
+  "when": "基础层/业务层实现阶段，为源端的事件总线、验密弹窗与开关联动选择目标端投递模型和回调时序时",
+  "description": "Android 源用 greenrobot EventBus 2.x（同步按引用投递、register(this, priority)、嵌套 post 排队）、每次 new 的 MaterialDialog、点击时实时读 Prefs、以及 onPreferenceChange 返回 true 后再验密；目标端候选是 @ohos.events.emitter / eventHub、ComponentContent 自定义弹窗、@Local 状态与 Toggle 受控值。",
+  "summary": "四个被修文件的写前输入都已给出源时序，偏差都落在实现者把目标端平台缺省或「更合理」的流程当成等价实现。\n一、OnEventBus（生成期）：Base-4 派工只说「EventBus 2.4 → 跨组件事件总线（emitter 或自研 typed pub/sub）」，\n未指定 emitter（agent-acc8a8caa9933073e.jsonl:L1）。worker 读到 feature-base §事件系统（EventBus 2.4.0、register 部分带\npriority 1、映射二选一 emitter/eventHub；L25/L26）、grep 回执 PasswordActivity.java:70 / ListFragment.java:191 的\nregister(this, 1)（L90/L91），以及 SDK d.ts「EventPriority 对订阅不生效」（L78/L79）。09:16:10Z Write 却以 emitter.emit/on\n作传输层，头注把 priority 判为「对本工程订阅方无行为差异，不迁移」、把回调说成「在发布线程执行」（L99/L100），未核 emitter 是\n异步投递且会序列化 data（Note/Category 实例方法与 instanceof 失效、post 返回后才回调），也没有嵌套 post 队列与订阅表快照。\n该片段保留到返修：G8 子代理 2026-10-13T15:56:27Z cat 到的仍是 emitter 版（agent-a65f0f02d9fe9874b.jsonl:L163/L164，\nL192 grep 到 :77 emitter.emit），16:19:25Z 重写为进程内同步按引用总线 + priority 降序/注册序 + isPosting 队列（L504）。\n下游 PasswordPage/NoteListPage 的订阅优先级 0（PW-13/CG-07）即因该 API 没有 priority 形参。\n二、PasswordService（生成期）：Slice 3 worker a57a43c1c60941174 Read 到 PasswordHelper.java:45-97 / :100-135 每次调用都\nnew MaterialDialog.Builder…build().show()（L31/L32），15:30:34Z Write 却把弹窗做成单例字段 requestDialogContent/resetDialogContent，\n每次 requestPassword/resetPassword 先 dismissRequestDialog()/dismissResetDialog() 关掉前一个（L118 :155-156、:181、:225、:299-310）；\n第二次调用会静默关闭前一个且其回调永不触发。返修 G7 15:48:46Z cat 到的仍是该实例句柄（agent-a5d025f75cc08eb73.jsonl:L97/L98；\nG7 表 PW-22），16:27:27Z 重写为每次调用独立 ComponentContent、dismiss 只关自身（L511）。\n三、PasswordPage（生成期）：converter af04c62c72a5b8e4d Read 到 PasswordActivity.java:89-116 的移除/确认按钮每次点击都\n实时 Prefs.getString(PREF_PASSWORD)（L27/L28），09:29:09Z Write 却在 aboutToAppear 缓存 @Local hasPassword 并在\nonRemove/onConfirm 分支直接用它（L109 :49、:65、:81、:98），页面停留期间密码被设置/移除后判断过期。Slice 3 worker 15:31:56Z 只把\n缓存来源换成 isPasswordSet()，缓存模式未变（agent-a57a43c1c60941174.jsonl:L145/L146）。返修 G7 15:48:48Z cat 到的仍是缓存态\n（agent-a5d025f75cc08eb73.jsonl:L101/L102；G7 表 PW-07/08），16:31:19Z 重写为每次点击实时读 Prefs 并补订阅优先级（L537）。\n四、SettingsContentComponent（生成期，两处起点同一方向）：converter a89715c52d68297ec sed 到 SettingsFragment.java:321-337\n（onPreferenceChange 内 requestPassword，return true → 新值立即生效，SUCCEED 再 setChecked(同值)，取消不回滚；全文无 onEvent 订阅；\nL41/L42），12:27:34Z Write 的 P-S4-010 桩却先 revertSwitch 回滚、注释写「确认通过后才 setChecked」，并额外订阅 PasswordRemovedEvent\n即时刷新（Android SettingsFragment 只在 onResume 重读；S-40）（L132 :87-101、:240-250）。该 converter 未读 F010 规格，派工也未提及\n该开关流程。G1 closer a41d3f09ceeabb3d0 17:04:47Z 又 sed 到同一段源码含 return true（agent-a41d3f09ceeabb3d0.jsonl:L77/L78），\n并读了桩注释（L65/L66），17:10:20Z 仍实现为 revertSwitch → requestPassword → SUCCEED 才 set/落值（L154/L155）。\nF010 spec 作者 a5e143eb7728c0a3e 读到同一段源码（L58/L59）后，07:45:15Z 的 AC19 也写成「SUCCEED 才真正切换、验密失败后开关回弹原位」\n（L178/L179），与源码相反；但 converter 与 closer 的读取记录中都没有 F010-password-lock.md，本卡不把 spec 作为该目标的交付桥梁。\n返修 G6 15:47:06Z cat 到 :294-298 仍是回滚后验密（agent-aa6b40003c730ac95.jsonl:L46/L47；G6 表 S-12、G7 表 CG-08），\n2026-10-13T21:20:58Z Write 改为「return true 先生效落盘，SUCCEED 再 setChecked(同值)，失败/取消不回滚」并去掉事件订阅\n（agent-a761fc44c7a5df1e2.jsonl:L509）。\nEventConstants/EventPayloads 的「补 NotificationRemoved/PushbulletReply」属于一比一标准推翻 PD-C8-F021-01/PD-C6-F018-01\n裁剪决策的新要求，不是生成偏差，列入 unresolved_targets。\n",
+  "recommendations": [
+    "实现阶段：把事件总线从 greenrobot EventBus 迁到目标端前，先逐条核对投递契约——同步/异步、按引用还是序列化拷贝、priority 与注册序、嵌套 post 是否排队；@ohos.events.emitter 是异步且序列化 data（类实例丢原型），不能直接承载 Note/Category 等对象事件，需要同步按引用语义时自建订阅表（派工给出的另一选项）或用 eventHub。",
+    "实现阶段：源码里出现 register(this, priority) 时，把 priority 作为 API 形参保留下来并在订阅点传入，不以「本工程订阅方互不依赖顺序」的推断去掉它。",
+    "实现阶段：源端每次 new 的对话框，目标端也按调用创建独立 ComponentContent/Controller 并只关闭自身；不要把弹窗句柄做成服务单例字段并在新调用前 dismiss 旧句柄。",
+    "实现阶段：源端在点击时实时读取的判定（如 Prefs.getString(PREF_PASSWORD)）保持实时读取，不在 aboutToAppear 缓存成 @Local 再在回调里复用。",
+    "实现阶段：Android onPreferenceChange 返回 true 表示新值立即持久化生效，随后的验密只是补偿动作；翻译 Switch 联动时按源顺序先落值再验密、取消不回滚，不要改成先回滚、SUCCEED 才落值；源 Fragment 没有订阅的事件也不要额外订阅来「即时刷新」。",
+    "规格提取阶段：描述带回调的联动流程时写明每一步的落值时刻与失败分支（F010-AC19 把 return true 的即时生效写成了「SUCCEED 才切换、失败回弹」），并把源文件行号与「立即生效/事后补偿」字样一起写入 AC。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/events/OnEventBus.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/spec/baseline/feature-base.md",
+          "at": "2026-10-01T09:09:19.650Z",
+          "reason": "正常输入：Read offset 160 回执给出 §事件系统——de.greenrobot EventBus 2.4.0、register 部分带 priority 1（PasswordActivity.java:70、ListFragment.java:191）、13 事件表，以及硬映射「emitter 或 eventHub 项目级二选一、onEventMainThread→主线程、off 成对」；足以说明目标总线必须对齐 EventBus.post/register 语义而非只对齐命名（agent-acc8a8caa9933073e.jsonl:L25/L26）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/java/it/feio/android/omninotes/PasswordActivity.java",
+          "at": "2026-10-01T09:14:23.437Z",
+          "reason": "正常输入：Bash 在 omninotes 源目录 grep register/postSticky，回执列出 8 个 register 点，其中 PasswordActivity.java:70 与 ListFragment.java:191 为 EventBus.getDefault().register(this, 1)；说明源端存在订阅优先级要求（agent-acc8a8caa9933073e.jsonl:L90/L91）。"
+        },
+        {
+          "key": "/Users/fengyi/Library/Huawei/Sdk/default/openharmony/ets/api/@ohos.events.emitter.d.ts",
+          "at": "2026-10-01T09:11:43.609Z",
+          "reason": "正常输入：Bash sed 读 SDK d.ts，回执含 EventPriority 枚举与「The EventPriority settings do not take effect under event subscription」、emit 为事件队列投递；足以提示 emitter 没有订阅侧优先级且不是同步按引用调用，需另核投递语义（agent-acc8a8caa9933073e.jsonl:L78/L79）。"
+        },
+        {
+          "key": "bc655f68-6f49-4bcf-ab64-aa45d7a58cc2:acc8a8caa9933073e",
+          "at": "2026-10-01T09:16:10.932Z",
+          "reason": "派工只要求「emitter 或自研 typed pub/sub」（L1）。已收到上述输入，Write OnEventBus.ets 以 emitter.emit<T>/on<T>/off<T> 为传输层，头注把 register(this,1) 判为「emitter 无注册侧优先级…对本工程订阅方无行为差异，不迁移」，并称「emitter 回调在发布线程执行」即 onEventMainThread 语义；未写同步投递、按引用载荷、priority/注册序、嵌套 post 队列（agent-acc8a8caa9933073e.jsonl:L99/L100）。返修 G8 2026-10-13T15:56:27Z cat 到的仍是该版本（agent-a65f0f02d9fe9874b.jsonl:L163/L164），16:19:25Z 重写为同步按引用总线（L504）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4,
+          "force": true,
+          "reason": "Bash 进入 omninotes 源目录 grep -rn「EventBus.getDefault().register 或 postSticky」，回执列出 PasswordActivity.java:70 register(this, 1) 与 ListFragment.java:191 register(this, 1)；这支持生成者写 OnEventBus 前已实际读到源端订阅优先级要求。",
+          "evidence": [
+            {
+              "source": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2/subagents/agent-acc8a8caa9933073e.jsonl",
+              "line": 90
+            },
+            {
+              "source": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2/subagents/agent-acc8a8caa9933073e.jsonl",
+              "line": 91
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "Bash sed -n 405,500p / 300,365p 读取 SDK @ohos.events.emitter.d.ts，回执返回 EventPriority 枚举及「EventPriority settings do not take effect under event subscription」等声明；这支持生成者写前已读到 emitter 无订阅侧优先级、以事件队列投递的 API 定义。",
+          "evidence": [
+            {
+              "source": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2/subagents/agent-acc8a8caa9933073e.jsonl",
+              "line": 78
+            },
+            {
+              "source": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2/subagents/agent-acc8a8caa9933073e.jsonl",
+              "line": 79
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/services/PasswordService.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/java/it/feio/android/omninotes/utils/PasswordHelper.java",
+          "at": "2026-10-01T15:16:59.368Z",
+          "reason": "正常输入：Read 回执给出 requestPassword(:45-97) 与 resetPassword(:100-135) 每次调用都 new MaterialDialog.Builder(...).build() 并 show()，局部变量持有、互不干涉；足以确定弹窗按调用建实例、重复调用叠放各自回调（agent-a57a43c1c60941174.jsonl:L31/L32）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/spec/baseline/features/F010-password-lock.md",
+          "at": "2026-10-01T15:16:40.718Z",
+          "reason": "正常输入：Read 回执给出 AC17/AC18 验密弹窗三分支、错密码不关弹窗不中断、RESTORE 转 resetPassword 等契约，未要求任何弹窗单例化（agent-a57a43c1c60941174.jsonl:L20/L21）。"
+        },
+        {
+          "key": "e95edcb7-c619-475d-b56e-7bb84402a4ba:a57a43c1c60941174",
+          "at": "2026-10-01T15:30:34.386Z",
+          "reason": "已读到上述源码与规格，Write PasswordService.ets 却把弹窗做成服务单例字段 requestDialogContent/resetDialogContent（:155-156），requestPassword/resetPassword 入口先 dismissRequestDialog()/dismissResetDialog() 关掉前一个句柄（:181、:225、:299-310）；第二次调用静默关闭前一弹窗且其回调永不触发（agent-a57a43c1c60941174.jsonl:L118/L119）。返修 G7 2026-10-13T15:48:46Z cat 到的仍是实例句柄（agent-a5d025f75cc08eb73.jsonl:L97/L98），16:27:27Z 重写为每次调用独立 ComponentContent、只关闭自身（L511）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/pages/PasswordPage.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/java/it/feio/android/omninotes/PasswordActivity.java",
+          "at": "2026-10-01T09:17:58.911Z",
+          "reason": "正常输入：Read 回执给出 password_remove(:89-99) 与 password_confirm(:101-116) 的点击监听都在点击时实时 Prefs.getString(PREF_PASSWORD, null) != null 判定是否先验旧密码，以及 onStart 的 register(this, 1)（agent-af04c62c72a5b8e4d.jsonl:L27/L28）。"
+        },
+        {
+          "key": "bc655f68-6f49-4bcf-ab64-aa45d7a58cc2:af04c62c72a5b8e4d",
+          "at": "2026-10-01T09:29:09.146Z",
+          "reason": "已读到上述源码，Write PasswordPage.ets 却声明 @Local hasPassword，在 aboutToAppear 读一次 Prefs 缓存（:49、:65），onRemove/onConfirm 分支直接用 this.hasPassword 判定（:81、:98），页面停留期间密码状态变化后判断过期；订阅 onPasswordRemoved 无优先级形参可传（:66，上游 OnEventBus API 未提供）（agent-af04c62c72a5b8e4d.jsonl:L109/L110）。返修 G7 2026-10-13T15:48:48Z cat 到的仍是缓存态（agent-a5d025f75cc08eb73.jsonl:L101/L102），16:31:19Z 重写为每次点击实时读 Prefs 并传订阅优先级（L537）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/components/SettingsContentComponent.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/java/it/feio/android/omninotes/SettingsFragment.java",
+          "at": "2026-10-01T12:17:36.525Z",
+          "reason": "正常输入：Bash sed -n 200,450p 回执给出 settings_password_access 段（:321-337）——无密码时 setEnabled(false)+setChecked(false)；onPreferenceChange 内 requestPassword，SUCCEED 再 setChecked(newValue)，监听 return true 即新值立即生效，取消不回滚；全文无 onEvent 订阅（agent-a89715c52d68297ec.jsonl:L41/L42）。"
+        },
+        {
+          "key": "e95edcb7-c619-475d-b56e-7bb84402a4ba:a89715c52d68297ec",
+          "at": "2026-10-01T12:27:34.416Z",
+          "reason": "已读到上述源码，Write SettingsContentComponent.ets 的 KEY_PASSWORD_ACCESS 分支却先 revertSwitch 回滚视觉态，注释写「PasswordHelper.requestPassword 确认通过后才 setChecked」（:240-244），并额外 onPasswordRemoved 订阅即时刷新 password_access（:87-101，源 Fragment 只在 onResume 重读）（agent-a89715c52d68297ec.jsonl:L132/L133）。该「先回滚、确认后才落值」结构被后续接线沿用。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/java/it/feio/android/omninotes/SettingsFragment.java",
+          "at": "2026-10-01T17:04:47.408Z",
+          "reason": "正常输入：G1 closer 接线前 Bash sed -n 330,352p 回执再次给出 setOnPreferenceChangeListener → requestPassword → SUCCEED setChecked(newValue) 并 return true（agent-a41d3f09ceeabb3d0.jsonl:L77/L78），足以判定新值先生效、验密只是补偿。"
+        },
+        {
+          "key": "fcc67332-0774-45b4-a72c-d2b6a33207b8:a41d3f09ceeabb3d0",
+          "at": "2026-10-01T17:10:20.757Z",
+          "reason": "已读到上述源码（并 sed 到桩注释，L65/L66），Edit 把 P-S4-010 桩接成 revertSwitch → PasswordService.requestPassword → 仅 SUCCEED 才 switchValues.set + setBoolean，注释「SUCCEED 才落值；弹窗确认前开关视觉态回滚（FAIL/RESTORE 保持原值）」（agent-a41d3f09ceeabb3d0.jsonl:L154/L155）。返修 G6 2026-10-13T15:47:06Z cat 到 :294-298 仍是该结构（agent-aa6b40003c730ac95.jsonl:L46/L47），21:20:58Z 起改为先生效后验密、去掉事件订阅（agent-a761fc44c7a5df1e2.jsonl:L509）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "Bash sed -n 200,450p 读取 Android SettingsFragment.java，回执含 settings_password_access 的 setOnPreferenceChangeListener → requestPassword → SUCCEED setChecked(newValue) 与 return true；这支持 converter 写 P-S4-010 桩前已实际读到源端「先生效后验密」的开关联动。",
+          "evidence": [
+            {
+              "source": "migration/e95edcb7-c619-475d-b56e-7bb84402a4ba/subagents/agent-a89715c52d68297ec.jsonl",
+              "line": 41
+            },
+            {
+              "source": "migration/e95edcb7-c619-475d-b56e-7bb84402a4ba/subagents/agent-a89715c52d68297ec.jsonl",
+              "line": 42
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": "target"
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "Bash sed -n 330,352p 读取 Android SettingsFragment.java（password_access listener），回执返回 requestPassword 回调内 SUCCEED setChecked(newValue) 及监听 return true；这支持 closer 接线前已实际读到源端新值立即生效的语义。",
+          "evidence": [
+            {
+              "source": "migration/fcc67332-0774-45b4-a72c-d2b6a33207b8/subagents/agent-a41d3f09ceeabb3d0.jsonl",
+              "line": 77
+            },
+            {
+              "source": "migration/fcc67332-0774-45b4-a72c-d2b6a33207b8/subagents/agent-a41d3f09ceeabb3d0.jsonl",
+              "line": 78
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "converter 与 closer 都未读 F010-AC19；本卡把设置开关的偏差归因于 converter 桩与 closer 实现，spec AC19 的同向错误作为规格阶段建议记录，不声称二者沿用了 spec。",
+    "emitter 序列化导致 instanceof 失效在生成期是否被发现：迁移池中未检索到相关讨论，返修 G8 表 EV-01 首次记载；本卡只归因「未核投递契约」，不声称生成者明知序列化后果。"
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/events/EventConstants.ets",
+      "reason": "已确认返修补入 PUSHBULLET_REPLY 常量并修正 NOTIFICATION_REMOVED 注释（agent-a65f0f02d9fe9874b.jsonl:L508/L510/L516）。生成期 Write（agent-acc8a8caa9933073e.jsonl:L94）按派工与 decision-ledger 的 PD-C8-F021-01 明示裁剪 PushbulletReplyEvent；缺项源于一比一标准推翻已批准裁剪决策，属新要求而非生成偏差。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/events/EventPayloads.ets",
+      "reason": "已确认返修新增 NotificationRemovedPayload / PushbulletReplyPayload 并修正 SwitchDirection「跨 emitter 通道」注释（agent-a65f0f02d9fe9874b.jsonl:L521/L523、agent-a18ac80d00e826069.jsonl:L586）。载荷缺项同上属裁剪决策被新标准推翻；SwitchDirection 注释随 OnEventBus 的 emitter 选择而来，未另立起点。"
+    }
+  ],
+  "job": "issue-a293ed8cf3fa860f8330",
+  "metadata": {
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.247",
+        "2.1.296",
+        "2.1.300"
+      ]
+    },
+    "source_set_id": "sources-fef5281fb5eb1e655dea",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos",
+        "at": "2026-10-01T08:07:31.804Z",
+        "ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1119",
+        "request_ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1117",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos",
+        "at": "2026-10-01T08:07:31.804Z",
+        "ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1119",
+        "request_ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1117",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes",
+        "at": "2026-10-13T15:34:04.077Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L121",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L120",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes",
+        "at": "2026-10-13T15:34:04.077Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L121",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L120",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes",
+        "at": "2026-10-14T01:47:40.558Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L159",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L158",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes",
+        "at": "2026-10-14T01:47:40.558Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L159",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L158",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.10"
+  },
+  "revision": "5b59203d875d7187e99f77129cb00b802dad0c45e4571c82b666606995535ad5"
+}

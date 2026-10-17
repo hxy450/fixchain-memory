@@ -6,8 +6,8 @@
 
 ## 本级经验
 
-- [Kit API 的 catch 值按 BusinessError 取 message 与 code，网络失败按错误码映射源错误类型](lesson-b19162077a2ab886d809.lesson.md)
-  - 时机：规格提取与服务实现阶段，迁移源端按异常类型分类、以 getMessage() 记录详情的 catch 分支时
+- [Kit API 的 catch 取 BusinessError 的 message 与 code，code 先经 Number() 归一再比较，网络失败按码映射](lesson-b19162077a2ab886d809.lesson.md)
+  - 时机：规格提取与服务实现阶段，迁移源端按异常类型分类、以 getMessage() 记录详情的 catch 分支时；为 Kit 接口的 BusinessError 写错误码分支（如定位开关关闭时等待还是失败）时
   - 情境：目标 catch 到的是网络、文件、数据库等 Kit API 抛出或拒绝的 BusinessError（含 code、message 的普通对象，不是 Error 实例）；源端按 IllegalArgumentException、SocketTimeoutException、UnknownHostException 等异常类型分支；@ohos.net.http 的失败码为 2300000 加 libcurl 码。
 - [单线程写执行器改为 Promise 串行队列时，为重入调用提供不经队列的内部版本](lesson-cdc6de4ebcdeeadc287c.lesson.md)
   - 时机：数据层实现阶段，把源端单线程 Executor（调用方已在执行线程即同步内联）移植为异步串行队列时
@@ -21,6 +21,9 @@
 - [源 API 用返回值表示“被拒”、用异常表示故障，而目标 SDK 两者都 reject 时，用一个单次原语适配器还原三态，所有重试与返回码路径都经它](lesson-47faf26b44bb4075b0d2.lesson.md)
   - 时机：服务或引擎实现阶段，把以 boolean 返回业务结果、以异常表示 I/O 失败或目标丢失的源 API（如 MIFARE 扇区认证）映射到只以 Promise reject 报错的 SDK，并实现带重试或返回码的上层方法时
   - 情境：源方法返回 false 表示被拒并据此按偏好重试，只有 IOException、TagLostException 等才立即失败；目标方法返回 Promise&lt;void&gt;，被拒与 I/O、状态异常都以 BusinessError reject，d.ts 只列错误码、不说明各码对应哪种情形；同一文件里可能已有区分两者的单次函数，却只被部分路径调用。
+- [源端在后台线程执行的文件拷贝用异步 IO 或 taskpool 实现：async 函数包装 *Sync 调用不算后台执行](lesson-c54d1c8af2177b819837.lesson.md)
+  - 时机：实现阶段迁移 AsyncTask、线程池或 IO 调度器中的文件拷贝与附件导入时
+  - 情境：源端拷贝在 AsyncTask.doInBackground、THREAD_POOL_EXECUTOR 等后台线程执行，规格或并发说明写明后台或并发拷贝；目标准备用 fileIo.copyFileSync、openSync + readSync 实现，再在 async 函数里调用。
 - [源端连续的同步平台调用（先取消再振动、先停止再启动）映射到返回 Promise 的 API 时，在网关内串行发出或改用同步变体，不各自 fire-and-forget](lesson-ba0cb144aa48f9584060.lesson.md)
   - 时机：功能实现阶段封装平台能力网关，把源端依赖先后生效的连续同步系统调用映射为返回 Promise 的目标 API 时；规格提取阶段为这类映射写契约时
   - 情境：源端在同一方法里依次同步调用两个平台方法且后者依赖前者已生效（如 Vibrator.cancel() 后立刻 vibrate(pattern)）；目标 API（如 vibrator.stopVibration/startVibration）返回 Promise，网关接口按规格声明为 void，调用方仍按源顺序逐个调用。

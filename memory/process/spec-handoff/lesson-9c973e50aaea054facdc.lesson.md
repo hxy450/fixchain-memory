@@ -1,6 +1,6 @@
 # 平台差异只收敛确实做不到的那一步：写“无对等”前查证并记录，替代方案只作用于源端同一路径，其余出口、分支与回退照源端保留
 
-ID：`lesson-9c973e50aaea054facdc` · 版本：2
+ID：`lesson-9c973e50aaea054facdc` · 版本：3
 
 [本主题](index.md)
 
@@ -30,22 +30,28 @@ ID：`lesson-9c973e50aaea054facdc` · 版本：2
 6. 计划或台账写“执行已批准不可用 UX”一类汇总前，逐项核对所引决策是否覆盖该能力；不在内的单列为接入任务或待批决策。
 7. 实现者只按差异条目列明的出口收敛；条目没覆盖的行为照源端实现，确需降级时登记为显式偏离或占位，不写成已实现。收到与源端基类行为冲突的开关接口位（如源端无条件开启前台派发，接口却要求按开关注册）时，回报规格冲突。差异决策的前提可以就地核对时（手边 SDK 声明里查得到所称不存在的接口，或理由只有成本、复杂度），回报决策冲突，不照写恒定状态、无效设置行或最小降级。
 
-来源支持：14 张卡 · 3 次迁移 · 3 个应用
+来源支持：17 张卡 · 已知 3 次迁移（部分未记录） · 已知 3 个应用（部分未记录）
 
 ## 来源（按需复核）
 
 - [case-01833db0536ba02ed2ce](../../../store/cases/case-01833db0536ba02ed2ce/19be163e103f323f9d0fb55e1aa2516564a0df2af7f113771337fa3e7f3c8f79.json) · 结论：recommendation:1
   卡片版本：`19be163e103f323f9d0fb55e1aa2516564a0df2af7f113771337fa3e7f3c8f79`
+- [case-29db923e9cadbe8ce53c](../../../store/cases/case-29db923e9cadbe8ce53c/aa92466b00c3c3bc5eadb4e83e006fcff79e7f08502b0bb49fa74f7777666761.json) · 结论：diagnosis, recommendation:3
+  卡片版本：`aa92466b00c3c3bc5eadb4e83e006fcff79e7f08502b0bb49fa74f7777666761`
 - [case-33b4b9ce51ba471ee770](../../../store/cases/case-33b4b9ce51ba471ee770/871dbcf0ed85e10b3dc05afa0ae591d090cd53dc24ad85bc90d89cbb0d6affe5.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3, recommendation:4
   卡片版本：`871dbcf0ed85e10b3dc05afa0ae591d090cd53dc24ad85bc90d89cbb0d6affe5`
 - [case-3b8b620c1c7fa2848a34](../../../store/cases/case-3b8b620c1c7fa2848a34/2c8f9548575702e3dd4840957d2d99053daa0e3fe45f93f40765b5cabcb618bd.json) · 结论：recommendation:5
   卡片版本：`2c8f9548575702e3dd4840957d2d99053daa0e3fe45f93f40765b5cabcb618bd`
+- [case-3cdc388116566cb08735](../../../store/cases/case-3cdc388116566cb08735/6d0768ed4925b6b36898f8df2a28079e213f3095214c16a510a4df3472ac2e97.json) · 结论：diagnosis, recommendation:4
+  卡片版本：`6d0768ed4925b6b36898f8df2a28079e213f3095214c16a510a4df3472ac2e97`
 - [case-730269321014e7e1d765](../../../store/cases/case-730269321014e7e1d765/d62d1ca408ead4c6087ee8493ffc6be944e20a88c5230ed7af8f16298d439621.json) · 结论：recommendation:1
   卡片版本：`d62d1ca408ead4c6087ee8493ffc6be944e20a88c5230ed7af8f16298d439621`
 - [case-7456fcf259be55a8834b](../../../store/cases/case-7456fcf259be55a8834b/0fcbb858330dc0692a5ef76947e2ee1aae9990c5195f78148938c87b3ce94fe8.json) · 结论：recommendation:3
   卡片版本：`0fcbb858330dc0692a5ef76947e2ee1aae9990c5195f78148938c87b3ce94fe8`
 - [case-7e6984a7fa6d5845737b](../../../store/cases/case-7e6984a7fa6d5845737b/28061d97667de8051e1a704ca4104b16d7db6a03989478ec6a0298430dae5dba.json) · 结论：diagnosis, recommendation:3
   卡片版本：`28061d97667de8051e1a704ca4104b16d7db6a03989478ec6a0298430dae5dba`
+- [case-7f8dcb2d9341693d1225](../../../store/cases/case-7f8dcb2d9341693d1225/9bc002a9ae47b1515ae4f83a7641866747bdf2d6e5d4dae238785c21ea360875.json) · 结论：diagnosis, recommendation:1
+  卡片版本：`9bc002a9ae47b1515ae4f83a7641866747bdf2d6e5d4dae238785c21ea360875`
 - [case-8e426a5be8a17ead231c](../../../store/cases/case-8e426a5be8a17ead231c/4e2dc4057a637cdf01596cbbb248f5a8d6aa8a12596c92a5d3f1caacb17504b0.json) · 结论：recommendation:1, recommendation:4
   卡片版本：`4e2dc4057a637cdf01596cbbb248f5a8d6aa8a12596c92a5d3f1caacb17504b0`
 - [case-a78ca40d4f9b42be76bb](../../../store/cases/case-a78ca40d4f9b42be76bb/7d12da37377f7c970931508bbb172dfde97532993727638bbbfba2a8f413f627.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:4

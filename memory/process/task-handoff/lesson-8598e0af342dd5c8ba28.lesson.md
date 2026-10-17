@@ -1,6 +1,6 @@
 # 派工的必读清单、阅读顺序与对接清单要覆盖任务依赖的语义来源（含已识别的框架约束与移交的验收条款），附加提速要求时也保留
 
-ID：`lesson-8598e0af342dd5c8ba28` · 版本：4
+ID：`lesson-8598e0af342dd5c8ba28` · 版本：5
 
 [本主题](index.md)
 
@@ -31,12 +31,14 @@ ID：`lesson-8598e0af342dd5c8ba28` · 版本：4
 
 - 收敛后有疑问时，检索原生属性（如 .shadow(）确认只剩共享函数调用。
 
-来源支持：12 张卡 · 5 次迁移 · 4 个应用
+来源支持：13 张卡 · 已知 5 次迁移（部分未记录） · 已知 4 个应用（部分未记录）
 
 ## 来源（按需复核）
 
 - [case-02008ba6db4e6a0ddfa2](../../../store/cases/case-02008ba6db4e6a0ddfa2/c4e9657f6da6da85435faa109fb5d920b0fe9b1560b66011aac636021cad5a18.json) · 结论：recommendation:4
   卡片版本：`c4e9657f6da6da85435faa109fb5d920b0fe9b1560b66011aac636021cad5a18`
+- [case-2f7266880e1702fcb7a2](../../../store/cases/case-2f7266880e1702fcb7a2/7ad07097b8635ee30e7754d0a13165768bfede48f5dd7b281caa3f66644e0eef.json) · 结论：recommendation:1
+  卡片版本：`7ad07097b8635ee30e7754d0a13165768bfede48f5dd7b281caa3f66644e0eef`
 - [case-30d42aa2ba7c8354db17](../../../store/cases/case-30d42aa2ba7c8354db17/caedcf037b4f51f56e370b09f5e18559d3a5abf76c513a88e701ad9ca342fe0f.json) · 结论：recommendation:4
   卡片版本：`caedcf037b4f51f56e370b09f5e18559d3a5abf76c513a88e701ad9ca342fe0f`
 - [case-38718a95ad1839df7084](../../../store/cases/case-38718a95ad1839df7084/00eab77c139e8c3d0a58417a8df36dbebf5d067235aec37097d8ddd12e5bd8cd.json) · 结论：recommendation:2

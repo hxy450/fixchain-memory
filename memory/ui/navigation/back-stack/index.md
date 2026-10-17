@@ -6,6 +6,10 @@
 
 ## 本级经验
 
+- [Fragment 事务与 finish() 迁到 NavPathStack 时逐调用点按分支映射，不压成一次同步 pop/push](lesson-9a113ce21ae30365ea5b.lesson.md)
+  - 时机：规格提取与页面实现阶段，把源 Activity/Fragment 的 replace、addToBackStack、popBackStack(Immediate) 与 finish() 调用翻译成 NavPathStack 操作时
+  - 情境：源端在宿主 Activity 里切换 Fragment：已有详情时 popBackStackImmediate 后 replace 一个新实例，列表 replace+addToBackStack；保存或返回时按偏好分支 popBackStack（异步，栈深满足条件才恢复标题栏）或 showToast 后 finish() 整个 Activity。目标是单 Navigation 栈，规格写成“switchToDetail → pushPathByName”一行，实现注释写“退化为 pop”“返回栈语义由 NavPathStack 天然保留”。
+  - 例外：源端未覆写返回、靠 Activity 默认行为离开栈底页面时，按栈底返回的处理方式实现，不套用这里的 finish 映射
 - [唯一页面被压在空的 Navigation 首页之上时，由栈底 NavDestination 自身的 onBackPressed 接管返回（不写在 @Entry 页，@Entry.onBackPress 收不到）：size()&lt;=1 时 moveAbilityToBackground 退后台、不出栈露出空白宿主；源端未覆写返回时按 Activity finish() 同时执行 onDestroy 的释放并复位页面实例态，参照设备实测为 HOT 恢复时才保留实例](lesson-efff93743d668b55b55a.lesson.md)
   - 时机：规格提取与入口装配阶段，为单 Activity 应用确定根页面的返回语义、搭建 Navigation 入口壳并决定首页放在 Navigation 内容区还是首次 push 时；页面转换阶段为首启引导页、主菜单等可能成为栈底的页面接返回时；把注入经验转成派工要求、确定栈底返回的生命周期效果时
   - 情境：安卓启动 Activity 未覆写 onBackPressed，也没有 OnBackPressedDispatcher、BackHandler 或 KEYCODE_BACK 处理（含 Compose NavHost 的起始目的地），返回键走 Activity 默认行为：默认 finish()，onDestroy 执行（如释放音乐、关闭数据源），实例态（输入框文字、所选值、播放位置）丢失，进程与静态单例保留；部分 Android 12+ 设备与启动方式下任务根 Activity 改为移到后台、onPause 存档、onResume 读档，以参照设备实测为准。目标按 Navigation + NavDestination 模板，用内容为空的 Navigation 首页在启动时 pushPathByName 压入唯一页面，或启动页已生成为 NavDestination、入口只能首次 push。

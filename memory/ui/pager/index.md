@@ -6,6 +6,10 @@
 
 ## 本级经验
 
+- [ViewPager（含三方库封装的）迁 Swiper 只是结构对应：释放定页阈值、归位时长与曲线按 ViewPager 规则落实](lesson-fc05d6dfe9844a88815b.lesson.md)
+  - 时机：规格提取与界面实现阶段，为源端 ViewPager 页面确定目标翻页容器与需保留的拖动定页行为时
+  - 情境：源端用 androidx/support ViewPager，或 AppIntro、图库类三方库内部的 ViewPager；映射参考写“ViewPager → Swiper 标准映射”，目标准备沿用 Swiper 缺省的翻页阈值与回弹曲线。
+  - 例外：源端是 ViewPager2（RecyclerView 加 PagerSnapHelper 定页），规则不同，按其源实现核对；决策台账以决策 ID 批准沿用目标容器缺省物理
 - [分页容器的初始页用 Swiper.index 状态绑定，不在 onReady 里立即调用 changeIndex](lesson-ccccf83dc93ae809ccfb.lesson.md)
   - 时机：界面实现阶段，把源端 ViewPager 的初始定位（post 里 setCurrentItem）与首播触发转写成 ArkUI Swiper 时
   - 情境：源端装好数据后在 view.post 等延后回调里 setCurrentItem(index, false)，并靠 onPageSelected 启动当前页；目标在 NavDestination.onReady 读路由参数，Swiper 位于按列表非空条件渲染的分支里。

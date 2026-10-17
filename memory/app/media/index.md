@@ -26,9 +26,9 @@
 - [本地音频导入用 AudioViewPicker 并复制进沙箱；photoAccessHelper 只覆盖图片和视频，不作为音频来源](lesson-62ac5e65ac4aa51128bd.lesson.md)
   - 时机：平台能力映射与实现阶段，为 Android MediaStore 本地音频扫描选择 HarmonyOS 读取方式与权限链时；编译修复遇到缺失的媒体类型枚举时
   - 情境：源端申请 READ_EXTERNAL_STORAGE/READ_MEDIA_AUDIO 后查询 MediaStore.Audio 列出本地音频；目标受“不申请图片/视频媒体权限、优先 picker”约束，候选方案涉及 photoAccessHelper(MediaLibraryKit)、READ_AUDIO 与 AudioViewPicker。
-- [源端写公共目录并做媒体扫描的产物，目标改落沙箱后每条链路都要写出用户可见的导出步骤](lesson-b59097ee968fe827f70d.lesson.md)
-  - 时机：规格提取阶段，把源端下载或导出产物的落点及“沙箱 + picker 导出”替代方案映射到各条业务链时；实现者把公共目录换成沙箱路径时
-  - 情境：源端申请 WRITE_EXTERNAL_STORAGE 写公共目录并发 ACTION_MEDIA_SCANNER_SCAN_FILE，使产物在文件管理或媒体库中可见；目标不申请媒体权限，改为下载到应用沙箱；同一功能中可能只有某一条链写了 DocumentViewPicker 导出。
+- [源端写到公共目录、对用户可见的产物（媒体扫描的导出文件、公共 Documents 下的日志等），目标改落沙箱时每条链路写出导出步骤或可见落点](lesson-b59097ee968fe827f70d.lesson.md)
+  - 时机：规格提取阶段，把源端下载或导出产物的落点及“沙箱 + picker 导出”替代方案映射到各条业务链时；实现者把公共目录换成沙箱路径时；规格为日志目录等横切副作用写落点验收时
+  - 情境：源端申请 WRITE_EXTERNAL_STORAGE 写公共目录并发 ACTION_MEDIA_SCANNER_SCAN_FILE，使产物在文件管理或媒体库中可见；目标不申请媒体权限，改为下载到应用沙箱；同一功能中可能只有某一条链写了 DocumentViewPicker 导出。 也包括源端日志库把文件写到公共 Documents 下的子目录（没有媒体扫描，但在文件管理中可见），规格同一文件里映射表写“用户文件目录”、验收条目写“应用沙箱”。
 - [源端推进后主动预取后续图片时，目标用图片解码真实预取并限定缓存，不以 Image 组件缓存替代或只在差异清单里注销](lesson-cde53c6eab199d1262b2.lesson.md)
   - 时机：ViewModel 或页面逻辑迁移阶段，处理源端图片预加载、缓存预热等性能行为，决定实现、平台替代还是登记缺口时
   - 情境：源端 ViewModel 在加载或每次推进后按规则挑出后续若干项（如跳过已处理、已跳过项和视频）并主动预取（如 Coil imageLoader.enqueue），规格含对应的性能验收项；目标页面只用 Image 组件按需显示当前项，没有独立的预加载服务。

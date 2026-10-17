@@ -1,0 +1,372 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-aa81c21ff3eaca257ba4",
+  "created_at": "2026-10-17T03:23:25.497699+00:00",
+  "migration_key": "/private/tmp/claude-502/-Users-fengyi-Workspace-migbot-set-l123-cc-glm53/a9f6942f-6659-40bd-bc16-6616949070fb/scratchpad/distill/pool2",
+  "title": "AppCompat 宿主栏控件（SearchView / DrawerToggle / 返回链）被压成查询函数与图标开关，框架内部状态机未落地",
+  "when": "规格提取阶段，把源端菜单 actionView（SearchView）、ActionBarDrawerToggle 等 AppCompat 宿主栏控件翻译成目标契约时；实现/接线阶段，为工具栏搜索框、抽屉指示器与返回链写页面代码时",
+  "description": "Android 源用 menu_list 的 collapseActionView|always SearchView（OnActionExpandListener / OnQueryTextFocusChangeListener / onQueryTextSubmit 返回值 / searchable ACTION_SEARCH 投递 / supportInvalidateOptionsMenu 收起）、ActionBarDrawerToggle（setDrawerIndicatorEnabled / syncState / DrawerArrowDrawable）和 AppCompatDelegate 返回链承载工具栏行为；目标为 HarmonyOS 自绘标题栏 + NavPathStack + SideBarContainer，且要求行为一比一",
+  "summary": "本问题 4 个目标分两种成因。\n（一）规格先把 SearchView 控件状态机裁成查询函数，实现者沿用（SearchViewModel.ets、NoteListPage.ets）。\nF009 规格作者（bc655f68…:a7b0fe6f31d4deb51）Read 到 ListFragment.java:640-800 全文：setSearchFocus 时 expandActionView\n+ 收键盘（:668-673）、setOnQueryTextFocusChangeListener → setActionItemsVisibility(menu, hasFocus)（:683-684）、\nOnActionExpandListener 的 collapse（searchQuery=null、toggleSearchLabel(false)、ACTION_MAIN、initNotesList、\nsupportInvalidateOptionsMenu，:692-700）与 expand（commitPending + 新 OnQueryTextListener，searchPerformed 匿名字段，:706-731）、\nonQueryTextSubmit 返回 settings_instant_search（返回 false 才由 SearchView 投递 ACTION_SEARCH）（agent-a7b0fe6f31d4deb51.jsonl:L95-L96）。\nWrite F009-search.md 时，实现映射把「SearchManager/ACTION_SEARCH intent 流转」写成「应用内 SearchViewModel 状态直调（无系统\nsearchable 中转）… 内化等价」，服务层只定义 submitQuery/instantQuery/searchByTag/searchUncompleteChecklists/clear 五个查询函数，\nAC 只剩 AC01（展开隐菜单/收起清空重载）、AC02/AC03（即时与提交语义）；expandActionView/collapseActionView 状态、焦点取样时机、\n菜单重建（MenuBuilder.clear）收起、空串不提交、提交后收键盘均无条目（L195-L196；Slice 11 读到的正文见 agent-a8b4a12b220c2faf6.jsonl:L25）。\nSlice 11 worker（fcc67332…:a8b4a12b220c2faf6）Read 该规格（L24-L25）、也 sed 读到 initSearchView :660-740（L38-L39），\n但派工 HARD-GATE 是「SearchViewModel API 覆盖 spec 服务层节全集」，Write 的 VM 即五函数 + beginSearchSession()（仅重置 searchPerformed），\nsubmitQuery 在即时开关开启时直接 return，无展开/收起/焦点/ACTION_SEARCH 投递出口（L68-L69）。\nGroup 2 closer（fcc67332…:ac7db1f1e97435d0a）以 grep 读到 F009 对接点+AC（L67-L68）、Read SearchViewModel 全文（L75-L76），\n未读 initSearchView 段（其 ListFragment 读取为 1015-1045/1200-1270/1299-1345/1375-1470/1521-1580/1650-1800，L98-L105），\nEdit NoteListPage：searchViewFocused 一个布尔同时充当「展开」与「焦点」，展开态渲染 TextInput + 取消图标，onChange→instantQuery、\nonSubmit→submitQuery、取消→vm.clear()（L259、L266-L267）。返修报告 4-01~4-12 全「部分」、8-07 缺失，返修重写为\nSearchViewController（expandActionView/collapseActionView/collapseWithoutListener/setText 去重/submit 空串与 launchQuerySearch\n/onFocusChange，agent-a37ab07ebd7bca6e3.jsonl:L1026、L1053）。\n（二）输入正确、实现者把框架语义折成图标开关（MainPage.ets、NavDrawerComponent.ets）。\npage_0001 converter（e95edcb7…:ac81e9c5c719d73bc）Read 到 MainActivity.java 全文：onBackPressed 列表分支\nnavdrawer_on_exit 开/关抽屉 → 否则 closeFab() 为假时 isPasswordAccepted=false + super.onBackPressed（:297-340），\nswitchToList 调 getDrawerToggle().setDrawerIndicatorEnabled(false)（:489-490）（agent-ac81e9c5c719d73bc.jsonl:L27-L28），\n也 sed 读到 NavigationDrawerFragment:55-235（ActionBarDrawerToggle、refreshMenus 末尾 syncState、animateBurger 经 onDrawerSlide，L139-L140）。\nWrite MainPage：onBackPress 只处理抽屉两分支、其余 return false，closeFab 以注释推给列表页，无 isPasswordAccepted 复位；\n导航位用 ic_drawer 与 sys.symbol.chevron_left 两张图按 burgerShape 切 opacity「交叉淡化」，无 DrawerArrowDrawable/指示器启用态；\nswitchToList 留 FWD-REF P-S1-024（注释已列 setDrawerIndicatorEnabled(false)）（L168-L169）。\nSlice 1 Step 3d worker（e95edcb7…:aef386d08f13edbfc）sed 读到 MainActivity:480-545（switchToList 含 setDrawerIndicatorEnabled(false)，\nagent-aef386d08f13edbfc.jsonl:L126-L127）、NavigationDrawerFragment:60-235（refreshMenus→syncState，L105-L106）、F001 规格 AC26\n「refreshMenus = 主菜单 + 分类菜单 + toggle syncState」与 AC79（L20-L21），Edit MainPage.switchToList 为 push NoteListPage +\nSwitchFragment(PARENT)，注释写明「setDrawerIndicatorEnabled(false) 的箭头指示器禁用子语义由 AC79 汉堡态验收覆盖」（L274-L275）；\nEdit NavDrawerComponent.refreshMenus 只做 refreshMainMenu + buildCategoryMenu，无 syncState（L285-L286）。\n上述片段原样保留到返修前（spec/parity-fix-work/_orig/…/MainPage.ets:468-472、561-573、635-647），返修改为 MainShell.drawerIndicatorEnabled\n+ DrawerArrowController/DrawerArrowToggle + controller.syncState(opened)，返回链按 AppCompatDelegate 顺序由列表页恒消费\n（G1 1-10/1-11/1-24，G2 DR-08/09/10；agent-a37ab07ebd7bca6e3.jsonl:L1160，agent-aefc2f17edc072f7a.jsonl:L398-L402）。\n对 job 问题的回答：生成者读到的是 menu XML、ListFragment/MainActivity/NavigationDrawerFragment 源码与规格；规格没有只写「有搜索框」，\n但把 SearchView 写成了查询 API（内化等价），未描述 expandActionView 状态机。skill 的 interaction/atomic 映射参考没有 SearchView、\nActionMode、ActionBarDrawerToggle、invalidateOptionsMenu 任何条目（agent-ac81e9c5c719d73bc.jsonl:L43 全文 0 命中）。\n",
+  "recommendations": [
+    "规格提取阶段：源端经 AppCompat 控件（SearchView actionView、ActionBarDrawerToggle、ActionMode）实现的工具栏行为，先按控件 API 列出状态机（expand/collapse 回调、焦点监听、onQueryTextSubmit 返回值→ACTION_SEARCH 投递、invalidateOptionsMenu 收起、setDrawerIndicatorEnabled/syncState），每个回调成一条 AC；不要以「内化等价」把控件生命周期折成查询函数接口。",
+    "实现/接线阶段：接宿主栏控件前读源文件中创建该控件的方法全文（如 ListFragment.initSearchView :660-735），把「展开」「焦点」「提交」「收起」「菜单重建」分成独立状态与事件；一个布尔同时表示展开与焦点、取消图标代替 collapseActionView 都是偏差。",
+    "实现阶段：源方法里对框架对象的调用（setDrawerIndicatorEnabled(false)、mDrawerToggle.syncState()、isPasswordAccepted=false、closeFab()）要逐条落到目标，缺一条即在报告列明；不能用「AC 的验收描述已覆盖」替代源调用。",
+    "实现阶段：导航图标是 DrawerArrowDrawable 的 position 插值（汉堡↔箭头同一绘制、与抽屉滑动共用 position），不是两张图标切透明度；写前核对源是否经 onDrawerSlide 写入。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/viewmodels/SearchViewModel.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/java/it/feio/android/omninotes/ListFragment.java",
+          "at": "2026-10-01T07:35:42.427Z",
+          "reason": "正常输入：F009 规格作者 Read offset 640 limit 160，回执含 initSearchView 全文——setSearchFocus→expandActionView+收键盘（:668-673）、焦点监听→setActionItemsVisibility（:683-684）、OnActionExpandListener collapse/expand（:692-731）、onQueryTextSubmit 返回 settings_instant_search（:709-713）（migration/bc655f68-…/subagents/agent-a7b0fe6f31d4deb51.jsonl:L95-L96）。控件状态机在源码中完整可见。"
+        },
+        {
+          "key": "bc655f68-6f49-4bcf-ab64-aa45d7a58cc2:a7b0fe6f31d4deb51",
+          "at": "2026-10-01T07:47:50.579Z",
+          "reason": "读到上述源码后 Write F009-search.md：实现映射把 SearchManager/ACTION_SEARCH 流转写成「应用内 SearchViewModel 状态直调（无系统 searchable 中转）…内化等价」，服务层只定义 submitQuery/instantQuery/searchByTag/searchUncompleteChecklists/clear，AC 仅 AC01-AC03 概括展开/收起/即时/提交；expand/collapse 回调、焦点取样、菜单重建收起、空串不提交等无条目（agent-a7b0fe6f31d4deb51.jsonl:L195-L196）。规格在此把控件生命周期裁成查询函数接口。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/spec/baseline/features/F009-search.md",
+          "at": "2026-10-01T16:38:56.602Z",
+          "reason": "交付桥梁：Slice 11 worker 的 Read 回执仍含上述五函数服务层与「内化等价」行（migration/fcc67332-…/subagents/agent-a8b4a12b220c2faf6.jsonl:L24-L25）；派工 HARD-GATE 要求「SearchViewModel API 覆盖 spec 服务层节全集」（同转录 L1）。"
+        },
+        {
+          "key": "fcc67332-0774-45b4-a72c-d2b6a33207b8:a8b4a12b220c2faf6",
+          "at": "2026-10-01T16:44:52.195Z",
+          "reason": "实际读到该规格（并 sed 读过 initSearchView :660-740，L38-L39），Write SearchViewModel.ets：@ObservedV2 五函数 + beginSearchSession() 仅重置 searchPerformed；submitQuery 在即时开关开启时直接 return，无 expanded/focused 状态、无 collapse 出口、无 ACTION_SEARCH 投递（agent-a8b4a12b220c2faf6.jsonl:L68-L69）。本链确认按规格传递；返修重写为 SearchViewController（expandActionView/collapseActionView/collapseWithoutListener/submit 空串与 launchQuerySearch，repair/…/agent-a37ab07ebd7bca6e3.jsonl:L1026）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/java/it/feio/android/omninotes/ListFragment.java",
+          "at": "2026-10-01T16:39:48.193Z",
+          "reason": "正常输入：Slice 11 worker 自己 Bash sed -n '660,740p' 读到 initSearchView 的 expand/collapse/焦点监听原文（agent-a8b4a12b220c2faf6.jsonl:L38-L39），足以在 VM 中保留控件状态。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 5,
+          "to": 4,
+          "force": true,
+          "reason": "Slice 11 worker 以 Bash sed -n '660,740p' 读取 ListFragment.java，回执返回 initSearchView 的 expandActionView/焦点监听/OnActionExpandListener/onQueryTextSubmit 原文；这是它写 SearchViewModel 前对该源的真实读取。",
+          "evidence": [
+            {
+              "source": "migration/fcc67332-0774-45b4-a72c-d2b6a33207b8/subagents/agent-a8b4a12b220c2faf6.jsonl",
+              "line": 38
+            },
+            {
+              "source": "migration/fcc67332-0774-45b4-a72c-d2b6a33207b8/subagents/agent-a8b4a12b220c2faf6.jsonl",
+              "line": 39
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/pages/NoteListPage.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/java/it/feio/android/omninotes/ListFragment.java",
+          "at": "2026-10-01T07:35:42.427Z",
+          "reason": "正常输入：F009 规格作者 Read 到 initSearchView 全文（expandActionView、焦点监听→setActionItemsVisibility、collapse→supportInvalidateOptionsMenu、onQueryTextSubmit 返回值；migration/bc655f68-…/subagents/agent-a7b0fe6f31d4deb51.jsonl:L95-L96）。"
+        },
+        {
+          "key": "bc655f68-6f49-4bcf-ab64-aa45d7a58cc2:a7b0fe6f31d4deb51",
+          "at": "2026-10-01T07:47:50.579Z",
+          "reason": "Write F009-search.md 把 SearchView 控件写成五个查询函数与 AC01-AC03，对接点只写「search 输入 → instantQuery/submitQuery」「搜索焦点下菜单可见性」，未给页面任何展开/收起/焦点/菜单重建的状态契约（agent-a7b0fe6f31d4deb51.jsonl:L195-L196）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/spec/baseline/features/F009-search.md",
+          "at": "2026-10-01T17:46:22.811Z",
+          "reason": "交付桥梁：Group 2 closer 以 Bash grep -A 30 '^## 对接点' 读到该规格的对接点段与 AC01-AC11（migration/fcc67332-…/subagents/agent-ac7db1f1e97435d0a.jsonl:L67-L68）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/viewmodels/SearchViewModel.ets",
+          "at": "2026-10-01T17:46:30.067Z",
+          "reason": "正常输入：closer Read 到 Slice 11 的 VM 全文，头注释列出 initSearchView :675-728 的 onQueryTextSubmit/onQueryTextChange 语义及 beginSearchSession 为 expand 等价（agent-ac7db1f1e97435d0a.jsonl:L75-L76）；VM 只提供查询函数，无展开/收起/焦点状态。"
+        },
+        {
+          "key": "fcc67332-0774-45b4-a72c-d2b6a33207b8:ac7db1f1e97435d0a",
+          "at": "2026-10-01T17:53:38.901Z",
+          "reason": "读到规格对接点与 VM 后，未读 initSearchView 段（其 ListFragment sed 范围为 1015-1045/1200-1270/1299-1345/1375-1470/1521-1580/1650-1800，L98-L105），Edit NoteListPage：onMenuSearchClicked 只置 searchViewFocused=true，titleBar 在 searchViewFocused 时渲染 TextInput + ic_cancel 取消图标，onChange→instantQuery、onSubmit→submitQuery、取消→vm.clear()+searchViewFocused=false（agent-ac7db1f1e97435d0a.jsonl:L259、L266-L267）。一个布尔同时充当展开与焦点，无 collapseActionView 语义、无菜单重建收起、无空串/收键盘处理；返修报告 4-01~4-12 全「部分」、8-07 缺失，返修重写为 SearchViewController 驱动的独占布局（repair/…/agent-a37ab07ebd7bca6e3.jsonl:L1053）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 5,
+          "force": true,
+          "reason": "Group 2 closer 以 Bash grep -A 30 '^## 对接点' spec/baseline/features/F009-search.md 读取该规格，回执返回对接点段与 AC01-AC11 全文；这是它接线 NoteListPage 搜索框前对该规格的真实读取。",
+          "evidence": [
+            {
+              "source": "migration/fcc67332-0774-45b4-a72c-d2b6a33207b8/subagents/agent-ac7db1f1e97435d0a.jsonl",
+              "line": 67
+            },
+            {
+              "source": "migration/fcc67332-0774-45b4-a72c-d2b6a33207b8/subagents/agent-ac7db1f1e97435d0a.jsonl",
+              "line": 68
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/pages/MainPage.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/java/it/feio/android/omninotes/MainActivity.java",
+          "at": "2026-10-01T11:07:55.496Z",
+          "reason": "正常输入：page_0001 converter Read 全文，含 onBackPressed 列表分支（navdrawer_on_exit 开/关抽屉，否则 closeFab() 为假时 isPasswordAccepted=false + super.onBackPressed，:297-340）与 switchToList 的 getDrawerToggle().setDrawerIndicatorEnabled(false)（:489-490）（migration/e95edcb7-…/subagents/agent-ac81e9c5c719d73bc.jsonl:L27-L28）。"
+        },
+        {
+          "key": "e95edcb7-c619-475d-b56e-7bb84402a4ba:ac81e9c5c719d73bc",
+          "at": "2026-10-01T11:25:15.053Z",
+          "reason": "读到上述源码（及 NavigationDrawerFragment:55-235 的 ActionBarDrawerToggle/syncState/animateBurger，L139-L140）后 Write MainPage：onBackPress 只有抽屉开/关两分支、其余 return false，closeFab 用注释推给列表页，无 isPasswordAccepted 复位；导航位 burgerButton 用 ic_drawer 与 sys.symbol.chevron_left 按 burgerShape 切 opacity 交叉淡化，无指示器启用态；switchToList 留 FWD-REF P-S1-024（注释已列 setDrawerIndicatorEnabled(false)）（agent-ac81e9c5c719d73bc.jsonl:L168-L169）。片段保留到返修前（_orig/…/MainPage.ets:561-573、635-647）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/java/it/feio/android/omninotes/MainActivity.java",
+          "at": "2026-10-01T14:44:06.746Z",
+          "reason": "正常输入：Slice 1 Step 3d worker Bash sed -n '480,545p' 读到 switchToList 全文，含 getDrawerToggle().setDrawerIndicatorEnabled(false) 与 SwitchFragmentEvent(PARENT)（migration/e95edcb7-…/subagents/agent-aef386d08f13edbfc.jsonl:L126-L127）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/spec/baseline/features/F001-notes-list.md",
+          "at": "2026-10-01T14:33:15.785Z",
+          "reason": "正常输入：同一 worker Read 到 F001-AC79（switchToList/startSearchView，返回时标题栏为汉堡态）与 AC26（refreshMenus = 主菜单 + 分类菜单 + toggle syncState）（agent-aef386d08f13edbfc.jsonl:L20-L21）。AC79 只写汉堡态，但源调用已在节点 3 明示。"
+        },
+        {
+          "key": "e95edcb7-c619-475d-b56e-7bb84402a4ba:aef386d08f13edbfc",
+          "at": "2026-10-01T15:03:00.151Z",
+          "reason": "读到源码与规格后 Edit MainPage.switchToList：push NoteListPage(searchFocus) + postSwitchFragment(PARENT)，注释写明「setDrawerIndicatorEnabled(false) 的箭头指示器禁用子语义由 AC79 汉堡态验收覆盖」，指示器从未被禁用（agent-aef386d08f13edbfc.jsonl:L274-L275）。片段保留到返修前（_orig/…/MainPage.ets:468-472）；返修 1-10 改为 shell.drawerIndicatorEnabled=false + 列表导航位按指示器态渲染（repair/…/agent-a37ab07ebd7bca6e3.jsonl:L1160）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        },
+        {
+          "from": 3,
+          "to": 5,
+          "force": true,
+          "reason": "Slice 1 Step 3d worker 以 Bash sed -n '480,545p' 读取 MainActivity.java，回执返回 switchToList 全文（含 getDrawerToggle().setDrawerIndicatorEnabled(false)）；这是它改写 MainPage.switchToList 前对该源的真实读取。",
+          "evidence": [
+            {
+              "source": "migration/e95edcb7-c619-475d-b56e-7bb84402a4ba/subagents/agent-aef386d08f13edbfc.jsonl",
+              "line": 126
+            },
+            {
+              "source": "migration/e95edcb7-c619-475d-b56e-7bb84402a4ba/subagents/agent-aef386d08f13edbfc.jsonl",
+              "line": 127
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/components/NavDrawerComponent.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/java/it/feio/android/omninotes/NavigationDrawerFragment.java",
+          "at": "2026-10-01T14:43:15.032Z",
+          "reason": "正常输入：Slice 1 Step 3d worker Bash sed -n '60,235p' 读到 ActionBarDrawerToggle 构造与 setDrawerIndicatorEnabled(true)、onDrawerClosed→supportInvalidateOptionsMenu、refreshMenus 末尾 mDrawerToggle.syncState()、animateBurger 经 onDrawerSlide 写 position（migration/e95edcb7-…/subagents/agent-aef386d08f13edbfc.jsonl:L105-L106）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/spec/baseline/features/F001-notes-list.md",
+          "at": "2026-10-01T14:33:15.785Z",
+          "reason": "正常输入：F001-AC26 明写「refreshMenus = 主菜单 + 分类菜单 + toggle syncState」（agent-aef386d08f13edbfc.jsonl:L20-L21）。"
+        },
+        {
+          "key": "e95edcb7-c619-475d-b56e-7bb84402a4ba:aef386d08f13edbfc",
+          "at": "2026-10-01T15:04:22.749Z",
+          "reason": "读到上述源码与 AC26 后 Edit NavDrawerComponent：refreshMenus() 只调 refreshMainMenu() + buildCategoryMenu()，注释写「NavigationDrawerFragment.java:152-159：主菜单 + 分类菜单重建」，syncState 与指示器态均无（agent-aef386d08f13edbfc.jsonl:L285-L286）。返修 DR-09 标「缺失」，补 controller.syncState(opened)，DR-10 补 DrawerArrowController/DrawerArrowToggle（repair/…/agent-aefc2f17edc072f7a.jsonl:L398-L402）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "Slice 1 Step 3d worker 以 Bash sed -n '60,235p' 读取 NavigationDrawerFragment.java，回执返回 refreshMenus 末尾 mDrawerToggle.syncState()、setDrawerIndicatorEnabled(true) 与 animateBurger 原文；这是它写 NavDrawerComponent.refreshMenus 前对该源的真实读取。",
+          "evidence": [
+            {
+              "source": "migration/e95edcb7-c619-475d-b56e-7bb84402a4ba/subagents/agent-aef386d08f13edbfc.jsonl",
+              "line": 105
+            },
+            {
+              "source": "migration/e95edcb7-c619-475d-b56e-7bb84402a4ba/subagents/agent-aef386d08f13edbfc.jsonl",
+              "line": 106
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "MenuBuilder.clear 收起（8-07）、AppCompatDelegateImpl 返回链顺序（1-24）、SearchView 内部 mOldQueryText 去重等属 appcompat 库内部行为，源仓库无对应代码，skill 参考亦无条目；本卡只核到规格与实现均未提及，未追 skill 参考材料的形成过程。",
+    "4-13 语音搜索由 PD-C6-F009-01 裁剪（spec/decision-ledger.md，agent-a8b4a12b220c2faf6.jsonl:L32-L33），返修改为 CoreSpeechKit 实现属新要求，本卡不归因。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-aa81c21ff3eaca257ba4",
+  "metadata": {
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.247",
+        "2.1.296",
+        "2.1.300"
+      ]
+    },
+    "source_set_id": "sources-fef5281fb5eb1e655dea",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos",
+        "at": "2026-10-01T08:07:31.804Z",
+        "ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1119",
+        "request_ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1117",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos",
+        "at": "2026-10-01T08:07:31.804Z",
+        "ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1119",
+        "request_ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1117",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes",
+        "at": "2026-10-13T15:34:04.077Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L121",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L120",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes",
+        "at": "2026-10-13T15:34:04.077Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L121",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L120",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes",
+        "at": "2026-10-14T01:47:40.558Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L159",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L158",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes",
+        "at": "2026-10-14T01:47:40.558Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L159",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L158",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.10"
+  },
+  "revision": "186b3ad1798ec3352fd7eec9416a225c17b00304f58ef4f907d2a94f7d32f674"
+}

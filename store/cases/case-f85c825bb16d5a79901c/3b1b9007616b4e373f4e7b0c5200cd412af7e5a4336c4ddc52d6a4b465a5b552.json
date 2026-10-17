@@ -1,0 +1,177 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-f85c825bb16d5a79901c",
+  "created_at": "2026-10-17T02:46:29.562856+00:00",
+  "migration_key": "/private/tmp/claude-502/-Users-fengyi-Workspace-migbot-set-l123-cc-glm53/a9f6942f-6659-40bd-bc16-6616949070fb/scratchpad/distill/pool2",
+  "title": "把 System.exit(0) 式「重启」按字面规约成 terminateSelf 退出，丢掉系统重建主界面与保存态语义",
+  "when": "规格提取阶段，为源端进程退出/重启类调用（System.exit、restartApp）确定目标端等价行为与状态保留要求时",
+  "description": "Android 源用 System.exit(0) 实现 restartApp（注释称 full app restart；调用点为导入完成通知点击、语言切换、数据重置），前台进程被杀后系统按任务栈与 savedInstanceState 重建 Activity；目标端 HarmonyOS 需在 terminateSelf 与 ApplicationContext.restartApp 之间选择，并自行携带原由系统保存的界面状态（抽屉开合、列表位置、搜索条件）。",
+  "summary": "写前实际收到：c4-04 批 spec 作者（bc655f68…:a7b0fe6f31d4deb51）Read 了 Android SystemHelper.java，回执第 35-40 行是\n注释「Performs a full app restart」与 restartApp() { System.exit(0); }（agent-a7b0fe6f31d4deb51.jsonl:L111 请求、L112 回执，\n2026-10-01T07:36:06.872Z）。注释已给出意图；Android 前台进程被 System.exit 杀死后，系统按残留任务栈与 onSaveInstanceState\n重建 MainActivity，源码调用点 MainActivity.handleIntents:396-398（ACTION_RESTART_APP）、SettingsFragment.java:349/493\n（语言切换、数据重置）都依赖这一平台行为。该作者对 MainActivity.java 只 Read 了 offset 410/limit 40 一段（L164/L165），没有看到\nhandleIntents 的调用点。\n本次输出却偏离：作者在思考中写下「源码 restartApp=System.exit(0)（其实没重启只是退出！注释说 full restart 但实现是 exit）。\n忠实迁移：terminateSelf」（同转录 L199），随后 Write F020-crash-reporting.md（L201，回执 L202 2026-10-01T07:48:54.320Z），\n§服务层写「restartApp(context) // System.exit(0) 忠实迁移=退出应用（terminateSelf），不附加重启」，§实现映射写\n「SystemHelper.restartApp = System.exit(0)（注释称 full restart 实为退出）| context.terminateSelf() | 忠实迁移：退出进程语义，不附加拉起」。\n偏差位于源码到规格的平台语义翻译：把「杀进程」当成「退出应用」，否定了注释意图，也与同批次外的 F012-AC20\n「导入完成通知点击以 ACTION_RESTART_APP 语义重启应用……点击完成通知后应用重启进入主页」（spec/baseline/features/F012-backup-restore.md:116）\n相互矛盾。F020 后续编辑（同作者 L206/L219，主会话 bc655f68 L981）只改 AC04/AC05/AC09，restartApp 两行保持到执行期。\n执行期 Slice 8 worker（fcc67332…:ac03a106156044eac）Read 到该 F020（L25/L26 回执 2026-10-01T16:37:59.685Z，第 52、67 行即上述两条），\n也 Read 了同一份 SystemHelper.java 含「Performs a full app restart」注释（L31/L32 回执 16:38:04.791Z），仍按规格 Write SystemHelper.ets\n（L121，回执 L122 16:46:57.683Z）：头注释「契约（spec F020 §服务层 SystemHelper）restartApp(context)：terminateSelf() 忠实退出语义，\n不附加重启拉起」，方法体 static restartApp(context) { context.terminateSelf() }。本链确认规格传递到目标，不另推定 worker 独立失职。\n同一误读在 Slice 4 worker（e95edcb7…:ad3e5c91fc593f020，SettingsService.ets Write L203，2026-10-01T14:14:00Z）独立出现：\n「restartApp = System.exit(0)（进程退出，无自动重启；用户再启 = 冷启动）→ terminateSelf 等价」，尽管 F011 规格写的是\n「标:ApplicationContext 重启」；该文件不在本 job 目标内，仅作旁证。\n该片段保留到返修前：返修 G3b 子代理（40790d98…:afe325235a7f9e099）先 sed 读取 MainActivity.java:385-400 与 SettingsFragment.java\n两处调用点（L174，2026-10-13T20:54Z），其 Edit 的 old_string 与生成写入逐字一致（L404/L406，2026-10-13T21:13:17/21Z），改为\nApplicationContext.restartApp(want) 新进程拉起 EntryAbility、失败 terminateSelf 兜底。返修主会话随后补齐系统保存态的缺口：\n新建 services/SavedInstanceState.ets（L5392，2026-10-15T01:38:59Z，抽屉开合/列表位置/搜索条件经 Want 参数携带），脚本在\nSystemHelper.restartApp 中加入 SavedInstanceStateStore.writeTo(want)（L5398）；EntryAbility 的推迟重启改到 windowStageEvent\nACTIVE 窗口获焦时执行（L22141，2026-10-15T09:09:50Z，因前台时 restartApp 被 AMS 以 not foreground 拒绝）；ACTION_RESTART_APP\n冷启分支先过 PasswordGate.checkOnLaunch 再关闭（L37555/L37571，2026-10-15T18:15Z）。对应返修报告修复 12、65、96\n（spec/parity-fix-report.md:1067/1120/1151）。本卡只归因 SystemHelper.restartApp 这一契约片段；EntryAbility、MainPage、\nSavedInstanceState 的生成期缺位列在 unresolved_targets。\n",
+  "recommendations": [
+    "规格提取时遇到 System.exit / Runtime.exit / killProcess 这类进程退出调用，不按字面译成「退出应用」：先 grep 调用方（本例 ACTION_RESTART_APP 通知点击、语言切换、数据重置）和方法注释，写明 Android 前台进程被杀后系统按任务栈与 savedInstanceState 重建 Activity 的平台语义，再给出目标端等价（ApplicationContext.restartApp 拉起新进程 + 需保留的界面状态随 Want 携带）。",
+    "同一源方法出现在多个 feature spec 时（本例 F020 服务层、F012-AC20「重启进入主页」、F011「ApplicationContext 重启」）在写 spec 前核对口径一致；矛盾时以描述用户可见终态的 AC（重启后进入主页、抽屉状态保持）为准修正服务层契约。",
+    "实现阶段读到源码注释（Performs a full app restart）与规格契约相反时，不沉默沿用规格：在 source-notes 差异项中登记并上报，或按注释与调用点核实后实现重启；选择 restartApp 时同时规划重启时机（窗口获焦后）、冷启取回的保存态和验密门等入口约束。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/services/SystemHelper.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/java/it/feio/android/omninotes/utils/SystemHelper.java",
+          "at": "2026-10-01T07:36:06.872Z",
+          "reason": "正常输入：spec 作者 Read 回执给出第 35-40 行注释「Performs a full app restart」与 restartApp() { System.exit(0); }（migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2/subagents/agent-a7b0fe6f31d4deb51.jsonl:L111 请求、L112 回执）。注释已声明重启意图，结合 Android 杀前台进程后系统按保存态重建 Activity 的平台语义，足以确定目标端不能只做退出。"
+        },
+        {
+          "key": "bc655f68-6f49-4bcf-ab64-aa45d7a58cc2:a7b0fe6f31d4deb51",
+          "at": "2026-10-01T07:48:54.320Z",
+          "reason": "读到上述源码后，思考中写「其实没重启只是退出！注释说 full restart 但实现是 exit。忠实迁移：terminateSelf」（同转录 L199），随后 Write F020-crash-reporting.md（L201，回执 L202）：§服务层「restartApp(context) // System.exit(0) 忠实迁移=退出应用（terminateSelf），不附加重启」、§实现映射「context.terminateSelf() | 忠实迁移：退出进程语义，不附加拉起」。源码到规格的平台语义在此偏离；其 MainActivity.java 读取只覆盖 offset 410 起 40 行（L164/L165），未看到 handleIntents:396-398 的调用点。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/spec/baseline/features/F020-crash-reporting.md",
+          "at": "2026-10-01T16:37:59.685Z",
+          "reason": "交付桥梁：Slice 8 worker 的 Read 回执第 52 行与第 67 行仍是上述 terminateSelf 契约（migration/fcc67332-0774-45b4-a72c-d2b6a33207b8/subagents/agent-ac03a106156044eac.jsonl:L25 请求、L26 回执）。期间对 F020 的编辑（a7b0fe6f31d4deb51 L206/L219、bc655f68 主会话 L981）只改 AC04/AC05/AC09，不含 restartApp。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/java/it/feio/android/omninotes/utils/SystemHelper.java",
+          "at": "2026-10-01T16:38:04.791Z",
+          "reason": "正常输入：Slice 8 worker 自己也 Read 了源文件，回执同样含「Performs a full app restart」注释与 System.exit(0)（agent-ac03a106156044eac.jsonl:L31 请求、L32 回执）；它据此在头注释里写「注释称 full restart 实为退出进程」，复述了规格的判断。"
+        },
+        {
+          "key": "fcc67332-0774-45b4-a72c-d2b6a33207b8:ac03a106156044eac",
+          "at": "2026-10-01T16:46:57.683Z",
+          "reason": "实际读到上述规格与源码后，Write SystemHelper.ets（L121，回执 L122）：头注释「契约（spec F020 §服务层 SystemHelper）restartApp(context)：terminateSelf() 忠实退出语义，不附加重启拉起」，方法体 static restartApp(context) { context.terminateSelf() }，把规格的退出契约落到目标。该片段逐字保留到返修 Edit 的 old_string（repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-afe325235a7f9e099.jsonl:L406，2026-10-13T21:13:21Z）。本链确认传递，不另推定其独立失职。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 5
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/entryability/EntryAbility.ets",
+      "reason": "已确认修改：返修主会话脚本把推迟的重启从 onForeground 改到 windowStageEvent ACTIVE（repair/40790d98…jsonl:L22141，2026-10-15T09:09:50Z），并为 ACTION_RESTART_APP 冷启分支加 PasswordGate.checkOnLaunch 验密门（L37555/L37571，2026-10-15T18:15Z）。迁移池中 EntryAbility.ets 的 45 次生成期写入/脚本没有一次含 ACTION_RESTART_APP（grep 为 0），即生成期完全没有该 want 的接收分支，分支本身是返修期新建再逐步修正的；F012-AC20 已要求「点击完成通知后应用重启进入主页」（F012-backup-restore.md:116），BackupService 侧发出了 ACTION_RESTART_APP want（group_03 writeback L685）。尚缺：哪个 slice/closer 负责在 EntryAbility 或 MainPage 接收该 want、为何遗漏，未追到生成期派工与接线记录。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/pages/MainPage.ets",
+      "reason": "job 列出的返修子代理 Edit（agent-a37ab07ebd7bca6e3 L1300/L1327 分享记录与 destinationName 类型、agent-aea03558554c5b0c8 L453 导航切换）均与重启/保存态无关；本问题相关的抽屉状态恢复与 ACTION_RESTART_APP 处理（验密通过后 terminateSelf）由返修主会话经 Bash 内嵌脚本写入（2026-10-15），具体写入行未逐条定位。生成期 MainPage 没有保存态恢复，直接成因与上图相同（规格把重启定为退出，因而无需恢复状态）；114 次生成期写入未逐项核对，不单独设链。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/services/SavedInstanceState.ets",
+      "reason": "返修新建文件（repair/40790d98…jsonl:L5392 Write，2026-10-15T01:38:59.118Z），替代 Android 系统在 System.exit 后重建 MainActivity 时的 savedInstanceState（DrawerLayout 开合、ListFragment listViewPosition/searchQuery/searchTags）。迁移池中没有生成期产物；迁移期 spec 对 onSaveInstanceState 的提及（F001/F002/F009、page_0013_ListFragment 等）未核是否覆盖「进程重建后抽屉与列表状态恢复」这一要求。该缺位是上图 terminateSelf 契约的直接后果（既定为退出就没有可携带的状态），不另立生成期起点。"
+    }
+  ],
+  "job": "issue-f85c825bb16d5a79901c",
+  "metadata": {
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.247",
+        "2.1.296",
+        "2.1.300"
+      ]
+    },
+    "source_set_id": "sources-fef5281fb5eb1e655dea",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos",
+        "at": "2026-10-01T08:07:31.804Z",
+        "ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1119",
+        "request_ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1117",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos",
+        "at": "2026-10-01T08:07:31.804Z",
+        "ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1119",
+        "request_ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1117",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes",
+        "at": "2026-10-13T15:34:04.077Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L121",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L120",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes",
+        "at": "2026-10-13T15:34:04.077Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L121",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L120",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes",
+        "at": "2026-10-14T01:47:40.558Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L159",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L158",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes",
+        "at": "2026-10-14T01:47:40.558Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L159",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L158",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.10"
+  },
+  "revision": "3b1b9007616b4e373f4e7b0c5200cd412af7e5a4336c4ddc52d6a4b465a5b552"
+}

@@ -19,8 +19,8 @@
   - 时机：界面实现阶段，为同一视图设置圆角与描边（按钮 cornerRadius 加 stroke、OutlinedBox、GradientDrawable setStroke）时
   - 情境：目标写成 .borderRadius(X) 后接不带 radius 的 .border({ width, color })；映射参考可能把圆角与描边分列成两个属性。
 - [多字重字族按“族-字重”逐文件 registerFont，排版样式引用注册名，入口调用一次注册](lesson-046baeb5ffbb10a6abc5.lesson.md)
-  - 时机：主题令牌阶段，把 Compose FontFamily(Font(R.font.x, weight), ...) 迁到 ArkUI，或确定全局字体注册由谁调用时
-  - 情境：源字族为同一族声明多个字重文件，资源阶段已把字体文件放进 rawfile；目标要先 registerFont 才能用 fontFamily 引用；主题令牌、公共组件、页面与入口由不同任务分批生成。
+  - 时机：主题令牌阶段，把 Compose FontFamily(Font(R.font.x, weight), ...) 迁到 ArkUI，或确定全局字体注册由谁调用时；把 View 布局中 pixlui:typeface、android:fontFamily 指定的字体文件落到 Text 时
+  - 情境：源字族为同一族声明多个字重文件，资源阶段已把字体文件放进 rawfile；目标要先 registerFont 才能用 fontFamily 引用；主题令牌、公共组件、页面与入口由不同任务分批生成。也包括 View 体系布局用 pixlui:typeface 或 android:fontFamily 指定 ttf，规格要求字体文件入 rawfile/fonts 并用 fontFamily 替换，写者只在注释写字体名。
 - [委托 Material/AppCompat 库或平台框架（Theme.Holo、android.preference、框架 AlertDialog）提供外观的组件，先在本机 SDK 平台资源或依赖库 res（含 values-land、values-sw600dp 等限定目录）查默认外观与几何，查过仍无才标待核；内部留白按库规则分侧落实](lesson-5a82d62ff7e087616968.lesson.md)
   - 时机：规格提取与界面实现阶段，翻译只显式传入部分参数、其余外观交给 Material3 库默认的组件（Slider、Snackbar、TopAppBar 等），或源码没写 padding、留白由库组件内部布局提供时；为 View 体系的工具栏、底部导航、FAB、按钮、TabLayout、偏好分组标题确定高度、字号字重、圆角与配色，而布局 XML 未写具体值时；把 android.preference 的 PreferenceActivity/PreferenceFragment 偏好列表与 ListPreference、框架 AlertDialog 转成目标行与对话框，确定行几何、分类头、分隔线、对话框几何与行内控件类型时；判断这些默认值是否随横竖屏或窗口宽度变化时
   - 情境：源组件只传少数颜色或尺寸，thumb 形状、留隙、刻度、容器高度、内距等来自库默认与 MaterialTheme；TopAppBar 等容器的标题槽、导航与动作槽留白由库内部布局决定，源码本身没有 padding 修饰符；目标组件的内置样式与之不同。也包括 View 体系源用 ?attr/actionBarSize、MaterialToolbar、BottomNavigationView、TabLayout、未写 style 的 FAB 或 OutlinedButton，取值由 Theme.Material3.*、MaterialComponents 或 AppCompat 父主题与组件默认样式决定，且库在 values-land、values-sw600dp 下另有取值（如 AppCompat 横屏 actionBarSize 48dp、Toolbar 标题 14dp；TabLayout 横屏 tabGravity=center），应用自身 res 没有对应覆盖。也包括 PreferenceFragment（preference_material）行、ListView 分隔线、框架 AlertDialog 与 ListPreference 单选对话框，几何在本机 SDK 平台资源里。也包括 View 体系 Activity 继承 android.preference.PreferenceActivity、主题为 Theme.Holo，页面没有布局 XML，复选框、分类头、行高与内边距、列表左右内边距、分隔线规则由平台 preference_holo 等布局与资源隐式提供。

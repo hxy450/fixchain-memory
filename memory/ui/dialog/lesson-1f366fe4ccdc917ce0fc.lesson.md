@@ -1,6 +1,6 @@
 # 源弹窗按它实际加载的布局 XML、函数全文或依赖库模板逐控件还原并接通配置回调，不以行为代码、相邻弹窗外壳、通用确认弹窗或现成文案代替
 
-ID：`lesson-1f366fe4ccdc917ce0fc` · 版本：6
+ID：`lesson-1f366fe4ccdc917ce0fc` · 版本：7
 
 [本主题](index.md)
 
@@ -25,7 +25,7 @@ ID：`lesson-1f366fe4ccdc917ce0fc` · 版本：6
 5. 源弹窗由 Helper 或配置对象生成时，把配置字段与回调逐项列成清单（标题、说明条目、勾选控件及两态图、链接色与协议链接、同意与拒绝分支），按字段表达的语义落实：勾选两态图对应协议确认状态，链接回调与链接色对应可点击的服务/隐私协议文本，每个回调绑定到控件 onClick 与路由。重写正文或操作区前先与目标 onClick 逐项对账，替换文案时不删除仍未实现的入口；目标页已存在而 URL 提供者在后续切片时，仍绑定点击并留下指向负责切片的前向引用，不把链接降级为只改字色的静态文字。
 6. 配置字段不等于版面：库渲染弹窗的分区、文案与操作区以依赖库为准，从 build.gradle 定位库坐标，解包其 AAR 的 res/layout 与 values/strings，或取实机截图，再按其结构实现。暂时取不到时，不把条目数组等数据直接展开成独立分区、不自拟按钮文案、不自定简化形态，把未核的文案与面板几何列为待截图或真机核对的差异写进报告，不标为“Android 原文”。规格提取阶段为会弹出库弹窗的页面补一节弹层结构：源调用锚点、全部配置字段、“布局由依赖库提供”及结构基准来源，每个交互回调写成验收条目并在导航表登记去向页（如各协议链接 → WebView 页）；上下文压缩后再写这类 UI 先重开对应源码片段。
 
-来源支持：10 张卡 · 6 次迁移 · 6 个应用
+来源支持：11 张卡 · 已知 6 次迁移（部分未记录） · 已知 6 个应用（部分未记录）
 
 ## 来源（按需复核）
 
@@ -41,6 +41,8 @@ ID：`lesson-1f366fe4ccdc917ce0fc` · 版本：6
   卡片版本：`7112bcd3f96e30d029bb4a952c0f31ba43b6c4c490f4d17be1641d5148185649`
 - [case-a3404675917f8a352eb9](../../../store/cases/case-a3404675917f8a352eb9/251cba380648c037ead6cf198430233a569adb360f6b3ef5ae66404b79cb74ab.json) · 结论：diagnosis, recommendation:1, recommendation:2
   卡片版本：`251cba380648c037ead6cf198430233a569adb360f6b3ef5ae66404b79cb74ab`
+- [case-ac1b65b76f72e7be3fa6](../../../store/cases/case-ac1b65b76f72e7be3fa6/cdb9faac1ebcaa9e773f9d8554ce300513bd212e668336b1f874cbab05359895.json) · 结论：recommendation:3
+  卡片版本：`cdb9faac1ebcaa9e773f9d8554ce300513bd212e668336b1f874cbab05359895`
 - [case-ae1e7b09c5cfe5214cd2](../../../store/cases/case-ae1e7b09c5cfe5214cd2/330b086d78a6625e9a9a7fa9cdcd53c10d3ecfef919ec81b12a73fcae4c061c4.json) · 结论：diagnosis, recommendation:1
   卡片版本：`330b086d78a6625e9a9a7fa9cdcd53c10d3ecfef919ec81b12a73fcae4c061c4`
 - [case-b2c7b25e7fdfde0c6ec1](../../../store/cases/case-b2c7b25e7fdfde0c6ec1/54fdf7375c7df149cf80bacb158a266cee12c29172076257f335c61a1270bc70.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3

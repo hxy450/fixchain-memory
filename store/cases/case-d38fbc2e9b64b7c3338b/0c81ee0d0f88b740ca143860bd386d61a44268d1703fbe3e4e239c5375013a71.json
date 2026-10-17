@@ -1,0 +1,383 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-d38fbc2e9b64b7c3338b",
+  "created_at": "2026-10-16T16:56:07.706066+00:00",
+  "migration_key": "/private/tmp/claude-502/-Users-fengyi-Workspace-migbot-set-l123-cc-glm53/a9f6942f-6659-40bd-bc16-6616949070fb/scratchpad/distill/pool2",
+  "title": "把 ArkUI 命中测试与手势缺省值当成 Android 触摸语义：常驻 overlay、包装节点、空 onClick、Image 可拖拽",
+  "when": "界面实现阶段，为叠放层（OverlayManager 图层、浮动按钮组、撤销条、提示条、拖拽柄）决定触摸由谁消费、是否透传时",
+  "description": "Android 源用 clickable=true、不可点击 View、FrameLayout 层序或 startDrag 的 DragShadow 决定触摸归属；ArkUI 目标里对应的是 Stack 叠放的自定义组件、带通用属性的组件实例（生成 __Common__ 包装节点）、OverlayManager 上的 ComponentContent（根被包进 BuilderProxyNode）或作为拖拽柄的 Image，命中测试与拖拽都取平台缺省值。",
+  "summary": "本问题五个片段的写者在写前都已拿到 Android 侧的触摸归属（styles.xml UndoBar clickable=true、fragment_list.xml 中\nlist_root→undobar→fab 的层序、反编译 ChecklistViewOnTouchListener 按下即 startDrag 且阴影只在拖拽期存在、\ncrouton_handle 覆盖工具栏而不拦截），工程里也已有正确范例（MainPage 的 CroutonHost 包装 Column 显式 Transparent、\nSketchPage 的 Image 带 .draggable(false)、NoteListPage 列表根 onTouch→commitPending）。写者却把 ArkUI 缺省值当成等价实现，\n偏差都落在「实现者选择触摸语义」这一环；按原生转录核验，四处是返修期重写时新生，一处沿用生成期结构：\n一、NoteDetailPage（返修新生）：G3a 子代理 abb92fcadb53ed4c2 于 02:01:48Z cat 过反编译拖拽源（ACTION_DOWN→startDrag，\n阴影由 DragShadowBuilder 生成、拖拽结束消失）后，06:12:55Z 用 heredoc 整体重写页面模块级部分，新增 DragShadowHost\n（内层 Stack 写 HitTestMode.None）并声明 dragShadowContent: ComponentContent；06:14:12Z 追加 struct 时在 aboutToAppear\n末尾调 this.addDragShadowLayer()，把拖拽阴影做成常驻窗口级图层（agent-abb92fcadb53ed4c2.jsonl:L3145/L3146、L3149/L3150）；\n同组 a253bd56186843030 09:25:00Z 按此补出 ui.getOverlayManager().addComponentContent(content) 方法体\n（agent-a253bd56186843030.jsonl:L1505/L1506）。自定义组件作 ComponentContent 根会被包进缺省命中的 BuilderProxyNode，\n内层 None 不起作用，详情页整页不响应触摸。主会话 2026-10-14T15:48:55Z 改为按 ChecklistController.dragShadowVisibilityListener\n在阴影出现时挂载、消失时摘除（repair 主转录 L2153/L2154），15:52:59Z 又把溢出弹窗 overlay 根改为帧节点并随 interactive 切换命中（L2239）。\n二、ChecklistEditor（返修新生）：生成期文件（abb92 01:44:21Z cat 回执，L37）没有拖拽柄 Image；同一子代理 03:04:26Z Write\n重写文件时，dragHandle 写成 Image(checklistview_ic_drag_handle) + onTouch(onHandleTouch) + priorityGesture(PanGesture)，\n未写 .draggable(false)（L1053/L1054）。ArkUI Image 缺省可拖拽，长按后系统图片拖拽接管输入，自绘拖拽收到 Cancel、条目停留隐藏。\n它写前已读到源码「仅 ACTION_DOWN 起拖、无长按分支」，也读到本工程 SketchPage 的 Image 带 .draggable(false)（L354/L355）。\n主会话 2026-10-15T03:47:59Z Edit 补 .draggable(false)（L11703）。\n三、UndoBarController（返修新生，同类缺陷生成期已存在）：G1 子代理 a6403a52e5ea00951 读到 styles.xml UndoBar\nclickable=true（L68/L69）、NoteListPage 列表根 onTouch→commitPending（:1744-1748）与撤销层 Stack Transparent（:1931-1933）后，\n16:50:44Z 用 Bash 内嵌 python 重写条体，加注释「clickable=true：条体吞掉触摸，不下穿列表」却只写了空 .onClick(() => {})\n（L1117/L1118）；onClick 不改变命中测试，宿主 Transparent 下其下 list_root 仍同时命中，点「撤销」先触发 commitPending\n把 undo 映射清空，撤销无效。生成期 UndoBarController 条体同样没有任何阻断（migration agent-a0880cb7aecba93f5.jsonl:L122\nWrite，2026-10-01T09:17:01Z），撤销层宿主 Transparent 在生成期已存在（agent-ac7db1f1e97435d0a.jsonl:L264 Edit 的 old_string 已含）；\n本卡按返修期重写归因。主会话 2026-10-15T02:19:09Z 改为 .hitTestBehavior(HitTestMode.BLOCK_HIERARCHY) 并 alignSelf(Stretch)（L7220）。\n四、FabMenu（返修重写沿用生成期结构）：同一 G1 子代理 15:48:14Z cat 过生成期 FabMenu（根 Stack Transparent，L160/L161）、\nRead 过 NoteListPage 的层序与列表根 onTouch，16:53:29Z Write 重写 FabMenu：根仍 Transparent、主钮/子钮只挂 onTouch/onClick\n（缺省命中）、子行展开时 Default（L1136/L1137）；Transparent 祖先下按钮上的触摸仍会继续命中其下列表与撤销条。\n主会话 2026-10-15T02:10:15Z 把主钮、子钮及展开子行改为 HitTestMode.Block（L6887），02:11:11Z 把 NoteListPage 中承载 padding 的\nFabMenu 包装节点改为 None（L6949）。\n五、SettingsPage（返修新生）：G6 子代理 adf66d1811cb7d155 已 Read 到 MainPage 中 CroutonHost 的包装 Column 写了 .margin({top})\n且显式 .hitTestBehavior(HitTestMode.Transparent)（:864-871，L161/L162），14:20:16Z Edit 给 ONAlert 实例直接加\n.margin({ top: windowTopPadding }) 而未设命中模式（L289/L290）；组件实例上的通用属性产生缺省命中的 __Common__ 包装节点，\n提示条显示期间覆盖并遮挡工具栏。主会话 2026-10-15T02:11:11Z 为该实例补 .hitTestBehavior(HitTestMode.None)（L6949）。\nNoteListItem 的滑动触发点击（onClick(fn, TOUCH_SLOP=8)）实际改在 NoteListPage.ets 行节点（L6661），本卡未归因。\n",
+  "recommendations": [
+    "实现阶段：把 Android 的 clickable / 不可点击 / 层序翻成 ArkUI 时，逐个节点写明 hitTestBehavior，不依赖缺省值：要吞掉触摸的条体用 Block 或 BLOCK_HIERARCHY（宿主 Transparent 时必须用后者），只做占位的包装用 None；空 onClick 不改变命中测试。",
+    "实现阶段：给自定义组件实例加 margin/padding/position 等通用属性时，同时给它 .hitTestBehavior(None 或 Transparent)，因为该属性会生成缺省命中的 __Common__ 包装节点；工程内 MainPage CroutonHost 的写法可直接照搬。",
+    "实现阶段：用 OverlayManager/ComponentContent 挂窗口级图层时，只在需要显示的时段挂载、用完即 removeComponentContent；若必须常驻，根用帧节点（Stack）并按交互态切换 hitTestBehavior，内层自定义组件上的 None 对 BuilderProxyNode 无效。",
+    "实现阶段：作为拖拽柄或按钮使用的 Image 一律 .draggable(false)；源码用 ACTION_DOWN/onTouch 起拖的手势不能叠在可系统拖拽的 Image 上。",
+    "验证阶段：对叠放层（撤销条、FAB、提示条、弹层）逐个做实机点按：点目标节点时其下层的 onTouch/onClick 不得触发，点空白区下层必须可达。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/pages/NoteDetailPage.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "nodes": [
+        {
+          "key": "/tmp/g3a_libs/dec/clv/it/feio/android/checklistview/dragging/ChecklistViewOnTouchListener.java",
+          "at": "2026-10-14T02:01:48.988Z",
+          "reason": "正常输入：Bash cat -n 反编译的 checklistview 拖拽源：onTouch 仅在 ACTION_DOWN 调 startDrag(…, new ChecklistViewDragShadowBuilder(v), …)，阴影随本次拖拽生成、由系统在拖拽结束时移除；足以说明阴影图层只需在拖拽期间存在（agent-abb92fcadb53ed4c2.jsonl:L457/L458）。"
+        },
+        {
+          "key": "40790d98-e128-4480-9378-5c27fe3ba82e:abb92fcadb53ed4c2",
+          "at": "2026-10-14T06:14:12.301Z",
+          "reason": "已读到上述输入，06:12:55Z heredoc 整体重写页面模块级部分，写入 DragShadowHost（内层 Stack 写 HitTestMode.None）与 dragShadowBuilder；06:14:12Z heredoc 追加 struct，声明 dragShadowContent: ComponentContent 并在 aboutToAppear 末尾写入 this.addDragShadowLayer()，把阴影做成常驻窗口级图层（agent-abb92fcadb53ed4c2.jsonl:L3145/L3146、L3149/L3150）；同组 a253bd56186843030 09:25:00Z 按此补出 getOverlayManager().addComponentContent 方法体（agent-a253bd56186843030.jsonl:L1505/L1506）。常驻图层的 BuilderProxyNode 缺省命中，详情页整页不响应触摸，保留到 2026-10-14T15:48:55Z 主会话改为随阴影显隐挂载/摘除（repair 主转录 L2153/L2154）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "Bash 进入 /tmp/g3a_libs/dec/clv/…/checklistview/dragging 目录 cat -n ChecklistViewOnTouchListener.java 等三个反编译源文件，回执返回 onTouch 仅在 ACTION_DOWN 调 startDrag(…ChecklistViewDragShadowBuilder…) 并返回 true、无长按分支；这支持该子代理写前已实际读到拖拽柄与阴影的源手势语义。",
+          "evidence": [
+            {
+              "source": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl",
+              "line": 457
+            },
+            {
+              "source": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl",
+              "line": 458
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": "target",
+          "force": true,
+          "reason": "Bash heredoc cat > pages/NoteDetailPage.ets 整体重写模块级部分（含 DragShadowHost 与 HitTestMode.None 内层），随后 cat >> 追加 struct（含 dragShadowContent 声明与 aboutToAppear 末尾的 this.addDragShadowLayer()）；两次回执均 wc -l 返回写后的行数（798、1310），证明已写盘。",
+          "evidence": [
+            {
+              "source": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl",
+              "line": 3145
+            },
+            {
+              "source": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl",
+              "line": 3146
+            },
+            {
+              "source": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl",
+              "line": 3149
+            },
+            {
+              "source": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl",
+              "line": 3150
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/components/detail/ChecklistEditor.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "nodes": [
+        {
+          "key": "/tmp/g3a_libs/dec/clv/it/feio/android/checklistview/dragging/ChecklistViewOnTouchListener.java",
+          "at": "2026-10-14T02:01:48.988Z",
+          "reason": "正常输入：Bash cat -n 回执给出拖拽柄 OnTouchListener 只处理 ACTION_DOWN（startDrag 并返回 true），无长按分支；足以确定柄上除按下起拖外不应有其他手势（agent-abb92fcadb53ed4c2.jsonl:L457/L458）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/pages/SketchPage.ets",
+          "at": "2026-10-14T01:56:14.507Z",
+          "reason": "正常输入：Bash sed -n 1225,1270p 读取回执含工具栏 Image($r('app.media.drawer_arrow_back')) … .matchTextDirection(true).draggable(false)，是本工程禁用 Image 缺省拖拽的既有写法（agent-abb92fcadb53ed4c2.jsonl:L354/L355）。"
+        },
+        {
+          "key": "40790d98-e128-4480-9378-5c27fe3ba82e:abb92fcadb53ed4c2",
+          "at": "2026-10-14T03:04:26.189Z",
+          "reason": "已读到上述输入（且 01:44:21Z cat 过的生成期 ChecklistEditor 没有拖拽柄 Image，L36/L37），Write 重写 ChecklistEditor.ets：dragHandle 写成 Image($r('app.media.checklistview_ic_drag_handle')) + onTouch(onHandleTouch) + priorityGesture(PanGesture)，未写 .draggable(false)（agent-abb92fcadb53ed4c2.jsonl:L1053/L1054）；长按柄时系统图片拖拽接管、自绘拖拽收到 Cancel。该片段保留到 2026-10-15T03:47:59Z 主会话 Edit 补 .draggable(false)（repair 主转录 L11703）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "Bash 进入 /tmp/g3a_libs/dec/clv/…/checklistview/dragging 目录 cat -n ChecklistViewOnTouchListener.java 等三个反编译源文件，回执返回 onTouch 仅在 ACTION_DOWN 调 startDrag(…ChecklistViewDragShadowBuilder…) 并返回 true、无长按分支；这支持该子代理写前已实际读到拖拽柄与阴影的源手势语义。",
+          "evidence": [
+            {
+              "source": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl",
+              "line": 457
+            },
+            {
+              "source": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl",
+              "line": 458
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "Bash 进入工程 ets 目录 sed -n 1225,1270p pages/SketchPage.ets，回执返回工具栏 Image($r('app.media.drawer_arrow_back')).matchTextDirection(true).draggable(false)；这支持该子代理写新文件前已实际读到本工程禁用 Image 缺省拖拽的写法。",
+          "evidence": [
+            {
+              "source": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl",
+              "line": 354
+            },
+            {
+              "source": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl",
+              "line": 355
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/components/common/UndoBarController.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/res/values/styles.xml",
+          "at": "2026-10-13T15:44:56.516Z",
+          "reason": "正常输入：Bash sed -n 17,400p 读取回执给出 style UndoBar 含 android:clickable=true，即条体自身消费触摸、不下穿（agent-a6403a52e5ea00951.jsonl:L68/L69）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/pages/NoteListPage.ets",
+          "at": "2026-10-13T15:47:44.098Z",
+          "reason": "正常输入：Read 回执给出列表根 .onTouch(() => { this.commitPending() })（InterceptorLinearLayout 等价，:1744-1748）与撤销层 Stack .hitTestBehavior(HitTestMode.Transparent)（:1931-1933）；足以推出条体若不阻断命中，点撤销会同时触发其下 commitPending（agent-a6403a52e5ea00951.jsonl:L147/L148、L150/L151）。"
+        },
+        {
+          "key": "40790d98-e128-4480-9378-5c27fe3ba82e:a6403a52e5ea00951",
+          "at": "2026-10-13T16:50:44.437Z",
+          "reason": "已读到上述输入，Bash 内嵌 python 重写 UndoBar 渲染组件，注释写明「style UndoBar android:clickable=true：条体吞掉触摸，不下穿列表」，实现却只是空 .onClick(() => {})，没有任何 hitTestBehavior（agent-a6403a52e5ea00951.jsonl:L1117/L1118）；onClick 不改变命中测试，撤销点击仍先命中 list_root 的 commitPending。该片段保留到 2026-10-15T02:19:09Z 主会话 Edit 改为 HitTestMode.BLOCK_HIERARCHY（repair 主转录 L7220）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "Bash 进入 Android res 目录 sed -n 17,400p values/styles.xml，回执返回 style UndoBar 的 android:clickable=true；这支持该子代理重写条体前已实际读到 UndoBar 消费触摸的要求。",
+          "evidence": [
+            {
+              "source": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-a6403a52e5ea00951.jsonl",
+              "line": 68
+            },
+            {
+              "source": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-a6403a52e5ea00951.jsonl",
+              "line": 69
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target",
+          "force": true,
+          "reason": "Bash 进入 components/common 目录运行内嵌 python，读取 UndoBarController.ets、把「/** 底部撤销条渲染组件」起的整段替换为新 UndoBar 组件（含 clickable 注释与空 onClick）并写回；回执 grep 列出写入后的新行（72/74/76/89/95/98/119 行），证明脚本已写盘。",
+          "evidence": [
+            {
+              "source": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-a6403a52e5ea00951.jsonl",
+              "line": 1117
+            },
+            {
+              "source": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-a6403a52e5ea00951.jsonl",
+              "line": 1118
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/components/common/FabMenu.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/res/layout/fragment_list.xml",
+          "at": "2026-10-13T15:44:40.071Z",
+          "reason": "正常输入：Bash cat 回执给出 FrameLayout 根内 list_root（InterceptorLinearLayout）→ include undobar → include fab 的层序，FloatingActionsMenu 叠在列表与撤销条之上，其按钮消费触摸后列表不再收到（agent-a6403a52e5ea00951.jsonl:L57/L58）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/pages/NoteListPage.ets",
+          "at": "2026-10-13T15:47:44.098Z",
+          "reason": "正常输入：Read 回执给出列表根 onTouch→commitPending（:1744-1748）以及 undoLayer/fabLayer 以 Stack 叠放、撤销层 Transparent（:1927-1939）（agent-a6403a52e5ea00951.jsonl:L147/L148、L150/L151）；说明 FAB 按钮若不阻断命中，触摸会继续落到撤销条与列表根。"
+        },
+        {
+          "key": "40790d98-e128-4480-9378-5c27fe3ba82e:a6403a52e5ea00951",
+          "at": "2026-10-13T16:53:29.392Z",
+          "reason": "已读到上述输入（并 15:48:14Z cat 过生成期 FabMenu 根 Stack Transparent，L160/L161），Write 重写 FabMenu.ets：根 Stack 仍 .hitTestBehavior(HitTestMode.Transparent)，主钮/子钮只挂 onTouch/onClick 用缺省命中，子行展开时 Default（agent-a6403a52e5ea00951.jsonl:L1136/L1137）；Transparent 祖先下按钮上的触摸仍继续命中其下撤销条与列表。保留到 2026-10-15T02:10:15Z 主会话改主钮、子钮、展开子行为 HitTestMode.Block（repair 主转录 L6887），02:11:11Z 又把 NoteListPage 中的 FabMenu 包装节点改为 None（L6949）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "Bash 进入 Android res 目录 cat layout/fragment_list.xml 等六个布局，回执返回 FrameLayout 根内 list_root → include undobar → include fab 的层序；这支持该子代理重写 FabMenu 前已实际读到 FAB 叠在列表与撤销条之上的源布局。",
+          "evidence": [
+            {
+              "source": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-a6403a52e5ea00951.jsonl",
+              "line": 57
+            },
+            {
+              "source": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-a6403a52e5ea00951.jsonl",
+              "line": 58
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/pages/SettingsPage.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/pages/MainPage.ets",
+          "at": "2026-10-14T14:08:52.604Z",
+          "reason": "正常输入：Read(offset 820) 回执给出 crouton_handle 的实现范例：Column(){ CroutonHost() } .height(CROUTON_HANDLE_HEIGHT).margin({ top: windowTopPadding }).hitTestBehavior(HitTestMode.Transparent)（:864-871），即承载 margin 的包装必须显式设为不拦截（agent-adf66d1811cb7d155.jsonl:L161/L162）。"
+        },
+        {
+          "key": "40790d98-e128-4480-9378-5c27fe3ba82e:adf66d1811cb7d155",
+          "at": "2026-10-14T14:20:16.554Z",
+          "reason": "已读到上述范例（并 14:08:45Z Bash cat 过 activity_settings.xml / crouton_handle.xml，L157/L158），Edit SettingsPage.ets 给 ONAlert({...}) 实例直接加 .margin({ top: this.windowModel.windowTopPadding })，未设 hitTestBehavior（agent-adf66d1811cb7d155.jsonl:L289/L290）；实例上的通用属性生成缺省命中的 __Common__ 包装节点，提示条显示期间遮挡其下工具栏。保留到 2026-10-15T02:11:11Z 主会话为该实例补 .hitTestBehavior(HitTestMode.None)（repair 主转录 L6949）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/components/common/NoteListItem.ets",
+      "reason": "报告修复 17 的 onClick(fn, TOUCH_SLOP=8) 实际写在 pages/NoteListPage.ets 的行节点（repair 主转录 L6661，2026-10-15T02:06:03Z）；job 列出的 NoteListItem.ets 修改（agent-a37ab07ebd7bca6e3.jsonl:L977 Write、主转录 L7614 空文本占位 Edit）不含命中测试或点击阈值改动，该文件在本问题下无可核的偏差片段，未归因。"
+    }
+  ],
+  "job": "issue-d38fbc2e9b64b7c3338b",
+  "metadata": {
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.247",
+        "2.1.296",
+        "2.1.300"
+      ]
+    },
+    "source_set_id": "sources-fef5281fb5eb1e655dea",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos",
+        "at": "2026-10-01T08:07:31.804Z",
+        "ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1119",
+        "request_ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1117",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos",
+        "at": "2026-10-01T08:07:31.804Z",
+        "ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1119",
+        "request_ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1117",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes",
+        "at": "2026-10-13T15:34:04.077Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L121",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L120",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes",
+        "at": "2026-10-13T15:34:04.077Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L121",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L120",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes",
+        "at": "2026-10-14T01:47:40.558Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L159",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L158",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes",
+        "at": "2026-10-14T01:47:40.558Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L159",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L158",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.10"
+  },
+  "revision": "0c81ee0d0f88b740ca143860bd386d61a44268d1703fbe3e4e239c5375013a71"
+}

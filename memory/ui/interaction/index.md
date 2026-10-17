@@ -22,6 +22,9 @@
 - [SwipeToDismissBox 的滑删方向按物理手势和 offset 符号写明，不凭枚举名加“左滑/右滑”注释；未覆写的触发阈值按源依赖版本的库默认值落实](lesson-7f5eba1b969bddfb34dc.lesson.md)
   - 时机：规格提取与界面实现阶段，转写 Material3 SwipeToDismissBox 的滑删方向与触发阈值、在列表行内自定义滑删手势时
   - 情境：源端用 enableDismissFromStartToEnd、EndToStart 等枚举描述方向，背景对齐方向与之配合；rememberSwipeToDismissBoxState 未传 positionalThreshold，触发条件来自库默认、不在源文件里；目标在列表行内用 Stack + PanGesture 一类写法自定义滑删。
+- [作拖拽柄或自绘手势起点的 Image 写 .draggable(false)：ArkUI Image 默认可系统拖拽，长按会接管输入](lesson-b30da57443f68ab9046a.lesson.md)
+  - 时机：界面实现阶段，在 Image 上挂 onTouch、PanGesture 实现拖拽柄、按下即起拖或其他自绘手势时
+  - 情境：源端 ImageView 作拖拽柄（OnTouchListener 在 ACTION_DOWN 即开始拖动），没有长按触发的系统拖拽；目标用 Image + onTouch 或 priorityGesture(PanGesture) 承接。
 - [修可侧滑行的按钮点击被内容层拦截时，把调整限定在按钮热区，不把承载滑动手势的整张内容层设为 HitTestMode.None](lesson-6677d286e690407d4af4.lesson.md)
   - 时机：界面缺陷修复阶段，为可侧滑列表行解决展开后操作按钮点击被上层内容拦截的命中冲突时
   - 情境：列表行用 Stack 叠放底层操作按钮与上层内容卡片，卡片以 translate 平移露出按钮，并在同一节点上绑定点击（未展开进详情、已展开则收起）与横向 PanGesture（展开或收起）。
@@ -42,6 +45,10 @@
   - 时机：界面实现阶段，把带 Modifier.clickable/toggleable/selectable，或 Card、Surface(onClick) 的 Compose 容器转成挂 onClick 的 ArkUI 容器时；把 ListView、PreferenceActivity 中由主题 listSelector 提供按压态的可点击行转成 ArkUI 列表行时；把 GridView 条目转成 Grid/GridItem 时
   - 情境：源端容器经 clickable/toggleable（可带 role = Button、Switch）或 Card/Surface(onClick) 响应点击，没有把 indication 设为 null，按压时由主题提供涟漪或状态层；目标用 Column/Row/Stack 加 .onClick 实现，ArkUI 通用容器默认没有按压反馈（Button 自带的按压效果除外）。 也包括 View 体系的 ListView、PreferenceActivity 行没有把 background 或 listSelector 设为 null，按压态由主题选择器（如 Holo 暗色 list_selector_holo_dark）提供；写者在 d.ts 里找不到通用容器的 stateEffect，就放弃了按压态。 也包括 GridView 条目：GridView 未改写 listSelector 与 drawSelectorOnTop，Activity 主题分散在 res/values 与 values-v11/v14 等多个 styles.xml，低 minSdk 的旧工程在新设备上走 values-v11+ 的 Holo 父主题。
   - 例外：源端显式 indication = null 或自定义 indication 时，按源端写法处理；目标用自带按压效果的 Button 承载点击时，不再叠加
+- [源端吞触摸的叠放条体与按钮显式设 Block：空 onClick 不阻断下层，祖先 Transparent 时用 BLOCK_HIERARCHY](lesson-df573635678a799a5f80.lesson.md)
+  - 时机：界面实现阶段，为叠在列表或页面之上的撤销条、浮动按钮组、提示条决定触摸由谁消费、是否透传下层时；给自定义组件实例加 margin、padding、position 等通用属性时
+  - 情境：源端条体 clickable=true（含 style 中声明）或按钮自身消费触摸，下层列表根另有 onTouch/onClick（如触摸即提交待定操作）；目标宿主 Stack 或某个祖先为放行空白区设了 HitTestMode.Transparent。也包括源端只占位、不拦截的叠放层（提示条覆盖工具栏），目标在自定义组件实例上直接加通用属性。
+  - 例外：源端该层本身不消费触摸（非 clickable、无监听），按“不处理点击的覆盖层显式 Transparent”的做法处理
 - [源端在触发瞬间读取锚点窗口位置时，目标在点击回调里取本次手势坐标或即时查询，onAreaChange 缓存只作兜底；锚点取源端传入的同一元素](lesson-963bf871aa4e910a8fc8.lesson.md)
   - 时机：界面实现与修复阶段，为从点击处发出的动效或气泡（完成彩纸、锚点提示）确定起点坐标与锚点元素时
   - 情境：源端在动效或弹窗被调用时用 getLocationInWindow 读取传入锚点 View 的当下窗口中心；目标列表项存在 translate 平移、LazyForEach/Repeat 节点复用或弹层内滚动，写者准备用 onAreaChange 缓存控件位置。
@@ -53,6 +60,10 @@
   - 时机：规格提取阶段为 setEnabled/android:enabled 切换的控件写转换决策时；界面实现阶段落实控件禁用态外观与点击拦截时
   - 情境：源端在 setEnabled(false) 的同时 setBackgroundResource 换成没有 state_enabled 分支的灰色 drawable，textColor 是固定颜色而非 ColorStateList（AppCompat 按钮禁用时投影另归零）；映射参考把 setEnabled(false)/android:enabled 一律对到 .enabled(false)。
   - 例外：源端禁用外观本身来自 state_enabled 选择器或半透明（ColorStateList 的 disabled 项、Compose 组件默认禁用色）时，按源端色值显式写出；目标默认禁用透明度恰与源值一致时才直接用 .enabled()
+- [源端自写触摸状态机或用框架手势类时，按源阈值、跟手与取消逐项复刻，不以 onClick/SwipeGesture/PinchGesture 识别器代替](lesson-b9f5cb5d3ae174e5bf70.lesson.md)
+  - 时机：规格提取阶段把源端 MotionEvent 处理或手势类翻成交互契约时；界面实现阶段为列表项滑动、画廊点击与缩放选择 onClick、SwipeGesture、PanGesture 还是 onTouch 时
+  - 情境：源端 onTouch/dispatchTouchEvent 自写 DOWN 记点、MOVE 超阈值取消点击、UP 判定点击；或用 ItemTouchHelper 滑删、ScaleGestureDetector 或三方缩放控件；映射参考写“ItemTouchHelper Swipe → SwipeGesture”“ScaleGestureDetector → PinchGesture 直接映射”，或规格写“目标点击与滑动天然分离，无需迁移”。
+  - 例外：源端本身就是识别器回调（setOnClickListener、onLongClick）且没有自定义阈值时，直接用对应识别器
 - [点击事件挂在源端真正持有点击的节点上：源端只绑整栏就挂外层，只绑行内子 View 就只挂该子控件；带文字的 CheckBox/RadioButton 拆成勾选控件加 Text 时整体可点、命中区按源宽度](lesson-fd3add7128663eb9998f.lesson.md)
   - 时机：界面实现与返修阶段，为由多个子控件拼成的搜索栏、入口条或设置行决定 onClick 挂在哪一层，或清理、重写其中的点击绑定时；把带文字的 CheckBox/RadioButton 拆成 ArkUI 勾选控件加 Text 时
   - 情境：源布局只在整条容器上绑定点击（如 LinearLayout 的 onClick 或 DataBinding 点击），内部图标、提示文字、“搜索”字样只负责展示；目标用 Row + Image + Text 模拟占位搜索框（不是 TextInput），点击后压栈进入目标页。也包括源端 Java 只对行内某个子 View（如右侧值文本）setOnClickListener，同页其他行绑定整行 layout；目标用 Row 承载这些设置行。也包括带文字的 CheckBox/RadioButton（XML 声明或代码动态创建，宽度来自 wrap_content、match_parent、alignParentLeft 加 toLeftOf 两端锚定或父容器默认 LayoutParams），目标 Checkbox/Radio 不带文字、需另配 Text；为折行给 Text 加 layoutWeight(1) 时连同点击挂在整行上。

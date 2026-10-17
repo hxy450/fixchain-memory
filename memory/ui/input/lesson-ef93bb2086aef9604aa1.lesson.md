@@ -1,6 +1,6 @@
 # 源端同一控件既可编辑又分段着色（EditText + Spannable、Compose TextField 的 visualTransformation）时用 RichEditor 承载，不拆成只读着色与单色编辑两态，也不降级成纯文本；整体重建与焦点恢复照源实现
 
-ID：`lesson-ef93bb2086aef9604aa1` · 版本：2
+ID：`lesson-ef93bb2086aef9604aa1` · 版本：3
 
 [本主题](index.md)
 
@@ -22,7 +22,7 @@ TextArea 不承载 Span，组件选择与着色要求自相矛盾；改成“着
 2. 实现阶段发现规格组件满足不了源行为时，先查同平台的可编辑富文本组件，不自行拆成双态；确需降级时在规格与占位登记中列出丢失的行为，不在注释中声称等价。
 3. 迁移“删除并重建整个编辑器再恢复焦点”的逻辑时保留重建语义（错误单元随数据消失、按子项序号恢复焦点），不以原地刷新代替。
 
-来源支持：2 张卡 · 2 次迁移 · 2 个应用
+来源支持：3 张卡 · 已知 2 次迁移（部分未记录） · 已知 2 个应用（部分未记录）
 
 ## 来源（按需复核）
 
@@ -30,3 +30,5 @@ TextArea 不承载 Span，组件选择与着色要求自相矛盾；改成“着
   卡片版本：`2c8f9548575702e3dd4840957d2d99053daa0e3fe45f93f40765b5cabcb618bd`
 - [case-4a5592fd88f74b1c16a4](../../../store/cases/case-4a5592fd88f74b1c16a4/a1c7bb6a2ed0a2ff537c2684d91954958c7741fd9d1e7e687ac599208494ce2a.json) · 结论：diagnosis, recommendation:1, recommendation:3, recommendation:4
   卡片版本：`a1c7bb6a2ed0a2ff537c2684d91954958c7741fd9d1e7e687ac599208494ce2a`
+- [case-6984b2614fabe391f2e7](../../../store/cases/case-6984b2614fabe391f2e7/4e13e5e45b38251a019a68c084e9d1f1d2301fcf064ee28b4c8386bbcbbeb2b3.json) · 结论：recommendation:1
+  卡片版本：`4e13e5e45b38251a019a68c084e9d1f1d2301fcf064ee28b4c8386bbcbbeb2b3`

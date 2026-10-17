@@ -1,0 +1,376 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-97530cfa88ec30cb186c",
+  "created_at": "2026-10-16T16:56:06.574040+00:00",
+  "migration_key": "/private/tmp/claude-502/-Users-fengyi-Workspace-migbot-set-l123-cc-glm53/a9f6942f-6659-40bd-bc16-6616949070fb/scratchpad/distill/pool2",
+  "title": "把系统代理提醒当作 AlarmManager 的一对一替身：规格写入平台没有的按钮 wantAgent，实现者核出冲突后就近降级止步",
+  "when": "规格提取与服务层实现阶段，把 AlarmManager+PendingIntent 按钮+通知渠道映射到 reminderAgentManager / notificationManager，并决定按钮路由、贪睡间隔、发布失败回退和入口 Ability 语义时",
+  "description": "源端用 AlarmManager 精确闹钟到点自绘通知，按钮各带 PendingIntent（Snooze=now+偏好分钟、Postpone=弹选择器）、builder 默认 smallIcon/largeIcon、铃声偏好、RRULE 链式重挂、无 UI 透明 trampoline Activity 分派动作；目标端拟用 reminderAgentManager 系统托管（ActionButton 仅 title/titleResource/type、ReminderRequest 有 snoozeTimes/timeInterval、publishReminder 有配额/条数上限且到点无回调），按钮级 wantAgent 只在 notificationManager 的 NotificationActionButton 上存在。",
+  "summary": "规格作者（C4 批 c4-04，bc655f68:a7b0fe6f31d4deb51）写 F008 前已实际读到 d.ts：grep 回执给出 ReminderRequest 的\nsnoozeTimes :517 / timeInterval :525（L130-L131），整文件 grep wantAgent 只命中 :484/:489/:493 即 ReminderRequest 级\nwantAgent/maxScreenWantAgent（L133-L134），sed 20-60 给出带 wantAgent 的是 notificationManager 域的\nNotificationActionButton（L135-L136），sed 300-340 给出 reminderAgentManager.ActionButton 仅 title/titleResource/type\n（L167-L168）。随后 Write 出的 F008 spec 却把两者嫁接：PD-C6-F008-01 写成「actionButton[≤3]{title, wantAgent=拉起\nUIAbility 的 Want(action_*, NoteParam)}」，AC06 据此要求按钮分别拉起路由，并以「系统托管」裁决把到点副作用、开机恢复一并降级，\n没有记录配额/错误码、有效提醒条数上限、到点无回调这些决定是否需要应用侧回退的事实（L174-L175）；后续 9 次 Edit 只补 AC 判据与\n渠道行，未改这段；worker receipt c4-04.json 把该 PD 登记为 proposed_decisions（L225）。决策在规格阶段作出。\nSlice 17 worker（fcc67332:a4cc5d7bbd651a427）写前 Read 到该 spec（L25-L26）与 ledger 行 80「reminderAgentManager 系统托管\n（模板渲染 + wantAgent 惰性副作用 + 重启恢复）approved」（L35-L36），又自行 sed 了 d.ts：确认 ActionButton 只有\ntitle/titleResource/type、ReminderRequest 有 snoozeTimes/timeInterval/notificationId（L86-L87），ButtonType 仅\nCLOSE/SNOOZE、wantAgent 只在 :484（L127-L128），并读到 NotificationActionButton{title, wantAgent}（L136-L137）。\n它在 source-notes G-3 正确指出 spec 的按钮级路由不可达（L320），但 ReminderScheduler 的 Write 把两个按钮写成\nACTION_BUTTON_TYPE_SNOOZE/CLOSE 系统型「最大近似」、不设 timeInterval、不订阅按钮状态、publishReminder 失败只记日志返回 0、\n无条数上限与本地通知回退，NoteParam 只挂在通知体 wantAgent 上（L225-L226 第 162-178、266-279、338-352 行）；\nReminderActionHandler 的 snooze/postpone 分支因此只有通知体点击一条入口可达，postpone 依赖 window.getLastWindow（自认\nU-1 冷启竞态）、通知体点击经 ShortcutEntryService 改写主入口 want，没有 SnoozeActivity 透明 trampoline 的拦截/前后台语义\n（L246-L247）；NotificationService 读过 NotificationsHelper.java 的 setSmallIcon(smallIcon) 与\nsetLargeIcon(R.drawable.logo_notification_lollipop) 默认值（L49-L50）及 spec render 节「置顶常驻通知 = logo_notification_lollipop\n默认大图标」（L26 第 171-173 行），Write 却只在调用方 setLargeIcon 时写 largeIcon、不设默认大图标也不写 smallIcon（L207-L208\n第 245-246 行）。Group 3 closer（fcc67332:a1bebb022b2aa0159）读到 source-notes 接线表 HANDOFF P-S17-002 与 handler 的\nHANDOFF 注释（L18-L19、L66-L67）后，Edit EntryAbility 在 onCreate/onNewWant 各加 dispatchFromWant（onCreate 另加 attach /\nreconcileOnStartup），与 ShortcutEntryService 共用同一入口（L289-L290），把上述入口语义原样带进 EntryAbility。\n生成期后续 Edit（closer L591/L595、aec7734fadfc00077 L360-L368/L443/L445、a7144c990395acaed L406/L408/L463/L465）只改\nimport、slotType、注释与 onWindowStageCreate，未触及上述片段；返修子代理 2026-10-13T20:49Z 的 cat -n 回执仍含 SNOOZE/CLOSE\n按钮、schedule 失败返回 0、getLastWindow、largeIcon 条件写入且无 smallIcon（agent-a20e64cdf9376bcdc.jsonl L62/L64/L67）。\n返修期对照 Android（G5-reminders.md N-03/N-05/N-06/N-10/N-16/N-18/N-19、E 段 GAP-002）：Add reminder 仅关通知、snooze 用\n系统默认间隔、超 30 条即丢、只发布首个发生、真机 publishReminder 恒 1700002（未开通云能力）导致到点无任何通知。最终修改：\nReminderScheduler 增加 subscribeReminderState 按钮回调、timeInterval 贪睡、30 条轮转与到点补弹、代理提醒不可用时的本地通知\n回退（修复 48）；NotificationService 补默认大图标与 smallIcon（修复 49/52）；ReminderActionHandler/EntryAbility 增加前台状态\n跟踪与取消/过去时刻的透明模态窗口（修复 53）；PD-C6-F008-01「降级」裁决被部分推翻（parity-fix-report §2.4）。\n",
+  "recommendations": [
+    "规格阶段写 PD 替代路径时，逐字段对照目标模块自己的 d.ts 接口（reminderAgentManager.ActionButton 仅 title/titleResource/type），不把另一模块（NotificationActionButton.wantAgent）的字段嫁接过来；同一行里写明平台能提供的等价手段（timeInterval/snoozeTimes、subscribeReminderState、notificationManager 本地通知）以及发布失败码/配额/条数上限、到点无回调这些事实，再决定是否需要应用侧回退。",
+    "实现阶段核出 spec 的平台契约与 d.ts 冲突时，不以系统型按钮做「最大近似」收口：按源端语义挑可达路径——按钮路由走 NotificationActionButton.wantAgent 本地通知或 subscribeReminderState 回调，贪睡用 timeInterval=偏好分钟×60，publishReminder 失败/超限回退本地通知并保留应用侧链式重挂；把受影响的 AC 判据标为阻塞而不是只记 GAP。",
+    "通知与 notificationManager 封装要按源 NotificationsHelper 的 builder 默认值填齐 smallIcon 与默认大图标（logo_notification_lollipop），再由调用方覆盖附件缩略图。",
+    "把无 UI trampoline Activity（SnoozeActivity）接进 EntryAbility 时，保留其独立任务、透明窗口拦截、前后台状态语义（foreground 跟踪、取消/过去时刻的模态窗口、onBackground 释放），而不是只在 onCreate/onNewWant 加一行分发。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/services/ReminderScheduler.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "nodes": [
+        {
+          "key": "/Applications/DevEco-Studio.app/Contents/sdk/default/openharmony/ets/api/@ohos.reminderAgentManager.d.ts",
+          "at": "2026-10-01T07:40:10.737Z",
+          "reason": "正常输入：规格作者 Bash sed 300-340 回执给出 ActionButton 仅 title/titleResource/type（agent-a7b0fe6f31d4deb51.jsonl:L167-L168）；更早 grep 回执给出 snoozeTimes :517 / timeInterval :525（同转录 L130-L131），整文件 grep wantAgent 只命中 ReminderRequest 级 :484/:489/:493（L133-L134）。足以判断按钮级 wantAgent 不在该接口内、贪睡间隔有专门字段。"
+        },
+        {
+          "key": "bc655f68-6f49-4bcf-ab64-aa45d7a58cc2:a7b0fe6f31d4deb51",
+          "at": "2026-10-01T07:46:16.507Z",
+          "reason": "读到上述 d.ts 后，Write F008 spec 把 PD-C6-F008-01 写成 actionButton[≤3]{title, wantAgent=拉起 UIAbility 的 Want}、AC06 要求按钮分别拉起路由，并以「系统托管」裁决降级到点副作用/开机恢复，未记录配额、错误码与到点无回调（agent-a7b0fe6f31d4deb51.jsonl:L174-L175 第 66、111-113、187 行）；后续 Edit 未改动这段。源码到规格的平台契约在此偏离。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/spec/baseline/features/F008-reminders-notifications.md",
+          "at": "2026-10-01T17:26:35.068Z",
+          "reason": "交付桥梁：Slice 17 worker 的 Read 回执含上述 PD 文与 AC06/AC09/AC11（agent-a4cc5d7bbd651a427.jsonl:L25-L26 第 66、185 行）；其 grep ledger 回执亦返回行 80 的「系统托管 approved」裁决（同转录 L35-L36）。"
+        },
+        {
+          "key": "/Applications/DevEco-Studio.app/Contents/sdk/default/openharmony/ets/api/@ohos.reminderAgentManager.d.ts",
+          "at": "2026-10-01T17:30:01.265Z",
+          "reason": "正常输入：worker 自行 sed 300-360/440-530/590-760 的回执给出 ActionButton 仅 title/titleResource/type、ReminderRequest 有 snoozeTimes/timeInterval/notificationId（agent-a4cc5d7bbd651a427.jsonl:L86-L87，17:28:01）；随后 sed 262-300 回执给出 ButtonType 仅 CLOSE/SNOOZE、grep wantAgent 只命中 :484（同转录 L127-L128，17:30:01）。足以判断 spec 的按钮路由不可达且需另选路径。"
+        },
+        {
+          "key": "/Applications/DevEco-Studio.app/Contents/sdk/default/openharmony/ets/api/notification/notificationActionButton.d.ts",
+          "at": "2026-10-01T17:30:31.973Z",
+          "reason": "正常输入：worker sed 20-80 回执给出 NotificationActionButton{title, wantAgent: WantAgent}（agent-a4cc5d7bbd651a427.jsonl:L136-L137），说明按钮级跳转在 notificationManager 本地通知上可达。"
+        },
+        {
+          "key": "fcc67332-0774-45b4-a72c-d2b6a33207b8:a4cc5d7bbd651a427",
+          "at": "2026-10-01T17:41:55.885Z",
+          "reason": "已收到错误 spec 并自行核实 d.ts 冲突（source-notes G-3，L320），Write ReminderScheduler 却把按钮写成 ACTION_BUTTON_TYPE_SNOOZE/CLOSE 且不带路由、不设 timeInterval、不订阅按钮状态、publishReminder 失败只记日志返回 0、无条数上限与本地通知回退，只在通知体 wantAgent 挂 NoteParam（agent-a4cc5d7bbd651a427.jsonl:L225-L226 第 162-178、266-279、338-352 行）。纠正 spec 后又引入「就近降级止步」的新偏差。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "规格作者 Bash 对 @ohos.reminderAgentManager.d.ts 执行 sed -n '300,340p'，回执返回 ActionButton 仅 title/titleResource/type 三字段（L167-L168）；更早的 grep 回执返回 snoozeTimes :517、timeInterval :525（L130-L131），整文件 grep wantAgent 只命中 :484/:489/:493（L133-L134）。这支持其写 PD 前已收到真实接口定义。",
+          "evidence": [
+            {
+              "source": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2/subagents/agent-a7b0fe6f31d4deb51.jsonl",
+              "line": 167
+            },
+            {
+              "source": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2/subagents/agent-a7b0fe6f31d4deb51.jsonl",
+              "line": 168
+            },
+            {
+              "source": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2/subagents/agent-a7b0fe6f31d4deb51.jsonl",
+              "line": 130
+            },
+            {
+              "source": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2/subagents/agent-a7b0fe6f31d4deb51.jsonl",
+              "line": 131
+            },
+            {
+              "source": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2/subagents/agent-a7b0fe6f31d4deb51.jsonl",
+              "line": 133
+            },
+            {
+              "source": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2/subagents/agent-a7b0fe6f31d4deb51.jsonl",
+              "line": 134
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 6
+        },
+        {
+          "from": 4,
+          "to": 6,
+          "force": true,
+          "reason": "Slice 17 worker 用 Bash sed -n '300,360p;440,530p;590,760p' 读同一 d.ts，回执含 ActionButton 仅 title/titleResource/type、ReminderRequest 的 snoozeTimes/timeInterval/notificationId 定义（L86-L87）；随后 sed 262-300 加 grep wantAgent 回执给出 ButtonType 仅 CLOSE/SNOOZE、wantAgent 只命中 :484（L127-L128）。这支持其写 ReminderScheduler 前已收到接口事实。",
+          "evidence": [
+            {
+              "source": "migration/fcc67332-0774-45b4-a72c-d2b6a33207b8/subagents/agent-a4cc5d7bbd651a427.jsonl",
+              "line": 86
+            },
+            {
+              "source": "migration/fcc67332-0774-45b4-a72c-d2b6a33207b8/subagents/agent-a4cc5d7bbd651a427.jsonl",
+              "line": 87
+            },
+            {
+              "source": "migration/fcc67332-0774-45b4-a72c-d2b6a33207b8/subagents/agent-a4cc5d7bbd651a427.jsonl",
+              "line": 127
+            },
+            {
+              "source": "migration/fcc67332-0774-45b4-a72c-d2b6a33207b8/subagents/agent-a4cc5d7bbd651a427.jsonl",
+              "line": 128
+            }
+          ]
+        },
+        {
+          "from": 5,
+          "to": 6,
+          "force": true,
+          "reason": "Slice 17 worker 用 Bash sed -n '20,80p' 读 notification/notificationActionButton.d.ts，回执返回 NotificationActionButton{title, wantAgent: WantAgent}。这支持其写前已知按钮级 wantAgent 在本地通知域可用。",
+          "evidence": [
+            {
+              "source": "migration/fcc67332-0774-45b4-a72c-d2b6a33207b8/subagents/agent-a4cc5d7bbd651a427.jsonl",
+              "line": 136
+            },
+            {
+              "source": "migration/fcc67332-0774-45b4-a72c-d2b6a33207b8/subagents/agent-a4cc5d7bbd651a427.jsonl",
+              "line": 137
+            }
+          ]
+        },
+        {
+          "from": 6,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/services/ReminderActionHandler.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/spec/baseline/features/F008-reminders-notifications.md",
+          "at": "2026-10-01T17:26:35.068Z",
+          "reason": "正常输入（本分支）：Read 回执含 state-machine 表与 AC11（snooze=now+偏好分钟×60_000）、AC12（postpone 弹 page_0024）、page_0008「无 UI trampoline」契约（agent-a4cc5d7bbd651a427.jsonl:L25-L26 第 64、121、192-193 行）；同时携带错误的按钮 wantAgent 契约（第 66 行）。"
+        },
+        {
+          "key": "/Applications/DevEco-Studio.app/Contents/sdk/default/openharmony/ets/api/@ohos.reminderAgentManager.d.ts",
+          "at": "2026-10-01T17:28:01.721Z",
+          "reason": "正常输入：sed 300-360 回执给出 ActionButton 仅 title/titleResource/type、无 wantAgent（agent-a4cc5d7bbd651a427.jsonl:L86-L87），说明 handler 的 action_snooze/action_postpone 分支若只靠 want 入口将无按钮可达。"
+        },
+        {
+          "key": "fcc67332-0774-45b4-a72c-d2b6a33207b8:a4cc5d7bbd651a427",
+          "at": "2026-10-01T17:43:57.752Z",
+          "reason": "Write ReminderActionHandler：四路分派只以 want.parameters 为入口（dispatchFromWant），而同一 agent 刚写的 ReminderScheduler 未给按钮任何路由，snooze/postpone 链实际不可达；postpone 依赖 window.getLastWindow（自认 U-1 冷启竞态）、通知体点击改经 ShortcutEntryService.dispatch 改写主入口 want，没有 SnoozeActivity 透明 trampoline 的拦截/前后台语义（agent-a4cc5d7bbd651a427.jsonl:L246-L247 第 66-77、230-243、255-284 行）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "Slice 17 worker 用 Bash sed -n '300,360p;440,530p;590,760p' 读 @ohos.reminderAgentManager.d.ts，回执含 ActionButton 仅 title/titleResource/type、无 wantAgent 的定义；这支持其写 ReminderActionHandler 前已知按钮不能把 action_snooze/action_postpone 送到 want 入口。",
+          "evidence": [
+            {
+              "source": "migration/fcc67332-0774-45b4-a72c-d2b6a33207b8/subagents/agent-a4cc5d7bbd651a427.jsonl",
+              "line": 86
+            },
+            {
+              "source": "migration/fcc67332-0774-45b4-a72c-d2b6a33207b8/subagents/agent-a4cc5d7bbd651a427.jsonl",
+              "line": 87
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/services/NotificationService.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/java/it/feio/android/omninotes/helpers/notifications/NotificationsHelper.java",
+          "at": "2026-10-01T17:27:06.500Z",
+          "reason": "正常输入：Bash sed 25-265 回执含 createNotification 的 .setSmallIcon(smallIcon) 与 setLargeIcon(R.drawable.logo_notification_lollipop) 默认值（agent-a4cc5d7bbd651a427.jsonl:L49-L50 第 96-107 行）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/spec/baseline/features/F008-reminders-notifications.md",
+          "at": "2026-10-01T17:26:35.068Z",
+          "reason": "正常输入：render 节写明提醒通知 small icon ic_stat_notification 经资源迁移、置顶常驻通知 = logo_notification_lollipop 默认大图标，NotificationRequest.largeIcon?: PixelMap 存在（agent-a4cc5d7bbd651a427.jsonl:L25-L26 第 171-173 行）。"
+        },
+        {
+          "key": "fcc67332-0774-45b4-a72c-d2b6a33207b8:a4cc5d7bbd651a427",
+          "at": "2026-10-01T17:40:27.680Z",
+          "reason": "Write NotificationService：buildRequest 只在调用方 setLargeIcon 时写 request.largeIcon，不设默认大图标，也不写 smallIcon（agent-a4cc5d7bbd651a427.jsonl:L207-L208 第 60、115-116、245-246 行）；后续两次 Edit 只改 content 类型与 import（L216、L222）。源端 builder 默认值在此丢失。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "Slice 17 worker 用 Bash cd 进入 Android 源目录执行 sed -n '25,265p' helpers/notifications/NotificationsHelper.java，回执返回 createNotification 的 .setSmallIcon(smallIcon) 与 setLargeIcon(R.drawable.logo_notification_lollipop) 默认值。这支持其写 NotificationService 前已收到源端 builder 默认图标。",
+          "evidence": [
+            {
+              "source": "migration/fcc67332-0774-45b4-a72c-d2b6a33207b8/subagents/agent-a4cc5d7bbd651a427.jsonl",
+              "line": 49
+            },
+            {
+              "source": "migration/fcc67332-0774-45b4-a72c-d2b6a33207b8/subagents/agent-a4cc5d7bbd651a427.jsonl",
+              "line": 50
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/entryability/EntryAbility.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "nodes": [
+        {
+          "key": "fcc67332-0774-45b4-a72c-d2b6a33207b8:a4cc5d7bbd651a427",
+          "at": "2026-10-01T17:43:57.752Z",
+          "reason": "Write ReminderActionHandler 时以 HANDOFF 注释规定 EntryAbility.onCreate/onNewWant 只需调 dispatchFromWant(want, this)，入口语义止于一行分发，无前后台状态、无透明窗口拦截（agent-a4cc5d7bbd651a427.jsonl:L246-L247 第 23-25、66 行）；随后 Write 的 source-notes 接线表 HANDOFF P-S17-002 重复同一指引（同转录 L320-L321 第 173 行）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/services/ReminderActionHandler.ets",
+          "at": "2026-10-01T18:05:46.022Z",
+          "reason": "交付桥梁：Group 3 closer 的 Read 回执含上述 HANDOFF 注释与 dispatchFromWant 签名（agent-a1bebb022b2aa0159.jsonl:L66-L67）；其更早 Read 的 slice-17-source-notes.md 回执含同一接线表（同转录 L18-L19 第 173 行）。"
+        },
+        {
+          "key": "fcc67332-0774-45b4-a72c-d2b6a33207b8:a1bebb022b2aa0159",
+          "at": "2026-10-01T18:38:05.402Z",
+          "reason": "实际读到该指引后，Edit EntryAbility 在 onCreate 加 ReminderScheduler.attach / dispatchFromWant / reconcileOnStartup、在 onNewWant 加 dispatchFromWant，仍与 ShortcutEntryService.dispatch 共用同一入口（agent-a1bebb022b2aa0159.jsonl:L289-L290，L287 加 import）。本链确认传递，不另推定其独立失职。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-97530cfa88ec30cb186c",
+  "metadata": {
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.247",
+        "2.1.296",
+        "2.1.300"
+      ]
+    },
+    "source_set_id": "sources-fef5281fb5eb1e655dea",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos",
+        "at": "2026-10-01T08:07:31.804Z",
+        "ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1119",
+        "request_ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1117",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos",
+        "at": "2026-10-01T08:07:31.804Z",
+        "ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1119",
+        "request_ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1117",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes",
+        "at": "2026-10-13T15:34:04.077Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L121",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L120",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes",
+        "at": "2026-10-13T15:34:04.077Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L121",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L120",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes",
+        "at": "2026-10-14T01:47:40.558Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L159",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L158",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes",
+        "at": "2026-10-14T01:47:40.558Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L159",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L158",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.10"
+  },
+  "revision": "e9a66b9b0d513325b2858b3d811641c06df59f79e8673e56184c2c01be9d3376"
+}

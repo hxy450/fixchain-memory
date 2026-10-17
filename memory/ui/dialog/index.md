@@ -29,6 +29,10 @@
   - 时机：规格提取阶段为源端系统对话框（代码中 AlertDialog.Builder 构造，或 PreferenceActivity 中 EditTextPreference、ListPreference 等点击弹出）写转换决策时，以及界面实现阶段按该决策落地 ArkUI 系统弹窗或自定义弹窗时；规格整合时在几条来源之间裁定按钮排位、面板样式与取消方式时；页内复刻多个同时显示的对话框、安排遮罩与遮罩点击时
   - 情境：源码用 AlertDialog.Builder 内联构造确认框，只设 title、message、setPositiveButton、setNegativeButton，无自定义布局或样式，外观由应用主题继承的平台默认警告框决定；目标准备用 ArkUI AlertDialog.show(primaryButton/secondaryButton) 等系统弹窗替代，项目要求与源端逐屏一致。 也包括应用主题为 Theme.Holo 等框架主题，多个对话框都由 Builder 或 DialogPreference 构造、没有自定义样式；规格只按经验摘要写了“标题左对齐、负左正右、遮罩、cancelable”几项，各页写者凭记忆或兄弟页先例自绘面板。 也包括 targetSdk≤20 或 values-v11/v14 中应用主题继承 Theme.Holo/Theme 的旧应用：Builder 未调用 setCancelable、setCanceledOnTouchOutside，源端可能同时叠放两个以上对话框；目标用页内遮罩加自绘面板复刻，同时要防止点击穿透到下层画面。
   - 例外：项目明确接受目标系统弹窗的固有外观、只要求文案与按键行为一致；此时仍按角色核对按钮槽位
+- [库对话框与 Dialog 主题 Activity 的自绘窗口按提供方取宽度公式、遮罩、圆角、投影与点外关闭，不写 width('100%')](lesson-1bff1c90d9df6c9609ec.lesson.md)
+  - 时机：规格提取与界面实现阶段，为三方对话框库（如 material-dialogs）的封装组件，或 manifest 以 Theme.*.Dialog 承载、目标做成 openCustomDialog 或 Dialog 形态页卡片的浮动 Activity，确定窗口宽度、遮罩、底色圆角、投影与点外关闭时
+  - 情境：源码只出现库名或 Dialog 主题名，没有窗口几何数值，应用 res 里也没有（值在库 dimens 或对话框主题与框架默认里）；目标自绘卡片准备用 width('100%')、整屏减边距或凭印象的 80%/95%，用工程里语义不同的半透明颜色资源（如 black_overlay）当遮罩；同族页面已有这种写法可被沿用。
+  - 例外：对话框由 AlertDialog.Builder、MaterialAlertDialogBuilder 构造时，按对应平台或 Material 主题代际的警告框经验取值
 - [按源弹层类型逐个选呈现形态：居中 CustomDialog/AlertDialog（含框架生成的 ListPreference 选项框：无确定钮、留 CANCEL）用居中卡片，底部面板才用 bindSheet，锚定菜单按锚点弹出；形态不同的面板不共用一个弹窗；定长密码框输满即校验](lesson-21db515a505be4845497.lesson.md)
   - 时机：页面接线与界面实现阶段，为源端 DialogHelper 一类函数弹出的确认或输入弹窗选择承载形态与校验触发方式时；对齐同页多个工具面板（如阅读页的设置、更多、发弹幕）的容器、锚点与交互步骤时
   - 情境：源端经 CustomDialog/AlertDialog 加自定义布局弹出居中卡片，卡内可能有定长格子密码框（输满即比对、失败提示），根视图点击关闭；目标公共弹窗封装只有确认/提示类，带输入的弹窗需要在页面内自建。也包括源端同页多个工具面板容器各不相同（底部 PopupWindow 面板、锚定在标题栏右上角带箭头的弹出菜单、先编辑再在内容上拖动定位的多步弹层），目标现有实现用一个固定高度、带拖动条与关闭按钮的 bindSheet 承载全部面板。也包括源端 MaterialAlertDialogBuilder（含 setView 输入、下拉）对话框，工程惯例或规格并列给出 bindSheet/CustomDialog。也包括 AlertDialog.Builder…setView(ListView) 的列表选择框被规格写成 bindSheet 半模态加 List；按钮的上下文菜单被写成锚定 bindPopup 或 bindMenu，丢了长按入口与标题图标。也包括 android.preference.ListPreference 的选项对话框：由框架生成的居中 AlertDialog，代码中看不到 Builder，规格却写成 Select 或 bindSheet。

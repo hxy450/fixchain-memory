@@ -1,0 +1,207 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-bbb6bcf0a09493406de9",
+  "created_at": "2026-10-16T16:45:02.482499+00:00",
+  "migration_key": "/private/tmp/claude-502/-Users-fengyi-Workspace-migbot-set-l123-cc-glm53/a9f6942f-6659-40bd-bc16-6616949070fb/scratchpad/distill/pool2",
+  "title": "把 SQLiteOpenHelper 的隐式契约压成「打开即建表」与共享 store 上的 await 事务",
+  "when": "数据层实现阶段，用 relationalStore 重写 SQLiteOpenHelper 子类的打开/建表/事务与 SQL 脚本解析时",
+  "description": "源端 DbHelper extends SQLiteOpenHelper（super(ctx, NAME, null, VERSION)、onCreate/onUpgrade、每次 getWritableDatabase、beginTransaction…endTransaction），建表 SQL 由 BufferedReader.readLine 逐行解析；目标端用 @ohos.data.relationalStore 的 RdbStore 单例、store.version 与异步 API 实现。",
+  "summary": "Base-2 生成者（a2h-migration-worker，bc655f68 会话子代理 a5de99c92f8d9ae39）写前实际读到：\nDbHelper.java 全文——DATABASE_VERSION=625（:77）、super(mContext, DATABASE_NAME, null, DATABASE_VERSION)（:156）、\ngetDatabase(boolean) 每次调用 getWritableDatabase/getReadableDatabase（:171）、onCreate/onUpgrade 分派（:184-216）、\nupdateNote 的 beginTransaction…setTransactionSuccessful/endTransaction 同步独占事务（:227-267）\n（agent-a5de99c92f8d9ae39.jsonl:L32/L35）；SqlParser.java 的 removeComments 用 BufferedReader.readLine 分行（:55-59，L33/L36）；\nfeature-base.md「## 数据库」节（Bash awk 截取，L28/L29）给出版本 625、onCreate 执行 create.sql，并写明\n「HMOS 迁移决策：升级路径不迁移（D-003）、onCreate 即唯一入口」；skill 参考 rdbstore-dao-patterns.md 的单例示例是\ninit 内 getRdbStore 后直接 createTables（L20/L21）；v2-rdb-advanced.md 的事务示例在 beginTransaction 内同步调用后\ncommit/rollBack，并提示「API 14+ 另有 store.createTransaction() 返回 Transaction，适合异步细粒度控制」，\n版本节给出 store.version===0 建表、<2 升级的分支写法（L102/L103）。\nWrite DbHelper.ets（L145/L146，2026-10-01T10:19:07Z）却把这些写成：initInternal 打开后直接 await onCreate()，\nonCreate 内「version >= 625 则 return，否则执行 create.sql 并写 version=625」，没有 0→onCreate / 低版本→onUpgrade /\n高版本→降级报错的分派（DB-04；onUpgrade 内容不迁移由 D-003 明示，返修也按 D-003 判 UpgradeProcessor 一致，本卡不把它算作偏差）；\ninit 把 initInternal 的 promise 永久缓存在 initPromise，失败后每次 DAO 调用都拿到同一个 rejected promise，\n不像 getWritableDatabase 每次访问重新尝试（DB-09，框架隐式契约，spec 与源码文本均未明说）；\nupdateNote 在共享 store 上 store.beginTransaction() 后多次 await store.insert / updateAttachmentWithNote / store.delete 再 commit，\n其他异步库操作可混入同一事务、并发 updateNote 形成 SAVEPOINT 嵌套错位（DB-13，参考已给出 createTransaction 提示）。\nWrite SqlParser.ets（L141/L142，2026-10-01T10:17:53Z）把 readLine 写成 script.split('\\n')，\nCR 行尾的 upgrade-390/391/394.sql 无法分行（SQL-02）。\n生成期后续对 DbHelper.ets 的写入（同转录 L149 Edit、L158/L161/L163 perl 改注释；e95edcb7 子代理 a57a43c1c60941174 L157、\nfcc67332 子代理 a41d3f09ceeabb3d0 L117/L119、a1bebb022b2aa0159 L296 的 hook 注入 Edit）都只改接缝注释与注入方法，\n上述片段原样保留到返修前（spec/parity-fix-work/_orig/entry/src/main/ets/database/DbHelper.ets；\n返修 agent-a65f0f02d9fe9874b.jsonl:L330 与 L536 的 Edit old_string 即生成原文）。\n返修：第 1 轮子代理 a65f0f02d9fe9874b 增加 openWithVersion 版本分派与 SQL_DIR/CREATE_QUERY/UPGRADE_* 常量、\nonUpgrade 执行 rawfile upgrade-*.sql（L330/L335/L337/L342，2026-10-13T16:09-16:10Z）、SqlParser 改为\nsplit(/\\r\\n|\\r|\\n/)（L536/L538，2026-10-13T16:20Z）；第 2 轮子代理 a18ac80d00e826069 让 init 失败复位、\nopenStore 重试（L307/L309，2026-10-13T21:09Z），updateNote 改为 store.createTransaction(IMMEDIATE) 独立事务对象（L315）。\n",
+  "recommendations": [
+    "重写 SQLiteOpenHelper 子类时，先把基类隐式契约逐条列出再逐条落地：构造参数 VERSION 的分派（0→onCreate、低→onUpgrade、高→onDowngrade 抛错、完成后 setVersion）、每次 getWritable/ReadableDatabase 都重试打开；spec 说「升级路径不迁移」只免去 onUpgrade 的内容，不免去分派骨架与失败可重试。",
+    "relationalStore 上凡是事务体内需要 await 的多步写入，不用共享 store 的 beginTransaction，改用 store.createTransaction() 返回的 Transaction 对象执行并 commit/rollback；检查方法：grep beginTransaction 后同函数内是否出现 await。",
+    "init/getStore 用缓存 promise 去重时，catch 中把缓存复位，使下一次访问重新打开；不要让一次失败把单例永久钉死。",
+    "翻译 BufferedReader.readLine 之类的逐行读取时，按其行终止符语义（LF/CR/CRLF）分行，不写成 split('\\n')；先用 file 或 od 看一遍被解析脚本的实际行尾。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/database/DbHelper.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/java/it/feio/android/omninotes/db/DbHelper.java",
+          "at": "2026-10-01T10:07:37.744Z",
+          "reason": "正常输入：Read 回执给出 DATABASE_VERSION=625 :77、super(mContext, DATABASE_NAME, null, DATABASE_VERSION) :156、getDatabase(boolean) 每次调用 getWritableDatabase/getReadableDatabase :171、onCreate :184 / onUpgrade :195 分派、updateNote 的 beginTransaction :227 … setTransactionSuccessful/endTransaction :266-267；足以说明要按版本分派、每次访问重试、事务独占串行（agent-a5de99c92f8d9ae39.jsonl:L32/L35）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/spec/baseline/feature-base.md",
+          "at": "2026-10-01T10:07:34.448Z",
+          "reason": "正常输入：Bash awk 截取「## 数据库」节，回执含版本 625、onCreate 执行 create.sql、以及「HMOS 迁移决策：升级路径不迁移（D-003）、onCreate 即唯一入口」；它只免去 onUpgrade 的内容，未要求去掉版本分派与打开重试（agent-a5de99c92f8d9ae39.jsonl:L28/L29）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/.claude/skills/arkts-data-layer/references/rdbstore-dao-patterns.md",
+          "at": "2026-10-01T10:07:14.337Z",
+          "reason": "正常输入：Read 回执的「RdbStore 单例初始化」示例是 init 内 getRdbStore 后直接 await createTables()，不带版本分派与失败重试；它是基础 CRUD 模式，不替代源码契约（agent-a5de99c92f8d9ae39.jsonl:L20/L21）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/.claude/skills/arkts-data-layer/references/v2-rdb-advanced.md",
+          "at": "2026-10-01T10:11:23.360Z",
+          "reason": "正常输入：Read 回执的事务节示例在 beginTransaction 内同步调用后 commit/rollBack，并提示 API 14+ 的 store.createTransaction() 返回 Transaction 适合异步细粒度控制；版本节给出 store.version===0 建表、<2 升级的分支写法（agent-a5de99c92f8d9ae39.jsonl:L102/L103）。"
+        },
+        {
+          "key": "bc655f68-6f49-4bcf-ab64-aa45d7a58cc2:a5de99c92f8d9ae39",
+          "at": "2026-10-01T10:19:07.281Z",
+          "reason": "已收到上述输入，Write DbHelper.ets 却写成：initInternal 打开后直接 await onCreate()，onCreate 内 version>=625 即 return、否则建表并写 625，无 onUpgrade/降级分派；init 永久缓存 initInternal 的 promise，失败后不再重试；updateNote 在共享 store 上 store.beginTransaction() 后多次 await insert/delete 再 commit（agent-a5de99c92f8d9ae39.jsonl:L145/L146，写入正文第 92-135、181-234 行）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 5
+        },
+        {
+          "from": 2,
+          "to": 5,
+          "force": true,
+          "reason": "Bash 用 awk 截取 spec/baseline/feature-base.md 的「## 数据库」节并 wc -l 同一文件，回执返回版本 625、onCreate 执行 create.sql 与 D-003 升级路径不迁移的决策；这支持生成者写前已实际读到该规格内容。",
+          "evidence": [
+            {
+              "source": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2/subagents/agent-a5de99c92f8d9ae39.jsonl",
+              "line": 28
+            },
+            {
+              "source": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2/subagents/agent-a5de99c92f8d9ae39.jsonl",
+              "line": 29
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": 5
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/database/SqlParser.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/java/it/feio/android/omninotes/db/SqlParser.java",
+          "at": "2026-10-01T10:07:37.750Z",
+          "reason": "正常输入：Read 回执给出 removeComments 用 BufferedReader 包装后 readLine 逐行读取（:55-59），readLine 以 LF/CR/CRLF 任一为行终止；足以确定分行语义（agent-a5de99c92f8d9ae39.jsonl:L33/L36）。"
+        },
+        {
+          "key": "bc655f68-6f49-4bcf-ab64-aa45d7a58cc2:a5de99c92f8d9ae39",
+          "at": "2026-10-01T10:17:53.586Z",
+          "reason": "读到上述源码后，Write SqlParser.ets 的 removeComments 用 script.split('\\n') 分行（写入正文第 34 行），只认 LF；CR 行尾脚本整文件成一行（agent-a5de99c92f8d9ae39.jsonl:L141/L142）。该片段保留到返修前，返修 agent-a65f0f02d9fe9874b L536 改为 split(/\\r\\n|\\r|\\n/)。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-bbb6bcf0a09493406de9",
+  "metadata": {
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.247",
+        "2.1.296",
+        "2.1.300"
+      ]
+    },
+    "source_set_id": "sources-fef5281fb5eb1e655dea",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos",
+        "at": "2026-10-01T08:07:31.804Z",
+        "ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1119",
+        "request_ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1117",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos",
+        "at": "2026-10-01T08:07:31.804Z",
+        "ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1119",
+        "request_ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1117",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes",
+        "at": "2026-10-13T15:34:04.077Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L121",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L120",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes",
+        "at": "2026-10-13T15:34:04.077Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L121",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L120",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes",
+        "at": "2026-10-14T01:47:40.558Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L159",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L158",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes",
+        "at": "2026-10-14T01:47:40.558Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L159",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L158",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.10"
+  },
+  "revision": "21a32e8e2f659dec5dc8a1982ba4cec150ff0dddab1577f972cec3d0a8b6d17a"
+}

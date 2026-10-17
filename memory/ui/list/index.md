@@ -10,6 +10,10 @@
   - 时机：界面实现及对齐修复阶段，把 ExpandableListView + BaseExpandableListAdapter 翻译为 ArkUI 列表，确定组头交互与展开状态时
   - 情境：源 Activity 只调用 expandGroup(n) 设定初始展开，没有 setOnGroupClickListener（或监听返回 false）；getGroupView 按 isExpanded 切换上下箭头等资源；目标用 List/ForEach 渲染分组。
   - 例外：源端注册了 OnGroupClickListener 并返回 true 拦截默认行为，此时按监听体实现
+- [LazyForEach 换数据时不重新赋值数据源对象：保持同一 IDataSource 宿主并通知重载，行键跨数据集唯一](lesson-40efd2d02a5ea9554a95.lesson.md)
+  - 时机：界面实现与返修重写阶段，为 LazyForEach 列表实现整批换数据（换适配器、排序、筛选结果）或延迟填充时
+  - 情境：源端 setAdapter/swapAdapter、排序后 notifyDataSetChanged 等整表刷新；目标 LazyForEach 绑定一个实现 IDataSource 的数据源对象，准备在换数据时写 this.dataSource = new XxxDataSource(...)。
+  - 例外：列表已改用 ForEach 或 Repeat，按它们的键与更新规则处理
 - [Refresh.onRefreshing 会在程序置 refreshing 时触发，发起刷新前先判断是否已在运行](lesson-fa79c5a6658c68b71a21.lesson.md)
   - 时机：界面转换时把 SwipeRefreshLayout 映射为 Refresh，以及接线时把运行态事件接到 refreshing 绑定状态时
   - 情境：源 setOnRefreshListener 只响应用户下拉，另由运行态事件 setRefreshing 同步指示器；目标 Refresh({ refreshing: $$state }) 的状态会被事件或菜单刷新程序置为 true。

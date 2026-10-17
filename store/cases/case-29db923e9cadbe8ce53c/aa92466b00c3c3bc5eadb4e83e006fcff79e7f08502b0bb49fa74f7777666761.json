@@ -1,0 +1,395 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-29db923e9cadbe8ce53c",
+  "created_at": "2026-10-17T02:41:17.843597+00:00",
+  "migration_key": "/private/tmp/claude-502/-Users-fengyi-Workspace-migbot-set-l123-cc-glm53/a9f6942f-6659-40bd-bc16-6616949070fb/scratchpad/distill/pool2",
+  "title": "系统能力预检、权限门控与隐式意图回退被折叠成异常捕获或在规格阶段被裁掉",
+  "when": "规格提取阶段，把源端 IntentChecker/权限/进程重启等系统交互翻译成目标平台契约时；实现阶段，为相机、外部意图、文件拷贝等系统能力写服务层时",
+  "description": "Android 源在拉起系统能力前先做可用性预检（IntentChecker.isAvailable / hasSystemFeature）、运行时权限申请（PermissionsHelper）、无接收者时回退或提示，或用 System.exit 做整应用重启；目标为 HarmonyOS，系统相机走 cameraPicker，外部意图走隐式 Want / startAbility / openLink，文件拷贝走 fileIo，且要求行为一比一",
+  "summary": "本问题 7 个目标里，生成期可核的偏差分两类成因：\n（一）输入正确、实现者折叠。Slice 16 附件 worker（fcc67332…:a1b6e42d3192efc9d）写 AttachmentService 前已 Read 到\nDetailFragment.takePhoto 的 IntentChecker.isAvailable(FEATURE_CAMERA) → feature_not_available 与 PermissionsHelper.requestPermission(CAMERA)\n（agent-a1b6e42d3192efc9d.jsonl:L98-L99，offset 1276），F006 规格 AC07「CAMERA 权限拒绝时不创建附件文件、不发起拍摄」和\nAC10「相机能力不可用…提示 feature_not_available_on_this_device 且不创建附件」（L25-L26）；它读到的 camera-picker.md 只给\ncameraPicker.pick + catch 样例，无可用性或权限说明（L124-L125）。Write 的 captureMedia 直接 cameraPicker.pick，\n把 catch 注释成「IntentChecker.isAvailable 失败分支等价」，既无 canIUse/能力预检也无 CAMERA 权限申请（payload 107-123 行，L233-L234），\n而同一文件为录音写了 ensureMicrophonePermission（201-211 行）——权限模式它会用，只是没按 AC07 用到相机。\n同一 worker 写 StorageHelper 时已读 races addendum §2「HMOS：taskpool.execute 并发 + 主线程收束」（L35-L36）、F006 AC17\n「逐个并发创建附件任务（多 uri 并行拷贝）」及 AttachmentTask.doInBackground（L68-L69），却把拷贝链写成\nfileIo.copyFileSync / openSync+readSync 同步 IO（payload 175-209 行，L204-L205），AttachmentService.attachOne 只是 async 包装\n（233 行 payload 246-256），多文件导入期间主线程被阻塞（F-02）。返修新增异步拷贝链并接入 createAttachmentFromUri\n（agent-a62bb893d8124da5d.jsonl:L516/L521、agent-afe325235a7f9e099.jsonl:L322/L324）。\n（二）规格先偏离，实现者沿用。\n地图：F019 规格作者（bc655f68…:a363098e952cc57fe）Bash sed 读到 DetailFragment:675-685 的 geo: ACTION_VIEW + IntentChecker.isAvailable\n→ MAPS_API 两级回退（agent-a363098e952cc57fe.jsonl:L139-L140），思考中断言「HMOS: 无 geo: scheme 隐式 intent 体系」（L158、L201），\n未查 SDK/skill 任何隐式 Want 匹配资料，Write F019 时把 AC07 标 superseded、铸 PD-C6-F019-02「固定 OSM URL + startAbility 单级打开（无 geo: scheme 解析层）」\n（L278-L279）。Slice 20 worker（fcc67332…:a9d015ded29f54764）Read 到该规格（agent-a9d015ded29f54764.jsonl:L25-L26），虽也 sed 读到源码 675-685（L100-L101），\n仍按 PD 写 MapLauncher 为 OSM URL 单级 startAbility（L140-L141）。返修第 1 轮恢复 geo: 两级（agent-a62bb893d8124da5d.jsonl:L783，\n靠 startAbility 抛错回退），双机对照才发现隐式拉起 geo: 会弹系统选择框，修复 38 改为 bundleManager.canOpenLink 预检 + module.json5 querySchemes\n（主会话 L14215/L14308，2026-10-15）——「未先 canOpenLink」本身是返修中新生问题，生成期偏差是规格把两级回退裁成单级。\n重启：F020 规格作者（bc655f68…:a7b0fe6f31d4deb51）Read 到 SystemHelper.java「Performs a full app restart / System.exit(0)」\n（agent-a7b0fe6f31d4deb51.jsonl:L111-L112），未读 MainActivity:396-398、SettingsFragment:349/493 等调用点（语言切换/恢复后期望应用重新拉起），\n思考里「System.exit(0)——HMOS context.terminateSelf？」（L169）后 Write 服务层契约「restartApp(context)：System.exit(0) 忠实迁移=退出应用（terminateSelf），不附加重启」\n（L201-L202）。Slice 8 worker（fcc67332…:ac03a106156044eac）Read 该规格（agent-ac03a106156044eac.jsonl:L25-L26）后 Write\nSystemHelper.restartApp = context.terminateSelf()（L121-L122）；返修改为 ApplicationContext.restartApp，失败 terminateSelf 兜底（SY-01）。\n标签链接：F003 规格作者（bc655f68…:a109a00ea12f41473）cat 到 TagOpenerHelper.kt 的 mailto → ACTION_SENDTO、IntentChecker.isAvailable\n否则抛 UnhandledIntentException（agent-a109a00ea12f41473.jsonl:L108-L109）及 DetailFragment 的 no_application 提示（L113-L114），\nWrite F003 服务层却只定义 TagOpener.dispatch(tagText) → 'dial'|'sendto'|'hashtag_search'|'view' 四值归一（L205-L206），\n动作与可用性探测没有任何目标符号承接，AC09 仅保留「无可用 App 提示」。Slice 15 worker（fcc67332…:a1ec3834de2ea53e9）Read 该规格\n（agent-a1ec3834de2ea53e9.jsonl:L27-L28）与源码（L37-L38）后，Write 的 TagOpener 只做 scheme 分类，注释把「可用性判定与无接收方提示」\n推给页面侧 openLink 失败回调（L110-L111）；运行期 openLink(mailto:) 被 BMS 按后缀推断 MIME 命中本应用（修复 46），返修改为\ncanOpenLink(mailto://) 探测 + startAbility{sendToData}（agent-a0ff3efade02501a1.jsonl:L993）。\n对 job 问题的回答：规格里登记的是行为（F006 AC07/AC10、F003 AC09），没有 IntentChecker 对应的目标符号；browser-intent.md 只说\n「startAbility 可能抛异常必须 catch」，camera-picker.md 无预检/权限段，skill 参考未提示隐式 Want 的 BMS 匹配规则（按 \"://\" 切 scheme、\n无 \"://\" 按后缀推断 MIME）——这是材料缺口，但 F006/F003 的 AC 已足以要求预检与权限。\n",
+  "recommendations": [
+    "实现阶段：源端拉起系统能力前的每个门控（IntentChecker/hasSystemFeature、PermissionsHelper）都要落成目标侧的显式步骤（canIUse/能力查询、requestPermissionsFromUser 并在 module.json5 声明），不能用 pick/startAbility 的 catch 代替；检查方法是对照源方法逐行列出「预检→权限→拉起→结果」四段，缺一段即为偏差。",
+    "实现阶段：规格或 addendum 已写并发/后台拷贝（taskpool、THREAD_POOL_EXECUTOR 等价）时，核对所写 IO 调用是否为同步 API（*Sync/readSync）；async 包装同步调用不等于后台执行。",
+    "规格提取阶段：对「目标平台没有 X 能力」的断言（如无 geo: 隐式意图、System.exit 只等于退出），先在本项目 SDK d.ts 或 skill 参考里核实（bundleManager.canOpenLink / querySchemes、ApplicationContext.restartApp），并读源方法的调用点确认期望行为；未核实前保留源端两级回退 / 重启语义，不要用 PD 把回退裁成单级或把重启降级为退出。",
+    "规格提取阶段：把源 helper 翻成目标服务契约时，源方法里的动作（ACTION_SENDTO/ACTION_DIAL）与可用性探测要有明确的目标符号承接；只留一个纯分类函数会让实现者把探测推给通用 openLink。",
+    "实现阶段：隐式 Want 拉起外部应用前先 canOpenLink（并在 module.json5 querySchemes 登记 scheme），无接收者走源端的回退/提示分支，而不是依赖 startAbility 抛错。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/services/AttachmentService.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/java/it/feio/android/omninotes/DetailFragment.java",
+          "at": "2026-10-01T17:27:54.581Z",
+          "reason": "正常输入：Read offset 1276 回执含 takePhoto/takeVideo：IntentChecker.isAvailable(…FEATURE_CAMERA) 为假 → showMessage(feature_not_available_on_this_device) 并 return；随后 PermissionsHelper.requestPermission(CAMERA, permission_camera…) 回调内才建文件、拉相机（源 :1314-1361；migration/fcc67332-…/subagents/agent-a1b6e42d3192efc9d.jsonl:L98-L99）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/spec/baseline/features/F006-attachments.md",
+          "at": "2026-10-01T17:26:24.251Z",
+          "reason": "正常输入：Read 回执含 F006-AC07「CAMERA 权限拒绝时不创建附件文件、不发起拍摄（源 DetailFragment.java:1321 → 标 AttachmentService.takePhoto）」与 AC10「相机能力不可用或拉起失败提示 feature_not_available_on_this_device 且不创建附件」（文件 L160、L163；agent-a1b6e42d3192efc9d.jsonl:L25-L26）。足以要求预检与权限门控。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/.claude/skills/arkts-system-capabilities/references/camera-picker.md",
+          "at": "2026-10-01T17:28:22.027Z",
+          "reason": "输入（部分）：Read 回执只给 cameraPicker.pick(context,[PHOTO],profile) + catch 返回 null 的样例和 module.json5 entity.system.camera 声明，无可用性预检、无 CAMERA 权限段（agent-a1b6e42d3192efc9d.jsonl:L124-L125）。skill 材料边界：缺口记录于此，规格 AC07/AC10 已足够。"
+        },
+        {
+          "key": "fcc67332-0774-45b4-a72c-d2b6a33207b8:a1b6e42d3192efc9d",
+          "at": "2026-10-01T17:38:37.016Z",
+          "reason": "已收到上述输入，Write AttachmentService.ets 的 captureMedia 直接 await cameraPicker.pick，catch 注释「相机能力不可用/拉起失败（IntentChecker.isAvailable 失败分支等价，DetailFragment:1316-1319）」，无能力预检、无 ohos.permission.CAMERA 申请（payload 107-123 行）；同文件为录音写了 ensureMicrophonePermission（201-211 行），说明权限模式已知但未按 AC07 用于相机（agent-a1b6e42d3192efc9d.jsonl:L233-L234）。返修新增 isCameraAvailable 预检与 PermissionService.request('ohos.permission.CAMERA')（C-01/C-02）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/services/StorageHelper.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/spec/baseline/features/F006-attachments.races.md",
+          "at": "2026-10-01T17:26:57.128Z",
+          "reason": "正常输入：Read 回执 §2「多文件并发导入的完成顺序」：Android 逐个 AttachmentTask.executeOnExecutor(THREAD_POOL_EXECUTOR) 线程池并行拷贝、主线程回调乱序；HMOS：taskpool.execute 并发 + 主线程收束（文件 L18-L20；migration/fcc67332-…/subagents/agent-a1b6e42d3192efc9d.jsonl:L35-L36）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/spec/baseline/features/F006-attachments.md",
+          "at": "2026-10-01T17:26:24.251Z",
+          "reason": "正常输入：Read 回执含 F006-AC17「返回后逐个并发创建附件任务（多 uri 并行拷贝）」与 AC18 拷贝三级兜底链（源 StorageHelper.createExternalStoragePrivateFile → 标 StorageHelper.copyIntoAttachmentDir）（文件 L174-L175；agent-a1b6e42d3192efc9d.jsonl:L25-L26）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/java/it/feio/android/omninotes/async/AttachmentTask.java",
+          "at": "2026-10-01T17:27:29.895Z",
+          "reason": "正常输入：Read 回执含 doInBackground 中 StorageHelper.createAttachmentFromUri（源 :54-61），即拷贝在后台线程执行（agent-a1b6e42d3192efc9d.jsonl:L68-L69）。"
+        },
+        {
+          "key": "fcc67332-0774-45b4-a72c-d2b6a33207b8:a1b6e42d3192efc9d",
+          "at": "2026-10-01T17:36:45.230Z",
+          "reason": "读到并发/后台要求后，Write StorageHelper.ets 的 copyUriIntoFile / copyByStream 全用 fileIo.copyFileSync、openSync + readSync 同步 IO（payload 175-209 行），注释自称「三级兜底链」却未用 taskpool 或异步 API；随后 AttachmentService.attachOne 仅 async 包装该同步调用（L233 payload 246-256 行），导入大文件时主线程阻塞（F-02）（agent-a1b6e42d3192efc9d.jsonl:L204-L205）。返修新增 copyIntoAttachmentDirAsync / copyUriIntoFileAsync（fileIo.open + copyFile(fd,fd)）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/services/MapLauncher.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/java/it/feio/android/omninotes/DetailFragment.java",
+          "at": "2026-10-01T07:37:36.435Z",
+          "reason": "正常输入：规格作者 Bash sed -n '655,712p' 回执含位置行 click：geo:lat,lon?q=… ACTION_VIEW → IntentChecker.isAvailable 为假才改 String.format(Constants.MAPS_API) → startActivity（源 :675-685；migration/bc655f68-…/subagents/agent-a363098e952cc57fe.jsonl:L139-L140）。两级回退语义清楚。"
+        },
+        {
+          "key": "bc655f68-6f49-4bcf-ab64-aa45d7a58cc2:a363098e952cc57fe",
+          "at": "2026-10-01T07:50:15.127Z",
+          "reason": "读到上述源码后，思考中断言「HMOS: 无 geo: scheme 隐式 intent 体系 → 直接构造地图 URL」（L158、L201），全程未查 SDK d.ts 或 skill 参考核实隐式 Want 是否支持 geo: scheme（其 SDK 查询仅 geoLocationManager，L250/L253），Write F019-location-attachment.md 把 AC07 两级回退标 superseded、铸 PD-C6-F019-02「固定 OSM URL 模板 → startAbility 单级打开（无 geo: scheme 解析层）」、AC08「无 geo: scheme 两级回退」（文件 L53、L78、L115-L116；agent-a363098e952cc57fe.jsonl:L278-L279）。规格在此先偏离。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/spec/baseline/features/F019-location-attachment.md",
+          "at": "2026-10-01T17:45:37.840Z",
+          "reason": "交付桥梁：Slice 20 worker 的 Read 回执仍含 PD-C6-F019-02 替代路径与 AC08 单级 URL 打开（migration/fcc67332-…/subagents/agent-a9d015ded29f54764.jsonl:L25-L26）。"
+        },
+        {
+          "key": "fcc67332-0774-45b4-a72c-d2b6a33207b8:a9d015ded29f54764",
+          "at": "2026-10-01T17:53:12.377Z",
+          "reason": "实际读到该规格（并在 L100-L101 sed 读到源码 675-685 的两级回退），按 PD 写 MapLauncher.openNoteLocation：仅 MAPS_API.replace 注入经纬度 → Want{viewData, uri: https} startAbility，catch 返回 false（payload 36-52 行；agent-a9d015ded29f54764.jsonl:L140-L141），geo: 一级整体缺失。本链确认传递；返修先恢复 geo: 两级（agent-a62bb893d8124da5d.jsonl:L783），修复 38 再加 canOpenLink 预检。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "F019 规格作者以 Bash sed -n '655,712p' main/java/it/feio/android/omninotes/DetailFragment.java 读取位置行 click 段，回执返回 geo: ACTION_VIEW + IntentChecker.isAvailable → MAPS_API 两级回退原文；这是它写 F019 规格前对源码的真实读取。",
+          "evidence": [
+            {
+              "source": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2/subagents/agent-a363098e952cc57fe.jsonl",
+              "line": 139
+            },
+            {
+              "source": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2/subagents/agent-a363098e952cc57fe.jsonl",
+              "line": 140
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/services/SystemHelper.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/java/it/feio/android/omninotes/utils/SystemHelper.java",
+          "at": "2026-10-01T07:36:06.872Z",
+          "reason": "正常输入：规格作者 Read 回执含「/** Performs a full app restart */ public static void restartApp() { System.exit(0); }」（源 :35-40；migration/bc655f68-…/subagents/agent-a7b0fe6f31d4deb51.jsonl:L111-L112）。方法名与注释都说明期望是整应用重启。"
+        },
+        {
+          "key": "bc655f68-6f49-4bcf-ab64-aa45d7a58cc2:a7b0fe6f31d4deb51",
+          "at": "2026-10-01T07:48:54.320Z",
+          "reason": "读到上述源码后，未读 restartApp 的调用点（MainActivity:396-398、SettingsFragment:349/493，其 MainActivity Read 只取 offset 410 的 hashtag 段，L164-L165），思考「restartApp=System.exit(0)——HMOS context.terminateSelf？」（L169）即 Write F020 服务层契约「restartApp(context)：System.exit(0) 忠实迁移=退出应用（terminateSelf），不附加重启」与实现映射行「忠实迁移：退出进程语义，不附加拉起」（文件 L52、L67；agent-a7b0fe6f31d4deb51.jsonl:L201-L202）。把前台进程退出后系统重建任务栈的冷启效果写成了单纯退出。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/spec/baseline/features/F020-crash-reporting.md",
+          "at": "2026-10-01T16:37:59.685Z",
+          "reason": "交付桥梁：Slice 8 worker 的 Read 回执仍含该 terminateSelf 契约（migration/fcc67332-…/subagents/agent-ac03a106156044eac.jsonl:L25-L26）。"
+        },
+        {
+          "key": "fcc67332-0774-45b4-a72c-d2b6a33207b8:ac03a106156044eac",
+          "at": "2026-10-01T16:46:57.683Z",
+          "reason": "实际读到该规格（并 Read 过 SystemHelper.java，L31-L32），Write SystemHelper.ets：「退出应用（System.exit(0) 忠实迁移 = terminateSelf，不附加重启拉起）」static restartApp(context) { context.terminateSelf() }（payload 32-35 行；agent-ac03a106156044eac.jsonl:L121-L122）。本链确认传递；返修改为 ApplicationContext.restartApp(EntryAbility)，失败 terminateSelf 兜底（SY-01）。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/services/TagOpener.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/java/it/feio/android/omninotes/helpers/TagOpenerHelper.kt",
+          "at": "2026-10-01T07:36:37.884Z",
+          "reason": "正常输入：规格作者 Bash cat 回执含 openOrGetIntent：tel → ACTION_DIAL、mailto → ACTION_SENDTO、else → ACTION_VIEW，IntentChecker.isAvailable 为真才 startActivity，否则 throw UnhandledIntentException（源 :32-57；migration/bc655f68-…/subagents/agent-a109a00ea12f41473.jsonl:L108-L109）。动作 + 可用性探测是源方法的主体。"
+        },
+        {
+          "key": "bc655f68-6f49-4bcf-ab64-aa45d7a58cc2:a109a00ea12f41473",
+          "at": "2026-10-01T07:46:14.273Z",
+          "reason": "读到上述源码（及 DetailFragment 捕获 UnhandledIntentException → no_application_can_perform_this_action，L113-L114）后，Write F003-tags.md 服务层只定义 TagOpener.dispatch(tagText): 'dial'|'sendto'|'hashtag_search'|'view'「四 case 归一」，AC09 把源 TagOpenerHelper.openOrGetIntent 映射到 TagOpener.dispatch，动作（sendTo/dial）与可用性探测没有任何目标符号承接（文件 L45、L82；agent-a109a00ea12f41473.jsonl:L205-L206）。规格在此把「探测 + 拉起」裁成纯分类。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/spec/baseline/features/F003-tags.md",
+          "at": "2026-10-01T17:26:19.519Z",
+          "reason": "交付桥梁：Slice 15 worker 的 Read 回执仍含 dispatch 四值契约与 AC09「无可用 App 处理时提示 no_application_can_perform_this_action」（migration/fcc67332-…/subagents/agent-a1ec3834de2ea53e9.jsonl:L27-L28）。"
+        },
+        {
+          "key": "fcc67332-0774-45b4-a72c-d2b6a33207b8:a1ec3834de2ea53e9",
+          "at": "2026-10-01T17:33:06.702Z",
+          "reason": "读到该规格与源码后，Write TagOpener.ets 只做 split(':')[0] 的 scheme 分类（payload 27-39 行），头注释明写「可用性判定与无接收方提示由页面侧 openLink 失败回调承担」（9-12 行）；既未保留 ACTION_SENDTO 等价的 Want action，也未做可用性探测，AC09 的提示条件被交给通用 openLink 抛错（agent-a1ec3834de2ea53e9.jsonl:L110-L111）。运行期 openLink(mailto:) 被 BMS 按后缀推断 MIME 命中本应用（修复 46）；返修重写为 canOpenLink(mailto://) + startAbility{sendToData}（agent-a0ff3efade02501a1.jsonl:L993）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/java/it/feio/android/omninotes/helpers/TagOpenerHelper.kt",
+          "at": "2026-10-01T17:26:29.595Z",
+          "reason": "正常输入：Slice 15 worker 自己也 Read 到 IntentChecker.isAvailable + ACTION_SENDTO/ACTION_DIAL 原文（agent-a1ec3834de2ea53e9.jsonl:L37-L38），足以在服务层补上探测与动作。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "F003 规格作者以 Bash cat omniNotes/src/main/java/it/feio/android/omninotes/helpers/TagOpenerHelper.kt 读取源文件，回执返回 openOrGetIntent 全文（ACTION_DIAL/ACTION_SENDTO/ACTION_VIEW 与 IntentChecker.isAvailable → UnhandledIntentException）；这是它写 F003 规格前对该源的真实读取。",
+          "evidence": [
+            {
+              "source": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2/subagents/agent-a109a00ea12f41473.jsonl",
+              "line": 108
+            },
+            {
+              "source": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2/subagents/agent-a109a00ea12f41473.jsonl",
+              "line": 109
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 5,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "camera-picker.md、browser-intent.md 的作者与形成过程未追（skill 材料边界）；本卡只核到它们缺少预检/权限与隐式 Want 匹配规则的说明。"
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/pages/MainPage.ets",
+      "reason": "已确认修改：返修 G1 子代理重写 shareNote 用可分享授权 uri 替代沙箱路径（SH-01；agent-a37ab07ebd7bca6e3.jsonl:L1160 等）。生成期该文件有 114 次写入/脚本（最早 e95edcb7…:ac81e9c5c719d73bc L168），分享片段的最初写者及其写前输入（MainActivity.shareNote:517-569 / F006 AC36 授权 uri）尚未逐一核对，未归因。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/module.json5",
+      "reason": "已确认修改：返修 G9 子代理补 ohos.permission.CAMERA 声明与 querySchemes [geo, mailto]（agent-a93099ab97c6034fa.jsonl:L1332/L1336）。这些声明是 AttachmentService / MapLauncher / TagOpener 改用权限流程与 canOpenLink 后的派生要求；生成期 30 次写入（最早 bc655f68…:afdc83df6f5e4bc66 L157 资源脚本）中无人收到过 CAMERA 权限或 querySchemes 要求（Slice 16 worker 只把 entity.system.camera 上报 deferred-work），无可绑定的生成期偏差写入，故不单独成图。"
+    }
+  ],
+  "job": "issue-29db923e9cadbe8ce53c",
+  "metadata": {
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.247",
+        "2.1.296",
+        "2.1.300"
+      ]
+    },
+    "source_set_id": "sources-fef5281fb5eb1e655dea",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos",
+        "at": "2026-10-01T08:07:31.804Z",
+        "ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1119",
+        "request_ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1117",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos",
+        "at": "2026-10-01T08:07:31.804Z",
+        "ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1119",
+        "request_ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1117",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes",
+        "at": "2026-10-13T15:34:04.077Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L121",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L120",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes",
+        "at": "2026-10-13T15:34:04.077Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L121",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L120",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes",
+        "at": "2026-10-14T01:47:40.558Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L159",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L158",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes",
+        "at": "2026-10-14T01:47:40.558Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L159",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L158",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.10"
+  },
+  "revision": "aa92466b00c3c3bc5eadb4e83e006fcff79e7f08502b0bb49fa74f7777666761"
+}

@@ -25,6 +25,10 @@
 - [控制门面的同步访问路径也要具备源端懒加载 getter 的回退来源](lesson-cd4a69e85ec59eabf5b9.lesson.md)
   - 时机：播放功能实现阶段，把源端控制器懒加载的当前媒体 getter 翻译为 seekTo、getPosition、getDuration 等同步路径时
   - 情境：源 getter 在服务未运行时从偏好中保存的当前媒体 id 读库；目标服务实例只在起播后持有当前媒体，门面把 getter 做成异步方法、同步路径只读服务实例。
+- [源宿主退后台不停播放时，AVPlayer 同时接入 AVSession、AUDIO_PLAYBACK 长时任务与 backgroundModes](lesson-65db317135138c3181c7.lesson.md)
+  - 时机：规格提取为 MediaPlayer/ExoPlayer 写 AVPlayer 映射行时；实现阶段接入音频播放控制器并交接 module.json5 配置时
+  - 情境：源宿主的 onPause、onStop、onDestroy 不调用播放器的 pause、stop、release，只有离开页面或用户操作才停止，退后台时播放继续到结束；目标用 AVPlayer 播放音频，规格把映射判为“行为等价”，实现只覆盖前台的开始、停止与完成。
+  - 例外：源端在 onPause/onStop 中暂停或释放播放器
 - [源端同一 release() 用在不同作用域时，目标封装拆成两个方法：重载前只释放实例并作废令牌，宿主销毁时才清空宿主 context 与事件](lesson-1a3150939a5e45c02b0e.lesson.md)
   - 时机：服务层实现阶段，把源端播放器等资源的释放调用（重载开头丢弃旧实例、宿主销毁时全清）映射到目标封装类的释放方法时
   - 情境：源端在 loadMusic 一类重载方法开头用 player.release(); player = null 只丢弃旧实例，宿主引用只在整体 release() 中置空；目标把播放器实例、宿主 context、代数令牌封装进一个通道类，由同一类提供释放方法。

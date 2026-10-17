@@ -9,10 +9,13 @@ Room 到 relationalStore 的库名、schema 版本、建表语句（含标识符
 - [Room 数据库落成 relationalStore 时保留库名、schema 版本与显式升级路径；基线建表与版本重放方式一致，迁移代码里的 xxx_new 是临时表](lesson-a6f300f9295ba538f23b.lesson.md)
   - 时机：数据层实现阶段，把 Room 数据库落成 relationalStore，确定库名、schema 版本、建表语句与升级路径时；以及评审或修复分诊缺表、重复列问题时
   - 情境：源端 Room @Database 声明 version，配 addMigrations/AutoMigration 与 fallbackToDestructiveMigration，迁移代码可能 ALTER TABLE ADD COLUMN、CREATE TABLE 或用 xxx_new 临时表重建后 RENAME；实体类只给出最终版本的表结构；规格要求显式版本化迁移、保留源 schema 历史与字段可空性。
+- [SQLiteOpenHelper 子类迁到 relationalStore：按 VERSION 分派建表、升级与降级报错，打开失败后下次访问重试](lesson-7d8f649aa2713323e072.lesson.md)
+  - 时机：数据层实现阶段，把继承 SQLiteOpenHelper 的 helper 改写成 relationalStore 单例的 init/打开逻辑时；规格写“升级路径不迁移”“onCreate 即唯一入口”时
+  - 情境：源 helper 以 super(context, name, factory, VERSION) 声明版本，onCreate/onUpgrade 由基类按库版本分派，DAO 每次经 getWritableDatabase/getReadableDatabase 取库；目标准备在 init 里 getRdbStore 后直接建表，或写成“version 已达目标就返回、否则执行建表脚本”，并把 init 的 Promise 缓存为单例。
 - [SQLiteOpenHelper 构造不建库，首个 getReadable/WritableDatabase 才建：目标不在启动 init 里预建库，依赖“库文件是否存在”的流程（备份失败、恢复建库）按源路径保留](lesson-519f6769ca714500d9c3.lesson.md)
   - 时机：规格提取与数据层实现阶段，把继承 SQLiteOpenHelper 的 helper 与其调用方映射为 relationalStore 初始化时
   - 情境：源 helper 继承 SQLiteOpenHelper，构造只调 super，启动路径只 new helper，DAO 可能没有调用方；目标准备在入口或服务构造里 getRdbStore/init 建库，备份读写依赖库文件是否存在。
-- [relationalStore 共享写入口：单条语句直接 await execute/insert/delete，多语句事务用 beginTransaction/commit/rollBack；不选 d.ts 声明 801 的 beginTrans()/execute(sql, txId) 事务 ID 接口](lesson-a078efd3361b4abe58e3.lesson.md)
+- [relationalStore 写入口：单语句直接 await；事务体内有 await 用 createTransaction，全同步才用 beginTransaction，不用 beginTrans](lesson-a078efd3361b4abe58e3.lesson.md)
   - 时机：数据层实现阶段，为 relationalStore 的 DAO 共享写入口选择单语句执行或事务接口时
   - 情境：ArkTS 用 @kit.ArkData relationalStore 普通（非向量）关系库，DAO 的单条 INSERT/DELETE 经共享写入口执行；规格要求“写完才返回、失败不留半条记录、异常回滚”；SDK d.ts 中同时有 beginTransaction()/commit()/rollBack() 与 beginTrans(): Promise&lt;number&gt;、execute(sql, txId, args)、commit(txId)、rollback(txId) 两套事务写法，后者列出 801（Capability not supported）；data-layer skill 参考只给出前一套（API 14+ 另有 createTransaction()）。
 - [手写 relationalStore 建表 SQL 时给表名与列名统一加引号，关键字列名尤其不能裸写](lesson-c55c56444f5271471a64.lesson.md)

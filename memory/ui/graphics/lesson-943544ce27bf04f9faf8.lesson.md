@@ -1,6 +1,6 @@
 # 图标按源端原始资源与外形落实：检索全部限定词目录，缺失就从 Android 密度目录复制原图，主题或框架控件提供的图标（Up 尖角、溢出、复选框）从 SDK 平台 drawable 复制；不用文字字形、近名图标、系统符号、二次着色或纯色底替代
 
-ID：`lesson-943544ce27bf04f9faf8` · 版本：5
+ID：`lesson-943544ce27bf04f9faf8` · 版本：6
 
 [本主题](index.md)
 
@@ -21,7 +21,7 @@ ID：`lesson-943544ce27bf04f9faf8` · 版本：5
 1. 判断资源可用性时检索 resources 下全部限定词目录（base、xldpi、dark 等）或按资源映射表核对；构建日志里的“does not have a base resource”说明文件在限定词目录，不是缺失。
 2. 图标与装饰图按源布局的 src、drawableStart、background 中的 drawable 名取用，写完按源布局的 drawable 清单逐项对照组件中的引用；确认缺失时登记资源缺口，不以文字字形、纯色底或外观近似的图标替代。
 3. 头图带透明边缘时，其下的底色取页面背景，不填品牌色。
-4. 源图在目标 media 缺失时，从 Android 仓库对应密度目录（如 drawable-xxhdpi）复制原图并引用（重名时加模块前缀），或登记资源缺口；应用 res 里没有、由主题或框架控件提供的图标，从本机 SDK platforms/android-<api>/data/res/drawable-<密度> 复制原图。不拿其他模块同类、近名或带 1/2 后缀的图标顶替，不用 Polyline、Circle 或字形自绘平台图标，也不因缺图把“图标 + 文字”结构降成纯文字。
+4. 源图在目标 media 缺失时，从 Android 仓库对应密度目录（如 drawable-xxhdpi）复制原图并引用（重名时加模块前缀），或登记资源缺口；应用 res 里没有、由主题或框架控件提供的图标，从本机 SDK platforms/android-<api>/data/res/drawable-<密度> 复制原图；由 AppCompat/Material 控件提供的（如 setDisplayHomeAsUpEnabled 的 abc_ic_ab_back_material）从 Gradle 缓存中该库 AAR 的 res/drawable 取矢量转成 media svg，源 vector 带 autoMirrored 时 Image 加 .matchTextDirection(true)。不拿其他模块同类、近名或带 1/2 后缀的图标顶替，不用 Polyline、Circle 或字形自绘平台图标，也不因缺图把“图标 + 文字”结构降成纯文字。
 5. 原图自带颜色时不再 fillColor 二次着色；替代图颜色不对时先确认是否选错资源。现有代码里对应 Android 位图的 SymbolGlyph 或 Unicode 占位要换成原图，只改颜色或字号不算对齐；交付记录写明每个资源来自 Android 原图复制还是工程既有资源，不把近名资源称作原图。
 6. 源端用文字字符充当按钮图形或直接显示字符（粗体“-”“+”、Text 中的 emoji）时按原字符用 Text 实现（短横也可用 Divider/Rect 画同形），symbol 库没有同形名称时不选外形不同的近似 symbol（如 minus_circle）；“只用 symbol、不把 emoji 当图标”一类规则约束的是源端矢量图标资源的映射，与源端字面字符冲突时在规格中记录，不替换。
 
@@ -29,7 +29,7 @@ ID：`lesson-943544ce27bf04f9faf8` · 版本：5
 
 - 怀疑资源被替换时，用文件大小或哈希比对工程资源与 Android 原图是否一致。
 
-来源支持：7 张卡 · 5 次迁移 · 5 个应用
+来源支持：8 张卡 · 已知 5 次迁移（部分未记录） · 已知 5 个应用（部分未记录）
 
 ## 来源（按需复核）
 
@@ -43,6 +43,8 @@ ID：`lesson-943544ce27bf04f9faf8` · 版本：5
   卡片版本：`3b128ce1f45adbd905d0ce25b9396eeee973d527b0b9ccad5c9a72d571e4534f`
 - [case-9394dee6fa8ae478e54c](../../../store/cases/case-9394dee6fa8ae478e54c/8f48c8a73faee7c349509f2ad5bba1c58becb664c51aa5d0652abab5e9df4995.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3, recommendation:4
   卡片版本：`8f48c8a73faee7c349509f2ad5bba1c58becb664c51aa5d0652abab5e9df4995`
+- [case-9cfde635e67a08373fe6](../../../store/cases/case-9cfde635e67a08373fe6/2518eb32a760514e0502b0ebe77fc6cbe0a1431c7916a06f5aaf27ba9bf58985.json) · 结论：recommendation:3
+  卡片版本：`2518eb32a760514e0502b0ebe77fc6cbe0a1431c7916a06f5aaf27ba9bf58985`
 - [case-cdc57384e71fa7c70345](../../../store/cases/case-cdc57384e71fa7c70345/037233e15fe0fb44c8cc98e82060508d223a5a4eed01a1c90f1e7f451bdb00c7.json) · 结论：diagnosis, recommendation:1
   卡片版本：`037233e15fe0fb44c8cc98e82060508d223a5a4eed01a1c90f1e7f451bdb00c7`
 - [case-d827908975df4e90ae2b](../../../store/cases/case-d827908975df4e90ae2b/3a1473debde2f4a16a58728c1585a9683b0c44be2bd9aaf8fdaf26b2db0fb492.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3

@@ -1,6 +1,6 @@
 # “不确定”“待补资源”“无等价”“延期”“契约未确认”这类占位只登记输入确实缺值的情况：登记前查源码、SDK 与写入时刻的目录，能实现的当场实现
 
-ID：`lesson-a2f6a4ae9a72be740de6` · 版本：6
+ID：`lesson-a2f6a4ae9a72be740de6` · 版本：7
 
 [本主题](index.md)
 
@@ -32,7 +32,7 @@ ID：`lesson-a2f6a4ae9a72be740de6` · 版本：6
 8. 下结论前同时查对应 Options/Attribute 类型声明和构建生成目录（如 hvigor 生成的 BuildProfile）；规格或已批准决策明确写出的条件，不以“release 语义一致”等理由自行删掉一腿，确认无等价时登记决策缺口交审批。
 9. 确实采用近似时，在占位登记或转换报告写明具体差异，供验收逐项核对，不只写在代码注释里。
 
-来源支持：20 张卡 · 6 次迁移 · 5 个应用
+来源支持：22 张卡 · 已知 6 次迁移（部分未记录） · 已知 5 个应用（部分未记录）
 
 ## 来源（按需复核）
 
@@ -62,6 +62,8 @@ ID：`lesson-a2f6a4ae9a72be740de6` · 版本：6
   卡片版本：`686410a72e498ff1fb1d9233686e5ebc690a444c3056d62bc78d50dbcb257140`
 - [case-730269321014e7e1d765](../../../store/cases/case-730269321014e7e1d765/d62d1ca408ead4c6087ee8493ffc6be944e20a88c5230ed7af8f16298d439621.json) · 结论：recommendation:3, recommendation:4
   卡片版本：`d62d1ca408ead4c6087ee8493ffc6be944e20a88c5230ed7af8f16298d439621`
+- [case-74b07cb94daa311f36b1](../../../store/cases/case-74b07cb94daa311f36b1/fec951d790df3788a4e544e587922a8b64074abd17fe9d0f10ed1821d72413f8.json) · 结论：recommendation:3
+  卡片版本：`fec951d790df3788a4e544e587922a8b64074abd17fe9d0f10ed1821d72413f8`
 - [case-753b41488ff67ec1d068](../../../store/cases/case-753b41488ff67ec1d068/24570f598b1c5b1bdb181efddaac5a79a2aac2ad6e83f5f171a7107944d77842.json) · 结论：diagnosis, recommendation:3
   卡片版本：`24570f598b1c5b1bdb181efddaac5a79a2aac2ad6e83f5f171a7107944d77842`
 - [case-75784c189c0578d026a6](../../../store/cases/case-75784c189c0578d026a6/86dd42e7e9d78e101a4bd803a4210cddbe07659a8deb38852f8201fe10a1d261.json) · 结论：recommendation:4
@@ -74,5 +76,7 @@ ID：`lesson-a2f6a4ae9a72be740de6` · 版本：6
   卡片版本：`3149ab3429330e943123e716dd39905b242a535966c5e16dffe17278714a0381`
 - [case-ddbf301e2e83a466c644](../../../store/cases/case-ddbf301e2e83a466c644/dab3bcf4ca202ab2876fe7261e1bd211d29a2f32dae0da3a88e1ed005df5fda9.json) · 结论：recommendation:1, recommendation:3
   卡片版本：`dab3bcf4ca202ab2876fe7261e1bd211d29a2f32dae0da3a88e1ed005df5fda9`
+- [case-f3d590ba381f544833aa](../../../store/cases/case-f3d590ba381f544833aa/325219ee0b387ba129bb7f81d453f59f12c49ab4a600282dca41d129b45ee3f4.json) · 结论：diagnosis, recommendation:1, recommendation:3
+  卡片版本：`325219ee0b387ba129bb7f81d453f59f12c49ab4a600282dca41d129b45ee3f4`
 - [case-f4f67940ef03672d639c](../../../store/cases/case-f4f67940ef03672d639c/0c84d1476bf96ef042d71bcce5b94c7ae01ad2cf21e2004e85cd794b9ed5ca63.json) · 结论：recommendation:4
   卡片版本：`0c84d1476bf96ef042d71bcce5b94c7ae01ad2cf21e2004e85cd794b9ed5ca63`

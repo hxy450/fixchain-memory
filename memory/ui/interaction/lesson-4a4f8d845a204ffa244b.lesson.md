@@ -1,6 +1,6 @@
 # Stack 上层全尺寸容器和页面级遮罩会参与命中测试：不处理点击的覆盖层显式 Transparent，贴底内容栏直接锚定而不套全屏壳，条件遮罩与一次性动效层用根 Stack 条件子节点
 
-ID：`lesson-4a4f8d845a204ffa244b` · 版本：5
+ID：`lesson-4a4f8d845a204ffa244b` · 版本：6
 
 [本主题](index.md)
 
@@ -21,7 +21,7 @@ ArkUI 中没有 onClick 的容器同样参与命中测试（HitTestMode.Default 
 1. 按最终声明顺序逐层检查：位于可点击兄弟之上、覆盖其区域且自身不处理点击的容器，显式写 hitTestBehavior(HitTestMode.Transparent)；重排子节点或修改对齐与几何后重新核对。
 2. 源端按内容定高、align(BottomCenter) 贴底的底栏，在 Stack 中保持自身尺寸并直接锚到底部（position 的 bottom 边或 RelativeContainer 的对齐规则），不用满屏 Column + Blank 作定位壳；确需全屏壳时给壳设 Transparent，或让可点击的覆盖控件最后声明、提高 zIndex。
 3. 页面级全屏遮罩用无 padding 的根 Stack 条件子节点实现（条件为假时不产生节点），不在带 padding 的容器上用 .overlay() 挂条件 builder；复用同仓遮罩时连同挂载层级一起复用。
-4. 一次性全屏动效（彩纸、提示动画）按源端生命周期只在播放期间条件渲染，结束或取消回调里移除；不要让全屏组件常驻，只靠内部子节点的 HitTestMode.None 放行。
+4. 一次性全屏动效（彩纸、提示动画）按源端生命周期只在播放期间条件渲染，结束或取消回调里移除；不要让全屏组件常驻，只靠内部子节点的 HitTestMode.None 放行。经 OverlayManager.addComponentContent 挂的窗口级层（如拖拽阴影）同样只在源端显示时段挂载、结束即 removeComponentContent；确需常驻时根用 Stack 等系统容器并随交互态切换命中模式，自定义组件作 ComponentContent 根时外层代理节点按缺省命中，内层 None 不起作用。
 5. 按钮上叠的进度环、加载层同样逐个决定命中：纯展示节点设 Transparent，或把 onClick 挂在整个 Stack 容器上，不只挂在最底层图片。
 
 ## 可选检查
@@ -29,7 +29,7 @@ ArkUI 中没有 onClick 的容器同样参与命中测试（HitTestMode.Default 
 - 调整 Stack 对齐、上层几何或新增定位壳后，对被覆盖区域的按钮逐个实际点击（不只看节点 clickable 与 bounds），检查 hilog 有无 Touch test result is empty。
 - 一次性动效层改动后，空闲态用 dumpLayout 确认该节点不存在，再实测点击、横滑与折叠。
 
-来源支持：6 张卡 · 5 次迁移 · 5 个应用
+来源支持：7 张卡 · 已知 5 次迁移（部分未记录） · 已知 5 个应用（部分未记录）
 
 ## 来源（按需复核）
 
@@ -45,3 +45,5 @@ ArkUI 中没有 onClick 的容器同样参与命中测试（HitTestMode.Default 
   卡片版本：`0f0a55473275f4a825fd345992d4bfd1b18db95262ea8d48b11572f0c0dfc81f`
 - [case-9b8bac5680e58daada3a](../../../store/cases/case-9b8bac5680e58daada3a/07783b8487f55d819249fc632337f48a461889504642d293282c1e455ffb6591.json) · 结论：diagnosis, recommendation:1, recommendation:2
   卡片版本：`07783b8487f55d819249fc632337f48a461889504642d293282c1e455ffb6591`
+- [case-d38fbc2e9b64b7c3338b](../../../store/cases/case-d38fbc2e9b64b7c3338b/0c81ee0d0f88b740ca143860bd386d61a44268d1703fbe3e4e239c5375013a71.json) · 结论：diagnosis, recommendation:3
+  卡片版本：`0c81ee0d0f88b740ca143860bd386d61a44268d1703fbe3e4e239c5375013a71`

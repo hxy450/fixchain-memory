@@ -6,12 +6,15 @@
 
 ## 本级经验
 
-- [ohos.ability.shortcuts 挂在承载快捷方式的 UIAbility 的 metadata 下，不追加到 module 级 metadata](lesson-67118603fcc769a5edc9.lesson.md)
-  - 时机：配置实现阶段，在 module.json5 中挂载桌面长按快捷菜单（ohos.ability.shortcuts）时；构建后长按不出菜单或快捷方式条目变少时
-  - 情境：把 Android App Shortcuts 迁为 HarmonyOS 静态快捷方式：在 resources/base/profile 下新建快捷方式配置，并在 module.json5 中用 metadata 引用；module 级已有 metadata 数组（如 client_id），入口 UIAbility 还没有 metadata。
+- [module.json5 skills 逐条对应 intent-filter：SEND_MULTIPLE、SEARCH 分别登记，分享写 utd，源端没有的不加](lesson-daba8a5b555e6657d085.lesson.md)
+  - 时机：规格提取与入口配置阶段，把入口 Activity 的 intent-filter 映射为 module.json5 skills，并为外部 Want 的载荷确定解析键时
+  - 情境：源入口 Activity 有多条非深链 intent-filter（SEARCH、SEND、SEND_MULTIPLE、PROCESS_TEXT、AUTO_SEND 等），源码按 Intent.EXTRA_SUBJECT、EXTRA_TEXT、EXTRA_STREAM 读载荷；技能参考可能声称调用某系统能力（如 cameraPicker）须声明对应的 skill。
 - [只经桌面快捷方式或通知点击进入的页面：module.json5 快捷方式声明、EntryAbility 的 Want 分支与目标页参数都要有确定写者](lesson-c46f182cf1d01a97e05f.lesson.md)
   - 时机：规格拆分、切片实现与入口接线阶段，迁移源端只由外部 Intent（桌面快捷方式、本地通知点击）进入的页面时
   - 情境：源端页面由静态或动态 shortcut、通知 PendingIntent 携带 extras（如 shortId、通知渠道）进入；目标规格把入口配置定为 module.json5 静态声明；页面与切片 worker 的写域不含 module.json5 和 EntryAbility。
+- [固定桌面快捷方式（requestPinShortcut）迁 AppGallery Kit productViewManager，不判“无三方 pin API”](lesson-fe5cf66672ce205ee0d7.lesson.md)
+  - 时机：规格提取与实现阶段，迁移 ShortcutManager(Compat).requestPinShortcut、isRequestPinShortcutSupported、disableShortcuts 的固定与移除链时
+  - 情境：源端在条目上提供“固定到桌面”，删除条目时禁用或移除对应快捷方式；本地技能参考没有快捷方式章节，写者准备以“三方应用无 pin API”登记平台差异，或改成卡片引导等替代形态。
 - [源 Activity 未声明 configChanges 时，旋转（未被 screenOrientation 锁定）、语言、深浅色、字号、显示大小变化都会重建它：目标 UIAbility 与页面不重建，逐页按源端重建时序显式处理——直接 show() 的非托管对话框关闭、托管对话框保留、文案与一次性状态刷新；configChanges 不含 orientation 时旋转同样重建](lesson-94715d0df4c03a8fb5a5.lesson.md)
   - 时机：规格提取阶段把 Activity 生命周期回调与 Manifest 属性映射为目标生命周期契约时；实现阶段接线 UIAbility、页面生命周期，以及资源文案与一次性状态的缓存时；为只有静态列表与弹窗的页面写配置变化行为时
   - 情境：源 Activity 在 AndroidManifest 中未声明 android:configChanges，实现了 onSaveInstanceState/savedInstanceState 恢复分支，或在 View 构造、onSizeChanged、绘制时读取资源文案与 firstRun 等一次性状态；目标 HarmonyOS UIAbility 在语言、深浅色、字号、显示大小变化时不重建，只回调 onConfigurationUpdate 或发出 display 'change'。 也包括页面用 AlertDialog.Builder.show()/Dialog.show() 直接弹出非托管对话框（不经 DialogFragment、showDialog 或 DialogPreference），目标用页内状态驱动的浮层承载，页面没有动态文案。 也包括 configChanges 已声明但不含 orientation（如只写 screenSize），Activity 持有 SurfaceView 与自建渲染线程，监听器里用 setBackgroundResource/setImageResource 等代码设置界面状态。
@@ -33,3 +36,6 @@
 - [迁移深链 intent-filter 时同时声明 module.json5 的 skills（actions、entities、uris，App Links 加 domainVerify），并用隐式 Want 验收](lesson-d77baa7494930d485425.lesson.md)
   - 时机：入口与导航接线阶段，把源端 Activity 的 VIEW/BROWSABLE intent-filter 迁成 UIAbility 的 Want 接收与路由解析时；以及规格提取阶段描述深链映射时
   - 情境：源 AndroidManifest 在启动 Activity 上声明 VIEW+BROWSABLE、http/https 与固定 host 的 intent-filter；目标 module.json5 的入口 Ability skills 仍是脚手架默认的 HOME 一项。 也包括 intent-filter 带 android:autoVerify="true"（App Links），或决策写明 https 由域名校验的 App Linking 承载。也包括导航图 navDeepLink 的 uriPattern 或分享/复制链接由常量拼接（如 "$baseUrl/item/{id}"），深链规格的源码锚点没有列入 AndroidManifest。
+- [静态快捷方式 ohos.ability.shortcuts 挂所属 UIAbility 的 metadata，不写 module 级字段](lesson-67118603fcc769a5edc9.lesson.md)
+  - 时机：配置实现阶段，在 module.json5 中挂载桌面长按快捷菜单（ohos.ability.shortcuts）时；构建后长按不出菜单或快捷方式条目变少时
+  - 情境：把 Android App Shortcuts 迁为 HarmonyOS 静态快捷方式：在 resources/base/profile 下新建快捷方式配置，并在 module.json5 中用 metadata 引用；module 级已有 metadata 数组（如 client_id），入口 UIAbility 还没有 metadata。 也包括凭记忆在 module.json5 写 module 级 shortcuts 字段，编译报 schema 不允许该属性。

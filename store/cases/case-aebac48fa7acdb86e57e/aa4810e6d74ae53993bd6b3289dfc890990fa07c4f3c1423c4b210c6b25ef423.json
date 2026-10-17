@@ -1,0 +1,305 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-aebac48fa7acdb86e57e",
+  "created_at": "2026-10-16T16:58:17.209949+00:00",
+  "migration_key": "/private/tmp/claude-502/-Users-fengyi-Workspace-migbot-set-l123-cc-glm53/a9f6942f-6659-40bd-bc16-6616949070fb/scratchpad/distill/pool2",
+  "title": "把 Fragment 事务与 Activity 生命周期压成 NavPathStack 同步 pop 与 onShown/onHidden",
+  "when": "规格提取与页面实现阶段，把 Activity/Fragment 的回退栈操作（replace+addToBackStack、popBackStack、finish）和生命周期回调（onPostCreate/onResume/onPause/onStop/onActivityCreated/onDestroyView）映射到 Navigation + NavDestination 时",
+  "description": "源端 MainActivity 用 FragmentTransaction.replace+addToBackStack / popBackStack(Immediate) / finish() 管理单个 fragment_container，Fragment 依赖 onActivityCreated→init 的视图重建与 onResume/onPause 的注册/挂起顺序；目标端用 NavPathStack 的 pushPathByName/pop 与 NavDestination 的 onShown/onHidden/onReady 实现，同名页面可能被栈复用。",
+  "summary": "三条链共用一个成因：把 FragmentManager 的事务分支与 Activity 的多个生命周期回调，压成 NavPathStack 的一次\n同步 pop/push 和 NavDestination 的 onShown/onHidden 两个挂点。所有坐标按 pool2 原生转录重新核对；\n归因结论与重建材料上的前一稿一致，原生行号与重建版不同（见各节点）。\n\n（1）NoteDetailPage：Slice 9 worker（fcc67332…:a713247c50e682c36）写前 Read 了 DetailFragment.java 全文——\ngoHome :1031-1053 在 afterSavedReturnsToList=false 时 showToast 后 mainActivity.finish()，为 true 时\npopBackStack 且 getBackStackEntryCount()==1 才恢复标题栏/发 PARENT；onResume :291-295 / onPause :369-375 以\nactivityPausing 挂起（agent-a713247c50e682c36.jsonl 请求 L45、回执 L46）；并 Read 了 F002-note-editing.md，其中\n第 181 行 AC29 写明「afterSavedReturnsToList=false（外部入口）用 Toast 并结束页；true 用提示并返回列表」，\n第 148 行 AC04 写明 onPause → onPageHide（请求 L25、回执 L26）。Write NoteDetailPage.ets 却把 finishNavHandler\n写成 navPathStack.pop() 并注释「无独立任务栈时退化为 pop，独立任务栈语义归 F016 外部入口域 closer 接线」，\ngoHomeNavHandler 也是同步 pop、不判断栈深；生命周期只挂 NavDestination 的 onShown（activityPausing=false +\n重新订阅）和 onHidden（挂起 + 注销 + 自动保存 + 收键盘），没有按覆盖类型区分（请求 L301、回执 L302，\n写入第 371-378、1368-1377 行）。更早的 r3 converter（e95edcb7…:a01b64c33f0bfb57b，L103/L104，\n2026-10-01T12:43:46Z）把 discard/saveAndExit/goBackFromDetail 都写成 pop，但明确标了 FWD-REF P-S9-004 交\nSlice 9 Step 3d 解决（写入第 633-654 行），故偏差落定在 Slice 9 这次写入。a2h-execute / a2h-spec 的 references\n中没有任何 onShown/onHidden 或 onResume/onPause 的生命周期映射表；Slice 9 worker 写前读到的含 onShown 的材料\n只有同工程 Slice 4 已写的 SettingsPage（onResume → NavDestination.onShown）与 placeholder-registry 的\nP-S4-UNC-001 条目，即「只挂 onShown/onHidden」是生成者沿用同工程先例的简化，不是 skill 规定。\n返修 G3a 按 SV-05/SV-13/SV-16/SV-17 改为：finish → Toast 时长后 terminateSelf 并屏蔽输入，popBackStack 排队到\n下一轮且不越过列表根，PARENT 由 MainPage 在详情出栈回根时发，onHidden 按 Fragment 替换 / 全屏 Activity 页 /\n对话框式页 / 外部 Activity 覆盖四类合成状态机（repair agent-a253bd56186843030.jsonl:L1024-L1033 Edit）。\n\n（2）MainPage 两个起点。其一在规格：F001 spec 作者（bc655f68…:ab149f862331e6592，a2h-spec C4 批 1）已 Read\nMainActivity.java——switchToDetail :497-513 在已有 detail 时 popBackStackImmediate 后 replace 新的\nDetailFragment（恒 new 实例），switchToList :483-488 新 ListFragment + replace + addToBackStack；\nonPostCreate :117-121 只跑一次，onResume :138-141，onStop :149-153 注销 EventBus（请求 L56、回执 L57）。\n随后 Write F001-notes-list.md 第 169 行「navPathStack ← switchToDetail/switchToList/startSearchView 等价」\n（L107/L108），Edit 追加 AC78「源:MainActivity.switchToDetail() → 标:MainPage.navPathStack.pushPathByName()」、\nAC85「ListFragment.onResume() → NoteListPage.onPageShow()」、AC88「ListFragment.onPause() → NoteListPage.onPageHide()」\n（L112/L113），没有已有详情时出栈换新实例、也没有视图销毁/重建与 onStop 的条目。\nSlice 1 worker（e95edcb7…:aef386d08f13edbfc）Read 了这份 spec（请求 L20、回执 L21，第 170/278/285 行），又用\nsed 480-545 读到 switchToDetail 两个分支（请求 L126、回执 L127），Edit MainPage 时仍只写\npushPathByName('NoteDetailPage', param) + postSwitchFragment(CHILDREN)，并注释「返回栈语义（addToBackStack）\n由 NavPathStack 天然保留（pop 回上一态）」（L274/L275）。返修实测同帧 pop + pushPathByName 时 ArkUI 复用栈中\n同名 NavDestination、新页 onReady 不触发，改为 pushPath(info, { launchMode: NEW_INSTANCE })（parity-fix-report\n修复 69）。其二在 converter：e95edcb7…:ac81e9c5c719d73bc 已 Read MainActivity.java 的 onPostCreate/onResume/\nonStop（请求 L27、回执 L28），Write MainPage 时把 onResume 的 init/checkPassword 与 onPostCreate 的\nlaunchIntroIfRequired/changelog 分流一起塞进 onPageShow()，onStop 没有落点，switchToDetail 留 FWD-REF\nP-S1-023（L168/L169，写入第 110-131、263-266 行）。返修 G1 1-02/1-03/1-04 改为 ActivityState 状态机：\n首显先 onPostCreate 再 updateActivityState，页面类别 + 前后台 + 外部 Activity 合成 onActivityResume/\nonActivityStop（repair agent-a37ab07ebd7bca6e3.jsonl:L1160 Write）。\n\n（3）NoteListPage：同一 F001 spec 作者 Read 的 ListFragment.java 含 onActivityCreated :240-248 → init()\n（每次视图创建重建）、onPause :349-、onResume :387-393（prefsChanged 才 init）（请求 L53、回执 L54），\nspec 只写了 AC85 onResume → onPageShow、AC86 状态暂存与 AC88 onPause → onPageHide（L112/L113）；\nSlice 1 worker 读到该 spec 后，Edit NoteListPage 增加 onPageShown（注释「onResume 等价（NavDestination.onShown）」，\n仅 prefsChanged 才重初始化）/ onPageHidden（「onPause 等价（NavDestination.onHidden）」）（L195/L196），再把两者\n绑定到 NavDestination.onShown/onHidden（L254/L255），被详情页替换再返回时视图常驻不重建。返修 G1 2-02 增加\nonHidden(被 Fragment 页覆盖) 标记视图销毁、onShown 走 recreateView（repair agent-a37ab07ebd7bca6e3.jsonl:L1053 Write）。\n\njob 中 NoteEditorViewModel / AudioRecorderService / ShortcutEntryService / DynamicMenuService /\nNavDrawerComponent 的生成来源未逐一核对，列在 unresolved_targets。\n",
+  "recommendations": [
+    "映射 Fragment 事务前，先把源端每个事务/退出调用点按分支列表：replace+addToBackStack（恒新实例）、popBackStackImmediate+replace、popBackStack（异步、不越根）、finish()；逐条写对应 ArkUI 调用——新实例用 pushPath(info, { launchMode: LaunchMode.NEW_INSTANCE })，finish 用 terminateSelf（Toast 结束后）而不是 pop，popBackStack 排队到下一轮并在根页为空操作。注释里写「退化为 pop」「由 NavPathStack 天然保留」等于未实现，应登记占位而非默认等价。",
+    "生命周期不要只挂 onShown/onHidden：按覆盖类型建状态机——被 Fragment 页替换 → onPause+onDestroyView（返回时重走 onActivityCreated→init 重建视图）、全屏 Activity 页 → onPause+onStop、对话框式/外部 Activity → 仅 onPause、返回 → onResume；用 navDestinationSwitch 的目标页名、窗口焦点事件和 VisibilityChangeReason 区分。onPostCreate 只跑一次、onResume 每次前台、onStop 注销，分别落点，不合并进 onPageShow。同工程其他页面已用的 onResume→onShown 写法不是依据，需对照该页源码的全部回调。",
+    "规格提取阶段把 Activity/Fragment 生命周期与事务语义写成独立验收条目：onActivityCreated→init 的返回重建、onDestroyView 的视图销毁、finish 与 popBackStack 的区别、同名页面是否允许复用；不只写「onResume → onPageShow」「switchToDetail → pushPathByName」一行。",
+    "检查方法：grep 目标页的 navPathStack.pop( 与 pushPathByName( 调用，与源码 finish()/popBackStack/replace 调用点一一对照；grep onShown/onHidden 之外是否有 onPostCreate/onStop/onDestroyView 的落点；同名页面二次进入时验证 onReady 是否触发。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/pages/NoteDetailPage.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/java/it/feio/android/omninotes/DetailFragment.java",
+          "at": "2026-10-01T16:49:43.536Z",
+          "reason": "正常输入：Slice 9 worker 的 Read 回执给出 goHome :1031-1053——afterSavedReturnsToList=false 时 showToast 后 mainActivity.finish()，true 时 popBackStack 且 getBackStackEntryCount()==1 才恢复标题栏；onResume :291-295 / onPause :369-375 以 activityPausing 挂起。足以区分 finish 与 popBackStack、以及栈深判断（migration/fcc67332-…/subagents/agent-a713247c50e682c36.jsonl 请求 L45、回执 L46）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/spec/baseline/features/F002-note-editing.md",
+          "at": "2026-10-01T16:49:19.969Z",
+          "reason": "正常输入：Read 回执第 181 行 AC29「afterSavedReturnsToList=false（外部入口）用 Toast 并结束页；true 用提示并返回列表（PARENT 导航恢复抽屉态）」、第 148 行 AC04「onPause → onPageHide：注销订阅、收键盘、未 goBack 时自动保存」、第 110 行 SwitchFragmentEvent 与 NavPathStack 栈操作等价；规格已要求外部入口结束页而非返回（同转录请求 L25、回执 L26）。"
+        },
+        {
+          "key": "fcc67332-0774-45b4-a72c-d2b6a33207b8:a713247c50e682c36",
+          "at": "2026-10-01T17:10:48.281Z",
+          "reason": "已收到上述源码与规格，Write NoteDetailPage.ets 却把 finishNavHandler 写成 navPathStack.pop() 并注释「无独立任务栈时退化为 pop，独立任务栈语义归 F016 外部入口域 closer 接线」，goHomeNavHandler 同步 pop 不判断栈深；生命周期只挂 NavDestination.onShown/onHidden（activityPausing 置位、订阅、自动保存、收键盘），没有按覆盖类型区分 onPause/onStop/onDestroyView（同转录请求 L301、回执 L302，写入第 371-378、1368-1377 行）。更早 r3 converter 的 pop 带 FWD-REF P-S9-004 交本 worker 解决（agent-a01b64c33f0bfb57b.jsonl:L103），偏差在此落定。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/pages/MainPage.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/java/it/feio/android/omninotes/MainActivity.java",
+          "at": "2026-10-01T07:34:08.057Z",
+          "reason": "正常输入：F001 spec 作者的 Read 回执给出 switchToDetail :497-513——findFragmentByTag 为空时 replace+addToBackStack(FRAGMENT_LIST_TAG)，否则 popBackStackImmediate 后再 replace 新的 DetailFragment；switchToList :483-488 新 ListFragment + replace + addToBackStack；onPostCreate :117-121 仅一次、onResume :138-141、onStop :149-153 注销 EventBus（migration/bc655f68-…/subagents/agent-ab149f862331e6592.jsonl 请求 L56、回执 L57）。"
+        },
+        {
+          "key": "bc655f68-6f49-4bcf-ab64-aa45d7a58cc2:ab149f862331e6592",
+          "at": "2026-10-01T07:43:59.684Z",
+          "reason": "读到上述源码后，Write F001-notes-list.md 第 169 行「navPathStack ← switchToDetail/switchToList/startSearchView 等价」（L107/L108），Edit 追加 AC78「源:MainActivity.switchToDetail() → 标:MainPage.navPathStack.pushPathByName()」、AC85「ListFragment.onResume() → NoteListPage.onPageShow()」、AC88「ListFragment.onPause() → NoteListPage.onPageHide()」（L112/L113）；没有已有详情时出栈换新实例、也没有 Fragment 视图销毁/重建与 onStop 的条目。源码到规格在此先偏离。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/spec/baseline/features/F001-notes-list.md",
+          "at": "2026-10-01T14:33:15.785Z",
+          "reason": "交付桥梁：Slice 1 worker 的 Read 回执仍含第 170 行 navPathStack 等价、第 278 行 AC78 pushPathByName 等价与第 285 行 AC85 onResume→onPageShow（migration/e95edcb7-…/subagents/agent-aef386d08f13edbfc.jsonl 请求 L20、回执 L21）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/java/it/feio/android/omninotes/MainActivity.java",
+          "at": "2026-10-01T14:44:06.746Z",
+          "reason": "正常输入：Slice 1 worker 用 sed -n '480,545p' 读 MainActivity.java，回执含 switchToDetail 两个分支（已有 detail 时 popBackStackImmediate 后 replace 新实例）与 switchToList 的 replace+addToBackStack；足以说明不能只 push（同转录请求 L126、回执 L127）。"
+        },
+        {
+          "key": "e95edcb7-c619-475d-b56e-7bb84402a4ba:aef386d08f13edbfc",
+          "at": "2026-10-01T15:03:00.151Z",
+          "reason": "读到规格与源码两个分支后，Edit MainPage.ets 的 switchToDetail 仍只写 pushPathByName('NoteDetailPage', param) + postSwitchFragment(CHILDREN)，并注释「返回栈语义（addToBackStack）由 NavPathStack 天然保留（pop 回上一态）」；丢掉了已有详情时出栈换新实例的分支，后续同名 NavDestination 被栈复用（同转录请求 L274、回执 L275）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/java/it/feio/android/omninotes/MainActivity.java",
+          "at": "2026-10-01T11:07:55.496Z",
+          "reason": "正常输入：MainPage converter 的 Read 回执给出 onPostCreate :117-121（只在创建后一次：launchIntroIfRequired 否则 changelog）、onResume :138-141（isPasswordAccepted ? init : checkPassword）、onStop :149-153（EventBus.unregister）；三者时机不同（migration/e95edcb7-…/subagents/agent-ac81e9c5c719d73bc.jsonl 请求 L27、回执 L28）。"
+        },
+        {
+          "key": "e95edcb7-c619-475d-b56e-7bb84402a4ba:ac81e9c5c719d73bc",
+          "at": "2026-10-01T11:25:15.053Z",
+          "reason": "已收到上述源码，Write MainPage.ets 却把 onResume 的 init/checkPassword 与 onPostCreate 的 launchIntroIfRequired/changelog 一起放进 onPageShow()，每次显示都重跑，onStop 无落点；switchToDetail 留 FWD-REF P-S1-023（同转录请求 L168、回执 L169，写入第 110-131、263-266 行）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 5
+        },
+        {
+          "from": 4,
+          "to": 5,
+          "force": true,
+          "reason": "Bash 进入 Android 源码目录执行 sed -n '480,545p' MainActivity.java，回执返回 switchToList 的 replace+addToBackStack 与 switchToDetail 的两个分支（findFragmentByTag 为空时 replace+addToBackStack，否则 popBackStackImmediate 后 replace 新 DetailFragment）；这支持 Slice 1 worker 在 15:03 Edit switchToDetail 前已实际读到该分支。",
+          "evidence": [
+            {
+              "source": "migration/e95edcb7-c619-475d-b56e-7bb84402a4ba/subagents/agent-aef386d08f13edbfc.jsonl",
+              "line": 126
+            },
+            {
+              "source": "migration/e95edcb7-c619-475d-b56e-7bb84402a4ba/subagents/agent-aef386d08f13edbfc.jsonl",
+              "line": 127
+            }
+          ]
+        },
+        {
+          "from": 5,
+          "to": "target"
+        },
+        {
+          "from": 6,
+          "to": 7
+        },
+        {
+          "from": 7,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/pages/NoteListPage.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/java/it/feio/android/omninotes/ListFragment.java",
+          "at": "2026-10-01T07:34:05.626Z",
+          "reason": "正常输入：F001 spec 作者的 Read 回执给出 onActivityCreated :240-248 → init()（每次视图创建都重建）、onPause :349-、onResume :387-393（prefsChanged 才 init）；足以说明被替换再返回时视图重建与 onResume 是两条不同的路径（migration/bc655f68-…/subagents/agent-ab149f862331e6592.jsonl 请求 L53、回执 L54）。"
+        },
+        {
+          "key": "bc655f68-6f49-4bcf-ab64-aa45d7a58cc2:ab149f862331e6592",
+          "at": "2026-10-01T07:43:59.684Z",
+          "reason": "读到上述源码后，Edit F001-notes-list.md 只写了 AC85「ListFragment.onResume() → NoteListPage.onPageShow()」、AC86 状态暂存和 AC88「ListFragment.onPause() → NoteListPage.onPageHide()」，没有 replace→onDestroyView / 出栈返回→onActivityCreated→init 重建的条目（同转录 L112/L113）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/spec/baseline/features/F001-notes-list.md",
+          "at": "2026-10-01T14:33:15.785Z",
+          "reason": "交付桥梁：Slice 1 worker 的 Read 回执第 285 行 AC85 onResume→onPageShow、第 286 行 AC86 与第 288 行 AC88，无视图重建条目（migration/e95edcb7-…/subagents/agent-aef386d08f13edbfc.jsonl 请求 L20、回执 L21）。"
+        },
+        {
+          "key": "e95edcb7-c619-475d-b56e-7bb84402a4ba:aef386d08f13edbfc",
+          "at": "2026-10-01T14:58:35.553Z",
+          "reason": "实际读到该规格后，Edit NoteListPage.ets 增加 onPageShown（注释「onResume 等价（NavDestination.onShown，ListFragment.java:387-394）」，仅 prefsChanged 才重初始化）与 onPageHidden（「onPause 等价（NavDestination.onHidden）」）（同转录请求 L195、回执 L196），随后绑定到 NavDestination.onShown/onHidden（L254/L255，15:02:08Z）；视图在被详情页替换后常驻、返回不重建。本链确认传递。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/viewmodels/NoteEditorViewModel.ets",
+      "reason": "已确认返修改写 goHome/finish 分支（SV-05/SH-04，repair agent-abb92fcadb53ed4c2.jsonl:L1976 Write）；生成期由 Slice 9 worker fcc67332…:a713247c50e682c36 首写（请求 L245，回执 L246 2026-10-01T17:03:25.097Z），成因应与图 1 相同（finish/goHome 交给页面的 pop 处理器），但未单独核对该文件写入片段。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/services/AudioRecorderService.ets",
+      "reason": "已确认返修让录音器随页面生命周期（AT-14/R-09，repair agent-a62bb893d8124da5d.jsonl:L527 Write）；生成期首写 fcc67332…:a1b6e42d3192efc9d（L208，2026-10-01T17:36:59.335Z），其写前输入与单例生命周期决策未核。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/services/ShortcutEntryService.ets",
+      "reason": "已确认返修把入口未命中改为提示并结束应用（SH-04，repair agent-a93099ab97c6034fa.jsonl:L1255/L1301 Write）；生成期首写 fcc67332…:ae967fcc0cbe8f685（L198，2026-10-01T16:53:06.524Z），finish→pop 在该服务中的形成未核。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/services/DynamicMenuService.ets",
+      "reason": "已确认返修改查找表构造时机（MM-04/MM-10，repair agent-ad3d7b95ccbf0d799.jsonl:L494 脚本）；生成期首写 Slice 1 worker e95edcb7…:aef386d08f13edbfc（L171，2026-10-01T14:56:40.950Z），MainPage.attachServices 启动即 getInstance 的写前输入未核。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/components/NavDrawerComponent.ets",
+      "reason": "已确认返修把菜单首建改由 NotesLoaded 触发并补开合落定回调（MM-10/DR-05，repair agent-ad3d7b95ccbf0d799.jsonl:L536 Write）；生成期首写 converter e95edcb7…:ac81e9c5c719d73bc（L164，2026-10-01T11:23:20.669Z），aboutToAppear 首建的依据未核。"
+    }
+  ],
+  "job": "issue-aebac48fa7acdb86e57e",
+  "metadata": {
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.247",
+        "2.1.296",
+        "2.1.300"
+      ]
+    },
+    "source_set_id": "sources-fef5281fb5eb1e655dea",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos",
+        "at": "2026-10-01T08:07:31.804Z",
+        "ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1119",
+        "request_ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1117",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos",
+        "at": "2026-10-01T08:07:31.804Z",
+        "ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1119",
+        "request_ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1117",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes",
+        "at": "2026-10-13T15:34:04.077Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L121",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L120",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes",
+        "at": "2026-10-13T15:34:04.077Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L121",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L120",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes",
+        "at": "2026-10-14T01:47:40.558Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L159",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L158",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes",
+        "at": "2026-10-14T01:47:40.558Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L159",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L158",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.10"
+  },
+  "revision": "aa4810e6d74ae53993bd6b3289dfc890990fa07c4f3c1423c4b210c6b25ef423"
+}

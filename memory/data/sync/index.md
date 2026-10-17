@@ -6,6 +6,10 @@
 
 ## 本级经验
 
+- [EventBus 迁移先核投递契约：emitter 异步且序列化 data，需同步按引用投递时自建订阅表，保留 priority 与嵌套 post 排队](lesson-9db967b1941da87f27be.lesson.md)
+  - 时机：实现阶段把 greenrobot EventBus（register/post/onEvent）迁到目标端事件总线，在 @ohos.events.emitter、eventHub 与自建订阅表之间选择时
+  - 情境：源端 EventBus.getDefault().post(event) 携带实体对象（带方法的类实例、被 instanceof 判别），订阅方用 register(this, priority) 或依赖“post 返回前回调已执行”；派工只写“EventBus → emitter 或自研 typed pub/sub”；SDK d.ts 注明 EventPriority 对订阅不生效。
+  - 例外：源事件只携带可序列化的纯数据，订阅方不依赖同步回调、优先级与投递顺序
 - [同步调度保留源端每次触发都会执行的语义：合并在途任务要补跑尾随请求，失败队列按源端选取条件重推](lesson-cfe552e1b20080212ce9.lesson.md)
   - 时机：数据同步迁移的规格提取、调度实现与复核阶段，确定多次同步触发的并发语义与失败项重试范围时
   - 情境：源端每次同步触发都启动新任务并在互斥锁后排队执行（如协程 launch + Mutex.withLock，锁内先推送队列再拉取），待推送队列按资源类型而非同步状态选取；目标端用单一同步服务和 Promise 串行队列统一调度全量同步、定向拉取与状态推送；已有规格可能写着“并发触发复用当前任务”。

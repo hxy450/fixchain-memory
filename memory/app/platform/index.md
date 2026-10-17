@@ -29,6 +29,9 @@
 - [打开系统设置的显式 Want 包名随设备与系统版本变化：写前在目标设备核对，启动失败要可观察，不照抄参考里标“已验证”的值](lesson-4bea916d1ff67e51d455.lesson.md)
   - 时机：系统能力实现阶段，为“打开系统设置/应用权限页”编写 startAbility 显式 Want（bundleName/abilityName）时；维护迁移 skill 参考中的系统应用包名时
   - 情境：源端经 Settings.ACTION_* 一类 Intent 跳转系统设置（全部文件访问、应用详情等）；目标为 HarmonyOS NEXT 应用，需要以显式 Want 指定系统设置应用，规格与源码都不给目标包名，可查到的参考文档给出硬编码的厂商设置包名并标注已验证。
+- [拉起外部应用或系统能力前的可用性与权限门控逐段落实：隐式 Want 先 canOpenLink，不靠 startAbility 抛错](lesson-948d876672049969b865.lesson.md)
+  - 时机：实现阶段把 IntentChecker.isAvailable、resolveActivity、hasSystemFeature 或运行时权限请求之后再 startActivity 的源方法迁为 startAbility、picker 调用时；规格阶段为这类 helper 写目标服务契约时
+  - 情境：源方法按“可用性探测 → 权限 → 拉起 → 结果或回退”组织，例如 geo: 无接收者时转地图网页、mailto 走 ACTION_SENDTO、FEATURE_CAMERA 不可用时提示且不建附件；目标准备直接 startAbility 或调用 picker，用 catch 代替预检，或把探测推给通用的打开链接函数。
 - [接入 identifier.getOAID 时同批声明 APP_TRACKING_CONSENT 并在隐私同意后申请；全零串按未授权处理](lesson-2b00c4ffaeb442d87e5e.lesson.md)
   - 时机：服务层实现阶段，把源端 OAID（MSA 或厂商通道）采集迁到鸿蒙 identifier.getOAID 时
   - 情境：源端在隐私协议同意后静默采集 OAID，写缓存、上送归因接口并发布就绪事件；鸿蒙 getOAID 需要 user_grant 权限 ohos.permission.APP_TRACKING_CONSENT，未授权时返回全零串；Android 端没有对应的运行期授权。
@@ -46,6 +49,14 @@
 - [源端“先读当前系统值、再按位移增量写回”的手势（如亮度）分别映射读写两侧；异步读取在页面就绪时预读基线](lesson-33791daf74fc4298779e.lesson.md)
   - 时机：界面实现阶段，把源端按下时读取窗口亮度等系统值、移动时按增量写回的手势迁到鸿蒙时
   - 情境：源端手势在 ACTION_DOWN 读取窗口当前亮度，未覆写时回退系统亮度设置，移动时按位移增量写回窗口；规格只给出写入接口（setWindowBrightness），读取侧要实现者确定。
+- [源端以杀进程实现“重启应用”时用 ApplicationContext.restartApp，不译成 terminateSelf 退出](lesson-73618bb856a8a7dfe7fc.lesson.md)
+  - 时机：规格提取与实现阶段，迁移 System.exit(0)、Runtime.exit、Process.killProcess 等进程退出调用时
+  - 情境：源方法注释或调用点表明意图是重启（如通知点击的重启动作、切换语言、恢复或重置数据之后调用）；Android 前台进程被杀后，系统按残留任务栈与 savedInstanceState 重建 Activity；目标准备写 context.terminateSelf()。
+  - 例外：调用点只在用户主动退出或致命错误时结束进程，源端也不期待重新进入；此时按退出处理
+- [源端定时提醒迁 reminderAgentManager 时按其自身 d.ts 映射按钮与贪睡，并写出发布失败、条数上限与到点无回调的回退](lesson-7f1bc7ddc88fab2d03bd.lesson.md)
+  - 时机：规格提取与决策阶段，为源端 AlarmManager 定时提醒（带贪睡、延后、打开条目按钮的通知）选定代理提醒等替代路径时；实现阶段按规格写提醒调度与按钮处理时
+  - 情境：源端到点由 AlarmManager/广播触发，应用自己构建带按钮的通知，按钮经 PendingIntent 拉起透明跳板 Activity 做贪睡、延后或打开条目，提醒数不设上限、可链式重挂。目标规格准备以“系统托管”整体替代，把 notificationManager 的 NotificationActionButton.wantAgent 写进 reminderAgentManager 的 ActionButton；或实现者发现规格与 d.ts 冲突后改用系统 CLOSE/SNOOZE 按钮作“最大近似”。
+  - 例外：源端只需系统模板提醒：没有路由到应用的按钮、没有自定义贪睡间隔，发布失败时源端也不补偿
 - [源端通知按钮与可空正文迁到 WantAgent 与 NotificationRequest：每个按钮、每次构建用不同 requestCode，并按需加 UPDATE_PRESENT_FLAG；正文不直接给空串](lesson-716d06e75b7c2102c36c.lesson.md)
   - 时机：实现阶段，把源端通知的多个 PendingIntent 动作按钮与可为 null 的 setContentText 映射为 wantAgent.getWantAgent 与 NotificationRequest 时
   - 情境：源端每次构建通知都给按钮取不同的 requestCode（如逐次取 elapsedRealtime），按钮 Intent 载荷随运行状态变化；部分通知（完成通知、没有文本的步骤）contentText 为 null。目标用 WantAgentInfo（wants、operationType、requestCode、wantAgentFlags）与 NotificationBasicContent（title、text）发布。

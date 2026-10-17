@@ -16,6 +16,10 @@ Java 标准库与语言语义到 ArkTS 的等价实现：读行、split/trim、B
   - 时机：规格提取与切片实现阶段，转写依赖 Java 集合迭代序（keySet、toArray、new ArrayList&lt;&gt;(set)）、byte 与 int 字面量比较、按返回码 switch 分支的逻辑时
   - 情境：源端用 HashSet/HashMap 的迭代序决定输出文件、尝试顺序、写入顺序或问题清单顺序；用 byte 变量与 0x81 一类 int 字面量比较；switch 只把部分返回码（如 2、-1）判为失败；目标准备用 JS Set/Map（插入序）、0–255 的 number 与相邻方法的 result !== 0 判定。
   - 例外：规格或决策明确不要求复刻集合迭代序，并在验收中写明
+- [平台库调用不以形似 JS 内建加“等价”注释收口：ICU 正则字符类、码点切分、List.remove、Base64/Uri 逐项按源语义移植](lesson-5e3ba83ebfe5bbdf9278.lesson.md)
+  - 时机：实现阶段把 Java/Android 平台库调用（正则、字符串切分与比较、集合删除、Base64、Uri、MIME 查询）替换为 JS 内建或自写简化函数，准备在注释里写“等价/直迁”时；规格提取阶段描述这类调用的契约时
+  - 情境：源码调用 Pattern/String.matches/replaceAll（Android 上由 ICU 执行）、split("")、compareToIgnoreCase、List.remove(Object)、android.util.Base64.decode、Uri.parse(path).getPath()、ContentResolver.getType；目标准备用 JS RegExp 字符类或手写 ASCII 空白集、charCodeAt 逐单元计数、整串 toLowerCase 比较、filter、自写宽松解码、对原始串直接处理或静态扩展名表替代；规格对这些调用只有口语描述（如“非空白字符数”“拒绝 /data 前缀”）。
+  - 例外：决策记录明确批准某项语义差异，并写明用户可见影响
 - [手写 getString/String.format 的位置参数插入时，不把用户数据作为 String.replace 的替换串：用 split/join 或替换回调字面插入](lesson-ecbaa1723e2beb9b1aec.lesson.md)
   - 时机：实现阶段，把 Android getString(resId, args) 或 String.format 的 %1$s、%s 位置参数改写为 ArkTS 字符串拼装（自写 formatRes 一类 helper）时
   - 情境：源端 getString(R.string.x, name) 把用户输入的名称、标题插入格式串（如克隆名后缀）；目标取到格式串后准备用 s.replace('%1$s', arg) 替换占位，或复用兄弟页面已有的同类 helper。

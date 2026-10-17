@@ -1,0 +1,335 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-5e7f81b1b1ef0753d249",
+  "created_at": "2026-10-17T05:55:53.987665+00:00",
+  "migration_key": "/private/tmp/claude-502/-Users-fengyi-Workspace-migbot-set-l123-cc-glm53/a9f6942f-6659-40bd-bc16-6616949070fb/scratchpad/distill/pool2",
+  "title": "模型基类在二进制依赖中时，规格只转写可见序列化证据并改写字段类型，实现沿用后 null/''、Double、equals/toString 与 Gson/Cursor 契约全部失真",
+  "when": "规格提取阶段，为继承自外部库基类的实体写字段表与序列化契约时；模型实现阶段，为字段确定类型、可空性与缺省值时；数据层实现阶段，把 Cursor 读写转成 ResultSet 读写时",
+  "description": "源实体 class X extends BaseX 来自 Maven/JitPack 二进制依赖（主仓无 Base* 源码），持久化走 SQLite Cursor/ContentValues（REAL 列经 cursor.getString 读回），备份走 Gson 反射序列化；目标为 ArkTS class 显式字段 + 手写 toJson/fromJson + relationalStore ResultSet。",
+  "summary": "规格作者（C3 feature-base 撰写，bc655f68:ae3c915d1468d6648）写前实际读到 Note.java：class Note extends BaseNote、\nwriteToParcel 对 latitude 走 String.valueOf(getLatitude())、Parcel 构造器走 setLatitude(in.readString())\n（agent-ae3c915d1468d6648.jsonl:L29）；又读到 ref 设计文档 §5.2 明确给出 latitude/longitude 为 Double（装箱）、\n§5.4 备份 JSON 示例自标 [推断]（同转录 L153）；grep 回执给出 DetailFragment 既以 setLatitude(\"\") 也以\nsetLatitude(location.getLatitude()) 调用、getter 与 null/0 比较（L157）。它查实 Commons 1.4.0 为 build.gradle:197 的\n二进制依赖、主仓无源码（L34-L46），随后 Write feature-base.md 把 latitude 改写成“装箱数值…setter 同时接受 String 与数值”，\n并在差异记录 #2 建议 HMOS 模型用 string | null 存储 + 数值访问器；对 equals/isChanged/toString/toJSON 键序与类型、\n无参构造缺省值等基类语义，只记“主仓无源码”而未给出契约或未知标记（L175-L176）。偏差先出现在源码/参考到规格这一环：\n有 Double 真值仍改为字符串域，且把基类不可达当成可以不写契约。\nBase-1 Models 生成者（bc655f68:a924e4dd762f74cda）读到这份 feature-base.md（agent-a924e4dd762f74cda.jsonl:L24）后，\nWrite Note.ets 把 latitude/longitude 写成 string | null，只提供 parseNumberOrNull 访问器而无 setLatitude(String)→parseDouble、\nNFE→null 语义；toJson 把 archived/trashed 以 0/1 数值写出；未实现 equals/isChanged/toString（L88-L89）。\n返修期用 javap 读 Commons 字节码后，模型补 Double 语义访问器（setLatitudeText=parseDouble 失败→null、串统一为\nDouble.toString 文本）、Gson 反射键序、Boolean true/false、equals/isChanged/toString=title（G8-data.md MD-06/09/10/12/16）。\n同一生成者的两处实现侧偏离：Category.ets——feature-base 表已写明 id 缺省“当前毫秒”，Category.java 只显示 Category()→super()，\n它却写 id: number | null = null 并在注释里把缺省解释为落库侧逻辑（L83-L84），返修改回构造缺省 Date.now()（MD-24）；\nAttachment.ets——Attachment.java 的双参构造器 this(…, uri, null, 0, 0, mimeType) 明确传 name=null，\n它却把 name 写成非空 string = ''、withUri 传 ''（L85-L86），null 与 \"\" 从此混同（DB 一律写 ''、JSON 一律省略），\n返修新增 nameValue: string | null 承载原值（MD-21a）。\nBase-2 Database 生成者（bc655f68:a5de99c92f8d9ae39）读到 DbHelper.java 的 values.put(KEY_LATITUDE, note.getLatitude())\n与 note.setLatitude(cursor.getString(i++))（agent-a5de99c92f8d9ae39.jsonl:L35）和上述 string | null 模型（L40），\nWrite DbHelper.ets 以 'latitude': note.latitude 直接绑定模型串（页面置 '' 后以 TEXT '' 落库而非 NULL，DB-12），\n读回用 rs.getString 取 REAL 列全精度文本（L145-L146）；Android 的 cursor.getString 对 REAL 列按 CursorWindow \"%g\" 成文\n（6 位有效数字），这条平台差异在它收到的任何输入里都没有出现。返修改为绑定 getLatitudeAsNumber()（空串/不可解析→NULL），\n读回按 getColumnType 对 REAL 走 cFormatG 再 parseDouble（DB-12/DB-23/MD-06）。\nModelJson.ets 的 MD-17 是返修中新生问题：G8 子代理（40790d98:a65f0f02d9fe9874b）在派工已指明 gson/Commons jar 在 Gradle\n缓存、可 javap 查真值的情况下，只定位了 gson jar 路径而未看 JsonWriter，凭记忆用 JSON.stringify + 全局 replace 写 gsonHtmlSafe，\n正则字面量里直接放入 U+2028/U+2029 原字符（TS 正则禁止行终止符，编译错误；孤立代理项写法也与 Android 不同），\n由 G8 第 2 轮续跑子代理按行号脚本替换成逐字符 Gson 等价写出器 gsonString/gsonValue\n（agent-a18ac80d00e826069.jsonl:L375-L376）。\n",
+  "recommendations": [
+    "规格提取时遇到实体继承外部库基类：先尝试取得该库（Gradle 缓存 jar、JitPack/Maven 下载、GitHub 源码）并以 javap 或源码核对字段类型、缺省值、equals/toString/JSON 序列化；取不到时在规格中逐项标注“未知”，而不是只写“主仓无源码”后用可见代码推断。",
+    "规格中的字段类型以类型真值为准：参考文档或 getter 已给出 Double/Long 时，不因 setter 有 String 重载或 Parcel 用 String.valueOf 就把存储类型改成 string；String 入口的解析规则（parseDouble、失败→null）另写成访问器契约。",
+    "实现模型字段时，规格表的缺省值（如 id 缺省当前毫秒）就是构造时缺省值；要改成由仓储层补值，必须回源码确认无参构造不赋值，并在注释引出处。",
+    "Java 引用类型字段按源构造器/调用点区分 null 与 \"\"：源码里某条构造路径显式传 null 的字段，目标模型保留 T | null 承载原值，不以 '' 兼表两者；落库 NULL、JSON 省略键均按原值判定。",
+    "把 Cursor 读取转成 ResultSet 读取时，REAL/INTEGER 列经 getString 读回的文本形态要按源平台规则（Android CursorWindow 对 REAL 按 %g 六位有效数字）复刻，不把 getString 一对一搬到 relationalStore；Double 字段的绑定走数值语义（空串/不可解析→NULL）。",
+    "备份/互通 JSON 不照抄标注 [推断] 的示例，先核对真实序列化器（Gson 反射：字段名序、Boolean 为 true/false、null 省略、htmlSafe 转义）；需要特殊字符转义时逐字符写出，不在正则字面量中放 U+2028/U+2029 原字符，用 \\u2028 转义。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/models/Note.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/java/it/feio/android/omninotes/models/Note.java",
+          "at": "2026-10-01T07:22:52.677Z",
+          "reason": "正常输入：规格作者 Read 回执给出 class Note extends BaseNote（Note.java:28）、writeToParcel 对 latitude 走 String.valueOf(getLatitude())（:179）、Parcel 构造器 setLatitude(in.readString())（:82）；可确定 getter 不是 String 类型、基类不在主仓（agent-ae3c915d1468d6648.jsonl:L29）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/spec/ref/omninotes_design.md",
+          "at": "2026-10-01T07:25:25.013Z",
+          "reason": "正常输入：Read 回执 §5.2 给出 latitude/longitude 为 Double（装箱），§5.4 备份 JSON 示例自标 [推断]；足以说明存储类型是 Double，示例不能当契约（agent-ae3c915d1468d6648.jsonl:L153）。"
+        },
+        {
+          "key": "bc655f68-6f49-4bcf-ab64-aa45d7a58cc2:ae3c915d1468d6648",
+          "at": "2026-10-01T07:29:05.743Z",
+          "reason": "已查实 Commons 为二进制依赖（同转录 L34-L46）并读到上述 Double 真值与 DetailFragment 的 String/数值两种 setter 调用（L157），Write feature-base.md 却把 latitude 写成“装箱数值…setter 同时接受 String 与数值”、差异记录 #2 建议 HMOS 用 string | null 存储；对 BaseNote 的 equals/toString/toJSON/缺省值只写“主仓无源码”，未给契约或未知标记（同转录 L175-L176）。源码/参考到规格在此偏离。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/spec/baseline/feature-base.md",
+          "at": "2026-10-01T08:54:37.418Z",
+          "reason": "交付桥梁：Base-1 Models 生成者的 Read 回执包含上述 latitude 行（第 30-31 行）与差异记录 #2 的 string | null 建议（第 344 行），以及“主仓无 Base* 源码”说明（第 7 行）（agent-a924e4dd762f74cda.jsonl:L24）。"
+        },
+        {
+          "key": "bc655f68-6f49-4bcf-ab64-aa45d7a58cc2:a924e4dd762f74cda",
+          "at": "2026-10-01T09:01:30.090Z",
+          "reason": "读到该规格后 Write Note.ets：latitude/longitude 为 string | null，仅有 parseNumberOrNull 访问器，无 setLatitude(String) 的 parseDouble/失败→null 语义；toJson 把 archived/trashed 以 0/1 数值写出；无 equals/isChanged/toString（agent-a924e4dd762f74cda.jsonl:L88-L89）。本链确认规格偏差传到目标，不另推定其独立失职。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/models/Category.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "summary": "生成者写前读到的 feature-base 表已写明 Category.id “主键；新建缺省取当前毫秒”、默认列为“当前毫秒”，\n派工也要求字段默认值逐字段对齐该表；Category.java 只显示 Category() → super()，不与之矛盾。\nWrite 出的 Category.ets 却把 id 写成 number | null = null，并在注释中把缺省当前毫秒解释为落库侧逻辑。\n返修按 BaseCategory 字节码确认无参构造即取构造时刻毫秒，把构造器缺省改为 Date.now()（MD-24）。\n",
+      "recommendations": [
+        "规格表给出的缺省值按构造时缺省实现；要改成由仓储层补值，必须回源码确认无参构造不赋值并在注释引出处。"
+      ],
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/spec/baseline/feature-base.md",
+          "at": "2026-10-01T08:54:37.418Z",
+          "reason": "正常输入：Read 回执 §数据模型.2 表写明 id | Long（主键；新建缺省取当前毫秒） | 当前毫秒 | Category.java:27/57；DbHelper.java:888-889（第 48 行），派工（同转录 L1）要求默认值逐字段对齐此表（agent-a924e4dd762f74cda.jsonl:L24）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/java/it/feio/android/omninotes/models/Category.java",
+          "at": "2026-10-01T08:54:50.031Z",
+          "reason": "正常输入：Read 回执显示 Category() 仅调用 super()（:34-36）、toString 返回 getName()（:65-67）；没有任何“模型保持 null”的依据（agent-a924e4dd762f74cda.jsonl:L35）。"
+        },
+        {
+          "key": "bc655f68-6f49-4bcf-ab64-aa45d7a58cc2:a924e4dd762f74cda",
+          "at": "2026-10-01T09:00:32.830Z",
+          "reason": "已收到上述输入，Write Category.ets 却写 id: number | null = null，注释称“id 缺省取当前毫秒——落库侧逻辑，模型保持 null”；规格要求的缺省值未落实到构造器（agent-a924e4dd762f74cda.jsonl:L83-L84）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/models/Attachment.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "summary": "生成者写前读到 Attachment.java：双参构造器 Attachment(Uri uri, String mimeType) 调用 this(当前毫秒, uri, null, 0, 0, mimeType)，\nname 显式为 null；feature-base 表只给 name | String | —，未写可空性。Write 出的 Attachment.ets 把 name 写成非空 string = ''，\n等价工厂 withUri 传 ''，使相机/录音等经 withUri 创建的附件与无显示名的 AttachmentTask 附件无法区分（DB 一律写 ''、JSON 一律省略）。\n返修新增 nameValue: string | null 承载原值，name 改为访问器，DB 绑定/读回与 JSON 省略判定按 nameValue（MD-21a，DB-17/DB-41）。\n",
+      "recommendations": [
+        "Java 引用类型字段按源构造器/调用点区分 null 与 \"\"：某条构造路径显式传 null 的字段，目标模型保留 T | null 承载原值，不以 '' 兼表两者。"
+      ],
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/java/it/feio/android/omninotes/models/Attachment.java",
+          "at": "2026-10-01T08:54:50.379Z",
+          "reason": "正常输入：Read 回执显示 Attachment(Uri uri, String mimeType) → this(Calendar…getTimeInMillis(), uri, null, 0, 0, mimeType)（:32-34），name 显式传 null；全参构造器把 name 原样交给 super（:37-38）（agent-a924e4dd762f74cda.jsonl:L37）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/spec/baseline/feature-base.md",
+          "at": "2026-10-01T08:54:37.418Z",
+          "reason": "正常输入（部分）：Read 回执第 65 行 name | String | — | Attachment.java:37；DbHelper.java:311，只给类型未写可空性；派工第 14 行要求“装箱可空用 T | null”（agent-a924e4dd762f74cda.jsonl:L24、L1）。"
+        },
+        {
+          "key": "bc655f68-6f49-4bcf-ab64-aa45d7a58cc2:a924e4dd762f74cda",
+          "at": "2026-10-01T09:00:54.239Z",
+          "reason": "已读到源码的 null 传参，Write Attachment.ets 却写 @Trace name: string = ''，并让 withUri(uri, mimeType) 返回 new Attachment(Date.now(), uri, '', 0, 0, mimeType)（第 25、44-47 行）；null 与 \"\" 在此混同（agent-a924e4dd762f74cda.jsonl:L85-L86）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/database/DbHelper.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "summary": "Base-2 Database 生成者写前读到 DbHelper.java：values.put(KEY_LATITUDE, note.getLatitude()) 以 Double 绑定，\nparseNote 以 note.setLatitude(cursor.getString(i++)) 读回 REAL 列；又读到 Base-1 写出的 Note.ets（latitude: string | null）。\n它 Write DbHelper.ets 时以 'latitude': note.latitude 直接绑定模型串（页面移除位置后置 ''，以 TEXT '' 落库而非 NULL，\ngetNotesWithLocation 的 longitude != 0 会把该行计为有位置），读回用 rs.getString 取 REAL 列全精度文本；\nAndroid 的 cursor.getString 对 REAL 列按 CursorWindow \"%g\" 成文（6 位有效数字），该平台规则不在其任何输入中。\n'' 落库是上游 string | null 模型类型的传递；REAL 读回精度是本环节新偏差。返修改为绑定 getLatitudeAsNumber()\n（空串/不可解析→NULL），读回对 REAL 列走 cFormatG 再 parseDouble（DB-12/DB-23/MD-06）。\n",
+      "recommendations": [
+        "把 Cursor 读取转成 ResultSet 读取时，REAL/INTEGER 列经 getString 读回的文本形态要按源平台规则（Android CursorWindow 对 REAL 按 %g 六位有效数字）复刻，不把 getString 一对一搬到 relationalStore；Double 字段的绑定走数值语义（空串/不可解析→NULL）。"
+      ],
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/java/it/feio/android/omninotes/db/DbHelper.java",
+          "at": "2026-10-01T10:07:37.744Z",
+          "reason": "正常输入：Read 回执给出 values.put(KEY_LATITUDE, note.getLatitude())（:243-244，Double 绑定）、getNotesWithLocation 的 longitude IS NOT NULL AND != 0（:390-391）、parseNote 的 note.setLatitude(cursor.getString(i++))（:465-466）（agent-a5de99c92f8d9ae39.jsonl:L35）。"
+        },
+        {
+          "key": "bc655f68-6f49-4bcf-ab64-aa45d7a58cc2:a924e4dd762f74cda",
+          "at": "2026-10-01T09:01:30.090Z",
+          "reason": "上游偏差起点（同图 1）：Write Note.ets 把 latitude/longitude 写成 string | null 存储，无 parseDouble/失败→null 语义（agent-a924e4dd762f74cda.jsonl:L88-L89）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/models/Note.ets",
+          "at": "2026-10-01T10:07:40.910Z",
+          "reason": "交付桥梁：Base-2 生成者的 Read 回执含 @Trace latitude: string | null = null（第 49 行）与同类型构造参数（第 72 行）（agent-a5de99c92f8d9ae39.jsonl:L40）。"
+        },
+        {
+          "key": "bc655f68-6f49-4bcf-ab64-aa45d7a58cc2:a5de99c92f8d9ae39",
+          "at": "2026-10-01T10:19:07.281Z",
+          "reason": "读到上述源码与模型后 Write DbHelper.ets：ContentValues 以 'latitude': note.latitude / 'longitude': note.longitude 直接绑定模型串（第 202-203 行，传递上游 string 类型）；parseNote 以 getNullableStringCol → rs.getString(idx) 读回 REAL 列（第 878-879、911-917 行），得到全精度文本而非 Android 的 %g 六位有效数字。REAL 读回精度在此偏离；该平台规则未在任何输入出现，见 unknown（agent-a5de99c92f8d9ae39.jsonl:L145-L146）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/models/ModelJson.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "summary": "本分支是返修中新生问题（MD-17）。G8 派工已写明 Gson/Commons jar 在 Gradle 缓存、可 unzip + javap 查真值；\nG8 子代理定位了 gson jar 路径但未查看 JsonWriter，就在 ModelJson.ets 新增 gsonHtmlSafe：\nJSON.stringify 后全局 replace，正则字面量内直接放入 U+2028/U+2029 原字符（TS 正则字面量禁止行终止符，编译错误），\n孤立代理项写法也与 Android 写盘结果不同。G8 第 2 轮续跑子代理用 Edit 无法匹配含原字符的旧函数，改按行号脚本替换为\n逐字符 Gson 等价写出器 gsonString/gsonValue 并删除 gsonHtmlSafe（agent-a18ac80d00e826069.jsonl:L375-L376；G8-data.md MD-17）。\n",
+      "recommendations": [
+        "复刻第三方序列化器的转义规则时，先 javap/读源码核对再写；需要转义 U+2028/U+2029 等行终止符时，用 \\u2028 转义或逐字符判断，不把原字符放进正则字面量。"
+      ],
+      "nodes": [
+        {
+          "key": "40790d98-e128-4480-9378-5c27fe3ba82e:a65f0f02d9fe9874b",
+          "at": "2026-10-13T16:54:26.122Z",
+          "reason": "收到 G8 派工（提示词写明 Omni-Notes-Commons 1.4.0 与 gson 在 ~/.gradle/caches/modules-2/files-2.1，可 unzip + javap -c -p 查真值；40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L404，同转录 L1），Bash 只定位了四个 gson jar 路径（同转录 L1088-L1089）未查 JsonWriter，随后 Edit ModelJson.ets 新增 gsonHtmlSafe：.replace(/</g,…) 链，并在正则字面量中直接写入 U+2028/U+2029 原字符（同转录 L1099-L1100）。该写法编译失败且孤立代理项结果与 Android 不同，属返修新引入偏差。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "规格阶段 Commons 1.4.0 jar 尚未在本机 Gradle 缓存（该缓存目录与 jar 的文件时间为 2026-10-02T01:02Z 之后，晚于生成结束），规格作者是否能离线取得字节码未核；本例只归因“有 Double 真值仍改写为字符串域、未对基类语义标注未知”。",
+    "Android CursorWindow 对 REAL 列 getString 走 %g 的规则在迁移材料池中无任何输入给出（spec、skill 参考、派工均未提及）；DbHelper 分支的 REAL 读回精度偏差止于“逐字搬运 getString 而未核平台差异”，不另推定生成者明知 %g。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-5e7f81b1b1ef0753d249",
+  "metadata": {
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.247",
+        "2.1.296",
+        "2.1.300"
+      ]
+    },
+    "source_set_id": "sources-fef5281fb5eb1e655dea",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos",
+        "at": "2026-10-01T08:07:31.804Z",
+        "ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1119",
+        "request_ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1117",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos",
+        "at": "2026-10-01T08:07:31.804Z",
+        "ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1119",
+        "request_ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1117",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes",
+        "at": "2026-10-13T15:34:04.077Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L121",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L120",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes",
+        "at": "2026-10-13T15:34:04.077Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L121",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L120",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes",
+        "at": "2026-10-14T01:47:40.558Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L159",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L158",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes",
+        "at": "2026-10-14T01:47:40.558Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L159",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L158",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.10"
+  },
+  "revision": "203ae9a24100267c1011c082352849d2f6596b184a230d8213699ec0075fa03b"
+}

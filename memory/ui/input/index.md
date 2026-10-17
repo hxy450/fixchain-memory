@@ -18,16 +18,26 @@
 - [EditText 的 inputType 键盘与候选提示和内容约束分开映射：textCapCharacters → autoCapitalizationMode、textNoSuggestions → enablePreviewText(false)、带符号数字用含 +/- 的键盘；只有源端有 digits/InputFilter 才过滤，程序写入按 maxLength 截断](lesson-0457a04c31208e1fb916.lesson.md)
   - 时机：界面实现阶段（含公共输入组件设计、页面规格的控件映射与页面转换），把 Android EditText 的 inputType、digits、InputFilter、maxLength 与粘贴回填翻译成 ArkUI TextInput/TextArea 属性时
   - 情境：源布局用 textCapCharacters、textNoSuggestions、number、numberSigned 等 inputType 标志声明键盘与输入法行为，多数未配 android:digits 或 InputFilter，内容合法性在点击计算或保存时才校验；个别控件挂了 InputFilter.AllCaps；页面另有粘贴或扫描回填写入带 maxLength 的输入框。目标 ArkUI（SDK 6.x 可用 autoCapitalizationMode、enablePreviewText、InputType.Number/PhoneNumber）；映射参考只给 number → InputType.Number 与“capitalize 无直接对应，使用文本转换”。
+- [EditText.setError 迁成尾部错误图标加聚焦时弹出的气泡、改动即清，不改成 showError 下方文字或常显红字](lesson-f7edea01f8308bf563ef.lesson.md)
+  - 时机：规格提取阶段为调用 setError 的输入框写转换决策时；界面实现阶段把 EditText.setError 校验提示落成 ArkUI 输入框时
+  - 情境：源码对 EditText（或 TextView）调用 setError(msg) 提示校验失败（如保存时标题为空、两次密码不一致），布局里没有 TextInputLayout 或自定义错误视图；目标准备用 TextInput 的 showError/errorMessage 在框下显示错误文字、在输入框下常显红字，或规格写成“实时校验”。
+  - 例外：源端用 TextInputLayout.setError（框下常显错误文字）或自绘错误视图时，按其呈现迁移
 - [会被子页覆盖再返回的页面里，TextInput 的获焦回调先判别是否由用户触摸引起再写业务状态](lesson-4c476a62732697c56c22.lesson.md)
   - 时机：界面实现阶段，把 TextInput 的焦点回调接到页面业务状态，且页面常驻 NavBar 或保活容器、会被 pushPath 覆盖时
   - 情境：页面用 focused 之类的业务字段决定显示分支（如建议列表与分类）；从子页系统返回后，框架可能把焦点交还该 TextInput。
+- [工具栏 SearchView（actionView）按控件状态机迁移：展开、焦点、提交、收起与菜单重建分开建模，不折成查询函数](lesson-4995a3977dc8bc7fa696.lesson.md)
+  - 时机：规格提取与工具栏接线阶段，把源端菜单项上的 SearchView actionView 迁成目标标题栏搜索框时
+  - 情境：源端在菜单 inflate 后为搜索项设置 SearchView：expandActionView/collapseActionView、OnActionExpandListener 的展开与收起回调（收起时清查询、重载列表、invalidateOptionsMenu）、焦点监听切换其他菜单项可见性、onQueryTextSubmit 的返回值决定是否由 SearchView 投递 ACTION_SEARCH，以及即时搜索偏好。目标规格写成应用内 ViewModel“内化等价”的几个查询函数，实现用一个布尔同时表示展开与焦点、用取消图标代替收起。
 - [把同页多组表单收集为执行请求时，按源执行方法实际读取的控件为每个模式设独立字段，不因同名复用其他表单的槽位](lesson-dee3401b34b8fab1a0fb.lesson.md)
   - 时机：功能实现阶段，把 Android Activity 上多组输入表单的字段收集为服务层执行请求、接到写入或计算方法时
   - 情境：源 Activity 在同一页面持有多组语义相近的输入控件（写块的扇区/块与值块的扇区/块、值块数值与另一模式的数值），各执行方法分别读取自己表单的控件；目标由页面收集参数构造一个请求对象交给共享服务，页面已为各表单建了独立状态。
 - [按 EditText 对齐 TextInput 时，未声明 background 的输入框按主题状态背景（editTextBackground 的 9-patch，随聚焦切换并取其内边距）复刻，并显式关闭源端没有的 ArkUI 默认装饰：填充底与圆角、Password 显隐图标、清除按钮，核默认高度](lesson-1150c0c721e6dc0dede4.lesson.md)
-  - 时机：界面实现或 1:1 对齐修复阶段，把安卓 EditText（含密码框、数字掩码的验证码框）转换或核对为 ArkUI TextInput，决定要显式覆盖哪些默认外观时；为未声明 background 的 EditText 写 TextInput 外观修饰链时
-  - 情境：源输入框是裸 EditText 或其子类，用 android:password、inputType=textPassword/numberPassword 掩码，没有 TextInputLayout passwordToggleEnabled 或自绘显隐按钮，也没有清除按钮；目标用 TextInput，type 为 InputType.Password 或 Normal。 也包括源 EditText 未声明 background、padding 与高度，外观来自框架主题的 editTextBackground 状态选择器（Holo 为 textfield_default/activated_holo_dark 两张 9-patch，含端头竖线与内容内边距）。
+  - 时机：界面实现或 1:1 对齐修复阶段，把安卓 EditText（含密码框、数字掩码的验证码框）转换或核对为 ArkUI TextInput，决定要显式覆盖哪些默认外观时；为未声明 background 的 EditText 写 TextInput 外观修饰链时；以及确定输入框软键盘动作键时
+  - 情境：源输入框是裸 EditText 或其子类，用 android:password、inputType=textPassword/numberPassword 掩码，没有 TextInputLayout passwordToggleEnabled 或自绘显隐按钮，也没有清除按钮；目标用 TextInput，type 为 InputType.Password 或 Normal。 也包括源 EditText 未声明 background、padding 与高度，外观来自框架主题的 editTextBackground 状态选择器（Holo 为 textfield_default/activated_holo_dark 两张 9-patch，含端头竖线与内容内边距）。 也包括规格把 Password 显隐图标登记为“HarmonyOS 自带”的对应能力；以及多个单行 EditText 纵向排列、未写 imeOptions，目标 TextInput 未设 enterKeyType。
   - 例外：源端确有可见性切换（passwordToggleEnabled 或自绘眼睛按钮）或清除按钮，此时保留并按源端对齐样式
+- [收软键盘用 hideTextInput，不用 hideSoftKeyboard 或 stopInputSession；焦点态绑 onFocus/onBlur](lesson-99da84bf5c70367eb3df.lesson.md)
+  - 时机：界面与服务实现阶段，为搜索框等输入框实现“展开取焦、提交收键盘、菜单随焦点切换”并选择输入法控制 API 时
+  - 情境：源端用 InputMethodManager.hideSoftInputFromWindow/showSoftInput 只收放键盘、焦点不变，或由 SearchView 焦点变化驱动菜单与工具栏；规格写“输入法方法实现期核实后钉死”；目标准备调用 showSoftKeyboard/hideSoftKeyboard、stopInputSession，或用点击时手工翻转的布尔量表示“输入框已聚焦”。
 - [源码用 selectable 行加条件尾部勾选表示选中时按同一结构实现，不按“单选”语义换成 Radio](lesson-d53223f43ad454261f26.lesson.md)
   - 时机：界面实现阶段，把 Compose 排序、筛选等选择列表行转换为 ArkUI 行组件并确定选中标记时
   - 情境：源端每行是 Row(Modifier.selectable(selected) { ... })，行首图标加文字，选中时才出现尾部 Icon(ic_check, tint = brand)，未选中行不显示任何标记；目标有 ArkUI Radio 等现成单选控件可用。
