@@ -1,0 +1,37 @@
+# 分协议的蓝牙连接回调按设备聚合：所有协议都断开才判定设备断开，连接、配对与断开成功以回调或回读确认
+
+ID：`lesson-ecc67592eba3402c0a1f` · 版本：2 · 阶段：execute · 主题：[app/system-state](index.md)
+
+概要：分协议连接回调按设备聚合，全部断开才判断开
+
+信号：`connectionStateChange`, `A2DP`, `HFP`, `ACL`, `ACTION_ACL_DISCONNECTED`, `getConnectedDevices`, `ProfileConnectionState`
+
+## 何时使用
+
+实现蓝牙设备连接、断开状态与“连接/断开成功”判定时
+
+## 适用情境
+
+源端用 ACL 等设备级广播判断连接与断开；目标用 A2DP、HFP 等分协议的 connectionStateChange 回调，同一耳机常同时挂多个协议。
+
+## 原因
+
+单个协议断开不代表设备断开；把首个 false 当成设备断开或“断开成功”，会误清列表、误报成功，连接成功若在发起时就显示也会与系统状态不符。来源中重写蓝牙服务时把 A2DP 或 HFP 任一协议的断开直接上报为设备断开，连接页收到首个 false 即判定断开成功，后续修复才改为全部协议断开再判定。
+
+## 做法
+
+1. 维护“设备 → 各协议状态”，任一协议仍为连接，或已连接设备并集中仍含该设备时，不判定断开或断开成功。
+2. 连接、配对、断开的成功提示都在收到系统回调或回读确认后再显示。
+
+## 同源经验
+
+由相同来源卡提炼的其他经验，按共享卡数排序；不是依赖关系。
+
+- [蓝牙开关以 getState 回读终态为准，过渡态不写关闭](lesson-29922f57cc365ff3d638.lesson.md)（共享 1 张卡）
+
+来源支持：1 张卡 · 1 次迁移 · 1 个应用
+
+## 来源（按需复核）
+
+- [case-c9f54856d3fb74cbd54b](../../../../store/cases/case-c9f54856d3fb74cbd54b/44393c2b1eb069a8783fb6cdaf2173655cd8ced3e5c347c5d8df872baf20fba2.json) · 结论：diagnosis, rec-06e4f38e27
+  卡片版本：`44393c2b1eb069a8783fb6cdaf2173655cd8ced3e5c347c5d8df872baf20fba2`

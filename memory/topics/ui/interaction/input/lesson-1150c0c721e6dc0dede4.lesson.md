@@ -1,0 +1,56 @@
+# 按 EditText 对齐 TextInput 时，未声明 background 的输入框按主题状态背景（editTextBackground 的 9-patch，随聚焦切换并取其内边距）复刻，并显式关闭源端没有的 ArkUI 默认装饰：填充底与圆角、Password 显隐图标、清除按钮，核默认高度
+
+ID：`lesson-1150c0c721e6dc0dede4` · 版本：5 · 阶段：execute/repair · 主题：[ui/interaction/input](index.md)
+
+概要：TextInput 关默认装饰，按主题状态背景复刻
+
+信号：`showPasswordIcon`, `InputType.Password`, `cancelButton`, `textPassword`, `numberPassword`, `passwordToggleEnabled`, `editTextBackground`, `enterKeyType`, `imeOptions`, `keepEditableState`, `borderRadius(0)`
+
+## 何时使用
+
+界面实现或 1:1 对齐修复阶段，把安卓 EditText（含密码框、数字掩码的验证码框）转换或核对为 ArkUI TextInput，决定要显式覆盖哪些默认外观时；为未声明 background 的 EditText 写 TextInput 外观修饰链时；以及确定输入框软键盘动作键时
+
+## 适用情境
+
+源输入框是裸 EditText 或其子类，用 android:password、inputType=textPassword/numberPassword 掩码，没有 TextInputLayout passwordToggleEnabled 或自绘显隐按钮，也没有清除按钮；目标用 TextInput，type 为 InputType.Password 或 Normal。 也包括源 EditText 未声明 background、padding 与高度，外观来自框架主题的 editTextBackground 状态选择器（Holo 为 textfield_default/activated_holo_dark 两张 9-patch，含端头竖线与内容内边距）。 也包括规格把 Password 显隐图标登记为“HarmonyOS 自带”的对应能力；以及多个单行 EditText 纵向排列、未写 imeOptions，目标 TextInput 未设 enterKeyType。
+
+## 例外与边界
+
+- 源端确有可见性切换（passwordToggleEnabled 或自绘眼睛按钮）或清除按钮，此时保留并按源端对齐样式
+
+## 原因
+
+ArkUI 的 Password 输入框默认显示显隐图标（showPasswordIcon 默认 true），源 XML 里不会出现对应属性，只比对源端写出的属性就会漏掉；dumpLayout 的字段 bounds 也看不出这类内部装饰，几何全对不等于外观一致。来源中对齐会话两次读到三个裸 EditText，也已注意到 TextInput 默认高度与源端不同，差异清单仍未列显隐图标；验证只核几何，截图拍了没看，用户随后报告“三个小眼睛”。同一应用的登录页、找回密码页也有同类输入框。TextInput 自带填充底、圆角、内边距与默认高度；只设透明底加 bottom 边框时默认圆角让两端上翘，也没有聚焦态。另一应用的经验摘要写“TextInput 显式覆盖默认填充底为透明+下划线”，写者据此用静态下边框和猜测色近似了状态背景。
+
+## 做法
+
+1. 源 EditText 未声明 background 时外观是主题的状态背景：从本机 SDK 平台资源取 editTextBackground 选择器各状态的 9-patch，随 onFocus/onBlur 切换，padding 取 9-patch 内容区，高度按 wrap_content 结果（内边距 + 文字行高）设置，光标色按 textCursorDrawable；不用 border bottom 加猜测色近似。TextInput 改透明底时同时显式 borderRadius(0)。
+2. 源端密码框没有显隐切换时，在 .type(InputType.Password) 旁写 .showPasswordIcon(false)；数字掩码的验证码框同样处理。
+3. 单行 EditText 未写 imeOptions 时动作键由框架决定：下方还有可编辑框为 Next（回车移到下一框），否则为 Done（本机 android-36.1 TextView.onCreateInputConnection）；TextInput 默认 EnterKeyType.Done（text_input.d.ts）。按源端顺序逐框写 enterKeyType(EnterKeyType.Next)，最后一框写 Done，并在 onSubmit 把焦点移到下一框；非 TV 设备按回车默认失焦并收起键盘，逐框 Next 时在 OnSubmitCallback 里调用 event.keepEditableState() 保持键盘（HarmonyOS 文档 ts-basic-components-textinput，访问于 2026-10-17）。
+4. 对齐 TextInput 时，除源 XML 写出的属性外，逐项核源端没有、ArkUI 却默认带出的外观：默认填充底、圆角与内边距（默认 padding 为上下 8vp、左右 16vp，下划线模式为上下 12vp、左右 0）、默认高度、密码显隐图标（非 TV 设备默认显示）、输入时的清除按钮（cancelButton 默认 CancelButtonStyle.INPUT 即有内容时显示，可设为 INVISIBLE；HarmonyOS 文档 ts-basic-components-textinput，访问于 2026-10-17）、光标样式；源端没有对应项就显式关闭或覆盖。
+5. 修一处后在工程内检索 InputType.Password 等同类字段一并处理，不等用户逐页报告。
+
+## 可选检查
+
+- 真机验证输入框时打开截图目视对照（必要时裁剪输入框右端），不只看 dumpLayout 的 bounds。
+
+## 同源经验
+
+由相同来源卡提炼的其他经验，按共享卡数排序；不是依赖关系。
+
+- [不补源端没有的元素；框架默认元素须保留](../../../process/unapproved-deviation/lesson-352b96f599237cd27403.lesson.md)（共享 1 张卡）
+- [主题或宿主隐式提供的外观写成显式样式，取值自实际提供方](../../theme/sources/lesson-47785524c7f132ea7efe.lesson.md)（共享 1 张卡）
+- [未设 WebSettings 时按安卓默认逐项显式设](../../web/lesson-65ebab594a9dabe77ac2.lesson.md)（共享 1 张卡）
+- [沿用已生成页面或兄弟写法前回源码核对语义](../../../process/secondary-over-source/lesson-e9c6e8ef1b29a6fe9c26.lesson.md)（共享 1 张卡）
+- [setError 迁尾部图标加聚焦气泡、改动即清](lesson-f7edea01f8308bf563ef.lesson.md)（共享 1 张卡）
+
+来源支持：3 张卡 · 已知 2 次迁移（部分未记录） · 已知 2 个应用（部分未记录）
+
+## 来源（按需复核）
+
+- [case-0ce95f901f7e409784a3](../../../../../store/cases/case-0ce95f901f7e409784a3/4aa26550cce3a384a4aa9ffe3848cf1c7c967010523cbc09787d6c214d2c67df.json) · 结论：diagnosis, rec-43526c324a, rec-5672d572c4, rec-941d2f93ff
+  卡片版本：`4aa26550cce3a384a4aa9ffe3848cf1c7c967010523cbc09787d6c214d2c67df`
+- [case-403ea87fd461ab4a0ad8](../../../../../store/cases/case-403ea87fd461ab4a0ad8/396b6254f2aabefa36741250da14adee7db9fc436d214e603f984286e8c606b2.json) · 结论：diagnosis, rec-0fa5c81434, rec-0d24cb42e7, rec-446906ee98, rec-e69c5cd74e
+  卡片版本：`396b6254f2aabefa36741250da14adee7db9fc436d214e603f984286e8c606b2`
+- [case-9174c62c22f8d979372e](../../../../../store/cases/case-9174c62c22f8d979372e/eec4229b6f305745c835a372c2d8c2fb44e5a7937fa2f43696c8ce7707fe1efa.json) · 结论：diagnosis, rec-8c896c8866, rec-8e0fbb877e
+  卡片版本：`eec4229b6f305745c835a372c2d8c2fb44e5a7937fa2f43696c8ce7707fe1efa`

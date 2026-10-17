@@ -1,0 +1,56 @@
+# 单视图对父容器居中、兄弟单向悬挂时（ConstraintLayout 单向约束、RelativeLayout layout_below），用 RelativeContainer 或不占行高的下挂层复刻，不用 Column 整组居中
+
+ID：`lesson-e607a28fcd91acd2b40f` · 版本：5 · 阶段：spec/execute · 主题：[ui/layout/constraints](index.md)
+
+概要：单视图居中加兄弟悬挂用 RelativeContainer
+
+信号：`RelativeContainer`, `alignRules`, `__container__`, `constraintTop_toBottomOf`, `chainStyle`, `VerticalAlign.Center`, `HorizontalAlign.Center`, `ConstraintLayout`, `layout_below`, `layout_centerVertical`
+
+## 何时使用
+
+规格提取阶段把 ConstraintLayout 约束翻译成容器与定位决策，或页面实现阶段落定容器时；转换 RelativeLayout 控件排（按钮 layout_centerVertical、标签 layout_below）时
+
+## 适用情境
+
+源 ConstraintLayout 中一个子视图以 start/end/top/bottom 四向锚定 parent 自身居中，另一个兄弟只以 constraintTop_toBottomOf 等单向约束挂在它下方，兄弟之间没有双向约束。也包括 RelativeLayout 控件排：按钮 layout_centerVertical，标签以 layout_below 挂在各自按钮下方，兄弟之间有固定 margin。
+
+## 例外与边界
+
+- 兄弟之间有双向约束构成 chain 时，按 chain 语义（chainStyle）另行转换，不适用本条
+
+## 原因
+
+只有相邻视图互相双向约束才构成 chain；单向悬挂的兄弟不参与居中，被居中的只有锚定 parent 的那个视图。改成 Column 整组居中后，该视图中心会上移 (间距 + 兄弟高度) / 2。来源中规格把这种布局概括成“垂直居中链”：结构段写对了锚点，决策表却选了 Column 居中，项目级映射基线也写成“居中约束链 → Column 居中”，实现照做。另一应用中，城市卡的天气图标与描述块同时约束到 parent 的 start 与 end、在整卡中居中，转换者却把它放进 Row 里 Blank() 之后，天气信息被推到右侧、挨着温度。
+
+## 做法
+
+1. 规格提取时逐个子视图记下纵向锚点指向 parent 还是兄弟，再判断是否构成 chain；把决策写成“A 在容器内自身居中，B 以 top 锚 A 底部加间距”，写完与同文件的页面结构段对账；项目级映射基线里的笼统映射按同一规则改成按约束区分。
+2. ArkUI 用 RelativeContainer：A 设 .alignRules({ middle: { anchor: '__container__', align: HorizontalAlign.Center }, center: { anchor: '__container__', align: VerticalAlign.Center } })；B 设 .alignRules({ middle: { anchor: '__container__', align: HorizontalAlign.Center }, top: { anchor: '<A 的 id>', align: VerticalAlign.Bottom } }).margin({ top: <源间距> })；被锚定的子组件要设 id。
+3. 实现阶段若规格给的是 Column 整组居中，先用源 XML 的 constraint 属性核对；与源约束冲突时按源约束实现，并在转换报告标出。
+4. 列表项中同时约束到 parent 首尾的信息块在整卡居中：用 Stack 居中叠放或 RelativeContainer 居中对齐，不放进用 Blank() 分隔的横向 Row；贴 parent 末端的兄弟单独按末端锚定。
+5. RelativeLayout 控件排中按钮保持源尺寸，由 Row alignItems(VerticalAlign.Center) 对齐；layout_below 的标签做成不占行高的下挂层（Stack 加 position，或 RelativeContainer alignRules），逐个兄弟补齐源 margin，不用统一的大槽位把图标和标签一起居中。
+
+## 可选检查
+
+- 对居中结果有疑问时，用布局 dump 比较被居中视图的中心与容器内容区中心，单视图居中时两者应重合；无需另起截图任务。
+
+## 同源经验
+
+由相同来源卡提炼的其他经验，按共享卡数排序；不是依赖关系。
+
+- [Tab 宿主不统一加顶部安全区，按子页源处理分别避让](../immersion/lesson-48e9408812c28e934db8.lesson.md)（共享 1 张卡）
+- [布局引用的 @drawable 先打开取数值写进规格与修饰链](../../theme/sources/lesson-771d1ba1a032b769097a.lesson.md)（共享 1 张卡）
+- [规格与源码冲突按源实现，例外只认决策 ID](../../../process/secondary-over-source/lesson-7a065e8fe384b8c462cc.lesson.md)（共享 1 张卡）
+- [源 XML 的 gone 节点不渲染，固定尺寸点击容器作热区](../layers/lesson-f1a98587fe72ff68c5a8.lesson.md)（共享 1 张卡）
+- [tint 着色渐变装饰层用容器 linearGradient](../../theme/effects/lesson-fcd86aeea6209ea0718b.lesson.md)（共享 1 张卡）
+
+来源支持：3 张卡 · 3 次迁移 · 3 个应用
+
+## 来源（按需复核）
+
+- [case-06c7df8f8d85e13580ac](../../../../../store/cases/case-06c7df8f8d85e13580ac/ca52540bea37bccd8d5ad10a7f6923c33ff17356042c3c86ff15c469f7a1ac44.json) · 结论：diagnosis, rec-6fc2485d52
+  卡片版本：`ca52540bea37bccd8d5ad10a7f6923c33ff17356042c3c86ff15c469f7a1ac44`
+- [case-5b7b00a1deb25ed0b8d3](../../../../../store/cases/case-5b7b00a1deb25ed0b8d3/919bf87f71df8c5347bde16fb06fa3396a51d284ab648ce5d123265dfbf05b5e.json) · 结论：rec-c2c310f793
+  卡片版本：`919bf87f71df8c5347bde16fb06fa3396a51d284ab648ce5d123265dfbf05b5e`
+- [case-6448a485599bfc0740c6](../../../../../store/cases/case-6448a485599bfc0740c6/ee79f91fda0232a915c1fd976889b9b074c5a5ebef6177e7b7704b4c30211b79.json) · 结论：diagnosis, rec-9500b1459d, rec-f403259644, rec-1d95ca19a6
+  卡片版本：`ee79f91fda0232a915c1fd976889b9b074c5a5ebef6177e7b7704b4c30211b79`

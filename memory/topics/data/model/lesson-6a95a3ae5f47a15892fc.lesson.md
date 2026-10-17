@@ -1,0 +1,37 @@
+# 带“本月”一类关联语义的保存与读取，按源端实体构造参数和查询条件建模关联键
+
+ID：`lesson-6a95a3ae5f47a15892fc` · 版本：2 · 阶段：execute/converge · 主题：[data/model](index.md)
+
+概要：带本月语义的保存与查询按源实体构造参数建关联键
+
+信号：`Budget(month`, `getBudgetByTimestamp`, `Repository`, `@Query`
+
+## 何时使用
+
+数据层实现阶段，把源端实体的保存与查询迁移为目标模型字段和仓储方法参数时
+
+## 适用情境
+
+源端以 Budget(month, associated, classify) 一类构造保存，并按 getBudgetByTimestamp(month, classify) 查询当月记录；目标准备在已有模型上加一个单值字段。
+
+## 原因
+
+只加单值字段会丢掉关联键：切换月份仍显示同一值，统计也不按当月计算。来源中写者读到源端按“月份+账本”保存与读取预算，仍在账本上加单个预算值、设置方法不带月份，直到用户要求“本月预算与本月统计关联”才补月份键并按当月账单计算。
+
+## 做法
+
+1. 把源端实体构造参数与查询条件逐项映射为目标模型字段和仓储方法参数；带“本月/当日”语义的数据要有对应时间键，页面按当前选中时间过滤。
+2. 收尾时沿源端调用链核对保存、读取、展示三处使用同一关联键，不只核对弹窗外观与校验文案。
+
+## 同源经验
+
+由相同来源卡提炼的其他经验，按共享卡数排序；不是依赖关系。
+
+- [金额含小数时不用 InputType.Number](../../ui/interaction/input/lesson-a5aeed3d4c376cd085d1.lesson.md)（共享 1 张卡）
+
+来源支持：1 张卡 · 1 次迁移 · 1 个应用
+
+## 来源（按需复核）
+
+- [case-0d37e50dbb1a2e0a9bee](../../../../store/cases/case-0d37e50dbb1a2e0a9bee/a72d2163734bf85155f4e46236ac3ab57df7d675bfda616e92a576af577688da.json) · 结论：diagnosis, rec-b48514868c, rec-0acf7f494d
+  卡片版本：`a72d2163734bf85155f4e46236ac3ab57df7d675bfda616e92a576af577688da`

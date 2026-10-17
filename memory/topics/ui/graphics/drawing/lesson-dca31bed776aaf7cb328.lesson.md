@@ -1,0 +1,42 @@
+# 自绘图表的折线点与节点标签共用同一坐标原点：点坐标已含顶部留白时，不再给图形节点加同向 position 偏移
+
+ID：`lesson-dca31bed776aaf7cb328` · 版本：2 · 阶段：execute · 主题：[ui/graphics/drawing](index.md)
+
+概要：折线点与标签共用原点，点坐标含留白时不再加 position
+
+信号：`valToY`, `ItemDecoration`, `Polyline`, `paddingTop`, `Canvas`, `Shape`
+
+## 何时使用
+
+界面实现阶段，把 Android 自定义 ItemDecoration/Canvas 图表（温度折线、趋势图）转换为 ArkUI Canvas、Polyline 或 Shape 时
+
+## 适用情境
+
+源端在同一画布坐标里用 valToY 一类函数（已含 paddingTop 与文字高度）画折线和节点标签；目标把折线画在 Polyline/Shape 上并用 position 定位，标签另用 Text 定位。
+
+## 原因
+
+源端映射函数里已计入的顶部留白，若再通过图形节点的 position 偏移一次，折线相对标签整体下移、落到容器底部被裁剪。来源中重建趋势图时 y 已计入 150dp 顶部留白，又把 Polyline 定位在 y:150，用户反馈“两条折线太靠下看不清”。
+
+## 做法
+
+1. 让折线点与标签使用同一原点：图形节点设了 position 偏移时，点坐标扣除同一偏移；或都在同一 Canvas 坐标系中绘制。
+
+## 可选检查
+
+- 需要确认时，用最高、最低两组边界值算出屏幕 y，确认都在容器高度内且与标签对齐。
+
+## 同源经验
+
+由相同来源卡提炼的其他经验，按共享卡数排序；不是依赖关系。
+
+- [编译修复只改报错行，不删功能或换异义替代](../../../process/check-gaming/lesson-29744eb694376e8acaca.lesson.md)（共享 1 张卡）
+- [图标按资源固有 dp 显示，触摸盒放外层不设成盒尺寸](../icons/lesson-bdc493f5950835f9bfcc.lesson.md)（共享 1 张卡）
+- [编码到资源的多变体映射按取值字段拆分不合一](../icons/lesson-c65e8e59008a5e31bcad.lesson.md)（共享 1 张卡）
+
+来源支持：1 张卡 · 1 次迁移 · 1 个应用
+
+## 来源（按需复核）
+
+- [case-9d7fa754a567e2ecec7e](../../../../../store/cases/case-9d7fa754a567e2ecec7e/08068dd456a4c32cc1327c39f339215b49dab4ffc8f5a25dc8024b7112ebbd28.json) · 结论：diagnosis, rec-a8aca0724d
+  卡片版本：`08068dd456a4c32cc1327c39f339215b49dab4ffc8f5a25dc8024b7112ebbd28`

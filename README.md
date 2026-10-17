@@ -4,7 +4,7 @@
 
 ## 两层产物
 
-- `memory/`：开发维护用的渐进披露目录，保留每条经验的来源段，可直接点击到 `store/` 中对应版本的卡片。从根索引按任务进入相关主题，不必全量加载。
+- `memory/`：开发维护用的阅读包，按三个检索轴组织：`stage`（阶段字段）、`topic`（领域/主题[/子主题]，按技术机制划分）、`signals`（输入里可 grep 的符号）。根 `index.md` 给出三步召回协议、领域与阶段入口；`catalog.jsonl` 每行一条经验，`signals.json` 是符号到经验 id 的倒排表，`by-stage/` 按阶段分组，`topics/` 每级只列直接子项，`topics/<主题>/<id>.lesson.md` 是正文（与主题索引同目录，末尾自动附同源经验和来源段，可点击到 `store/` 中对应版本的卡片）。
 - `store/`：正式情景卡、经验数据及格式需要的版本快照。经验通过 case、claim、revision 关联具体来源卡。
 
 正式卡使用自包含的 `migloop-case/4`，保存模型总结、建议、归因图及必要身份与环境信息。迁移模型通常只阅读经验，证据卡用于按需复核；图的 UI 结合原始迁移转录重新生成，不把检查回执和展示缓存存成知识。
@@ -25,9 +25,25 @@
 
 旧版阅读包由 Git 历史保留，不按迁移复制多份。此前的 `runs/` 已退出当前 Git 树，本地的材料、稿件、报告与断点仍保留；原有提交没有改写。此次目录调整不改变卡片内容、经验语义或知识 revision。
 
-当前发布分支：`memory/multi-app-20261017`（multi-app-20261012 全部内容加 omni-notes 归并，知识版本 `212330c6…`，715 张卡、550 条 active 经验）。留出 app ColorLines 的独立评测库在 `memory/colorlines-holdout`，不并入本分支。工作目录、转录、SQLite、模型日志、提案及本机调度信息不进入正式发布树。
+当前发布分支：`memory/multi-app-20261017`（旧目录结构，知识版本 `212330c6…`）。本分支 `memory/structure-v2-20261017` 是同一批 715 张卡、550 条经验的 v2 结构版本（知识版本 `9f396e97…`），对照评测后再定是否作为发布分支。留出 app ColorLines 的独立评测库在 `memory/colorlines-holdout`，不并入本分支。工作目录、转录、SQLite、模型日志、提案及本机调度信息不进入正式发布树。
 
 机械检查保证格式、引用及所画历史关系符合契约，不等于归因语义认证或泛化效果证明。评测应冻结一个 Git commit / memory revision，在未入库应用上对照。
+
+## 2026-10-17：按 v2 结构重建（分支 memory/structure-v2-20261017）
+
+起点 `212330c6…`（memory/multi-app-20261017）。知识版本 `9f396e9797c18686ee288022550338c72218bc5d5ded0c29f3fd10ad48283072`（序号 88：87 为 migrate，88 为补字段与重划主题），发布器 0.11.1（migloop `feat/memory-structure-0.10.10`：把 0.11.0 移到 0.10.10 之上）。保留 **715 张卡、550 条 active 经验**，没有重新调查，没有改写任何经验的 title、when、description、why、how、check、依赖或来源绑定；每条经验版本号加一，因为补了字段、移动了主题。
+
+- **claim ID 稳定化**：`memory.py migrate` 在快照内把 715 张卡的 2,628 条建议绑定从 `recommendation:N` 改为 `rec-<文本哈希>`，卡片文件未改。
+- **检索字段**：2026-10-07 v2 已定过且正文此后未改的 284 条沿用当时的 topic、stage、summary、signals；正文改过的 82 条沿用 v2 主题，按新正文重核 summary 与 signals；v2 之后新增的 184 条由分类子任务逐条补全。阶段分布：execute 513、spec 194、repair 92、plan 42、verify 42、converge 27；2,601 个不同符号。
+- **主题树**：在 v2 树上扩展为 5 个领域 105 个主题路径、89 个叶子（最大 12 条）。新开的叶子有 app/playback、app/recreation、app/nfc、app/notification、app/window、data/preferences、arkts/java-stdlib、arkts/async-mapping、process/unapproved-deviation、process/lossy-transcription、ui/animation/*、ui/web、ui/accessibility、ui/interaction 下的 focus-ime、gestures、press-states、app-bar，以及 ui/dialog/frame、ui/graphics/canvas-text、ui/layout/variants。超限的 app/capability（15 条）拆为 sdk-lookup、degradation、launch，ui/layout/safearea 拆为 immersion 与 insets（软键盘避让并入 insets），页面转场并入 ui/animation/transitions。
+- **校验**：apply 前后逐条比对，经验正文、来源绑定与状态无变化；从 store 重新导出与提交的 `memory/` 一致；lint 文风提示 690 条，与起点相同。
+
+### 没有做的
+
+- export 给出 23 条非阻断整理提示：14 个叶子少于 4 条（如 ui/libraries、ui/interaction/app-bar 各 1 条），9 个叶子多于 9 条（ui/layout/sizing 12 条，app/resources、data/storage、ui/theme/effects 各 11 条）。子任务建议的进一步拆分（app/resources 分 identity 与 conversion，back-stack、feedback、input 按子机制拆）没有做。
+- 子任务提出的跨领域与跨叶子调整（如 SwipeToDismissBox 移到 gestures、runtime-semantics 两条移到 async-mapping）没有采纳；changed 经验的 topic 全部沿用 v2。
+- lesson-6b2879705254045a49c5 正文没有任何代码符号，signals 暂用“同一项即忽略”这句守卫描述，不是 grep 符号。
+- 召回方要用 0.11.1 的 recall skill 才能按三步协议读这个布局；没有做召回或迁移评测。
 
 ## 2026-10-17：omni-notes 归并（分支 memory/omni-notes-20261017）
 
