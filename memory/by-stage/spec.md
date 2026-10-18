@@ -267,7 +267,7 @@
 
 ### [ui/graphics/drawing](../topics/ui/graphics/drawing/index.md) — Canvas 自绘的移植：坐标原点共用、自适应公式的参照常量、共享绘制分支的统一规则与被注释绑定的静态化。
 
-- [按 px 公式移植画布时用 PX 构造上下文](../topics/ui/graphics/drawing/lesson-7083c6ad69ab19ad17dd.lesson.md) · 信号：LengthMetricsUnit.PX, CanvasRenderingContext2D, measureText, Paint.setTextSize
+- [按 px 公式移植画布时主画布与离屏都用 PX 构造](../topics/ui/graphics/drawing/lesson-7083c6ad69ab19ad17dd.lesson.md) · 信号：LengthMetricsUnit.PX, CanvasRenderingContext2D, measureText, Paint.setTextSize
 - [预缩放位图在 PixelMap 上按同一采样缩放](../topics/ui/graphics/drawing/lesson-c3bd9c8b2f24c209a659.lesson.md) · 信号：BitmapFactory.decodeResource, createScaledBitmap, drawBitmap, drawImage
 
 ### [ui/graphics/icons](../topics/ui/graphics/icons/index.md) — 图标资源的选取与显示：原图复制不以近名替代、固有 dp 与触摸盒分离、场景变体映射、动画矢量帧与 Lottie 接入。

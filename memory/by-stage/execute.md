@@ -426,7 +426,7 @@
 - [Adapter 注释掉的绑定按未启用，只按 XML 静态属性](../topics/ui/graphics/drawing/lesson-cd87ec49e06af8e6459a.lesson.md) · 信号：Adapter, onBindViewHolder, maxTop, minTop
 - [反复 render 的画布每帧先清屏](../topics/ui/graphics/drawing/lesson-351ce34d3ebe51b8ff8e.lesson.md) · 信号：clearRect, onDraw, render(), CanvasRenderingContext2D
 - [折线点与标签共用原点，点坐标含留白时不再加 position](../topics/ui/graphics/drawing/lesson-dca31bed776aaf7cb328.lesson.md) · 信号：valToY, ItemDecoration, Polyline, paddingTop
-- [按 px 公式移植画布时用 PX 构造上下文](../topics/ui/graphics/drawing/lesson-7083c6ad69ab19ad17dd.lesson.md) · 信号：LengthMetricsUnit.PX, CanvasRenderingContext2D, measureText, Paint.setTextSize
+- [按 px 公式移植画布时主画布与离屏都用 PX 构造](../topics/ui/graphics/drawing/lesson-7083c6ad69ab19ad17dd.lesson.md) · 信号：LengthMetricsUnit.PX, CanvasRenderingContext2D, measureText, Paint.setTextSize
 - [烘焙位图改每帧绘制时状态留快照、按比例缩放](../topics/ui/graphics/drawing/lesson-046c8bbb304684669060.lesson.md) · 信号：onSizeChanged, Bitmap, onDraw, setBounds
 - [自绘红点按实际分支取尺寸，半径换直径](../topics/ui/graphics/drawing/lesson-99fe69fc59afa886750d.lesson.md) · 信号：BadgeView, setBadgeCount, drawCircle, Circle
 - [自适应尺寸公式的参照基数写成独立常量不替换](../topics/ui/graphics/drawing/lesson-f395cbdf6742a7f4c761.lesson.md) · 信号：referenceCellHeight, contentHeight / 6, Canvas, onDraw
