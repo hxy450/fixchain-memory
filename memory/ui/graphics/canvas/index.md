@@ -28,7 +28,7 @@
   - 情境：源端在 onSizeChanged 等时机把受状态字段控制的元素（如首启说明）和圆角底、数字等烘焙进 Bitmap，onDraw 只贴图，或在出生、合并动画中用 setBounds((int)…) 整体拉伸、按 int 位移绘制；这些状态在位图生成后仍会被其他流程改写；目标改为 Canvas 每帧 roundRect、fillText 等矢量绘制。
 - [按 Android px 公式移植自绘 View 时先定画布上下文单位：用 LengthMetricsUnit.PX 构造，让字号、测宽、几何与触点同域，dp 常量与 vp 输入在边界换算](lesson-7083c6ad69ab19ad17dd.lesson.md)
   - 时机：规格提取与渲染实现阶段，创建 CanvasRenderingContext2D，并为字体串、measureText、几何公式、触点坐标、窗口避让值和 dp 常量确定单位域时
-  - 情境：源端是 Android 自定义 View：onSizeChanged 给出 int px 尺寸，Paint.setTextSize/measureText 在 px 域推导字号与派生间距，drawable 圆角等常量以 dp 声明；目标用 ArkUI Canvas 逐式移植，规格或已有代码对画布单位的表述不一致（字体串写 px、映射写 vp、触点写 px 域）。
+  - 情境：源端是 Android 自定义 View：onSizeChanged 给出 int px 尺寸，Paint.setTextSize/measureText 在 px 域推导字号与派生间距，drawable 圆角等常量以 dp 声明，位图资源的固有尺寸（getIntrinsicWidth/Height）也作为 px 量进入格宽、边界等公式；目标用 ArkUI Canvas 逐式移植，规格或已有代码对画布单位的表述不一致（字体串写 px、映射写 vp、触点写 px 域）。
 - [源端位图按密度解码、createScaledBitmap 预缩放后原尺寸绘制时，目标在 PixelMap 上按同一采样预缩放](lesson-c3bd9c8b2f24c209a659.lesson.md)
   - 时机：规格提取阶段把源端位图的解码、预缩放与绘制方式写成画布绘制契约时；渲染实现阶段按契约装载并绘制这些位图时
   - 情境：源端自绘 View 用 BitmapFactory.decodeResource 解码只放在单一密度目录（如 drawable-ldpi）的位图，再用 Bitmap.createScaledBitmap(raw, w, h, filter) 缩到运行时算出的尺寸，onDraw 里 drawBitmap(bmp, x, y, paint) 按原尺寸绘制；目标在 ArkUI Canvas 上用 drawImage 移植。

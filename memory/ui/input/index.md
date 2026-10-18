@@ -21,12 +21,16 @@
 - [会被子页覆盖再返回的页面里，TextInput 的获焦回调先判别是否由用户触摸引起再写业务状态](lesson-4c476a62732697c56c22.lesson.md)
   - 时机：界面实现阶段，把 TextInput 的焦点回调接到页面业务状态，且页面常驻 NavBar 或保活容器、会被 pushPath 覆盖时
   - 情境：页面用 focused 之类的业务字段决定显示分支（如建议列表与分类）；从子页系统返回后，框架可能把焦点交还该 TextInput。
+- [对话框里的 EditText 把焦点、软键盘与预填光标分三项迁移：只获焦不弹键盘时 TextInput/TextArea 设 enableKeyboardOnFocus(false)，setText 预填后光标置于开头](lesson-b8d75f1de6a5d144f6fc.lesson.md)
+  - 时机：规格提取阶段为源端对话框内 EditText 写打开时的焦点、软键盘与预填光标契约时；弹层内容组件实现与宿主接线阶段落实这些初始状态时
+  - 情境：源端 AlertDialog/DialogFragment 用 setView 承载 EditText，靠布局 &lt;requestFocus/&gt; 或首个可获焦视图获焦，onCreateDialog 里 setText 预填；源码与 manifest 都没有 showSoftInput、setSoftInputMode 或 windowSoftInputMode。目标以 openCustomDialog 承载 TextInput/TextArea 内容组件，用 defaultFocus 或宿主 requestFocus 获焦。
+  - 例外：源码显式请求输入法（showSoftInput，setSoftInputMode 为 STATE_VISIBLE/ALWAYS_VISIBLE，或 DialogPreference/EditTextPreference 打开时请求输入法）：按源端打开即弹键盘
 - [把同页多组表单收集为执行请求时，按源执行方法实际读取的控件为每个模式设独立字段，不因同名复用其他表单的槽位](lesson-dee3401b34b8fab1a0fb.lesson.md)
   - 时机：功能实现阶段，把 Android Activity 上多组输入表单的字段收集为服务层执行请求、接到写入或计算方法时
   - 情境：源 Activity 在同一页面持有多组语义相近的输入控件（写块的扇区/块与值块的扇区/块、值块数值与另一模式的数值），各执行方法分别读取自己表单的控件；目标由页面收集参数构造一个请求对象交给共享服务，页面已为各表单建了独立状态。
 - [按 EditText 对齐 TextInput 时，未声明 background 的输入框按主题状态背景（editTextBackground 的 9-patch，随聚焦切换并取其内边距）复刻，并显式关闭源端没有的 ArkUI 默认装饰：填充底与圆角、Password 显隐图标、清除按钮，核默认高度](lesson-1150c0c721e6dc0dede4.lesson.md)
   - 时机：界面实现或 1:1 对齐修复阶段，把安卓 EditText（含密码框、数字掩码的验证码框）转换或核对为 ArkUI TextInput，决定要显式覆盖哪些默认外观时；为未声明 background 的 EditText 写 TextInput 外观修饰链时
-  - 情境：源输入框是裸 EditText 或其子类，用 android:password、inputType=textPassword/numberPassword 掩码，没有 TextInputLayout passwordToggleEnabled 或自绘显隐按钮，也没有清除按钮；目标用 TextInput，type 为 InputType.Password 或 Normal。 也包括源 EditText 未声明 background、padding 与高度，外观来自框架主题的 editTextBackground 状态选择器（Holo 为 textfield_default/activated_holo_dark 两张 9-patch，含端头竖线与内容内边距）。
+  - 情境：源输入框是裸 EditText 或其子类，用 android:password、inputType=textPassword/numberPassword 掩码，没有 TextInputLayout passwordToggleEnabled 或自绘显隐按钮，也没有清除按钮；目标用 TextInput，type 为 InputType.Password 或 Normal。 也包括源 EditText 未声明 background、padding 与高度，外观来自框架主题的 editTextBackground 状态选择器（Holo 为 textfield_default/activated_holo_dark 两张 9-patch，含端头竖线与内容内边距；Material 系为 &lt;inset&gt; 包着随状态切换的 9-patch 选择器 edit_text_material）。
   - 例外：源端确有可见性切换（passwordToggleEnabled 或自绘眼睛按钮）或清除按钮，此时保留并按源端对齐样式
 - [源码用 selectable 行加条件尾部勾选表示选中时按同一结构实现，不按“单选”语义换成 Radio](lesson-d53223f43ad454261f26.lesson.md)
   - 时机：界面实现阶段，把 Compose 排序、筛选等选择列表行转换为 ArkUI 行组件并确定选中标记时

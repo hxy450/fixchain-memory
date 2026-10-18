@@ -64,9 +64,12 @@
   - 时机：界面实现阶段，按项目已采用的页内覆层写法（条件渲染的全幅遮罩 + 卡片）改写 Android Dialog，确定覆层挂载层级与卡片、按钮行的高度约束时
   - 情境：源弹窗由 Activity 创建（如 Fragment 中 new XxxDialog(getActivity(), ...)），样式继承 Theme.Dialog、windowIsFloating=true，布局是固定宽、wrap_content 高的卡片，按钮行内有 layout_height=match_parent 的竖分隔 View；触发按钮位于 Tabs 子页或嵌套组件内。 也包括按钮由 AlertDialog.Builder 的 setPositive/Negative/NeutralButton 生成、源布局里没有按钮行，按钮条外观来自主题的平台对话框样式。
   - 例外：改用 openCustomDialog、bindSheet 等系统弹窗 API 时，全窗遮罩由系统窗口负责，按真弹窗写法处理
-- [锚定弹出的下拉（PopupWindow showAsDropDown 自定义下拉、框架 ActionBar 的溢出下拉面板）按源样式在锚点下方还原：不换成原生 Select、系统 Menu 或整页筛选视图](lesson-666a746081ba1e447322.lesson.md)
-  - 时机：界面实现阶段，为筛选栏、排序栏等下拉选项选择 ArkUI 弹出容器、呈现位置与菜单样式时；为工具栏溢出菜单（showAsAction=never 的项）选择承载方式与外观时
-  - 情境：源端点击筛选项后用 PopupWindow 加载自定义布局（固定宽度、固定行高、箭头图、勾选图标），以 showAsDropDown 锚定在触发器或置顶筛选栏下方原位展开；同页可能另有整屏的“更多筛选”面板；目标有现成的 Select 组件或已写好的整页筛选组件可用。 也包括源 Activity 用框架 ActionBar（Theme.Holo 等），showAsAction=never 的菜单项由平台主题绘制的 ListPopupWindow 下拉面板承载，源码里没有面板样式；目标准备用 ArkUI Menu/bindMenu，任务要求逐屏一致。
+- [锚定弹出的下拉（PopupWindow showAsDropDown 自定义下拉、框架 ActionBar 的溢出面板）按源样式与源主题锚定方式还原（Material 溢出面板盖住标题栏），遮罩与面板放同一承载层：不换成原生 Select、系统 Menu 或整页筛选视图](lesson-666a746081ba1e447322.lesson.md)
+  - 时机：界面实现阶段，为筛选栏、排序栏等下拉选项选择 ArkUI 弹出容器、呈现位置与菜单样式时；为工具栏溢出菜单（showAsAction=never 或未上栏的项）选择承载方式、锚定位置与外观时；把页内浮层（锚定面板与点外关闭层）搬进共享标题栏等组件时
+  - 情境：源端点击筛选项后用 PopupWindow 加载自定义布局（固定宽度、固定行高、箭头图、勾选图标），以 showAsDropDown 锚定在触发器或置顶筛选栏下方原位展开；同页可能另有整屏的“更多筛选”面板；目标有现成的 Select 组件或已写好的整页筛选组件可用。 也包括源 Activity 用框架 ActionBar（Theme.Holo，或 values-v21 的 Theme.Material*），溢出菜单项由平台主题绘制的 ListPopupWindow 面板承载，源码里没有面板样式；目标准备用 ArkUI Menu/bindMenu，任务要求逐屏一致。 也包括溢出面板由共享标题栏组件绘制（组件节点内或 .overlay()），点外关闭的全幅捕获层按组件契约留给宿主页，声明在标题栏之后的兄弟层里。
+- [非全屏窗口用 openCustomDialog 承载源对话框窗口时，遮罩压不到系统绘制的状态栏、卡片按整窗居中：弹窗期间按 dim 切状态栏底色，按避让差下移卡片](lesson-4f60c8233a03d4676c92.lesson.md)
+  - 时机：界面实现阶段，用 openCustomDialog（或其他系统弹窗）承载 Android 对话框、确定遮罩与显示位置参数时，包括共享弹窗工具与各页宿主的打开处
+  - 情境：源主题由应用窗口绘制状态栏底色（Theme.Material 及以后 windowDrawsSystemBarBackgrounds=true、statusBarColor 不透明），对话框窗口 dim（主题 backgroundDimAmount，Material 为 0.6）覆盖整块屏幕，窗口在状态栏与导航栏之间居中；目标窗口保持非全屏，状态栏由系统按 statusBarColor 绘制，对话框用 openCustomDialog 加 maskColor 与 DialogAlignment.Center 打开。
 - [页内对话框的可见性状态逐一落实打开触发点：卡片整体点击与卡内关闭按钮分开实现，留给后续任务的触发点要登记](lesson-f0d5a447e645bc253019.lesson.md)
   - 时机：界面转换与页内接线阶段，把源页面中可点击的卡片、按钮及其打开的页内对话框转换为 ArkUI 触发器与可见性状态时
   - 情境：源端 Compose Card 以 Modifier.clickable 打开对话框，卡内另有关闭或忽略按钮；目标以 @Local 可见性标志加 @Builder 覆盖层实现页内对话框，部分处理器以前向占位留给后续切片；页面规格的导航关系表列出“触发 → 对话框”。

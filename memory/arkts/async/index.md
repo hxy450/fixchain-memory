@@ -21,6 +21,9 @@
 - [源 API 用返回值表示“被拒”、用异常表示故障，而目标 SDK 两者都 reject 时，用一个单次原语适配器还原三态，所有重试与返回码路径都经它](lesson-47faf26b44bb4075b0d2.lesson.md)
   - 时机：服务或引擎实现阶段，把以 boolean 返回业务结果、以异常表示 I/O 失败或目标丢失的源 API（如 MIFARE 扇区认证）映射到只以 Promise reject 报错的 SDK，并实现带重试或返回码的上层方法时
   - 情境：源方法返回 false 表示被拒并据此按偏好重试，只有 IOException、TagLostException 等才立即失败；目标方法返回 Promise&lt;void&gt;，被拒与 I/O、状态异常都以 BusinessError reject，d.ts 只列错误码、不说明各码对应哪种情形；同一文件里可能已有区分两者的单次函数，却只被部分路径调用。
+- [源端后台线程或回调里写的字段，调用方发起后又同步写同一字段时，按实际生效顺序推导结果；改成同步调用要把调用方的写挪到调用之前](lesson-3cdb1fea9a29344c9205.lesson.md)
+  - 时机：规格提取阶段把源端 Thread、Handler.post、异步回调里写入的状态翻译成目标契约与验收时；实现阶段把源端后台加载改成同步调用时
+  - 情境：源端方法启动后台线程（new Thread、Handler.post、AsyncTask、异步回调），成功后在线程里写某个字段；调用方在发起它之后紧接着在主线程同步写同一字段（如先发起加载、再把该字段清零）。目标把这段后台工作改成事件循环内的同步执行，或规格按代码书写顺序推导可观察结果。
 - [源端连续的同步平台调用（先取消再振动、先停止再启动）映射到返回 Promise 的 API 时，在网关内串行发出或改用同步变体，不各自 fire-and-forget](lesson-ba0cb144aa48f9584060.lesson.md)
   - 时机：功能实现阶段封装平台能力网关，把源端依赖先后生效的连续同步系统调用映射为返回 Promise 的目标 API 时；规格提取阶段为这类映射写契约时
   - 情境：源端在同一方法里依次同步调用两个平台方法且后者依赖前者已生效（如 Vibrator.cancel() 后立刻 vibrate(pattern)）；目标 API（如 vibrator.stopVibration/startVibration）返回 Promise，网关接口按规格声明为 void，调用方仍按源顺序逐个调用。

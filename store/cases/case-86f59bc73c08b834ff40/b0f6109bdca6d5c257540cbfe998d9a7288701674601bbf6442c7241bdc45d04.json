@@ -1,0 +1,158 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-86f59bc73c08b834ff40",
+  "created_at": "2026-10-17T10:28:55.903622+00:00",
+  "migration_key": "sokoban-glm531-c77c7279-bc70-4f57-adce-85229d07f0ca",
+  "title": "自绘视图的格尺寸取迁移位图的解码像素，未按资源密度目录换算到设备密度",
+  "when": "规格提取与渲染实现阶段，为 Canvas 自绘视图确定由位图资源固有尺寸决定的格宽、视口边界等 px 量时",
+  "description": "源端自定义 View 用 Resources.getDrawable 取放在多个密度目录（drawable-mdpi…xxxhdpi）的位图，以 getIntrinsicWidth/Height 作为格尺寸进入整型 px 公式，再 setBounds 绘制；目标 Canvas 用 LengthMetricsUnit.PX，资源迁移只把其中一个密度目录的 PNG 放进 base/media。",
+  "summary": "源端 SokoView.java:49-50 在 init 中取 chrDimX=kabe.getIntrinsicWidth()。BitmapDrawable 的固有尺寸是\n所选密度目录的位图按 Bitmap.scaleFromDensity 缩放到设备密度后的像素，不是 PNG 的原始像素。\n规格作者 a67d5ffdd9bda0269 写 F003 前已读到这段源码（agent-a67d5ffdd9bda0269.jsonl:L72），\n也读到 feature-base 的“贴图 5 密度取最高密度、按密度换算后按固有尺寸显示”（L51）。\n它在推理中把 getIntrinsicWidth 译成“decoded bitmap/most-density asset 的固有 px”，并把密度换算当作\n资源迁移的事（L126）。写出的映射行是“贴图资源固有 px（最高密度换算，feature-base 资源基线）”，单位契约是\n“chrDim 同 px 域”，AC02 为“init 取 kabe 贴图固有 px 一次”（L164）。规格没有写明 Android 固有尺寸已按\n设备密度缩放，也没有给来源目录 dpi 和换算式。它所指的 feature-base 基线写的是“密度 px÷1.5 换算 dp”\n（主转录 L607；系数来自主线程收到的 lesson-bdc493 提醒“hdpi÷1.5”，L317），只讲 Image 显示用的 dp，\n而且 ÷1.5 不是 xxxhdpi 的倍率，同样给不出画布 px。偏差从源码到规格的这一步开始。\n主线程派 Slice 3 时，把这一映射具体化为“固有尺寸 getWidth/getHeight 供 chrDim”（主转录 L3487）。\nBase-0 回报已说明图块取自 drawable-xxxhdpi，196px 对应 49vp（L1444），这条信息没有带进派工。\n实现者 a41c89cffb1d03aa7 读到派工（L1）、F003（L39）和 SokoView.java（L42）。它在 L142 自己指出\nAndroid getDrawable 按设备密度解码，getIntrinsicWidth 返回该密度下的 px，随后却以规格措辞为据，判定\n“迁移 PNG 的解码尺寸就是固有 px，无需密度换算”，没有列入 Spec Gap。首稿已写 chrDimX = info.size.width（L162）。\n首次写入前的经验召回（L163）把 lesson-c3bd9c8（位图按密度解码）转述成“解码=原样像素（无密度重采样，\nchrDim=迁移资产固有 px）”。定稿把这句写进注释，chrDim 仍取 getImageInfoSync().size（L177-L178，196px）。\n该片段原样保留到返修。\n返修 C29-2 发现 level51 每格 196px（56vp），房间超出视口、不居中。修复新增 TEXTURE_SOURCE_DPI=640，\n改为 chrDim=trunc((px×vp2px(160)+320)/640)，本机 560dpi 下得 172px，截图显示房间居中\n（repair/3212c816-0906-464d-be11-07f0eba50527.jsonl:L1203-L1206、L1246-L1247）。\n",
+  "recommendations": [
+    "规格提取时，把源端 Drawable.getIntrinsicWidth/Height 写成设备密度下的 px 契约：注明目标资源取自哪个密度目录（目录 dpi），以及整数取整式 (px×设备dpi+目录dpi/2)/目录dpi。来源目录尚未由资源迁移确定时写成待核项，不写“贴图固有 px”“解码尺寸”这类可以读成原始像素的措辞。",
+    "派工转述规格映射时保留换算条件，不把“固有 px（按密度换算）”改写成 getWidth/getHeight 这类具体取值 API；资源迁移回报已给出来源密度目录的，把它带进使用这些位图做几何计算的派工。",
+    "实现 Canvas 自绘视图时，凡由位图固有尺寸参与的 px 量（格宽、边界余量、触点换算除数），先按来源目录 dpi 换算到设备 dpi（设备 dpi=vp2px(160)）再进公式。若自己已判断源 API 带密度缩放，而规格或派工写成原始像素，就登记 Spec Gap 或 decision_gaps 并查资源迁移的取样记录，不以规格措辞消解冲突。",
+    "本应用 base/media 的 12 张图块取自 drawable-xxxhdpi（640dpi，196px）：chrDim=trunc((px×vp2px(160)+320)/640)，560dpi 设备得 172px；绘制尺寸仍按 (int)(chrDim×scale) 计算。",
+    "写后在同一关卡比对两端的单格宽度（dp）或一屏可见行列数；源端在同密度设备上的格宽约等于资源 px÷目录倍率 dp，相差数倍时先查固有尺寸是否漏了密度换算。",
+    "修订 lesson-7083c6ad69ab19ad17dd（版本 1，增量）：做法第 2 步“选定域后逐项换算跨域输入”补一类输入。位图资源的固有尺寸（Drawable.getIntrinsicWidth/Height）是从资源所在密度目录缩放到设备密度后的 px；目标只保留某一密度目录的位图时，按 (px×设备dpi+目录dpi/2)/目录dpi 整数取整（目录 dpi：mdpi 160、hdpi 240、xhdpi 320、xxhdpi 480、xxxhdpi 640；设备 dpi=vp2px(160)）换算后再进 px 公式，不直接用解码像素。第 3 步的单位契约同时写出该输入的来源目录。依据：规格作者收到本条提醒（agent-a67d5ffdd9bda0269.jsonl:L138）后写的单位契约把 chrDim 列入 px 域，换算却交给“最高密度”资源基线（L164）；实现者收到本条提醒（agent-a41c89cffb1d03aa7.jsonl:L163）后同样把解码像素当作 px 固有尺寸（L177）。原文列出的跨域输入只有字体串、触点、避让值和 dp 常量，按它逐项核对时，这类输入不会被提示。",
+    "召回失败 lesson-c3bd9c8b2f24c209a659：原文标题“源端位图按密度解码…”、做法第 1 步“契约写明解码是否按资源所在密度目录与设备密度缩放”和第 2 步的密度解码取整，本可排除“chrDim 取解码像素”。召回 worker 读了原文（recall/a41c89cffb1d03aa7-call_cb91bcb348df4f6aae9fffb9.jsonl:L191-L192），在 L200 也写出 getIntrinsicWidth 按 scaleFromDensity 适配设备密度，却以规格措辞为准，输出“解码=原样像素（无密度重采样，chrDim=迁移资产固有 px）”（L302，送达 agent-a41c89cffb1d03aa7.jsonl:L163）。实现者把这句写进了目标注释（L177）。偏差在召回前已经形成（L142、L162），这次召回错过了纠正机会，不是成因。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/entry/src/main/ets/components/SokoBoardView.ets",
+        "since": "2026-10-16T09:29:14.636Z",
+        "at": "2026-10-16T20:56:02.704Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/sokoban-tomari-80c7d44/app/src/main/java/su/drsouko/SokoView.java",
+          "at": "2026-10-15T16:15:58.890Z",
+          "reason": "正常输入：规格作者整读源码，回执含 :39-50 用 r.getDrawable 装载贴图、chrDimX=kabe.getIntrinsicWidth()，以及各处 (int)(chrDim×scale) 的 px 公式。源 API 决定 chrDim 是设备密度下的 px（agent-a67d5ffdd9bda0269.jsonl:L71-L72）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/spec/baseline/feature-base.md",
+          "at": "2026-10-15T16:15:46.846Z",
+          "reason": "部分正确的输入：资源迁移基线写明贴图有 5 个密度、取最高密度、需按密度换算后按固有尺寸显示，足以提示资源像素不等于固有尺寸；其中“px÷1.5 换算 dp”的系数有误，且只讲 Image 显示用的 dp（agent-a67d5ffdd9bda0269.jsonl:L50-L51）。"
+        },
+        {
+          "key": "agent-a67d5ffdd9bda0269.jsonl",
+          "at": "2026-10-15T16:35:30.042Z",
+          "reason": "读到上述源码和基线后，在推理中把 getIntrinsicWidth 译成解码位图或最高密度资产的固有 px，把密度换算归给资源迁移（L126）。随后写出 F003：映射行“贴图资源固有 px（最高密度换算，feature-base 资源基线）”、单位契约“chrDim 同 px 域”、AC02“init 取 kabe 贴图固有 px 一次”，没有写明需按来源目录 dpi 换算到设备 dpi（L164-L165）。源码到规格的映射在这里偏离。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/spec/baseline/features/F003-board-render.md",
+          "at": "2026-10-16T03:34:44.963Z",
+          "reason": "交付桥梁：实现者整读 F003，回执仍是上述映射行与 AC02，没有密度换算条件（agent-a41c89cffb1d03aa7.jsonl:L38-L39）。"
+        },
+        {
+          "key": "c77c7279-bc70-4f57-adce-85229d07f0ca.jsonl",
+          "at": "2026-10-16T03:34:11.632Z",
+          "reason": "派工：主线程派 Slice 3 时写“PixelMap 解码…固有尺寸 getWidth/getHeight 供 chrDim”，把规格映射具体化为取解码像素；Base-0 回报的 xxxhdpi 196px→49vp（主转录 L1444）没有带进派工（主转录 L3487-L3488；实现者 L1 收到）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/sokoban-tomari-80c7d44/app/src/main/java/su/drsouko/SokoView.java",
+          "at": "2026-10-16T03:34:45.044Z",
+          "reason": "正常输入：实现者整读源码，回执含 :49-50 getIntrinsicWidth/Height（agent-a41c89cffb1d03aa7.jsonl:L40、L42）。"
+        },
+        {
+          "key": "agent-a41c89cffb1d03aa7.jsonl",
+          "at": "2026-10-16T06:58:40.058Z",
+          "reason": "沿用规格与派工：L142 自己指出 getDrawable 按设备密度解码、getIntrinsicWidth 返回该密度下的 px，却以 F003 措辞判定解码尺寸即固有 px，没有登记 Spec Gap；首稿 L162 已取 info.size.width。召回提醒（L163）把 lesson-c3bd9c8 转述成“无密度重采样”后，定稿 Write 写入 chrDimX=kabeInfo.size.width，并加注释“解码=迁移资产原样像素，无密度重采样”（L177-L178）。本链确认的是传递加错失纠正，起点在规格。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 7
+        },
+        {
+          "from": 5,
+          "to": 7
+        },
+        {
+          "from": 6,
+          "to": 7
+        },
+        {
+          "from": 7,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "主转录在 L3487 派工前没有关于 chrDim 取值的显式推理，“固有尺寸 getWidth/getHeight”是转述 F003 AC02 还是主线程自拟，无法区分；不影响 F003 映射在先、实现沿用这一归因。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-86f59bc73c08b834ff40",
+  "metadata": {
+    "migration": {
+      "id": "sokoban-glm531-c77c7279-bc70-4f57-adce-85229d07f0ca",
+      "project": "Sokoban"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.300",
+        "2.1.301"
+      ]
+    },
+    "source_set_id": "sources-1be36e727cb05cb3320f",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-sokoban-glm5.31",
+        "at": "2026-10-15T16:40:54.058Z",
+        "ref": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca.jsonl:L990",
+        "request_ref": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca.jsonl:L984",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-sokoban-glm5.31",
+        "at": "2026-10-15T16:40:54.058Z",
+        "ref": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca.jsonl:L990",
+        "request_ref": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca.jsonl:L984",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "45abaa6a-d22b-4444-adea-2a735a0501f9"
+      ]
+    }
+  },
+  "revision": "b0f6109bdca6d5c257540cbfe998d9a7288701674601bbf6442c7241bdc45d04"
+}

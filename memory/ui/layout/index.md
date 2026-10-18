@@ -13,7 +13,11 @@
 
 ## 本级经验
 
-- [工具栏导航图标按实际生效者绘制：基类以 ActionBarDrawerToggle 接管同一 Toolbar 时画汉堡；否则窗口 ActionBar 页在 Manifest 有 parentActivityName 时 AppCompat 默认显示 Up，都没有且未调 setDisplayHomeAsUpEnabled(true) 才不画；菜单项按实际生效的 showAsAction 分流到图标位或溢出菜单（AppCompat 下 android:showAsAction 被忽略），可勾选项开启勾选指示](lesson-a6121cc7eaf207b702f7.lesson.md)
+- [values-sw&lt;N&gt;dp(-land) 覆盖按设备屏幕短边 min(宽,高) 判定再叠加方向，不译成 mediaquery min-width](lesson-51bf52bc666b921ef2e9.lesson.md)
+  - 时机：规格提取与界面实现阶段，把源端 sw&lt;N&gt;dp 限定目录（可带 -land/-port）的覆盖值落成运行期分支时
+  - 情境：源 res 有 values-sw720dp-land 一类最小宽度限定目录，覆盖尺寸、边距等取值，注释常写“for sw720dp devices (e.g. 10" tablets)”；目标没有对应资源限定词，要在运行期按屏幕配置取值，可用 mediaquery 或 display 查询；规格里写成“横屏 + 最小宽度≥N”。
+  - 例外：源限定目录是 values-w&lt;N&gt;dp、values-h&lt;N&gt;dp（当前可用宽高）：按当前窗口宽高取值，不按短边
+- [工具栏导航图标按实际生效者绘制：基类以 ActionBarDrawerToggle 接管同一 Toolbar 时画汉堡；否则窗口 ActionBar 页在 Manifest 有 parentActivityName 时 AppCompat 默认显示 Up，都没有且未调 setDisplayHomeAsUpEnabled(true) 才不画；菜单项按实际生效的 showAsAction 分流：always 上栏，ifRoom 只在名额与宽度够时上栏，其余进溢出菜单（AppCompat 下 android:showAsAction 被忽略），可勾选项开启勾选指示](lesson-a6121cc7eaf207b702f7.lesson.md)
   - 时机：界面实现阶段，转换工具栏菜单 XML、自绘 ActionBar 或标题栏，决定导航图标（返回箭头或汉堡）、图标位与溢出菜单时；自绘框架主题提供的 ActionBar（应用图标、Up 尖角、溢出按钮、横竖屏高度与标题字号）时
   - 情境：源菜单项带图标与 showAsAction=ifRoom/always，或带 checkable=true。也包括 Activity 基于 AppCompat、菜单 XML 写的是 android:showAsAction（常带 tools:ignore="AppCompatResource"）。也包括判断导航图标的输入：Manifest 是否为 Activity 声明 parentActivityName 或 PARENT_ACTIVITY meta-data、代码是否调用 setDisplayHomeAsUpEnabled、基类 onPostCreate 是否以同一 Toolbar 构造 ActionBarDrawerToggle 并 syncState；目标套用自带返回箭头的标题栏模板、兄弟页标题栏，或保留自定义 Up 标题栏。也包括框架 ActionBar（Theme.Holo 等）带 manifest android:icon、setDisplayHomeAsUpEnabled 与 showAsAction="ifRoom|withText"，目标多个页面各自用 hideTitleBar 自绘标题栏。
 - [源 manifest 未声明 android:supportsRtl 时布局方向恒为 LTR：有顺序或对齐语义的容器逐个显式 Direction.Ltr](lesson-148a3e67bd557bafd722.lesson.md)

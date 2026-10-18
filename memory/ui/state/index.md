@@ -35,6 +35,10 @@ ArkUI V2 状态刷新与订阅：@Builder 参数（含异步重赋值的数组�
   - 时机：规格提取与服务实现阶段，为页面编排服务确定作用域（单例还是页面实例），并迁移源 Activity 的实例字段（待写数据、密钥映射、挂起状态）时
   - 情境：源 Activity 把本次会话的数据放在实例字段里，Activity 重建或另开一个实例就是全新状态；目标规格把页面编排服务写成单例，实现者用 getInstance() 持有这些字段，并以 attach 时复位来近似实例重建。
   - 例外：源端该状态本就是静态全局的（如公共类的静态字段），此时可以映射为单例
+- [源端 onCreate 里 findViewById 后立即调用的 View setter，在子组件登记时回调宿主完成首次接线，不在 NavDestination.onReady 中读子组件句柄](lesson-f9be21096154da5890b5.lesson.md)
+  - 时机：界面实现与跨组件接线阶段，决定宿主页何时、经什么机制拿到子组件实例并完成首次接线时
+  - 情境：源 Activity.onCreate 中 findViewById 取到自定义 View 后立即调用 setter（设置状态对象、注册触摸或回调监听）；目标父页不能直接取得子 struct 实例，改由子组件在 aboutToAppear 把自身写入宿主传入的句柄，宿主的初始化链放在 NavDestination.onReady 等生命周期回调里。
+  - 例外：子组件通过 @Param/@Event 等声明式参数直接接收状态与回调，宿主不需要命令式取得实例
 - [源端以引用比较判断“有未保存改动”时，先确认未改动时两侧是同一对象；ArkUI V2 中改用显式改动标志，不拿 @Local 数组与另存的原数组或新字面量做 ===](lesson-5d6e099ff0c8965f2b3c.lesson.md)
   - 时机：界面实现阶段，把编辑页的未保存检测（离开前确认、canSafelyExit 一类）从 Compose 翻译到 ArkUI V2 状态时
   - 情境：源端编辑页以 remember(x){ mutableStateOf(x) } 一类写法让编辑状态的初值就是入参对象，修改时整体替换成新列表，再用 !== / === 引用比较判断是否改动；目标用 @Local 数组承载编辑状态，另存一份初始数组，或在新增模式把两者各自初始化为 \[\]。

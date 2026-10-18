@@ -1,0 +1,214 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-96bad1fc979bd25d24d3",
+  "created_at": "2026-10-17T11:26:18.350873+00:00",
+  "migration_key": "sokoban-glm531-c77c7279-bc70-4f57-adce-85229d07f0ca",
+  "title": "把安卓对话框的点外取消写成无条件路径，映射到 openCustomDialog 后按住对话框内控件拖到遮罩松手也会关闭",
+  "when": "规格提取阶段写对话框取消契约，以及界面实现阶段把点外取消映射到 openCustomDialog 的 autoCancel / onWillDismiss(TOUCH_OUTSIDE) 时",
+  "description": "源端 Dialog、AlertDialog 或 DialogFragment 没有关闭点外取消（未调用 setCanceledOnTouchOutside(false)），对话框内有按钮、列表、输入框或可滚动正文；目标用 openCustomDialog 承载，autoCancel 为默认 true，或在 onWillDismiss 里对 DismissReason.TOUCH_OUTSIDE 直接关闭。",
+  "summary": "两位规格作者实际收到的输入是：应用源码里的 AlertDialog.Builder…show()、DialogFragment 和 ListPreference，都没有调用 setCancelable 或 setCanceledOnTouchOutside\n（agent-aa2040b0997247c21.jsonl:L58-L59；agent-a7006049ff2520113.jsonl:L93-L94）；首次写入被拒时，又都收到 lesson-9c4de55af3c1ecd8eaa4 v3 的提醒，\n“分开写返回键与点外部两条取消路径（均未调 setCancelable/setCanceledOnTouchOutside→均默认可取消）”（分别为 L196、L177）。\nsokoban_spec.md:872 由此写成“返回键与点击对话框外部两条取消路径均默认可用”，§7.4 各对话框标“两条默认路径”（aa2040…:L207-L208）；\npage_0004 第 57、60 行写成“载体 promptAction.openCustomDialog……返回键由载体自消费”“② 返回键/点外（cancelable 默认 true）”（a7006049…:L206-L207）。\n两份契约都没有写安卓判定点外的条件。Dialog.dispatchTouchEvent 先把事件交给窗口内的视图，只有没被消费的事件才进 onTouchEvent，\n再由 Window.shouldCloseOnTouch 判断 ACTION_UP 是否落在窗口外（本机 SDK sources/android-36.1 Dialog.java:936-937、802-803，Window.java:1703-1707）。\n所以按在按钮、列表、输入框、可滚动正文或按钮条上再拖出去松手，对话框不会关闭。生成期没有 agent 读过这段框架源码。\n分三层看：经验原文第 1 步给出点外路径和它的默认值来源（windowCloseOnTouchOutside），第 6 步写“遮罩点击按点外部取消契约处理”，都没有触摸消费这一条件。\n召回提醒忠实于原文；规格作者照提醒与源码写契约，执行没有偏离所收到的信息。缺口在经验原文，以及按它写出的规格契约，所以建议增量修订 9c4de55。\n实现侧照契约落地。Base-3 worker 读到规格 §7.4、ui-manifest 的“返回键+点外双取消路径”和派工“返回键与点外两取消路径分别回调”\n（agent-a1155719b304de950.jsonl:L171-L172、L37-L38、L1）；它读的本机 @ohos.promptAction.d.ts 对 autoCancel 只写“Allows users to click the mask layer to exit”（L185-L186）。\n首次写入被拒时它还收到 9c4de55 与 lesson-368c4592e4c7075c1871 v6 的提醒“onWillDismiss 按 PRESS_BACK/TOUCH_OUTSIDE 分流回调+action.dismiss()”（L292，与 368c 第 7 步一致）。\n据此写出的 openSokoAlertDialog 是 autoCancel: true，onWillDismiss 对 TOUCH_OUTSIDE 无条件 action.dismiss()（L313-L314）。\n设置页转换者读 page_0004 后，写出选项框 openCustomDialog: autoCancel: true，不设 onWillDismiss（agent-a148fd46222e19bdb.jsonl:L18-L19、L298-L299）。\n生成检查点 c85b474 中 SokoPage、EditPage×2、SokoSelPage 的 openCustomDialog 也都是 autoCancel: true、不设 onWillDismiss。\nArkUI 侧按抬起点判定，是返修时在两端实测得到的：鸿蒙从 CANCEL 拖到卡片内不关、拖到遮罩松手关闭；安卓两种都不关，从遮罩拖进卡片两端都不关\n（repair/3212c816-0906-464d-be11-07f0eba50527.jsonl:L7592-L7593、L7615-L7617、L7629-L7631）。\n所以这个差异需要两段知识。安卓侧的条件可以从本机框架源码推出，不必实测；目标侧 d.ts 没写，需要实测，或者在契约写明条件后先加防御性守卫。\n返修新增 DialogTouchGuard：onTouch 按下时登记“由可消费区域开始”，抬起或取消后在本次事件处理完再清除；allows 对这类 TOUCH_OUTSIDE 返回 false。\n它给 SokoAlertDialog 的正文、列表、按钮条，以及设置页选项框、StagePicker、TitlesDialog、ImportDialog 的可消费区域挂 track，\n六处 openCustomDialog 的 onWillDismiss 先问 allows（L7915-L7917、L7990-L7998、L8009-L8010），检查点 f7d6a63（L8067-L8070）。两端同一组拖动手势逐项一致（L8020-L8022、L8055-L8056）。\nlesson-368c4592e4c7075c1871 第 7 步只规定承载形态与取消回调接线，不负责点外判定条件，本卡不建议修改它。\n",
+  "recommendations": [
+    "修订 lesson-9c4de55af3c1ecd8eaa4（版本 3，增量）：做法第 1 步写取消契约时，“点对话框外部”要写出安卓的实际判定：只有这次触摸没有被对话框窗口内的视图消费（按钮、列表、输入框、可滚动正文、按钮条都会消费按下），且抬起落在窗口外，才会取消（Dialog.dispatchTouchEvent 先交窗口视图，未消费才进 onTouchEvent → Window.shouldCloseOnTouch）。按在这些控件上拖到外部松手不取消；按在标题等不消费触摸的位置拖出去，或直接点外部，才取消。第 6 步和实现阶段用 openCustomDialog 的 autoCancel 或 onWillDismiss(TOUCH_OUTSIDE) 承载时，要知道系统按抬起点判定、不看按下点，所以 TOUCH_OUTSIDE 分支要先排除按下起于对话框内可消费区域的触摸，返回键路径不受影响。",
+    "规格提取阶段写点外取消路径时，除了“源码是否关闭”和默认值来源，还要写这条路径的触摸判定：哪些区域会消费触摸，拖到外部松手是否取消。依据取本机 SDK sources 的 Dialog/Window 源码，不止写“点外部可取消”。",
+    "界面实现阶段把点外取消映射到 openCustomDialog 时，不把 autoCancel=true 或无条件的 TOUCH_OUTSIDE 关闭当作与源端等价。给会消费触摸的区域挂 onTouch，按下时登记，抬起或取消后在本次事件处理完再清除；onWillDismiss 对已登记的 TOUCH_OUTSIDE 不关闭。再用拖动手势验收：控件拖到遮罩松手应保持打开，标题拖到遮罩、直接点遮罩应关闭，返回键关闭。",
+    "本应用（Dr Soko）的具体落点：共享 DialogTouchGuard 的 track/allows，挂在 SokoAlertDialog 的正文、列表和按钮条，设置页选项框的列表和按钮条，StagePickerContent 的列表，TitlesDialogContent 的输入区和按钮条，ImportDialogContent 的输入框和按钮条。openSokoAlertDialog 与 SettingsPage、SokoPage、EditPage×2、SokoSelPage 的 openCustomDialog 都在 onWillDismiss 里先问 allows。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/entry/src/main/ets/components/common/SokoAlertDialog.ets",
+        "since": "2026-10-16T09:29:14.636Z",
+        "at": "2026-10-16T20:56:02.704Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/sokoban-tomari-80c7d44/app/src/main/java/su/drsouko/SokoSelActivity.java",
+          "at": "2026-10-15T15:32:18.425Z",
+          "reason": "正常输入：规格作者 Read 回执给出删除确认、清高分、关于等 AlertDialog.Builder…show()，都没有 setCancelable 或 setCanceledOnTouchOutside，说明点外取消按框架默认开启。触摸如何判定为点外不在应用源码里，在框架 Dialog/Window 源码中，生成期无人读取（agent-aa2040b0997247c21.jsonl:L58-L59）。"
+        },
+        {
+          "key": "agent-aa2040b0997247c21.jsonl",
+          "at": "2026-10-15T15:50:28.262Z",
+          "reason": "经验输入写在这里：首次 Write 被 hook 拒绝，回执带来 lesson-9c4de55af3c1ecd8eaa4 v3 的标题与提醒（L195-L196）。提醒由召回 worker 读原文后写成（recall/aa2040b0997247c21-call_1dfdd3aeda514702be1d552a.jsonl:L125-L126、L206），忠实于原文第 1 步，原文没有触摸消费条件。该交付走 hook，不是读写或派发，图里不单列节点。收到源码与提醒后，Write 写出 sokoban_spec.md:872“返回键与点击对话框外部两条取消路径均默认可用”，§7.4 各对话框标“两条默认路径”。点外取消在这里被写成不看触摸起点的无条件路径，丢了安卓“未被对话框内视图消费且抬起在窗口外”的判定（同转录 L207-L208）。它的输入同样没有这个条件，属于知识缺口，不是没照输入做；本链以此作为偏差起点。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/spec/ref/sokoban_spec.md",
+          "at": "2026-10-16T01:28:54.604Z",
+          "reason": "交付桥梁：Base-3 worker 用 Bash sed 读 §7.4 的回执里有“返回键 / 点外部 → 取消”和各对话框的“两条默认路径”，没有触摸消费条件（agent-a1155719b304de950.jsonl:L171-L172）。"
+        },
+        {
+          "key": "agent-a1155719b304de950.jsonl",
+          "at": "2026-10-16T02:02:31.350Z",
+          "reason": "按收到的契约，以及 9c4de55、368c 的提醒（L292），Write 出 openSokoAlertDialog：autoCancel: true，onWillDismiss 对 TOUCH_OUTSIDE 回调 onOutsideCancel 后无条件 action.dismiss()（L313-L314）。这段保留到返修，返修在它前面插入 DialogTouchGuard.allows 判断（repair/3212c816-0906-464d-be11-07f0eba50527.jsonl:L7990-L7998）。本链确认契约被传到目标，不另认定它独立失职。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "Base-3 worker 用 Bash sed -n '875,935p' 读 sokoban_spec.md，回执是 §7.4 对话框表（“返回键 / 点外部 → 取消”“两条默认路径”）；这是它写 SokoAlertDialog 之前读到的取消契约。",
+          "evidence": [
+            {
+              "source": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca/subagents/agent-a1155719b304de950.jsonl",
+              "line": 171
+            },
+            {
+              "source": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca/subagents/agent-a1155719b304de950.jsonl",
+              "line": 172
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/entry/src/main/ets/pages/SettingsPage.ets",
+        "since": "2026-10-16T09:29:14.636Z",
+        "at": "2026-10-16T20:56:02.704Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/sokoban-tomari-80c7d44/app/src/main/java/su/drsouko/SettingsActivity.java",
+          "at": "2026-10-15T15:49:54.126Z",
+          "reason": "正常输入：页面规格作者 Read 回执给出 PreferenceFragment 加 ListPreference（选项框由框架 DialogPreference 生成），源码没有关闭任何取消路径。点外判定在框架里，不在应用源码中（agent-a7006049ff2520113.jsonl:L93-L94）。"
+        },
+        {
+          "key": "agent-a7006049ff2520113.jsonl",
+          "at": "2026-10-15T16:07:48.661Z",
+          "reason": "经验输入：首次 Write page_0001 被 hook 拒绝，回执带来 9c4de55 的提醒“全部内联 AlertDialog 契约：双取消路径分别写（返回键+点外，均未关 cancelable）”（L176-L177）。提醒同样忠实于原文。随后 Write 的 page_0004 第 57 行写“载体 promptAction.openCustomDialog 居中卡片，返回键由载体自消费”，第 60 行写选项框“② 返回键/点外（cancelable 默认 true，不改选中值）”（L206-L207）。它和 sokoban_spec 的作者各自从同一经验与源码得出同样不带触摸消费条件的点外取消契约，是本链的偏差起点；输入里同样没有这个条件。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/spec/baseline/ui/page_0004_SettingsActivity.md",
+          "at": "2026-10-16T01:21:19.911Z",
+          "reason": "交付桥梁：设置页转换者 Read 回执第 57-60 行是“载体 promptAction.openCustomDialog 居中卡片，返回键由载体自消费”和“② 返回键/点外（cancelable 默认 true，不改选中值）”（agent-a148fd46222e19bdb.jsonl:L18-L19）。"
+        },
+        {
+          "key": "agent-a148fd46222e19bdb.jsonl",
+          "at": "2026-10-16T01:57:47.375Z",
+          "reason": "按页面规格以及 9c4de55 的提醒“返回键与点外两取消路径分别核”（L257），Write 出选项框 openCustomDialog：autoCancel: true，不设 onWillDismiss，注释“取消路径②：返回键/点外（autoCancel=true，载体自消费；不改值）”（L298-L299）。这处保留到返修，返修加 onWillDismiss→DialogTouchGuard.allows，并给列表与按钮条挂 track。本链确认契约被传到目标。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [
+    {
+      "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/entry/src/main/ets/pages/SokoPage.ets",
+      "reason": "已确认修改：选关弹层 openCustomDialog 加 onWillDismiss→allows。生成检查点中为 autoCancel: true、无 onWillDismiss。生成写者为 acbfe02cd15ded4a4（2026-10-15T18:00:07Z），之后 a5dd99ac1f85b05da、a5a9090bf74ee235e 也写过该文件；成因相同，未逐项画出交接。"
+    },
+    {
+      "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/entry/src/main/ets/pages/EditPage.ets",
+      "reason": "已确认修改：StagePicker 与 TitlesDialog 两处 openCustomDialog 加 onWillDismiss→allows。生成检查点中两处均为 autoCancel: true、无 onWillDismiss。写者为 a0db36cad591595c2（2026-10-16T01:31:27Z）。page_0007_TitlesDialog.md:94 的移交表由 a60aa5fe02fb86871 写入，明写“返回键/点外→openCustomDialog autoCancel”；成因相同，未逐项画出交接。"
+    },
+    {
+      "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/entry/src/main/ets/pages/SokoSelPage.ets",
+      "reason": "已确认修改：ImportDialog 的 openCustomDialog 加 onWillDismiss→allows。生成检查点中为 autoCancel: true、无 onWillDismiss，文件注释“autoCancel 点外/返回键静默关闭”。生成写者为 a5d32be86e8c2e994（2026-10-15T17:58:25Z）；成因相同，未逐项画出交接。"
+    },
+    {
+      "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/entry/src/main/ets/components/StagePickerContent.ets",
+      "reason": "已确认修改：列表挂 onTouch→DialogTouchGuard.track。生成期内容组件把取消路径交给宿主 autoCancel，自身没有可做的点外判定；缺的是宿主侧守卫所需的登记点，成因同代表链，未单独画链。"
+    },
+    {
+      "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/entry/src/main/ets/components/TitlesDialogContent.ets",
+      "reason": "已确认修改：customPanel 与按钮条挂 track。生成写者 a60aa5fe02fb86871 按 9c4de55 的提醒“两条取消路径（返回键/点外=宿主 autoCancel）分别写进移交”（注入记录：该转录 L192），把点外交给宿主，并在 page_0007 第 94 行写“返回键/点外→openCustomDialog autoCancel”。其中“=宿主 autoCancel”是召回 worker 加的目标映射，原文没有；但原文同样没有触摸消费条件，排除不了这种情形，所以不算召回失败。成因同代表链，未单独画链。"
+    },
+    {
+      "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/entry/src/main/ets/components/dialogs/ImportDialogContent.ets",
+      "reason": "已确认修改：输入框与按钮条挂 track。生成期由宿主 autoCancel 承载点外取消，成因同代表链，未单独画链。"
+    },
+    {
+      "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/entry/src/main/ets/components/common/DialogTouchGuard.ets",
+      "reason": "返修新建文件（repair/3212c816-0906-464d-be11-07f0eba50527.jsonl:L7915/L7917），生成期不存在，没有生成写者可归因；它补的是代表链所述的点外判定缺口。"
+    }
+  ],
+  "job": "issue-96bad1fc979bd25d24d3",
+  "metadata": {
+    "migration": {
+      "id": "sokoban-glm531-c77c7279-bc70-4f57-adce-85229d07f0ca",
+      "project": "Sokoban"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.300",
+        "2.1.301"
+      ]
+    },
+    "source_set_id": "sources-1be36e727cb05cb3320f",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-sokoban-glm5.31",
+        "at": "2026-10-15T16:40:54.058Z",
+        "ref": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca.jsonl:L990",
+        "request_ref": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca.jsonl:L984",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-sokoban-glm5.31",
+        "at": "2026-10-15T16:40:54.058Z",
+        "ref": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca.jsonl:L990",
+        "request_ref": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca.jsonl:L984",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "45abaa6a-d22b-4444-adea-2a735a0501f9"
+      ]
+    }
+  },
+  "revision": "e9aae85b3c4653261a6cb758cbd6089a333eeb7fde4380278a15e24aa285615e"
+}

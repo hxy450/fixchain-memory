@@ -1,0 +1,434 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-1a1c2ec5cf0140821002",
+  "created_at": "2026-10-17T10:56:16.862730+00:00",
+  "migration_key": "sokoban-glm531-c77c7279-bc70-4f57-adce-85229d07f0ca",
+  "title": "按 values/ 的回落主题认定应用主题，漏掉 values-v21 Material 主题提供的状态栏色、窗口底色与标题栏投影",
+  "when": "规格提取阶段确定应用的生效主题与全局视觉约定时；实现阶段在入口 Ability 设置系统栏、为页面根容器定底色、复刻框架 ActionBar 时",
+  "description": "源 res 在 values/ 与 values-vNN 下各定义一份同名应用主题（如 values/ 的 AppBaseTheme 继承 Theme.Light，values-v21 改为 Theme.Material.Light.DarkActionBar 并覆写 colorPrimary/colorPrimaryDark/colorAccent）；布局 XML 不写窗口背景与标题栏投影，状态栏底色、窗口底色与窗口 ActionBar 的 elevation 都由设备 API 级生效的主题提供。目标保持非全屏窗口，标题栏用自绘共享组件复刻。",
+  "summary": "源端：manifest 的应用主题是 AppTheme → AppBaseTheme。values/styles.xml 中 AppBaseTheme 继承 android:Theme.Light，\n文件注释写明“This theme is replaced by AppBaseTheme from res/values-vXX/styles.xml on newer devices”；\nvalues-v21/styles.xml 把它改为 Theme.Material.Light.DarkActionBar，并覆写 colorPrimary #d32f2f、colorPrimaryDark #b71c1c、\ncolorAccent #f44336。API 21+ 设备上，状态栏是 statusBarColor → colorPrimaryDark #B71C1C 配白色图标，窗口底色是\nwindowBackground → colorBackground = background_material_light #FAFAFA，窗口 ActionBar 带 Widget.Material.ActionBar 的\n4dp elevation（本机 SDK android-34：themes_material.xml:533、550，styles_material.xml:1025，dimens_material.xml:65）。\n这三项都不在布局 XML 里。\n\n规格阶段最先偏离。主线程写 ui-manifest 之前，列出的 res 目录里有 values-v21（主转录 L50-L51），读到了 values/styles.xml\n里的上述注释（L209-L210），自己生成的 meta.json 的 style_sources 也列了 values-v21/styles.xml（L238-L239）。但全局约定写成\n“AppTheme 实际继承 android:Theme.Light 浅色 + 原生 ActionBar”和“主题: AppBaseTheme extends android:Theme.Light”\n（L309 首次写入被召回拦下，L339 落盘）；召回之后又加了“普通页面仅做系统栏默认避让”。全局约定和页面规格都没有状态栏底色、\n窗口底色、ActionBar 投影的条目。页面规格作者整读 ui-manifest（agent-a7006049ff2520113.jsonl:L158-L159），没读 meta 列出的\nstyles 文件，把“取 Theme.Light 平台资源”和“仅做系统栏默认避让（常规 NavDestination 标题栏…）”写进 page_0001、page_0002\n（L194、L197）。分析器的 sokoban_design.md §3.4.2 写对了 API 21+ 主题链，但平台外观注明“本档不展开具体值”\n（agent-aa2040b0997247c21.jsonl:L212）。资源阶段迁了 primary_dark，也按 Material.Light 解析出 #FAFAFA，但只用作启动窗底色；\nstyles.xml 登记为“主题由 ui-manifest 设计令牌 + 组件层承载”，不迁移（agent-a8570f8920a02c5f7.jsonl:L239-L240、L342）。\n\n实现阶段的各个写者都没有补上：\n- 状态栏（EntryAbility）：FV-1 为通过沉浸式检测器，首次写系统栏代码。它只读了 values/styles.xml（agent-a37f38a62e2c624ed.jsonl:L138、L141），\n  推断“Theme.Light 无 colorPrimaryDark → 默认黑”（L167），没看注释指向的 values-v21。召回提醒（L201）给的是\n  setWindowLayoutFullScreen(false) + setWindowSystemBarEnable，另一条写“图标恒白、底色黑”。FV-1 只写了这两个调用，\n  注释称“与源端逐边一致”，没有调 setWindowSystemBarProperties（L267-L268），运行时状态栏是鸿蒙默认的白底黑字。\n- 列表页底色（SokoSelPage）：转换者自己读了 values-v21（agent-a5d32be86e8c2e994.jsonl:L132-L133），在文件头写明生效链与\n  colorPrimaryDark=#b71c1c，也查到 background_material_light = material_grey_50（L181-L182）；值表与写入却只覆盖\n  ActionBar、列表行和弹窗，Navigation 没设底色，自绘栏也没有投影（L220、L272）。\n- 游戏页底色（SokoPage）：转换者 grep ui-manifest 得到“仅做系统栏默认避让”（agent-acbfe02cd15ded4a4.jsonl:L84-L85），\n  按 page_0002 的“常规 NavDestination 标题栏”用 .title()/.menus()，NavDestination 不设底色（L298）。它知道 v21 是\n  Material 主题（L176-L177），没有查 windowBackground。Slice 5 整文件重写时保留了这一结构。\n- 标题栏投影（SokoActionBar）：Base-3 读到 design §3.4.2 的 API 21+ 主题链和“ActionBar 等外观逐项取本机 SDK 平台资源”\n  （agent-a1155719b304de950.jsonl:L45-L46），但只 grep 了它记得的几个 dimen 名（L223-L224，返回 dimens_material.xml 第 39–78 行中的\n  几行，没取第 65 行 action_bar_elevation_material），整理出的栏属性清单里没有 elevation（L218），写入时只给溢出浮层加了投影（L330）。\n  FV-1 读到这个无投影的组件（L272-L273），在 SokoSelPage、EditPage、SettingsPage 用它替换各页内联栏（L348、L415、L434）；\n  被替换的内联栏同样没有投影。\n\n返修先取样：安卓栏下 15px 由 #DEDEDE 渐隐到 #FAFAFA，状态栏为 #B71C1C（repair/3212c816-0906-464d-be11-07f0eba50527.jsonl:L1743-L1756）。\n然后：EntryAbility 加 setWindowSystemBarProperties({ statusBarColor: '#FFB71C1C', statusBarContentColor: '#FFFFFFFF' })（L1768/L1770；\n试加导航栏色无效，L1840-L1858 撤回）；SokoActionBar 栏 Row 加 shadow，radius 从 20 调到 12（px）、#30000000、offsetY 4\n（L1783-L1786、L1810-L1811）；SokoSelPage 的 Navigation 与 SokoPage 的 NavDestination 加 background_material_light 底色，\nSokoSelPage、EditPage、SettingsPage 的 SokoActionBar 加 zIndex(1)，让投影压在内容之上（L1798-L1799）；检查点 38ece90（L1872-L1873）。\nEditPage、SettingsPage 生成时已有 #FAFAFA 底色，本项只为投影改了 zIndex。\n\n经验注入的三层判断：\n(1) 原文：lesson-0e1c846868f2683cc280 v7 做法第 1 步已写“按源设置系统栏底色与图标色”，但“查主题链”没有要求按 API 级取\nvalues-vNN 的覆盖，也没说底色取哪个主题属性。读过原文的两位召回 worker 和 FV-1 都停在 values/ 的 Theme.Light，因此按增量修订。\nlesson-824031d5fddf81036b54 原文要求查各 values-vNN 覆盖，只规定图标色，原文无误。\nlesson-47785524c7f132ea7efe 做法第 4 步要求写出 windowBackground，但只召回给了 SettingsPage 转换者，而它确实设了底色；其标题和第 1 步不涉及\nvalues-vNN 主题解析，不算召回失败。\n(2) 传递：规格作者那次和 FV-1 那次召回都把“按源设置系统栏底色与图标色”丢了；规格作者那次的提醒有 60 字以内的限制。FV-1 那次\n还自拟了“底色黑”，两条都列为召回失败。SokoSel 转换者那次召回列出了提醒\n（recall/a5d32be86e8c2e994-call_c165aca6fe0a4228be2f9711.jsonl:L497），钩子却按 lessons=[] 放行（同文件 L1），转换者没收到任何提醒；\n所列各条不涉及窗口底色与栏投影，不是本偏差的成因。Base-3 收到 lesson-5a82d62ff7e087616968 的提醒“几何/色先查 android-34 平台 res”，\n原文与提醒都要求查框架组件的默认外观，它查了 SDK 却漏掉 elevation，属执行层。\n(3) 执行：FV-1 收到“图标恒白、底色黑”，仍然没有设置任何系统栏颜色。\n这两条经验经钩子回执送达（FV-1 转录 L199/L201），索引不把它当作对经验文件的读取，所以没有作为图节点，定位写在建议里。\n库 e613047f 里没有“按 API 级解析生效主题，并把主题提供的窗口级外观写成全局约定、指派承接者”的经验，按新经验沉淀。\n",
+  "recommendations": [
+    "规格提取阶段：对 manifest 引用的应用主题，把同名 style 在 values/ 与全部 values-vNN 下的定义都读出来，按参照设备 API 级（不低于 minSdk，通常 21+）取覆盖后的生效父主题链写进 ui-manifest 的主题行；values/ 的父主题只是低版本回落，文件注释写着 replaced by values-vXX 时更不能停在 values/。页面元数据 style_sources 列出的文件读完再下结论。",
+    "规格提取阶段：主题行之后，逐项写出由生效主题提供、布局里看不到的窗口级外观，并指派承接者：状态栏底色（Material 系为 statusBarColor → colorPrimaryDark）与图标深浅 → 入口 Ability；windowBackground → colorBackground → 每个页面根容器；窗口 ActionBar 的背景、标题色与 elevation → 共享标题栏组件及其宿主的层叠。非全屏时写“按源设置系统栏底色与图标色”，不写“系统栏默认”。",
+    "实现阶段：入口 Ability 写 setWindowSystemBarEnable 一类系统栏代码时，同一处用 setWindowSystemBarProperties 设置源端状态栏底色与图标色；源值从生效主题解析。只读了 values/styles.xml 时，不写“与源端一致”之类的注释。",
+    "实现阶段：页面根 Navigation/NavDestination 显式设置源主题 windowBackground 的颜色；复刻框架 ActionBar 的共享组件，把 Widget.Material.ActionBar 的 elevation（action_bar_elevation_material）换算成 px 写成 shadow，并在接口说明里要求宿主把标题栏层叠在内容之上。查 SDK 时读整个 widget style 的 item 列表，不只 grep 记得的几个 dimen 名。",
+    "最小检查：装机后在列表页、游戏页截图，取状态栏一点、内容区空白处一点，以及标题栏下沿往下约 20px 的一列像素，与安卓参照截图同位置对比。",
+    "本应用的具体修法：EntryAbility 在 setWindowSystemBarEnable 后调用 setWindowSystemBarProperties({ statusBarColor: '#FFB71C1C', statusBarContentColor: '#FFFFFFFF' })；SokoSelPage 的 Navigation 与 SokoPage 的 NavDestination 加 backgroundColor($r('app.color.background_material_light'))（#FAFAFA）；SokoActionBar 的栏 Row 加 shadow({ radius: 12, color: '#30000000', offsetX: 0, offsetY: 4 })（px，按实测渐隐约 5.5dp 校准），SokoSelPage、EditPage、SettingsPage 中的 SokoActionBar 加 zIndex(1)。",
+    "修订 lesson-0e1c846868f2683cc280（版本 7，增量）：做法第 1 步的“查主题链”和“按源设置系统栏底色与图标色”补上主题链的取法：应用主题的同名 style 在 values-vNN 下另有定义时，按运行设备 API 级取覆盖后的生效链（values/ 只是低版本回落；windowTranslucentStatus、statusBarColor 常只写在 values-v19/v21 里）；系统栏底色取生效主题的 statusBarColor，Material 系主题默认就是 colorPrimaryDark，Holo 及更早的主题为黑。只看 values/ 会把全屏判定和底色一起判错。原文位置 base-memory/ui/safearea/lesson-0e1c846868f2683cc280.lesson.md:L25；本次依据：读过原文的召回 worker 仍按 values/ 定为 Theme.Light、底色黑（recall/a37f38a62e2c624ed-call_3173cafb0ec045dd90769472.jsonl:L166、L235），FV-1 只读 values/styles.xml 就写成“与源端逐边一致”（agent-a37f38a62e2c624ed.jsonl:L141、L167、L267-L268）。",
+    "召回失败 lesson-0e1c846868f2683cc280：做法第 1 步原文“全都没有时目标保持非全屏：在 loadContent 回调里 setWindowLayoutFullScreen(false)，按源设置系统栏底色与图标色，用 setWindowSystemBarEnable(['status','navigation'])…”本可排除“只开系统栏、不着色”。两次召回都把着色这一步丢了。规格作者那次 worker 读过原文（recall/__main__-call_438b606dd2734fae95b9d869.jsonl:L229），提醒只剩“保持非全屏、不套四件套”（同文件 L446），ui-manifest 随后写成“仅做系统栏默认避让”。FV-1 那次 worker 的笔记写了“+ 按源设系统栏底色/图标色”（recall/a37f38a62e2c624ed-call_3173cafb0ec045dd90769472.jsonl:L216、L235），最终提醒（同文件 L236）却只留两个调用，FV-1 照此写码。原文见 base-memory/ui/safearea/lesson-0e1c846868f2683cc280.lesson.md:L25。",
+    "召回失败 lesson-824031d5fddf81036b54：原文做法第 1 步要求“查源主题、各 values-vNN 覆盖与代码中的浅色状态栏标志”，只规定图标色，没有给底色。FV-1 那次 worker 的提醒写成“状态栏图标恒白（'#ffffffff'），底色黑”，其中“底色黑（老 Theme.Light 框架默认）”是 worker 按只读 values/ 得出的主题自拟的值（recall/a37f38a62e2c624ed-call_3173cafb0ec045dd90769472.jsonl:L235-L236），原文没有；values-vNN 的检查也没有传下去。原文见 base-memory/ui/safearea/lesson-824031d5fddf81036b54.lesson.md:L21。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/entry/src/main/ets/entryability/EntryAbility.ets",
+        "since": "2026-10-16T09:29:14.636Z",
+        "at": "2026-10-16T20:56:02.704Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/sokoban-tomari-80c7d44/app/src/main/res/values/styles.xml",
+          "at": "2026-10-16T08:42:28.281Z",
+          "reason": "输入：FV-1 cat 得到 AppBaseTheme parent=android:Theme.Light，以及注释“This theme is replaced by AppBaseTheme from res/values-vXX/styles.xml on newer devices”。注释足以提示还要查 values-vXX；values-v21 里的 Material.Light.DarkActionBar 与 colorPrimaryDark #b71c1c 决定状态栏底色（agent-a37f38a62e2c624ed.jsonl:L138、L141）。"
+        },
+        {
+          "key": "agent-a37f38a62e2c624ed.jsonl",
+          "at": "2026-10-16T08:57:52.893Z",
+          "reason": "FV-1 推断“Theme.Light 无 colorPrimaryDark → 默认黑”（L167），没有查 values-v21。写入前收到的召回提醒（L199 的 Edit 被拦，L201 回执）里，lesson-0e1c846868f2683cc280 一条只给 setWindowLayoutFullScreen(false) + setWindowSystemBarEnable，丢了原文做法第 1 步的“按源设置系统栏底色与图标色”；lesson-824031d5 一条写“图标恒白、底色黑”。FV-1 在 onWindowStageCreate 只写入这两个调用，注释称源端 AppTheme=android:Theme.Light、与源端逐边一致，没有 setWindowSystemBarProperties（L267-L268）。返修在这一片段后补了状态栏色（repair L1768/L1770）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "FV-1 用 Bash cat 读 values/styles.xml 与 manifest 的 activity 段，回执含 AppBaseTheme parent=android:Theme.Light 及“replaced by AppBaseTheme from res/values-vXX/styles.xml on newer devices”注释；这是写 EntryAbility 前对源主题文件的真实读取。",
+          "evidence": [
+            {
+              "source": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca/subagents/agent-a37f38a62e2c624ed.jsonl",
+              "line": 138
+            },
+            {
+              "source": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca/subagents/agent-a37f38a62e2c624ed.jsonl",
+              "line": 141
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/entry/src/main/ets/components/common/SokoActionBar.ets",
+        "since": "2026-10-16T09:29:14.636Z",
+        "at": "2026-10-16T20:56:02.704Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/spec/ref/sokoban_design.md",
+          "at": "2026-10-16T01:21:37.223Z",
+          "reason": "正确输入：§3.4.2 给出“API 21+: AppTheme → AppBaseTheme → android:Theme.Material.Light.DarkActionBar (values-v21)”，并规定 ActionBar 等平台外观“取自本机 SDK 平台资源逐项核对”。足以要求按 Widget.Material.ActionBar 取全部默认外观，其中包括 elevation（agent-a1155719b304de950.jsonl:L45-L46）。"
+        },
+        {
+          "key": "agent-a1155719b304de950.jsonl",
+          "at": "2026-10-16T02:05:08.493Z",
+          "reason": "Base-3 只 grep 了 action_bar_default_height、content_inset、button_min_width 等记得的 dimen 名（L223-L224），整理出的 ActionBar 属性清单里没有 elevation（L218）。写出的 SokoActionBar 栏 Row 只有 colorPrimary 底色，投影只给了溢出浮层（L330-L331）。返修在这一 Row 上补了 shadow（repair L1783-L1786）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/entry/src/main/ets/pages/SokoSelPage.ets",
+        "since": "2026-10-16T09:29:14.636Z",
+        "at": "2026-10-16T20:56:02.704Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/spec/baseline/ui/page_0001_SokoSelActivity.md",
+          "at": "2026-10-15T17:30:42.777Z",
+          "reason": "有缺陷的输入：页面规格沿用 ui-manifest 的“取 Theme.Light 平台资源”和“仅做系统栏默认避让”，没有窗口底色与标题栏投影条目（agent-a5d32be86e8c2e994.jsonl:L18-L19）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/sokoban-tomari-80c7d44/app/src/main/res/values-v21/styles.xml",
+          "at": "2026-10-15T17:36:19.991Z",
+          "reason": "正确输入：转换者自己 cat 到 values-v21 的 AppBaseTheme parent=Theme.Material.Light.DarkActionBar、colorPrimaryDark=@color/primary_dark（同转录 L132-L133），据此纠正了规格里的 Theme.Light（L136）。随后又在 SDK 查到 background_material_light = material_grey_50（L181-L182）。"
+        },
+        {
+          "key": "agent-a5d32be86e8c2e994.jsonl",
+          "at": "2026-10-15T17:58:25.701Z",
+          "reason": "转换者已知生效主题和 colorBackground，值表（L220）与写入只覆盖 ActionBar、列表行和弹窗：Navigation 的属性链（navDestination、mode、hideTitleBar、onNavBarStateChange）里没有底色；文件头写了 colorPrimaryDark=#b71c1c，却没有任何地方使用；自绘栏没有投影（L272-L273）。返修在 .navDestination(this.pageMap) 之后补了底色（repair L1798）。",
+          "problem": true
+        },
+        {
+          "key": "agent-a1155719b304de950.jsonl",
+          "at": "2026-10-16T02:05:08.493Z",
+          "reason": "Base-3 写出无投影的共享 SokoActionBar（同 SokoActionBar 图，agent-a1155719b304de950.jsonl:L218、L223-L224、L330）。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/entry/src/main/ets/components/common/SokoActionBar.ets",
+          "at": "2026-10-16T08:58:02.841Z",
+          "reason": "交付桥梁：FV-1 整读组件，回执中栏 Row 只有 backgroundColor(primary)，shadow 只出现在溢出浮层（agent-a37f38a62e2c624ed.jsonl:L272-L273）。"
+        },
+        {
+          "key": "agent-a37f38a62e2c624ed.jsonl",
+          "at": "2026-10-16T09:03:13.758Z",
+          "reason": "FV-1 为消除孤儿组件，把页内自绘栏换成 SokoActionBar（L348-L349）。组件无投影，宿主也就没有给它设层叠；返修为新加的投影给这个调用补了 zIndex(1)（repair L1798）。本节点只是传递，不另认定偏差。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "SokoSel 转换者用 Bash 依次 cat values-v11/v14/v21 的 styles.xml，回执含 values-v21 的 AppBaseTheme parent=android:Theme.Material.Light.DarkActionBar 与 colorPrimaryDark；这是写 SokoSelPage 前对源主题文件的真实读取。",
+          "evidence": [
+            {
+              "source": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca/subagents/agent-a5d32be86e8c2e994.jsonl",
+              "line": 132
+            },
+            {
+              "source": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca/subagents/agent-a5d32be86e8c2e994.jsonl",
+              "line": 133
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target"
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": 6
+        },
+        {
+          "from": 6,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/entry/src/main/ets/pages/SokoPage.ets",
+        "since": "2026-10-16T09:29:14.636Z",
+        "at": "2026-10-16T20:56:02.704Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/sokoban-tomari-80c7d44/app/src/main/res/values/styles.xml",
+          "at": "2026-10-15T15:33:25.529Z",
+          "reason": "输入：主线程 cat 到 values/styles.xml，AppBaseTheme parent=android:Theme.Light，注释写明新设备上由 values-vXX 的 AppBaseTheme 取代（主转录 L209-L210）；此前列目录已显示 values-v21 存在（L50-L51）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/spec/baseline/ui-snapshots/page_0001_SokoSelActivity/meta.json",
+          "at": "2026-10-15T15:34:13.523Z",
+          "reason": "输入：主线程读回自己生成的 meta.json，style_sources 包含 app/src/main/res/values-v21/styles.xml（主转录 L238-L239）。"
+        },
+        {
+          "key": "c77c7279-bc70-4f57-adce-85229d07f0ca.jsonl",
+          "at": "2026-10-15T15:48:31.034Z",
+          "reason": "规格作者（主线程）在 ui-manifest 全局约定写“AppTheme 实际继承 android:Theme.Light 浅色 + 原生 ActionBar”“主题: AppBaseTheme extends android:Theme.Light”“普通页面仅做系统栏默认避让”，没有状态栏底色、窗口底色、ActionBar 投影的条目（L309 被召回拦下，L339-L341 落盘）。源到规格在此偏离。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/spec/baseline/ui-manifest.md",
+          "at": "2026-10-15T15:50:42.380Z",
+          "reason": "交付桥梁：页面规格作者整读 ui-manifest，回执第 9、11、14 行是上述 Theme.Light 与“仅做系统栏默认避让”（agent-a7006049ff2520113.jsonl:L158-L159）。"
+        },
+        {
+          "key": "agent-a7006049ff2520113.jsonl",
+          "at": "2026-10-15T16:06:17.682Z",
+          "reason": "页面规格作者没读 meta 列出的 styles 文件，把“取 Theme.Light 平台资源”和“仅做系统栏默认避让（常规 NavDestination 标题栏…）”写进 page_0002，没写窗口底色（L197-L198）。本链确认的是传递。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/spec/baseline/ui/page_0002_SokoActivity.md",
+          "at": "2026-10-15T17:30:45.306Z",
+          "reason": "交付桥梁：转换者整读 page_0002，回执包含上述两处措辞（agent-acbfe02cd15ded4a4.jsonl:L18-L19）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/spec/baseline/ui-manifest.md",
+          "at": "2026-10-15T17:33:02.922Z",
+          "reason": "交付桥梁：转换者 grep ui-manifest，回执带出“沉浸式 + 安全区: 源 App 非全屏（Theme.Light…）…普通页面仅做系统栏默认避让”（agent-acbfe02cd15ded4a4.jsonl:L84-L85）。"
+        },
+        {
+          "key": "agent-acbfe02cd15ded4a4.jsonl",
+          "at": "2026-10-15T18:00:07.404Z",
+          "reason": "转换者按规格用 NavDestination 的 .title()/.menus() 作常规标题栏，NavDestination 不设底色（L298-L299）。它知道 v21 是 Material 主题（L176-L177），但没有查 windowBackground。Slice 5 整文件重写时保留了这一结构；返修在 .title(this.stageTitle) 之前补了底色（repair L1798）。本链确认的是传递。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "主线程用 Bash cat values 目录资源与 styles.xml，回执含 AppBaseTheme parent=android:Theme.Light 与“replaced by AppBaseTheme from res/values-vXX/styles.xml on newer devices”注释；这是写 ui-manifest 前对源主题文件的真实读取。",
+          "evidence": [
+            {
+              "source": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca.jsonl",
+              "line": 209
+            },
+            {
+              "source": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca.jsonl",
+              "line": 210
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "主线程用 Bash cat 读回自己合成的 page_0001 meta.json，回执 style_sources 列出 app/src/main/res/values-v21/styles.xml；这是写 ui-manifest 前的真实读取。",
+          "evidence": [
+            {
+              "source": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca.jsonl",
+              "line": 238
+            },
+            {
+              "source": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca.jsonl",
+              "line": 239
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": 6
+        },
+        {
+          "from": 6,
+          "to": 8
+        },
+        {
+          "from": 7,
+          "to": 8,
+          "force": true,
+          "reason": "SokoPage 转换者用 Grep 工具检索 ui-manifest.md（0002|SokoPage，上下文 6 行），回执第 14 行即“沉浸式 + 安全区: 源 App 非全屏（Theme.Light…）…普通页面仅做系统栏默认避让”；这是写 SokoPage 前对规格的真实读取。",
+          "evidence": [
+            {
+              "source": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca/subagents/agent-acbfe02cd15ded4a4.jsonl",
+              "line": 84
+            },
+            {
+              "source": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca/subagents/agent-acbfe02cd15ded4a4.jsonl",
+              "line": 85
+            }
+          ]
+        },
+        {
+          "from": 8,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/entry/src/main/ets/pages/EditPage.ets",
+        "since": "2026-10-16T09:29:14.636Z",
+        "at": "2026-10-16T20:56:02.704Z"
+      },
+      "nodes": [
+        {
+          "key": "agent-a1155719b304de950.jsonl",
+          "at": "2026-10-16T02:05:08.493Z",
+          "reason": "Base-3 写出无投影的共享 SokoActionBar（见 SokoActionBar 图，agent-a1155719b304de950.jsonl:L218、L223-L224、L330）。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/entry/src/main/ets/components/common/SokoActionBar.ets",
+          "at": "2026-10-16T08:58:02.841Z",
+          "reason": "交付桥梁：FV-1 整读组件，栏 Row 没有投影（agent-a37f38a62e2c624ed.jsonl:L272-L273）。"
+        },
+        {
+          "key": "agent-a37f38a62e2c624ed.jsonl",
+          "at": "2026-10-16T09:05:36.680Z",
+          "reason": "FV-1 把 EditPage 的页内自绘栏换成 SokoActionBar（L415-L416），没有设层叠。EditPage 生成时已有 start_window_background #FAFAFA 底色；返修只为新加的栏投影给这个调用补了 zIndex(1)（repair L1798）。本节点只是传递。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/entry/src/main/ets/pages/SettingsPage.ets",
+        "since": "2026-10-16T09:29:14.636Z",
+        "at": "2026-10-16T20:56:02.704Z"
+      },
+      "nodes": [
+        {
+          "key": "agent-a1155719b304de950.jsonl",
+          "at": "2026-10-16T02:05:08.493Z",
+          "reason": "Base-3 写出无投影的共享 SokoActionBar（见 SokoActionBar 图，agent-a1155719b304de950.jsonl:L218、L223-L224、L330）。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/entry/src/main/ets/components/common/SokoActionBar.ets",
+          "at": "2026-10-16T08:58:02.841Z",
+          "reason": "交付桥梁：FV-1 整读组件，栏 Row 没有投影（agent-a37f38a62e2c624ed.jsonl:L272-L273）。"
+        },
+        {
+          "key": "agent-a37f38a62e2c624ed.jsonl",
+          "at": "2026-10-16T09:06:04.927Z",
+          "reason": "FV-1 把 SettingsPage 的页内自绘栏换成 SokoActionBar（带 onUpClick，L434-L435），没有设层叠。SettingsPage 生成时已有 background_material_light 底色；返修只为新加的栏投影补了 zIndex(1)（repair L1798）。本节点只是传递。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "SokoPage 转换者在写入前没有留下查 colorBackground/windowBackground 的记录，本卡只认定它按规格的“默认系统栏、常规 NavDestination 标题栏”实现，不判定它是否明知 #FAFAFA。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-1a1c2ec5cf0140821002",
+  "metadata": {
+    "migration": {
+      "id": "sokoban-glm531-c77c7279-bc70-4f57-adce-85229d07f0ca",
+      "project": "Sokoban"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.300",
+        "2.1.301"
+      ]
+    },
+    "source_set_id": "sources-1be36e727cb05cb3320f",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-sokoban-glm5.31",
+        "at": "2026-10-15T16:40:54.058Z",
+        "ref": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca.jsonl:L990",
+        "request_ref": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca.jsonl:L984",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-sokoban-glm5.31",
+        "at": "2026-10-15T16:40:54.058Z",
+        "ref": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca.jsonl:L990",
+        "request_ref": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca.jsonl:L984",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "45abaa6a-d22b-4444-adea-2a735a0501f9"
+      ]
+    }
+  },
+  "revision": "f7ad383b455028dd14e5e685d58d0d26d304a4710f751c0ad5de4cc6f6c44103"
+}

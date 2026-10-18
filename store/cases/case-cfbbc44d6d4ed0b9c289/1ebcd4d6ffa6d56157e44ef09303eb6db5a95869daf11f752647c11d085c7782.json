@@ -1,0 +1,122 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-cfbbc44d6d4ed0b9c289",
+  "created_at": "2026-10-17T10:30:02.666130+00:00",
+  "migration_key": "sokoban-glm531-c77c7279-bc70-4f57-adce-85229d07f0ca",
+  "title": "源端 ValueAnimator 未设插值器被当成线性，走步动画进度直接用时间分数",
+  "when": "界面实现阶段，把 Android ValueAnimator/ObjectAnimator 驱动的逐帧进度改写成目标端自驱帧循环或 ArkUI 动画，确定进度曲线时",
+  "description": "源码用 ValueAnimator.ofFloat/ObjectAnimator 建动画，设了时长和更新监听，没有调用 setInterpolator，animatedValue 直接写进绘制用的进度字段（如驱动 Canvas 插值重绘的 animProgress）；目标端没有同语义的 Animator，要自写 postFrameCallback 一类帧循环，或改用 animateTo/曲线；规格只写“ValueAnimator(0→1, 50ms) → animateTo 驱动”，没有写插值器。",
+  "summary": "写前实际收到的输入：SokoPage 写者 acbfe02（a2h-activity-converter）在 L35-L36 整读源 SokoActivity.java。\n:88-90 是 anim=ValueAnimator.ofFloat(0,1)、setDuration(50)、addUpdateListener(this)，全文没有 setInterpolator；\n:282-286 的 onAnimationUpdate 把 animatedValue 写进 state.animProgress 后 invalidate。\nAndroid 框架在未设插值器时默认用 AccelerateDecelerateInterpolator\n（本机 SDK sources/android-36.1/android/animation/ValueAnimator.java:151-153 sDefaultInterpolator）。\n源码事实已经给全，只要再加一条框架默认值就能得出正确曲线。\nL18-L19 读到的页面规格 page_0002 转换决策只写“ValueAnimator(0→1, 50ms) | animateTo 驱动 state.animProgress”，\nL74-L75 读到的 F002 也只写“animateTo(50ms) 驱动”，两份都没提插值器：没有写成线性，也没有给出默认曲线。\n派工和这些输入里都没有“线性”字样。\n\n偏离出在写者自己的判断。L122（17:40）写者判定 animateTo 驱动不了 JS 侧逐帧读取的字段，于是改用 postFrameCallback 帧循环，\n同时断言“ValueAnimator is time-based linear 0→1 over 50ms … ValueAnimator(0→1,50ms, LINEAR) equivalent”；\nL174 的草稿注释也写成“源 ValueAnimator(0→1, 50ms) 线性插值”。这些都发生在经验注入之前。\nL183（17:52）首写被拒时注入了 lesson-6d6ba721c81206d45fbe（v1），提醒为“帧循环进度按绝对时差(frameNow-start)/50计算并Math.min(1,·)”。\n这条经验标题和做法第一步都把“当前帧时间 − 起始时间”除以时长直接叫作进度，只在情境里提到来源是 tween(LinearEasing)。\n写者在 L296 拿它核对线性公式，记下“Per lesson 6d6ba...: 绝对时差 + min(1,·) ✓”，没有因此回头看插值器。\n这条经验是经被拒的 Edit(color.json) 的 hook 回执送达的。索引把 L183 绑定为对 color.json 的写操作，\n检查器不接受用它证明“经验 → 写者”这条交接（invalid_force_source），所以经验没有画进图，依据都写在本段和修订建议里。\nL298-L299 的 Write 写出注释“animProgress 0→1（50ms 线性）”和 state.animProgress = raw >= 1 ? 1 : Math.fround(raw)。\n\n这一行一直保留到返修：写者 L386 只把 onStepAnimFrame 改成包内可见；a5a9090、a5dd99 后来对 SokoPage 的编辑都没有碰进度计算行；\n返修 L1012 的 old_string 仍然包含这一行。\n返修 L1010-L1016 新建 utils/AnimInterp.ets（accelerateDecelerate = fround(fround(cos((t+1)π)/2)+0.5)），把进度改成 accelerateDecelerate(raw)，\nL1028 把注释改为“默认 AccelerateDecelerate 插值”，检查点 3619016（L1146-L1147）。\n同一检查点还修了 animFramePending 不复位导致只跑首帧的问题，那个问题不在本卡归因范围内。\n\n旁证：分析阶段写的 spec/ref/sokoban_design.md §3.4.6 也写了“线性（默认插值器）”（agent-aa2040b0997247c21.jsonl:L212，15:55），\n说明同样的错误认知在其他环节也出现过。但 acbfe02 没有读过这份文件，它不在本链上。\n\n编辑器滚屏动画同样受影响：EditActivity.java:349-364 的 scrollHalfScreen 懒建同样的 ValueAnimator(0→1, 50ms)，也没有设插值器。\nEditorController 由 a5dd99 写（agent-a5dd99ac1f85b05da.jsonl:L237，2026-10-16T07:30），沿用 SokoPage 的写法 Math.fround(raw)；\n它在 L99-L100 读到了 SokoPage 里“50ms 线性”的注释。\n它的召回 worker 在 recall/a5dd99ac1f85b05da-call_685cc6049793464880d0f168.jsonl:L51 已经写出“actually default interpolator is AccelerateDecelerate”，\n却以“the established project precedent is linear”为准，给出的提醒是“50ms 滚动动画按绝对时差(单调钟)/50 计算进度”。\n返修 X12（repair L10814，检查点 9955803）只补了 scrollAnimFramePending=false。\nAnimInterp 头注释（L1011）把 EditorController 列为消费方，但实际没有接入：retained-application.patch 里 EditorController 没有改插值的 hunk，\n最终 onScrollAnimFrame 仍是线性。返修转录里没有说明不改的理由，属于遗漏，不是平台差异。\n",
+  "recommendations": [
+    "界面实现阶段，改写 ValueAnimator/ObjectAnimator 前先在源码里查 setInterpolator。没有调用就是框架默认的 AccelerateDecelerateInterpolator，即 getInterpolation(t) = cos((t+1)π)/2 + 0.5，可在本机 SDK sources/android-*/android/animation/ValueAnimator.java 的 sDefaultInterpolator 核对。自驱帧循环里进度取 插值(min(1, 经过时间/时长))，只有源码显式用 LinearInterpolator 或 setInterpolator(null) 才写成线性。注释写明插值来自显式设置还是框架默认，不凭印象标“线性”。",
+    "规格提取阶段，转写源端 Animator 时把生效插值器及其来源（显式设置或框架默认）和时长一起写进转换决策。映射到 animateTo/Curve 时注明：Curve.EaseInOut 是三次贝塞尔曲线，和 AccelerateDecelerate 的余弦曲线不等价，要求一比一时给出公式。",
+    "返修阶段修正源端默认插值器时，先 grep 源码里全部 ValueAnimator/ObjectAnimator 创建点（本例是 SokoActivity.java:88-90 和 EditActivity.java:360-364），逐一核对目标端对应的帧循环。新增共享插值函数时，注释列出的消费方要和实际 import 一致；没改的写明理由。",
+    "修订 lesson-6d6ba721c81206d45fbe（版本 1，增量）：做法第一步里“(frameTime − startTime) / duration”算出的是时间分数，进度还要套源端插值曲线，即 progress = easing(min(1, (frameTime − startTime) / duration))；只有源端显式线性（Compose LinearEasing、Android LinearInterpolator 或 setInterpolator(null)）才可以省掉这一步。同时补两个默认值：Compose tween 不写 easing 时默认 FastOutSlowInEasing；Android ValueAnimator/ObjectAnimator 不调 setInterpolator 时默认 AccelerateDecelerateInterpolator。标题里“进度按‘当前帧时间 − 起始时间’计算”改成“时间分数按……计算，再套源端插值”，原有的追平、不钳制等条件保持在标题与第一步。回归核对：来源案例是 tween(LinearEasing) 计时器，easing 为恒等，结论不变。依据：SokoPage 写者收到这条经验后拿“绝对时差 + min(1,·)”核对了线性公式（agent-acbfe02cd15ded4a4.jsonl:L183、L296）；编辑器分支的召回 worker 已经知道默认是 AccelerateDecelerate，提醒仍写“按绝对时差/50 计算进度”（recall/a5dd99ac1f85b05da-call_685cc6049793464880d0f168.jsonl:L51）。",
+    "召回失败 lesson-e9c6e8ef1b29a6fe9c26：编辑器分支（不是本 job 目标）的召回 worker 在 recall/a5dd99ac1f85b05da-call_685cc6049793464880d0f168.jsonl:L51 写出了 ValueAnimator 默认 AccelerateDecelerate，却以 SokoPage 已生成的线性写法为“project precedent”，也没有选这条经验。该经验标题“沿用已生成页面、兄弟任务的写法……前，回到源码核对该片段的语义”、做法第一步“已有代码不能代替对源码的核对”，以及第 5 步“旧代码注释里的结论……用源码和框架默认行为重新验证”，本可以排除沿用 SokoPage“50ms 线性”注释的做法（经验正文在 process/spec-handoff/lesson-e9c6e8ef1b29a6fe9c26.lesson.md）。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/entry/src/main/ets/pages/SokoPage.ets",
+        "since": "2026-10-16T09:29:14.636Z",
+        "at": "2026-10-16T20:56:02.704Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/sokoban-tomari-80c7d44/app/src/main/java/su/drsouko/SokoActivity.java",
+          "at": "2026-10-15T17:30:55.893Z",
+          "reason": "正常输入：写者 Read 回执返回全文，:88-90 是 ValueAnimator.ofFloat(0,1)、setDuration(50)、addUpdateListener，没有 setInterpolator；:282-286 把 animatedValue 写进 animProgress 并 invalidate。加上框架默认插值器就能确定进度曲线（agent-acbfe02cd15ded4a4.jsonl:L35-L36）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/spec/baseline/ui/page_0002_SokoActivity.md",
+          "at": "2026-10-15T17:30:45.306Z",
+          "reason": "正常输入（不完整）：转换决策行只写“ValueAnimator(0→1, 50ms) | animateTo 驱动 state.animProgress → SokoBoardView 请求重绘”，没有写插值器，也没有写线性；规格既没给出默认曲线，也没有把写者引向线性（agent-acbfe02cd15ded4a4.jsonl:L18-L19）。"
+        },
+        {
+          "key": "agent-acbfe02cd15ded4a4.jsonl",
+          "at": "2026-10-15T18:00:07.404Z",
+          "reason": "收到的源码里没有 setInterpolator，规格也没有写线性；写者在 L122 却断言 ValueAnimator 是线性 0→1，L174 草稿注释写“线性插值”。L298-L299 的 Write 写出注释“animProgress 0→1（50ms 线性）”和 state.animProgress = raw >= 1 ? 1 : Math.fround(raw)，漏掉了框架默认的 AccelerateDecelerate。这一行保留到返修 L1012 被替换。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [
+    {
+      "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/entry/src/main/ets/utils/AnimInterp.ets",
+      "reason": "返修 L1011/L1014 新建的共享插值函数文件，生成期不存在，也没有生成期写者。它补上的正是 SokoPage 图里已归因的缺失（没有实现默认 AccelerateDecelerate 插值），没有独立的生成来源可以连。头注释把 EditorController 列为消费方，但实际没有接入，见总结。"
+    }
+  ],
+  "job": "issue-cfbbc44d6d4ed0b9c289",
+  "metadata": {
+    "migration": {
+      "id": "sokoban-glm531-c77c7279-bc70-4f57-adce-85229d07f0ca",
+      "project": "Sokoban"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.300",
+        "2.1.301"
+      ]
+    },
+    "source_set_id": "sources-1be36e727cb05cb3320f",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-sokoban-glm5.31",
+        "at": "2026-10-15T16:40:54.058Z",
+        "ref": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca.jsonl:L990",
+        "request_ref": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca.jsonl:L984",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-sokoban-glm5.31",
+        "at": "2026-10-15T16:40:54.058Z",
+        "ref": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca.jsonl:L990",
+        "request_ref": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca.jsonl:L984",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "45abaa6a-d22b-4444-adea-2a735a0501f9"
+      ]
+    }
+  },
+  "revision": "1ebcd4d6ffa6d56157e44ef09303eb6db5a95869daf11f752647c11d085c7782"
+}

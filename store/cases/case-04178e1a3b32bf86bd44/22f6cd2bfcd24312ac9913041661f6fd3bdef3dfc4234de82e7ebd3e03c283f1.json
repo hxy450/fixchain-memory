@@ -1,0 +1,225 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-04178e1a3b32bf86bd44",
+  "created_at": "2026-10-17T10:37:24.236227+00:00",
+  "migration_key": "sokoban-glm531-c77c7279-bc70-4f57-adce-85229d07f0ca",
+  "title": "溢出面板画在共享标题栏内、点外关闭层留给宿主页作后声明兄弟层，面板项点击被捕获层截获",
+  "when": "共享组件实现与结构收口阶段：把页内锚定浮层（溢出菜单面板与点外关闭层）搬进共享标题栏组件，或用该组件替换页面已实现的标题栏与浮层片段时，决定面板与点外关闭层放在哪个承载层、谁在上层",
+  "description": "源端溢出菜单是框架 ActionBar 的 PopupWindow：浮在窗口最上层，点外部只关闭菜单、这次触摸不下发。目标页先在内容区 Stack 里内联写了全幅透明捕获层，面板在它之后声明、层级在上；之后共享标题栏组件把面板画在自身节点里（Stack 子节点或 .overlay()），点外关闭层按组件契约留给宿主页，放在标题栏之后的兄弟 Stack 中。",
+  "summary": "写前实际收到的输入：两个页面的转换者最初把点外关闭层和面板放在同一个 Stack 里，面板后声明，\n注释写“透明点击捕获层：几何=覆盖内容区全幅（拦截点外关闭溢出面板），面板 z 序居上”\n（SokoSelPage：agent-a5d32be86e8c2e994.jsonl:L272；EditPage：agent-a0db36cad591595c2.jsonl:L450）。这个写法命中顺序是对的。\n\n偏差一，共享组件作者 a1155719（Base-3 公共组件库）。写前用 Bash 看过 SokoSelPage 655-700 行，\n其中就有上面那段捕获层和“面板 z 序居上”（agent-a1155719b304de950.jsonl:L164-L165）；L70-L71 读到了页内的 OverflowPanel。\nL292 首写被拒时注入了 lesson-666a746081ba1e447322（v2），提醒是“溢出面板贴栏下锚定……外点关闭+宿主返回先关面板”。\nL294 它判断“panel close on outside click is page-level (component can't cover page)”。\nL330 写出的 SokoActionBar 把面板放进组件根 Stack，注释写“溢出浮层贴栏下右锚定覆盖页内容（不推移布局）”；\n@Param overflowVisible 注释“外点捕获层/返回先关面板由宿主兑现”，@Event onOverflowVisibleChange 注释“宿主据此渲染页级外点捕获层”。\n组件契约没有写面板必须在捕获层之上。按它的设计意图，面板覆盖页内容，而宿主捕获层是后声明的全幅兄弟层，\n两者重叠，命中先落到捕获层。按收口者 L299 的分析，当时面板用 margin 参与布局，会把根 Stack 撑高、把页面内容往下推，\n面板与内容区反而不重叠；而且生成期没有页面引用这个组件，所以问题当时没显出来。\n\n偏差二，FV-1 收口者 a37f38a6（a2h-closer mode=final）。派工让它消除孤儿组件，SokoActionBar 就在孤儿清单上。\nL96-L97 它读到 SokoSelPage 的内联片段：捕获层之后紧接 this.OverflowPanel()，注释“面板 z 序居上”。\nL201 首写被拒时注入了 lesson-447ba5818e4e203272e8 与 lesson-ad6f23b88f09b55dd92a（v3），\nad6f 的提醒是“替换前完整读被删片段及引用builder（非部分行段），逐项比对色/图标/形状/内距；组件不符先修组件，不传覆盖参数保旧外观”。L270 它按这两条决定接线收敛，\nL272-L273 读到组件契约，L280、L294 列出的比对矩阵只有视觉常量，结论是“页面只需保留外点捕获层”。\nL299 它发现组件里 margin 会撑高根 Stack，按“组件不符先修组件”在 L306 把面板改成栏 Column 的 .overlay()（align TopEnd、dy=栏高）。\n这一改让面板浮到页面内容区上方。L348（SokoSelPage）和 L417（EditPage）接线时，它删掉 this.OverflowPanel()，\n保留后声明的捕获层，把注释从“面板 z 序居上”改成“溢出浮层本体由 SokoActionBar overlay 渲染”；L510 的 brief 也写了外点捕获层留在页面。\n它改动的 old_string 里就有“面板 z 序居上”，输入足以说明替换后要保证面板在上。面板改挂 overlay 后，它没有重核重叠区的命中顺序。\n这个组合就是在这次收口里形成的。之后 af2b9ab1（fv-final-build）只做编译修复，把 overlay offset 的 dx/dy 改成 x/y、\n删掉 closeOverflowMenu 的 @Builder（agent-af2b9ab1b73cc83d4.jsonl:L106-L122），没有碰层级关系，结构保留到返修。\n\n返修：实测菜单项无效，安卓菜单打开时点列表行只关闭菜单（repair/3212c816-0906-464d-be11-07f0eba50527.jsonl:L1428-L1440）。\nL1501 把溢出面板改由 UIContext.getOverlayManager() 承载（OverflowPopupHost：全窗口透明层按下即关闭，加右上面板），\n用 @Monitor('overflowVisible') 增删节点，aboutToDisappear 移除；L1513 删掉 SokoSelPage/EditPage 的捕获层和 closeOverflowMenu()；\nL1525-L1566 实测 Settings/About 可进入，外部点击只关闭菜单；检查点 6acb8c7（L1593-L1594）。\n\n经验注入三层判断。\nlesson-666a（组件作者收到）：召回 worker 的提醒没有把遮罩派给宿主，传递基本忠实；\n原文做法第 3 步“要求一比一时用页内浮层：全屏遮罩只负责关闭并吞掉事件，面板贴锚点下沿，宿主 onBackPressed 先关闭浮层”\n没有写面板与遮罩必须在同一承载层、面板在上，也没有写面板由共享标题栏组件绘制时怎么办。\n组件作者据“页内”推出遮罩归宿主页；召回 worker 自己的笔记也把这一步读成“outside-tap close via page catcher”\n（recall/a1155719b304de950-call_97ef957791694d8f84d03dbe.jsonl:L516）。原文缺的正是这次起作用的条件，按增量修订。\nlesson-ad6f（收口者收到）：提醒忠实。原文标题和第 1 步把比对范围限定为视觉（颜色、尾部图标、形状、内边距），\n收口者照此列出纯视觉矩阵，按“先修组件”改了挂载方式，没有核对被删片段里的层叠约束，按增量修订。\n收口者另有执行层面的问题：输入片段里明写“面板 z 序居上”却删掉了，在建议里单列。\nlesson-4a4f8d845a204ffa244b（Stack 上层全尺寸层参与命中测试）两位都没有收到。它的做法是给不处理点击的覆盖层设 Transparent，\n而本例捕获层本身要处理点击，不能照搬。组件作者的召回已选了更直接的浮层经验 666a；收口者召回时（L201）任务是孤儿接线与沉浸式，\n还没有涉及浮层。所以不算召回失败。\n",
+  "recommendations": [
+    "共享组件实现阶段：把页内浮层（锚定面板与点外关闭的全幅遮罩）搬进共享标题栏等组件时，遮罩和面板放在同一个承载层，面板后声明、层级在上。面板在组件节点里绘制、遮罩又要覆盖页面时，整层由组件经 UIContext.getOverlayManager() 挂到窗口级：用 ComponentContent，回调先赋值再构造，可见态变化时增删节点，aboutToDisappear 移除。不把遮罩留给宿主页做兄弟节点；确需宿主参与的（如返回键先关面板），在组件契约里写明层级要求。",
+    "结构收口阶段：用共享组件替换页面片段时，比对项除视觉外还要包括被删片段里的层叠和事件关系，例如浮层与点外关闭层的声明顺序、注释里的 z 序约束、点外和返回两条关闭路径。替换后这些关系要仍然成立。按“组件不符先修组件”改动面板的几何或挂载方式（.overlay()、position、移出原容器）后，逐个检查宿主里保留的、后声明的全尺寸层是否与面板重叠，并实际点击面板项与面板外区域验证。",
+    "本应用的具体修法：SokoActionBar 新增 OverflowPopupSpec 与全局 @Builder OverflowPopupHost（全窗口 Column 在 TouchType.Down 时关闭，右上面板 196/48/16），@Monitor('overflowVisible') 调 openOverflowPopup/closeOverflowPopup，aboutToDisappear 移除；删除 SokoSelPage 与 EditPage 内容区 Stack 中的透明捕获层及 closeOverflowMenu()。验证：溢出菜单点 Settings 进入设置页、点 About 弹出关于框，菜单打开时点列表行只关闭菜单。",
+    "修订 lesson-666a746081ba1e447322（版本 2，增量）：做法第 3 步的“页内浮层”补上承载条件：全屏遮罩与面板放在同一个容器里，面板在遮罩之后声明、层级在上。溢出面板由共享标题栏组件绘制、和遮罩不在同一容器时，组件用 UIContext.getOverlayManager() 把遮罩加面板整层挂到窗口级，不把遮罩留给宿主页做后声明的兄弟层；宿主后声明的全尺寸层会在重叠区先命中，面板项点不中。宿主只负责返回键先关面板。回归核对：两张来源卡分别是页内 bindPopup 或 Stack 下拉、页内遮罩 Block 加面板的 Holo 溢出浮层，遮罩与面板本来就在同一层，结论不变。依据：组件作者收到这条经验后判断“component can't cover page”，把点外关闭层写成宿主职责（agent-a1155719b304de950.jsonl:L292、L294、L330），返修改用 OverlayManager 后恢复（repair/3212c816-0906-464d-be11-07f0eba50527.jsonl:L1501、L1525-L1566）。",
+    "修订 lesson-ad6f23b88f09b55dd92a（版本 3，增量）：比对范围从视觉扩到交互结构。做法第 1 步在颜色、尾部图标、形状与内边距之外，加上被替换片段中的层叠与事件关系（浮层与遮罩或点外关闭层的声明顺序、注释里的 z 序约束、关闭路径），替换后这些关系要仍然成立；“组件不符先修组件”时，如果改了组件内节点的几何或挂载方式（.overlay()、position），重核它与宿主保留层的重叠和命中顺序。原有的视觉逐项比对、不传覆盖参数、完整读取被删片段三点不变。回归核对：来源卡是标题品牌色与箭头、图片圆角覆盖参数这类视觉偏差，扩展后仍然覆盖。依据：收口者按这条经验只列了视觉比对矩阵，按“先修组件”把面板改成 .overlay()，接线时删掉写有“面板 z 序居上”的面板调用、保留捕获层（agent-a37f38a62e2c624ed.jsonl:L201、L270、L294、L306、L348、L417）。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/entry/src/main/ets/components/common/SokoActionBar.ets",
+        "since": "2026-10-16T09:29:14.636Z",
+        "at": "2026-10-16T20:56:02.704Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/entry/src/main/ets/pages/SokoSelPage.ets",
+          "at": "2026-10-16T01:28:40.533Z",
+          "reason": "正常输入：组件作者用 Bash sed 读 SokoSelPage 655-700 行，回执里有内容区 Stack 中的透明捕获层，注释“面板 z 序居上”（agent-a1155719b304de950.jsonl:L164-L165）；L70-L71 也读到页内 OverflowPanel。足以说明面板必须在点外关闭层之上。"
+        },
+        {
+          "key": "agent-a1155719b304de950.jsonl",
+          "at": "2026-10-16T02:05:08.493Z",
+          "reason": "L294 判断点外关闭只能在页级，L330 写出 SokoActionBar：面板在组件根 Stack 内，意图是“覆盖页内容（不推移布局）”；契约注释把“外点捕获层/返回先关面板”交给宿主，“宿主据此渲染页级外点捕获层”，没有写面板要在捕获层之上。这个设计让面板与宿主后声明的全幅捕获层重叠。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/entry/src/main/ets/pages/SokoSelPage.ets",
+          "at": "2026-10-16T08:39:59.884Z",
+          "reason": "正常输入：收口者 Read SokoSelPage 560-770 行，回执里捕获层之后紧接 this.OverflowPanel()，注释“面板 z 序居上”（agent-a37f38a62e2c624ed.jsonl:L96-L97）。"
+        },
+        {
+          "key": "agent-a37f38a62e2c624ed.jsonl",
+          "at": "2026-10-16T09:01:36.737Z",
+          "reason": "L272-L273 读到上述组件契约，L294 比对矩阵只有视觉常量，结论“页面只需保留外点捕获层”；L299-L306 为了修 margin 撑高的问题，把面板改成栏 Column 的 .overlay()（align TopEnd、dy=栏高），面板从此浮在宿主内容区上方，没有重核与宿主捕获层的命中顺序。这段 overlay 保留到返修 L1501 被 OverlayManager 取代。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/entry/src/main/ets/pages/SokoSelPage.ets",
+        "since": "2026-10-16T09:29:14.636Z",
+        "at": "2026-10-16T20:56:02.704Z"
+      },
+      "nodes": [
+        {
+          "key": "agent-a1155719b304de950.jsonl",
+          "at": "2026-10-16T02:05:08.493Z",
+          "reason": "组件契约把点外关闭层定为宿主页职责（“宿主据此渲染页级外点捕获层”），没有写面板与捕获层的层级要求（agent-a1155719b304de950.jsonl:L294、L330）。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/entry/src/main/ets/components/common/SokoActionBar.ets",
+          "at": "2026-10-16T08:58:02.841Z",
+          "reason": "交付桥梁：收口者 Read 全文，回执里有 overflowVisible 与 onOverflowVisibleChange 的宿主捕获层契约（agent-a37f38a62e2c624ed.jsonl:L272-L273）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/entry/src/main/ets/pages/SokoSelPage.ets",
+          "at": "2026-10-16T08:39:59.884Z",
+          "reason": "正常输入：收口者读到的内联片段是捕获层加 this.OverflowPanel()，注释“面板 z 序居上”（agent-a37f38a62e2c624ed.jsonl:L96-L97）。"
+        },
+        {
+          "key": "agent-a37f38a62e2c624ed.jsonl",
+          "at": "2026-10-16T09:03:13.758Z",
+          "reason": "已在 L306 把面板改成 SokoActionBar 的 .overlay()；L348 接线时 old_string 里有“面板 z 序居上”，它删掉 this.OverflowPanel()，保留后声明的全幅捕获层，注释改成“溢出浮层本体由 SokoActionBar overlay 渲染”。捕获层从此盖在面板之上。片段保留到返修 L1513 被删除。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/entry/src/main/ets/pages/EditPage.ets",
+        "since": "2026-10-16T09:29:14.636Z",
+        "at": "2026-10-16T20:56:02.704Z"
+      },
+      "nodes": [
+        {
+          "key": "agent-a1155719b304de950.jsonl",
+          "at": "2026-10-16T02:05:08.493Z",
+          "reason": "同一组件契约：点外关闭层归宿主页，没有写层级要求（agent-a1155719b304de950.jsonl:L294、L330）。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/entry/src/main/ets/components/common/SokoActionBar.ets",
+          "at": "2026-10-16T08:58:02.841Z",
+          "reason": "交付桥梁：收口者 Read 组件全文，回执里有宿主捕获层契约（agent-a37f38a62e2c624ed.jsonl:L272-L273）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/entry/src/main/ets/pages/EditPage.ets",
+          "at": "2026-10-16T09:05:31.951Z",
+          "reason": "正常输入：收口者 Read EditPage 690-775 行，回执 759-766 行是捕获层，注释“面板 z 序居上”，后接 this.OverflowPanel()（agent-a37f38a62e2c624ed.jsonl:L412-L413）。"
+        },
+        {
+          "key": "agent-a37f38a62e2c624ed.jsonl",
+          "at": "2026-10-16T09:05:38.316Z",
+          "reason": "L415 把 this.ActionBar() 换成 SokoActionBar；L417 删掉 this.OverflowPanel()，保留后声明的捕获层，把“面板 z 序居上”改成“溢出浮层本体由 SokoActionBar overlay 渲染”。片段保留到返修 L1513 被删除。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-04178e1a3b32bf86bd44",
+  "metadata": {
+    "migration": {
+      "id": "sokoban-glm531-c77c7279-bc70-4f57-adce-85229d07f0ca",
+      "project": "Sokoban"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.300",
+        "2.1.301"
+      ]
+    },
+    "source_set_id": "sources-1be36e727cb05cb3320f",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-sokoban-glm5.31",
+        "at": "2026-10-15T16:40:54.058Z",
+        "ref": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca.jsonl:L990",
+        "request_ref": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca.jsonl:L984",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-sokoban-glm5.31",
+        "at": "2026-10-15T16:40:54.058Z",
+        "ref": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca.jsonl:L990",
+        "request_ref": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca.jsonl:L984",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "45abaa6a-d22b-4444-adea-2a735a0501f9"
+      ]
+    }
+  },
+  "revision": "22f6cd2bfcd24312ac9913041661f6fd3bdef3dfc4234de82e7ebd3e03c283f1"
+}

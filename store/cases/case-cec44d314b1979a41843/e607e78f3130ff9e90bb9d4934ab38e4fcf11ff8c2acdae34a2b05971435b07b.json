@@ -1,0 +1,206 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-cec44d314b1979a41843",
+  "created_at": "2026-10-17T11:15:13.732126+00:00",
+  "migration_key": "sokoban-glm531-c77c7279-bc70-4f57-adce-85229d07f0ca",
+  "title": "框架复选框改用 ArkUI Checkbox，且迁出的 checked 向量图没有烘焙根 tint 色",
+  "when": "资源迁移阶段，把框架或应用 VectorDrawable 批量转成 SVG 并烘焙主题 tint 时；页面实现阶段，为 CheckBoxPreference/CheckBox 选定勾选框的载体与尺寸时；规格提取阶段为框架主题提供的勾选框写转换决策时",
+  "description": "源端 CheckBox 或 CheckBoxPreference 的勾选图由框架主题提供，应用 res 里没有同名资源。Material 主题下它是 SDK 平台 drawable 里的 btn_checkbox_checked_mtrl / btn_checkbox_unchecked_mtrl 向量：画布 32dp、viewport 48，方框 18dp、圆角 2dp，勾是方框里的镂空。vector 根写 android:tint=\"@color/control_checkable_material\"（选中取 colorControlActivated→colorAccent，未选取 colorControlNormal），path 的 fillColor 却是字面 #FF000000，另有 fillAlpha=0 的动画用 path。工程里已经迁出这两态 SVG，同页单选标记也用框架 btn_radio 双态图；规格转换表写的是“CheckBoxPreference → Checkbox（勾选框，非 Switch/Toggle）”。",
+  "summary": "一、勾选图资源（资源迁移阶段）。Stage 0 资源 worker a8570f8920a02c5f7 在 L135-L136 读到 SDK android-30 的 btn_checkbox_checked_mtrl.xml：\nvector 根 android:tint=\"@color/control_checkable_material\"；check_path_merged 的 fillColor 是字面 #FF000000（外框圆角矩形和勾合在一条 nonzero 路径里，勾是镂空）；\nbox_inner_merged 的 fillAlpha=0。L178 它已经解析出 tint 链，计划“btn_checkbox_checked_mtrl.svg: paths filled #F44336”。\nL224 首次写脚本被拦，收到 lesson-4e306a66aba5f1d76fdf（v1）的提醒“tint 解析后填可见色并在映射表登记链，不写 fill=none”。\nL240 写出的 base0_gen.py 在框架图标表里给 btn_checkbox_checked_mtrl 填了覆盖色 #F44336，但 vd_to_svg 的 conv_fill 只在 fillColor 以 @ 或 ? 开头时才用覆盖色，\n字面 #FF000000 原样输出成 fill=\"#000000\"。未选态的覆盖色恰好是 #000000，脚本再用字符串替换补上 fill-opacity 0.541，所以结果碰巧正确。\nL294-L295 最后一次运行写出 checked SVG，可见路径是 fill=\"#000000\"。L299 只抽查了 unchecked 和 ic_ab_back；\nL342 写 resource-mapping.md 时仍登记“#F44336 … SettingsPage CheckBoxPreference 勾选态”，没有读回 checked 文件。\n这条经验的原文把主题色问题写成“部分 fillColor 引用主题属性”，没有提到 vector 根上的 tint 会覆盖字面 fill，脚本正是按这个说法只在引用型 fillColor 上分支。\n生成期没有别的写者改过这个文件。SettingsPage 转换者 L193-L194 读到的仍是 #000000；返修 L5801 先断言 s.count('fill=\"#000000\" fill-rule=\"nonzero\"/>')==1，再改成 #F44336，说明它一直留到了返修。\n\n二、设置页勾选框（页面实现阶段）。SettingsPage 转换者 a148fd46222e19bdb 写前收到的输入：派工（L1）称“Stage 0 已迁 btn_checkbox SVG”，并说明 radio 用双状态 SVG；\n页面规格 page_0004 的转换表（L18-L19）写“CheckBoxPreference | Checkbox（勾选框，非 Switch/Toggle）| 源为复选框；不补源端没有的形态与元素”，强调的是形态不是开关；\nL170-L171 列出 SDK 里的 btn_checkbox_checked/unchecked_mtrl 向量；L181-L182 读到两张已迁 SVG（32×32、viewBox 48）。\nL184 它原本打算用 Image(btn_checkbox_*) 32×32。L193-L194 发现 checked SVG 的 fill 是 #000000（第一节留下的问题），\nL196-L200 拿不准 Image.fillColor 能否覆盖显式 fill，又误判“Bake tints? Can't — one asset, two states”（其实两态各是一个文件），于是转向 ArkUI Checkbox。\n它在 L200 自己写到“Using the migrated SVG assets reproduces the exact Material glyph”，L213 仍以规格里的“Checkbox”和原子映射 CheckBox→Checkbox 定案。\nL257 首次写入被拦，注入的提醒里：lesson-943544ce27bf04f9faf8 的标题写着“主题或框架控件提供的图标（Up 尖角、溢出、复选框）从 SDK 平台 drawable 复制”，提醒却只说 radio；\nlesson-47785524c7f132ea7efe 的提醒是“Checkbox映射须显式化默认外观：.shape(ROUNDED_SQUARE)+selectedColor”，出自原文做法 11。\n转换者 L259 照这两条分别处理：为 radio 新建烘焙色 SVG（L278、L281 写 btn_radio_on/off_mtrl.svg），勾选框保留 Checkbox。\nL298-L299 的 Write 写出 CHECKBOX_SIZE=20，注释“Material btn_checkbox 画布 32dp 内核 18dp+2dp 描边 → ArkUI Checkbox 取 20vp 视觉盒”（18dp 本来已含边框），\n以及 Checkbox().shape(CheckBoxShape.ROUNDED_SQUARE).selectedColor(accent).unselectedColor(...)，只设了左距 16，没有按 32dp 画布留位。\n转换报告（L340）把依据写成 spec 与 lesson-47785524/fd3add71。生成期后来的写者没有动这一段，blame 只命中 a148 的两次写入（L256 被拦，L298 落盘）。\n\n三、返修。返修 L5643 先把 Checkbox 改成 18vp、左右各留 7vp；L5784 放大对照后发现“HM's rounded corner ~4vp, thinner checkmark”，\nL5801/L5807 把 SoundRow 改成 Image(btn_checkbox_checked_mtrl / btn_checkbox_unchecked_mtrl) 32vp、左距 16，加上无障碍角色 CHECKBOX 和 checked 态，\n同一脚本把 checked SVG 的填色改成 #F44336；L5812 改注释；检查点 5ba463b（L6106-L6107）。\n修复报告 C63（evidence/spec/parity-fix-report.md:169-174）写的根因是“勾选框用 ArkUI Checkbox（圆角、勾形不可设）且取 20vp”。\n\n四、注入经验分三层看。\nlesson-47785524c7f132ea7efe（v8）原文有两条互相冲突：做法 5 写“外观由位图或 9-patch 状态选择器决定的框架控件（…CheckBox/RadioButton）复制平台原图…只给 ArkUI 内置组件改颜色不算显式化”；\n做法 11 写“映射 Material 控件时…逐项与 ArkUI 默认值对照并显式设置：Checkbox .shape(CheckBoxShape.ROUNDED_SQUARE)”。\nMaterial 主题的勾选框是向量状态 drawable，字面上不属于“位图或 9-patch”；照做法 11 做，得到的就是本例的输出，而 ArkUI Checkbox 的圆角和勾形设不成框架样子。\n召回 worker 在 recall/a148fd46222e19bdb-call_96362e69e2e641dd8761c0e9.jsonl:L200 读到做法 5 时已经得出“use the migrated btn_checkbox SVG pair…NOT the ArkUI Checkbox component”，\n随后以规格写了 Checkbox、Stage 0 的 SVG 是黑色、做法 11 也认可组件映射（L226 “Both paths have lesson support”）为由改回 Checkbox，提醒只转述了做法 11。\n原文两步互相矛盾，是 worker 能改回去的依据，所以需要修订原文。\nlesson-943544ce27bf04f9faf8（v5）的标题已经点名复选框，提醒却只写 radio，这是召回传递的问题；转换者看到了标题，仍只用在 radio 上，这是执行层的问题。原文不改。\nlesson-4e306a66aba5f1d76fdf（v1）缺少“vector 根 tint 覆盖字面 fill”这一前提，需要增量修订。\n这三条经验都是经被拒写入的 hook 回执送达的（agent-a8570f8920a02c5f7.jsonl:L224、agent-a148fd46222e19bdb.jsonl:L257），两名写者都没有另外 Read 经验正文；\n索引把这些回执绑定在被拒的写操作上，检查器不接受用它证明“经验 → 写者”这条交接（invalid_force_source），所以经验没有画进图，依据写在本段和修订建议里。\n",
+  "recommendations": [
+    "资源迁移阶段转换 VectorDrawable 时，先看 vector 根有没有 android:tint：有 tint 时，按 tint 链解析出的颜色替换每个可见 path 的填色（字面 #FF000000 也要替换），fillAlpha=0 的 path 保持透明。多态资源每个状态文件分别烘焙（本例 btn_checkbox_checked_mtrl → #F44336，unchecked → #000000 加 fill-opacity 0.541）。写映射表前逐个读回输出 SVG 的 fill，与登记值比对，不只抽查一两个文件。",
+    "页面实现阶段，源端 CheckBoxPreference/CheckBox 的勾选图由框架主题提供时，用平台 drawable 的两态图按 checked 切换：Image 尺寸取向量画布（本例 32vp，方框 18dp、圆角 2dp 已在图内），左距取 widget_frame 的 16dp；加 accessibilityRole(CHECKBOX) 和 accessibilityChecked；点击仍挂在整行。和同页 radio 用同一口径。已迁图颜色不对时，按 tint 链重新烘焙对应状态的文件，或登记资源缺口交资源负责方；不要改用 ArkUI Checkbox（圆角、勾形设不成框架样子），也不要用 fillColor 二次着色。",
+    "规格提取阶段，给框架主题提供的勾选框写转换决策时，把形态约束（非 Switch/Toggle）和外观来源分开写：外观写 SDK drawable 名、画布与方框尺寸、各状态 tint 的解析色；不要在 ArkUI 组件一栏直接写 Checkbox，以免实现者把它当成指定内置组件。",
+    "修订 lesson-47785524c7f132ea7efe（版本 8，纠错）：做法 11 把“Checkbox .shape(CheckBoxShape.ROUNDED_SQUARE)”列为 Material CheckBox 默认外观的显式化，但 ArkUI Checkbox 的圆角（约 4vp）、勾形（细线、两端圆）和尺寸都设不成框架 btn_checkbox 的样子（方框 18dp、圆角 2dp、实心方框里镂空勾），照做仍会偏。改法：做法 5 的条件从“位图或 9-patch 状态选择器”扩成“平台 drawable 状态选择器”，包括 Material 主题 btn_check_material_anim 指向的 btn_checkbox_checked/unchecked_mtrl、btn_radio_on/off_mtrl 向量，转 SVG 后按各状态烘焙 tint 解析色、按状态切换；做法 11 里的 Checkbox+ROUNDED_SQUARE 改成和 Switch→Toggle 同样的写法，注明只是功能映射，要求外观一致时用做法 5。回归核对：来源卡 case-c40332380c19d002090d 的问题是复选框默认圆形，修订后不用平台图时仍至少设 ROUNDED_SQUARE，用平台图同样不会是圆形，结论不变。依据：转换者照该提醒写 Checkbox().shape(ROUNDED_SQUARE)（agent-a148fd46222e19bdb.jsonl:L257、L298，报告 L340 引用 lesson-47785524）；召回 worker 读到做法 5 后已判定用 SVG，又因做法 11 改回（recall/a148fd46222e19bdb-call_96362e69e2e641dd8761c0e9.jsonl:L200、L226）；返修发现圆角约 4vp、勾线偏细，改成平台图（repair/3212c816-0906-464d-be11-07f0eba50527.jsonl:L5784、L5801）。",
+    "修订 lesson-4e306a66aba5f1d76fdf（版本 1，增量）：适用情境和做法 2 只写了“fillColor 引用主题属性”。补充：vector 根上的 android:tint（含框架 color state list，如 control_checkable_material）按默认 SRC_IN 作用于全部 path，烘焙时要替换每个可见 path 的填色，字面 fillColor 也要替换，fillAlpha/strokeAlpha 为 0 的 path 保持透明；多态资源按状态分别烘焙。可选检查加一项：写后逐个读回输出 SVG 的 fill，与映射表登记的解析色比对。回归核对：来源卡 case-e82be6ce5af181afb98d 的问题是 viewBox 与 viewport 错配、主题属性写成 fill=none，补充只扩大颜色覆盖范围，两点仍按原做法处理。依据：Stage 0 读到根 tint 与字面 #FF000000（agent-a8570f8920a02c5f7.jsonl:L136），收到提醒（L224）后脚本只在 @/? 开头的 fillColor 上用覆盖色（L240），输出 fill=#000000（L294-L295），映射表却登记 #F44336（L342）；返修把该 path 改成 #F44336（repair/3212c816-0906-464d-be11-07f0eba50527.jsonl:L5801）。",
+    "召回失败 lesson-943544ce27bf04f9faf8：标题“主题或框架控件提供的图标（Up 尖角、溢出、复选框）从 SDK 平台 drawable 复制；不用…系统符号、二次着色…替代”和做法 4“应用 res 里没有、由主题或框架控件提供的图标，从本机 SDK platforms/…/drawable 复制原图”足以排除用 ArkUI Checkbox 代替框架勾选图。召回 worker 在 recall/a148fd46222e19bdb-call_96362e69e2e641dd8761c0e9.jsonl:L226 讨论过勾选图，最终提醒只写 radio（L294）；转换者收到完整标题（agent-a148fd46222e19bdb.jsonl:L257），L259 只用在 radio 上。原文见 base-memory/ui/graphics/lesson-943544ce27bf04f9faf8.lesson.md。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/entry/src/main/resources/base/media/btn_checkbox_checked_mtrl.svg",
+        "since": "2026-10-16T09:29:14.636Z",
+        "at": "2026-10-16T20:56:02.704Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/AppData/Local/Android/Sdk/platforms/android-30/data/res/drawable/btn_checkbox_checked_mtrl.xml",
+          "at": "2026-10-15T17:09:17.994Z",
+          "reason": "正常输入：Stage 0 worker 用 Bash 循环 cat 这个框架 drawable，回执显示 vector 根 android:tint=\"@color/control_checkable_material\"，check_path_merged 的 fillColor=\"#FF000000\"，box_inner_merged 的 fillAlpha=0（agent-a8570f8920a02c5f7.jsonl:L135-L136）；L178 它据此解析出选中态 colorControlActivated→colorAccent=#f44336。足以确定 checked 图的可见填色。"
+        },
+        {
+          "key": "agent-a8570f8920a02c5f7.jsonl",
+          "at": "2026-10-15T17:26:07.595Z",
+          "reason": "L240 的脚本给 btn_checkbox_checked_mtrl 登记覆盖色 #F44336，但 conv_fill 只在 fillColor 以 @/? 开头时才用它；L294-L295 最后一次运行把 checked 图的可见路径写成 fill=\"#000000\"。L299 只抽查 unchecked，L342 映射表仍登记 #F44336。这一值保留到返修 L5801。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "Stage 0 worker 的 Bash 在 for 循环里对 SDK android-30 drawable 目录逐个 cat，列表含 btn_checkbox_checked_mtrl.xml，回执给出该文件全文（根 tint 与字面 #FF000000）；路径由循环变量拼成，索引没有解析出这次读取。",
+          "evidence": [
+            {
+              "source": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca/subagents/agent-a8570f8920a02c5f7.jsonl",
+              "line": 135
+            },
+            {
+              "source": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca/subagents/agent-a8570f8920a02c5f7.jsonl",
+              "line": 136
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": "target",
+          "force": true,
+          "reason": "Bash 运行 base0_gen.py，脚本 vd_to_svg 把 SDK btn_checkbox_checked_mtrl.xml 转成 media/btn_checkbox_checked_mtrl.svg（输出名由 f[:-4]+'.svg' 拼成）；回执显示断言全部通过。这是生成期对该文件的最后一次写入。",
+          "evidence": [
+            {
+              "source": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca/subagents/agent-a8570f8920a02c5f7.jsonl",
+              "line": 294
+            },
+            {
+              "source": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca/subagents/agent-a8570f8920a02c5f7.jsonl",
+              "line": 295
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/entry/src/main/ets/pages/SettingsPage.ets",
+        "since": "2026-10-16T09:29:14.636Z",
+        "at": "2026-10-16T20:56:02.704Z"
+      },
+      "nodes": [
+        {
+          "key": "agent-a8570f8920a02c5f7.jsonl",
+          "at": "2026-10-15T17:26:07.595Z",
+          "reason": "同上一图：Stage 0 脚本没有把根 tint 烘焙进 checked 图，输出 fill=\"#000000\"（agent-a8570f8920a02c5f7.jsonl:L240、L294-L295）。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/entry/src/main/resources/base/media/btn_checkbox_checked_mtrl.svg",
+          "at": "2026-10-16T01:34:32.608Z",
+          "reason": "交付桥梁：转换者 grep 回执显示 checked 图的可见路径 fill=\"#000000\"（agent-a148fd46222e19bdb.jsonl:L193-L194），L196-L200 它因此拿不准 fillColor 能否覆盖，转而考虑 ArkUI Checkbox。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/spec/baseline/ui/page_0004_SettingsActivity.md",
+          "at": "2026-10-16T01:21:19.911Z",
+          "reason": "规格输入（措辞有歧义）：Read 回执第 25 行“复选框形态用 Checkbox，不改 Toggle/开关”，第 36 行转换表“CheckBoxPreference | Checkbox（勾选框，非 Switch/Toggle）| 源为复选框；不补源端没有的形态与元素”（agent-a148fd46222e19bdb.jsonl:L18-L19）。它约束的是形态，没有写外观来源；转换者 L213 把它当作指定 ArkUI Checkbox 组件。"
+        },
+        {
+          "key": "agent-a148fd46222e19bdb.jsonl",
+          "at": "2026-10-16T01:57:47.375Z",
+          "reason": "L170-L171、L181-L182 已经看到 SDK 向量和两张已迁 SVG，L184 原计划用 Image 32×32；L196-L213 以“one asset, two states”无法烘焙、规格写 Checkbox 为由改用 ArkUI Checkbox。同一次写入里 radio 用了烘焙色 SVG（L278、L281），勾选框却由 L298 写成 Checkbox().shape(ROUNDED_SQUARE)、CHECKBOX_SIZE=20、只设左距 16。这一段保留到返修 L5801。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "Bash 运行 base0_gen.py，脚本 vd_to_svg 写出 media/btn_checkbox_checked_mtrl.svg（输出名由 f[:-4]+'.svg' 拼成），可见路径 fill 为 #000000。",
+          "evidence": [
+            {
+              "source": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca/subagents/agent-a8570f8920a02c5f7.jsonl",
+              "line": 294
+            },
+            {
+              "source": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca/subagents/agent-a8570f8920a02c5f7.jsonl",
+              "line": 295
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 4,
+          "force": true,
+          "reason": "转换者 Bash 对 media/btn_checkbox_checked_mtrl.svg 执行 grep -n fill=，回执返回两条 path，可见路径 fill=\"#000000\"；这是写 SettingsPage 前对该文件的真实读取。",
+          "evidence": [
+            {
+              "source": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca/subagents/agent-a148fd46222e19bdb.jsonl",
+              "line": 193
+            },
+            {
+              "source": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca/subagents/agent-a148fd46222e19bdb.jsonl",
+              "line": 194
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-cec44d314b1979a41843",
+  "metadata": {
+    "migration": {
+      "id": "sokoban-glm531-c77c7279-bc70-4f57-adce-85229d07f0ca",
+      "project": "Sokoban"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.300",
+        "2.1.301"
+      ]
+    },
+    "source_set_id": "sources-1be36e727cb05cb3320f",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-sokoban-glm5.31",
+        "at": "2026-10-15T16:40:54.058Z",
+        "ref": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca.jsonl:L990",
+        "request_ref": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca.jsonl:L984",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-sokoban-glm5.31",
+        "at": "2026-10-15T16:40:54.058Z",
+        "ref": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca.jsonl:L990",
+        "request_ref": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca.jsonl:L984",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "45abaa6a-d22b-4444-adea-2a735a0501f9"
+      ]
+    }
+  },
+  "revision": "e607e78f3130ff9e90bb9d4934ab38e4fcf11ff8c2acdae34a2b05971435b07b"
+}

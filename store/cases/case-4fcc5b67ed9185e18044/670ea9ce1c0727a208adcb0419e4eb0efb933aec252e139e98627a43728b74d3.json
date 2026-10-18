@@ -1,0 +1,164 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-4fcc5b67ed9185e18044",
+  "created_at": "2026-10-17T10:25:28.147708+00:00",
+  "migration_key": "sokoban-glm531-c77c7279-bc70-4f57-adce-85229d07f0ca",
+  "title": "自驱逐帧动画的帧回调不清待决标志，续帧被自身去重拦下，动画停在第一帧",
+  "when": "界面与交互实现阶段：把源端 ValueAnimator 一类逐帧动画改写成 postFrameCallback 自驱帧循环，并用待决标志对续帧去重时；或复制同工程已有帧循环作模板时",
+  "description": "源端用 ValueAnimator(0→1, 固定时长) + onAnimationUpdate 逐帧写进度并 invalidate。目标用一次性帧回调（UIContext.postFrameCallback，FrameCallback 抽象类子类）自写帧循环，调度函数以 pending 标志合并请求；回调体可能从闭包抽成宿主方法，由回调类转发。同工程里可能已有按契约实现的同模式重绘入口，或可作模板的兄弟实现。",
+  "summary": "SokoPage 由 page_0002 转换者 acbfe02 写出。写前它读到 F003 重绘契约（agent-acbfe02cd15ded4a4.jsonl:L70-L71）：\nrequestRedraw 用待决标志合并请求，postFrameCallback 回调“先清标志再绘制”，只在 50ms 动画活跃期间由宿主逐帧续帧。\n它还读到 F002-AC38（L74-L75），要求动画期间 animProgress 从 0 单调走到 1。\n这些输入正确，也足够指导本项实现。\nL174 的草稿里，它在 postFrameCallback 箭头回调的首行写了 this.animFramePending = false。\nL224-L230 查本地 d.ts 时，它发现 FrameCallback 是抽象类，于是改成由 StepAnimFrameCallback.onFrame 转发给 onStepAnimFrame。\nL298 的 Write 中，scheduleStepAnimationFrame 照旧把标志置 true 并据此去重，onStepAnimFrame 却漏掉了清标志那一行。\n结果第一帧之后的续帧调用都在入口 return，动画停在首帧进度。\nL386 的后续 Edit 只把方法改为包内可见，这一片段一直保留到生成结束。\n\nEditorController 由 Slice 6 worker a5dd99 写出。写前它同时读到两份实现。\n一份是 SokoBoardView.ets（agent-a5dd99ac1f85b05da.jsonl:L80-L81）：onFrameTick 首行清 pendingFrame，注释写明“先清待决标志再绘制（AC18）”，是正确实现。\n另一份是 SokoPage.ets（L99-L100），即上面带缺陷的版本。\nF004 把 ValueAnimator 名义映射为 animateTo。它判断 animateTo 不能逐帧驱动普通字段，于是在 L200 决定照 SokoPage.onStepAnimFrame 的帧循环写，原话是“Matches SokoPage precedent exactly”。\nL237 的 Write 写出了 EditorScrollFrameCallback，注释“同 SokoPage StepAnimFrameCallback 形态”；onScrollAnimFrame 同样不清 scrollAnimFramePending。\n随后它在 slice-06 source-notes（L349）里把这套写法称作“F002 已验帧循环形态”，而当时两处帧循环都没有运行验证过。\n所以第二处并不是规格出错后的传递：它有正确的同模式实现可对照，却选了带缺陷的兄弟实现作模板。\n\n返修会话截图发现两处现象：游戏页走一步后人物停在两格之间（C35），编辑器半屏滚动只移动约一成（X12）。\n加临时日志确认 pending 标志未复位后，在 onStepAnimFrame 首行和 onScrollAnimFrame 入口各补一行“标志 = false”。\n依据：3212c816-0906-464d-be11-07f0eba50527.jsonl:L1012/L1015、L10814/L10816，检查点 3619016、9955803。\nC35 同一次修改还把线性进度改成 AccelerateDecelerate 插值，那是另一问题，本卡不归因。\n\n经验注入分三层看。\n第一层，原文：两位写者首次写入前都收到 lesson-6d6ba721c81206d45fbe（v1）。原文讲自驱 ticker 的进度怎么算（帧时间减起始时间）、刷新节奏怎么定，标题和第一步都没有涉及去重标志，内容本身正确。\n第二层，传递：提醒忠实。给 acbfe02 的提醒在 L183：“帧循环进度按绝对时差…不逐tick累加”；给 a5dd99 的在 L222：“…postFrameCallback 逐帧续帧，禁逐 tick 累加”。\n第三层，执行：两位都按提醒用绝对时差算进度，偏差不在这里。\n写有“回调先清标志”的 lesson-27d9e16a099c2fb437eb 两次都没被召回，但同一要求已经经由 F003 和 SokoBoardView 交到写者手里，漏选不是偏离点。\n偏离点在 agent 执行层，不建议修改经验。\n",
+  "recommendations": [
+    "实现阶段，用一次性帧回调（postFrameCallback 等）自写逐帧动画、并以待决标志去重时，回调入口第一行先清标志，再做销毁判断、算进度、决定是否续帧。把回调体从闭包抽成方法或 FrameCallback 子类转发时，逐行核对清标志、销毁判断和终止条件都还在。",
+    "复制兄弟实现的帧循环作模板前，先找同工程按契约实现的同模式入口逐项对照：标志在哪里置位、在哪里清除。本例应对照 SokoBoardView 的 requestRedraw/onFrameTick 与 F003-AC18。未运行验证的生成代码，不要写成“已验”先例。",
+    "可选检查：对一次 50ms 动画统计 onFrame 调用次数和最终进度——应多于 1 帧、最终进度为 1、结束后待决标志为 false。也可以写成单元断言：首帧回调之后再次调度不会被标志拦下。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/entry/src/main/ets/pages/SokoPage.ets",
+        "since": "2026-10-16T09:29:14.636Z",
+        "at": "2026-10-16T20:56:02.704Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/spec/baseline/features/F003-board-render.md",
+          "at": "2026-10-15T17:32:35.338Z",
+          "reason": "正常输入：Read 回执返回 F003 重绘契约。内容包括：待决标志合并，任一时刻待决调度不超过 1；postFrameCallback 回调先清标志再绘制；只在 50ms 动画活跃期间由宿主逐帧续帧，动画结束后待决调度为 0（AC18，第 41、100-102、130 行）。宿主自写去重帧循环用的是同一模式，这些足以说明回调里必须先清标志（agent-acbfe02cd15ded4a4.jsonl:L70-L71）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/spec/baseline/features/F002-game-play.md",
+          "at": "2026-10-15T17:32:45.775Z",
+          "reason": "正常输入：Read 回执给出 ValueAnimator(0→1, 50ms) 的映射，并写明“渲染侧续帧契约归 F003”；F002-AC38 要求成功移动后 animProgress 从 0 起，50ms 内单调推进到 1。这是可观察的验收要求（agent-acbfe02cd15ded4a4.jsonl:L74-L75）。"
+        },
+        {
+          "key": "agent-acbfe02cd15ded4a4.jsonl",
+          "at": "2026-10-15T18:00:07.404Z",
+          "reason": "收到上述契约。L174 的草稿在箭头回调首行写了 animFramePending = false；L224-L230 发现 FrameCallback 是抽象类后改成子类转发。L298 的 Write 中，scheduleStepAnimationFrame 照旧置 true 并据此去重，onStepAnimFrame 却没有清标志，续帧从第二帧起被拦下，动画停在首帧进度。偏差在“已知契约→实际输出”这一环，本分支在此停止上溯。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/entry/src/main/ets/viewmodels/EditorController.ets",
+        "since": "2026-10-16T09:29:14.636Z",
+        "at": "2026-10-16T20:56:02.704Z"
+      },
+      "nodes": [
+        {
+          "key": "agent-acbfe02cd15ded4a4.jsonl",
+          "at": "2026-10-15T18:00:07.404Z",
+          "reason": "缺陷模板的来源：L298 写出 SokoPage 时，onStepAnimFrame 不清 animFramePending（写前输入与偏差见 SokoPage 图）。这一片段到 a5dd99 读取时仍在（L386 的 Edit 只改了可见性）。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/entry/src/main/ets/pages/SokoPage.ets",
+          "at": "2026-10-16T07:04:44.476Z",
+          "reason": "交付桥梁：a5dd99 的 Read 回执显示，scheduleStepAnimationFrame 置位并去重，onStepAnimFrame 里没有清 animFramePending 的语句（agent-a5dd99ac1f85b05da.jsonl:L99-L100，回执第 412-431 行）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/entry/src/main/ets/components/SokoBoardView.ets",
+          "at": "2026-10-16T07:04:13.220Z",
+          "reason": "正常输入：Read 回执给出同一模式的正确实现。requestRedraw 已有待决帧就直接返回，否则置 pendingFrame 再 postFrameCallback；onFrameTick 首行 pendingFrame = false，注释写明“先清待决标志再绘制（AC18）”。这足以说明自写的同模式滚动帧循环也要在回调入口清标志（agent-a5dd99ac1f85b05da.jsonl:L80-L81，回执第 99-102、251-271 行）。"
+        },
+        {
+          "key": "agent-a5dd99ac1f85b05da.jsonl",
+          "at": "2026-10-16T07:30:19.007Z",
+          "reason": "L200 判断 F004 的 animateTo 映射不可行，决定照 SokoPage.onStepAnimFrame 写帧循环（“Matches SokoPage precedent exactly”）。L237 的 Write 写出 EditorScrollFrameCallback（注释“同 SokoPage StepAnimFrameCallback 形态”），scheduleScrollAnimFrame 置位去重，onScrollAnimFrame 却不清 scrollAnimFramePending，复制了模板的缺陷。同一次输入里的 SokoBoardView 正确实现没有拿来对照。L349 又把这套写法记成“F002 已验帧循环形态”。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-4fcc5b67ed9185e18044",
+  "metadata": {
+    "migration": {
+      "id": "sokoban-glm531-c77c7279-bc70-4f57-adce-85229d07f0ca",
+      "project": "Sokoban"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.300",
+        "2.1.301"
+      ]
+    },
+    "source_set_id": "sources-1be36e727cb05cb3320f",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-sokoban-glm5.31",
+        "at": "2026-10-15T16:40:54.058Z",
+        "ref": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca.jsonl:L990",
+        "request_ref": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca.jsonl:L984",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-sokoban-glm5.31",
+        "at": "2026-10-15T16:40:54.058Z",
+        "ref": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca.jsonl:L990",
+        "request_ref": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca.jsonl:L984",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "45abaa6a-d22b-4444-adea-2a735a0501f9"
+      ]
+    }
+  },
+  "revision": "670ea9ce1c0727a208adcb0419e4eb0efb933aec252e139e98627a43728b74d3"
+}

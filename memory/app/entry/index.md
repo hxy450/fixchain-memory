@@ -12,9 +12,13 @@
 - [只经桌面快捷方式或通知点击进入的页面：module.json5 快捷方式声明、EntryAbility 的 Want 分支与目标页参数都要有确定写者](lesson-c46f182cf1d01a97e05f.lesson.md)
   - 时机：规格拆分、切片实现与入口接线阶段，迁移源端只由外部 Intent（桌面快捷方式、本地通知点击）进入的页面时
   - 情境：源端页面由静态或动态 shortcut、通知 PendingIntent 携带 extras（如 shortId、通知渠道）进入；目标规格把入口配置定为 module.json5 静态声明；页面与切片 worker 的写域不含 module.json5 和 EntryAbility。
-- [源 Activity 未声明 configChanges 时，旋转（未被 screenOrientation 锁定）、语言、深浅色、字号、显示大小变化都会重建它：目标 UIAbility 与页面不重建，逐页按源端重建时序显式处理——直接 show() 的非托管对话框关闭、托管对话框保留、文案与一次性状态刷新；configChanges 不含 orientation 时旋转同样重建](lesson-94715d0df4c03a8fb5a5.lesson.md)
+- [源 Activity 未声明 configChanges 时，旋转（未被 screenOrientation 锁定）、语言、深浅色、字号、显示大小变化都会重建它：目标 UIAbility 与页面不重建，逐页按源端重建时序显式处理——直接 show() 的非托管对话框关闭、托管对话框以新实例重显（setter 注入的监听与参数丢失）、文案与一次性状态刷新、新实例 onCreate/onResume 的可见效果重放；configChanges 不含 orientation 时旋转同样重建](lesson-94715d0df4c03a8fb5a5.lesson.md)
   - 时机：规格提取阶段把 Activity 生命周期回调与 Manifest 属性映射为目标生命周期契约时；实现阶段接线 UIAbility、页面生命周期，以及资源文案与一次性状态的缓存时；为只有静态列表与弹窗的页面写配置变化行为时
   - 情境：源 Activity 在 AndroidManifest 中未声明 android:configChanges，实现了 onSaveInstanceState/savedInstanceState 恢复分支，或在 View 构造、onSizeChanged、绘制时读取资源文案与 firstRun 等一次性状态；目标 HarmonyOS UIAbility 在语言、深浅色、字号、显示大小变化时不重建，只回调 onConfigurationUpdate 或发出 display 'change'。 也包括页面用 AlertDialog.Builder.show()/Dialog.show() 直接弹出非托管对话框（不经 DialogFragment、showDialog 或 DialogPreference），目标用页内状态驱动的浮层承载，页面没有动态文案。 也包括 configChanges 已声明但不含 orientation（如只写 screenSize），Activity 持有 SurfaceView 与自建渲染线程，监听器里用 setBackgroundResource/setImageResource 等代码设置界面状态。
+- [源 Activity 的 SEND 分享接收入口（standard 启动、无 onNewIntent）映射为独立 multiton Ability：skills 用 sendData 加 utd 声明，结束只 terminateSelf 本实例](lesson-51651155ed8226212e55.lesson.md)
+  - 时机：规格提取与入口配置阶段，把源端 ACTION_SEND/SEND_MULTIPLE 接收入口映射为目标 Ability 的实例形态、module.json5 skills 声明与结束范围时；接线阶段给入口 Ability 加分享解析或结束逻辑时
+  - 情境：源 AndroidManifest 在某 Activity（常是 LAUNCHER）上另有 SEND + DEFAULT + mimeType（如 text/plain）的 intent-filter，未声明 singleTop/singleTask/singleInstance，源码没有 onNewIntent，只在 onCreate 读 EXTRA_TEXT 等处理，结束时 finish()。目标工程只有入口 EntryAbility（launchType 默认 singleton），外部数据经系统分享面板送达，接收方用 systemShare.getSharedData 读取。
+  - 例外：源 Activity 声明 singleTop/singleTask/singleInstance 或实现 onNewIntent 承接分享：按源端复用实例的语义映射到已有 Ability 的 onNewWant
 - [源端“getLast(Custom)NonConfigurationInstance 为空才按启动参数建立状态”只在配置变化重建时取回实例：目标按“本次是否由配置变化重建”区分，正常进入一律按入口参数分支，不用单例是否存在代替](lesson-ed571550c44efdeb321e.lesson.md)
   - 时机：规格提取与页面实现阶段，翻译源 Activity.onCreate 中“取回保留实例为空才读启动参数”的建局或建状态逻辑时
   - 情境：源 Activity 未声明 configChanges，用 onRetain(Custom)NonConfigurationInstance 与 getLast(Custom)NonConfigurationInstance 跨配置变化保留对象，该对象可能同时是静态单例（只在退出时 destroy）；目标页面不因配置变化重建，单例跨页面常驻，同一页面有多个入口模式（如新开与续局）。

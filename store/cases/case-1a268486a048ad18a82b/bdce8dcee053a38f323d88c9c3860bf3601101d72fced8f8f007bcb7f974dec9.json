@@ -1,0 +1,226 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-1a268486a048ad18a82b",
+  "created_at": "2026-10-17T10:28:34.213185+00:00",
+  "migration_key": "sokoban-glm531-c77c7279-bc70-4f57-adce-85229d07f0ca",
+  "title": "把子组件 aboutToAppear 登记的句柄放到 NavDestination.onReady 里消费，首次接线被可选链静默跳过",
+  "when": "界面实现与跨组件接线阶段，把源 Activity.onCreate 中 findViewById 后立即调用自定义 View setter 的接线迁到 ArkUI 页面时，决定宿主何时、经何种机制拿到子组件实例并完成首次接线",
+  "description": "源 Activity 在 onCreate 里 findViewById 取到自定义 View 后立即 setGameState、setTouchListener 等；目标页以 NavDestination 为根，初始化链放在 onReady；父页无法直接取得子 struct 实例，改由子组件在 aboutToAppear 把自身写入宿主传入的句柄，调用点用 ?. 可选链。",
+  "summary": "源端 SokoActivity.onCreate（:72、:81、:86）与 EditActivity.onCreate（:37-38、:55）都是 findViewById 后立即\nsetGameState / setSokoTouchListener。转换期两页按 P-04（参数只在 onReady 可读）把 onCreate 链整体放进\nNavDestination.onReady→initPage，棋盘接线留作 P-S5-002 / P-S6-003 前向占位，登记文字只写“句柄回填+注册由\nSlice 5/6 Step 3a 兑现”；Slice 3 的 source-notes §二.8 给出句柄取得的可选形态“register 回调/@Builder 传参等”。\n规格、计划与派工都没有写 onReady 与子组件创建的先后；本机 SDK nav_destination.d.ts 的 onReady 注释写明它在\nNavDestination 子组件创建之前回调，但生成期没有任何 agent 读到这段注释（转换者只 grep 过签名行）。\n\nSlice 6（编辑器）写前读到了 EditActivity 源码与 slice-03 笔记，自行推断“EditPage.aboutToAppear → build →\n子组件 aboutToAppear 登记 → onReady → initPage 使用句柄 ✓”（agent-a5dd99ac1f85b05da.jsonl:L173、L200 思考），\n未查 SDK 注释。据此在共享组件 SokoBoardView.ets 加了只写字段、不回调宿主的 SokoBoardViewHandle（L226-L233，\n注释“组件 aboutToAppear 登记自身引用……宿主随后即可调命令式公开面”），在 EditPage.initPage 中读\nboardHandle.view 后 setGameState / setSokoTouchListener，注释写成“句柄登记于子组件 aboutToAppear，onReady 时\n必已就绪”（L264-L269、L294-L295），EditorController.attachBoard 注释写“页面 onReady 后注入棋盘实例”（L237）。\nslice-06 source-notes 的差异表 W6 行把 findViewById→句柄登记的外显影响写成“无”。\n\nSlice 5（对局）最初的写法是正确方向：页侧备好 attachBoardView（setGameState/setSokoTouchListener），组件侧\nonBoardReady 自报钩子作为移交项留给 G3 closer（agent-a5a9090bf74ee235e.jsonl:L319）。随后读到 Slice 6 已加的句柄机制（L405-L406），\n推断“棋盘在初始 build 树中，aboutToAppear 总在 onReady 之前 ✓ 无需 attach 回调”（L408 思考），删掉\nattachBoardView，把 boardView 改成读 boardHandle.view 的 getter，由 onReady 中的 initPage 以\nthis.boardView?.setGameState / ?.setSokoTouchListener 接通（L410-L422）。所以两页同一缺陷来自 Slice 6 首建、\nSlice 5 复用的同一共享约定，且 Slice 5 自己又独立得出同一个错误时序判断；不是来自规格。\n\n运行时 onReady 早于棋盘 aboutToAppear，boardHandle.view 为 null，两次 ?. 调用静默跳过，之后再无接线点：棋盘\n只画 dummy 分支的一块墙砖，触摸监听未注册，步数不变；编辑器同样，且 onSelectTool(Move) 的 setScrollEnable 也\n未下发。返修查到 nav_destination.d.ts:1066-1077（repair/3212c816-0906-464d-be11-07f0eba50527.jsonl:L570-L571），\n给 SokoBoardViewHandle 加 onAttach 回调、组件登记后调用（L627-L631）；SokoPage/EditPage 新增 attachBoard()，\n在 aboutToAppear 挂到 onAttach，initPage 若已登记也走同一方法，EditPage 另在 attachBoard 中按当前工具重设\nscrollEnable（L644-L649、L663-L666、L678-L680）；EditorController 只改注释（L693-L694）；检查点 35d5518\n（L985-L986）。\n\n经验注入的三层判断：Slice 5、Slice 6 收到的提醒都不涉及宿主回调与子组件创建的先后（Slice 5 的\nlesson-4f81eeea17b94190c2de 提醒反而指向“SokoBoardView 加 @Event 自报”，与其最初方案一致）；库 e613047f 中没有覆盖“宿主在\nNavDestination.onReady 消费子组件登记句柄”的经验。最接近的 lesson-ccccf83dc93ae809ccfb 讲 Swiper 在 onReady\n中尚未挂载、changeIndex 被丢弃，适用条件是 ViewPager 初始定位，本例不满足，未被召回属合理。Slice 6 把\nlesson-a2f6a4ae9a72be740de6 的提醒（“SDK 已核无子实例捕获 API→加 hostHandle”）当作设计获经验库确认，但该\n设计在注入前（L201）已定，提醒也未涉及消费时机，不是本偏差的成因。本次属库里没有的新偏差，按新经验沉淀。\n",
+  "recommendations": [
+    "实现阶段：源端在 onCreate 里 findViewById 后立即对自定义 View 调 setter 时，目标端的首次接线放在子组件登记的那一刻——子组件 aboutToAppear 写入句柄后回调宿主，由宿主在回调里完成 setXxx；宿主自己的初始化若可能晚于登记，判断已登记时调用同一个接线函数，保证无论先后都只经一条路径接通。",
+    "依赖宿主生命周期回调（NavDestination.onReady、onShown、aboutToAppear）与子组件创建的先后时，写前在本机 SDK 对应 .d.ts 读该回调的注释段（不只 grep 签名行），把核实到的先后写进注释；未核实时按“与先后无关”设计（登记回调），不在注释里写“必已就绪”之类的断言。NavDestination.onReady 注释写明在其子组件创建之前回调。",
+    "只执行一次的接线点不用 ?. 静默跳过：取不到子组件实例时要么由登记回调补接，要么打错误日志；可选链只用于登记后才会反复触发的调用（重绘、度量）。",
+    "给共享组件加跨页句柄机制的切片，把“宿主何时可用”作为契约的一部分：提供登记回调或写明最早可消费点，并在差异清单中把“源端同步取得 View、目标端延后登记”列为可观察差异，验证时进入页面确认首帧是实际数据而非空态分支、一次操作后状态改变。",
+    "本应用的具体修法：SokoBoardViewHandle 增 onAttach，SokoBoardView.aboutToAppear 登记后调用；SokoPage、EditPage 各加 attachBoard()（setGameState + setSokoTouchListener，EditPage 另调 editor.attachBoard 并按当前工具 selectTool 重设 scrollEnable），在 aboutToAppear 赋给 boardHandle.onAttach，initPage 中 boardHandle.view 非空时也调用它。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/entry/src/main/ets/pages/SokoPage.ets",
+        "since": "2026-10-16T09:29:14.636Z",
+        "at": "2026-10-16T20:56:02.704Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/sokoban-tomari-80c7d44/app/src/main/java/su/drsouko/SokoActivity.java",
+          "at": "2026-10-16T07:02:54.279Z",
+          "reason": "正常输入：Slice 5 整读源码，onCreate :72 findViewById 后 :81 setGameState、:86 setSokoTouchListener，足以说明棋盘在页面创建时就要接通对局态与触摸监听（agent-a5a9090bf74ee235e.jsonl:L47-L48）。"
+        },
+        {
+          "key": "agent-a5dd99ac1f85b05da.jsonl",
+          "at": "2026-10-16T07:29:05.194Z",
+          "reason": "Slice 6 未核 SDK 就推定子组件 aboutToAppear 早于 NavDestination.onReady（同转录 L173、L200 思考），在共享 SokoBoardView.ets 加只写字段、不回调宿主的 SokoBoardViewHandle，注释称登记后“宿主随后即可调命令式公开面”（L226-L233）。这一约定随共享文件交给 Slice 5。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/entry/src/main/ets/components/SokoBoardView.ets",
+          "at": "2026-10-16T07:47:44.102Z",
+          "reason": "交付桥梁：Slice 5 读取回执含 Slice 6 写入的 SokoBoardViewHandle、@Param hostHandle 与 aboutToAppear 登记代码及上述注释（agent-a5a9090bf74ee235e.jsonl:L405-L406）。"
+        },
+        {
+          "key": "agent-a5a9090bf74ee235e.jsonl",
+          "at": "2026-10-16T07:49:08.160Z",
+          "reason": "Slice 5 原已备好页侧 attachBoardView，组件侧 onBoardReady 自报钩子作为移交项留给 G3 closer（L319）；读到句柄机制后推断“aboutToAppear 总在 onReady 之前，无需 attach 回调”（L408 思考），删回调、把 boardView 改为读 boardHandle.view 的 getter，由 onReady→initPage 的 this.boardView?.setGameState / ?.setSokoTouchListener 接通（L410-L422）。该片段保留到返修，被 attachBoard/onAttach 取代（repair L644-L649）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/entry/src/main/ets/pages/EditPage.ets",
+        "since": "2026-10-16T09:29:14.636Z",
+        "at": "2026-10-16T20:56:02.704Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/sokoban-tomari-80c7d44/app/src/main/java/su/drsouko/EditActivity.java",
+          "at": "2026-10-16T07:03:36.490Z",
+          "reason": "正常输入：Slice 6 整读源码，onCreate :37 findViewById 后 :38 setSokoTouchListener、:55 setGameState，说明编辑器棋盘在创建时即接通（agent-a5dd99ac1f85b05da.jsonl:L40-L41）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/spec/execution/source-understanding/slice-03-f003-source-notes.md",
+          "at": "2026-10-16T07:09:35.511Z",
+          "reason": "正常输入：§二.8 写明 this.boardView 引用获取（register 回调/@Builder 传参等）归 Slice 5/6，只给机制候选、未写时序；不构成“可在 onReady 读句柄”的依据（agent-a5dd99ac1f85b05da.jsonl:L166-L167）。"
+        },
+        {
+          "key": "agent-a5dd99ac1f85b05da.jsonl",
+          "at": "2026-10-16T07:33:06.935Z",
+          "reason": "未读 nav_destination.d.ts 的 onReady 注释，自行推定 onReady 晚于子组件登记（L173、L200 思考）；EditPage.initPage 读 boardHandle.view 后 setGameState/setSokoTouchListener，注释写“句柄登记于子组件 aboutToAppear，onReady 时必已就绪”（L268-L269），字段与使用点注释写“initPage 于 onReady 后消费”（L264-L265、L294-L295）。片段保留到返修，改为 attachBoard + onAttach（repair L663-L666、L678-L680、L693-L694）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/entry/src/main/ets/components/SokoBoardView.ets",
+        "since": "2026-10-16T09:29:14.636Z",
+        "at": "2026-10-16T20:56:02.704Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/spec/execution/source-understanding/slice-03-f003-source-notes.md",
+          "at": "2026-10-16T07:09:35.511Z",
+          "reason": "正常输入：组件句柄机制归 Slice 5/6，候选形态含“register 回调”（agent-a5dd99ac1f85b05da.jsonl:L166-L167）。"
+        },
+        {
+          "key": "agent-a5dd99ac1f85b05da.jsonl",
+          "at": "2026-10-16T07:29:05.194Z",
+          "reason": "在共享组件加 SokoBoardViewHandle（仅 view 字段）与 @Param hostHandle，aboutToAppear 只把自身写入 handle.view，不通知宿主；注释声称宿主随后即可调用（L226-L233）。登记本身无误，缺的是回调宿主，使宿主只能靠一个未核实的时序读取。返修为 Handle 增 onAttach 并在登记后调用（repair L627-L631）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/entry/src/main/ets/viewmodels/EditorController.ets",
+        "since": "2026-10-16T09:29:14.636Z",
+        "at": "2026-10-16T20:56:02.704Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/sokoban-tomari-80c7d44/app/src/main/java/su/drsouko/EditActivity.java",
+          "at": "2026-10-16T07:03:36.490Z",
+          "reason": "正常输入：源端棋盘在 onCreate 中取得即接线（agent-a5dd99ac1f85b05da.jsonl:L40-L41）。"
+        },
+        {
+          "key": "agent-a5dd99ac1f85b05da.jsonl",
+          "at": "2026-10-16T07:30:19.007Z",
+          "reason": "Write EditorController 时把 attachBoard 注释写成“页面 onReady 后注入棋盘实例（SokoBoardViewHandle 登记…）”，与 EditPage 同一时序假设（L237-L238）。本文件只有注释受影响，返修以 sed 改为“棋盘登记后由页面注入（SokoBoardViewHandle.onAttach…）”（repair L693-L694）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-1a268486a048ad18a82b",
+  "metadata": {
+    "migration": {
+      "id": "sokoban-glm531-c77c7279-bc70-4f57-adce-85229d07f0ca",
+      "project": "Sokoban"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.300",
+        "2.1.301"
+      ]
+    },
+    "source_set_id": "sources-1be36e727cb05cb3320f",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-sokoban-glm5.31",
+        "at": "2026-10-15T16:40:54.058Z",
+        "ref": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca.jsonl:L990",
+        "request_ref": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca.jsonl:L984",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-sokoban-glm5.31",
+        "at": "2026-10-15T16:40:54.058Z",
+        "ref": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca.jsonl:L990",
+        "request_ref": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca.jsonl:L984",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "45abaa6a-d22b-4444-adea-2a735a0501f9"
+      ]
+    }
+  },
+  "revision": "bdce8dcee053a38f323d88c9c3860bf3601101d72fced8f8f007bcb7f974dec9"
+}

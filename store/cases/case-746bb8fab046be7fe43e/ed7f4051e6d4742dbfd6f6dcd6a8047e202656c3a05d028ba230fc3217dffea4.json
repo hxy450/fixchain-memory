@@ -1,0 +1,135 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-746bb8fab046be7fe43e",
+  "created_at": "2026-10-17T10:52:32.252141+00:00",
+  "migration_key": "sokoban-glm531-c77c7279-bc70-4f57-adce-85229d07f0ca",
+  "title": "整表重建的列表在条目点击闭包里按对象身份 indexOf 定位行，返回列表后得 -1 崩溃",
+  "when": "界面实现阶段，把源端按 position 取当前数据表的列表点击回调写成 ForEach 条目闭包、确定闭包内如何定位被点行时；规格提取阶段写列表整表重建与 ForEach 键契约时",
+  "description": "源端 ListView/Adapter 的点击回调以 position 从当前数据表取行；目标用 ForEach 以内容或 id 为键（不含实例分量）渲染，数据表在 onPageShow、子页返回或增删后整表重建为新对象，条目 onClick 闭包捕获行对象后再到当前数组里求位置。",
+  "summary": "规格作者（a7006049ff2520113）在首次写 page_0001 规格前收到 lesson-2e636699 的注入（agent-a7006049ff2520113.jsonl:L177），\n重写后的规格写明「loadFilelist() 每次整表重建」「ForEach 键须含 filename+title+copyright，不用纯下标」，\n点击分发写成「ListActivity.onListItemClick → ListItem.onClick 按 selState 五分支分发，语义照抄」（同转录 L194）。\n这些内容都正确，但没有说点击闭包里怎样定位当前行。\n\nconverter（a5d32be86e8c2e994）写前读到了这份规格（L18-L19）和源码 SokoSelActivity.java（L29-L30）。\n源码 :121-136 的 onListItemClick 用 position 从当前 files 取行，:74-97 的 loadFilelist 每次 new 一张新表。\n它还读到 ui-migration-pitfalls P-05「键不变时框架判为同一项、复用旧子组件」（L62-L63）。\n思考中它自己写下「Step-3d service will likely reassign whole array (loadFilelist rebuilds)」，\n又判断 onListItemClick 里的 indexOf「fine」（L270）。\n最后 Write 写出 ForEach 键 filename|title|copyright、条目 .onClick(() => this.onListItemClick(row))，\n以及 onListItemClick 里的 const position = this.files.indexOf(row)，交给 Export/Delete/ClearHS/Edit 四个分支用（L272-L273）。\n偏差在 converter 的实现：源端按 position 取当前表，它却改成用闭包里的旧对象做身份查找。\n列表整表重建与同键行复用这两条前提，它写前都已拿到。\n\nSlice 4（a294c58eb9f8a6585）照规格把 reloadFilelist 接成 this.files = this.library().loadFilelist()（agent-a294c58eb9f8a6585.jsonl:L213）。\nloadFilelist 每次都 new StageFileEntry（L178），由 onPageShow 和 onNavBarStateChange(true) 两处调用。\n于是从子页返回后数组换成了新对象，键不变的行不重建，闭包里的 row 仍是旧对象，indexOf 得 -1，files[-1] 为 undefined。\nPlay 分支只用 row.filename，不受影响。\nblame 显示生成期只有 converter 那次 Write 含 indexOf(row)；Slice 4、G2 收口和 a37f38a62e2c624ed 都没改这一行。\n返修时先复现了 editStages 处的 TypeError 闪退（repair/3212c816-0906-464d-be11-07f0eba50527.jsonl:L2584-L2585），\n再改为 findIndex(f => f.filename === row.filename)（L2597），重编复测后进程存活（L2598-L2600），检查点 7713bf6（L2670）。\n\n经验三层分开看。\n原文层：lesson-2e636699 讲了同键复用让条目拿不到新对象，但做法与核对链只到「子组件 @Param 绑定的是哪个对象」，没覆盖条目闭包同样持有旧实例。\n规格作者照它把键写对了，点击定位却仍留着缺口。\nlesson-09a0bceae55d05616ecc 的做法第一步以 this.items.indexOf(item) 作为「按当前位置求值」的写法，这正是本次得 -1 的表达式。\n这条经验没有进入本次任何 agent 的输入，所以不入图，只作为边界证据。\nlesson-2e636699 是通过 hook 回执注入给规格作者的，不是文件读取，检查器无法把它绑定成图边；经验内容与注入行号记在规格作者节点和修订建议里。\n传递层：converter 的召回 worker 读过 lesson-2e636699，但最终输出带代码块标记、ID 被截断（如 lesson-2e63669）。\n注入记录为 decision allow、lessons []（recall/a5d32be86e8c2e994-call_c165aca6fe0a4228be2f9711.jsonl 首行 blocked_write、L497），converter 没收到任何提示。\n那条提醒本身也只复述键规则，原文不足以排除本情形，所以这次没送达不是偏差成因。\n",
+  "recommendations": [
+    "界面实现阶段：源端点击回调按 position 从当前表取行时，目标条目闭包里不要用对象身份（indexOf(row)）或 ForEach 生成时的 index 定位当前数组。应按行内唯一字段在当前数组里 findIndex（本例为 filename，内置关卡为 null），或者只用回调真正需要的行字段。",
+    "写条目闭包前核一遍：列表会不会整表重建为新对象（onPageShow、子页返回、增删后重载），键是否不含实例分量。两者都成立时，同键行不会重建，onClick 等闭包捕获的仍是旧对象。最小检查：进子页再返回后，在每个点击分支各点一行，包括内置行。",
+    "规格提取阶段：规格已写明整表重建与内容键时，在点击分发契约里一并写出行定位方式（与源 position 等价：按唯一键查当前表），不只写键。",
+    "修订 lesson-2e636699fa65aefd63f0（版本 6，增量）：同键复用不只让子组件 @Param 停在旧对象，条目生成函数里的事件闭包（onClick 等）捕获的行对象也停在旧实例。做法第 3 步的核对链应补上「条目闭包捕获的是哪个对象」：闭包里要定位当前行时，按唯一字段在当前数组里查，不用对象身份 indexOf，也不用生成时的 index。回归核对：来源六例（改名替换、重新请求后 setList、Swiper 页模型、arr[pos] 换新实例、嵌套 ForEach 内容键）的键与 @Trace 做法不变，补的只是闭包这一项核对，原能避免的显示不刷新仍能避免。依据：规格作者收到本经验注入后才写入整表重建与内容键（agent-a7006049ff2520113.jsonl:L177、L194），converter 照规格写键，却在闭包里用 this.files.indexOf(row)（agent-a5d32be86e8c2e994.jsonl:L272）；子页返回后得 -1 崩溃，返修改为按 filename 查当前表（repair/3212c816-0906-464d-be11-07f0eba50527.jsonl:L2584-L2585、L2597）。",
+    "修订 lesson-09a0bceae55d05616ecc（版本 1，增量）：做法第 1 步的 this.items.indexOf(item) 只在数组元素保持同一实例（原位换位、splice）时成立。列表整表重建为新对象而键不变时，复用行闭包里的 item 已不在新数组中，indexOf 得 -1，这时应按唯一 id 在当前数组里 findIndex。回归核对：来源案例的步骤列表上移、下移都在同一批实例内换位，按 id 查与 indexOf 结果相同，原能避免的位置值过期仍能避免。依据：本次 converter 用同一表达式按当前数组求位置（agent-a5d32be86e8c2e994.jsonl:L272），数组被 reloadFilelist 换成新对象后得 -1 崩溃，返修改为按 filename 查当前表（repair/3212c816-0906-464d-be11-07f0eba50527.jsonl:L2584-L2585、L2597）。本经验未进入本次任何 agent 的输入，这里只揭示它缺的前提，不是本偏差的成因。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/entry/src/main/ets/pages/SokoSelPage.ets",
+        "since": "2026-10-16T09:29:14.636Z",
+        "at": "2026-10-16T20:56:02.704Z"
+      },
+      "nodes": [
+        {
+          "key": "agent-a7006049ff2520113.jsonl",
+          "at": "2026-10-15T16:05:25.296Z",
+          "reason": "规格作者。首次 Write 被 hook 拦下，回执注入了 lesson-2e636699（版本 6），提醒为「files 列表每次整表重建：ForEach 键含会变的显示字段（filename+title+copyright），不用纯下标」（L176-L177）。注入前的草稿（L176）没有整表重建和键规则；重写后（L194-L195）加入「loadFilelist() 每次整表重建」「ForEach 键须含 filename+title+copyright」，点击写成 onClick 按五态分发、语义照抄。规格作者照经验落实无误，不算偏差。缺口在原文：它只覆盖显示刷新，所以规格没写闭包里怎样定位行。注入不是文件读取，经验节点无法绑定成边，依据记在这里。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/spec/baseline/ui/page_0001_SokoSelActivity.md",
+          "at": "2026-10-15T17:30:42.777Z",
+          "reason": "交付桥梁：converter 的 Read 回执含整表重建、键规则、点击五分支语义照抄，以及生命周期 onResume→onShown 列表重载（agent-a5d32be86e8c2e994.jsonl:L18-L19）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/sokoban-tomari-80c7d44/app/src/main/java/su/drsouko/SokoSelActivity.java",
+          "at": "2026-10-15T17:30:45.833Z",
+          "reason": "正常输入：Read 回执给出 onListItemClick(ListView, View, int position, long) 按 position 从当前 files 取行（:121-136、editStages :300-316），loadFilelist 每次 new LinkedList 整表重建（:74-97）。这足以说明行定位依据是当前表位置，不依赖对象身份（同转录 L29-L30）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/.claude/skills/android-ui-graph-query/references/ui-migration-pitfalls.md",
+          "at": "2026-10-15T17:31:05.977Z",
+          "reason": "正常输入：P-05 写明键不变时「框架按 key 判定为同一项、复用旧子组件」，同键行不会重跑条目构建（同转录 L62-L63）。"
+        },
+        {
+          "key": "agent-a5d32be86e8c2e994.jsonl",
+          "at": "2026-10-15T17:58:25.701Z",
+          "reason": "已知数组会被整表替换（L270：Step-3d will likely reassign whole array），也读到同键复用（L63），仍判断 indexOf「fine」。Write 写出条目 onClick 闭包捕获 row、onListItemClick 用 this.files.indexOf(row) 求 position 并交给四个分支（L272-L273）。源端的 position 语义在这里被改成对象身份查找，返回列表后得 -1。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 5
+        },
+        {
+          "from": 3,
+          "to": 5
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-746bb8fab046be7fe43e",
+  "metadata": {
+    "migration": {
+      "id": "sokoban-glm531-c77c7279-bc70-4f57-adce-85229d07f0ca",
+      "project": "Sokoban"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.300",
+        "2.1.301"
+      ]
+    },
+    "source_set_id": "sources-1be36e727cb05cb3320f",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-sokoban-glm5.31",
+        "at": "2026-10-15T16:40:54.058Z",
+        "ref": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca.jsonl:L990",
+        "request_ref": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca.jsonl:L984",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-sokoban-glm5.31",
+        "at": "2026-10-15T16:40:54.058Z",
+        "ref": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca.jsonl:L990",
+        "request_ref": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca.jsonl:L984",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "45abaa6a-d22b-4444-adea-2a735a0501f9"
+      ]
+    }
+  },
+  "revision": "ed7f4051e6d4742dbfd6f6dcd6a8047e202656c3a05d028ba230fc3217dffea4"
+}

@@ -1,0 +1,173 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-db3da49c14f06085f3b8",
+  "created_at": "2026-10-17T10:41:09.933719+00:00",
+  "migration_key": "sokoban-glm531-c77c7279-bc70-4f57-adce-85229d07f0ca",
+  "title": "横屏取值失真：sw720dp-land 写成当前宽媒体查询，平台标题字号漏查 values-land，上栏 ForEach 键不含项身份，返修移植的上栏分配不随转屏重算",
+  "when": "界面实现阶段，把源端随屏幕配置变化的取值落成运行期分支时：包括 sw/land 限定目录覆盖、框架 ActionBar 的横屏几何、按屏幕尺寸分配上栏动作项，以及动作项 ForEach 的键",
+  "description": "源应用有 values-sw<N>dp-land 这类最小宽度限定目录覆盖，或依赖框架主题 ActionBar 的默认外观（values-land 下栏高与标题字号不同，上栏动作数按屏幕 dp 尺寸决定）；Activity 未声明 configChanges，转屏即重建并重算菜单；目标用 ArkUI mediaquery 和自绘标题栏实现，动作项由 ForEach 渲染。",
+  "summary": "本问题有三个起点，其中两个在生成期，一个在返修中新出现。\n（1）SokoSelPage 宽横屏判定（页面转换阶段）。转换者 a5d32be86e8c2e994 写页面前读到了三份材料。\n页规格写明“values-sw720dp-land 覆盖为 128dp……目标按「横屏+最小宽度≥720」等价条件运行期取值”\n（agent-a5d32be86e8c2e994.jsonl:L18-L19）。源 values-sw720dp-land/dimens.xml 的注释是\n“for sw720dp devices (e.g. 10\" tablets) in landscape”（L80、L82）。resource-mapping §8 写的是\n“values-sw720dp-land（sw≥720dp 且横屏）……运行期按断点宽 720vp+横屏”（L127、L129）。\n其中限定符名、“最小宽度”这一 Android 中文术语和“10 寸平板”注释都指向设备最短边，信息已经够用。\n但它在 L124 的推理里把条件转述成“landscape + minWidth≥720vp”，随后选用\nmediaquery '(min-width: 720vp) and (orientation: landscape)'，并在 L272/L273 写入目标。\nArkUI 的 min-width 比的是当前窗口宽度，手机横屏（Pixel_5 横屏宽 803dp、sw392）同样命中，\n于是列表两侧留白变成 128vp。偏差出在把最小宽度限定符翻成当前宽媒体特性这一步。\n规格里“最小宽度”与 mediaquery min-width 的中文名相同，resource-mapping 的“断点宽”也不够明确，两者削弱了提示，但没有写错。\nG1 收尾者 aa783fa8d0f0fa77d 在 L170 只往同一段加了配置变化订阅，媒体查询原样保留到生成结束。\nX13 把判定改为“横屏且 smallestScreenWidthVp()（display 宽高较小者）≥720”\n（repair/3212c816-0906-464d-be11-07f0eba50527.jsonl:L11150-L11151）。\n（2）SokoActionBar 横屏标题字号（公共组件实现阶段）。Base-3 写者 a1155719b304de950 读到的设计规格 §3.4.2 写明：\nActionBar 等平台外观“取自本机 SDK 平台资源（含其 land/sw 限定目录）逐项核对”（agent-a1155719b304de950.jsonl:L45-L46）。\n它在 values/dimens_material.xml 查到 text_size_title_material_toolbar=20dp（L223-L224）；\n对 values-land 却只 grep 了 action_bar_default_height，回执 48dp（L252-L253）。\n同一份 android-34 values-land/dimens_material.xml 第 21 行是 text_size_title_material_toolbar=14dp。\nL292 的经验注入又送来 lesson-5a82d62ff7e087616968 的提醒“几何/色先查 android-34 平台 res（含 values-land）”。\nL330/L331 写组件时，栏高写成 isLandscape ? 48 : 56，标题仍写死 fontSize(20)。\nX13 改为 fontSize(isLandscape ? 14 : 20)。\n（3）上栏 ForEach 键（同一次写入）。L330 的上栏键是 `${index}_${item.showAsAction}_${item.alphabeticShortcut}`，不含项身份；\naf2b9ab1b73cc83d4 后来只补了 ?? ''（agent-af2b9ab1b73cc83d4.jsonl:L118）。\n写前的派工、规格和 skill 都没提键的要求。生成期上栏子集只按 showAsAction 静态过滤，这个缺陷当时没有暴露。\n（4）返修中新出现：上栏分配不随转屏重算（返修阶段）。C10 用脚本把 ActionBarPolicy.getMaxActionButtons 与 flagActionItems 移植成 actionFlags()\n（repair/...:L1919-L1920，同轮 Edit L1958/L1960，检查点 1288528）。这个方法在普通函数里读 display.getDefaultDisplaySync()，\n不依赖任何 @Local/@Param；源端则在转屏时重建 Activity、重算菜单。结果是转屏后上栏数不变。\n上栏子集从此随宽度变化，与下标绑定的键会复用错位的子节点，编辑器横屏因此显示“⊕ → →”。\nX13 新增 @Local screenWidthDp/screenHeightDp，在横竖屏变化时刷新，并加了 actionItemKey 作为键\n（L11125-L11128、L11957-L11958），检查点回执 63632af（L12556-L12557）。\n经验注入分三层看。转换者 a5d32be86e8c2e994 的召回返回空表（recall/a5d32be86e8c2e994-call_c165aca6fe0a4228be2f9711.jsonl:L1，lessons: []）。\n库中 lesson-0c9e222422d81871b464 的做法5 对宽度覆盖写的是“按当前可用宽取值”，没有区分 sw 与 w。\n不过这条经验没有送到转换者，与本偏差没有因果关系，所以不提修订。\n标题字号一支里，lesson-5a82d62ff7e087616968 的原文和提醒都覆盖了 values-land 标题 14dp，偏差在 agent 执行层。\n",
+  "recommendations": [
+    "规格提取阶段登记 values-sw<N>dp(-land) 覆盖时，写明判定量是设备屏幕短边 min(宽,高)，与方向无关，再叠加方向条件，并举出手机横屏不命中的例子；不要只写与 mediaquery min-width 同名的“最小宽度”。",
+    "界面实现阶段把 sw 限定符翻成运行期条件时，从 display 取宽高的较小者（vp）与阈值比较，再与 orientation 组合；不用 mediaquery 的 min-width/width，它们比的是当前窗口宽，手机横屏同样超过阈值。本例阈值 720、覆盖值 128vp。",
+    "为框架 ActionBar 这类平台默认外观取值时，每查到一个平台资源名（栏高、标题字号等），都在 values-land、values-sw* 中按同名检索一次，有覆盖就一并写成方向分支，不只给已知的一项做分支。本例为 text_size_title_material_toolbar 20dp/横屏 14dp。",
+    "用 ForEach 渲染动作项或菜单项时，键要包含项身份（标题资源 id 或命令 id），不能用下标加分类属性代替；显示子集会随宽度、方向变化时尤其要这样做。",
+    "返修阶段移植按屏幕配置计算的框架算法（如 ActionBarPolicy 的上栏数）时，把屏幕尺寸放进 @Local 状态，在方向和窗口变化时刷新，因为源端靠转屏重建来重算；改动让列表子集可变时，同时核对该列表的 ForEach 键。",
+    "召回失败 lesson-5a82d62ff7e087616968：标题“……（含 values-land、values-sw600dp 等限定目录）查默认外观与几何”、做法1“同时列出这些资源在 values-land、values-sw600dp 等限定目录的覆盖值”和做法6“Toolbar 标题 20dp、values-land 14dp”本可排除写死 20 的情形。提醒忠实送达（agent-a1155719b304de950.jsonl:L292），但 agent 只对 action_bar_default_height 查了 values-land（L252-L253）。原文见 base-memory/ui/theme/lesson-5a82d62ff7e087616968.lesson.md。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/entry/src/main/ets/pages/SokoSelPage.ets",
+        "since": "2026-10-16T09:29:14.636Z",
+        "at": "2026-10-16T20:56:02.704Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/spec/baseline/ui/page_0001_SokoSelActivity.md",
+          "at": "2026-10-15T17:30:42.777Z",
+          "reason": "正常输入：转换者 Read 回执第 45 行写明 values-sw720dp-land 覆盖为 128dp，目标按「横屏+最小宽度≥720」等价条件运行期取值，不合并为单值；“最小宽度”是 sw 限定符的标准译名，足以界定只对短边≥720 的设备生效（agent-a5d32be86e8c2e994.jsonl:L18-L19）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/sokoban-tomari-80c7d44/app/src/main/res/values-sw720dp-land/dimens.xml",
+          "at": "2026-10-15T17:31:29.196Z",
+          "reason": "正常输入：Bash cat 回执给出 activity_horizontal_margin=128dp，注释写明 for sw720dp devices (e.g. 10\" tablets) in landscape，指明面向大屏设备而非任意横屏（agent-a5d32be86e8c2e994.jsonl:L80、L82）。"
+        },
+        {
+          "key": "c77c7279-bc70-4f57-adce-85229d07f0ca:a5d32be86e8c2e994",
+          "at": "2026-10-15T17:58:25.701Z",
+          "reason": "读到上述输入后，L124 推理把条件转成“landscape + minWidth≥720vp”，L272 Write 写入 mediaquery.matchMediaSync('(min-width: 720vp) and (orientation: landscape)')，按当前窗口宽判定。最小宽度限定符被翻成当前宽媒体特性，手机横屏也会命中 128vp（同转录 L124、L272-L273）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "转换者 Bash cat 源工程 values-sw720dp-land/dimens.xml（路径为 Windows 反斜杠，未被解析为读取），回执返回 activity_horizontal_margin=128dp 及 sw720dp 平板横屏注释；这是写前对该文件的真实读取。",
+          "evidence": [
+            {
+              "source": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca/subagents/agent-a5d32be86e8c2e994.jsonl",
+              "line": 80
+            },
+            {
+              "source": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca/subagents/agent-a5d32be86e8c2e994.jsonl",
+              "line": 82
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/entry/src/main/ets/components/common/SokoActionBar.ets",
+        "since": "2026-10-16T09:29:14.636Z",
+        "at": "2026-10-16T20:56:02.704Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/spec/ref/sokoban_design.md",
+          "at": "2026-10-16T01:21:37.223Z",
+          "reason": "正常输入：Read 回执 §3.4.2 第 235 行写明平台外观（对话框、ActionBar 等）由主题的平台资源提供，迁移时取自本机 SDK 平台资源（含其 land/sw 限定目录）逐项核对，足以要求标题字号也查 values-land（agent-a1155719b304de950.jsonl:L45-L46）。"
+        },
+        {
+          "key": "c77c7279-bc70-4f57-adce-85229d07f0ca:a1155719b304de950",
+          "at": "2026-10-16T02:05:08.493Z",
+          "reason": "SDK grep 在 values 中查到 text_size_title_material_toolbar=20dp（L223-L224），values-land 只查了 action_bar_default_height（L252-L253），漏掉同文件的标题 14dp；L292 注入的提醒也写了“含 values-land”。L330 Write 只给栏高做 48/56 分支，标题写死 fontSize(20)；同一次写入的上栏 ForEach 键为 `${index}_${item.showAsAction}_${item.alphabeticShortcut}`，不含项身份，写前输入对键没有要求（同转录 L330-L331）。",
+          "problem": true
+        },
+        {
+          "key": "3212c816-0906-464d-be11-07f0eba50527:main",
+          "at": "2026-10-16T15:55:46.002Z",
+          "reason": "返修中新出现的问题：C10 用脚本移植 ActionBarPolicy/flagActionItems 为 actionFlags()，在普通方法里读 display.getDefaultDisplaySync()，不依赖任何状态，转屏后不会重算（repair/3212c816-0906-464d-be11-07f0eba50527.jsonl:L1919-L1920，同轮 Edit L1958/L1960，检查点 1288528）。上栏子集从此随宽度变化，上面不含项身份的键开始复用错位子节点。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "修复会话 C10 写 actionFlags 前读的是哪份 ActionBarPolicy 实现，未查到读取记录（L1919 之前未见）。本卡只依据写入内容，判定它不随转屏重算。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-db3da49c14f06085f3b8",
+  "metadata": {
+    "migration": {
+      "id": "sokoban-glm531-c77c7279-bc70-4f57-adce-85229d07f0ca",
+      "project": "Sokoban"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.300",
+        "2.1.301"
+      ]
+    },
+    "source_set_id": "sources-1be36e727cb05cb3320f",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-sokoban-glm5.31",
+        "at": "2026-10-15T16:40:54.058Z",
+        "ref": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca.jsonl:L990",
+        "request_ref": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca.jsonl:L984",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-sokoban-glm5.31",
+        "at": "2026-10-15T16:40:54.058Z",
+        "ref": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca.jsonl:L990",
+        "request_ref": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca.jsonl:L984",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "45abaa6a-d22b-4444-adea-2a735a0501f9"
+      ]
+    }
+  },
+  "revision": "c679bb6c86541e5f34f87ce8cdf2a5916c70d1427e62bba1d5228300a4ad8967"
+}

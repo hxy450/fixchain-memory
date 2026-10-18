@@ -1,0 +1,392 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-4e3bf06f478ee642f9cb",
+  "created_at": "2026-10-17T11:25:53.908166+00:00",
+  "migration_key": "sokoban-glm531-c77c7279-bc70-4f57-adce-85229d07f0ca",
+  "title": "文本分享接收入口被映射成唯一 EntryAbility 的冷/热启动承接，skills 用 MIME type 而非 utd 声明",
+  "when": "规格提取与入口配置阶段：把源端 Activity 的 ACTION_SEND 文本分享接收入口（intent-filter、onCreate 读 EXTRA_TEXT、导入后 finish）映射为目标 Ability 的实例形态、module.json5 skills 声明和结束范围时",
+  "description": "源 AndroidManifest 在 LAUNCHER Activity 上另有 SEND+DEFAULT+mimeType text/plain 的 intent-filter，未声明 launchMode（standard），源码没有 onNewIntent，只在 onCreate 读 EXTRA_TEXT 弹预填导入框，导入成功或取消后 finish()。目标工程只有一个入口 EntryAbility（launchType 默认 singleton），外部文本经系统分享面板（ShareKit）送达，接收方用 systemShare.getSharedData 读取。",
+  "summary": "本问题有两个成因，分别落在不同环节。\n\n一、实例形态（EntryAbility、AppEvents、SokoSelPage、新增的 ShareImportAbility）。\n分页规格作者 a7006049 写前读到了 AndroidManifest：SokoSelActivity 上除 LAUNCHER 外还有\nSEND+DEFAULT+text/plain 的 intent-filter，没有 launchMode（agent-a7006049ff2520113.jsonl:L171-L172）；\n也读到了 SokoSelActivity.java：onCreate 读 getIntent 的 EXTRA_TEXT 后调 importFile，没有 onNewIntent，\n导入成功或取消时 input!=null 就 setResult+finish()（L82-L83）。这些足以确定：每次分享由框架新建一个\nSokoSelActivity 实例，finish() 只结束这个实例，用户原来打开的列表不受影响。\nL194 落盘的 page_0001 规格却写成“外部 ACTION_SEND/VIEW 进入 importFile(str) | EntryAbility onCreate/onNewWant\n解析 want（text/plain）→ 路由本页并弹导入层 | 分享接收口在入口 Ability 层承接”，导航表写“（冷启动/热启动）”，\n结束仍写 setResult+finish，没说明目标里结束的是哪个实例。偏差在源码到规格这一步：“每次新建实例”被改成\n“唯一入口 Ability 冷启或热启复用”。注入前的首稿 L176 已是这个写法，L177 注入的提醒没有涉及实例形态。\nF001 作者 a67d5 读到这份规格（agent-a67d5ffdd9bda0269.jsonl:L52-L53），L159 写进实现映射第 56、57 行：\n“EntryAbility onCreate/onNewWant 解析 want → 路由本页弹预填导入层”和“setResult+finish → terminateSelf（仅外部分享来源分支）”。\n两行合起来，分享导入结束时要终止的是唯一的入口 Ability。主线程台账 T-001（主转录 L994）和切片计划\n（agent-a4859a3bc6ff4401c.jsonl:L153）沿用了“EntryAbility onCreate/onNewWant”。\n实现时，切片 4 worker a294c58 读 F001（agent-a294c58eb9f8a6585.jsonl:L31-L32），L236 在 SokoSelPage 的\nonImportTextEntered/onImportCancelled 里写 source!==null 时 terminateSelf()；组收尾者 af2d1d87 按 F001 第 56 行\n（L394-L395）在 EntryAbility 加 onCreate/onNewWant 双点 consumeShareWant（L456），在 AppEvents 加 IMPORT_PRESET 与\npendingImportPreset 中转槽（L450），在 SokoSelPage 订阅并读槽（L469）。L392 它已注意到源端没有 onNewIntent、\n只在 onCreate 解析，仍按规格补了热启动分支。这些片段一直保留到返修。\n\n二、skills 声明字段（module.json5）。\n主线程 L587-L590 读到参考规格 §11.3：分享接收是 SEND+DEFAULT+text/plain，迁移契约只写“以 module skills\n（actions/entities/uris 或 type）等价声明该入口，并用隐式 Want 验收”，同节还记录了 launchMode 为 standard。\n主线程在台账写 T-001（L994），派 Base-0 时把它定成字段：“actions=[ohos.want.action.sendData]\nentities=[entity.system.home] type=text/plain 的 skills 入口声明”（L1383）。也就是把源 MIME 直接当 skills 的 type，\n挂在入口 Ability 上，没有核对鸿蒙系统分享面板按什么字段选目标。Base-0 a8570 读了 arkts-project-scaffolder 的\nconfig-reference（L210-L211）：skills 示例的 uris 带 \"type\": \"text/plain\"，“Share target”一行只有 entity.system.default\n加 sendData，没有 utd、scheme file、maxFileSupported。L213 它决定照派工写 uris type，L316 在 EntryAbility skills\n追加 {entities:[entity.system.home], actions:[sendData], uris:[{type:'text/plain'}]}。整个生成链路里没有一份输入写出分享目标要按 utd 声明；\n本机 SDK 的 openharmony/toolchains/modulecheck/module.json 里有 uris 的 utd、maxFileSupported 字段，返修就是从这里查到的\n（repair/3212c816-0906-464d-be11-07f0eba50527.jsonl:L4134-L4135）。组收尾者解析时已按记录的 utd general.plain-text 取文本（L456），\n却没有回头核对 skills 是不是按 utd 声明的。\n\n返修：实测鸿蒙分享面板里没有 Dr Soko，安卓则每次分享新建 SokoSelActivity 任务、IMPORT 后回到原列表\n（repair L4062-L4103）。L4185 删掉 EntryAbility 的 onNewWant/consumeShareWant 和 AppEvents 的 IMPORT_PRESET/pendingImportPreset，\n改成两个 LocalStorage 键；L4199 新建 ShareImportAbility（继承 EntryAbility，onCreate 用 systemShare.getSharedData 取 general.plain-text，\nloadContent 时经 LocalStorage 传预填）；L4212、L4236 改 SokoSelPage 从 getSharedLocalStorage 读预填，分享实例在栈底按返回时 terminateSelf；\nL4236 把 module.json5 的 sendData 项从 EntryAbility 移到新 Ability：exported、launchType multiton，\nuris {scheme:file, utd:general.plain-text, maxFileSupported:1}。检查点 fd668a9（L4345-L4346）。\n\n经验注入的三层判断。lesson-d77baa7494930d485425（v3，深链 intent-filter 的 skills 声明）先后注入给 api-inventory、\n参考规格作者、主线程、切片计划和 Base-0。\n原文：标题是“迁移深链 intent-filter 时……”，做法第 1 步是 viewData、browsable、按 scheme/host 写 uris，适用情境限于\nVIEW+BROWSABLE 与 http/https。原文本身没有错，标题和第一步都能排除 SEND 文本分享接收。\n传递：召回 worker 把它套到分享接收上。给主线程的提醒是“收分享入口(ACTION_SEND文本)：module.json5 skills声明+EntryAbility Want分支要有确定写者”\n（主转录 L317），给 Base-0 的提醒是“SEND intent-filter→同 Ability skills 追加声明：actions/entities 照 T-001，mimeType 写 uris[].type”\n（agent-a8570f8920a02c5f7.jsonl:L224；recall/a8570f8920a02c5f7-call_027cca51a84e4dcea1507aed.jsonl:L177）。\n“mimeType 写 uris[].type”是 worker 自拟的，原文没有这一项。\n执行：两处关键决定都早于提醒。page_0001 的 EntryAbility 承接在 L176 首稿就有，Base-0 的 uris type 在 L213 已定，L224 才收到提醒。\n所以提醒是附和错误决定的传递失真，不是成因。见召回失败建议。\n库里没有分享接收入口的经验，按新经验沉淀。\n",
+  "recommendations": [
+    "规格提取阶段：源 Activity 声明了 SEND/SEND_MULTIPLE 等外部入口 intent-filter，又没有 singleTop/singleTask/singleInstance launchMode、没有 onNewIntent 时，要在规格里写明实例形态：每次外部调用都由框架新建实例，finish() 只结束这个实例并回到来源应用，原来运行中的应用不受影响。映射到目标时用独立的 UIAbility（launchType multiton，加载同一页面，经 loadContent 的 LocalStorage 把入参交给页面），结束时 terminateSelf 只结束这个实例。不要写成入口 EntryAbility 的 onCreate/onNewWant 冷热启动承接加全局事件槽。验收里写出：分享后出现独立任务，导入或取消后原列表仍在前台。",
+    "入口配置阶段：声明系统分享接收目标时，skills 写 actions [ohos.want.action.sendData]，uris 每类数据一条 {scheme:'file', utd:<源 MIME 对应的 UTD，text/plain 对应 general.plain-text>, maxFileSupported:<条数>}，不要把源 mimeType 写成 uris 的 type，也不要挂 entity.system.home。写前查本机 SDK 的 toolchains/modulecheck/module.json 里 skills.uris 的字段。声明和接收两端要对上：接收方用 systemShare.getSharedData(want) 按记录 utd 取 content，utd 应与 skills 里声明的一致。验收要实际从另一个应用打开系统分享面板，看到并选中本应用。",
+    "接线阶段：给共用的入口 Ability 加分享解析或结束逻辑之前，先确认承接分享的是不是独立实例。入口 Ability 是唯一一个时，分享流程里的 terminateSelf 会结束整个应用；源端没有 onNewIntent 却要补 onNewWant 热启动分支时，先回规格核对源端的实例形态。",
+    "本应用的修法：新增 shareimportability/ShareImportAbility.ets，继承 EntryAbility，onCreate 用 systemShare.getSharedData 取 utd 为 general.plain-text 的 content，loadMainPage 时用 LocalStorage 传 shareEntry=true 和 shareImportPreset；module.json5 新增该 Ability（exported、launchType multiton，skills sendData + {scheme:file, utd:general.plain-text, maxFileSupported:1}），EntryAbility 只留 home 入口；删掉 EntryAbility 的 onNewWant/consumeShareWant 和 AppEvents 的 IMPORT_PRESET/pendingImportPreset；SokoSelPage 从 getSharedLocalStorage 读预填，分享实例在栈底按返回时 terminateSelf。验证：鸿蒙分享面板出现 Dr Soko，选中后新开一个 mission 并弹出预填导入框，IMPORT 后分享 mission 结束、原列表回到前台并刷新。",
+    "召回失败 lesson-d77baa7494930d485425：原文标题“迁移深链 intent-filter 时……”和做法第 1 步（ohos.want.action.viewData、entity.system.browsable、按 scheme/host 写 uris），加上适用情境里的 VIEW+BROWSABLE、http/https，足以排除 SEND+text/plain 的分享接收入口。召回 worker 仍把它判为适用，给 Base-0 的提醒自拟了“mimeType 写 uris[].type”（recall/a8570f8920a02c5f7-call_027cca51a84e4dcea1507aed.jsonl:L177，送达 agent-a8570f8920a02c5f7.jsonl:L224），给主线程的提醒写“module.json5 skills声明+EntryAbility Want分支要有确定写者”（主转录 L317），给参考规格作者的提醒要求“写成目标 skills 声明+隐式 Want 验收”（agent-aa2040b0997247c21.jsonl:L196），这句后来成了 §11.3 的迁移契约。这些提醒没有引出原始决定（page_0001 L176 与 Base-0 L213 都早于提醒），但附和了错误字段和单实例承接。原文见 base-memory/app/entry/lesson-d77baa7494930d485425.lesson.md。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/entry/src/main/ets/entryability/EntryAbility.ets",
+        "since": "2026-10-16T09:29:14.636Z",
+        "at": "2026-10-16T20:56:02.704Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/sokoban-tomari-80c7d44/app/src/main/AndroidManifest.xml",
+          "at": "2026-10-15T15:51:23.036Z",
+          "reason": "正常输入：分页规格作者 Read 回执里，SokoSelActivity 同时有 MAIN/LAUNCHER 和 SEND+DEFAULT+mimeType text/plain 两个 intent-filter，没有 launchMode（standard）。每次分享都会新建一个实例（agent-a7006049ff2520113.jsonl:L171-L172）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/sokoban-tomari-80c7d44/app/src/main/java/su/drsouko/SokoSelActivity.java",
+          "at": "2026-10-15T15:49:40.319Z",
+          "reason": "正常输入：Read 回执里 onCreate 读 getIntent 的 type/action/EXTRA_TEXT 后 importFile(str)，没有 onNewIntent；textEntered 成功或 importCancelled 时 input!=null 就 setResult+finish()，只结束这个实例（agent-a7006049ff2520113.jsonl:L82-L83）。"
+        },
+        {
+          "key": "agent-a7006049ff2520113.jsonl",
+          "at": "2026-10-15T16:05:25.296Z",
+          "reason": "L194 写 page_0001：组件映射表写“外部 ACTION_SEND/VIEW 进入 importFile(str) | EntryAbility onCreate/onNewWant 解析 want（text/plain）→ 路由本页并弹导入层 | 分享接收口在入口 Ability 层承接”，导航表写“外部 ACTION_SEND/VIEW text/plain（冷启动/热启动）”，结束仍写 setResult+finish。“每次新建实例、只结束自己”被改成唯一入口 Ability 冷热启动复用。注入前首稿 L176 已是这样，L177 的提醒没有涉及实例形态。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/spec/baseline/ui/page_0001_SokoSelActivity.md",
+          "at": "2026-10-15T16:15:47.257Z",
+          "reason": "交付桥梁：F001 作者 Read 全文，回执第 43、70 行就是上面的 EntryAbility 冷热启动承接映射（agent-a67d5ffdd9bda0269.jsonl:L52-L53）。"
+        },
+        {
+          "key": "agent-a67d5ffdd9bda0269.jsonl",
+          "at": "2026-10-15T16:34:10.791Z",
+          "reason": "沿用这个映射：L159 写 F001 实现映射第 56 行“外部 ACTION_SEND/VIEW text/plain 入口 | EntryAbility onCreate/onNewWant 解析 want → 路由本页弹预填导入层 | skills 声明归 ui-manifest/EntryAbility 层”，第 57 行“setResult+finish → terminateSelf（仅外部分享来源分支）”。两行合起来，分享导入结束会终止唯一的入口 Ability。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/spec/baseline/features/F001-stage-library.md",
+          "at": "2026-10-16T07:25:16.599Z",
+          "reason": "交付桥梁：组收尾者 Grep F001，回执含第 56、57 行（agent-af2d1d87cb7c3e2f1.jsonl:L394-L395）。"
+        },
+        {
+          "key": "agent-af2d1d87cb7c3e2f1.jsonl",
+          "at": "2026-10-16T07:30:05.087Z",
+          "reason": "按 F001 第 56 行在 EntryAbility 的 onCreate 和新加的 onNewWant 里都调 consumeShareWant：用 systemShare.getSharedData 取 utd 为 general.plain-text 的文本，写入 AppEvents.pendingImportPreset，再 emit IMPORT_PRESET（L456-L457）。L392 它已注意到源端没有 onNewIntent、只在 onCreate 解析，仍按规格补了热启动分支。这段保留到返修 L4185 才删除。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": 6
+        },
+        {
+          "from": 6,
+          "to": 7,
+          "force": true,
+          "reason": "组收尾者用 Grep 工具检索 F001-stage-library.md（pattern want|Want|sendData|EXTRA|分享|预填），回执返回第 56 行 EntryAbility onCreate/onNewWant 承接与第 57 行 terminateSelf 映射；随后按此写入目标。",
+          "evidence": [
+            {
+              "source": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca/subagents/agent-af2d1d87cb7c3e2f1.jsonl",
+              "line": 394
+            },
+            {
+              "source": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca/subagents/agent-af2d1d87cb7c3e2f1.jsonl",
+              "line": 395
+            }
+          ]
+        },
+        {
+          "from": 7,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/entry/src/main/ets/events/AppEvents.ets",
+        "since": "2026-10-16T09:29:14.636Z",
+        "at": "2026-10-16T20:56:02.704Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/sokoban-tomari-80c7d44/app/src/main/AndroidManifest.xml",
+          "at": "2026-10-15T15:51:23.036Z",
+          "reason": "正常输入：SEND+text/plain intent-filter 在 standard 启动模式的 SokoSelActivity 上，每次分享新建实例（agent-a7006049ff2520113.jsonl:L171-L172）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/sokoban-tomari-80c7d44/app/src/main/java/su/drsouko/SokoSelActivity.java",
+          "at": "2026-10-15T15:49:40.319Z",
+          "reason": "正常输入：只在 onCreate 读 EXTRA_TEXT，没有 onNewIntent，结束用 finish()（agent-a7006049ff2520113.jsonl:L82-L83）。"
+        },
+        {
+          "key": "agent-a7006049ff2520113.jsonl",
+          "at": "2026-10-15T16:05:25.296Z",
+          "reason": "page_0001 把分享入口写成 EntryAbility onCreate/onNewWant 冷热启动承接（L194；首稿 L176 已如此）。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/spec/baseline/ui/page_0001_SokoSelActivity.md",
+          "at": "2026-10-15T16:15:47.257Z",
+          "reason": "交付桥梁：F001 作者读到该映射（agent-a67d5ffdd9bda0269.jsonl:L52-L53）。"
+        },
+        {
+          "key": "agent-a67d5ffdd9bda0269.jsonl",
+          "at": "2026-10-15T16:34:10.791Z",
+          "reason": "沿用：F001 第 56 行写 EntryAbility onCreate/onNewWant 解析 want 后路由本页弹预填导入层（L159）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/spec/baseline/features/F001-stage-library.md",
+          "at": "2026-10-16T07:25:16.599Z",
+          "reason": "交付桥梁：组收尾者 Grep 回执含第 56 行（agent-af2d1d87cb7c3e2f1.jsonl:L394-L395）。"
+        },
+        {
+          "key": "agent-af2d1d87cb7c3e2f1.jsonl",
+          "at": "2026-10-16T07:29:50.380Z",
+          "reason": "为了把单实例冷热两路的预填文本送到页面，L450 给 AppEvents 加 IMPORT_PRESET=1002 和 static pendingImportPreset 中转槽（冷启动 aboutToAppear 读槽，热启动订阅事件读槽）。这是单实例承接的配套件，保留到返修 L4185 删除，改成两个 LocalStorage 键。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": 6
+        },
+        {
+          "from": 6,
+          "to": 7,
+          "force": true,
+          "reason": "组收尾者用 Grep 工具检索 F001-stage-library.md（pattern want|Want|sendData|EXTRA|分享|预填），回执返回第 56 行 EntryAbility onCreate/onNewWant 承接与第 57 行 terminateSelf 映射；随后按此写入目标。",
+          "evidence": [
+            {
+              "source": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca/subagents/agent-af2d1d87cb7c3e2f1.jsonl",
+              "line": 394
+            },
+            {
+              "source": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca/subagents/agent-af2d1d87cb7c3e2f1.jsonl",
+              "line": 395
+            }
+          ]
+        },
+        {
+          "from": 7,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/entry/src/main/ets/pages/SokoSelPage.ets",
+        "since": "2026-10-16T09:29:14.636Z",
+        "at": "2026-10-16T20:56:02.704Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/sokoban-tomari-80c7d44/app/src/main/AndroidManifest.xml",
+          "at": "2026-10-15T15:51:23.036Z",
+          "reason": "正常输入：SEND+text/plain 入口在 standard 启动模式的 Activity 上（agent-a7006049ff2520113.jsonl:L171-L172）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/sokoban-tomari-80c7d44/app/src/main/java/su/drsouko/SokoSelActivity.java",
+          "at": "2026-10-15T15:49:40.319Z",
+          "reason": "正常输入：分享来源的导入成功或取消后 finish() 只结束这个实例（agent-a7006049ff2520113.jsonl:L82-L83）。"
+        },
+        {
+          "key": "agent-a7006049ff2520113.jsonl",
+          "at": "2026-10-15T16:05:25.296Z",
+          "reason": "page_0001 把分享入口映射到唯一的 EntryAbility，结束只写 setResult+finish，没写目标里结束哪个实例（L194）。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/spec/baseline/ui/page_0001_SokoSelActivity.md",
+          "at": "2026-10-15T16:15:47.257Z",
+          "reason": "交付桥梁：F001 作者读到该映射（agent-a67d5ffdd9bda0269.jsonl:L52-L53）。"
+        },
+        {
+          "key": "agent-a67d5ffdd9bda0269.jsonl",
+          "at": "2026-10-15T16:34:10.791Z",
+          "reason": "沿用并具体化：F001 第 56 行是 EntryAbility 承接，第 57 行是“setResult+finish → terminateSelf（仅外部分享来源分支）”，所以终止的是唯一的入口 Ability（L159）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/spec/baseline/features/F001-stage-library.md",
+          "at": "2026-10-16T03:34:42.657Z",
+          "reason": "交付桥梁：切片 4 worker 先整读 F001（agent-a294c58eb9f8a6585.jsonl:L31-L32）。"
+        },
+        {
+          "key": "agent-a294c58eb9f8a6585.jsonl",
+          "at": "2026-10-16T06:54:31.288Z",
+          "reason": "L236 在 SokoSelPage 写 onImportTextEntered/onImportCancelled：source!==null 时 (getContext(this) as common.UIAbilityContext).terminateSelf()，注释写“源 setResult(RESULT_OK)+finish……仅 terminateSelf”。这个页面挂在唯一的 EntryAbility 上，导入后会关掉整个应用。之后组收尾者 L469 又在本页加了 pendingImportPreset 读槽与订阅。返修 L4212 改成从 getSharedLocalStorage 读预填，并只在分享实例里 terminateSelf。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": 6
+        },
+        {
+          "from": 6,
+          "to": 7
+        },
+        {
+          "from": 7,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/entry/src/main/module.json5",
+        "since": "2026-10-16T09:29:14.636Z",
+        "at": "2026-10-16T20:56:02.704Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/spec/ref/sokoban_spec.md",
+          "at": "2026-10-15T16:11:16.151Z",
+          "reason": "输入：主线程用 Bash sed 读 §11，回执里分享接收是 SEND+DEFAULT+mimeType text/plain，迁移契约只写“以 module skills（actions/entities/uris 或 type）等价声明该入口，并用隐式 Want 验收”，同节记录了 launchMode 未声明即 standard（主转录 L587、L590）。这里没有给出鸿蒙系统分享面板识别目标所用的字段。"
+        },
+        {
+          "key": "c77c7279-bc70-4f57-adce-85229d07f0ca.jsonl",
+          "at": "2026-10-15T17:05:42.402Z",
+          "reason": "主线程先在台账写 T-001“module.json5 声明 skills 接收 ACTION_SEND + text/plain……EntryAbility onNewCreate/Want 分支有确定写者”（L994），派 Base-0 时定成字段“actions=[ohos.want.action.sendData] entities=[entity.system.home] type=text/plain 的 skills 入口声明”（L1383）。源 MIME 被直接写成 skills 的 type，挂在入口 Ability 上，没有核对鸿蒙分享面板按什么字段列出目标。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/.claude/skills/arkts-project-scaffolder/references/config-reference.md",
+          "at": "2026-10-15T17:14:26.849Z",
+          "reason": "输入（技能材料边界）：Base-0 Read 第 110-194 行，回执里 skills 示例 uris 带 \"type\": \"text/plain\"，“Share target”一行只有 entity.system.default 和 ohos.want.action.sendData，没有 utd、scheme file、maxFileSupported（agent-a8570f8920a02c5f7.jsonl:L210-L211）。这份参考对分享目标的写法本身不完整。"
+        },
+        {
+          "key": "agent-a8570f8920a02c5f7.jsonl",
+          "at": "2026-10-15T17:26:29.895Z",
+          "reason": "L213 判断“Confirmed skills syntax: uris:[{type:'text/plain'}]……follow the dispatch ruling”，L316 在 EntryAbility 的 skills 里追加 {entities:[entity.system.home], actions:[ohos.want.action.sendData], uris:[{type:'text/plain'}]}。L224 注入的提醒“mimeType 写 uris[].type”晚于这个决定。这段保留到返修 L4236，被移到 multiton 的 ShareImportAbility 并改成 utd 声明。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "主线程用 Bash 执行 sed -n '1014,1065p' spec/ref/sokoban_spec.md，回执返回 §11 全文，含 §11.3 分享接收的迁移契约（uris 或 type 等价声明）与 launchMode standard。",
+          "evidence": [
+            {
+              "source": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca.jsonl",
+              "line": 587
+            },
+            {
+              "source": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca.jsonl",
+              "line": 590
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [
+    {
+      "key": "entry/src/main/ets/shareimportability/ShareImportAbility.ets",
+      "reason": "返修 L4199 新建的文件，生成期不存在，没有可以绑定的生成期写入。它缺失的原因就是 EntryAbility、SokoSelPage、module.json5 三张图里的单实例承接决定：规格把每次分享新建的实例映射成了唯一 EntryAbility 的冷热启动。"
+    }
+  ],
+  "job": "issue-4e3bf06f478ee642f9cb",
+  "metadata": {
+    "migration": {
+      "id": "sokoban-glm531-c77c7279-bc70-4f57-adce-85229d07f0ca",
+      "project": "Sokoban"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.300",
+        "2.1.301"
+      ]
+    },
+    "source_set_id": "sources-1be36e727cb05cb3320f",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-sokoban-glm5.31",
+        "at": "2026-10-15T16:40:54.058Z",
+        "ref": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca.jsonl:L990",
+        "request_ref": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca.jsonl:L984",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-sokoban-glm5.31",
+        "at": "2026-10-15T16:40:54.058Z",
+        "ref": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca.jsonl:L990",
+        "request_ref": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca.jsonl:L984",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "45abaa6a-d22b-4444-adea-2a735a0501f9"
+      ]
+    }
+  },
+  "revision": "a70b6598df58a3bc23c4552a9c4b2786be798cfbf0b7b6e40c5142162fb81946"
+}

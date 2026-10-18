@@ -1,6 +1,6 @@
 # View.invalidate 迁成唯一的“请求下一帧绘制一次”入口：待决标志合并请求，用 postFrameCallback 调度，只在动画活跃时续帧；SurfaceView 自建线程的 lockCanvas 循环不适用
 
-ID：`lesson-27d9e16a099c2fb437eb` · 版本：2
+ID：`lesson-27d9e16a099c2fb437eb` · 版本：3
 
 [本主题](index.md)
 
@@ -31,12 +31,14 @@ invalidate 只请求下一帧的一次 onDraw，多次请求会合并。写成�
 - 对帧循环有疑问时，记录动画期间与结束后的待决调度数：任一时刻不超过 1，动画结束后为 0，页面销毁后不再绘制。
 - 规格声称定时器与源端 vsync 节拍等价时，在帧回调里计 1–2 秒帧数，与源端同场景比较。
 
-来源支持：4 张卡 · 2 次迁移 · 2 个应用
+来源支持：5 张卡 · 3 次迁移 · 3 个应用
 
 ## 来源（按需复核）
 
 - [case-4a352d41e71bd8f199f0](../../../../store/cases/case-4a352d41e71bd8f199f0/bfb25822a981031a8ca464a470972396d768323577afd20d17f7b84d67d5cc0d.json) · 结论：diagnosis, recommendation:1
   卡片版本：`bfb25822a981031a8ca464a470972396d768323577afd20d17f7b84d67d5cc0d`
+- [case-4fcc5b67ed9185e18044](../../../../store/cases/case-4fcc5b67ed9185e18044/670ea9ce1c0727a208adcb0419e4eb0efb933aec252e139e98627a43728b74d3.json) · 结论：diagnosis, recommendation:1
+  卡片版本：`670ea9ce1c0727a208adcb0419e4eb0efb933aec252e139e98627a43728b74d3`
 - [case-569a68ae79caad45dbb6](../../../../store/cases/case-569a68ae79caad45dbb6/f52b572012bb921778066e276b5ebecd610f8263b432b09bccedfe8de4edeb49.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3, recommendation:4
   卡片版本：`f52b572012bb921778066e276b5ebecd610f8263b432b09bccedfe8de4edeb49`
 - [case-5b4026f2fabf83812ff2](../../../../store/cases/case-5b4026f2fabf83812ff2/43e98074974b2d60bab047b15264b217ca9d4855b956901208c3897b7e047c75.json) · 结论：diagnosis, recommendation:1

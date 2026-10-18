@@ -1,0 +1,140 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-c576f74cc60bac7ba886",
+  "created_at": "2026-10-17T11:27:51.722712+00:00",
+  "migration_key": "sokoban-glm531-c77c7279-bc70-4f57-adce-85229d07f0ca",
+  "title": "把源端交给 GestureDetector/ScaleGestureDetector 的触摸手势定为按参数清单自建的「等效检测器」：捏合进不了缩放、长按不吞事件、滚动只跟首指、双击锚点错、缺 quick scale",
+  "when": "规格提取与界面实现阶段，为源端交给 Android 框架手势检测器处理的触摸事件确定目标端检测方式并写出检测逻辑时",
+  "description": "源端自定义 View 的 onTouchEvent 把每个 MotionEvent 先交 ScaleGestureDetector、再交 GestureDetector，监听只覆写 onSingleTapUp/onDoubleTap/onScroll/onScale 等回调；长按、双击计时、多指焦点、缩放开始条件与 quick scale 等行为在 Android 框架里而不在应用源码；目标 ArkUI 需在 onTouch 上自行做同等检测，本机 Android SDK 带 sources/android-N 框架源码。",
+  "summary": "源端 SokoView.java:51-52 构造两个框架检测器，:126-139 的 onTouchEvent 把每个事件先交 ScaleGestureDetector、再交 GestureDetector，\n监听只覆写 onDown/onSingleTapUp/onDoubleTap/onScroll 与 onScaleBegin/onScale（targetSdk 27）。长按、双击计时、多指焦点、\n缩放开始条件与 quick scale 都由框架决定。本机 SDK 的 sources/android-36.1 框架源码在生成前就已存在（目录创建于 2026-05-02），返修 L9050-L9051 直接找到并读取了它。\n\n规格作者 c4-04（agent-a67d5ffdd9bda0269）整读了 SokoView.java（L71-L72）；派工只要求写\"手势四路\"（L1），\n已有的 page_0002 规格写\"按触发路径复刻……多指/容差按 GestureDetector 触发路径复刻\"（L57-L58）。首写前注入了 lesson-68023ac5 v3（L138），\n它随后整读经验原文（L144-L145），在 L149 思考中按做法第 3 步决定\"复刻 GestureDetector 的触发路径\"，对多指、长按的框架细节只凭记忆、带着不确定。\nF003 实现映射（L164-L165，F003-board-render.md 第 42-43、51 行）写成\"GestureDetector.SimpleOnGestureListener → 等价检测器按触发路径复刻（非逐事件直译）\"，\n只列 onDown 恒 true、onSingleTapUp 抬起即触发、双击窗口内第二击触发、onScroll 增量、多指取消单击，并把\"触点=getX()/getY()=首指\"写给整个检测器；\n长按超时只出现在备注\"参数按 ViewConfiguration 语义复刻\"，没写它到期后吞掉 onScroll 与单击；ScaleGestureDetector 一行写\"PinchGesture/等效捏合检测\"，\n只规定逐事件比例与焦点缓存，没有开始条件、最小跨度与 quick scale；文末还声明\"无 HARD-DIV……行为等价\"。\n「等效检测器」的取舍在这一步定下。计划 slice-03 只写\"Canvas 载体 + 手势检测器复刻\"，派工写\"手势四路复刻 GestureDetector 触发路径\"，都沿用规格，没有新增要求。\n\nSlice 3 实现者（agent-a41c89cffb1d03aa7）读到这份规格（L38-L39）和 SokoView.java（L40-L42）。L62 思考中它凭记忆回想 AOSP：认定 onScroll 的焦点取 pointer 0；\n长按细节想不清，最后判定\"spec doesn't mention duration limits → don't add one\"（规格备注其实列了长按超时）；捏合用\"my own span tracking\"。\n全程只核对鸿蒙 d.ts，没有打开本机 Android SDK 的检测器源码。首写前同一经验的提醒是\"slop 8dp、双击窗 300ms、多指取消单击、onScroll 逐事件增量\"（L163，没有长按）。\nL177-L178 写出的 SokoBoardView：GestureParams 只有 touchSlop/doubleTapTimeout/doubleTapSlop/spanSlop；refreshScaleMachine 只在指针按下/抬起时调用，\nonPointerMove 要 scaleActive 已为真才算比例，所以两指按下后移动永远进不了缩放；onScroll 只跟 ptrIds[0]；双击按\"距上次抬起 300ms\"判定并回调第二次按下的坐标；\n没有长按、quick scale 与最小跨度。之后 agent-a5dd99ac1f85b05da 加了宿主句柄、agent-a3d61eb6d25a48ff7 改了一行注释，都没有动手势片段；\n从生成检查点到最终检查点的保留补丁中，删除的仍是这套 GestureParams/refreshScaleMachine（evidence/retained-application.patch:546、788、863、881）。\n\n返修用原始事件注入实测两端：返修 L9026 指出鸿蒙捏合机只在按下/抬起推进；L9183-L9208 确认安卓按住 0.7s 后拖动不平移、松手不走步。\n返修读本机 SDK 的 GestureDetector/ScaleGestureDetector（L9062-L9100），新建 AndroidGestureDetectors.ets 逐段移植（L9266/L9268、L9318/L9320）；\nSokoBoardView 删除旧的捏合机等字段，handleTouch 把触摸折成 MotionEvent 序列，照源先喂缩放检测器、再喂手势检测器（L9297-L9305、L9358/L9359、L9439/L9440），\n检查点 6f18dcf（L9551/L9552），见报告 X9（evidence/spec/parity-fix-report.md:219-225）。\n\n三层判断：\n1. 经验原文：lesson-68023ac5 做法第 3 步只针对 onFling，给出\"按 ViewConfiguration 参数清单实现等价检测器\"。它没有覆盖 onScroll/onDoubleTap 依赖的检测器状态机，也没有覆盖 ScaleGestureDetector。规格作者照这一步定了等效方案，所以原文需要增量修订。\n2. 召回传递：四条提醒（主会话 L317、a7006049 L177、本规格作者 L138、本实现者 L163）都去掉了第 3 步的长按超时 400ms。Slice 3 的召回 worker 读到了原文的 400ms，却记作\"doesn't matter as I don't gate on it\"\"unused\"，没有写进提醒（recall/a41c89cffb1d03aa7-call_cb91bcb348df4f6aae9fffb9.jsonl:L138、L232）。提醒还把\"触发路径复刻\"扩到原文没有的缩放检测器；给规格作者的提醒又把拖画路径的\"getX()=首指\"放进检测器过滤规则（recall/a67d5ffdd9bda0269-call_a8ac59235fdc4c1b80cd5637.jsonl:L304-L305）。\n3. agent 执行：规格作者把等效方案扩到 ScaleGestureDetector，并在没读框架源码的情况下宣称行为等价；实现者忽略了规格备注里的长按超时，写出只在按下/抬起时推进的捏合机。\n",
+  "recommendations": [
+    "规格提取阶段：源端把 MotionEvent 交给 Android 框架检测器（GestureDetector、ScaleGestureDetector）时，检测行为由框架决定，应用源码里没有。映射契约写成“按本机 SDK sources/android-N 中该检测器的 onTouchEvent 逐段移植”，并列出回调依赖的框架行为：长按超时到期后不再回调 onScroll/onSingleTapUp（onLongPress 为空实现也一样）；onScroll 距离按全部未抬起手指的平均焦点算；双击要求第二次按下时第一次按下发出的 TAP 消息仍未到期，onDoubleTap 收到的是第一次按下事件；ScaleGestureDetector 在每个 MOVE 判断是否开始，跨度变化要超过 spanSlop 且不小于 minSpan，targetSdk>18 时 quick scale 默认开启。不要写“等价检测器（非逐事件直译）”或“PinchGesture/等效捏合”；没读框架源码前，不声明“行为等价、无 HARD-DIV”。",
+    "界面实现阶段：规格要求复刻框架检测器时，先打开本机 SDK 的检测器源码逐段移植，不凭记忆重写。Handler 消息改用定时器，ViewConfiguration 尺寸按本机密度换算。把 ArkUI 逐指触摸折成 MotionEvent 序列：首指 DOWN，其余 POINTER_DOWN；MOVE 带全部指针；非末指 POINTER_UP，末指 UP。然后照源顺序先喂缩放检测器、再喂手势检测器，最后走源端自己的 ACTION_MOVE 分支。规格或参数表列出的每个参数（如长按超时）都要落成行为，不能因为监听没覆写对应回调就省掉；缩放开始条件放在 MOVE 中判断。最小检查：双指捏合能缩放，且到最小跨度时停止；按住 0.7s 后松手不算单击、再拖动不平移；双击后按住拖动，以第一次按下点为焦点缩放、期间不平移。",
+    "修订 lesson-68023ac5f088c72a775a（版本 3，增量）：做法第 3 步现在只为 onFling 给出“按 ViewConfiguration 参数清单实现等价检测器”。补一条：源端回调依赖 onScroll、onDoubleTap、onSingleTapUp 的多指与时序语义，或同时把事件交给 ScaleGestureDetector 时，按本机 SDK sources/android-N 中 GestureDetector（及 ScaleGestureDetector）的 onTouchEvent 逐段移植（没装 sources 包时先装对应版本），不按参数清单自建。同时写明参数清单方案会漏掉的行为：长按到期后吞掉后续 onScroll 与 onSingleTapUp（onLongPress 为空实现也如此）；onScroll 按全部手指的平均焦点；双击以第一次按下计时，onDoubleTap 收到第一次按下事件；ScaleGestureDetector 在 MOVE 中判定开始，有最小跨度，quick scale 默认开启。VelocityTracker 这类原生实现仍用同类速度估计，保留 fling 的最小/最大抛掷速度条件。标题末句“按其触发路径复刻”相应改为“按本机 SDK 源码逐段移植该检测器”。可选检查补一条：按住超过长按超时后拖动不滚动、松手不算单击。回归核对：来源 case-a1849836a1bfff3c265c 的返修复刻了 8dp 容差、400ms 长按、双击与抛掷速度，逐段移植同样覆盖；另两张来源卡讲原始 onTouch 的首指过滤，做法第 1、2 步不变。",
+    "召回失败 lesson-68023ac5f088c72a775a：本次四条提醒都去掉了做法第 3 步列出的长按超时（400ms）。Slice 3 的召回 worker 读到了这一项，却以“不按它判定”为由记作 unused（recall/a41c89cffb1d03aa7-call_cb91bcb348df4f6aae9fffb9.jsonl:L138、L232）。提醒又把“按触发路径复刻”套到原文没有涉及的 ScaleGestureDetector/捏合上（主会话 L317、agent-a7006049ff2520113.jsonl:L177、agent-a67d5ffdd9bda0269.jsonl:L138），给规格作者的提醒还把源端 ACTION_MOVE 拖画路径的“getX()=首指”列进 GestureDetector 的过滤规则（recall/a67d5ffdd9bda0269-call_a8ac59235fdc4c1b80cd5637.jsonl:L304-L305）。原文第 3 步与可选检查“长按后拖动不触发”本可保留长按条件，“getX() 取指针索引 0”在原文中只属于源端自己判 getAction 的情形（经验正文 ui/interaction/lesson-68023ac5f088c72a775a.lesson.md）。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/entry/src/main/ets/components/SokoBoardView.ets",
+        "since": "2026-10-16T09:29:14.636Z",
+        "at": "2026-10-16T20:56:02.704Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/sokoban-tomari-80c7d44/app/src/main/java/su/drsouko/SokoView.java",
+          "at": "2026-10-15T16:15:58.890Z",
+          "reason": "正常输入：规格作者 Read 回执显示 :51-52 构造 ScaleGestureDetector 与 GestureDetector，:126-139 onTouchEvent 把每个事件先交缩放检测器再交手势检测器，监听只覆写 onSingleTapUp/onDoubleTap/onScroll/onScale。由此足以判断手势行为由框架检测器决定，需要按框架源码确定（agent-a67d5ffdd9bda0269.jsonl:L71-L72）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/.claude/a2h-bench/memory/ui/interaction/lesson-68023ac5f088c72a775a.lesson.md",
+          "at": "2026-10-15T16:31:05.856Z",
+          "reason": "注入经验（v3）：首写前被拒写入的提示中有它（L138），随后规格作者 Read 全文（L144-L145）。做法第 3 步只针对 onFling，写“源端交给 GestureDetector 时实现等价检测器：按 ViewConfiguration 的触摸容差（8dp）、长按超时（400ms）、双击窗口、多指时取消点击……判定 fling”；全文没有 ScaleGestureDetector，也没有 onScroll/onDoubleTap 依赖的焦点平均、双击锚点与长按吞事件。规格作者据此定下等效方案，原文需增量修订，见修订建议。"
+        },
+        {
+          "key": "agent-a67d5ffdd9bda0269.jsonl",
+          "at": "2026-10-15T16:35:30.042Z",
+          "reason": "偏差起点：读过源码与经验后，L149 思考按第 3 步决定复刻触发路径，对框架细节只凭记忆。Write F003 时把 GestureDetector 写成“等价检测器按触发路径复刻（非逐事件直译）”，“触点=首指”写给整个检测器，长按超时只作备注、没写行为；把 ScaleGestureDetector 写成“PinchGesture/等效捏合检测”，没有开始条件、最小跨度与 quick scale；并声明“无 HARD-DIV……行为等价”。没打开本机 SDK 的检测器源码（同转录 L164-L165）。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/spec/baseline/features/F003-board-render.md",
+          "at": "2026-10-16T03:34:44.963Z",
+          "reason": "交付桥梁：Slice 3 实现者 Read 回执中仍是上述映射行（第 42-43 行“等价检测器按触发路径复刻（非逐事件直译）”“PinchGesture/等效捏合检测”，第 51 行“行为等价”）。派工也写“手势四路复刻 GestureDetector 触发路径”，与它一致（agent-a41c89cffb1d03aa7.jsonl:L1、L38-L39）。"
+        },
+        {
+          "key": "agent-a41c89cffb1d03aa7.jsonl",
+          "at": "2026-10-16T06:58:40.058Z",
+          "reason": "沿用等效方案，并加了自己的偏差：L62 凭记忆回想 AOSP，以“spec doesn't mention duration limits”为由不做长按（规格备注列了长按超时），捏合用自建跨度跟踪；没打开本机 SDK 源码。L177-L178 Write 的 SokoBoardView 中，refreshScaleMachine 只在按下/抬起时调用，两指移动进不了缩放；onScroll 只跟 ptrIds[0]；双击以上次抬起计时、回调第二次按下坐标；没有长按与 quick scale。后续编辑没动这些片段，保留到返修。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [
+    {
+      "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/entry/src/main/ets/components/AndroidGestureDetectors.ets",
+      "reason": "返修 X9 新建的检测器移植文件（repair/3212c816-0906-464d-be11-07f0eba50527.jsonl:L9266/L9268，L9318/L9320 修改），生成期不存在，没有可以绑定的生成期写入。它补上的就是 SokoBoardView 图中已归因的缺失（没有按框架源码移植检测器），没有独立的生成来源可以连。"
+    }
+  ],
+  "job": "issue-c576f74cc60bac7ba886",
+  "metadata": {
+    "migration": {
+      "id": "sokoban-glm531-c77c7279-bc70-4f57-adce-85229d07f0ca",
+      "project": "Sokoban"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.300",
+        "2.1.301"
+      ]
+    },
+    "source_set_id": "sources-1be36e727cb05cb3320f",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-sokoban-glm5.31",
+        "at": "2026-10-15T16:40:54.058Z",
+        "ref": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca.jsonl:L990",
+        "request_ref": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca.jsonl:L984",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-sokoban-glm5.31",
+        "at": "2026-10-15T16:40:54.058Z",
+        "ref": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca.jsonl:L990",
+        "request_ref": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca.jsonl:L984",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "45abaa6a-d22b-4444-adea-2a735a0501f9"
+      ]
+    }
+  },
+  "revision": "10b0bc053b6e6edb1eb5353b4c9af200a1ee3ddb92222df8cd442f419d7822fb"
+}

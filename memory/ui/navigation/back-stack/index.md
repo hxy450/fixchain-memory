@@ -28,10 +28,10 @@
 - [源端经 TaskStackBuilder.addNextIntentWithParentStack(...).startActivities() 跳转时，按 Manifest 父链清栈重建 \[父…, 目标\]：目标 NavPathStack 先 clear 再依次 push 父页与目标，返回落到父页而非来源页](lesson-2986423250986124d039.lesson.md)
   - 时机：规格提取与基座实现阶段，把基类的父栈跳转方法（抽屉导航等）翻译成 NavPathStack 操作与返回验收时
   - 情境：源基类被多个页面继承，抽屉等跳转经 TaskStackBuilder 发起，Manifest 为目标声明 parentActivityName 或 PARENT_ACTIVITY；目标是单个 Navigation + NavPathStack，跳转可从栈底以外的任意宿主页发起；页面规格里可能有“pushPathByName（主页为根天然在栈底）”一类只在来源页是主页时成立的映射。
+- [源端返回按钮与 onBackPressed 执行同一逻辑时共用同一处理分支，按源端启动来源标志执行、不默认 pop；返回按钮直接调 super.onBackPressed()、finish() 时两路分开实现](lesson-f19632971e470d55c543.lesson.md)
+  - 时机：页面转换阶段，把 Activity 的返回按钮点击（含 ActionBar Up 的 android.R.id.home 分支）与 onBackPressed 翻译成 NavDestination 的返回处理时；规格提取阶段为导航表写 Up 与系统返回行时
+  - 情境：源 Activity 按启动来源标志（如 isFromSplash）改变返回行为：首启进入时返回会先执行补救动作（如添加默认城市）再进主页，其他来源才 finish；目标页用 NavPathStack 管理，返回按钮默认写成 pop()，系统返回未处理。 也包括源端返回按钮直接调 super.onBackPressed()、finish() 或跳转，绕过子类 onBackPressed 覆写里的分支（如先回跳上一项），与系统返回不是同一逻辑。
 - [被 @Entry 页直接组合、未进入 Navigation 栈的子组件要拦截返回键时，由 @Entry.onBackPress 转调子组件登记的处理函数，多个登记方后进先出；@Entry 承载 Navigation 且栈内有 NavDestination 时，挂载点改为栈顶 NavDestination.onBackPressed](lesson-803ba029eea852122e77.lesson.md)
   - 时机：页面转换与接线阶段，为源端非根 Composable 里的 BackHandler/PredictiveBackHandler，或把 OnBackPressedDispatcher 的多级回调映射到 ArkUI 返回键钩子时
   - 情境：源端在抽屉宿主等非 Activity 根的 Composable 中按状态条件拦截返回（例如抽屉打开时先关抽屉）；目标端该组件不是 @Entry，由唯一的 @Entry 页直接组合，没有作为页面驻留在 Navigation 路由栈内。也包括源端 OnBackPressedDispatcher 按后登记先问分发（Activity 只登记壳层回调，选择模式等另登记回调），目标壳页的返回处理是封闭分支、嵌入的子页没有登记入口。
   - 例外：组件本身就是 @Entry 页、且没有承载内有页面的 Navigation 时，直接实现 onBackPress；组件位于 NavDestination 内容中（含被页面组合的 BasePage 等共享基座）时，返回先交该 NavDestination.onBackPressed，返回 false 即出栈，@Entry.onBackPress 不会被调用；由该 NavDestination 的 onBackPressed 转调基座的裁决函数，不在 @Entry 上兑现
-- [返回按钮与系统返回共用同一处理分支，按源端启动来源标志执行 onBackPressed 的逻辑，不默认 pop](lesson-f19632971e470d55c543.lesson.md)
-  - 时机：页面转换阶段，把 Activity 的返回按钮点击与 onBackPressed 翻译成 NavDestination 的返回处理时
-  - 情境：源 Activity 按启动来源标志（如 isFromSplash）改变返回行为：首启进入时返回会先执行补救动作（如添加默认城市）再进主页，其他来源才 finish；目标页用 NavPathStack 管理，返回按钮默认写成 pop()，系统返回未处理。

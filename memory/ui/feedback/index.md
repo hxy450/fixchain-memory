@@ -9,9 +9,9 @@
 - [全局广播或飘屏浮层按源端队列语义播放：不自加去重、条数上限或点击清空，确需目标侧保护时单列为适配策略](lesson-2cc8bcca579d597cb6a2.lesson.md)
   - 时机：界面与服务实现阶段，把 Android 全局广播、飘屏窗口迁成浮层服务，确定入队、去重、上限与点击后的队列处理时；审计或规格阶段为这类浮层写最小实现链时
   - 情境：源端由单例窗口持有列表逐个播放网络响应附带的广播（addAll 入队、remove(0) 出队、动画结束有剩余就继续，点击只跳详情不动队列）；上游审计或规格出现源码没有的“有界/去重队列”等防护性描述。
-- [公共 Toast 封装把时长做成每次调用的参数，逐调用点映射源端 LENGTH_SHORT/LONG；源端对文案的字符串加工在取得字符串后保留](lesson-8335bc404934f58c6f31.lesson.md)
-  - 时机：服务层与页面实现阶段，把源端 Toast.makeText 调用翻译成目标 Toast 封装或 showToast，确定每处时长与文案拼接时
-  - 情境：Android 源码在同一文件或同一公共方法中混用 Toast.LENGTH_SHORT 与 LENGTH_LONG，部分文案先取资源串再做 toLowerCase 等加工；目标用毫秒 duration 的 promptAction.showToast 或自建公共 Toast 桥，资源经 getStringSync 等取成 string 后再拼接。
+- [公共 Toast 封装把时长做成每次调用的参数，逐调用点映射源端 LENGTH_SHORT/LONG，位置按源端默认显式传 bottom；源端对文案的字符串加工在取得字符串后保留](lesson-8335bc404934f58c6f31.lesson.md)
+  - 时机：服务层与页面实现阶段，把源端 Toast.makeText 调用翻译成目标 Toast 封装或 showToast，确定每处时长、显示位置与文案拼接时
+  - 情境：Android 源码在同一文件或同一公共方法中混用 Toast.LENGTH_SHORT 与 LENGTH_LONG，部分文案先取资源串再做 toLowerCase 等加工；目标用毫秒 duration 的 promptAction.showToast 或自建公共 Toast 桥，资源经 getStringSync 等取成 string 后再拼接。 也包括源端文字 Toast 未调用 setGravity/setMargin、位置取平台默认，目标封装或直接调用的 showToast 不传 bottom。
 - [同一业务链有多个入口时，每个入口都要真正调用服务并在所有终态收口 loading](lesson-a87eaa08f98ea95d04d5.lesson.md)
   - 时机：界面接线阶段，为同一业务链实现“弹窗确认”与“无弹窗直调”等多个入口，并编写忙态（loading）的起链与收口时
   - 情境：源端工具方法显示 loading 后直接下载或设置，并在各终态关闭；目标把链路拆成弹窗组件加静态入口方法，服务调用需要 UI context，而 context 只在组件按钮回调里拿得到。

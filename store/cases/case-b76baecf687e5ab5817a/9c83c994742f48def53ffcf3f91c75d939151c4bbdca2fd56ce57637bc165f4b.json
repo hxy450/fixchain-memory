@@ -1,0 +1,354 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-b76baecf687e5ab5817a",
+  "created_at": "2026-10-17T10:33:01.853763+00:00",
+  "migration_key": "sokoban-glm531-c77c7279-bc70-4f57-adce-85229d07f0ca",
+  "title": "把主题涟漪（RippleDrawable）按 colorControlHighlight 原值整块平铺成按压底色",
+  "when": "界面实现阶段（页面转换与共享组件），为源端主题提供的列表行、标题栏按钮、对话框按钮确定 ArkUI 按压态外观与取值时",
+  "description": "源应用在 API 21+ 设备上走 values-v21 的 android:Theme.Material.Light.DarkActionBar，列表 listSelector（Widget.Material.ListView → ?attr/listChoiceBackgroundIndicator）、标题栏按钮背景（?attr/actionBarItemBackground）和无边框对话框按钮背景都解析到 <ripple> drawable；目标用 stateStyles 或 onTouch 自绘按压层，规格、派工或兄弟页只给出“按压色”或单一色值。",
+  "summary": "最早的平铺写法出在入口页转换者（agent-a5d32be86e8c2e994）。它写前读到 page_0001 规格“按压反馈由 Theme.Light listSelector\n提供 → stateStyles pressed 态、按压色取平台资源、画在内容下层”（L18-L19），又自查 android-35 平台资源：\nWidget.Material.ListView 的 listSelector=?attr/listChoiceBackgroundIndicator（L193-L194）、Widget.Material.ActionButton 的\nbackground=?attr/actionBarItemBackground（L208-L209）、colorControlHighlight=ripple_material_light=highlight_alpha×前景色（L199-L200、L217-L218）。\n它没有沿这两个主题属性打开 drawable（本机 android-35 SDK 中分别是 list_choice_background_material 与\naction_bar_item_background_material，都是 <ripple>，后者无 mask、带 android:radius=\"20dp\"，是无界圆），\n而是把 highlight_alpha 0.20 直接乘前景色，写成 PRESSED_ON_LIGHT #33000000 / PRESSED_ON_DARK #33FFFFFF 两个\nbackgroundColor 整块平铺，注释自己也写着“深色栏 ripple：0.20 alpha 前景色”（SokoSelPage.ets，L272-L273）。\n偏差在“平台资源 → 按压外观”这一步：选择器类型和无界半径就在它已读到的属性所指的 drawable 里，取到的却只是涟漪着色输入。\n\n共享组件作者（agent-a1155719b304de950）读了 SokoSelPage 的这两组常量与 pressedOnDarkBar/pressedOnLight（L62-L63、L70-L71），\n派工本身也只写“listSelector 按压态 stateStyles(pressed) 底色层”（L1）。它比较了本机 SDK 的 highlight_alpha：android-30 0.10、\nandroid-34 0.5、android-35 0.20（L207-L208、L308-L309），没有因此怀疑原值不是屏上值，而是“栏/列表族取 android-35 对齐 SokoSelPage”：\nTwoLineListItem 写 #33000000（注释“与 SokoSelPage 内联行同源同值”，L318-L319），SokoActionBar 的 barPressed #33FFFFFF 铺满整个按钮矩形、\n溢出面板行 #33000000（L330-L331）；同一 agent 在 SokoAlertDialog 里又按 android-34 0.5 写单选行与按钮按压 #80000000，\n注释写明按钮背景是“btn_borderless_material 波纹”（L313-L314）。设置页转换者（agent-a148fd46222e19bdb）读 SokoSelPage 与\nStagePickerContent 后（L84-L85、L130-L131），偏好行 PRESSED_ON_LIGHT #33000000 “对齐 page_0001 SokoSelPage 列表行口径”、\n选项框行 PICKER_ITEM_PRESSED #1F000000 随选关框（L298-L299）。\n\n经验层：lesson-fde79829831c2269e925（v3）的做法第一步要求“从 SDK 该主题 listSelector 指向的 drawable 取按压色”“pressed 态写\nbackgroundColor、normal 透明”，只覆盖 StateListDrawable 那种纯色按压态（来源为 Holo 与 Compose），对 <ripple> 没有分支。\n选关框转换者（agent-a4c0370414f513602）写前完整读了这条经验原文（L188-L189），按它去追 listSelector 链（L196-L201 检索未命中），\n随后照做法写 stateStyles pressed backgroundColor($r stagepicker_item_pressed)，并在 color.json 定值 #1F000000\n（L283、L289）；即使它找到 list_choice_background_material.xml 的 <ripple>，原文也只会让它取色平铺。该经验还经召回提醒\n注入了 a1155719（L292）与 a148fd（L257），对做法的转述忠实（“stateStyles pressed 底色层、normal 透明”）；给 a148fd 的提醒另把\n兄弟页的 #33000000/#1F000000 写进去（原文无此数值），但它召回前的首稿已含同值（L256），不是成因。规格作者\n（agent-a7006049ff2520113）收到的提醒是“列表行按压态由 Theme.Light listSelector 提供：stateStyles pressed 底色画在内容下……按压色取 SDK”\n（L177），据此写进 page_0001（L194）；提醒沿用派工的 Theme.Light，丢了原文“按 values-vNN 确认主题代际”的条件，但实现者\n都改用了 Material 资源，这一点不影响本项。ui-manifest 也直接标注 lesson-fde79829831c2269e925。\n\n这些平铺值一直保留到生成结束。返修 X5 在 Android 12 Pixel_5 上按住截屏分箱取样：有界涟漪稳态是以视图中心为圆心、\nR=视图半对角线的径向层，r≤0.6R 约 8.6%、R 处约 6%；标题栏是 20dp 无界白色圆、圆心在按钮内容区中心\n（evidence/spec/parity-fix-report.md:190-196）。修复新增 SokoRipple（rippleGradient/boundedRippleRadius/BAR_RIPPLE_RADIUS=20），\n各行 stateStyles 改 radialGradient，标题栏按钮改 onTouch + BarRipple 40vp 圆，并删除 barPressed、PRESSED_ON_LIGHT、\nPICKER_ITEM_PRESSED 与 stagepicker_item_pressed（repair/3212c816-0906-464d-be11-07f0eba50527.jsonl:L6768-L7766）。\nSokoAlertDialog 的按钮在返修 C66 已改成实测 #E9E9E9 的 inset 平铺（repair/3212c816-0906-464d-be11-07f0eba50527.jsonl:L3181），\n平铺方式沿自生成期，X5 才改为径向层。\n",
+  "recommendations": [
+    "界面实现阶段确定按压外观时，沿控件实际使用的主题属性打开 drawable 本体（列表：Widget.Material.ListView 的 listSelector→?attr/listChoiceBackgroundIndicator；标题栏按钮：?attr/actionBarItemBackground；无边框按钮：Widget.Material.Button.Borderless 的 background），先看根元素：是 <selector> 的纯色按压项才取色平铺；是 <ripple> 时，colorControlHighlight/highlight_alpha 只是涟漪着色输入，不作为屏上按压色整块铺 backgroundColor。",
+    "按 <ripple> 的形状落实：含 mask 或内容层的有界涟漪（如 list_choice_background_material、btn_borderless_material）在视图边界内画以中心为圆心、半径为视图半对角线的径向层；无 mask、无内容层的无界涟漪（如 action_bar_item_background_material）按 android:radius 画圆，圆心按源控件热区（本例实测为按钮内容区中心），圆外无色，不铺满按钮矩形。",
+    "highlight_alpha 原值随 SDK 版本变化（本机 android-30/34/35 为 0.10/0.5/0.20），涟漪屏上不透明度又由该版本 RippleDrawable 的绘制决定：按对照设备的 Android 版本实测按住稳态，或在报告里登记待实测；不要按“与兄弟页同源同值”挑某一 SDK 版本，也不要在同一组件里混用不同版本的值。",
+    "沿用兄弟页或共享件的按压常量前，回到源主题核对当前控件的 drawable 类型与半径（标题栏按钮、列表行、对话框按钮的来源各不相同），不以“收敛零视觉差”代替核对。",
+    "本应用的具体修法：Android 12 对照下按住稳态为中部 #16（约 8.6%），0.6R 起线性降到 R 处 #0F（约 6%）；列表行、偏好行、选项框行、选关框行、溢出菜单行与对话框按钮按视图半对角线取 R，用 stateStyles 内联块 .radialGradient；标题栏 Up/图标/溢出钮用 onTouch 记录按下与按钮尺寸，在图标下层绝对定位 40vp 白色径向圆（BAR_RIPPLE_RADIUS=20）。",
+    "规格提取阶段写按压反馈时，按 values-v21 的实际父主题（本例 Material.Light.DarkActionBar，而非 values/ 的 Theme.Light）写出提供方 drawable、类型（ripple/selector）、有界或无界及半径，不只写“按压色取平台资源”。",
+    "修订 lesson-fde79829831c2269e925（版本 3，增量）：做法第一步“取色前……从该主题 listSelector 指向的 drawable 取按压色”之后补一个分支，并在标题末句“按压色作底色画在内容下”后补“选择器解析到 <ripple> 时不按原色整块平铺”：先看 drawable 根元素，<selector> 的纯色按压项（Holo 等）照现写法写 backgroundColor；<ripple>（Material 主题 API 21+ 的 listChoiceBackgroundIndicator、selectableItemBackground、actionBarItemBackground 等）里的 colorControlHighlight 只是涟漪着色输入，屏上是径向层——含 mask 或内容层的有界涟漪以视图中心为圆心、视图半对角线为半径，无 mask 的无界涟漪按 android:radius 画圆、圆外无色——不透明度按对照设备实测，不用 SDK 的 highlight_alpha 原值。判断信号：父主题为 android:Theme.Material*/DeviceDefault 或选择器 XML 根元素为 <ripple>。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "entry/src/main/ets/components/common/TwoLineListItem.ets",
+        "since": "2026-10-16T09:29:14.636Z",
+        "at": "2026-10-16T20:56:02.704Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/spec/baseline/ui/page_0001_SokoSelActivity.md",
+          "at": "2026-10-15T17:30:42.777Z",
+          "reason": "写前输入：Read 回执给出列表行“按压反馈由 Theme.Light listSelector 提供 → stateStyles pressed 态、按压色取平台资源、画在内容下层”（agent-a5d32be86e8c2e994.jsonl:L18-L19）。要求去平台资源取值，但只写成“按压色”，没写出 drawable 类型。"
+        },
+        {
+          "key": "agent-a5d32be86e8c2e994.jsonl",
+          "at": "2026-10-15T17:58:25.701Z",
+          "reason": "自查 android-35 资源已看到 listSelector=?attr/listChoiceBackgroundIndicator、ActionButton background=?attr/actionBarItemBackground 与 ripple_material_light=highlight_alpha×前景色（L193-L194、L199-L200、L208-L209、L217-L218），未打开这两个 drawable（均为 <ripple>），把 0.20 原值写成 PRESSED_ON_LIGHT #33000000 / PRESSED_ON_DARK #33FFFFFF 整块 backgroundColor，注释称“深色栏 ripple：0.20 alpha 前景色”（L272-L273）。平铺取法从这里开始。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/entry/src/main/ets/pages/SokoSelPage.ets",
+          "at": "2026-10-16T01:22:07.312Z",
+          "reason": "交付桥梁：共享组件作者两次 Read 回执包含 PRESSED_ON_LIGHT/PRESSED_ON_DARK 常量、“highlight_alpha 0.20 × 前景色 → 按压高亮（ripple_material_*)”注释及 pressedOnLight/pressedOnDarkBar 用法（agent-a1155719b304de950.jsonl:L62-L63、L70-L71）。"
+        },
+        {
+          "key": "agent-a1155719b304de950.jsonl",
+          "at": "2026-10-16T02:03:08.154Z",
+          "reason": "派工只要求“listSelector 按压态 stateStyles(pressed) 底色层”（L1）；读到 SokoSelPage 常量后，虽查得 highlight_alpha 在 android-30/34/35 为 0.10/0.5/0.20（L207-L208、L308-L309），仍按“栏/列表族取 android-35 对齐 SokoSelPage”写 TwoLineListItem pressed backgroundColor('#33000000')，注释“与 SokoSelPage 内联行同源同值”（L318-L319）。本链确认传递。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "entry/src/main/ets/components/common/SokoActionBar.ets",
+        "since": "2026-10-16T09:29:14.636Z",
+        "at": "2026-10-16T20:56:02.704Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/spec/baseline/ui/page_0001_SokoSelActivity.md",
+          "at": "2026-10-15T17:30:42.777Z",
+          "reason": "写前输入：规格要求按压色取平台资源、溢出面板几何与色取平台资源（agent-a5d32be86e8c2e994.jsonl:L18-L19）。"
+        },
+        {
+          "key": "agent-a5d32be86e8c2e994.jsonl",
+          "at": "2026-10-15T17:58:25.701Z",
+          "reason": "grep 回执已显示 Widget.Material.ActionButton 的 background=?attr/actionBarItemBackground（L208-L209），该属性在本机 SDK 指向 action_bar_item_background_material（<ripple android:radius=\"20dp\">，无界）；它未打开该 drawable，把标题栏按钮按压写成 pressedOnDarkBar backgroundColor #33FFFFFF 铺满按钮、溢出面板行 #33000000（L272-L273）。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/entry/src/main/ets/pages/SokoSelPage.ets",
+          "at": "2026-10-16T01:22:07.312Z",
+          "reason": "交付桥梁：共享组件作者 Read 回执含 PRESSED_ON_DARK #33FFFFFF 及标题栏按钮 .stateStyles({ pressed: this.pressedOnDarkBar })（agent-a1155719b304de950.jsonl:L62-L63、L70-L71）。"
+        },
+        {
+          "key": "agent-a1155719b304de950.jsonl",
+          "at": "2026-10-16T02:05:08.493Z",
+          "reason": "派工未提标题栏按压；它未查 actionBarItemBackground，照 SokoSelPage 写 barPressed backgroundColor('#33FFFFFF') 挂在 Up/图标/文字/溢出钮整块按钮上、panelPressed '#33000000'，注释“android-35 highlight_alpha_material_dark/light”（L330-L331）。本链确认传递。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "entry/src/main/ets/components/StagePickerContent.ets",
+        "since": "2026-10-16T09:29:14.636Z",
+        "at": "2026-10-16T20:56:02.704Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/.claude/a2h-bench/memory/ui/interaction/lesson-fde79829831c2269e925.lesson.md",
+          "at": "2026-10-15T17:51:19.639Z",
+          "reason": "注入经验（v3）原文，转换者被召回提醒后整篇 Read（agent-a4c0370414f513602.jsonl:L188-L189）。做法第一步要求从主题 listSelector 指向的 drawable 取按压色、pressed 态写 backgroundColor、normal 透明；只覆盖纯色 StateListDrawable，对 Material 主题的 <ripple> 选择器没有分支，条件成立照做仍得到整块平铺。",
+          "problem": true
+        },
+        {
+          "key": "agent-a4c0370414f513602.jsonl",
+          "at": "2026-10-15T17:55:16.363Z",
+          "reason": "照经验追 listSelector 链（在 themes_material.xml 找 listSelector 项、找 drawable/ripple_material_light.xml，L196-L201 均未命中），随后写 stateStyles({ normal: 透明, pressed: .backgroundColor($r('app.color.stagepicker_item_pressed')) })，按压色登记 P-S6-UNC-002 待核（L283）。本链确认经验做法的传递。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "entry/src/main/resources/base/element/color.json",
+        "since": "2026-10-16T09:29:14.636Z",
+        "at": "2026-10-16T20:56:02.704Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/.claude/a2h-bench/memory/ui/interaction/lesson-fde79829831c2269e925.lesson.md",
+          "at": "2026-10-15T17:51:19.639Z",
+          "reason": "同上：经验原文要求取选择器按压色作 backgroundColor 底色，无 <ripple> 分支（agent-a4c0370414f513602.jsonl:L188-L189）。",
+          "problem": true
+        },
+        {
+          "key": "agent-a4c0370414f513602.jsonl",
+          "at": "2026-10-15T17:55:22.245Z",
+          "reason": "Edit 在 color.json 新增 stagepicker_item_pressed=#1F000000（ripple_material_light 原值），供选关框行 pressed 平铺（L289）；该键直到返修 X5 才删除。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "entry/src/main/ets/pages/SettingsPage.ets",
+        "since": "2026-10-16T09:29:14.636Z",
+        "at": "2026-10-16T20:56:02.704Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/spec/baseline/ui/page_0001_SokoSelActivity.md",
+          "at": "2026-10-15T17:30:42.777Z",
+          "reason": "写前输入：按压色取平台资源、画在内容下层（agent-a5d32be86e8c2e994.jsonl:L18-L19）。"
+        },
+        {
+          "key": "agent-a5d32be86e8c2e994.jsonl",
+          "at": "2026-10-15T17:58:25.701Z",
+          "reason": "未打开 listChoiceBackgroundIndicator 指向的 <ripple>，把 highlight_alpha 0.20 × 黑写成 PRESSED_ON_LIGHT #33000000 平铺（L193-L194、L272-L273）。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/entry/src/main/ets/pages/SokoSelPage.ets",
+          "at": "2026-10-16T01:23:11.223Z",
+          "reason": "交付桥梁：设置页转换者整文件 Read 回执含 PRESSED_ON_LIGHT #33000000 与 pressedOnLight（agent-a148fd46222e19bdb.jsonl:L84-L85）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/.claude/a2h-bench/memory/ui/interaction/lesson-fde79829831c2269e925.lesson.md",
+          "at": "2026-10-15T17:51:19.639Z",
+          "reason": "经验原文只给取色平铺做法（agent-a4c0370414f513602.jsonl:L188-L189）。",
+          "problem": true
+        },
+        {
+          "key": "agent-a4c0370414f513602.jsonl",
+          "at": "2026-10-15T17:55:16.363Z",
+          "reason": "照经验写选关框行 pressed backgroundColor 平铺（L283）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/entry/src/main/ets/components/StagePickerContent.ets",
+          "at": "2026-10-16T01:26:22.168Z",
+          "reason": "交付桥梁：设置页转换者 Read 回执含选关框行 stateStyles pressed backgroundColor($r stagepicker_item_pressed)（agent-a148fd46222e19bdb.jsonl:L130-L131）。"
+        },
+        {
+          "key": "agent-a148fd46222e19bdb.jsonl",
+          "at": "2026-10-16T01:57:47.375Z",
+          "reason": "Write 写出 PRESSED_ON_LIGHT '#33000000'（注释“对齐 page_0001 SokoSelPage 列表行口径”）供两偏好行 pressedOnLight，PICKER_ITEM_PRESSED '#1F000000' 供选项框行 pressed 平铺（L298-L299）；首稿在召回前已含同值（L256），未回源核对偏好行与选项框行的选择器。本链确认传递。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 7
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": 6
+        },
+        {
+          "from": 6,
+          "to": 7
+        },
+        {
+          "from": 7,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/entry/src/main/ets/components/common/SokoAlertDialog.ets",
+        "since": "2026-10-16T09:29:14.636Z",
+        "at": "2026-10-16T20:56:02.704Z"
+      },
+      "nodes": [
+        {
+          "key": "c77c7279-bc70-4f57-adce-85229d07f0ca.jsonl",
+          "at": "2026-10-16T01:21:12.991Z",
+          "reason": "派工：SokoAlertDialog 按 Material.Light 平台 AlertDialog 一比一复刻，几何按生效链 Material.Light.DarkActionBar 从本机 SDK platform res 取实值（主会话 L2221-L2227；agent-a1155719b304de950.jsonl:L1）。没有给按压色具体值。"
+        },
+        {
+          "key": "agent-a1155719b304de950.jsonl",
+          "at": "2026-10-16T02:02:31.350Z",
+          "reason": "grep 回执给出 android-34 highlight_alpha_material_light=0.5（L207-L208）。召回前的首稿已把按钮按压写成 backgroundColor('#80000000')、注释“btn_borderless_material 波纹”（L291）；确认写入时单选行与按钮都按 0.5 原值平铺 #80000000（L313-L314）——认出按钮背景是涟漪仍按原值铺满，且与同一 agent 列表行取 android-35 0.20 不一致。返修 C66 改成实测 #E9E9E9 但保留平铺（repair/3212c816-0906-464d-be11-07f0eba50527.jsonl:L3181），X5 才改径向层。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "生成期输入没有给出对照设备的 Android 版本，8.6%→6% 的涟漪稳态不透明度来自返修期 Android 12 实测，单凭 SDK res 推不出；本卡归因的是“把涟漪当纯色整块平铺、未取无界半径”，不声称生成者应当写出该具体数值。"
+  ],
+  "unresolved_targets": [
+    {
+      "key": "entry/src/main/ets/components/common/SokoImageButton.ets",
+      "reason": "返修 C28 新建的文件（repair/3212c816-0906-464d-be11-07f0eba50527.jsonl:L2396-L2398），按下 #C4C4C4 平铺由返修会话自身写入，属修复中新生问题；生成期方向键与工具钮在 SokoPage/EditPage 内联，未逐项追其按压来源。"
+    },
+    {
+      "key": "entry/src/main/ets/components/common/SokoRipple.ets",
+      "reason": "X5 修复新建的共享涟漪函数（repair/3212c816-0906-464d-be11-07f0eba50527.jsonl:L6768-L6770），生成期无此文件，没有可归因的生成偏差；它替换的平铺写法已在其他目标图中归因。"
+    }
+  ],
+  "job": "issue-b76baecf687e5ab5817a",
+  "metadata": {
+    "migration": {
+      "id": "sokoban-glm531-c77c7279-bc70-4f57-adce-85229d07f0ca",
+      "project": "Sokoban"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.300",
+        "2.1.301"
+      ]
+    },
+    "source_set_id": "sources-1be36e727cb05cb3320f",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-sokoban-glm5.31",
+        "at": "2026-10-15T16:40:54.058Z",
+        "ref": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca.jsonl:L990",
+        "request_ref": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca.jsonl:L984",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-sokoban-glm5.31",
+        "at": "2026-10-15T16:40:54.058Z",
+        "ref": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca.jsonl:L990",
+        "request_ref": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca.jsonl:L984",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "45abaa6a-d22b-4444-adea-2a735a0501f9"
+      ]
+    }
+  },
+  "revision": "9c83c994742f48def53ffcf3f91c75d939151c4bbdca2fd56ce57637bc165f4b"
+}

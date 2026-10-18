@@ -1,6 +1,6 @@
 # 按 EditText 对齐 TextInput 时，未声明 background 的输入框按主题状态背景（editTextBackground 的 9-patch，随聚焦切换并取其内边距）复刻，并显式关闭源端没有的 ArkUI 默认装饰：填充底与圆角、Password 显隐图标、清除按钮，核默认高度
 
-ID：`lesson-1150c0c721e6dc0dede4` · 版本：2
+ID：`lesson-1150c0c721e6dc0dede4` · 版本：3
 
 [本主题](index.md)
 
@@ -10,7 +10,7 @@ ID：`lesson-1150c0c721e6dc0dede4` · 版本：2
 
 ## 适用情境
 
-源输入框是裸 EditText 或其子类，用 android:password、inputType=textPassword/numberPassword 掩码，没有 TextInputLayout passwordToggleEnabled 或自绘显隐按钮，也没有清除按钮；目标用 TextInput，type 为 InputType.Password 或 Normal。 也包括源 EditText 未声明 background、padding 与高度，外观来自框架主题的 editTextBackground 状态选择器（Holo 为 textfield_default/activated_holo_dark 两张 9-patch，含端头竖线与内容内边距）。
+源输入框是裸 EditText 或其子类，用 android:password、inputType=textPassword/numberPassword 掩码，没有 TextInputLayout passwordToggleEnabled 或自绘显隐按钮，也没有清除按钮；目标用 TextInput，type 为 InputType.Password 或 Normal。 也包括源 EditText 未声明 background、padding 与高度，外观来自框架主题的 editTextBackground 状态选择器（Holo 为 textfield_default/activated_holo_dark 两张 9-patch，含端头竖线与内容内边距；Material 系为 <inset> 包着随状态切换的 9-patch 选择器 edit_text_material）。
 
 ## 例外与边界
 
@@ -22,7 +22,7 @@ ArkUI 的 Password 输入框默认显示显隐图标（showPasswordIcon 默认 t
 
 ## 做法
 
-1. 源 EditText 未声明 background 时外观是主题的状态背景：从本机 SDK 平台资源取 editTextBackground 选择器各状态的 9-patch，随 onFocus/onBlur 切换，padding 取 9-patch 内容区，高度按 wrap_content 结果（内边距 + 文字行高）设置，光标色按 textCursorDrawable；不用 border bottom 加猜测色近似。TextInput 改透明底时同时显式 borderRadius(0)。
+1. 源 EditText 未声明 background 时外观是主题的状态背景：从本机 SDK 平台资源取 editTextBackground 选择器各状态的 9-patch，随 onFocus/onBlur 切换，padding 取 9-patch 内容区，高度按 wrap_content 结果（内边距 + 文字行高）设置，光标色按 textCursorDrawable；不用 border bottom 加猜测色近似。Material 系的 editTextBackground 是 <inset> 包着 9-patch 选择器：下划线只画在 inset 后的区域内（左右各缩 inset 水平值、离控件底边 inset 底值），文字内距 = inset + 9-patch 内容区，不把 inset 当文字 padding 再让下划线满宽贴底；多行框的最小高度用源字体实际行距 × minLines 加内距，内容不足 minLines 时按 EditText 默认 gravity 竖直居中。TextInput 改透明底时同时显式 borderRadius(0)。
 2. 源端密码框没有显隐切换时，在 .type(InputType.Password) 旁写 .showPasswordIcon(false)；数字掩码的验证码框同样处理。
 3. 对齐 TextInput 时，除源 XML 写出的属性外，逐项核源端没有、ArkUI 却默认带出的外观：默认填充底、圆角与内边距、默认高度、密码显隐图标、输入时的清除按钮（可用 cancelButton 设为 INVISIBLE）、光标样式；源端没有对应项就显式关闭或覆盖。
 4. 修一处后在工程内检索 InputType.Password 等同类字段一并处理，不等用户逐页报告。
@@ -31,7 +31,7 @@ ArkUI 的 Password 输入框默认显示显隐图标（showPasswordIcon 默认 t
 
 - 真机验证输入框时打开截图目视对照（必要时裁剪输入框右端），不只看 dumpLayout 的 bounds。
 
-来源支持：2 张卡 · 2 次迁移 · 2 个应用
+来源支持：3 张卡 · 3 次迁移 · 3 个应用
 
 ## 来源（按需复核）
 
@@ -39,3 +39,5 @@ ArkUI 的 Password 输入框默认显示显隐图标（showPasswordIcon 默认 t
   卡片版本：`4aa26550cce3a384a4aa9ffe3848cf1c7c967010523cbc09787d6c214d2c67df`
 - [case-403ea87fd461ab4a0ad8](../../../store/cases/case-403ea87fd461ab4a0ad8/396b6254f2aabefa36741250da14adee7db9fc436d214e603f984286e8c606b2.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3, recommendation:4
   卡片版本：`396b6254f2aabefa36741250da14adee7db9fc436d214e603f984286e8c606b2`
+- [case-9d195db79dc4cccc7d1a](../../../store/cases/case-9d195db79dc4cccc7d1a/3ef58b6e05f43ead616304c92324166e074aa81e33e4c6ecad7b4910b60126e9.json) · 结论：recommendation:2, recommendation:7
+  卡片版本：`3ef58b6e05f43ead616304c92324166e074aa81e33e4c6ecad7b4910b60126e9`

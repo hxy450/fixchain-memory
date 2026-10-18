@@ -1,0 +1,153 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-0d11a441733b96377fb4",
+  "created_at": "2026-10-17T10:54:14.755359+00:00",
+  "migration_key": "sokoban-glm531-c77c7279-bc70-4f57-adce-85229d07f0ca",
+  "title": "把源端后台线程里后写入的 backStack 按语句顺序写成同步先写，返回键从两关来回切换变成二段退出",
+  "when": "规格提取阶段，把源端后台线程或 post 回调里写入的状态翻译成目标同步实现的契约与返回类验收时；页面实现阶段照规格落返回分支时",
+  "description": "源端方法启动后台线程（new Thread、Handler.post、异步回调），成功后在线程里写某个字段；调用方在发起它之后紧接着在主线程同步写同一字段（如 gotoStage(backStack); backStack=0）。目标端把这段后台工作改成事件循环内同步执行，或规格按代码书写顺序推导可观察结果。",
+  "summary": "源端 SokoActivity.onBackPressed 先 gotoStage(backStack) 再在主线程置 backStack=0，\n而 gotoStage 在 new Thread 里 loadStage 成功后才写 backStack=oldStg；这次后台写总晚于主线程的置 0，\n所以换关后返回键永远在两关之间来回，Retry 后返回一直重载本关，只能用向上箭头退出。\n参考规格作者（a2h-android-analyzer）写前整读了 SokoActivity.java（agent-aa2040b0997247c21.jsonl:L38-L39），\n在 sokoban_spec.md 第 9 条自己写了「gotoStage(n) 异步加载」，第 10 条却按书写顺序写成\n「若 backStack>0 先跳回该关并清零，否则退出」，验收为「3→10 后返回回到 3，再返回退回文件库」，\n游戏页行写成「backStack 二段行为」（L207-L208；首稿 L195 已如此，早于 L196 的经验提示）。\n功能规格作者再次整读同一源码并读到参考规格第 10 条（agent-a4c9d1f76affb4ff4.jsonl:L54-L55、L68-L69），\n在 F002 §races 记下「后台线程成功时写 steps=0、backStack=oldStg」，却在实现映射把 gotoStage 定为\n事件循环内同步顺序执行、称单线程「天然消除」源端竞争，没有推导这会让 gotoStage 里的写提前到调用方置 0 之前；\nAC16 沿用二段返回，AC17 又自行推出「重试后首按返回重载本关一次、再按才退出」（L120-L121，首稿 L115 已含）。\n页面转换者读到 F002 AC16/AC17（agent-acbfe02cd15ded4a4.jsonl:L74-L75）、page spec 返回键双分支与派工「返回键 backStack 二段」，\n按规格写出同步 gotoStage（成功时 this.backStack = oldStg）与 onBackAction 中\n「this.gotoStage(this.backStack); this.backStack = 0」（L298-L299），最终 backStack 恒为 0，第二次返回即退出。\n之后编译门合并 gotoStage 重载、Slice 5 改接线，都未动这两句顺序，保留到返修。\n返修在 Pixel_5 实测 Next 后返回 level51/52/51/52/51、Retry 后返回 3 次停在 level51，\n把 onBackAction 改为先取出 target 并置 backStack=0，再 gotoStage(target)，鸿蒙逐次一致\n（repair/3212c816-0906-464d-be11-07f0eba50527.jsonl:L2770-L2771、L2782-L2785、L2798-L2799、L2812）。\n偏差在规格提取：源端异步写相对调用方后续同步写的实际生效顺序被当成书写顺序，目标同步化后两次写的先后翻转；转换者照规格实现。\n注入层：三位作者写前收到的 lesson-14411595（怪癖照迁、副作用时序按源码）、lesson-843a70（源端同步初始化保持同步）、\nlesson-f19632（返回按钮与系统返回同分支）原文都不处理「后台线程写与调用方后续同步写的生效先后」；\n二段写法在两份规格的首稿里已存在，提示不是来源。转换者收到的 f19632 提醒写作「返回两段式」，是对派工措辞的回声；\n功能规格作者收到的 843a70 提醒把 gotoStage 归入「源端同步初始化」，超出原文范围，但同步映射在首稿已有，最终稿也只把该条限于 highscores.load/onCreate 链，未成为本偏差成因。\n",
+  "recommendations": [
+    "规格提取时，凡源端在 Thread、Handler.post 或异步回调里写的字段，先查调用方发起后是否还同步写同一字段；按运行时实际生效顺序（后台写落在调用方后续语句之后）推导可观察结果，不按代码书写顺序。",
+    "把源端后台工作映射为目标同步调用时，在契约里列出异步体内写入、且调用方发起后还会再写的字段，写明目标端要把调用方的写挪到同步调用之前，以保持源端的最终值；不以「单线程天然消除竞争」为由改变可观察结果。",
+    "为返回、撤销、重试这类可重复操作写验收时，连续走第 1、2、3 次并逐次写出结果（含 Retry 后、换关后两种起点），不只断言第一次；源端有后台写参与时，以设备实测序列定 AC。",
+    "本应用：SokoPage.onBackAction 先取 target=backStack 并置 backStack=0，再 gotoStage(target)，由成功分支写 backStack=旧关；验收为 Next 后返回 level51/52 交替、Retry 后返回停在本关、向上箭头回列表。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/entry/src/main/ets/pages/SokoPage.ets",
+        "since": "2026-10-16T09:29:14.636Z",
+        "at": "2026-10-16T20:56:02.704Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/sokoban-tomari-80c7d44/app/src/main/java/su/drsouko/SokoActivity.java",
+          "at": "2026-10-15T15:32:07.164Z",
+          "reason": "正常输入：参考规格作者 Read 回执给出 gotoStage 在 new Thread 内 loadStage 成功后才写 backStack=oldStg，onBackPressed 先 gotoStage(backStack) 再主线程 backStack=0，足以判定后台写晚于置 0（agent-aa2040b0997247c21.jsonl:L38-L39）。"
+        },
+        {
+          "key": "agent-aa2040b0997247c21.jsonl",
+          "at": "2026-10-15T15:50:28.262Z",
+          "reason": "读到上述源码，并在同一规格第 9 条写明 gotoStage 异步加载，第 10 条却按书写顺序写成「先跳回该关并清零，否则退出」，验收「3→10 后返回回 3，再返回退回文件库」；源端生效顺序到规格在此最早偏离（同转录 L207-L208，首稿 L195 已同）。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/spec/ref/sokoban_spec.md",
+          "at": "2026-10-15T16:14:55.902Z",
+          "reason": "交付桥梁：功能规格作者按 offset 412 读取 §5.2，回执含第 9 条异步加载与第 10 条二段返回及其验收（agent-a4c9d1f76affb4ff4.jsonl:L68-L69）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/sokoban-tomari-80c7d44/app/src/main/java/su/drsouko/SokoActivity.java",
+          "at": "2026-10-15T16:14:43.931Z",
+          "reason": "正常输入：功能规格作者整读源码，回执同样给出 gotoStage 线程体内写 backStack=oldStg 与 onBackPressed 的先后（agent-a4c9d1f76affb4ff4.jsonl:L54-L55）。"
+        },
+        {
+          "key": "agent-a4c9d1f76affb4ff4.jsonl",
+          "at": "2026-10-15T16:33:50.712Z",
+          "reason": "收到源码与参考规格后，F002 §races 写明后台线程成功时写 backStack=oldStg，实现映射却把 gotoStage 定为事件循环内同步执行并称天然消除竞争；AC16 沿用二段返回，AC17 自推「重试后首按返回重载一次、再按退出」。既有正确源码与自己的线程分析仍未推出生效顺序翻转，是第二个偏差点（同转录 L120-L121，首稿 L115 已含）。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-sokoban-glm5.31/spec/baseline/features/F002-game-play.md",
+          "at": "2026-10-15T17:32:45.775Z",
+          "reason": "交付桥梁：页面转换者整读 F002，回执含 races 段、gotoStage 同步映射行与 AC16 二段返回、AC17 重试链（agent-acbfe02cd15ded4a4.jsonl:L74-L75）。"
+        },
+        {
+          "key": "agent-acbfe02cd15ded4a4.jsonl",
+          "at": "2026-10-15T18:00:07.404Z",
+          "reason": "按 F002 AC16 与派工「返回键 backStack 二段」，Write 写出同步 gotoStage（成功时 this.backStack = oldStg）及 onBackAction「this.gotoStage(this.backStack); this.backStack = 0」，把错误契约传到目标；本链确认传递，不另推定其独立失职（同转录 L1、L298-L299）。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 5
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": 6
+        },
+        {
+          "from": 6,
+          "to": 7
+        },
+        {
+          "from": 7,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-0d11a441733b96377fb4",
+  "metadata": {
+    "migration": {
+      "id": "sokoban-glm531-c77c7279-bc70-4f57-adce-85229d07f0ca",
+      "project": "Sokoban"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.300",
+        "2.1.301"
+      ]
+    },
+    "source_set_id": "sources-1be36e727cb05cb3320f",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-sokoban-glm5.31",
+        "at": "2026-10-15T16:40:54.058Z",
+        "ref": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca.jsonl:L990",
+        "request_ref": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca.jsonl:L984",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-sokoban-glm5.31",
+        "at": "2026-10-15T16:40:54.058Z",
+        "ref": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca.jsonl:L990",
+        "request_ref": "generation/c77c7279-bc70-4f57-adce-85229d07f0ca.jsonl:L984",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "45abaa6a-d22b-4444-adea-2a735a0501f9"
+      ]
+    }
+  },
+  "revision": "d84a0178405139ee9a10a50eec8d7ab50b6dc3c5adfa04a0bf0a7d91013b9297"
+}
