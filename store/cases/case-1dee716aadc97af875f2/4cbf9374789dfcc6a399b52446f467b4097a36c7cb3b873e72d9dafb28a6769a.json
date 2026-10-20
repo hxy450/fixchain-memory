@@ -1,0 +1,255 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-1dee716aadc97af875f2",
+  "created_at": "2026-10-17T03:57:01.235751+00:00",
+  "migration_key": "/private/tmp/claude-502/-Users-fengyi-Workspace-migbot-set-l123-cc-glm53/a9f6942f-6659-40bd-bc16-6616949070fb/scratchpad/distill/pool2",
+  "title": "把 Android 退后台仍继续的音频播放只迁成前台 AVPlayer，漏掉 AVSession 与 AUDIO_PLAYBACK 长时任务三要素",
+  "when": "规格提取阶段为 MediaPlayer→AVPlayer 写跨栈映射行与生命周期 AC 时；服务实现阶段为音频播放控制器选择 AVPlayer 接入方式、并向 closer 交接 module.json5 配置清单时",
+  "description": "Android 用 MediaPlayer 内联播放本地音频（录音附件等），onPause/切后台不调用 stop/release，只有显式退出或再次点击才停止，即退后台继续播放至结束；目标用 AVPlayer 播放，工程 module.json5 尚无 backgroundModes/requestPermissions，且项目 skill 已给出 HarmonyOS 后台音频需 AVSession + AUDIO_PLAYBACK 长时任务 + KEEP_BACKGROUND_RUNNING 三要素。",
+  "summary": "规格阶段：F006 spec 作者（bc655f68…:a642ca5fbbf872149，批次 c4-03）写前整文件 Read 了 DetailFragment.java\n（agent-a642ca5fbbf872149.jsonl:L67-L68，07:34:19Z）：onPause:369-386 只注销 EventBus、置 activityPausing、saveNote、收键盘，\n不触碰 mPlayer；stopPlaying 的调用方只有 goHome:1032 与 playback:1725/1731，即 Android 退后台时播放继续到 onCompletion。\n但 Write 出的 F006-attachments.md 跨栈映射行把「MediaPlayer 内联播放 → AVPlayer + fd」判为「中 | 行为等价」，\nAC37-AC39 只覆盖三态切换、完成/停止恢复、prepare 失败，没有任何「切后台继续播放」的 AC 或平台差异（HARD-DIV/PD）登记\n（同转录 L113，回执 L114 07:43:25Z；该行后来原样出现在 worker 的读取回执 agent-a1b6e42d3192efc9d.jsonl:L26 第 114 行、第 201-204 行）。\n实现阶段：Slice 16 worker（fcc67332…:a1b6e42d3192efc9d）写前读到了上述 spec（L25-L26），按派工加载 arkts-media-playback skill\n（L117，正文 L119 17:28:14Z），该 skill 明文给出「后台播放三要素（module.json5 backgroundModes audioPlayback +\nKEEP_BACKGROUND_RUNNING 权限 + 代码 startBackgroundRunning/createAVSession）缺一不可」及「常见错误 4：缺少后台播放配置」；\n其 grep 回执也只返回 goHome:1032 与 playback 内两处 stopPlaying 调用、无生命周期调用方（L96-L97），并 Read 了 1718-1853 的\nplayback/startPlaying/stopPlaying 源码（L104-L105）。Write AudioPlaybackController.ets 却只写 createAVPlayer + fd:// +\nstateChange/error 回调与 release，头注释把锚点限定为 playback/startPlaying/stopPlaying 三段，未引入 avSession/backgroundTaskManager\n（L214，回执 L215 17:37:22Z）。同一 worker Read 了 module.json5（L149-L150，当时无 requestPermissions、无 backgroundModes），\n因写盘边界禁碰 module.json5，把配置缺口写进 slice-16-source-notes.md 交接 closer，但只列了 camera skills 与\nohos.permission.MICROPHONE（L264 第 80-81 行，回执 L265 17:40:11Z；最终信封 L294 同）。group-closer（fcc67332…:a1bebb022b2aa0159）\nRead 该 source-notes（L16-L17 18:03:51Z）后按单 Edit module.json5 加入 camera skills 与 PUBLISH_AGENT_REMINDER/VIBRATE/MICROPHONE\n三项权限（L477，回执 L478 18:45:02Z），没有 backgroundModes 与 KEEP_BACKGROUND_RUNNING。偏差位于「源码生命周期事实 → 规格映射行」\n与「skill 三要素要求 → 控制器实现/配置交接」两环；生成期其后对两文件的写入均未触及后台播放（迁移池中无 AVSession/backgroundModes 写入）。\n返修期：第 1 轮子代理 a62bb893 读到的控制器仍为 120 行 AVPlayer 版（agent-a62bb893d8124da5d.jsonl:L13-L14 15:45Z），其 Write（L532）\n与 G3b 子代理 afe325235 的重写（L397 21:12Z）都未加 AVSession，后者把 P-08 记为「平台差异 D-5：接入会新增控制中心播控卡片」\n（L459/L483）。批次 5 双机对照（修复 97）实测 HMOS 退后台被 AudioBackgroundManager 静音暂停而参照机继续播放，\n主会话才在控制器加入 createAVSession + startBackgroundRunning(AUDIO_PLAYBACK)、停止/播完/出错/页面销毁即 stopBackgroundRunning + destroy\n（主会话 L39120/L39122 2026-10-15T18:44-18:45Z），并以脚本写入 module.json5 backgroundModes audioPlayback 与\nKEEP_BACKGROUND_RUNNING（L39147-L39148 18:45:42Z，hvigor BUILD SUCCESSFUL）；D-5 撤销。\n",
+  "recommendations": [
+    "规格阶段为 MediaPlayer/ExoPlayer 写 AVPlayer 映射行时，先核对宿主的 onPause/onStop/onDestroy 是否调用 pause/stop/release：若不调用（本例 onPause:369-386 不碰 mPlayer，仅 goHome:1032 停止），就在 AC 中显式写出「切后台继续播放至结束」并标为 HARD-DIV/PD，不可直接判「行为等价」。",
+    "实现阶段凡 Android 播放可跨越后台，AVPlayer 接入按 skill 三要素一次配齐：进入 playing 后 createAVSession(context,'audio')+setAVPlaybackState 与 startBackgroundRunning(AUDIO_PLAYBACK, wantAgent)，停止/完成/出错/页面销毁时 stopBackgroundRunning+destroy；不要只实现 playback/startPlaying/stopPlaying 三段的前台等价。",
+    "worker 因写盘边界不能改 module.json5 时，交接给 closer 的配置清单要从所用 skill 的 module.json5 检查清单逐项抄全（本例应含 backgroundModes: [audioPlayback] 与 ohos.permission.KEEP_BACKGROUND_RUNNING），而不只列运行时权限；closer 落地前对照同一清单核一遍。",
+    "把「接入 AVSession 会新增控制中心卡片」这类取舍记为平台差异前，先在真机做一次退后台实测（dumpsys audio / AudioBackgroundManager 日志）确认源端与目标端行为是否一致；源端继续播放而目标端被系统静音，属于缺失功能而非平台不可行。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/services/AudioPlaybackController.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/java/it/feio/android/omninotes/DetailFragment.java",
+          "at": "2026-10-01T07:34:19.839Z",
+          "reason": "正常输入：spec 作者整文件 Read 回执（agent-a642ca5fbbf872149.jsonl:L67-L68）含 onPause:369-386（注销 EventBus、activityPausing=true、saveNote、收键盘，不碰 mPlayer）、goHome:1031-1032 stopPlaying、startPlaying:1753-1774 的 onCompletion 自释放；足以判定 Android 退后台时播放继续到结束，必须作为生命周期要求写入规格。"
+        },
+        {
+          "key": "bc655f68-6f49-4bcf-ab64-aa45d7a58cc2:a642ca5fbbf872149",
+          "at": "2026-10-01T07:43:25.455Z",
+          "reason": "已读到上述源码，Write F006-attachments.md 时把「MediaPlayer 内联播放 → AVPlayer + setFdSource」记为「中 | 行为等价」，H 组 AC37-AC39 只写三态切换/恢复缩略图/prepare 失败，没有「切后台继续播放」的 AC、HARD-DIV 或 PD 登记（同转录 L113，回执 L114）。规格在此漏掉后台续播要求。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/spec/baseline/features/F006-attachments.md",
+          "at": "2026-10-01T17:26:24.251Z",
+          "reason": "交付桥梁：Slice 16 worker 的 Read 回执仍是同一内容——第 114 行「AVPlayer … 中 | 行为等价」、第 201-204 行 AC37-AC39 无后台项（agent-a1b6e42d3192efc9d.jsonl:L25-L26）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/.claude/skills/arkts-media-playback/SKILL.md",
+          "at": "2026-10-01T17:28:14.462Z",
+          "reason": "正常输入：worker 按派工 Skill 加载 arkts-media-playback，正文含「后台播放三要素（module.json5 backgroundModes audioPlayback + KEEP_BACKGROUND_RUNNING + 代码 startBackgroundRunning/createAVSession）缺一不可」与「常见错误 4：缺少后台播放配置 → 切到后台后被系统杀死」（agent-a1b6e42d3192efc9d.jsonl:L117-L119）。连同其 grep 回执中 stopPlaying 只有 goHome:1032 与 playback 两处调用方（L96-L97），足以说明前台 AVPlayer 不等价于 Android 行为。"
+        },
+        {
+          "key": "fcc67332-0774-45b4-a72c-d2b6a33207b8:a1b6e42d3192efc9d",
+          "at": "2026-10-01T17:37:22.026Z",
+          "reason": "已收到上述 spec 与 skill，Write AudioPlaybackController.ets 却只实现 createAVPlayer + fd:// + stateChange/error 回调 + release，头注释把锚点限定为 playback/startPlaying/stopPlaying 三段，未引入 avSession/backgroundTaskManager，也未在任何位置登记后台播放缺口（L214，回执 L215）。HMOS 退后台被系统静音暂停由此产生，并保留到返修前（返修第 1 轮读到的仍是 120 行 AVPlayer 版，agent-a62bb893d8124da5d.jsonl:L13-L14）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 5
+        },
+        {
+          "from": 4,
+          "to": 5,
+          "force": true,
+          "reason": "worker 按派工调用 Skill 工具加载 arkts-media-playback（L117），回执后 L119 注入的正文即该 skill 目录 SKILL.md 全文，含 §后台播放三要素/检查清单（backgroundModes audioPlayback、KEEP_BACKGROUND_RUNNING、startBackgroundRunning、createAVSession）与常见错误 4；这是 worker 写前对该文件的真实读取。",
+          "evidence": [
+            {
+              "source": "migration/fcc67332-0774-45b4-a72c-d2b6a33207b8/subagents/agent-a1b6e42d3192efc9d.jsonl",
+              "line": 117
+            },
+            {
+              "source": "migration/fcc67332-0774-45b4-a72c-d2b6a33207b8/subagents/agent-a1b6e42d3192efc9d.jsonl",
+              "line": 118
+            },
+            {
+              "source": "migration/fcc67332-0774-45b4-a72c-d2b6a33207b8/subagents/agent-a1b6e42d3192efc9d.jsonl",
+              "line": 119
+            }
+          ]
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/module.json5",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/.claude/skills/arkts-media-playback/SKILL.md",
+          "at": "2026-10-01T17:28:14.462Z",
+          "reason": "正常输入：skill 的 module.json5 检查清单明确要求 abilities 声明 backgroundModes: [audioPlayback]、requestPermissions 声明 ohos.permission.KEEP_BACKGROUND_RUNNING（agent-a1b6e42d3192efc9d.jsonl:L117-L119 §后台播放三要素/检查清单）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/module.json5",
+          "at": "2026-10-01T17:29:41.235Z",
+          "reason": "正常输入：worker Read 回执显示当时 EntryAbility 只有 home skill，整个文件无 requestPermissions、无 backgroundModes（agent-a1b6e42d3192efc9d.jsonl:L149-L150）；worker 随即判断「写盘边界禁碰 module.json5 → 登记 deferred-work」（L151）。"
+        },
+        {
+          "key": "fcc67332-0774-45b4-a72c-d2b6a33207b8:a1b6e42d3192efc9d",
+          "at": "2026-10-01T17:40:11.390Z",
+          "reason": "已知 skill 三要素与 module.json5 现状，Write slice-16-source-notes.md 交接 closer 时只写「module.json5 缺 entity.system.camera + ohos.want.action.camera skills 与 ohos.permission.MICROPHONE requestPermissions」，没有 backgroundModes 与 KEEP_BACKGROUND_RUNNING（L264 第 80-81 行，回执 L265；最终信封 L294 的 deferred-work 上报同样只有这两项）。配置缺口在此交接中丢失。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/spec/execution/source-understanding/slice-16-source-notes.md",
+          "at": "2026-10-01T18:03:51.145Z",
+          "reason": "交付桥梁：group-closer 的 Read 回执第 80-81 行即上述只含 camera skills + MICROPHONE 的清单（agent-a1bebb022b2aa0159.jsonl:L16-L17）。"
+        },
+        {
+          "key": "fcc67332-0774-45b4-a72c-d2b6a33207b8:a1bebb022b2aa0159",
+          "at": "2026-10-01T18:45:02.660Z",
+          "reason": "实际读到该清单后，按「E12: module.json5（camera skills + 三项权限）」单次 Edit 加入 entity.system.camera skill 与 PUBLISH_AGENT_REMINDER/VIBRATE/MICROPHONE 权限，没有 backgroundModes 与 KEEP_BACKGROUND_RUNNING（L476-L477，回执 L478）。本链确认传递，不另推定其独立失职；生成期其后的 module.json5 写入（a2d070ead L142、ac7db1f1 L319、aec7734f L67 等）均为位置/shortcuts/权限，不涉后台模式。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "worker 按派工调用 Skill 工具加载 arkts-media-playback（L117），回执后 L119 注入的正文即该 skill 目录 SKILL.md 全文，含 §后台播放三要素/检查清单（backgroundModes audioPlayback、KEEP_BACKGROUND_RUNNING、startBackgroundRunning、createAVSession）与常见错误 4；这是 worker 写前对该文件的真实读取。",
+          "evidence": [
+            {
+              "source": "migration/fcc67332-0774-45b4-a72c-d2b6a33207b8/subagents/agent-a1b6e42d3192efc9d.jsonl",
+              "line": 117
+            },
+            {
+              "source": "migration/fcc67332-0774-45b4-a72c-d2b6a33207b8/subagents/agent-a1b6e42d3192efc9d.jsonl",
+              "line": 118
+            },
+            {
+              "source": "migration/fcc67332-0774-45b4-a72c-d2b6a33207b8/subagents/agent-a1b6e42d3192efc9d.jsonl",
+              "line": 119
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-1dee716aadc97af875f2",
+  "metadata": {
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.247",
+        "2.1.296",
+        "2.1.300"
+      ]
+    },
+    "source_set_id": "sources-fef5281fb5eb1e655dea",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos",
+        "at": "2026-10-01T08:07:31.804Z",
+        "ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1119",
+        "request_ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1117",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos",
+        "at": "2026-10-01T08:07:31.804Z",
+        "ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1119",
+        "request_ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1117",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes",
+        "at": "2026-10-13T15:34:04.077Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L121",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L120",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes",
+        "at": "2026-10-13T15:34:04.077Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L121",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L120",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes",
+        "at": "2026-10-14T01:47:40.558Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L159",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L158",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes",
+        "at": "2026-10-14T01:47:40.558Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L159",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L158",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.10"
+  },
+  "revision": "4cbf9374789dfcc6a399b52446f467b4097a36c7cb3b873e72d9dafb28a6769a"
+}

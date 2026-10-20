@@ -1,6 +1,6 @@
 # ui/theme
 
-主题、语义色、排版样式、控件默认样式与 style 继承属性（圆角、高度、渐变、字号）的迁移：宿主、foundation 组件、依赖库与 Android 框架主题（Theme.Holo 等，值取本机 SDK 平台资源）隐式提供的外观，ArkUI 组件自带默认外观的显式覆盖，Material 库组件与框架主题组件（如 PreferenceActivity 偏好列表）的默认几何与内部留白，深浅主题状态的可观察与渲染期取色、应用内切换时命令式取色与系统栏的重解析，?attr 主题属性色按各主题导出颜色键、深色资源键的同步追加，多字重字体的注册，被引用 drawable 的取值，同时设圆角与描边时 border() 对圆角的覆盖，Compose Brush 渐变背景，视觉属性逐项取自源布局与适配器，颜色约束的写法，以及按色值与字号选择资源键，DayNight 框架默认色按深浅两态成对建 token
+主题、语义色、排版样式、控件默认样式与 style 继承属性（圆角、高度、渐变、字号）的迁移：宿主、foundation 组件、依赖库与 Android 框架主题（Theme.Holo 等，值取本机 SDK 平台资源）隐式提供的外观，ArkUI 组件自带默认外观的显式覆盖，Material 库组件与框架主题组件（如 PreferenceActivity 偏好列表）的默认几何与内部留白，深浅主题状态的可观察与渲染期取色、应用内切换时命令式取色与系统栏的重解析，?attr 主题属性色按各主题导出颜色键、深色资源键的同步追加，字体文件的注册与按控件应用（多字重、三方 typeface 属性），被引用 drawable 的取值，同时设圆角与描边时 border() 对圆角的覆盖，Compose Brush 渐变背景，视觉属性逐项取自源布局与适配器，颜色约束的写法，以及按色值与字号选择资源键，DayNight 框架默认色按深浅两态成对建 token
 
 [上一级](../index.md)
 
@@ -18,12 +18,12 @@
 - [同时需要圆角与描边时把 radius 写进 .border()](lesson-8b7c4ece5e5bf7704a44.lesson.md)
   - 时机：界面实现阶段，为同一视图设置圆角与描边（按钮 cornerRadius 加 stroke、OutlinedBox、GradientDrawable setStroke）时
   - 情境：目标写成 .borderRadius(X) 后接不带 radius 的 .border({ width, color })；映射参考可能把圆角与描边分列成两个属性。
-- [多字重字族按“族-字重”逐文件 registerFont，排版样式引用注册名，入口调用一次注册](lesson-046baeb5ffbb10a6abc5.lesson.md)
-  - 时机：主题令牌阶段，把 Compose FontFamily(Font(R.font.x, weight), ...) 迁到 ArkUI，或确定全局字体注册由谁调用时
-  - 情境：源字族为同一族声明多个字重文件，资源阶段已把字体文件放进 rawfile；目标要先 registerFont 才能用 fontFamily 引用；主题令牌、公共组件、页面与入口由不同任务分批生成。
 - [委托 Material/AppCompat 库或平台框架（Theme.Holo、android.preference、框架 AlertDialog）提供外观的组件，先在本机 SDK 平台资源或依赖库 res（含 values-land、values-sw600dp 等限定目录）查默认外观与几何，查过仍无才标待核；内部留白按库规则分侧落实](lesson-5a82d62ff7e087616968.lesson.md)
   - 时机：规格提取与界面实现阶段，翻译只显式传入部分参数、其余外观交给 Material3 库默认的组件（Slider、Snackbar、TopAppBar 等），或源码没写 padding、留白由库组件内部布局提供时；为 View 体系的工具栏、底部导航、FAB、按钮、TabLayout、偏好分组标题确定高度、字号字重、圆角与配色，而布局 XML 未写具体值时；把 android.preference 的 PreferenceActivity/PreferenceFragment 偏好列表与 ListPreference、框架 AlertDialog 转成目标行与对话框，确定行几何、分类头、分隔线、对话框几何与行内控件类型时；判断这些默认值是否随横竖屏或窗口宽度变化时
   - 情境：源组件只传少数颜色或尺寸，thumb 形状、留隙、刻度、容器高度、内距等来自库默认与 MaterialTheme；TopAppBar 等容器的标题槽、导航与动作槽留白由库内部布局决定，源码本身没有 padding 修饰符；目标组件的内置样式与之不同。也包括 View 体系源用 ?attr/actionBarSize、MaterialToolbar、BottomNavigationView、TabLayout、未写 style 的 FAB 或 OutlinedButton，取值由 Theme.Material3.*、MaterialComponents 或 AppCompat 父主题与组件默认样式决定，且库在 values-land、values-sw600dp 下另有取值（如 AppCompat 横屏 actionBarSize 48dp、Toolbar 标题 14dp；TabLayout 横屏 tabGravity=center），应用自身 res 没有对应覆盖。也包括 PreferenceFragment（preference_material）行、ListView 分隔线、框架 AlertDialog 与 ListPreference 单选对话框，几何在本机 SDK 平台资源里。也包括 View 体系 Activity 继承 android.preference.PreferenceActivity、主题为 Theme.Holo，页面没有布局 XML，复选框、分类头、行高与内边距、列表左右内边距、分隔线规则由平台 preference_holo 等布局与资源隐式提供。
+- [字体文件逐个 registerFont（多字重按“族-字重”命名），排版样式与对应 Text 引用注册名；不以 fontWeight 合成粗体代替字体文件](lesson-046baeb5ffbb10a6abc5.lesson.md)
+  - 时机：主题令牌与界面实现阶段，把 Compose FontFamily(Font(R.font.x, weight), ...) 或 View 布局里按控件指定的字体文件（三方 TextView 的 typeface 属性、android:fontFamily）迁到 ArkUI，或确定全局字体注册由谁调用时
+  - 情境：源字族为同一族声明多个字重文件，资源阶段已把字体文件放进 rawfile；目标要先 registerFont 才能用 fontFamily 引用；主题令牌、公共组件、页面与入口由不同任务分批生成。 也包括 View 布局用三方库属性（如 pixlui:typeface）或 android:fontFamily 给不同 TextView 指定不同字体文件，映射基线只写“→ fontFamily，字体入 rawfile/fonts”。
 - [布局引用的 @drawable（progressDrawable、背景 shape、标签背景、光标 shape）先打开取数值：高度、圆角、轨道色、渐变、描边与光标宽色写进规格与实现](lesson-771d1ba1a032b769097a.lesson.md)
   - 时机：规格提取与界面实现阶段，为进度条、搜索框、分组标签等引用 drawable 的控件确定高度、圆角、颜色与描边时
   - 情境：源布局以 progressDrawable=@drawable/xxx、background=@drawable/bg_xxx 引用 layer-list/shape 资源，尺寸、圆角、轨道色、渐变和描边写在被引用文件里；目标工程可能已有名称相近、含义不同的颜色资源。也包括 EditText 用 textCursorDrawable 引用 shape 定义光标宽度与颜色，且只设在部分字段上。

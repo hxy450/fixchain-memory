@@ -1,6 +1,6 @@
 # 规格提取把 AndroidManifest 声明（含未声明的平台缺省）解析成实际行为与鸿蒙目标值并指派实现：未声明 screenOrientation 时 EntryAbility 写 orientation: auto_rotation_restricted；未声明 windowSoftInputMode 时按是否含可滚动视图取 RESIZE/OFFSET，并写出首屏焦点与是否弹键盘；“默认”不能作目标值
 
-ID：`lesson-c1d7ec16bb02aa152c33` · 版本：3
+ID：`lesson-c1d7ec16bb02aa152c33` · 版本：4
 
 [本主题](index.md)
 
@@ -26,7 +26,7 @@ ID：`lesson-c1d7ec16bb02aa152c33` · 版本：3
 
 - 解除旋转锁并转 90°，窗口宽高互换、横屏分支出现；点输入框弹出键盘时顶部内容不被推出屏幕、内容区收缩。
 
-来源支持：5 张卡 · 3 次迁移 · 3 个应用
+来源支持：6 张卡 · 已知 3 次迁移（部分未记录） · 已知 3 个应用（部分未记录）
 
 ## 来源（按需复核）
 
@@ -34,6 +34,8 @@ ID：`lesson-c1d7ec16bb02aa152c33` · 版本：3
   卡片版本：`d25c19688c8b9de99ca7f74859821e8e30e81052b97268686628491ed8614154`
 - [case-5e35bb283520acf3bd35](../../../store/cases/case-5e35bb283520acf3bd35/954c420a6eb53234d9a40e9851863e13e6a2b9e3e2195abc6f71fcfe048dcf4f.json) · 结论：recommendation:1
   卡片版本：`954c420a6eb53234d9a40e9851863e13e6a2b9e3e2195abc6f71fcfe048dcf4f`
+- [case-69a2766b2050118ebd5a](../../../store/cases/case-69a2766b2050118ebd5a/6d5ac1c6e6d2ab3eae9fdfa84fcbe2a5898f18f062dd05c39baed1dcb8862237.json) · 结论：diagnosis, recommendation:1
+  卡片版本：`6d5ac1c6e6d2ab3eae9fdfa84fcbe2a5898f18f062dd05c39baed1dcb8862237`
 - [case-c6c056189eaa36176e28](../../../store/cases/case-c6c056189eaa36176e28/2cb68533b47b0adbcc44f6714eab0ed4eee48b603073820527988ebacca82229.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
   卡片版本：`2cb68533b47b0adbcc44f6714eab0ed4eee48b603073820527988ebacca82229`
 - [case-c96bdbf4d2e0fb58e797](../../../store/cases/case-c96bdbf4d2e0fb58e797/690e3e8044afac976d280680a439898d1d9c1767283cf4bcd2d13a82c3977cf3.json) · 结论：diagnosis, recommendation:1, recommendation:3

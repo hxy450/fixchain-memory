@@ -1,6 +1,6 @@
 # ui/pager
 
-分页与标签容器：ViewPager/ViewPager2 到 Swiper 的页数与手势（禁滑方式）、初始页定位、自绘 tab 与分页的双向联动，自绘日历的翻页容器以及相邻页数据的合并提交与查询范围
+分页与标签容器：ViewPager/ViewPager2 到 Swiper 的页数与手势（禁滑方式）、初始页定位、自绘 tab 与分页的双向联动，自绘日历的翻页容器以及相邻页数据的合并提交与查询范围，ViewPager（含三方壳）松手定页与归位物理
 
 [上一级](../index.md)
 
@@ -15,6 +15,10 @@
 - [源端“首批数据到达后默认选中首项并通知父级”迁成 @Param 子组件时只初始化一次：items 引用更新只同步高亮，不重置初始化标志、不回调第 0 项](lesson-b6abeeb9b9476b1f1f4d.lesson.md)
   - 时机：页面或子组件转换阶段，把源端 Tab 列表的默认选中与父分页联动写成 ArkUI V2 的 @Param/@Monitor/@Event 逻辑时
   - 情境：源端 Tab Fragment 只在一次性装载分类后选中首项并回调父 ViewPager，翻页时父级只调用 setSelect(position) 同步；目标子组件接收 @Param items/selectedIndex，并经 @Event 让父 Swiper 切页，父组件可能每次渲染都重新映射出 items 数组。
+- [源端翻页容器是 ViewPager（含三方壳封装）时按其松手定页与归位规则实现，不沿用 Swiper 缺省翻页物理](lesson-d854f88ae2bbf882e85f.lesson.md)
+  - 时机：规格提取与界面实现阶段，为源端 ViewPager（androidx/support ViewPager，或引导页、图库查看器等基于它的三方壳）选择目标翻页容器并写翻页交互约束时
+  - 情境：源 Activity 直接使用 ViewPager，或继承基于 ViewPager 的三方壳（库为 AAR、仓内无源码），未自定义 Scroller、未覆写定页；映射参考或规格只写「ViewPager → Swiper 标准映射」，目标准备用 Swiper(index, loop:false) 承接，只把 offscreenPageLimit 映成 cachedCount。
+  - 例外：源端是 ViewPager2 等不基于 ViewPager 的翻页容器，或自定义了 Scroller、覆写了定页逻辑：按其自身实现另行核对；项目已批准沿用目标平台翻页物理并登记为差异
 - [翻页视图的相邻页数据按源端先合并、落定后一次提交，查询范围按页面实际格子的首尾日期](lesson-85b33ff729ab0514a20a.lesson.md)
   - 时机：数据接线与修复阶段，为分页日历实现首次加载、按方向预加载与相邻页数据提交时
   - 情境：源端并发查询当前页和前后页，合并后一次提交给视图，查询范围取自按格子计算的起止日期（含上月末与下月初）；目标在滑动手势回调中触发预加载，结果到达就写入正在移动的 Canvas。

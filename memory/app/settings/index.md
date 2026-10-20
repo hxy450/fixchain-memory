@@ -1,11 +1,20 @@
 # app/settings
 
-设置项迁移：偏好键与默认值之外，每个开关的运行期消费方与应用入口；设置保存的副作用（远端、本地缓存、刷新事件）与切换即持久化界面状态的恢复，应用内语言切换的即时生效
+设置项迁移：偏好存储的同步装载与读写时序，偏好键与默认值（同一键按读点的不同缺省值）之外，每个开关的运行期消费方与应用入口；onPreferenceChange 返回值决定的落值时刻与验证补偿；设置保存的副作用（远端、本地缓存、刷新事件）与切换即持久化界面状态的恢复，应用内语言切换的即时生效
 
 [上一级](../index.md)
 
 ## 本级经验
 
+- [SharedPreferences 迁移保留同步时序：onCreate 用 getPreferencesSync 装载，读写走 Sync 接口、异步 flush](lesson-9fa98065e5de983b7c01.lesson.md)
+  - 时机：基础层偏好迁移阶段，设计偏好存储封装的初始化与读写时序时；派工者为该任务写验收标准时
+  - 情境：源端用 SharedPreferences（或其封装库）在 Application.onCreate 构建，之后任意读都等待载入完成；目标改用 @ohos.data.preferences，派工或封装设想“异步载入 + 内存缓存 + 写队列”，载入完成前的读返回调用方默认值。
+- [onPreferenceChange 返回 true 即接受并持久化新值：其中发起的验证按源顺序先落值再补偿，取消不回滚](lesson-8b84279c4ecbeaf26e3e.lesson.md)
+  - 时机：设置页实现阶段，把 Preference 的 onPreferenceChange 监听（含其中发起的验密、确认弹窗）翻译成目标开关回调时；规格提取阶段描述这类联动流程时
+  - 情境：源端在 onPreferenceChange 里发起异步验证后立即 return true，验证成功的回调只做补偿动作（如再次 setChecked 同值），取消没有回滚分支；目标用受控 Toggle 与回调实现，写者倾向“先回滚、验证成功才落值”。
+- [同一偏好键在不同读点用不同缺省值时按读点保留，不收敛成键常量上的单一默认](lesson-0c355313bc2e9e0cb7ab.lesson.md)
+  - 时机：偏好键表与访问器设计阶段，以及页面实现中修改某个偏好读取的缺省值时
+  - 情境：源端同一键在不同调用点以不同 defValue 读取（如过滤逻辑读 false、菜单显隐读 true）；目标准备在键常量或单一访问器里集中定义一个默认值，键表或规格摘要只写了一个缺省。
 - [源端 SharedPreferences.Editor 累积 put 后一次 commit 的流程（恢复、导入），目标先暂存、全部校验通过后再 put 并 flush：preferences.putSync 立即改共享实例，中途失败不能留下部分写入](lesson-24bc4929b771a9a33ef4.lesson.md)
   - 时机：数据层实现阶段，迁移 Editor 批量写入后 commit/apply 的恢复或导入流程时
   - 情境：源端遍历输入逐键 editor.putX，遇到未知键或格式错误时抛出，末尾才 commit；目标准备逐键 putSync 到共享 preferences 实例。

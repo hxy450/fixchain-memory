@@ -1,14 +1,14 @@
 # arkts/async
 
-源端同步调用改成 ArkTS 异步（Promise/async）后新增的失败分支、加载态，异步初始化与用户输入的先后顺序，依赖先后生效的连续平台调用在网关内串行，单线程执行器改成 Promise 串行队列后的重入，仓库方法前置失败分支（未初始化、未授权）的错误通道，以及 Kit API catch 值（BusinessError）的取消息与按错误码分类，以及源 API 以返回值表示被拒、以异常表示故障而目标都 reject 时的单次适配
+源端同步调用改成 ArkTS 异步（Promise/async）后新增的失败分支、加载态，异步初始化与用户输入的先后顺序，依赖先后生效的连续平台调用在网关内串行，单线程执行器改成 Promise 串行队列后的重入，仓库方法前置失败分支（未初始化、未授权）的错误通道，以及 Kit API catch 值（BusinessError）的取消息与按错误码分类（code 先归一再比较），以及源 API 以返回值表示被拒、以异常表示故障而目标都 reject 时的单次适配
 
 [上一级](../index.md)
 
 ## 本级经验
 
-- [Kit API 的 catch 值按 BusinessError 取 message 与 code，网络失败按错误码映射源错误类型](lesson-b19162077a2ab886d809.lesson.md)
-  - 时机：规格提取与服务实现阶段，迁移源端按异常类型分类、以 getMessage() 记录详情的 catch 分支时
-  - 情境：目标 catch 到的是网络、文件、数据库等 Kit API 抛出或拒绝的 BusinessError（含 code、message 的普通对象，不是 Error 实例）；源端按 IllegalArgumentException、SocketTimeoutException、UnknownHostException 等异常类型分支；@ohos.net.http 的失败码为 2300000 加 libcurl 码。
+- [Kit API 的 catch 值按 BusinessError 取 message 与 code，code 先 Number() 归一再比较错误码](lesson-b19162077a2ab886d809.lesson.md)
+  - 时机：规格提取与服务实现阶段，迁移源端按异常类型分类、以 getMessage() 记录详情的 catch 分支时；按 SDK @throws 错误码为 Kit 调用编写异常分支判别时
+  - 情境：目标 catch 到的是网络、文件、数据库、定位等 Kit API 抛出或拒绝的 BusinessError（含 code、message 的普通对象，不是 Error 实例）；源端按 IllegalArgumentException、SocketTimeoutException、UnknownHostException 等异常类型分支；@ohos.net.http 的失败码为 2300000 加 libcurl 码。也包括依据 d.ts @throws 列出的数值错误码（如定位开关关闭）决定等待、重试或失败，而 d.ts 把 BusinessError.code 声明为 number。
 - [单线程写执行器改为 Promise 串行队列时，为重入调用提供不经队列的内部版本](lesson-cdc6de4ebcdeeadc287c.lesson.md)
   - 时机：数据层实现阶段，把源端单线程 Executor（调用方已在执行线程即同步内联）移植为异步串行队列时
   - 情境：源端写方法在已处于执行线程时直接内联执行嵌套调用（如按线程名判断后 runnable.run()）；目标队列任务体内会再调用同类公开写方法。

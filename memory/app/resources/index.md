@@ -1,6 +1,6 @@
 # app/resources
 
-资源批量转换：Android values 转 element JSON（颜色值形态与 #AARRGGBB 字节序、数组项结构、引用写法）与 drawable 转 media（VectorDrawable 转 SVG 的 viewBox 与显示尺寸、反编译 APK 的内联片段、资源文件名合法性），以及宣布资源阶段完成前的产物校验，以及快捷方式等图标的画布尺寸与图形显示区（低分辨率源图的处理），以及自适应图标转分层图标的图层尺寸与可见区裁切，以及 strings.xml 转 string.json 的 aapt2 编译语义（转义、引号、空白）与内联样式标记的保留；Compose Material 库图标（Rounded 等变体）的矢量来源
+资源批量转换：Android values 转 element JSON（颜色值形态与 #AARRGGBB 字节序、数组项结构、引用写法）与 drawable 转 media（VectorDrawable 转 SVG 的 viewBox 与显示尺寸、反编译 APK 的内联片段、资源文件名合法性），以及宣布资源阶段完成前的产物校验，以及快捷方式等图标的画布尺寸与图形显示区（低分辨率源图的处理），以及自适应图标转分层图标的图层尺寸与可见区裁切，以及 strings.xml 转 string.json 的 aapt2 编译语义（转义、引号、空白）与内联样式标记的保留；Compose Material 库图标（Rounded 等变体）的矢量来源；语言限定目录只放源端有的文字资源类型（键集审计不复制非文字资源）
 
 [上一级](../index.md)
 
@@ -17,7 +17,7 @@
   - 情境：源 vector 的 android:width/height（dp 显示尺寸）与 viewportWidth/Height（路径坐标系）常不相等，部分 fillColor 引用主题属性；也有 vector 根写 android:tint（含框架 color state list，如 control_checkable_material），path 的 fillColor 却是字面色（如不透明黑），并带 fillAlpha=0 的动画用 path。
 - [adaptive-icon 转 layered-image 时前景与背景生成同尺寸图层，前景先裁出启动器可见区再缩放，不直接拷贝 108dp 全层](lesson-d838f9236f7452b82738.lesson.md)
   - 时机：资源迁移阶段，把 Android adaptive-icon 转成鸿蒙 layered-image 并生成前景、背景图层 PNG 时；核验应用图标或维护资源转换规则时
-  - 情境：Android 应用图标是 adaptive-icon：背景为 @color 纯色或 108dp 图层，前景为 mipmap 下 108dp 全层 PNG（启动器只显示中央 72dp）；鸿蒙侧用 layered_image.json 的 foreground/background 两个 $media 图层；转换规则写“mipmap 直接拷贝”“纯色背景任意尺寸（如 1×1 或 108×108）”。
+  - 情境：Android 应用图标是 adaptive-icon（规范：图层 108dp，启动器只显示中央 72dp）：背景为 @color 纯色或 108dp 图层，前景为 mipmap 下 108dp 全层 PNG或 drawable 下的矢量（如 ic_launcher_foreground.xml），工程里通常还有旧版合成的 ic_launcher.png；鸿蒙侧用 layered_image.json 的 foreground/background 两个 $media 图层；转换规则写“mipmap 直接拷贝”“纯色背景任意尺寸（如 1×1 或 108×108）”。
 - [strings.xml 转 string.json 按 aapt2 编译语义计算值：引号外空白折叠、值中任何位置的未转义双引号都剥离（不只首尾成对，\\" 保留为引号）、\\n \\t \\uXXXX \\' 还原；带内联标记的键取完整内容（样式入口存 HTML、纯字符串入口取全部文字），不用 el.text](lesson-f88b9c824280ce239dea.lesson.md)
   - 时机：资源转换阶段，编写批量脚本把 Android strings.xml 转成 HarmonyOS string.json、确定转义、引号、空白与内联标记的处理规则时
   - 情境：values*/strings.xml 中有跨行书写（换行加缩进）、\\n、\\t、\\uXXXX 转义、\\' \\" 或未转义双引号（整值包裹，或出现在值中间，如 below "APM"）的字符串，有的键内联 `&lt;b&gt;`/`&lt;i&gt;`/`&lt;a href&gt;`/`&lt;p&gt;` 子元素（值可能以子元素开头）或用 CDATA 包裹 HTML，由 setMessage(resId)、android:text、Html.fromHtml 或 getString/stringResource 消费；目标 string.json 的值在运行时原样显示，不再经过 aapt2；资源转换 skill 的汇总表只写“\\n、\\t → preserved”“CDATA 提取文本”“整值被引号包裹时去外层引号”，没写值中间的引号与未包 CDATA 的子元素如何取值。
@@ -27,6 +27,10 @@
 - [从 apktool 反编译 APK 转资源时，把 $父名__N 内联片段单独分类；库前缀按父名匹配，写后校验输出文件名只含字母、数字与下划线](lesson-850dc758d337c4780ae9.lesson.md)
   - 时机：资源转换阶段，从反编译 APK 的 res/ 批量生成 media 文件并过滤库资源时
   - 情境：资源源是 apktool 反编译的 APK，drawable 目录里有 aapt 从 animated-vector、animation-list、selector 等拆出的内联子资源 $&lt;父名&gt;__N.xml；转换脚本按原文件名输出 SVG，并用锚定在名称开头的前缀正则跳过库资源。
+- [语言限定目录只放源端 values-&lt;locale&gt; 实际有的资源类型：不为补齐键集审计把 base 的颜色、尺寸、布尔、整数文件复制进语言目录](lesson-f9f923ac13560dc4a114.lesson.md)
+  - 时机：资源迁移收口阶段，i18n 或资源完整性审计报告语言目录缺键、缺文件，决定如何补齐时；编写按 base 批量补齐限定目录的脚本时
+  - 情境：Android 源的 values-&lt;locale&gt; 通常只有 strings、arrays、plurals；HarmonyOS 目标按语言目录放 element JSON，base 之外还有 horizontal、dark、ldpi 等配置目录覆盖颜色与尺寸；审计脚本以“base 键集合＝每个语言目录键集合”为门槛，findings 列出具体缺失键与所在文件。
+  - 例外：源端该语言目录本身定义了颜色、尺寸等非文字资源（如 values-&lt;locale&gt;/dimens.xml），此时按源端镜像该文件
 - [转换快捷方式等图标资源时同时落实画布尺寸与图形显示区；测量墨迹范围后再宣告合规，低分辨率源图不插值放大充当正式资源](lesson-66e082374dc8992f48ae.lesson.md)
   - 时机：资源迁移阶段，把源端快捷方式等小图标转换成目标规范尺寸的图标资源时
   - 情境：源端只有低分辨率透明小图标（如 Android xxhdpi 72px 的快捷方式图标）；目标图标规范给出 1024×1024 透明图层且前景显示区约 450×450px（或分层前景加背景）。

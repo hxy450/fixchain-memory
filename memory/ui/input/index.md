@@ -1,8 +1,12 @@
 # ui/input
 
-输入与选择控件：源端输入约束到 TextInput 等组件属性的转换（含小数输入），用户输入校验正则（Android 平台 Patterns 常量）的逐段移植与全串匹配，格子式密码输入层与获焦，会被子页覆盖再返回的页面里获焦来源的判别，自定义控件 XML 属性的初值，Compose Slider 的 steps 取值，选择列表行的选中标记（条件勾选与 Radio 的取舍），选择器回填的多级字段（省市区），密码显隐图标、清除按钮等 ArkUI 默认装饰的显式关闭，未定制光标外观的取证基准与 caretStyle；inputType 键盘与候选提示和内容约束的分开映射、可编辑分段着色文本（RichEditor）、同页多组表单收集执行请求时的取值来源；源控件显式内容槽（Switch thumbContent）在原生控件缺槽时自绘，受控输入非长度类拒绝条件用 onWillChange
+输入与选择控件：源端输入约束到 TextInput 等组件属性的转换（含小数输入），用户输入校验正则（Android 平台 Patterns 常量）的逐段移植与全串匹配，格子式密码输入层，自定义控件 XML 属性的初值，Compose Slider 的 steps 取值，选择列表行的选中标记（条件勾选与 Radio 的取舍），选择器回填的多级字段（省市区），密码显隐图标、清除按钮等 ArkUI 默认装饰的显式关闭，未定制光标外观的取证基准与 caretStyle；inputType 键盘与候选提示和内容约束的分开映射，单行输入框的键盘动作键与焦点链，可编辑分段着色文本（RichEditor），同页多组表单收集执行请求时的取值来源；源控件显式内容槽（Switch thumbContent）在原生控件缺槽时自绘，受控输入非长度类拒绝条件用 onWillChange；EditText.setError 的错误图标与聚焦气泡，菜单 SearchView 迁成自绘搜索栏时展开、焦点、提交与收起的分立；获焦时机与软键盘见子主题
 
 [上一级](../index.md)
+
+## 子主题
+
+- [focus-ime](focus-ime/index.md) — 输入焦点与软键盘：首屏输入框按平台缺省获焦的时机（窗口获焦后再 requestFocus），对话框里 EditText 的焦点、软键盘与预填光标，会被子页覆盖再返回的页面里获焦来源的判别，只收键盘不清焦点的 IME 接口选择（hideTextInput 与需系统权限的接口）
 
 ## 本级经验
 
@@ -16,15 +20,12 @@
   - 时机：界面实现阶段（含公共组件抽取），把 M3 Switch 等带内容槽的源控件映射为 ArkUI Toggle 等原生控件时
   - 情境：源端 Switch 传了 thumbContent = { if (checked) Icon(Icons.Rounded.Check) } 一类显式子内容；目标准备用 Toggle({ type: ToggleType.Switch })，写者认为原生开关打开时会自带勾选图标，或计划中的图标在落盘时被省略。
 - [EditText 的 inputType 键盘与候选提示和内容约束分开映射：textCapCharacters → autoCapitalizationMode、textNoSuggestions → enablePreviewText(false)、带符号数字用含 +/- 的键盘；只有源端有 digits/InputFilter 才过滤，程序写入按 maxLength 截断](lesson-0457a04c31208e1fb916.lesson.md)
-  - 时机：界面实现阶段（含公共输入组件设计、页面规格的控件映射与页面转换），把 Android EditText 的 inputType、digits、InputFilter、maxLength 与粘贴回填翻译成 ArkUI TextInput/TextArea 属性时
-  - 情境：源布局用 textCapCharacters、textNoSuggestions、number、numberSigned 等 inputType 标志声明键盘与输入法行为，多数未配 android:digits 或 InputFilter，内容合法性在点击计算或保存时才校验；个别控件挂了 InputFilter.AllCaps；页面另有粘贴或扫描回填写入带 maxLength 的输入框。目标 ArkUI（SDK 6.x 可用 autoCapitalizationMode、enablePreviewText、InputType.Number/PhoneNumber）；映射参考只给 number → InputType.Number 与“capitalize 无直接对应，使用文本转换”。
-- [会被子页覆盖再返回的页面里，TextInput 的获焦回调先判别是否由用户触摸引起再写业务状态](lesson-4c476a62732697c56c22.lesson.md)
-  - 时机：界面实现阶段，把 TextInput 的焦点回调接到页面业务状态，且页面常驻 NavBar 或保活容器、会被 pushPath 覆盖时
-  - 情境：页面用 focused 之类的业务字段决定显示分支（如建议列表与分类）；从子页系统返回后，框架可能把焦点交还该 TextInput。
-- [对话框里的 EditText 把焦点、软键盘与预填光标分三项迁移：只获焦不弹键盘时 TextInput/TextArea 设 enableKeyboardOnFocus(false)，setText 预填后光标置于开头](lesson-b8d75f1de6a5d144f6fc.lesson.md)
-  - 时机：规格提取阶段为源端对话框内 EditText 写打开时的焦点、软键盘与预填光标契约时；弹层内容组件实现与宿主接线阶段落实这些初始状态时
-  - 情境：源端 AlertDialog/DialogFragment 用 setView 承载 EditText，靠布局 &lt;requestFocus/&gt; 或首个可获焦视图获焦，onCreateDialog 里 setText 预填；源码与 manifest 都没有 showSoftInput、setSoftInputMode 或 windowSoftInputMode。目标以 openCustomDialog 承载 TextInput/TextArea 内容组件，用 defaultFocus 或宿主 requestFocus 获焦。
-  - 例外：源码显式请求输入法（showSoftInput，setSoftInputMode 为 STATE_VISIBLE/ALWAYS_VISIBLE，或 DialogPreference/EditTextPreference 打开时请求输入法）：按源端打开即弹键盘
+  - 时机：界面实现阶段（含公共输入组件设计、页面规格的控件映射与页面转换），把 Android EditText 的 inputType、digits、InputFilter、maxLength 与粘贴回填翻译成 ArkUI TextInput/TextArea 属性时；为多个单行输入框确定键盘动作键与焦点链时
+  - 情境：源布局用 textCapCharacters、textNoSuggestions、number、numberSigned 等 inputType 标志声明键盘与输入法行为，多数未配 android:digits 或 InputFilter，内容合法性在点击计算或保存时才校验；个别控件挂了 InputFilter.AllCaps；页面另有粘贴或扫描回填写入带 maxLength 的输入框。目标 ArkUI（SDK 6.x 可用 autoCapitalizationMode、enablePreviewText、InputType.Number/PhoneNumber）；映射参考只给 number → InputType.Number 与“capitalize 无直接对应，使用文本转换”。 也包括多个单行 EditText 未写 imeOptions，源端键盘动作键靠框架缺省形成“下一项”焦点链。
+- [EditText.setError 迁为尾部错误图标加仅聚焦时显示的气泡、输入即清，不用 errorMessage 常显红字或行内文字](lesson-5d1c2c78b5c27d9c5e97.lesson.md)
+  - 时机：规格提取与界面实现阶段，为源端 EditText.setError（含 AppCompatEditText）写转换决策并落实校验失败提示时
+  - 情境：源端校验失败时对输入框调用 setError(文案)，没有自定义错误视图；目标为 ArkUI TextInput，候选是 TextInput.errorMessage、输入框下方的行内红字或自绘气泡；规格可能写成“实时校验”或“HarmonyOS 自带错误提示”。
+  - 例外：源端用 Material TextInputLayout.setError（框下常显错误文字）而不是 EditText.setError：按该控件的呈现实现
 - [把同页多组表单收集为执行请求时，按源执行方法实际读取的控件为每个模式设独立字段，不因同名复用其他表单的槽位](lesson-dee3401b34b8fab1a0fb.lesson.md)
   - 时机：功能实现阶段，把 Android Activity 上多组输入表单的字段收集为服务层执行请求、接到写入或计算方法时
   - 情境：源 Activity 在同一页面持有多组语义相近的输入控件（写块的扇区/块与值块的扇区/块、值块数值与另一模式的数值），各执行方法分别读取自己表单的控件；目标由页面收集参数构造一个请求对象交给共享服务，页面已为各表单建了独立状态。
@@ -55,12 +56,12 @@
 - [色板、渐变方案、边框素材这类选项列表按源 Fragment/ViewModel 的数据源迁移，截图只核视觉；调色盘、相册、图库等动作项按源接到对应页面并写回编辑会话](lesson-60c1c37b0703e5d3b8d6.lesson.md)
   - 时机：界面实现阶段，为编辑页背景色、文字颜色、边框等选择区确定选项列表与点击行为时，尤其任务要求“根据截图转换”时
   - 情境：Android 选择区由各自 Fragment + ViewModel 以 RecyclerView 列表提供（背景含渐变方案与图片素材、文字为纯色列表、边框为位图素材且首项是调色盘），Fragment 泛型参数或布局 data-binding 指向对应 ViewModel；迁移任务同时给出设备截图作为视觉参考。
+- [菜单 SearchView 迁成自绘搜索栏时把展开、焦点、提交、收起与菜单重建分成独立状态和事件，焦点态取自 TextInput 焦点回调](lesson-edc9465d3902807c386b.lesson.md)
+  - 时机：规格提取与界面实现阶段，把菜单 actionView 的 SearchView（collapseActionView）翻成自绘标题栏搜索框、决定工具栏菜单随搜索状态切换时
+  - 情境：源端菜单项以 SearchView 为 actionView 且 showAsAction 含 collapseActionView，代码注册 OnActionExpandListener、OnQueryTextFocusChangeListener 与 OnQueryTextListener（onQueryTextSubmit 返回 false 才由 SearchView 投递 ACTION_SEARCH），收起时 invalidateOptionsMenu 重建菜单，提交后只收键盘不清焦点；目标为自绘标题栏加按条件构建的 TextInput。
 - [透明 TextInput 叠在掩码格上时，输入层铺满格区并显式获焦，多段输入各用独立节点](lesson-90a7888a65eefb3e94b3.lesson.md)
   - 时机：界面实现阶段，把格子式密码框等自定义输入控件转成“透明 TextInput + 掩码格”叠层时
   - 情境：源端弹窗内是固定尺寸的格子式输入控件（如 4 位数字密码），多段流程（设置、再次确认）各弹独立 Dialog 并各带新输入框；目标用页内条件挂载的浮层，透明 TextInput 与掩码 Row 叠放，外层卡片有吞点击的 onClick。
 - [金额类输入可含小数时不用 InputType.Number：按源端解析函数选择允许小数点的输入方式](lesson-a5aeed3d4c376cd085d1.lesson.md)
   - 时机：界面实现阶段，把源端输入弹窗的 EditText 转成 ArkUI TextInput 并确定输入类型时
   - 情境：源端 EditText 未设数字 inputType（或为 numberDecimal），保存时用 toDoubleOrNull 一类解析允许小数；目标 TextInput 准备用 InputType.Number。
-- [首屏输入框按源端平台缺省获焦时，在窗口获焦后再 requestFocus：冷启动窗口激活晚于首屏查询，提前请求不会拉起输入法](lesson-9d42548ee3c075de3330.lesson.md)
-  - 时机：界面实现阶段，为首屏含输入框的页面落实冷启动初始焦点与软键盘时
-  - 情境：源端靠平台缺省给第一个可获焦的 EditText 焦点并自动弹键盘（源码没有 requestFocus/showSoftInput），获焦条件随数据分支变化（如列表为空时）；目标为 NavDestination 页 + TextInput，ArkUI 不会自动给输入框焦点。

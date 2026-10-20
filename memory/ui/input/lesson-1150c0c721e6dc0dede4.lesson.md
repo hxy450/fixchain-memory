@@ -1,6 +1,6 @@
 # 按 EditText 对齐 TextInput 时，未声明 background 的输入框按主题状态背景（editTextBackground 的 9-patch，随聚焦切换并取其内边距）复刻，并显式关闭源端没有的 ArkUI 默认装饰：填充底与圆角、Password 显隐图标、清除按钮，核默认高度
 
-ID：`lesson-1150c0c721e6dc0dede4` · 版本：3
+ID：`lesson-1150c0c721e6dc0dede4` · 版本：4
 
 [本主题](index.md)
 
@@ -31,7 +31,7 @@ ArkUI 的 Password 输入框默认显示显隐图标（showPasswordIcon 默认 t
 
 - 真机验证输入框时打开截图目视对照（必要时裁剪输入框右端），不只看 dumpLayout 的 bounds。
 
-来源支持：3 张卡 · 3 次迁移 · 3 个应用
+来源支持：4 张卡 · 已知 3 次迁移（部分未记录） · 已知 3 个应用（部分未记录）
 
 ## 来源（按需复核）
 
@@ -39,5 +39,7 @@ ArkUI 的 Password 输入框默认显示显隐图标（showPasswordIcon 默认 t
   卡片版本：`4aa26550cce3a384a4aa9ffe3848cf1c7c967010523cbc09787d6c214d2c67df`
 - [case-403ea87fd461ab4a0ad8](../../../store/cases/case-403ea87fd461ab4a0ad8/396b6254f2aabefa36741250da14adee7db9fc436d214e603f984286e8c606b2.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3, recommendation:4
   卡片版本：`396b6254f2aabefa36741250da14adee7db9fc436d214e603f984286e8c606b2`
+- [case-9174c62c22f8d979372e](../../../store/cases/case-9174c62c22f8d979372e/eec4229b6f305745c835a372c2d8c2fb44e5a7937fa2f43696c8ce7707fe1efa.json) · 结论：recommendation:1, recommendation:2
+  卡片版本：`eec4229b6f305745c835a372c2d8c2fb44e5a7937fa2f43696c8ce7707fe1efa`
 - [case-9d195db79dc4cccc7d1a](../../../store/cases/case-9d195db79dc4cccc7d1a/3ef58b6e05f43ead616304c92324166e074aa81e33e4c6ecad7b4910b60126e9.json) · 结论：recommendation:2, recommendation:7
   卡片版本：`3ef58b6e05f43ead616304c92324166e074aa81e33e4c6ecad7b4910b60126e9`

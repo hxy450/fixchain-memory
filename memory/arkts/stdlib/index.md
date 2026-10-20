@@ -1,6 +1,6 @@
 # arkts/stdlib
 
-Java 标准库与语言语义到 ArkTS 的等价实现：读行、split/trim、BOM、String.format 与 Locale、Calendar 周规则，HashSet/HashMap 迭代序、有符号 byte 比较与 switch 返回码；DecimalFormat、BigDecimal 舍入与 Float.toString 的数值转文本，位置参数的字面插入（避开 String.replace 替换模式）
+Java 标准库与语言语义到 ArkTS 的等价实现：读行、split/trim、BOM、String.format 与 Locale、Calendar 周规则，HashSet/HashMap 迭代序、有符号 byte 比较与 switch 返回码；DecimalFormat、BigDecimal 舍入与 Float.toString 的数值转文本，位置参数的字面插入（避开 String.replace 替换模式）；Java/ICU 正则字符类与单遍替换、split("")、compareToIgnoreCase、List.remove 与 Android 工具类（Base64、Uri、getType）的语义
 
 [上一级](../index.md)
 
@@ -16,6 +16,10 @@ Java 标准库与语言语义到 ArkTS 的等价实现：读行、split/trim、B
   - 时机：规格提取与切片实现阶段，转写依赖 Java 集合迭代序（keySet、toArray、new ArrayList&lt;&gt;(set)）、byte 与 int 字面量比较、按返回码 switch 分支的逻辑时
   - 情境：源端用 HashSet/HashMap 的迭代序决定输出文件、尝试顺序、写入顺序或问题清单顺序；用 byte 变量与 0x81 一类 int 字面量比较；switch 只把部分返回码（如 2、-1）判为失败；目标准备用 JS Set/Map（插入序）、0–255 的 number 与相邻方法的 result !== 0 判定。
   - 例外：规格或决策明确不要求复刻集合迭代序，并在验收中写明
+- [Java/ICU 正则、String/List 方法与 Android 工具类不按形似 JS 内建改写：先列语义差异，不等价就按源实现移植](lesson-0cbafc2ad4096001d0e8.lesson.md)
+  - 时机：服务层、模型层与页面逻辑实现阶段，把源码直接调用的 Java 正则、String/List 方法或 Android 平台工具类翻译成 ArkTS 表达式时；规格提取阶段为这些调用写契约时
+  - 情境：源方法体调用的是平台库而不是应用自身代码：Pattern/matches/replaceAll（\\s、\\p{L}、Pattern.quote 交替）、String.split("")、compareToIgnoreCase、List.remove(Object)、android.util.Base64.decode、Uri.parse(path).getPath()、ContentResolver.getType；目标只有 JS RegExp/String/Array 与内建解码可用，写者准备在注释里写“等价/直迁”。
+  - 例外：规格或差异决策已明确接受对应差异，并写明受影响的输入
 - [手写 getString/String.format 的位置参数插入时，不把用户数据作为 String.replace 的替换串：用 split/join 或替换回调字面插入](lesson-ecbaa1723e2beb9b1aec.lesson.md)
   - 时机：实现阶段，把 Android getString(resId, args) 或 String.format 的 %1$s、%s 位置参数改写为 ArkTS 字符串拼装（自写 formatRes 一类 helper）时
   - 情境：源端 getString(R.string.x, name) 把用户输入的名称、标题插入格式串（如克隆名后缀）；目标取到格式串后准备用 s.replace('%1$s', arg) 替换占位，或复用兄弟页面已有的同类 helper。

@@ -1,0 +1,200 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-384517eb6b32c1c41f94",
+  "created_at": "2026-10-17T02:52:15.285544+00:00",
+  "migration_key": "/private/tmp/claude-502/-Users-fengyi-Workspace-migbot-set-l123-cc-glm53/a9f6942f-6659-40bd-bc16-6616949070fb/scratchpad/distill/pool2",
+  "title": "搜索框焦点与输入法：用未核实的系统级 IME API 收键盘、把输入焦点写成手工开关",
+  "when": "界面/服务实现阶段，为搜索输入框确定“展开取焦、提交收键盘、工具栏随焦点切换”的落地方式时",
+  "description": "Android 侧由 SearchView 的焦点回调（OnQueryTextFocusChangeListener）驱动菜单显隐，并用 InputMethodManager 只收键盘不清焦点；目标为 ArkUI TextInput + IMEKit inputMethodController，输入框按条件构建。",
+  "summary": "本问题两条代表链都在生成期即偏离，返修期的 4 项修复（报告修复 13/29/32/45）是在恢复真实焦点语义后暴露的平台时序差异。\n链一（KeyboardService）：Slice 9 实现者写前已读到 KeyboardUtils.java（hideKeyboard 只 hideSoftInputFromWindow，焦点不变；\nagent-a713247c50e682c36.jsonl:L61-L62）和 F002 规格“inputMethodController（@kit.IMEKit；具体方法名实现期经 Skill\narkts-knowledge-verifier 复核后钉死）”（同转录 L25-L26，规格第 103 行）。它对 skill 参考做了一次 grep 核对，没有命中任何 IMEKit\n方法说明（L134-L135），仍把显隐写成 showSoftKeyboard/hideSoftKeyboard，并用 catch 吞掉拒绝、注释成“isActive 短路”（L233）。\n返修时查 @ohos.inputMethod.d.ts 发现这两个方法需系统权限 CONNECT_IME_ABILITY、三方应用不可用，先改为 showTextInput/stopInputSession\n（agent-a0ff3efade02501a1.jsonl:L1001，2026-10-13），实机 hilog 再发现 stopInputSession 使编辑框失焦，最终改为 hideTextInput，\n并由 SearchViewModel.hideImeKeepingFocus 把“收键盘引发的失焦”排除在焦点变化之外（主会话 L5620、L5671，2026-10-15）。\n链二（NoteListPage）：Group 2 实现者写前读到 F009 对接点“菜单可见性：搜索焦点下 menu_tags/未完成清单可见、排序/过滤隐藏\n（setActionItemsVisibility）… 源:ListFragment.initSearchView → 标:SearchViewModel”（agent-ac7db1f1e97435d0a.jsonl:L67-L68）。\n它写出的标题栏却用手工布尔 searchViewFocused 决定展开态与菜单矩阵：TextInput 没有 onFocus/onBlur 绑定，展开时不请求焦点也不拉键盘，\n取消时直接置 false（同转录 L261、L266）；生成结束时 NoteListPage 中没有任何 requestFocus/showKeyboard（blame 查询）。\n返修第 1 轮把它改回真实焦点驱动（agent-a37ab07ebd7bca6e3.jsonl:L1053 Write；L1138 加 focusRequest→requestFocus），\n随后才出现“输入框未构建即 requestFocus 抛 150003”（主会话 L10075 改为待取焦标记 + onAppear 再取焦）和“对话框抢焦”（L10426\nONDialogOptions.focusable）等平台时序问题。\n",
+  "recommendations": [
+    "实现 IME 显隐时，先在 SDK d.ts 或知识库中核实所选方法的权限与焦点副作用（showSoftKeyboard/hideSoftKeyboard 需系统权限；stopInputSession 会使编辑框失焦；hideTextInput 只收键盘）；规格要求“实现期复核后钉死”而核对无结果时，应继续查 SDK 声明，不能用 catch 吞错替代核对。",
+    "规格把菜单/工具栏状态挂在“输入框焦点”上时，实现者应把该状态绑定到 TextInput 的 onFocus/onBlur，并在展开时经 requestFocus 取焦、按条件构建的输入框在 onAppear 后再取焦；不要用点击菜单时手工翻转的布尔量代替焦点态。",
+    "收键盘的调用方若依赖焦点态（如提交后工具栏保持聚焦菜单），要为“收键盘引发的失焦”单独处理，使其不触发焦点变化分支。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/services/KeyboardService.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/java/it/feio/android/omninotes/utils/KeyboardUtils.java",
+          "at": "2026-10-01T16:49:52.413Z",
+          "reason": "正常输入：Read 回执给出 hideKeyboard 为 imm.isActive() 短路后 hideSoftInputFromWindow（:63-73），只收键盘、不改焦点；showKeyboard 为 requestFocus→showSoftInput→toggleSoftInput 兜底（:33-50）（agent-a713247c50e682c36.jsonl:L61-L62）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/spec/baseline/features/F002-note-editing.md",
+          "at": "2026-10-01T16:49:19.969Z",
+          "reason": "正常输入：Read 回执第 103 行给出 KeyboardUtils 映射“ArkUI 焦点驱动 + inputMethodController（@kit.IMEKit；具体方法名实现期经 Skill arkts-knowledge-verifier 复核后钉死）”，第 154 行 AC08 要求收起在输入法非激活时直接返回；足以要求实现者在钉死方法名前完成核对（agent-a713247c50e682c36.jsonl:L25-L26）。"
+        },
+        {
+          "key": "fcc67332-0774-45b4-a72c-d2b6a33207b8:a713247c50e682c36",
+          "at": "2026-10-01T17:00:02.780Z",
+          "reason": "已收到上述输入；对 skill 参考 grep IMEKit/showSoftKeyboard/hideSoftKeyboard 仅返回一行无关配置（L134-L135，16:52:24Z），仍 Write KeyboardService：showKeyboard 调 showSoftKeyboard 并重试一次，hideKeyboard 调 hideSoftKeyboard，catch 吞掉拒绝并注释为 isActive 短路（L233-L234）。这两个方法需系统权限，三方应用调用必被拒绝，收键盘实际无效；返修改为 hideTextInput 并保持焦点态。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/pages/NoteListPage.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/spec/baseline/features/F009-search.md",
+          "at": "2026-10-01T17:46:22.811Z",
+          "reason": "正常输入：Bash grep 对接点回执给出“菜单可见性：搜索焦点下 menu_tags/menu_uncomplete_checklists 可见、排序/过滤等隐藏（setActionItemsVisibility :775-776）… 源:ListFragment.initSearchView → 标:SearchViewModel；源:ListFragment.setActionItemsVisibility → 标:NoteListPage.build；判:ui 展开搜索后排序/过滤菜单不可见而标签菜单可见”，即菜单矩阵应由输入框焦点态驱动（agent-ac7db1f1e97435d0a.jsonl:L67-L68）。"
+        },
+        {
+          "key": "fcc67332-0774-45b4-a72c-d2b6a33207b8:ac7db1f1e97435d0a",
+          "at": "2026-10-01T17:53:38.901Z",
+          "reason": "读到上述要求后，Edit 写出 titleBar：以手工布尔 searchViewFocused 切换 TextInput 与标题、驱动菜单矩阵，TextInput 只挂 onChange/onSubmit，没有 onFocus/onBlur，展开时不 requestFocus 也不拉键盘，search_cancel 直接置 false（L261、L266-L267）；“搜索焦点”从真实焦点退化为点击开关。返修第 1 轮恢复焦点绑定后才暴露 requestFocus 早于构建（150003）、提交收键盘失焦、对话框抢焦三项时序问题。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "Bash 对 F009-search.md 执行 grep -A 30 \"^## 对接点\"，回执返回搜索焦点驱动菜单可见性的对接点条目；这是实现者写 titleBar 前对该规格的真实读取。",
+          "evidence": [
+            {
+              "source": "migration/fcc67332-0774-45b4-a72c-d2b6a33207b8/subagents/agent-ac7db1f1e97435d0a.jsonl",
+              "line": 67
+            },
+            {
+              "source": "migration/fcc67332-0774-45b4-a72c-d2b6a33207b8/subagents/agent-ac7db1f1e97435d0a.jsonl",
+              "line": 68
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "尚未确认生成期 F002/F009 规格或 a2h-execute skill 是否列出过 IMEKit 各方法的权限要求；本例已核偏差是实现者在核对无结果后仍采用未核实方法。"
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/components/common/ONDialog.ets",
+      "reason": "已确认修改：返修主会话 2026-10-15T03:18 为 ONDialogOptions 增加 focusable（openCustomDialog focusable），标签筛选置 false（repair 主会话 L10426）。生成期 ONDialog 由 agent-a0880cb7aecba93f5 于 2026-10-01T09:17 以 openCustomDialog 缺省参数写出；其写前输入中未见“对话框不得夺走输入框焦点/输入法”的要求（Android 侧为 AlertController 对无输入框对话框自动置 FLAG_ALT_FOCUSABLE_IM 的框架行为，规格未提取）。标签筛选调用方 agent-a1bebb022b2aa0159 写前读到 filterByTags 仅在确认时 clearFocus+hideKeyboard（L141-L142），其接线（L466-L467）未保留对话框期间的搜索焦点；该偏差落在调用方与规格提取，尚未连到 ONDialog 本身的生成写入。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/components/detail/PixluiEditText.ets",
+      "reason": "返修期新建文件（agent-abb92fcadb53ed4c2.jsonl:L1026 Write 2026-10-14T02:53），迁移池无生成期写入。修复 45 的直接起因是该返修子代理自行引入的 FOCUS_PAIRING_MS=300 配对窗口（同转录 L2579，2026-10-14T05:20），主会话 2026-10-15T05:24 起改为 2s 单击待获焦窗口（repair 主会话 L15671 起）；属修复中新生问题，其替代的生成期产物（NoteDetailPage 标题/正文编辑器的取焦逻辑，agent-a1bebb022b2aa0159.jsonl:L555）与本问题的对应关系尚未核实。"
+    }
+  ],
+  "job": "issue-384517eb6b32c1c41f94",
+  "metadata": {
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.247",
+        "2.1.296",
+        "2.1.300"
+      ]
+    },
+    "source_set_id": "sources-fef5281fb5eb1e655dea",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos",
+        "at": "2026-10-01T08:07:31.804Z",
+        "ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1119",
+        "request_ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1117",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos",
+        "at": "2026-10-01T08:07:31.804Z",
+        "ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1119",
+        "request_ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1117",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes",
+        "at": "2026-10-13T15:34:04.077Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L121",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L120",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes",
+        "at": "2026-10-13T15:34:04.077Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L121",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L120",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes",
+        "at": "2026-10-14T01:47:40.558Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L159",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L158",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes",
+        "at": "2026-10-14T01:47:40.558Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L159",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L158",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.10"
+  },
+  "revision": "f6b049b4e7d9d6b5843e5cbe8da445a3fbc85ed7c0ac24b67adbcfc775926baa"
+}

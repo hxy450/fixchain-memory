@@ -1,0 +1,434 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-d23537ecc4c87801075a",
+  "created_at": "2026-10-17T02:41:05.689847+00:00",
+  "migration_key": "/private/tmp/claude-502/-Users-fengyi-Workspace-migbot-set-l123-cc-glm53/a9f6942f-6659-40bd-bc16-6616949070fb/scratchpad/distill/pool2",
+  "title": "把 ical4j / PrettyTime 这类算法库映射成「自研子集 / 系统 i18n」，库的字面输出契约（UNTIL 浮动时间+CRLF、重复文案、相对时间阈值）既没进规格也没进实现",
+  "when": "规格提取阶段，为 build.gradle 中承担日期/重复规则算法的第三方库写跨栈映射行与功能 spec 算法节时；以及服务实现阶段，按「自研 RFC5545 子集 / intl 相对时间」映射行实现 RRULE 与日期格式化服务时",
+  "description": "Android 源通过算法型第三方库（ical4j Recur/RRule、SublimePicker 的 EventRecurrenceFormatter、PrettyTime、libcore DateUtils.formatDateTime）产出要持久化或展示的字符串：RRULE 串写入数据库、重复规则文案、相对时间文案、短日期文本；目标端无同名库，规格把它们映射为「自研子集」或「@ohos.i18n / intl 相对时间」，实现者能看到的只有应用侧调用点与库 API 名。",
+  "summary": "迁移主会话写规格前已 grep 到 build.gradle 的 org.mnode.ical4j:ical4j:3.0.11 与\norg.ocpsoft.prettytime:prettytime:3.2.7.Final（bc655f68 主转录 L345/L347），也 Read 过 a2h-spec 的\nmigration-decision-categories.md C8：三方依赖无鸿蒙等价物时默认 PD-* proposed 阻断、占位/降级/砍/换由用户改判\n（L277/L279）。它却在 C3 feature-base 派工 prompt 的「跨栈映射基线」里直接写定\n「ical4j（RRULE）→自研/tiny RRULE 解析」「prettytime→@ohos intl 相对时间或自研」（L585 请求 / L587 后台派发回执）。\n规格作者 ae3c915d1468d6648 收到该 prompt（agent 转录 L1），grep build.gradle 看到两条依赖（L43/L44），\nWrite feature-base.md 跨栈映射基线 #10「ical4j 3.0.11 | 自研 / tiny RRULE 解析（RFC5545 子集）| L5 | Manual 🔴」、\n#14「prettytime 3.2.7.Final | @ohos.i18n intl 相对时间（getRelativeTimeSpanString 类）或自研 | L2/L5 | Semi-Auto 🟡」\n（L175/L176）；两行只写了替代方向，没有库输出的字面契约。\nF008 规格作者 a7b0fe6f31d4deb51 Read 了 feature-base.md（L29/L30，含 #10 行）和 RecurrenceHelper.java 全文\n（L49/L50：import EventRecurrenceFormatter、formatRecurrence→getRepeatString、Recur.getNextDate、\nbuildRecurrenceRuleByRecurrenceOptionAndRule = new RRule(new Recur(freq, new DateTime(32519731800000L)))\n.toString().replace(\"RRULE:\",\"\")），随后 Write F008-reminders-notifications.md（L174/L175）：服务层写\n「RRuleHelper（ical4j 替代，RFC5545 子集自研）」，平台契约表写「ical4j RRule/Recur/DateTime → RRuleHelper 自研\nRFC5545 子集 … HARD | 行为等价；ical4j 无 ohpm 等价」，algo-io 只登记 start=max(reminder+60_000, now) 与\n「UNTIL 固定 DateTime(32519731800000L)」毫秒常量；F008-AC17 判据写成「输出含 UNTIL=32519731800000」。\nRRule.toString() 实际产出「FREQ=<F>;UNTIL=<设备时区 yyyyMMddTHHmmss>\\r\\n」这一字面形态、formatRecurrence /\ngetNoteRecurrentReminderText 依赖的 EventRecurrenceFormatter 文案规则，均未进入 spec；#10 的 Manual 🔴 也没有\n转成 PD-* 由用户改判。\nStage 1 选择器转换者 ac78a02c68c8119fe 也 cat 了 RecurrenceHelper.java（L27/L28），在 11:44:34Z 向\nplaceholder-registry.md 登记 P-S17-UNC-002「ical4j new DateTime(32519731800000L) 按设备时区格式化、库内行为不可见，\n此处固定 UTC 30000705T185000Z」（L62/L63），并把 RRULE_UNTIL='30000705T185000Z' 写进 ReminderPickerDialog.ets\n（L66/L67）——UTC Z 字面量由此产生，但它如实标了 forward-ref-uncertain。\nSlice 17 worker a4cc5d7bbd651a427 的派工 prompt 写明「RRuleHelper（RFC5545 子集自研）」与 HARD-GATE\n「RRULE 解析/序列化与 Android 产物逐字段兼容」，并要求对 P-S17-UNC-002 二次审视（L1）。它 Read 了 F008（L25/L26）、\ngrep 到 UNC-002 行（L32/L33）、sed 读到 RecurrenceHelper.java 的 toString 与 EventRecurrenceFormatter 调用（L47/L48），\n仍 Write RRuleHelper.ets（L199/L200）：文件头自述「序列化固定 UTC Z 形态」，buildRule 用 formatUntilUtc 生成\n'FREQ=…;UNTIL=30000705T185000Z'（无 CRLF、非设备时区浮动时间）；nextOccurrence 自写 DAILY/WEEKLY/MONTHLY/YEARLY\n步进而非移植 Recur.getNextDate；formatRule 把 EventRecurrenceFormatter「降级为 FREQ 词 + 原样透传」；\n注释里把 UNC-002 写成「二次审视结论：差异由解析侧三形态容忍消化，全工程无跨栈 RRULE 字符串相等性断言」，\n最终报告 uncertain_regions_resolved 列出 P-S17-UNC-002（L383）。整个生成期没有任何 agent 用 ical4j 真值或\nEventRecurrenceFormatter 源码核对字面输出。后续 L203/L327/L366 三次 Edit 只改步进函数与防御分支，不改上述偏差；\n返修 G5 子代理 cat 到的返修前文件仍是 formatUntilUtc（agent-acaa9632f641dba66.jsonl:L46，_orig 快照 :88/:341）。\nDateHelper 分支：Slice 1 worker aef386d08f13edbfc 读到 DateHelper.java 的 getDateTimeShort flags 与\ngetFormattedDate→DateUtils.prettyTime（L121/L122）和 feature-base #14（L136/L137），14:57:20Z 写出两分支都回退\nyyyy-MM-dd HH:mm 的 DateHelper.ets 并登记 P-S1-035 forward-ref（L177/L178、L294），这是如实占位。\nFinal closer a7144c990395acaed 为清偿 P-S1-035，Read 了该占位文件（L88/L89），cat 了 DateUtils.java\n（L98/L99：new PrettyTime(); pt.setLocale(locale); pt.format(d)），grep 到 feature-base #14 行（L100/L101），\nsed 读到 getDateTimeShort 的 FORMAT_ABBREV_WEEKDAY|SHOW_WEEKDAY|ABBREV_MONTH|SHOW_DATE + SHOW_TIME（L111/L112），\n只核对了 SDK 的 intl.RelativeTimeFormat / DateTimeFormat 签名（L115–L121），19:38:55Z Write DateHelper.ets\n（L394/L395）：prettyTime 用 intl.RelativeTimeFormat(numeric:'auto') 配自定阈值（<60s 秒、<7 天日、<30 天周、\n<365 天月、Math.round 取整），注释声称「prettytime 默认粒度」；getDateTimeShort 用 DateTimeFormat\n{weekday:'short', month:'short', day, hour, minute, hourCycle: i18n.System.is24HourClock()}，无「非本年才带年份」规则。\nPrettyTime 3.2.7 实际为 5 分钟内「moments ago」、0.75 容差取整、周/月/年/十年等单位毫秒阈值与 44 语言资源，\nlibcore 的 skeleton 为 [y]MMMdEEE + hm/Hm；两者都不是 i18n 接口能给出的。返修前文件即此版本\n（_orig/…/DateHelper.ets :11/:36/:59/:73）。\n返修 G5 子代理 a20e64cdf9376bcdc 用 JDK + ical4j-3.0.11.jar / prettytime jar 做真值对拍后，21:14:25Z 重写\nRRuleHelper.ets 为 ical4j Recur 逐行移植、buildRule 产出设备时区浮动时间 + CRLF（agent-a20e64cdf9376bcdc.jsonl:L394），\n21:17:41Z 新建 EventRecurrence.ets（L420），21:18:48Z 新建 PrettyTime.ets（L430），21:19:35Z 重写 DateHelper.ets\n为 libcore skeleton + PrettyTimeEngine 并新增 DateUtils.is24HourMode 等价（L435/L450）。G5 报告 E 段写明\nP-S17-UNC-002 原「resolved」结论不成立（R-01/R-02/N-08/D-01/D-02/P-14）。\n本卡归因 RRuleHelper.ets 与 DateHelper.ets 两条代表链；EventRecurrence.ets、PrettyTime.ets 为返修新建文件，\n其生成期对应物分别是上述 formatRule 降级与 prettyTime 自定阈值，列为未决目标。\n",
+  "recommendations": [
+    "规格提取阶段：对 build.gradle 中产出要持久化或展示字符串的算法库（RRULE 解析/序列化、重复文案、相对时间、日期格式），映射行不能只写「自研子集 / intl 相对时间」并标 Auto/Semi-Auto；先用本机 gradle 缓存里的 jar（或 JDK 小程序）跑出代表输入的真实输出，把字面格式（UNTIL 的时区形态与 CRLF、文案模板、单位阈值与取整规则）写成契约字段，或按 C8 登记 PD-* 让用户改判。",
+    "规格提取阶段：功能 spec 的 algo-io 登记常量时，要同时登记该常量经库序列化后的字符串形态；像「UNTIL=32519731800000」这样把毫秒数当判据，实现者无法据此判断 UTC Z 与设备时区浮动时间谁对。",
+    "服务实现阶段：源码出现 lib.toString() / Formatter.getRepeatString() / PrettyTime.format() 这类库输出，而派工又要求「与 Android 产物逐字段兼容」时，先取库真值再写序列化与文案；不能以「解析侧容忍多形态」「全工程无相等性断言」把登记在案的 UNC 自行宣告 resolved，也不能把库文案「降级为 FREQ 词」。",
+    "服务实现阶段：用系统 i18n/intl 接口替代库时，只在库本身就是系统接口薄封装时成立；PrettyTime、EventRecurrenceFormatter、libcore skeleton 这类有自有阈值/模板/资源表的库，应移植算法与资源，或至少把自定阈值与库默认值逐项对照后写入注释并登记差异，而不是标注「prettytime 默认粒度」。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/services/RRuleHelper.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/build.gradle",
+          "at": "2026-10-01T07:03:00.813Z",
+          "reason": "正常输入：主会话 Bash grep 依赖清单，回执含 180: implementation('org.mnode.ical4j:ical4j:3.0.11') 与 187: org.ocpsoft.prettytime:prettytime:3.2.7.Final，说明 RRULE 与相对时间由外部库实现而非应用源码（bc655f68 主转录 L345/L347）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/.claude/skills/a2h-spec/references/migration-decision-categories.md",
+          "at": "2026-10-01T07:02:19.332Z",
+          "reason": "正常输入：主会话 Read 回执含 C8「三方依赖无鸿蒙等价物时的策略」：依赖清单自 build.gradle 提取、未覆盖项默认 PD-* proposed 阻断，占位/降级/砍/换由用户改判（L277/L279）；足以说明不应在派工中直接拍定「自研子集 / intl 替代」。"
+        },
+        {
+          "key": "bc655f68-6f49-4bcf-ab64-aa45d7a58cc2:main",
+          "at": "2026-10-01T07:22:30.236Z",
+          "reason": "已读到上述依赖与 C8 策略，Agent 派发 C3 feature-base 撰写时在 prompt「跨栈映射基线」里直接写定「ical4j（RRULE）→自研/tiny RRULE 解析」「prettytime→@ohos intl 相对时间或自研」，未取库真值也未登记 PD-*（L585 请求 / L587 后台派发回执）。库的字面输出契约从此不在规格输入里。",
+          "problem": true
+        },
+        {
+          "key": "bc655f68-6f49-4bcf-ab64-aa45d7a58cc2:ae3c915d1468d6648",
+          "at": "2026-10-01T07:29:05.743Z",
+          "reason": "收到派工硬映射（同转录 L1），grep build.gradle 看到 ical4j 3.0.11 与 prettytime 3.2.7（L43/L44），Write feature-base.md 跨栈映射基线 #10「ical4j 3.0.11 | 自研 / tiny RRULE 解析（RFC5545 子集）| L5 | Manual 🔴 | 解析 FREQ/INTERVAL/UNTIL/BYDAY 等实际用到的子集」与 #14 prettytime 行（L175/L176）。按派工转写并标 Manual；本链确认传递，不另推定其独立失职。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/spec/baseline/feature-base.md",
+          "at": "2026-10-01T07:33:44.228Z",
+          "reason": "交付桥梁：F008 规格作者 Read 回执完整返回映射基线，含 :322 #10 行「自研 / tiny RRULE 解析（RFC5545 子集）| Manual 🔴」与 :29 数据模型 recurrenceRule「RRULE 文本，ical4j 解析」（agent-a7b0fe6f31d4deb51.jsonl:L29/L30）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/java/it/feio/android/omninotes/helpers/date/RecurrenceHelper.java",
+          "at": "2026-10-01T07:34:17.524Z",
+          "reason": "正常输入：F008 规格作者 Read 回执给出全文：import EventRecurrenceFormatter，formatRecurrence 调 getRepeatString，nextReminderFromRecurrenceRule 用 Recur.getNextDate，buildRecurrenceRuleByRecurrenceOptionAndRule 返回 new RRule(new Recur(freq, new DateTime(32519731800000L))).toString().replace(\"RRULE:\",\"\")（agent-a7b0fe6f31d4deb51.jsonl:L49/L50）；可见持久化串与文案都是库的字面输出。"
+        },
+        {
+          "key": "bc655f68-6f49-4bcf-ab64-aa45d7a58cc2:a7b0fe6f31d4deb51",
+          "at": "2026-10-01T07:46:16.507Z",
+          "reason": "已读到 #10 Manual 行与 RecurrenceHelper.java 全文，Write F008-reminders-notifications.md：服务层「RRuleHelper（ical4j 替代，RFC5545 子集自研）」，平台契约表「ical4j RRule/Recur/DateTime → RRuleHelper 自研 RFC5545 子集 … HARD | ical4j 无 ohpm 等价」，algo-io 只登记 start=max(reminder+60_000,now) 与 UNTIL 毫秒常量，AC17 判据写「输出含 UNTIL=32519731800000」；RRule.toString() 的设备时区浮动时间+CRLF 形态与 EventRecurrenceFormatter 文案规则均未登记，Manual 🔴 也未转成 PD-*（同转录 L174/L175）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/spec/baseline/features/F008-reminders-notifications.md",
+          "at": "2026-10-01T17:26:35.068Z",
+          "reason": "交付桥梁：Slice 17 worker Read 回执完整返回该 spec，含 :80「RRuleHelper（ical4j 替代，RFC5545 子集自研）」、:118 契约表行与 :164-168 algo-io（agent-a4cc5d7bbd651a427.jsonl:L25/L26）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/java/it/feio/android/omninotes/helpers/date/RecurrenceHelper.java",
+          "at": "2026-10-01T11:36:33.890Z",
+          "reason": "正常输入：Stage 1 选择器转换者 Bash cat 回执给出同一文件，含 new Recur(freq, new DateTime(32519731800000L)) 与 new RRule(recur).toString()（agent-ac78a02c68c8119fe.jsonl:L27/L28）；可见 UNTIL 串由 ical4j 格式化，不是应用侧常量。"
+        },
+        {
+          "key": "e95edcb7-c619-475d-b56e-7bb84402a4ba:ac78a02c68c8119fe",
+          "at": "2026-10-01T11:44:34.675Z",
+          "reason": "读到上述源码后，Edit placeholder-registry.md 登记 P-S17-UNC-002「ical4j new DateTime(32519731800000L) 按设备时区格式化、库内行为不可见，此处固定 UTC 30000705T185000Z」（同转录 L62/L63），随后 Write ReminderPickerDialog.ets 写入 RRULE_UNTIL='30000705T185000Z'（L66/L67）。UTC Z 字面量由此产生；它如实标为 forward-ref-uncertain，交 Slice 17 Step 3a 确认。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/spec/placeholder-registry.md",
+          "at": "2026-10-01T17:26:38.709Z",
+          "reason": "交付桥梁：Slice 17 worker Bash grep \"^| P-S17-\" 回执返回 UNC-002 行原文，含「固定 UTC 30000705T185000Z；跨栈 RRULE 比对失败需按本地时区重算 | registered | forward-ref-uncertain」（agent-a4cc5d7bbd651a427.jsonl:L32/L33）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/java/it/feio/android/omninotes/helpers/date/RecurrenceHelper.java",
+          "at": "2026-10-01T17:27:00.733Z",
+          "reason": "正常输入：Slice 17 worker Bash sed 回执再次给出 import EventRecurrenceFormatter、formatRecurrence→getRepeatString、Recur.getNextDate 与 new RRule(recur).toString().replace(\"RRULE:\",\"\")（agent-a4cc5d7bbd651a427.jsonl:L47/L48）；配合派工 HARD-GATE「RRULE 解析/序列化与 Android 产物逐字段兼容」（L1），足以说明序列化形态必须以 ical4j 真值为准。"
+        },
+        {
+          "key": "fcc67332-0774-45b4-a72c-d2b6a33207b8:a4cc5d7bbd651a427",
+          "at": "2026-10-01T17:39:29.071Z",
+          "reason": "已读到 F008、UNC-002 行与 RecurrenceHelper.java，Write RRuleHelper.ets：头注释「序列化固定 UTC Z 形态」，buildRule 返回 FREQ=…;UNTIL=formatUntilUtc(32519731800000)（无 CRLF、非设备时区），nextOccurrence 自写步进替代 Recur.getNextDate，formatRule 把 EventRecurrenceFormatter「降级为 FREQ 词 + 原样透传」，并在注释中把 UNC-002 写成「二次审视结论：解析侧三形态容忍消化」（同转录 L199/L200）；最终报告 uncertain_regions_resolved 列出 P-S17-UNC-002（L383）。后续 Edit L203/L327/L366 未改上述片段，返修前文件仍是 formatUntilUtc（agent-acaa9632f641dba66.jsonl:L46）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "Bash 进入 Android 工程目录 grep omniNotes/build.gradle 的依赖行，回执列出 180: org.mnode.ical4j:ical4j:3.0.11 与 187: org.ocpsoft.prettytime:prettytime:3.2.7.Final；这支持主会话派工前已实际读到这两个库为外部依赖。",
+          "evidence": [
+            {
+              "source": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl",
+              "line": 345
+            },
+            {
+              "source": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl",
+              "line": 347
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": 7
+        },
+        {
+          "from": 6,
+          "to": 7
+        },
+        {
+          "from": 7,
+          "to": 8
+        },
+        {
+          "from": 8,
+          "to": 13
+        },
+        {
+          "from": 9,
+          "to": 10,
+          "force": true,
+          "reason": "Bash cat helpers/date/RecurrenceHelper.java 全文，回执含 new Recur(freq, new DateTime(32519731800000L)) 与 new RRule(recur).toString().replace(\"RRULE:\",\"\")；这支持选择器转换者登记 UNC-002 前已实际读到 UNTIL 串由 ical4j 格式化。",
+          "evidence": [
+            {
+              "source": "migration/e95edcb7-c619-475d-b56e-7bb84402a4ba/subagents/agent-ac78a02c68c8119fe.jsonl",
+              "line": 27
+            },
+            {
+              "source": "migration/e95edcb7-c619-475d-b56e-7bb84402a4ba/subagents/agent-ac78a02c68c8119fe.jsonl",
+              "line": 28
+            }
+          ]
+        },
+        {
+          "from": 10,
+          "to": 11
+        },
+        {
+          "from": 11,
+          "to": 13,
+          "force": true,
+          "reason": "Bash grep \"^| P-S17-\" spec/placeholder-registry.md，回执返回 P-S17-UNC-002 行原文（固定 UTC 30000705T185000Z、forward-ref-uncertain）；这支持 Slice 17 worker 写 RRuleHelper 前已实际读到该不确定项。",
+          "evidence": [
+            {
+              "source": "migration/fcc67332-0774-45b4-a72c-d2b6a33207b8/subagents/agent-a4cc5d7bbd651a427.jsonl",
+              "line": 32
+            },
+            {
+              "source": "migration/fcc67332-0774-45b4-a72c-d2b6a33207b8/subagents/agent-a4cc5d7bbd651a427.jsonl",
+              "line": 33
+            }
+          ]
+        },
+        {
+          "from": 12,
+          "to": 13,
+          "force": true,
+          "reason": "Bash sed -n '25,127p' 读 helpers/date/RecurrenceHelper.java，回执含 import EventRecurrenceFormatter、formatRecurrence→getRepeatString、Recur.getNextDate 与 new RRule(recur).toString().replace(\"RRULE:\",\"\")；这支持 worker 写前已实际读到库字面输出的调用点。",
+          "evidence": [
+            {
+              "source": "migration/fcc67332-0774-45b4-a72c-d2b6a33207b8/subagents/agent-a4cc5d7bbd651a427.jsonl",
+              "line": 47
+            },
+            {
+              "source": "migration/fcc67332-0774-45b4-a72c-d2b6a33207b8/subagents/agent-a4cc5d7bbd651a427.jsonl",
+              "line": 48
+            }
+          ]
+        },
+        {
+          "from": 13,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/services/DateHelper.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/build.gradle",
+          "at": "2026-10-01T07:03:00.813Z",
+          "reason": "正常输入：主会话 Bash grep 依赖清单，回执含 187: org.ocpsoft.prettytime:prettytime:3.2.7.Final，说明相对时间文案来自外部库（bc655f68 主转录 L345/L347）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/.claude/skills/a2h-spec/references/migration-decision-categories.md",
+          "at": "2026-10-01T07:02:19.332Z",
+          "reason": "正常输入：主会话 Read 回执含 C8 三方依赖无等价物时默认 PD-* 阻断、由用户改判（L277/L279）。"
+        },
+        {
+          "key": "bc655f68-6f49-4bcf-ab64-aa45d7a58cc2:main",
+          "at": "2026-10-01T07:22:30.236Z",
+          "reason": "已读到依赖与 C8 策略，C3 派工 prompt 直接写定「prettytime→@ohos intl 相对时间或自研」（L585 请求 / L587 回执），把有自有阈值与 44 语言资源的库当成系统接口可替代项。",
+          "problem": true
+        },
+        {
+          "key": "bc655f68-6f49-4bcf-ab64-aa45d7a58cc2:ae3c915d1468d6648",
+          "at": "2026-10-01T07:29:05.743Z",
+          "reason": "收到派工硬映射（同转录 L1），grep build.gradle 看到 prettytime 3.2.7.Final（L43/L44），Write feature-base.md #14「prettytime 3.2.7.Final | @ohos.i18n intl 相对时间（getRelativeTimeSpanString 类）或自研 | L2/L5 | Semi-Auto 🟡 | settings_prettified_dates 开关控制显示形态」（L175/L176）。按派工转写；本链确认传递。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/spec/baseline/feature-base.md",
+          "at": "2026-10-01T19:24:06.679Z",
+          "reason": "交付桥梁：final closer Bash grep 回执返回 feature-base.md:326 的 #14 行原文「@ohos.i18n intl 相对时间（getRelativeTimeSpanString 类）或自研 | Semi-Auto 🟡」（agent-a7144c990395acaed.jsonl:L100/L101）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/java/it/feio/android/omninotes/utils/date/DateUtils.java",
+          "at": "2026-10-01T19:24:05.954Z",
+          "reason": "正常输入：final closer Bash cat 回执给出 import org.ocpsoft.prettytime.PrettyTime 与 prettyTime(Long, Locale)：new PrettyTime(); pt.setLocale(locale); return pt.format(d)（agent-a7144c990395acaed.jsonl:L98/L99）；可见文案、单位与取整全由库决定，源码中没有阈值可抄。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/java/it/feio/android/omninotes/helpers/date/DateHelper.java",
+          "at": "2026-10-01T19:24:42.366Z",
+          "reason": "正常输入：final closer Bash sed 回执给出 getDateTimeShort 的 FORMAT_ABBREV_WEEKDAY|FORMAT_SHOW_WEEKDAY|FORMAT_ABBREV_MONTH|FORMAT_SHOW_DATE + 空格 + FORMAT_SHOW_TIME 拼接（agent-a7144c990395acaed.jsonl:L111/L112）；flags 对应 libcore skeleton，含非本年才带年份的规则。"
+        },
+        {
+          "key": "fcc67332-0774-45b4-a72c-d2b6a33207b8:a7144c990395acaed",
+          "at": "2026-10-01T19:38:55.249Z",
+          "reason": "已读到 #14 行、DateUtils.prettyTime 与 getDateTimeShort flags，仅核对 SDK 的 intl.RelativeTimeFormat / DateTimeFormat 签名（L115–L121）即 Write DateHelper.ets：prettyTime 用 intl.RelativeTimeFormat(numeric:'auto') 配自定阈值（<60s 秒、<7 天日、<30 天周、<365 天月、Math.round）并注释「prettytime 默认粒度」；getDateTimeShort 用 DateTimeFormat weekday/month short + hourCycle 随 i18n.System.is24HourClock，无年份规则（同转录 L394/L395）。该版本即返修前文件（_orig 快照 :59/:73），2026-10-13T21:19:35Z 被重写为 libcore skeleton + PrettyTime 3.2.7 移植（agent-a20e64cdf9376bcdc.jsonl:L435）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "Bash 进入 Android 工程目录 grep omniNotes/build.gradle 的依赖行，回执列出 187: org.ocpsoft.prettytime:prettytime:3.2.7.Final；这支持主会话派工前已实际读到相对时间由外部库实现。",
+          "evidence": [
+            {
+              "source": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl",
+              "line": 345
+            },
+            {
+              "source": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl",
+              "line": 347
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": 8,
+          "force": true,
+          "reason": "Bash grep 'AC55\\|相对时间\\|prettytime\\|RelativeTime' spec/baseline/features/F001*.md spec/baseline/feature-base.md，回执返回 feature-base.md:326 的 #14 行「@ohos.i18n intl 相对时间（getRelativeTimeSpanString 类）或自研 | Semi-Auto」；这支持 final closer 写 DateHelper 前已实际读到该映射行。",
+          "evidence": [
+            {
+              "source": "migration/fcc67332-0774-45b4-a72c-d2b6a33207b8/subagents/agent-a7144c990395acaed.jsonl",
+              "line": 100
+            },
+            {
+              "source": "migration/fcc67332-0774-45b4-a72c-d2b6a33207b8/subagents/agent-a7144c990395acaed.jsonl",
+              "line": 101
+            }
+          ]
+        },
+        {
+          "from": 6,
+          "to": 8,
+          "force": true,
+          "reason": "Bash cat utils/date/DateUtils.java，回执含 import org.ocpsoft.prettytime.PrettyTime 与 prettyTime(Long, Locale) 的 new PrettyTime(); pt.setLocale(locale); pt.format(d)；这支持 final closer 写前已实际读到相对时间完全由库产出。",
+          "evidence": [
+            {
+              "source": "migration/fcc67332-0774-45b4-a72c-d2b6a33207b8/subagents/agent-a7144c990395acaed.jsonl",
+              "line": 98
+            },
+            {
+              "source": "migration/fcc67332-0774-45b4-a72c-d2b6a33207b8/subagents/agent-a7144c990395acaed.jsonl",
+              "line": 99
+            }
+          ]
+        },
+        {
+          "from": 7,
+          "to": 8,
+          "force": true,
+          "reason": "Bash sed -n '55,80p' helpers/date/DateHelper.java，回执给出 getDateTimeShort 的 FORMAT_ABBREV_WEEKDAY|FORMAT_SHOW_WEEKDAY|FORMAT_ABBREV_MONTH|FORMAT_SHOW_DATE + FORMAT_SHOW_TIME 拼接；这支持 final closer 写前已实际读到短日期的 libcore flags。",
+          "evidence": [
+            {
+              "source": "migration/fcc67332-0774-45b4-a72c-d2b6a33207b8/subagents/agent-a7144c990395acaed.jsonl",
+              "line": 111
+            },
+            {
+              "source": "migration/fcc67332-0774-45b4-a72c-d2b6a33207b8/subagents/agent-a7144c990395acaed.jsonl",
+              "line": 112
+            }
+          ]
+        },
+        {
+          "from": 8,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "主会话 C3 派工 prompt 里「ical4j→自研/tiny RRULE 解析」「prettytime→@ohos intl 相对时间或自研」在转录中找不到更上游的文件来源（a2h-spec 模板与决策分类文件均无此映射）；本卡把它归为主会话派工时的决策。",
+    "尚未核对 Slice 17 worker 写前是否在本机 gradle 缓存中可取到 ical4j-3.0.11.jar；返修者能解包对拍，说明材料在机，但生成期无人尝试。"
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/services/EventRecurrence.ets",
+      "reason": "返修 2026-10-13T21:17:41Z 新建（agent-a20e64cdf9376bcdc.jsonl:L420），移植 EventRecurrence/EventRecurrenceFormatter/Time 子集。迁移池中无此文件的任何写入；它替代的生成期产物是 RRuleHelper.formatRule 对 EventRecurrenceFormatter 的「降级为 FREQ 词」（本卡图 1 节点 13），成因与图 1 相同，但该键没有生成期真实写边，不单独画图。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/services/PrettyTime.ets",
+      "reason": "返修 2026-10-13T21:18:48Z 经 Bash 脚本新建（agent-a20e64cdf9376bcdc.jsonl:L430），移植 PrettyTime 3.2.7 引擎与 34 个资源包。迁移池中无此文件的任何写入；它替代的生成期产物是 DateHelper.prettyTime 的 intl.RelativeTimeFormat 自定阈值（本卡图 2 节点 8），成因与图 2 相同，但该键没有生成期真实写边，不单独画图。"
+    }
+  ],
+  "job": "issue-d23537ecc4c87801075a",
+  "metadata": {
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.247",
+        "2.1.296",
+        "2.1.300"
+      ]
+    },
+    "source_set_id": "sources-fef5281fb5eb1e655dea",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos",
+        "at": "2026-10-01T08:07:31.804Z",
+        "ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1119",
+        "request_ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1117",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos",
+        "at": "2026-10-01T08:07:31.804Z",
+        "ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1119",
+        "request_ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1117",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes",
+        "at": "2026-10-13T15:34:04.077Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L121",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L120",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes",
+        "at": "2026-10-13T15:34:04.077Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L121",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L120",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes",
+        "at": "2026-10-14T01:47:40.558Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L159",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L158",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes",
+        "at": "2026-10-14T01:47:40.558Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L159",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L158",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.10"
+  },
+  "revision": "82aba2b2aeb3562e5d2c48260683b0f99162c182846f0e6771624298a1d71ff5"
+}

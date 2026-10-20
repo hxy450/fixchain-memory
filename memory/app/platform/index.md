@@ -1,11 +1,14 @@
 # app/platform
 
-系统平台能力（后台任务与扩展能力承载类、module.json5 extensionAbilities 的 type 登记，通知与常驻通知的订阅归属、画中画回退、动态取色、地图承载，打开系统设置的显式 Want）的实现、替代与降级，激励广告等能力门禁在能力不可用时的入口放行，厂商 SDK 鸿蒙版本的查询与选型，以及后台计时的恢复和退出清理，读当前系统值再增量写回的手势（亮度）读写映射，OAID 采集的跟踪授权；权限清单按已映射 API 在 d.ts 中的 @permission 汇总；画中画到 PiPWindow、动态取色到 wallpaper 的映射，后台计时与进度通知的降级边界，通知按钮 WantAgent 的 requestCode 与正文非空
+系统平台能力（后台任务与扩展能力承载类、module.json5 extensionAbilities 的 type 登记，通知与常驻通知的订阅归属、画中画回退、动态取色、地图承载，打开系统设置的显式 Want）的实现、替代与降级，激励广告等能力门禁在能力不可用时的入口放行，厂商 SDK 鸿蒙版本的查询与选型，以及后台计时的恢复和退出清理，读当前系统值再增量写回的手势（亮度）读写映射，OAID 采集的跟踪授权；权限清单按已映射 API 在 d.ts 中的 @permission 汇总；画中画到 PiPWindow、动态取色到 wallpaper 的映射，后台计时与进度通知的降级边界，通知按钮 WantAgent 的 requestCode 与正文非空；AlarmManager 到点通知改用代理提醒时的按钮路由、贪睡与失败回退，通知 builder 默认图标；拉起系统能力前的可用性预检、权限申请与无接收方回退（canOpenLink、querySchemes）
 
 [上一级](../index.md)
 
 ## 本级经验
 
+- [AlarmManager 到点通知改用代理提醒时，按 reminderAgentManager 自身接口落实按钮路由、贪睡与发布失败回退](lesson-5990184d75275f4df4ff.lesson.md)
+  - 时机：规格提取与服务实现阶段，把 AlarmManager 定时加自绘通知（按钮各带 PendingIntent）映射到 reminderAgentManager 或 notificationManager，并决定按钮路由、贪睡间隔、失败回退与到点副作用时
+  - 情境：源端用精确闹钟到点后自绘通知，按钮各带 PendingIntent（贪睡按偏好分钟重挂、改期弹选择器），到点在接收器里执行副作用并链式重挂下一次（如按 RRULE），动作可能经无 UI 的透明 Activity 分派；目标拟交系统代理提醒托管：reminderAgentManager.ActionButton 只有 title/titleResource/type，按钮级 wantAgent 只在 notificationManager 的 NotificationActionButton 上，ReminderRequest 提供 snoozeTimes/timeInterval 与提醒级 wantAgent，publishReminder 有条数上限与失败码，到点不回调应用。
 - [Android 依赖厂商 SDK（地图、登录、支付、账号等）时，先查鸿蒙系统 Kit 与厂商 ohpm 包，再在 Kit、厂商包、H5 与受控降级之间取舍；查证前不写“鸿蒙无等价”](lesson-e9890889e591196c3d0d.lesson.md)
   - 时机：规格提取与迁移规划阶段，为三方 SDK 作依赖决策、判断是否“鸿蒙无等价”、为对应切片绑定 SDK 文档类 skill 时；实现阶段遇到规格要求的 SDK 能力而工程里还没有 SDK 时
   - 情境：Android 工程直接依赖厂商 SDK（com.amap.api.* 一类），功能规格与接口清单写明这些能力；项目 skill 映射表把该厂商列为 SDK 文档查询类 skill 的典型对象；用户在决策问答中没有提供鸿蒙 SDK 资料，只回复“采用建议”。也包括微信 OpenSDK 登录与支付（ohpm 有 @tencent/wechat_open_sdk）、华为账号（系统 @kit.AccountKit 提供）这类被规格或决策表与其他三方 SDK 并列为占位候选的能力，而 skill 映射表已把它们绑定到登录、支付 skill。
@@ -46,9 +49,12 @@
 - [源端“先读当前系统值、再按位移增量写回”的手势（如亮度）分别映射读写两侧；异步读取在页面就绪时预读基线](lesson-33791daf74fc4298779e.lesson.md)
   - 时机：界面实现阶段，把源端按下时读取窗口亮度等系统值、移动时按增量写回的手势迁到鸿蒙时
   - 情境：源端手势在 ACTION_DOWN 读取窗口当前亮度，未覆写时回退系统亮度设置，移动时按位移增量写回窗口；规格只给出写入接口（setWindowBrightness），读取侧要实现者确定。
-- [源端通知按钮与可空正文迁到 WantAgent 与 NotificationRequest：每个按钮、每次构建用不同 requestCode，并按需加 UPDATE_PRESENT_FLAG；正文不直接给空串](lesson-716d06e75b7c2102c36c.lesson.md)
-  - 时机：实现阶段，把源端通知的多个 PendingIntent 动作按钮与可为 null 的 setContentText 映射为 wantAgent.getWantAgent 与 NotificationRequest 时
-  - 情境：源端每次构建通知都给按钮取不同的 requestCode（如逐次取 elapsedRealtime），按钮 Intent 载荷随运行状态变化；部分通知（完成通知、没有文本的步骤）contentText 为 null。目标用 WantAgentInfo（wants、operationType、requestCode、wantAgentFlags）与 NotificationBasicContent（title、text）发布。
+- [源端拉起系统能力前的可用性预检、权限申请与无接收方回退逐段落成目标显式步骤，不用 pick/startAbility 的 catch 代替](lesson-4b5903a870344121e97e.lesson.md)
+  - 时机：规格提取与服务层实现阶段，把源端拉起相机、外部应用或隐式 Intent 前的能力检查、权限申请与失败回退翻译为目标契约和代码时
+  - 情境：源方法在 startActivity 或拍照前先用 IntentChecker.isAvailable、PackageManager.hasSystemFeature、resolveActivity 判可用，经权限工具申请运行时权限，无接收方时走回退（如 geo: 打不开改走网页地图）或提示；目标用 cameraPicker、startAbility/openLink 的隐式 Want 等实现，参考样例只给“调用 + catch”。
+- [源端通知迁到 NotificationRequest：按钮与每次构建用不同 requestCode，正文不给空串，builder 默认图标照填](lesson-716d06e75b7c2102c36c.lesson.md)
+  - 时机：实现阶段，把源端通知构造（多个 PendingIntent 动作按钮、可为 null 的 setContentText、helper 里 builder 预设的图标）映射为 wantAgent.getWantAgent 与 NotificationRequest 时
+  - 情境：源端每次构建通知都给按钮取不同的 requestCode（如逐次取 elapsedRealtime），按钮 Intent 载荷随运行状态变化；部分通知（完成通知、没有文本的步骤）contentText 为 null。目标用 WantAgentInfo（wants、operationType、requestCode、wantAgentFlags）与 NotificationBasicContent（title、text）发布。 源端通知 helper 的 builder 先设默认 smallIcon/largeIcon，再由调用方按需覆盖。
 - [激励广告等能力门禁挡在核心功能入口前时，区分“用户未获奖励”与“广告能力不可用”：不可用时显式提示并按台账放行，不伪造奖励](lesson-0f67121af7969203b76b.lesson.md)
   - 时机：规格、巡检出单与接线实现阶段，为“先看激励广告、奖励回调后才导航”的入口确定各广告结果的去向时
   - 情境：源端功能入口先调起激励视频，仅在 onReward 回调后导航；目标端没有等价广告 SDK 或广告 provider 未装配，showRewarded 一类接口恒返回 unavailable；决策台账同时要求“能力不可用时显式失败、不伪造 SDK 成功”和核心功能流程真实可用，且没有对这些入口批准“不可用即阻断”。

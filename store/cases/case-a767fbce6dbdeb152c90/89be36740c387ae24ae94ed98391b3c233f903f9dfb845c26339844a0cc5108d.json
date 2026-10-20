@@ -1,0 +1,318 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-a767fbce6dbdeb152c90",
+  "created_at": "2026-10-17T03:06:49.284273+00:00",
+  "migration_key": "/private/tmp/claude-502/-Users-fengyi-Workspace-migbot-set-l123-cc-glm53/a9f6942f-6659-40bd-bc16-6616949070fb/scratchpad/distill/pool2",
+  "title": "第三方文本控件的截断语义与平台省略规则被按属性名直译",
+  "when": "规格提取阶段，把源工程的第三方 UI 库（pixlui、material-dialogs 等）登记为跨栈映射基线时；界面实现阶段，为单行/多行文本确定截断与排版修饰链时",
+  "description": "源布局使用第三方 TextView 子类（如 com.neopixl.pixlui.components.textview.TextView）配 singleLine/maxLines 而无 ellipsize，或工具栏标题/对话框正文的省略与行距由 Android 框架或库默认值决定；目标为 ArkUI Text，maxLines+TextOverflow.Ellipsis 按词断行后省略，lineSpacing 默认 0，且项目内仅有属性级映射参考。",
+  "summary": "本问题 8 个目标里，生成期可核的偏差分两类成因，均在 2026-10-01 的 bc655f68 会话内：\n（一）第三方库内部行为不在源码树，规格把库登记成「字体替换」，实现者按属性名直译。\nfeature-base 规格作者（bc655f68…:ae3c915d1468d6648）只从 build.gradle 的 grep 回执看到\n`com.github.federicoiosue:pixlui:3.0.1` 是二进制依赖（agent-ae3c915d1468d6648.jsonl:L43-L44），\n且派工提示已预设「pixlui→Text 组件 fontFamily」（主会话 bc655f68…jsonl:L585，07:22:30Z），\nWrite feature-base.md 跨栈基线 #12「pixlui 3.0.1（自定义字体 TextView）→ ArkUI Text .fontFamily()，L2 Auto 逐布局替换引用」\n（同转录 L175-L176）；pixlui TextView 实为 EllipsizingTextView（取前 N 行→按空格回退至「文本+…」→去尾标点→加「…」，\n禁用系统省略）这一截断语义在迁移池无任何转录读到过（grep EllipsizingTextView 为零）。\nBase-6 worker（bc655f68…:a0880cb7aecba93f5）读到该基线行（L30-L31 回执含 317-325 行）和 note_layout.xml\n（note_title 为 pixlui TextView + singleLine=true、note_content maxLines=@integer/textview_max_lines，均无 ellipsize；L45-L46），\nWrite NoteListItem.ets 时标题/正文一律 `.maxLines(N).textOverflow({ overflow: TextOverflow.Ellipsis })`\n（payload 61-67、87-92、106-118 行；L99-L100），头注释只列 note_layout.xml 为锚点、不提 pixlui 截断。\n返修 35 双机对照发现收起视图多行正文无「…」、长标题词中截断，新建 services/EllipsizingText.ets\n（@ohos.graphics.text Paragraph 同字体同宽取行）并让 NoteListItem 标题/正文改用（主会话 L12215 Write 04:01:53Z、L12228 Bash）。\n同一 worker 同一批 Write ONDialog.ets（L124-L125）：头注释以「material-dialogs 0.9.6.0」为锚点，正文 Text 只有 fontSize/fontColor，\n无 lineSpacing（payload 69-73 行）；它读到的基线 #6 只写「material-dialogs → CustomDialog + promptAction，Semi-Auto」，\n库内 DialogInit content.setLineSpacing(0, 1.2) 的缺省倍数不在源码树也不在任何输入（迁移池无 contentLineSpacingMultiplier）。\n返修 33 为 md 形制正文加 lineSpacing = 1.2×单行自然行高 − 字号（主会话 L10871/L10873，03:28Z）。\n（二）平台省略规则差异，属性级映射参考未提示，实现者未查项目内专项 skill。\nGalleryActivity 转换器（bc655f68…:ad325164a2c22a4bf）Read 到 getSupportActionBar().setTitle(title)（源 :159，L19-L20），\nRead 原子组件映射参考第 81 行「android:ellipsize → .textOverflow({ overflow: TextOverflow.Ellipsis })」及第 80 行「singleLine → 使用 TextInput」\n（L71-L72），pitfalls P-14「确需截断时才显式 .maxLines(N).textOverflow(Ellipsis)」（L76-L77），\nWrite GalleryPage.ets 标题 `Text(this.galleryTitle).fontSize(20)….maxLines(1).textOverflow(Ellipsis)`（payload 161-166 行；L108-L109）。\nAndroid Toolbar 标题是 TextUtils.ellipsize 字符级（参照机「Alpha beta gamma delt…」），ArkUI 先按词断行再省略（「Alpha beta …」）；\n映射参考与 pitfalls 都没写 wordBreak，而工程内 arkts-text-truncation skill 已记录 WordBreak.BREAK_ALL\n（SKILL.md:102、references/patterns.md:185），该 worker 的派工提示列出了这个 skill（L6）但它只读了 arkts-immersive-safearea。\nListFragment 转换器（bc655f68…:a5e63b2207e98f693）以 Bash sed 读同一参考 25-113 行（L100-L101，含 80-81 行），\nWrite NoteListPage.ets 自绘工具栏 `Text(this.pageTitle).fontSize(20).maxLines(1).textOverflow(Ellipsis)`（payload 761-766 行；L159-L160），同样无 wordBreak。\n返修 41 给图库标题与列表工具栏标题加 wordBreak(BREAK_ALL)（主会话 L14721/L14791 python 脚本，05:03–05:05Z）。\n对 job 问题的回答：生成者把 singleLine/maxLines 映射成 maxLines+Ellipsis 时，输入里没有任何材料说明 ArkUI Ellipsis 先按词断行；\npixlui 自定义截断在规格中没有记录（基线 #12 只登记字体）；[ ] → &EmptySmallSquare; 的字形回退、取色按钮 textCase 测量、\n清单链接多重装饰三项分别是忠实移植后的平台字体回退、返修中新生问题、返修新建文件，见 unresolved_targets。\n",
+  "recommendations": [
+    "规格提取阶段：把第三方 UI 库登记进跨栈映射基线前，取得库源码核实其渲染行为（迁移池中 F002 mapping 作者就曾 curl GitHub 取 checklistview 常量，agent-a5de99c92f8d9ae39.jsonl:L116-L117）；对 TextView/EditText/Dialog 子类至少列出截断策略、行距倍数、默认装饰三项，不能只凭类名写成「自定义字体，L2 Auto」。",
+    "界面实现阶段：源控件是第三方 TextView 子类（布局 xmlns 声明了库命名空间）且无 android:ellipsize 时，先确认库自身的截断策略再选 ArkUI 修饰链；多行正文要「…」且逐行按空格回退的，需自排版（@ohos.graphics.text Paragraph）而非 maxLines+Ellipsis。",
+    "界面实现阶段：单行用户内容（笔记标题、分类名）走 maxLines(1)+Ellipsis 时，对照 Android 字符级 TextUtils.ellipsize 补 wordBreak(WordBreak.BREAK_ALL)；检查方法是用含多个长词的标题在两端比对省略位置。映射参考只给属性对应时，读工程内 arkts-text-truncation 等专项 skill。",
+    "界面实现阶段：以 material-dialogs 等库为锚点封装对话框时，把库的 Builder 缺省值（contentLineSpacingMultiplier=1.2 等）写入组件注释并落成 lineSpacing，而非只复刻内边距与字号。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/components/common/NoteListItem.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/build.gradle",
+          "at": "2026-10-01T07:23:17.145Z",
+          "reason": "正常输入：规格作者 Bash grep implementation 的回执列出 203:implementation 'com.github.federicoiosue:pixlui:3.0.1'、172/176 material-dialogs 0.9.6.0，说明两者都是二进制依赖、源码不在工程树（migration/bc655f68-…/subagents/agent-ae3c915d1468d6648.jsonl:L43-L44）。"
+        },
+        {
+          "key": "bc655f68-6f49-4bcf-ab64-aa45d7a58cc2:ae3c915d1468d6648",
+          "at": "2026-10-01T07:29:05.743Z",
+          "reason": "只见到依赖坐标、未取库源码（迁移池无人读过 EllipsizingTextView），且派工提示预设「pixlui→Text 组件 fontFamily」（主会话 L585），Write feature-base.md 跨栈基线 #12「pixlui 3.0.1（自定义字体 TextView）→ ArkUI Text .fontFamily()，L2 Auto 逐布局替换引用」（文件 L324；agent-ae3c915d1468d6648.jsonl:L175-L176）。把一个自带 N 行省略算法的 TextView 子类登记成纯字体替换，截断语义在规格中缺失。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/spec/baseline/feature-base.md",
+          "at": "2026-10-01T09:09:39.238Z",
+          "reason": "交付桥梁：Base-6 worker 的 Read 回执含 317-325 行基线表，其中 #12 pixlui 仅「自定义字体 TextView → .fontFamily()」、#6 material-dialogs → CustomDialog（migration/bc655f68-…/subagents/agent-a0880cb7aecba93f5.jsonl:L30-L31）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/res/layout/note_layout.xml",
+          "at": "2026-10-01T09:09:55.304Z",
+          "reason": "正常输入：Read 回执含 xmlns:pixlui 声明，note_title 为 com.neopixl.pixlui.components.textview.TextView + android:singleLine=true，note_content 为同类 + maxLines=@integer/textview_max_lines，均无 android:ellipsize（文件 L18、L53-L61、L109-L117；agent-a0880cb7aecba93f5.jsonl:L45-L46）。类名本身提示截断由库决定。"
+        },
+        {
+          "key": "bc655f68-6f49-4bcf-ab64-aa45d7a58cc2:a0880cb7aecba93f5",
+          "at": "2026-10-01T09:15:01.046Z",
+          "reason": "按基线 #12 处理，Write NoteListItem.ets：收起/展开两形态的标题 .maxLines(1).textOverflow(Ellipsis)、正文 .maxLines(DesignTokens.noteMaxLines/noteMaxLinesExpanded).textOverflow(Ellipsis)（payload 61-67、87-92、106-118 行），头注释列 note_layout.xml 为锚点但未提 pixlui 截断（agent-a0880cb7aecba93f5.jsonl:L99-L100）。本链确认规格缺口被直译到目标；返修 35 新建 EllipsizingText 并替换此处（主会话 L12215/L12228）。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "feature-base 规格作者以 Bash grep -n \"implementation\\|api \" omniNotes/build.gradle 读取依赖清单，回执返回 203:implementation 'com.github.federicoiosue:pixlui:3.0.1' 及 material-dialogs 0.9.6.0 行；这是它写基线 #12/#6 前对该文件的真实读取。",
+          "evidence": [
+            {
+              "source": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2/subagents/agent-ae3c915d1468d6648.jsonl",
+              "line": 43
+            },
+            {
+              "source": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2/subagents/agent-ae3c915d1468d6648.jsonl",
+              "line": 44
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 5
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/pages/GalleryPage.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/java/it/feio/android/omninotes/GalleryActivity.java",
+          "at": "2026-10-01T09:19:38.383Z",
+          "reason": "正常输入：Read 回执含 initViews 的 setDisplayShowTitleEnabled(true) 与 initData 的 getSupportActionBar().setTitle(title)（源 :113-116、:159），标题为笔记标题（用户内容），Android Toolbar 标题默认单行 END 省略为字符级（migration/bc655f68-…/subagents/agent-ad325164a2c22a4bf.jsonl:L19-L20）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/.claude/skills/android-ui-graph-query/references/android-to-harmonyOS-ui-atomic-component-mapping-reference.md",
+          "at": "2026-10-01T09:23:03.831Z",
+          "reason": "输入（部分）：Read 回执第 80-81 行「android:singleLine → 使用 TextInput」「android:ellipsize → .textOverflow({ overflow: TextOverflow.Ellipsis })」，仅属性对应，无 ArkUI 省略先按词断行、需 wordBreak 的说明（agent-ad325164a2c22a4bf.jsonl:L71-L72）。skill 材料边界：缺口记录于此。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/.claude/skills/android-ui-graph-query/references/ui-migration-pitfalls.md",
+          "at": "2026-10-01T09:23:13.882Z",
+          "reason": "输入（部分）：Read 回执 P-14「确需截断时才显式 .maxLines(N).textOverflow({ overflow: TextOverflow.Ellipsis })」（文件 L163-L167），同样未提 wordBreak（agent-ad325164a2c22a4bf.jsonl:L76-L77）。"
+        },
+        {
+          "key": "bc655f68-6f49-4bcf-ab64-aa45d7a58cc2:ad325164a2c22a4bf",
+          "at": "2026-10-01T09:28:04.102Z",
+          "reason": "读到上述输入后，Write GalleryPage.ets 自绘标题栏 Text(this.galleryTitle).fontSize(20).fontWeight(Medium).fontColor(white).maxLines(1).textOverflow(Ellipsis)（payload 161-166 行），无 wordBreak(BREAK_ALL)，运行期「Alpha beta …」对参照机「Alpha beta gamma delt…」（agent-ad325164a2c22a4bf.jsonl:L108-L109）。派工提示列出的 arkts-text-truncation skill 记录了 WordBreak.BREAK_ALL（SKILL.md:102），该 worker 未读。返修 41 加 wordBreak(BREAK_ALL)（主会话 L14721）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/pages/NoteListPage.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/.claude/skills/android-ui-graph-query/references/android-to-harmonyOS-ui-atomic-component-mapping-reference.md",
+          "at": "2026-10-01T09:23:17.850Z",
+          "reason": "输入（部分）：ListFragment 转换器 Bash sed -n '25,113p;…' 读该参考，回执含「android:singleLine → 使用 TextInput」「android:ellipsize → .textOverflow(Ellipsis)」两行，无 wordBreak 说明（migration/bc655f68-…/subagents/agent-a5e63b2207e98f693.jsonl:L100-L101）。"
+        },
+        {
+          "key": "bc655f68-6f49-4bcf-ab64-aa45d7a58cc2:a5e63b2207e98f693",
+          "at": "2026-10-01T09:36:04.114Z",
+          "reason": "读到上述参考后，Write NoteListPage.ets 自绘工具栏 Text(this.pageTitle).fontSize(20).fontColor(White).maxLines(1).textOverflow(Ellipsis).layoutWeight(1)（payload 761-766 行），工具栏标题含分类名等用户内容而无 wordBreak(BREAK_ALL)（agent-a5e63b2207e98f693.jsonl:L159-L160）。与图库标题同一成因；返修 41 一并加 wordBreak（主会话 L14791）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "ListFragment 转换器以 Bash sed -n '25,113p;555,614p;893,946p' 读取原子组件映射参考，回执含 1.1.1 TextView → Text 属性映射表中 singleLine → TextInput、ellipsize → .textOverflow(Ellipsis) 两行；这是它写 NoteListPage 工具栏标题前对该参考的真实读取。",
+          "evidence": [
+            {
+              "source": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2/subagents/agent-a5e63b2207e98f693.jsonl",
+              "line": 100
+            },
+            {
+              "source": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2/subagents/agent-a5e63b2207e98f693.jsonl",
+              "line": 101
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/components/common/ONDialog.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/spec/baseline/feature-base.md",
+          "at": "2026-10-01T09:09:39.238Z",
+          "reason": "输入（部分）：Base-6 worker 的 Read 回执含基线 #6「material-dialogs 0.9.6.0 → ArkUI CustomDialog（@CustomDialog + UIContext）+ promptAction，L2 Semi-Auto」（文件 L318），只给容器映射，不含库正文排版缺省（contentLineSpacingMultiplier=1.2）（migration/bc655f68-…/subagents/agent-a0880cb7aecba93f5.jsonl:L30-L31）。库为二进制依赖，缺口在此记录。"
+        },
+        {
+          "key": "bc655f68-6f49-4bcf-ab64-aa45d7a58cc2:a0880cb7aecba93f5",
+          "at": "2026-10-01T09:17:14.981Z",
+          "reason": "Write ONDialog.ets：头注释以 material-dialogs 0.9.6.0 为锚点并声称「material 布局语义：24vp 内边距、16fp 标题、13fp 正文」，正文 Text(this.options.messageText) 只有 fontSize/fontColor，无 lineSpacing（payload 1-16、69-73 行；agent-a0880cb7aecba93f5.jsonl:L124-L125）。未核库 Builder 缺省即宣称对齐 material 语义。返修 33 加 lineSpacing = 1.2×单行自然行高 − 字号（主会话 L10871/L10873）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "原子组件映射参考与 ui-migration-pitfalls 的作者与形成过程未追（skill 材料边界）；本卡只核到它们缺少 ArkUI 省略按词断行的说明。",
+    "返修前 NoteListItem 的最终生成态（18 次生成期写入/脚本）未逐一核对；本卡绑定的是最初引入 maxLines+Ellipsis 的 Base-6 写入，返修报告确认该截断策略保留到对照时。"
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/pages/CategoryPage.ets",
+      "reason": "已确认修改（修复 25：先取串再 toLocaleUpperCase 后测宽，主会话 L9119 Edit 2026-10-15T02:50Z）。但 measureText/textCase 测量代码是返修 G2 子代理 2026-10-13T22:12Z 的 Write 引入（agent-aefc2f17edc072f7a.jsonl:L994），生成期 CategoryPage（bc655f68…:a72aa31c2e18decb1 L131 起）无任何文本测量；属返修中新生问题，无生成期偏差写入可绑定。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/components/detail/PixluiEditText.ets",
+      "reason": "已确认修改（修复 50：勾选态叠加透明 Text 画链接下划线）。该文件为返修 G3a 子代理 2026-10-14T02:53Z 新建（agent-abb92fcadb53ed4c2.jsonl:L1026），迁移池无生成期写入；其替代的生成期清单编辑组件（components/detail/ChecklistEditor.ets、DetailChecklistView.ets）中链接 span 与删除线叠加的最初写者及写前输入未核，未归因。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/services/EllipsizingText.ets",
+      "reason": "返修主会话 2026-10-15T04:01:53Z 新建（L12215），用于替代 NoteListItem 的 maxLines+Ellipsis；它没有生成期对应文件，其所纠正的生成期偏差已由本卡 NoteListItem 图归因（基线 #12 → Base-6 worker），不另成图。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/services/TextHelper.ets",
+      "reason": "job 引用的三条证据均为 2026-10-13 的 Bash 读取；返修期对该文件的 Write/Edit 在索引中为零。修复 57 落在 rawfile/fonts/ChecklistSymbols.ttf、NoteListPage 字体注册与 NoteListItem fontFamily，TextHelper 的 [ ] → &EmptySmallSquare; 替换是对 Android TextHelper/checklistview 常量的忠实移植；U+25FB 在 HMOS 回退到 emoji 字形属平台字体配置，生成期输入中无材料提示，且该替换在生成期由哪次写入引入（最初 Write L179 不含该实体）尚未核出，未归因。"
+    }
+  ],
+  "job": "issue-a767fbce6dbdeb152c90",
+  "metadata": {
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.247",
+        "2.1.296",
+        "2.1.300"
+      ]
+    },
+    "source_set_id": "sources-fef5281fb5eb1e655dea",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos",
+        "at": "2026-10-01T08:07:31.804Z",
+        "ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1119",
+        "request_ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1117",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos",
+        "at": "2026-10-01T08:07:31.804Z",
+        "ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1119",
+        "request_ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1117",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes",
+        "at": "2026-10-13T15:34:04.077Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L121",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L120",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes",
+        "at": "2026-10-13T15:34:04.077Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L121",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L120",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes",
+        "at": "2026-10-14T01:47:40.558Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L159",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L158",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes",
+        "at": "2026-10-14T01:47:40.558Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L159",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L158",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.10"
+  },
+  "revision": "89be36740c387ae24ae94ed98391b3c233f903f9dfb845c26339844a0cc5108d"
+}

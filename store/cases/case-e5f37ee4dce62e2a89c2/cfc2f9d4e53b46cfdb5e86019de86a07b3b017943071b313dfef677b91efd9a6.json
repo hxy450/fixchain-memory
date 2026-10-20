@@ -1,0 +1,266 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-e5f37ee4dce62e2a89c2",
+  "created_at": "2026-10-16T16:49:06.123839+00:00",
+  "migration_key": "/private/tmp/claude-502/-Users-fengyi-Workspace-migbot-set-l123-cc-glm53/a9f6942f-6659-40bd-bc16-6616949070fb/scratchpad/distill/pool2",
+  "title": "resourceManager 取串/取色用 Resource 对象重载，绕过了应用偏好语言",
+  "when": "实现阶段，为 context.resourceManager 同步读取字符串、字符串数组、复数串或颜色选择重载形式时（工程已实现应用内语言切换）",
+  "description": "目标工程用 i18n.System.setAppPreferredLanguage 实现应用内语言切换；页面/服务通过 context.resourceManager.getStringSync / getStringArrayValue(Sync) / getIntPluralStringValueSync / getColorSync 取资源；SDK 同时提供 (resId: number) 与 (resource: Resource) 两种重载，工程既有辅助函数（SettingsService.resText、TextHelper.getString、EventRecurrenceFormatter.string）统一传 $r(...).id。",
+  "summary": "三个目标文件的偏差形式相同：把 $r(...) 的 Resource 对象直接传给 resourceManager 的取值方法，\n而不是工程既有写法 $r(...).id。返修实机对照发现中文界面混入英文（抽屉 Notes/Archive、\n选择器文案），返修主会话定位为 Resource 对象重载按 bundle/module 另建资源管理器、不随\nsetAppPreferredLanguage 设定的应用偏好语言（repair/40790d98-….jsonl:L3143 思考、L3145 grep 清单），\n2026-10-15T00:54:32Z 用一段 python 把五个文件的调用统一改为 .id 重载（同转录 L3176/L3177，回执 ok）。\n一、生成期遗留（DynamicMenuService）：Slice 1 F001 第 3 次派发的生成者 agent-aef386d08f13edbfc\n写前 Read 了 SettingsService.ets，回执含 applyLanguage → i18n.System.setAppPreferredLanguage(tag)\n（:176-188）以及 resText(res) → getStringSync(res.id)（:297-302）\n（migration/e95edcb7-…/subagents/agent-aef386d08f13edbfc.jsonl:L73/L74，14:36:05Z）。\n其 14:53:05Z 的思考已写明「SettingsService.resText uses exactly this pattern: getStringSync(res.id)\n— established project pattern! Follow it … Follow suit」，紧接着却把 strarray 写成\nresourceManager.getStringArrayValue($r('app.strarray.navigation_list'))（同转录 L156）；\n14:56:40Z Write DynamicMenuService.ets 时头注释声明「SettingsService.resText 同模式」，\nloadNavigationLabels 却是 getStringArrayValue($r('app.strarray.navigation_list'))，未带 .id（L171/L172）。\n该写法与它同轮 Read 到的 NoteListPage.ets:253、NavDrawerComponent.ets:108 的既有数组取值一致\n（L31、L34 回执），即 .id 约定只被套用到 getStringSync，没有推及数组取值。\n这一行保留到返修前：G2 子代理 2026-10-13T15:45 cat -n 仍见第 190 行（agent-ad3d7b95ccbf0d799.jsonl:L76/L77），\n同日 16:14 的 python 重写也原样保留（L501/L502），主会话 2026-10-15 grep 第 222 行同样（L3145），\n最终改为 getStringArrayValue($r(...).id)。生成期后续两次 Edit（L325/L327）只改 import 与注释，不影响本项。\n二、返修中新生（SublimeRecurrencePicker）：G5 第 2 轮子代理 agent-a20e64cdf9376bcdc 新建该文件，\n替代生成期 ReminderPickerDialog 的重复规则部分。写前它已 sed 读到 TextHelper.getString 的\ngetStringSync(res.id)（agent-a20e64cdf9376bcdc.jsonl:L208/L209，20:59Z）、grep SDK d.ts 得到\ngetStringSync(resId: number, ...args) 签名（L380/L381，21:11Z），并 sed 读到自己同轮写的\nEventRecurrenceFormatter（L1302/L1303，22:41Z）。22:58:26Z Write 新文件时，文件内 7 处 getStringSync\n中 6 处带 .id，getIntPluralStringValueSync 也传 resource.id，唯独 SpRecurrenceEndDatePicker 的私有辅助\nres(resource) 写成 getStringSync(resource)，用于该结束日期选择器的 Cancel/OK 按钮文案\n（L1464 正文第 592/598/614-616 行、L1465 回执）；该写法保留到 2026-10-15 主会话 grep（L3145 第 613 行）。\n本条修正重建版卡片的说法：原生 Write 中经该辅助取值的只有两处按钮文案，不是全部选项菜单文案。\n三、返修中新生（SketchPage）：G4 第 2 轮子代理 agent-ac8f4b88e9a5b9e6a 把画笔粗细 Slider 改为 Canvas\n版 MaterialSeekBar。写前 Read 过 SketchPage 自身 getMediaContentSync($r('app.media.bg_popup').id)\n（agent-ac8f4b88e9a5b9e6a.jsonl:L370/L371 第 793 行，21:10Z），并 grep d.ts 得到 getColorSync(resId: number)\n与 getColorSync(resource: Resource) 两个重载（L1061/L1062，22:03Z）。22:07:57Z 的 Bash 内嵌 python\n以 s[:old_start] + new 重写「弹层子组件」段并 open(p,'w').write(s)，新正文 MaterialSeekBar.aboutToAppear\n写入 getColorSync($r('app.color.colorAccent'))（L1124/L1125）。回执 Exit code 1 来自脚本之后的\ngrep 'Slider\\|SEEKBAR_TRACK_THICKNESS' 无匹配，写盘已完成（L1128/L1129 对新段内容的替换成功、\ngrep 命中 1948/1964 行即证）。颜色不随语言变化，返修把它一并改为 .id 是为了统一用法，报告列入修复 6。\n三处的输入都已给出工程 .id 约定或 number 重载签名；未发现任何输入写明两种重载的语言解析差异，\n本卡只归因为未沿用既有约定，不声称写者已知该差异。\n",
+  "recommendations": [
+    "实现阶段：工程存在 setAppPreferredLanguage 应用内语言切换时，resourceManager 的 getStringSync / getStringArrayValue(Sync) / getIntPluralStringValueSync / getColorSync 一律传 $r(...).id 的 number 重载；写新文件或新辅助函数前先看同工程 resText / TextHelper.getString 的既有写法并照搬，并把该约定推及数组、复数、颜色等所有取值方法，不只套用到 getStringSync。",
+    "实现阶段自检：提交前 grep -nE \"resourceManager\\.get\\w+\\(\\s*(\\$r\\(|resource\\b|res\\b)\" 并排除 .id)，命中应为 0；用脚本批量改写代码段时把这条检查放进脚本尾部。",
+    "验证阶段：语言切换功能要在实机切到非系统语言后逐页核对抽屉、选择器、弹层文案，不只看默认语言下的编译通过。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/services/DynamicMenuService.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/services/SettingsService.ets",
+          "at": "2026-10-01T14:36:05.249Z",
+          "reason": "正常输入：Read 回执给出 applyLanguage 调 i18n.System.setAppPreferredLanguage(tag)（:176-188）和 resText(res) 用 getStringSync(res.id)（:297-302）；足以说明本工程语言由应用偏好决定、取资源按 id（migration/e95edcb7-…/subagents/agent-aef386d08f13edbfc.jsonl:L73/L74）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/pages/NoteListPage.ets",
+          "at": "2026-10-01T14:33:25.344Z",
+          "reason": "同轮读到的既有写法：Read 回执第 253 行 resourceManager.getStringArrayValue($r('app.strarray.navigation_list'))（Resource 重载，骨架期遗留）；生成者沿用了这一数组取值形式而非 resText 的 .id 约定。此节点只说明模式来源，本卡不再上溯骨架写者（同转录 L30/L31）。"
+        },
+        {
+          "key": "e95edcb7-c619-475d-b56e-7bb84402a4ba:aef386d08f13edbfc",
+          "at": "2026-10-01T14:56:40.959Z",
+          "reason": "已读到上述输入，思考中明确「SettingsService.resText … getStringSync(res.id) — established project pattern! Follow it」（L156），Write DynamicMenuService.ets 时注释声明「SettingsService.resText 同模式」，loadNavigationLabels 却写 getStringArrayValue($r('app.strarray.navigation_list'))，未传 .id（L171/L172）；该行保留到返修前（agent-ad3d7b95ccbf0d799.jsonl:L77 第 190 行；repair 主会话 L3145 第 222 行）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/components/common/SublimeRecurrencePicker.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/services/TextHelper.ets",
+          "at": "2026-10-13T20:59:01.040Z",
+          "reason": "正常输入：Bash sed -n '1,140p' 回执给出 TextHelper.getString(res) 用 TextHelper.context.resourceManager.getStringSync(res.id)，是工程取串的既有约定（repair/40790d98-…/subagents/agent-a20e64cdf9376bcdc.jsonl:L208/L209）。"
+        },
+        {
+          "key": "/Applications/DevEco-Studio.app/Contents/sdk/default/openharmony/ets/api/@ohos.resourceManager.d.ts",
+          "at": "2026-10-13T21:11:34.153Z",
+          "reason": "正常输入：Bash grep 回执给出 getStringSync(resId: number, ...args: Array<string | number>): string 等 number 重载签名（agent-a20e64cdf9376bcdc.jsonl:L380/L381）。"
+        },
+        {
+          "key": "40790d98-e128-4480-9378-5c27fe3ba82e:a20e64cdf9376bcdc",
+          "at": "2026-10-13T22:58:26.524Z",
+          "reason": "已读到上述输入（以及自己写的 EventRecurrenceFormatter.string 的 getStringSync(res.id, ...args)，L1302/L1303），Write 新建 SublimeRecurrencePicker.ets：同文件 6 处 getStringSync 与 getIntPluralStringValueSync 都传 .id，SpRecurrenceEndDatePicker 的私有辅助 res(resource) 却写 getStringSync(resource)，Cancel/OK 按钮文案经它取值（agent-a20e64cdf9376bcdc.jsonl:L1464 正文第 592/598/614-616 行、L1465 回执）；该写法保留到 2026-10-15 主会话 grep（L3145 第 613 行）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "Bash 进入工程 ets 目录执行 sed -n '1,140p' services/TextHelper.ets，回执返回 TextHelper.getString(res) 的 TextHelper.context.resourceManager.getStringSync(res.id)；这支持该子代理写新文件前已实际读到工程的 .id 取串约定。",
+          "evidence": [
+            {
+              "source": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-a20e64cdf9376bcdc.jsonl",
+              "line": 208
+            },
+            {
+              "source": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-a20e64cdf9376bcdc.jsonl",
+              "line": 209
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "Bash 进入 SDK api 目录对 @ohos.resourceManager.d.ts grep getIntPluralStringValueSync/getStringArrayValueSync/getStringSync(resId: number, ...args 等签名，回执返回 getStringSync(resId: number, ...args: Array<string | number>): string 等 number 重载；这支持该子代理写前已读到 number 重载签名。",
+          "evidence": [
+            {
+              "source": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-a20e64cdf9376bcdc.jsonl",
+              "line": 380
+            },
+            {
+              "source": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-a20e64cdf9376bcdc.jsonl",
+              "line": 381
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/pages/SketchPage.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "nodes": [
+        {
+          "key": "/Applications/DevEco-Studio.app/Contents/sdk/default/openharmony/ets/api/@ohos.resourceManager.d.ts",
+          "at": "2026-10-13T22:03:07.502Z",
+          "reason": "正常输入：Bash grep 回执给出 getColorSync(resId: number): number（:4011）与 getColorSync(resource: Resource): number（:4042）两种重载（repair/40790d98-…/subagents/agent-ac8f4b88e9a5b9e6a.jsonl:L1061/L1062）；此前 Read 的 SketchPage 自身第 793 行已用 getMediaContentSync($r('app.media.bg_popup').id)（同转录 L370/L371，21:10Z）。"
+        },
+        {
+          "key": "40790d98-e128-4480-9378-5c27fe3ba82e:ac8f4b88e9a5b9e6a",
+          "at": "2026-10-13T22:07:57.994Z",
+          "reason": "Bash 内嵌 python 以 s[:old_start] + new 重写 SketchPage「弹层子组件」段并写盘，新正文 MaterialSeekBar.aboutToAppear 写入 getColorSync($r('app.color.colorAccent'))，未传 .id（agent-ac8f4b88e9a5b9e6a.jsonl:L1124/L1125；脚本写盘后尾部 grep 无匹配致 Exit code 1，L1128/L1129 对同段内容替换成功证明已写入）。该行保留到 2026-10-15 主会话 grep（L3145 第 2100 行）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "Bash grep -n '    getColorSync(' $D/@ohos.resourceManager.d.ts，回执返回 4011 行 getColorSync(resId: number): number 与 4042 行 getColorSync(resource: Resource): number；这支持该子代理写入前已读到两种重载签名。",
+          "evidence": [
+            {
+              "source": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-ac8f4b88e9a5b9e6a.jsonl",
+              "line": 1061
+            },
+            {
+              "source": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-ac8f4b88e9a5b9e6a.jsonl",
+              "line": 1062
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": "target",
+          "force": true,
+          "reason": "Bash 内嵌 python 以 p='pages/SketchPage.ets' 读入全文，s = s[:old_start] + new 替换「弹层子组件」段以后的正文（含 MaterialSeekBar.aboutToAppear 的 getColorSync($r('app.color.colorAccent'))）并 open(p,'w',encoding='utf-8').write(s) 写盘；回执 Exit code 1 来自脚本之后的 grep 'Slider\\|SEEKBAR_TRACK_THICKNESS' 无匹配，写盘已完成（同转录 L1128/L1129 对该新段内容的替换成功、grep 命中 1948/1964 行即证）。",
+          "evidence": [
+            {
+              "source": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-ac8f4b88e9a5b9e6a.jsonl",
+              "line": 1124
+            },
+            {
+              "source": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-ac8f4b88e9a5b9e6a.jsonl",
+              "line": 1125
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "生成期与返修期输入中均未找到说明 Resource 对象重载与 number 重载在语言解析上有差异的文档；该差异由返修主会话实测推断（repair 主会话 L3143）。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-e5f37ee4dce62e2a89c2",
+  "metadata": {
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.247",
+        "2.1.296",
+        "2.1.300"
+      ]
+    },
+    "source_set_id": "sources-fef5281fb5eb1e655dea",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos",
+        "at": "2026-10-01T08:07:31.804Z",
+        "ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1119",
+        "request_ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1117",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos",
+        "at": "2026-10-01T08:07:31.804Z",
+        "ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1119",
+        "request_ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1117",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes",
+        "at": "2026-10-13T15:34:04.077Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L121",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L120",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes",
+        "at": "2026-10-13T15:34:04.077Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L121",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L120",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes",
+        "at": "2026-10-14T01:47:40.558Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L159",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L158",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes",
+        "at": "2026-10-14T01:47:40.558Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L159",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L158",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.10"
+  },
+  "revision": "cfc2f9d4e53b46cfdb5e86019de86a07b3b017943071b313dfef677b91efd9a6"
+}

@@ -1,0 +1,438 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-3cdc388116566cb08735",
+  "created_at": "2026-10-16T17:09:31.580653+00:00",
+  "migration_key": "/private/tmp/claude-502/-Users-fengyi-Workspace-migbot-set-l123-cc-glm53/a9f6942f-6659-40bd-bc16-6616949070fb/scratchpad/distill/pool2",
+  "title": "把源码的未捕获异常、快照写回与缺陷提示在规格或实现中改写成兜底继续",
+  "when": "规格提取阶段转写源码的异常处理与错误提示分支时；实现阶段落地「兜底/不崩溃/继续」类 AC、到点副作用写回和平台无等价通道的用户提示时",
+  "description": "源码存在只 catch 部分异常类型、findFile 返回 null 后解引用、资源 int 与字符串相加、以 Parcel 快照 upsert 写回等缺陷或崩溃路径；迁移政策要求含缺陷照复刻（决策 D-004，例外仅平台合规），而目标端的 try/catch、可空类型、系统托管提醒或缺少后台 Toast 通道会诱使写成「返回空对象继续 / return false 继续 / DB 现值优先跳过 / 只记日志」。",
+  "summary": "D-004「忠实复刻原版行为含缺陷；例外仅平台合规必需项」于 2026-10-01T08:08:17Z 由 bc655f68 主会话 Write 进 decision-ledger\n（bc655f68-….jsonl L1124-L1126，账本第 19 行与第 117-120 行）。本卡涉及的服务层生成写入都在其后，但三类偏差成因不同。\n（一）规格先净化异常路径，实现者沿用。c4-08 规格作者 a838ce 于 07:34:59Z Read 到 BackupHelper.java 全文\n（getImportNote 只 catch (IOException) 返回 new Note()，源 L179-L191；importAttachments 对 backupDir.findFile(...) 结果直接 .exists()，源 L196-L202；\nagent-a838ce L61-L62），却在 07:44:24Z Write 的 F012 spec 中写 AC17「读取/解析失败兜底：返回空 Note（不崩溃）……损坏 json 导入不抛异常，任务继续处理其余文件」\n和 AC16「附件目录缺失 importAttachments 整体返回 false，进程不崩溃」，并在对接点写「不复制崩溃行为」（agent-a838ce L184-L185）。\nSlice 12 worker af84 先 Read 该 spec（L25-L26，16:39:27Z）、再 Read 同一 BackupHelper.java（L39-L40，16:41:42Z），随后按 AC17 Write BackupNoteCodec.fromJson：\n解析失败 hilog.error 后 return new Note()，注释「getImportNote 等价（AC17）……保持 parity 并加日志，任务继续处理其余文件」（L210-L211，16:51:51Z）；\n按 AC16 Write BackupService.importAttachments：pathExists 为假时注释「AC16 …进程不崩溃」并 return false，importBackup 随后无条件 resetReminders、\ncancelBackupNotification 并发 data_import_completed 完成通知（L215-L216，16:52:39Z）。\n返修 G6 B-15/B-16 判定 Android 实际是 Gson JsonSyntaxException 不在 catch (IOException) 范围、findFile 返回 null 后 NPE，导入任务在该处终止；\n最终 BackupNoteCodec 改为 JSON 语法错误向上抛出、BackupService 附件目录缺失抛 BackupDirNotFoundException（repair agent-a761fc44 L459、L461）。\n（二）规格与源码都正确，实现者有意「修正」。Slice 17 worker a4cc5d7 Read 到 F008 spec（L25-L26，17:26:35Z）：数据流与 mapping 第 112/117 行写到期副作用\nupdateNote(archived=false, reminderFired) 以 Parcel 快照执行、NoteParam 替代标「行为等价」，AC07 只把执行时机推迟到通知拉起/冷启对账；\n又 Bash cat 到 AlarmReceiver.java（L45-L46，17:26:57Z）：onReceive 以 ParcelableUtil.unmarshall 还原快照后直接 setArchived(false)、setReminderFired、\nDbHelper.updateNote(note,false)，无任何 DB 读回或存在性检查。却在 Write ReminderActionHandler 时把 applyFiredEffects 写成 loadFreshOrSnapshot(getNote) →\nfresh 为 null（已删）return、isReminderFired 为真 return，注释「以 DB 现值优先（快照仅兜底）……笔记已删 → 跳过不复活……此处为有据偏离，见 source-notes G-5」\n（L246-L247，17:43:57Z），并在 slice-17-source-notes G-5 自记（L320，17:48:13Z）；未登记任何 PD/D 决策。\n同一 worker Bash sed 到 ReminderHelper.java 25-127 行（L47-L48，17:27:00Z）：showReminderMessage 在 reminder > now 时主线程 Toast(alarm_set_on + \" \" + getDateTimeShort)，\n随后未授权再 Toast(denied_notifications_permission)；Write ReminderScheduler 时却以「服务层无后台 Toast 通道，降级日志 + 授权检查诊断，见 source-notes G-2」\n把两个 Toast 替换为 hilog.info（L225-L226，17:41:55Z）。返修 G5 N-17 改回按快照覆盖写回（可复活已删笔记，D-004 保留缺陷，repair agent-a20e64c L669 onReminderFired），\nN-12 以 showToast 补回双 Toast（repair agent-a20e64c L518）。\n（三）规格把显式缺陷翻成「正确文案」，接线者按 spec 实现。c4-07 规格作者 a363098 Bash sed 到 DetailFragment.java 920-960 行（L141-L142，07:37:39Z）：\nonLocationUnavailable 为 showMessage(R.string.location_not_found + \": \" + e.getMessage(), ALERT)，资源 int 与 String 相加（源 L949-L951）；\nWrite F019 spec 时 AC06 写成「onLocationUnavailable → \"location_not_found: {异常消息}\"」，判据只要求「各有对应提示」（L278-L279，07:50:15Z）。\ngroup-closer a2d070 Bash sed 到同一源码 925-975 行（L85-L86，18:58:03Z），grep F019 得到该 AC06 原文（L98-L99，18:58:33Z），\n随后 Edit NoteDetailPage.onLocationUnavailable 为 showExitMessage(`${this.resText($r('app.string.location_not_found'))}: ${detail}`)，注释「AC06 三路失败分流」\n（L130-L131，19:00:04Z）。返修 G3a MS-03 改为显示 $r('app.string.location_not_found').id 数字（repair agent-a253bd56，2026-10-14T08:41 批次）。\n三条链中没有任何生成写者在写前读过 D-004 正文：af84 L29-L30 只 grep PD-C6-F012-01/D-008、L33-L34 只 sed 账本 130-175 行（D-006 起，不含第 19/117 行）；\na4cc5d7 L35-L36 只 grep PD-C6-F008-01/02、D-008；a2d070 无账本读取；两位规格作者 Write 规格时（07:44/07:50Z）D-004 尚未写入（08:08Z）。\n原生转录与重建版结论一致，仅行号不同；修复者不入图。\n",
+  "recommendations": [
+    "规格提取时转写源码错误处理分支，按运行时语义而非 catch 子句字面：列出该路径会抛出的未检查异常（Gson JsonSyntaxException、findFile 返回 null 的 NPE、资源 int 与 String 相加）与实际结局（任务在此终止、已导入保留、进行中通知残留、显示资源 id 数字），再写 AC；要改成「不崩溃/继续」必须以 PD-/D- 决策 ID 为锚（决: 二型），不能只写「源码现状兜底」或「不复制崩溃行为」。",
+    "实现「兜底/不崩溃/继续处理其余文件」类 AC 前，对照源码 catch 的具体异常类型与 null 检查：源码只 catch IOException 就不把解析异常并入 try/catch；源码对可能为 null 的返回值直接解引用，目标端缺目录应抛出终止任务而不是 return false 后继续发完成通知。",
+    "源码以 Parcel 快照 upsert 写回（到点副作用、通知动作）时按快照覆盖写回，包括复活已删笔记、覆盖后续修改；认为会损数据的，登记 PD 决策并在 spec 发行差异 AC，而不是在 source-notes 自记「有据偏离」后直接改成 DB 现值优先/已 fired 跳过。",
+    "平台无同名通道（服务层 Toast）时不以「只记日志」代替用户可见提示：用 window.getLastWindow + promptAction.showToast 等价复刻 alarm_set_on + 时间与未授权二次提示，或登记 PD 决策。",
+    "派发 slice worker / closer 时把 D-004 原文或「含缺陷复刻」要求写进提示并要求 grep 账本该条；spec 写「已知风险保持 parity」却把结局写成「继续」时，以源码为准并回报 spec gap。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/services/BackupNoteCodec.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/java/it/feio/android/omninotes/helpers/BackupHelper.java",
+          "at": "2026-10-01T07:34:59.440Z",
+          "reason": "正常输入：规格作者 Read 回执给出 getImportNote 只 catch (IOException e) 返回 new Note()（源 L179-L191），importAttachments 对 backupDir.findFile(...) 结果直接 .exists()（源 L196-L202）；足以看出解析异常不在兜底范围、目录缺失会解引用 null（agent-a838ce5554a81e7ed.jsonl L61-L62）。"
+        },
+        {
+          "key": "bc655f68-6f49-4bcf-ab64-aa45d7a58cc2:a838ce5554a81e7ed",
+          "at": "2026-10-01T07:44:24.936Z",
+          "reason": "读到上述源码后 Write F012 spec：AC17 写成「笔记 JSON 读取/解析失败兜底：返回空 Note（不崩溃）……损坏 json 导入不抛异常，任务继续处理其余文件」，把只对 IOException 的兜底扩展到解析失败；AC16 写成「附件目录缺失 importAttachments 整体返回 false，进程不崩溃」；对接点另写「不复制崩溃行为」（agent-a838ce5554a81e7ed.jsonl L184-L185）。源码到规格在此偏离；D-004 此时尚未写入账本（08:08:17Z）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/spec/baseline/features/F012-backup-restore.md",
+          "at": "2026-10-01T16:39:27.095Z",
+          "reason": "交付桥梁：Slice 12 worker 的 Read 回执第 112-113 行包含上述 AC16/AC17 原文（agent-af84ebfca37049844.jsonl L25-L26）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/java/it/feio/android/omninotes/helpers/BackupHelper.java",
+          "at": "2026-10-01T16:41:42.175Z",
+          "reason": "正常输入：worker 自己也 Read 了同一 BackupHelper.java，回执同样显示 catch (IOException) 与 findFile(...).exists()（agent-af84ebfca37049844.jsonl L39-L40）。"
+        },
+        {
+          "key": "fcc67332-0774-45b4-a72c-d2b6a33207b8:af84ebfca37049844",
+          "at": "2026-10-01T16:51:51.177Z",
+          "reason": "收到规格与源码后 Write BackupNoteCodec：fromJson 对空串与解析失败一律 hilog.error 后 return new Note()，注释「getImportNote 等价（AC17）……保持 parity 并加日志，任务继续处理其余文件」（agent-af84ebfca37049844.jsonl L210-L211）。本链确认规格契约被传递到目标，不另推定其独立失职；写前只 grep PD-C6-F012-01/D-008 并 sed 账本 130-175 行，未读 D-004（L29-L34）。该片段保留到返修，repair agent-a761fc44c7a5df1e2 L459 才改为语法错误向上抛出。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 5
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/services/BackupService.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/java/it/feio/android/omninotes/helpers/BackupHelper.java",
+          "at": "2026-10-01T07:34:59.440Z",
+          "reason": "正常输入：规格作者 Read 回执给出 importAttachments 中 backupDir.findFile(attachmentsDir.getName()) 结果直接 .exists()（源 L196-L202），以及 importNote → updateNote 的导入链（agent-a838ce5554a81e7ed.jsonl L61-L62）。"
+        },
+        {
+          "key": "bc655f68-6f49-4bcf-ab64-aa45d7a58cc2:a838ce5554a81e7ed",
+          "at": "2026-10-01T07:44:24.936Z",
+          "reason": "Write F012 spec AC16「备份内附件目录缺失时 importAttachments 整体返回 false（附件阶段不视为成功），进程不崩溃」，判据「无异常抛出」；把 null 解引用导致导入任务终止的结局写成正常返回并继续（agent-a838ce5554a81e7ed.jsonl L184-L185）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/spec/baseline/features/F012-backup-restore.md",
+          "at": "2026-10-01T16:39:27.095Z",
+          "reason": "交付桥梁：Slice 12 worker 的 Read 回执第 112 行包含 AC16 原文（agent-af84ebfca37049844.jsonl L25-L26）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/java/it/feio/android/omninotes/helpers/BackupHelper.java",
+          "at": "2026-10-01T16:41:42.175Z",
+          "reason": "正常输入：worker 自己 Read 的同一源码，回执含 findFile(...).exists()（agent-af84ebfca37049844.jsonl L39-L40）。"
+        },
+        {
+          "key": "fcc67332-0774-45b4-a72c-d2b6a33207b8:af84ebfca37049844",
+          "at": "2026-10-01T16:52:39.692Z",
+          "reason": "Write BackupService：importAttachments 在 pathExists 为假时注释「AC16：备份内附件目录缺失 → 整体 false，进程不崩溃」并 return false，importBackup 随后无条件 resetReminders、cancelBackupNotification 并发 data_import_completed 完成通知（agent-af84ebfca37049844.jsonl L215-L216）。规格契约被传递到目标；返修 repair agent-a761fc44c7a5df1e2 L461 改为抛 BackupDirNotFoundException 终止任务。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 5
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/services/ReminderActionHandler.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/spec/baseline/features/F008-reminders-notifications.md",
+          "at": "2026-10-01T17:26:35.068Z",
+          "reason": "正常输入：Read 回执的数据流写到期 AlarmReceiver.onReceive → updateNote(archived=false, reminderFired 条件置位) → DbHelper.updateNote(note,false)；mapping 第 112 行只把执行时机转移到通知拉起/冷启对账（PD-C6-F008-01），第 117 行 ParcelableUtil 快照 → NoteParam 标「行为等价」；AC07 判据为 archived=false 且 reminder_fired=1 落库。没有任何一条允许以 DB 现值覆盖快照或跳过已删/已 fired 笔记（agent-a4cc5d7bbd651a427.jsonl L25-L26）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/java/it/feio/android/omninotes/receiver/AlarmReceiver.java",
+          "at": "2026-10-01T17:26:57.707Z",
+          "reason": "正常输入：Bash cat 回执给出 onReceive 以 ParcelableUtil.unmarshall 还原快照 note，直接 setArchived(false)、setReminderFired、DbHelper.updateNote(note,false)，无任何 DB 读回或存在性检查（agent-a4cc5d7bbd651a427.jsonl L45-L46）。"
+        },
+        {
+          "key": "fcc67332-0774-45b4-a72c-d2b6a33207b8:a4cc5d7bbd651a427",
+          "at": "2026-10-01T17:43:57.752Z",
+          "reason": "收到上述输入后 Write ReminderActionHandler：applyFiredEffects 先 loadFreshOrSnapshot(getNote(creation))，fresh 为 null（已删）则 return，target.isReminderFired() 为真则 return，注释明写「以 DB 现值优先（快照仅兜底）……笔记已删 → 跳过不复活（Android 快照 update 会复活已删笔记，此处为有据偏离，见 source-notes G-5）」（agent-a4cc5d7bbd651a427.jsonl L246-L247；G-5 自记于 L320）。有意偏离而未登记决策；写前只 grep PD-C6-F008-01/02、D-008，未读 D-004（L35-L36）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "Bash 进入 Android 源目录执行 cat receiver/AlarmReceiver.java 等文件，回执返回 onReceive 以 ParcelableUtil.unmarshall 还原快照并直接 setArchived(false)/setReminderFired/DbHelper.updateNote(note,false) 的全文；这是 a4cc5d7 在 Write ReminderActionHandler 前对该源码的真实读取。",
+          "evidence": [
+            {
+              "source": "migration/fcc67332-0774-45b4-a72c-d2b6a33207b8/subagents/agent-a4cc5d7bbd651a427.jsonl",
+              "line": 45
+            },
+            {
+              "source": "migration/fcc67332-0774-45b4-a72c-d2b6a33207b8/subagents/agent-a4cc5d7bbd651a427.jsonl",
+              "line": 46
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/services/ReminderScheduler.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/spec/baseline/features/F008-reminders-notifications.md",
+          "at": "2026-10-01T17:26:35.068Z",
+          "reason": "正常输入：Read 回执含 AC11「并提示 alarm_set_on+短格式时间」的 parity 断言，races 节亦写「Handler(mainLooper).post 展示 toast：HMOS 主线程同步 emit 即可」（agent-a4cc5d7bbd651a427.jsonl L25-L26）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/java/it/feio/android/omninotes/utils/ReminderHelper.java",
+          "at": "2026-10-01T17:27:00.733Z",
+          "reason": "正常输入：Bash sed 25-127 行回执给出 showReminderMessage：reminder > now 时主线程 Toast(alarm_set_on + \" \" + getDateTimeShort)，随后未授权再 Toast(denied_notifications_permission)（源 L114-L125；agent-a4cc5d7bbd651a427.jsonl L47-L48）。"
+        },
+        {
+          "key": "fcc67332-0774-45b4-a72c-d2b6a33207b8:a4cc5d7bbd651a427",
+          "at": "2026-10-01T17:41:55.885Z",
+          "reason": "Write ReminderScheduler：showReminderMessage 注释「服务层无后台 Toast 通道，降级日志 + 授权检查诊断，见 source-notes G-2」，两个用户可见的 Toast 被替换为 hilog.info（agent-a4cc5d7bbd651a427.jsonl L225-L226）。返修 G5 N-12 以 showToast 补回双 Toast（repair agent-a20e64cdf9376bcdc L518）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "Bash 进入 Android 源目录执行 sed -n 25,127p utils/ReminderHelper.java（并接 ParcelableUtil），回执返回 showReminderMessage 的 Toast(alarm_set_on + 时间) 与未授权二次 Toast 实现；这是 a4cc5d7 在 Write ReminderScheduler 前对该源码的真实读取。",
+          "evidence": [
+            {
+              "source": "migration/fcc67332-0774-45b4-a72c-d2b6a33207b8/subagents/agent-a4cc5d7bbd651a427.jsonl",
+              "line": 47
+            },
+            {
+              "source": "migration/fcc67332-0774-45b4-a72c-d2b6a33207b8/subagents/agent-a4cc5d7bbd651a427.jsonl",
+              "line": 48
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/pages/NoteDetailPage.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/java/it/feio/android/omninotes/DetailFragment.java",
+          "at": "2026-10-01T07:37:39.632Z",
+          "reason": "正常输入：规格作者 Bash sed 920-960 行回执给出 onLocationUnavailable 为 showMessage(R.string.location_not_found + \": \" + e.getMessage(), ONStyle.ALERT)，资源 int 与 String 相加（源 L949-L951；agent-a363098e952cc57fe.jsonl L141-L142）。"
+        },
+        {
+          "key": "bc655f68-6f49-4bcf-ab64-aa45d7a58cc2:a363098e952cc57fe",
+          "at": "2026-10-01T07:50:15.127Z",
+          "reason": "Write F019 spec AC06：「onLocationUnavailable → \"location_not_found: {异常消息}\"」，把资源 id 数字拼接写成文案拼接，判据只要求「三种失败注入各有对应提示且无未捕获异常」（agent-a363098e952cc57fe.jsonl L278-L279）。源码到规格在此偏离；D-004 此时尚未写入账本。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/spec/baseline/features/F019-location-attachment.md",
+          "at": "2026-10-01T18:58:33.113Z",
+          "reason": "交付桥梁：group-closer 的 Bash grep 回执返回 AC06 原文（agent-a2d070ead66feb2a9.jsonl L98-L99）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/java/it/feio/android/omninotes/DetailFragment.java",
+          "at": "2026-10-01T18:58:03.224Z",
+          "reason": "正常输入：closer 自己 Bash sed 925-975 行回执同样给出 R.string.location_not_found + \": \" + e.getMessage()（agent-a2d070ead66feb2a9.jsonl L85-L86）。"
+        },
+        {
+          "key": "fcc67332-0774-45b4-a72c-d2b6a33207b8:a2d070ead66feb2a9",
+          "at": "2026-10-01T19:00:04.994Z",
+          "reason": "Edit NoteDetailPage：onLocationUnavailable 写为 showExitMessage(`${this.resText($r('app.string.location_not_found'))}: ${detail}`)，注释「AC06 三路失败分流」（agent-a2d070ead66feb2a9.jsonl L130-L131）。按规格把资源 id 数字换成了文案；本链确认传递，不另推定其独立失职。返修 MS-03 改为显示 $r(...).id 数字。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "Bash 进入 Android 源目录执行 sed -n 920,960p DetailFragment.java，回执返回 onLocationUnavailable 的 showMessage(R.string.location_not_found + \": \" + e.getMessage(), ONStyle.ALERT)；这是规格作者 a363098 在 Write F019 spec 前对该源码的真实读取。",
+          "evidence": [
+            {
+              "source": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2/subagents/agent-a363098e952cc57fe.jsonl",
+              "line": 141
+            },
+            {
+              "source": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2/subagents/agent-a363098e952cc57fe.jsonl",
+              "line": 142
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 5,
+          "force": true,
+          "reason": "Bash 对 spec/baseline/features/F019-location-attachment.md 执行 grep -n（含 AC0[456] 关键词），回执返回 F019-AC06「onLocationUnavailable → \"location_not_found: {异常消息}\"」原文；这是 closer a2d070 在 Edit NoteDetailPage 前对该规格的真实读取。",
+          "evidence": [
+            {
+              "source": "migration/fcc67332-0774-45b4-a72c-d2b6a33207b8/subagents/agent-a2d070ead66feb2a9.jsonl",
+              "line": 98
+            },
+            {
+              "source": "migration/fcc67332-0774-45b4-a72c-d2b6a33207b8/subagents/agent-a2d070ead66feb2a9.jsonl",
+              "line": 99
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": 5,
+          "force": true,
+          "reason": "Bash 对 DetailFragment.java 执行 sed -n 925,975p，回执返回 onLocationUnavailable 的 R.string.location_not_found + \": \" + e.getMessage()；这是 closer a2d070 在 Edit NoteDetailPage 前对该源码的真实读取。",
+          "evidence": [
+            {
+              "source": "migration/fcc67332-0774-45b4-a72c-d2b6a33207b8/subagents/agent-a2d070ead66feb2a9.jsonl",
+              "line": 85
+            },
+            {
+              "source": "migration/fcc67332-0774-45b4-a72c-d2b6a33207b8/subagents/agent-a2d070ead66feb2a9.jsonl",
+              "line": 86
+            }
+          ]
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "本卡对 B-15 的「JsonSyntaxException 未捕获、任务终止」结局采用返修 G6 表与 D-004 补充裁定（参照机结局）的判定；commons BaseNote.buildFromJson 的实现不在源码树内（外部依赖），未另行核验。"
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/pages/NoteListPage.ets",
+      "reason": "已确认修改（3-08 按位置槽位追踪、6-01 滑动开关粘滞、8-01 默认 true + 取样时机，repair agent-a37ab07ebd7bca6e3 L1053/L1289/L1325/L1451）。生成期最早写入 migration/bc655f68 agent-a5e63b2207e98f693 L159 Write 2026-10-01T09:36:04Z，共 187 次生成期写入/脚本；行为差异在取样时机与选中/滑动的状态机，尚未定位到具体生成写入与写前输入。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/components/common/NoteListItem.ets",
+      "reason": "已确认修改（3-08 选中高亮按位置、不复原；repair agent-a37ab07ebd7bca6e3 L977 重写、agent-aea03558554c5b0c8 L544、主会话 L7614）。生成期最早写入 migration/bc655f68 agent-a0880cb7aecba93f5 L99 Write 2026-10-01T09:15:01Z，未核其写前是否读到 NoteAdapter.java 的按位置选中语义。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/services/AttachmentService.ets",
+      "reason": "已确认修改（repair agent-a62bb893d8124da5d L597/L704/L1053、agent-afe325235a7f9e099 L358）。L-03「null (2 MB)」标题由返修新增的 getActionsDialogTitle 承接，生成期该标题拼接位于 NoteDetailPage；R-08/P-07 按 D-4 不复刻进程崩溃，不属本问题的「净化」。生成写者 migration/fcc67332 agent-a1b6e42d3192efc9d L233 Write 2026-10-01T17:38:37Z 未读 D-004，但其文件内未找到与本问题对应的生成期偏差片段。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/services/GeoUtil.ets",
+      "reason": "已确认修改：repair agent-a62bb893d8124da5d L967 把 formatCoordinates 的 `${lat}, ${lon}` 改为 Java Double.toString 等价文本（45 → \"45.0\"）。生成写者 migration/fcc67332 agent-a9d015ded29f54764 L138 Write 2026-10-01T17:53:04Z；偏差是 Double 拼接的文本形态，不是异常/缺陷路径净化，G-01「只回填不显示」在页面侧，故未归入本卡链。"
+    }
+  ],
+  "job": "issue-3cdc388116566cb08735",
+  "metadata": {
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.247",
+        "2.1.296",
+        "2.1.300"
+      ]
+    },
+    "source_set_id": "sources-fef5281fb5eb1e655dea",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos",
+        "at": "2026-10-01T08:07:31.804Z",
+        "ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1119",
+        "request_ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1117",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos",
+        "at": "2026-10-01T08:07:31.804Z",
+        "ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1119",
+        "request_ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1117",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes",
+        "at": "2026-10-13T15:34:04.077Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L121",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L120",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes",
+        "at": "2026-10-13T15:34:04.077Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L121",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L120",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes",
+        "at": "2026-10-14T01:47:40.558Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L159",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L158",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes",
+        "at": "2026-10-14T01:47:40.558Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L159",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L158",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.10"
+  },
+  "revision": "6d0768ed4925b6b36898f8df2a28079e213f3095214c16a510a4df3472ac2e97"
+}

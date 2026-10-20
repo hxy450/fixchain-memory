@@ -1,6 +1,6 @@
 # ui/interaction
 
-点击命中与手势：Stack/弹窗覆盖层对下层点击的影响（含按钮上叠的进度环）、hitTestBehavior与防穿透、事件绑定和点击副作用、侧滑行的手势归属与滑删方向，以及事件触发时的坐标与锚点取值；含状态按钮的内容分支；源端监听回调被注释（死按钮）时的迁移与审计；根级硬件键盘快捷键与聚焦输入框的事件归属，Activity 级按键回调的挂载节点；源端只跟随首指的触控分支对 ArkUI 逐指派发的过滤。；带文字的勾选控件拆成勾选框加文字时的可点范围；Compose 点击修饰符默认按压指示的补齐，combinedClickable 长按自带的系统触感
+点击命中与手势：Stack/弹窗覆盖层对下层点击的影响（含按钮上叠的进度环）、hitTestBehavior与防穿透、事件绑定和点击副作用、侧滑行的手势归属与滑删方向，以及事件触发时的坐标与锚点取值；含状态按钮的内容分支；源端监听回调被注释（死按钮）时的迁移与审计；根级硬件键盘快捷键与聚焦输入框的事件归属，Activity 级按键回调的挂载节点；源端只跟随首指的触控分支对 ArkUI 逐指派发的过滤；带文字的勾选控件拆成勾选框加文字时的可点范围；Compose 点击修饰符默认按压指示的补齐，combinedClickable 长按自带的系统触感；源端 clickable 吞触摸时的 Block/BLOCK_HIERARCHY，组件实例通用属性生成的包装节点与窗口级 ComponentContent 的命中，拖拽柄 Image 的默认系统拖拽；源端自写触摸状态机与框架手势助手（ItemTouchHelper、ScaleGestureDetector）按阈值与取消逐事件移植
 
 [上一级](../index.md)
 
@@ -16,6 +16,10 @@
   - 时机：界面实现阶段，把 Compose combinedClickable(onLongClick = …) 的长按交互转写为 ArkUI LongPressGesture 或长按事件时
   - 情境：源端条目用 combinedClickable(onLongClick = …) 处理长按，hapticFeedbackEnabled 为 true（未显式关闭）；长按回调里可能另有业务振动（如跳步时的重击感）；目标用 LongPressGesture 只回调业务逻辑。
   - 例外：源端显式写 hapticFeedbackEnabled = false
+- [Image 作拖拽柄或按钮并自绘触摸拖拽时设 draggable(false)：ArkUI Image 默认可被系统拖出，长按会接管输入](lesson-7389433391eddbaea827.lesson.md)
+  - 时机：界面实现阶段，用 Image 承载拖拽柄、按钮或可点图标，并在其上挂 onTouch、PanGesture 等自绘拖拽或按压逻辑时
+  - 情境：源端在 ACTION_DOWN 或 onTouch 中立即开始自定义拖拽（如清单条目拖拽排序），或图标只是点击按钮；目标用 Image 组件实现，未设置 draggable。
+  - 例外：源端本就允许把图片拖出到其他位置或应用时保留系统拖拽
 - [Stack 上层全尺寸容器和页面级遮罩会参与命中测试：不处理点击的覆盖层显式 Transparent，贴底内容栏直接锚定而不套全屏壳，条件遮罩与一次性动效层用根 Stack 条件子节点](lesson-4a4f8d845a204ffa244b.lesson.md)
   - 时机：界面实现与巡检修复阶段，把 FrameLayout 或 Compose Box 叠放层转成 ArkUI Stack、确定各层 hitTestBehavior 与贴底栏的定位方式时；为页面加保存中、引导等全屏遮罩时；实现彩纸等一次性全屏动效的覆盖层时
   - 情境：源 FrameLayout 中较晚声明、z 序更高的 match_parent 容器本身不可点击却覆盖下方按钮（Android 非 clickable 视图不消费触摸）；目标对应子层是 width/height('100%') 的容器；或页面要在带安全区 padding 的根容器上加全屏遮罩。也包括源 Compose Box 中返回按钮等可点击覆盖层之后，还有以 Modifier.align(Alignment.BottomCenter) 贴底、按内容定高的底栏，目标 Stack 的 alignContent 改为 TopStart 后需要另找贴底方式。也包括源端在触发瞬间向窗口根视图添加全屏、不可点击的动效层并在播完后移除，目标改成常驻挂载、带 zIndex 的全屏自定义组件，只给内部 Canvas 设 HitTestMode.None。也包括按钮之上叠有同尺寸、不可点击的自绘进度环或加载圈（源端触摸落到下层按钮），目标 Stack 保留 z 序而点击只挂在最底层图片上。
@@ -34,6 +38,9 @@
 - [根级键盘快捷键不假定聚焦的输入框会吞掉全部按键事件](lesson-a10cde3d336eee4eebe7.lesson.md)
   - 时机：实现根级硬件键盘快捷键（媒体控制、导航），并要求输入框聚焦时放行时
   - 情境：源 onKeyUp 在当前焦点为 EditText 时放行；目标在入口页根组件 onKeyEvent 统一处理按键。
+- [源端 clickable 吞触摸或组件实例带通用属性时显式写 hitTestBehavior：空 onClick 不阻断，实例外有缺省命中的包装节点](lesson-6aeb4924b6d6ee3d15f6.lesson.md)
+  - 时机：界面实现阶段，把 Android 的 clickable、不可点击 View 与 FrameLayout 层序翻成 ArkUI 叠放层（撤销条、浮动按钮组、提示条、窗口级图层），决定触摸由谁消费、是否透传时
+  - 情境：源端条体或按钮 clickable=true 吞掉触摸、不下穿到下层列表，或不可点击的提示条覆盖工具栏而不拦截；目标在 Stack 中叠放自定义组件，宿主层可能已设 Transparent，组件实例上写了 margin、padding、position 等通用属性，或用 OverlayManager 挂 ComponentContent；写者准备用空 .onClick 表示“吞触摸”，或依赖组件缺省命中模式。
 - [源端 onTouch 自己按未掩码 getAction 只跟随首指时，先看手指由谁接收再过滤 ArkUI 逐指派发：Up 事件的 touches 仍含正在抬起的手指（末指抬起为 touches.length === 1）；单个视图独占全部手指才按 touches 计数，兄弟控件各自监听时按 pointer id 集合；源端交给 GestureDetector/ScaleGestureDetector 时按本机 SDK 源码逐段移植该检测器](lesson-68023ac5f088c72a775a.lesson.md)
   - 时机：输入控制的规格提取与实现阶段，把 Android onTouch 的 MotionEvent 动作分支和坐标读取映射为 ArkUI onTouch 的 TouchType 分支与触点来源时
   - 情境：源端 OnTouchListener 用未掩码的 event.getAction() 只匹配 ACTION_DOWN/MOVE/UP，以无索引的 getX()/getY()（指针索引 0）读坐标，附加手指的 POINTER_DOWN/UP 不进入任何分支；目标 ArkUI .onTouch 对每根手指都派发 TouchType.Down/Up，TouchEvent 同时提供 touches（含本次抬起手指在内的全部触点）与 changedTouches（本次变化的触点）。也包括源端多个兄弟控件（方向键、旋转键等）各自 setOnTouchListener，targetSdk≥11 且未设 splitMotionEvents=false，窗口默认分指，每个控件只收落在自己身上的指针流；目标每个按钮各挂 .onTouch，而 TouchEvent.touches 列出屏幕上全部手指。也包括源端 onTouch 只 return gestureDetector.onTouchEvent(event)，方向写在 SimpleOnGestureListener.onFling/onScroll 中。
@@ -53,6 +60,10 @@
   - 时机：规格提取阶段为 setEnabled/android:enabled 切换的控件写转换决策时；界面实现阶段落实控件禁用态外观与点击拦截时
   - 情境：源端在 setEnabled(false) 的同时 setBackgroundResource 换成没有 state_enabled 分支的灰色 drawable，textColor 是固定颜色而非 ColorStateList（AppCompat 按钮禁用时投影另归零）；映射参考把 setEnabled(false)/android:enabled 一律对到 .enabled(false)。
   - 例外：源端禁用外观本身来自 state_enabled 选择器或半透明（ColorStateList 的 disabled 项、Compose 组件默认禁用色）时，按源端色值显式写出；目标默认禁用透明度恰与源值一致时才直接用 .enabled()
+- [源端自写触摸状态机或用框架手势助手（ItemTouchHelper 等）时按阈值、跟手与取消逐项移植，不换成识别器手势](lesson-1da902462560b389f0c6.lesson.md)
+  - 时机：规格提取与界面实现阶段，为源端 onInterceptTouchEvent/onTouch 状态机、ItemTouchHelper 滑删、ScaleGestureDetector 缩放或三方查看器手势选择 ArkUI 承接方式（onClick、SwipeGesture/PanGesture/PinchGesture 或 onTouch 逐事件）时
+  - 情境：源码里有带阈值、按压时序、跟手位移、速度判定或 CANCEL 的触摸处理（DOWN 记点、MOVE 超过阈值取消点击、UP 时仍按下才算点击），或交给 ItemTouchHelper、ScaleGestureDetector、ViewPager 等框架或三方手势类；规格写「目标点击与滑动天然分离，无需迁移」，映射参考把它们列为「SwipeGesture」「PinchGesture 直接映射」。
+  - 例外：源端只用识别器式回调（setOnClickListener、setOnLongClickListener），没有附加阈值或取消逻辑
 - [点击事件挂在源端真正持有点击的节点上：源端只绑整栏就挂外层，只绑行内子 View 就只挂该子控件；带文字的 CheckBox/RadioButton 拆成勾选控件加 Text 时整体可点、命中区按源宽度](lesson-fd3add7128663eb9998f.lesson.md)
   - 时机：界面实现与返修阶段，为由多个子控件拼成的搜索栏、入口条或设置行决定 onClick 挂在哪一层，或清理、重写其中的点击绑定时；把带文字的 CheckBox/RadioButton 拆成 ArkUI 勾选控件加 Text 时
   - 情境：源布局只在整条容器上绑定点击（如 LinearLayout 的 onClick 或 DataBinding 点击），内部图标、提示文字、“搜索”字样只负责展示；目标用 Row + Image + Text 模拟占位搜索框（不是 TextInput），点击后压栈进入目标页。也包括源端 Java 只对行内某个子 View（如右侧值文本）setOnClickListener，同页其他行绑定整行 layout；目标用 Row 承载这些设置行。也包括带文字的 CheckBox/RadioButton（XML 声明或代码动态创建，宽度来自 wrap_content、match_parent、alignParentLeft 加 toLeftOf 两端锚定或父容器默认 LayoutParams），目标 Checkbox/Radio 不带文字、需另配 Text；为折行给 Text 加 layoutWeight(1) 时连同点击挂在整行上。

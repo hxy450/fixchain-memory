@@ -1,0 +1,279 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-3ceab2782faa0c414d88",
+  "created_at": "2026-10-16T16:56:38.844435+00:00",
+  "migration_key": "/private/tmp/claude-502/-Users-fengyi-Workspace-migbot-set-l123-cc-glm53/a9f6942f-6659-40bd-bc16-6616949070fb/scratchpad/distill/pool2",
+  "title": "按切片拆分后跨文件接线丢失：基类横切门控只接到局部分支、用户可见目录在规格里被改成沙箱",
+  "when": "实现收口阶段，为页面补齐跨切片的服务调用与门控时；以及规格提取阶段，把源端共享基类/工具类的横切副作用写成目标契约时",
+  "description": "源 Activity/Fragment 把密码门控、公共目录等横切行为放在 BaseActivity/StorageHelper 等共享基类或工具类中，目标按 feature 切片分配给不同 worker/closer 实现，页面与服务之间靠规格文本和占位注释交接。",
+  "summary": "分支一（NoteListPage CAB 密码门）。Stage 1 转换器 a5e63b2207e98f693 写页面前实际读到 ListFragment.java:398-530，\n其中 ModeCallback.onActionItemClicked 对除 menu_select_all/menu_merge 外的全部 CAB 动作先调\nmainActivity.requestPassword(mainActivity, getSelectedNotes(), …)（migration/bc655f68-…/subagents/agent-a5e63b2207e98f693.jsonl:L80-L81）。\n它却在 performCabAction 的文档注释里把门控写成“含 menu_empty_trash/menu_delete 的 requestPassword 密码门控（ListFragment.java:782-797）”，\n并留 FWD-REF P-S1-010 交 Slice 10（同转录 L159 Write 内容第 508-511 行）。Slice 10 worker 未解析该占位；\nGroup 2 closer ac7db1f1e97435d0a 收口时 Read 页面 820-920 行读到这条注释（migration/fcc67332-…/subagents/agent-ac7db1f1e97435d0a.jsonl:L47-L48 第 840、843 行），\n又 grep 到 F005 规格 AC12 “CAB 动作密码门（select_all 与 merge 除外）通过后”与 AC15 “merge 动作免密码门”（同转录 L65-L66），\n随后 Edit 把 performCabAction 改成 11 个 case 直接分发，requestPassword 只放在 deleteNotes 确认正键和 emptyTrash 内（同转录 L245-L246 新串第 59-98、306-347 行），\narchive/trash/category/add_reminder 等批量动作不过密码门；该状态保留到返修前（G1 5-07/9-03、G7 CG-05 记“缺失”）。\n返修由 a37ab07ebd7bca6e3 重写 NoteListPage（repair/…/agent-a37ab07ebd7bca6e3.jsonl:L1053）并经 Bash 脚本在 onActionItemClicked 入口统一接\nPasswordGate.requestForNotes（同转录 L1112）。\n分支二（LogDelegate 日志目录）。规格阶段主会话 bc655f68 在 07:59:59 Read LogDelegate.java，其第 100 行\n.dir(new File(StorageHelper.getOrCreateExternalStoragePublicDir(), \"logs\")) 即公共 Documents 下用户可见目录\n（migration/bc655f68-….jsonl:L956-L958）；38 秒后 Edit 为 F020 新增 AC12，写成“目录 = 公共存储根目录下 logs 子目录……HMOS 端映射到应用沙箱日志目录”\n（同转录 L981-L983），与同文件映射表“HMOS 映射用户文件目录 logs/”自相矛盾且未说明用户可见性降级。\nSlice 8 worker ac03a106156044eac 读到含 AC12 的 F020 规格（第 64 行映射表仍写“用户文件目录 logs/”，第 97 行 AC12 写沙箱）\n和 LogDelegate.java 原文（migration/fcc67332-…/subagents/agent-ac03a106156044eac.jsonl:L25-L26、L29-L30），Write LogDelegate.ets 时按 AC12 写\n“源 dir = ExternalStoragePublicDir(DIRECTORY_DOCUMENTS/Omni-Notes)/logs → HMOS 映射应用沙箱 filesDir/logs”并以 filesDir/logs 初始化\n（同转录 L117-L118 内容第 124-132 行），用户可见日志目录这一副作用在此丢失（G6 L-05）。\n返修 aa6b40003c730ac95 重写 LogDelegate.ets 增加 setFileLogsDir 并映射到用户可见目录（repair/…/agent-aa6b40003c730ac95.jsonl:L673），设置页随后接线。\n另核：job 标题中“漏传 onRecordingStarted/onError”“从不调用 setFileLogsDir”在生成期并不成立——生成期 AttachmentService（Slice 16 worker a1b6e42d3192efc9d\nWrite，migration/fcc67332-…/subagents/agent-a1b6e42d3192efc9d.jsonl:L233）无这两个回调、生成期 LogDelegate.ets 没有 setFileLogsDir；\n两者都是返修第 1 轮（2026-10-13T16:26-16:27Z，repair/…/agent-aa6b40003c730ac95.jsonl:L673、agent-a62bb893d8124da5d.jsonl:L597）重写服务时新增，\n调用方当时未同步更新，属返修中新生问题，见 unresolved_targets。原生转录与重建版在本卡两条链上的归属一致，仅行号不同。\n",
+  "recommendations": [
+    "收口接线时，凡源端在 ActionMode/基类回调入口统一做的门控，先对照源回调函数（如 onActionItemClicked 的 protectedActions 列表）逐个动作核对目标分发表，不以页面占位注释里列出的局部分支为准。",
+    "页面壳转换器为 CAB/菜单分发写占位注释时，照抄源回调的适用范围（哪些动作例外）与行号，不要把入口级门控缩写成个别动作。",
+    "规格为目录、权限等横切副作用写 AC 时，若把源端公共目录改为沙箱，须在同一 AC 写明用户可见性的降级并与映射表保持一致；worker 发现同一文件内 AC 与映射表冲突时，回源码决定而非挑其中一条执行。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/pages/NoteListPage.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/java/it/feio/android/omninotes/ListFragment.java",
+          "at": "2026-10-01T09:19:43.412Z",
+          "reason": "正常输入：转换器 Bash sed -n '398,530p' 回执返回 ModeCallback.onActionItemClicked——protectedActions={menu_select_all, menu_merge}，其余动作先 mainActivity.requestPassword(mainActivity, getSelectedNotes(), …)；足以说明门控在 CAB 入口而非仅删除分支（migration/bc655f68-…/subagents/agent-a5e63b2207e98f693.jsonl:L80-L81）。"
+        },
+        {
+          "key": "bc655f68-6f49-4bcf-ab64-aa45d7a58cc2:a5e63b2207e98f693",
+          "at": "2026-10-01T09:36:04.114Z",
+          "reason": "读到上述入口级门控后，Write NoteListPage.ets 时在 performCabAction 注释写成“含 menu_empty_trash/menu_delete 的 requestPassword 密码门控（ListFragment.java:782-797）”，并留 FWD-REF P-S1-010 交 Slice 10；门控范围在此被缩成两个动作（同转录 L159-L160，Write 内容第 508-511 行）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/pages/NoteListPage.ets",
+          "at": "2026-10-01T17:46:05.667Z",
+          "reason": "交付桥梁：Group 2 closer Read 该页 offset 820/limit 100，回执第 840 行即上述缩窄后的门控注释、第 843 行为 P-S1-010 占位（migration/fcc67332-…/subagents/agent-ac7db1f1e97435d0a.jsonl:L47-L48）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/spec/baseline/features/F005-archive-trash-batch.md",
+          "at": "2026-10-01T17:46:22.301Z",
+          "reason": "正常输入：closer Bash grep -A 30 '^## 对接点' 回执含 F005-AC12 “CAB 动作密码门（select_all 与 merge 除外）通过后”与 AC15 “merge 动作免密码门”，已给出门控适用于除两项外的全部 CAB 动作（同转录 L65-L66）。"
+        },
+        {
+          "key": "fcc67332-0774-45b4-a72c-d2b6a33207b8:ac7db1f1e97435d0a",
+          "at": "2026-10-01T17:53:01.297Z",
+          "reason": "读到规格 AC12 与页面注释后，Edit 把 performCabAction 改为 11 个 case 直接分发，requestPassword 只放在 deleteNotes 确认正键与 emptyTrash 内，archive/trash/category/add_reminder 等不过门（同转录 L245-L246 新串第 59-98、306-347 行）；沿用了页面注释的局部范围而非规格的入口范围。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "Bash cd 到 Android 源目录后 sed -n '398,530p' ListFragment.java，回执返回 ModeCallback 全文，含 onActionItemClicked 的 protectedActions={menu_select_all, menu_merge} 与 mainActivity.requestPassword(mainActivity, getSelectedNotes(), …)；这支持转换器写页面前已实际读到 CAB 入口级密码门控。",
+          "evidence": [
+            {
+              "source": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2/subagents/agent-a5e63b2207e98f693.jsonl",
+              "line": 80
+            },
+            {
+              "source": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2/subagents/agent-a5e63b2207e98f693.jsonl",
+              "line": 81
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": "target"
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 5
+        },
+        {
+          "from": 4,
+          "to": 5,
+          "force": true,
+          "reason": "Bash grep -A 30 '^## 对接点' spec/baseline/features/F005-archive-trash-batch.md，回执返回 F005-AC12 “CAB 动作密码门（select_all 与 merge 除外）通过后”与 AC15 “merge 动作免密码门”；这支持 closer 接线前已实际读到门控适用于除两项外全部 CAB 动作的规格要求。",
+          "evidence": [
+            {
+              "source": "migration/fcc67332-0774-45b4-a72c-d2b6a33207b8/subagents/agent-ac7db1f1e97435d0a.jsonl",
+              "line": 65
+            },
+            {
+              "source": "migration/fcc67332-0774-45b4-a72c-d2b6a33207b8/subagents/agent-ac7db1f1e97435d0a.jsonl",
+              "line": 66
+            }
+          ]
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/services/LogDelegate.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/java/it/feio/android/omninotes/helpers/LogDelegate.java",
+          "at": "2026-10-01T07:59:59.694Z",
+          "reason": "正常输入：主会话 Read 回执第 97-103 行 FL.init(...).logToFile(true).dir(new File(StorageHelper.getOrCreateExternalStoragePublicDir(), \"logs\"))，日志目录是公共 Documents 下用户可见目录（migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L956-L958）。"
+        },
+        {
+          "key": "bc655f68-6f49-4bcf-ab64-aa45d7a58cc2:main",
+          "at": "2026-10-01T08:00:37.270Z",
+          "reason": "读到上述公共目录后，Edit F020-crash-reporting.md 新增 AC12 “目录 = 公共存储根目录下 logs 子目录……HMOS 端映射到应用沙箱日志目录”，把用户可见目录改写成沙箱且未说明降级；与同文件映射表“映射用户文件目录 logs/”矛盾（同转录 L981-L983）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/spec/baseline/features/F020-crash-reporting.md",
+          "at": "2026-10-01T16:37:59.685Z",
+          "reason": "交付桥梁：Slice 8 worker Read 回执第 97 行即上述 AC12 沙箱映射，同时第 64、87 行仍写公共存储/用户文件目录（migration/fcc67332-…/subagents/agent-ac03a106156044eac.jsonl:L25-L26）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/java/it/feio/android/omninotes/helpers/LogDelegate.java",
+          "at": "2026-10-01T16:38:04.496Z",
+          "reason": "正常输入：worker 也 Read 了源文件，回执第 100 行同样是 getOrCreateExternalStoragePublicDir()/logs（同转录 L29-L30）。"
+        },
+        {
+          "key": "fcc67332-0774-45b4-a72c-d2b6a33207b8:ac03a106156044eac",
+          "at": "2026-10-01T16:46:34.200Z",
+          "reason": "Write LogDelegate.ets，注释写“源 dir = ExternalStoragePublicDir(DIRECTORY_DOCUMENTS/Omni-Notes)/logs → HMOS 映射应用沙箱 filesDir/logs”，FileLogger.init(`${filesDir}/logs`)；按 AC12 执行，用户可见目录副作用在此落入代码（同转录 L117-L118 内容第 124-132 行）。本链确认传递，偏差起点在规格。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 5
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/pages/NoteDetailPage.ets",
+      "reason": "已确认返修修改（C-03/R-02/R-03/R-05/P-02/SH-08/LK-02）。“漏传 onRecordingStarted/onError”不是生成期状态：生成期 AttachmentService 由 Slice 16 worker a1b6e42d3192efc9d Write（migration/fcc67332-…/subagents/agent-a1b6e42d3192efc9d.jsonl:L233，2026-10-01T17:38:37Z）且无这两个回调，回调由返修第 1 轮 a62bb893d8124da5d 重写服务时新增（repair/…/agent-a62bb893d8124da5d.jsonl:L597，2026-10-13T16:27:08Z），页面当时未同步更新。生成期可核偏差是 Group 3 closer a1bebb022b2aa0159 在 18:43:22Z Edit captureAttachmentMedia（migration/fcc67332-…/subagents/agent-a1bebb022b2aa0159.jsonl:L429），其写前是否读到 DetailFragment.java:1789-1821 的先置位语义尚未核到；其余条目未逐项核。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/services/AttachmentService.ets",
+      "reason": "已确认返修重写（含 onError/onRecordingStarted/grantWrite）。生成期 Slice 16 worker a1b6e42d3192efc9d 设计的 startRecording/captureMedia 无起录前回调与失败回调（Write 2026-10-01T17:38:37Z，agent-a1b6e42d3192efc9d.jsonl:L233）；它写前对 DetailFragment.java:1789-1821 与 F006 规格的读取尚未核，故接口设计偏差的输入边界未定。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/components/SettingsContentComponent.ets",
+      "reason": "已确认返修（S-14/S-34/B-05/B-10/P-07）。S-34“从不调用 setFileLogsDir”为返修第 1 轮新生问题：setFileLogsDir 由 aa6b40003c730ac95 在 2026-10-13T16:26:11Z 新增（repair/…/agent-aa6b40003c730ac95.jsonl:L673），生成期该方法不存在；生成期组件只落偏好（Group 1 closer a41d3f09ceeabb3d0 Edit 2026-10-01T17:10:12-22Z，agent-a41d3f09ceeabb3d0.jsonl:L150-L156），其用户可见目录缺失随本卡分支二归因到规格。B-05/B-10/S-14 组件与 VM 接口失配：BackupViewModel 在返修第 1 轮 2026-10-13T16:51:38Z 重写，失配是否在生成期已存在尚未核。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/viewmodels/BackupViewModel.ets",
+      "reason": "已确认返修第 1 轮重写（Write 2026-10-13T16:51:38Z，repair/…/agent-aa6b40003c730ac95.jsonl:L995）；生成期接口与组件调用的对应关系未核。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/pages/MainPage.ets",
+      "reason": "已确认返修（CG-01/CG-02 启动门控缺 RESTORE/退出重锁、MM-08、SH-09）。生成期写者与其对 MainActivity.java:166-184、330-334 的读取未核；属基类/宿主横切门控分支，成因可能与分支一同类但未核实。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/services/DrawerCategoryListBuilder.ets",
+      "reason": "已确认返修 Bash 脚本修改（CL-06/CL-09 长按回调签名过期）；生成期签名演变未核。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/services/NoteBatchService.ets",
+      "reason": "已确认返修 Bash 脚本修改（9-09 回收站不移除快捷方式 no-op 等）；生成期写入来源未核。"
+    }
+  ],
+  "job": "issue-3ceab2782faa0c414d88",
+  "metadata": {
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.247",
+        "2.1.296",
+        "2.1.300"
+      ]
+    },
+    "source_set_id": "sources-fef5281fb5eb1e655dea",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos",
+        "at": "2026-10-01T08:07:31.804Z",
+        "ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1119",
+        "request_ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1117",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos",
+        "at": "2026-10-01T08:07:31.804Z",
+        "ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1119",
+        "request_ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1117",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes",
+        "at": "2026-10-13T15:34:04.077Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L121",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L120",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes",
+        "at": "2026-10-13T15:34:04.077Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L121",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L120",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes",
+        "at": "2026-10-14T01:47:40.558Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L159",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L158",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes",
+        "at": "2026-10-14T01:47:40.558Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L159",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L158",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.10"
+  },
+  "revision": "f93cc209ad34a04295351b16ce28dff6a7472a1b41bcf07ce50fdbbb161a949a"
+}

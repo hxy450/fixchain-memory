@@ -17,19 +17,19 @@
   - 时机：规格提取与界面实现阶段，把源端 sw&lt;N&gt;dp 限定目录（可带 -land/-port）的覆盖值落成运行期分支时
   - 情境：源 res 有 values-sw720dp-land 一类最小宽度限定目录，覆盖尺寸、边距等取值，注释常写“for sw720dp devices (e.g. 10" tablets)”；目标没有对应资源限定词，要在运行期按屏幕配置取值，可用 mediaquery 或 display 查询；规格里写成“横屏 + 最小宽度≥N”。
   - 例外：源限定目录是 values-w&lt;N&gt;dp、values-h&lt;N&gt;dp（当前可用宽高）：按当前窗口宽高取值，不按短边
-- [工具栏导航图标按实际生效者绘制：基类以 ActionBarDrawerToggle 接管同一 Toolbar 时画汉堡；否则窗口 ActionBar 页在 Manifest 有 parentActivityName 时 AppCompat 默认显示 Up，都没有且未调 setDisplayHomeAsUpEnabled(true) 才不画；菜单项按实际生效的 showAsAction 分流：always 上栏，ifRoom 只在名额与宽度够时上栏，其余进溢出菜单（AppCompat 下 android:showAsAction 被忽略），可勾选项开启勾选指示](lesson-a6121cc7eaf207b702f7.lesson.md)
-  - 时机：界面实现阶段，转换工具栏菜单 XML、自绘 ActionBar 或标题栏，决定导航图标（返回箭头或汉堡）、图标位与溢出菜单时；自绘框架主题提供的 ActionBar（应用图标、Up 尖角、溢出按钮、横竖屏高度与标题字号）时
-  - 情境：源菜单项带图标与 showAsAction=ifRoom/always，或带 checkable=true。也包括 Activity 基于 AppCompat、菜单 XML 写的是 android:showAsAction（常带 tools:ignore="AppCompatResource"）。也包括判断导航图标的输入：Manifest 是否为 Activity 声明 parentActivityName 或 PARENT_ACTIVITY meta-data、代码是否调用 setDisplayHomeAsUpEnabled、基类 onPostCreate 是否以同一 Toolbar 构造 ActionBarDrawerToggle 并 syncState；目标套用自带返回箭头的标题栏模板、兄弟页标题栏，或保留自定义 Up 标题栏。也包括框架 ActionBar（Theme.Holo 等）带 manifest android:icon、setDisplayHomeAsUpEnabled 与 showAsAction="ifRoom|withText"，目标多个页面各自用 hideTitleBar 自绘标题栏。
+- [导航图标与菜单分区按实际生效者实现：DrawerToggle 画汉堡、parentActivityName 默认 Up，showAsAction 按名额宽度分流](lesson-a6121cc7eaf207b702f7.lesson.md)
+  - 时机：界面实现阶段，转换工具栏菜单 XML、自绘 ActionBar 或标题栏，决定导航图标（返回箭头或汉堡）、图标位与溢出菜单时；自绘框架主题提供的 ActionBar（应用图标、Up 尖角、溢出按钮、横竖屏高度与标题字号）时；同一菜单复用到自绘多选 CAB（ActionMode）时
+  - 情境：源菜单项带图标与 showAsAction=ifRoom/always，或带 checkable=true。也包括 Activity 基于 AppCompat、菜单 XML 写的是 android:showAsAction（常带 tools:ignore="AppCompatResource"）。也包括判断导航图标的输入：Manifest 是否为 Activity 声明 parentActivityName 或 PARENT_ACTIVITY meta-data、代码是否调用 setDisplayHomeAsUpEnabled、基类 onPostCreate 是否以同一 Toolbar 构造 ActionBarDrawerToggle 并 syncState；目标套用自带返回箭头的标题栏模板、兄弟页标题栏，或保留自定义 Up 标题栏。也包括框架 ActionBar（Theme.Holo 等）带 manifest android:icon、setDisplayHomeAsUpEnabled 与 showAsAction="ifRoom|withText"，目标多个页面各自用 hideTitleBar 自绘标题栏。 也包括同一菜单 XML 在多选 CAB（ActionMode）里复用，部分项未声明 showAsAction；目标自绘工具栏与 CAB 栏，规格只登记了菜单 id 清单与显隐规则。
 - [源 manifest 未声明 android:supportsRtl 时布局方向恒为 LTR：有顺序或对齐语义的容器逐个显式 Direction.Ltr](lesson-148a3e67bd557bafd722.lesson.md)
   - 时机：规格提取与界面实现阶段，为带多语言资源的应用确定布局方向契约，新建按钮条、对话框面板等有顺序或起止对齐语义的容器时（含返修中用自绘面板替换系统弹窗）
   - 情境：AndroidManifest 的 &lt;application&gt; 未声明 android:supportsRtl（安卓布局方向恒为 LTR）；应用含 fa 等 RTL 语言资源，或可能在 RTL 系统语言下运行；目标用 Row/Column 等容器实现按钮条、对话框或起始对齐的内容，未设 direction。
   - 例外：源端声明 android:supportsRtl="true"：按源布局的 start/end 语义让容器随语言方向翻转
-- [源布局有 layout-land 等配置变体时逐控件逐属性对照，并在承载该布局的组件内按方向分支实现（ArkUI 没有布局资源限定词）；运行时 setBackgroundResource 只覆盖被调用的控件，其余控件取各变体 XML 的值](lesson-c8e645a542254d96997e.lesson.md)
-  - 时机：界面实现阶段，合并 layout 与 layout-land 变体，或实现替代带变体 fragment 的共享组件时；计划与派工阶段指派变体实现时
-  - 情境：源 res/layout-land/ 下有同名变体，控件的 background、weight、margin、textSize 或整体结构与竖屏不同；Activity 代码在运行时只对部分控件 setBackgroundResource；布局由另一任务的共享组件承载，派工只写竖屏结构，横屏要求只出现在资源任务或移交登记里。
+- [源布局（含 include 引入的布局）有 layout-land、layout-sw&lt;N&gt;dp 等变体时逐控件对照，在承载组件内按配置条件分支实现](lesson-c8e645a542254d96997e.lesson.md)
+  - 时机：页面数据提取与规格阶段登记页面布局来源时；界面实现阶段，合并 layout 与 layout-land、layout-sw&lt;N&gt;dp 等变体，或实现替代带变体 fragment 的共享组件时；计划与派工阶段指派变体实现时
+  - 情境：源 res/layout-land/、layout-sw600dp/ 等目录下有同名变体（也可能是被 &lt;include&gt; 或 setContentView 引入的子布局），控件的 background、weight、margin、textSize、排列方向或整体结构与 base 不同；Activity 代码在运行时只对部分控件 setBackgroundResource；页面元数据的布局来源清单只列 base 文件，或计划写“变体随迁”却未点名文件与负责方；布局由另一任务的共享组件承载，派工只写竖屏结构，横屏要求只出现在资源任务或移交登记里。
 - [源应用声明 supportsRtl=true 时保留逻辑方向：start/end 边距写 LengthMetrics 的 start/end，AutoMirrored 图标加 matchTextDirection(true)](lesson-786a04847bf10d364d9d.lesson.md)
   - 时机：规格提取与界面实现阶段，为声明 supportsRtl=true 的源应用转换 start/end 边距与自动镜像图标时
-  - 情境：源 Manifest 声明 android:supportsRtl="true"；Compose 用 padding(start/end)、Icons.AutoMirrored.*（或 autoMirrored=true 的矢量），View 用 marginStart/End、paddingStart/End；应用含 RTL 语言资源或可能在 RTL 系统语言下运行；转换者准备写 left/right，把返回箭头等方向性图标转成普通 Image；页面规格可能没有携带 RTL 契约，资源映射可能把自动镜像图标当普通媒体。
+  - 情境：源 Manifest 声明 android:supportsRtl="true"；Compose 用 padding(start/end)、Icons.AutoMirrored.*（或 autoMirrored=true 的矢量），View 用 marginStart/End、paddingStart/End；应用含 RTL 语言资源或可能在 RTL 系统语言下运行；转换者准备写 left/right，把返回箭头等方向性图标转成普通 Image；页面规格可能没有携带 RTL 契约，资源映射可能把自动镜像图标当普通媒体。 也包括 View 布局用 paddingStart/End、layout_marginEnd、layout_gravity="bottom|end"，目标外层 Stack 用 Alignment.BottomEnd 定位而边距写成 right；或第三方容器（库 View）内部另有自己的排布规则。
   - 例外：源 Manifest 未声明 supportsRtl：布局恒 LTR，按显式固定 LTR 的做法处理
 - [视觉修复以源布局与源码分支为准：截图尺寸差先折算成 vp 对照，容器尺寸与自绘组件的绘制尺寸同源修改，截图里缺少的入口先查渠道与开关分支，截图里的元素先对应到所属组件，文档截图与 @Preview 示例不当应用真值](lesson-8119d8bf0b58e4daac24.lesson.md)
   - 时机：视觉校验与修复阶段，根据截图差异撰写工单，决定修改固定尺寸、列数、背景，删减截图中没有出现的入口与区块，或按基线截图选定空态等文案与图标时；按差异单调整包裹自绘组件（Canvas 日历等）的容器高度与折叠范围时；按参考截图补齐无数据空态、决定截图中某段文案归属哪个组件时

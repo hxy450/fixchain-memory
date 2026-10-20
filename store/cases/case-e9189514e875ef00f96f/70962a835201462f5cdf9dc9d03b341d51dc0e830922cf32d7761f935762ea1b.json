@@ -1,0 +1,453 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-e9189514e875ef00f96f",
+  "created_at": "2026-10-17T02:28:33.754753+00:00",
+  "migration_key": "/private/tmp/claude-502/-Users-fengyi-Workspace-migbot-set-l123-cc-glm53/a9f6942f-6659-40bd-bc16-6616949070fb/scratchpad/distill/pool2",
+  "title": "把 Java / ICU / AOSP 库调用当成 JS 内建的「等价物」改写：HashMap 迭代序、split 尾空串、正则 \\s、float 舍入、Uri 解码、Base64 容错、List.remove 同一性、Html.fromHtml 与第三方正则在直迁时丢失",
+  "when": "服务层 / 模型层 / 页面逻辑实现阶段，把源码里的 Java 标准库、ICU 正则、AOSP 平台类（HashMap、String.split/trim、Collections.sort(compareToIgnoreCase)、Math.round(float)、Uri.parse、android.util.Base64、List.remove、Html.fromHtml、ContentResolver.getType、第三方库正则）翻译成 ArkTS 表达式时；以及规格提取阶段为这些调用写契约时",
+  "description": "源方法体直接调用 Java/Android 平台库而非应用自身代码：HashMap/Map 迭代后排序、String.split(\",\") / split(\"\")、正则 \\s 或 Pattern.quote 单遍替换、(float) 除法后 Math.round、Uri.parse(path).path、Base64.decode(DEFAULT)、List.remove(Object)、trim()、Html.fromHtml、ContentResolver.getType 回退 MimeTypeMap、来自 jar 依赖（pixlui/checklistview）的正则常量；目标端只有 JS Map/Array/String/RegExp/Math 内建可用，且源工程不含第三方库源码。",
+  "summary": "本卡按原生 Claude Code 转录（pool2/migration）重新核验，归因结论与重建材料一稿一致，坐标全部换成原生记录。\n本问题九个目标中八个的生成者写前都实际读到了 Android 源方法体（Read 或 Bash sed 回执），F0xx 规格也给出了方法级契约；\n偏差集中在同一环节：生成者把平台库调用改写成形似的 JS 内建，并在注释里自称「等价 / 直迁」，没有核对两者的语义差异。\nDbHelper（Base G3 worker bc655f68:a5de99c92f8d9ae39）Read 到 DbHelper.java getTags(:702-728) 用 HashMap<String,Integer> 聚合后\nCollections.sort(compareToIgnoreCase)、getNotesByTag 用 tag.split(\",\")、精筛正则 \".*(\\\\s|^)tag(\\\\s|$).*\"（L32/L35），\nBash sed 到 TagsHelper.retrieveTags 的 per-note HashMap（L88/L89）；Write DbHelper.ets 却用 JS Map 插入序 + 全串 toLowerCase 比较\n并注释「compareToIgnoreCase 等价（小写比较排序）」、tag.split(',') 不去尾随空串、new RegExp('(\\\\s|^)'+tag+'(\\\\s|$)','m') 并注释\n「等价于词边界检索」（L145 正文第 496-553 行，回执 L146）。返修 DB-37 以 javaHashMapKeyOrder 模拟 HashMap 迭代序（旧实现在构造用例错 2156 例）、\nDB-38 javaSplit、DB-39 Java \\\\s 字符集（repair agent-a65f0f02d9fe9874b L330-L342；G8-data.md）。\nSecurityCrypto（Slice 3 worker e95edcb7:a57a43c1c60941174）Read 到 Security.kt validatePath = Uri.parse(path).path 折叠后拒绝、\ndecrypt 用 Base64.decode(value, DEFAULT)（L33/L34）；Write 的注释自述「Android 端经 Uri.parse().path 提取，本处对原始串直接折叠」，\n并把 Base64.decode(DEFAULT) 写成只跳过 \\n \\r \\t 空格、其它字符 throw、'=' 只按个数校验的 base64DecodeLenient（L114 正文第 501-531、640-649 行，回执 L115）；\n返修 SC-07 完整移植 Uri 解析 + 百分号解码，SC-04 逐状态移植 AOSP 解码状态机（repair agent-a5d025f75cc08eb73 L363-L376；G7 SC-02/04/05/07）。\nCountFactory（Slice 5 worker fcc67332:a872ee6e98c7d68f0）Read 到 WordCounter 单遍 replaceAll(\"(\\\\Q[x] \\\\E|\\\\Q[ ] \\\\E)\")（L49/L50）、\nDefaultWordCounter.countChars = Stream.of(text.split(\"\")).map(trim).filter（L51/L52）、IdeogramsWordCounter = split(\"\").filter(!matches(\"\\\\s\"))（L53/L54）；\nWrite 用 charCodeAt 逐 UTF-16 单元计数（emoji 计 2）、JAVA_WS=/[ \\t\\n\\f\\r]/ 并注释「Java 正则 \\\\s 语义（仅 ASCII 空白）」（Android ICU 的 \\\\s 是 Unicode White_Space）、\nJAVA_LETTER 含 \\\\p{M}、清单符号两遍 split/join（L145 正文第 36-39、56、69-73、87-94、114-116 行，回执 L146）；\n返修 CF-03/04/05/07 改码点切分、ICU White_Space 集、\\\\p{L}、单遍交替扫描（repair agent-a5d025f75cc08eb73 L423）。\nNote（Base 模型 worker bc655f68:a924e4dd762f74cda）Read 到 Note.java removeAttachment = attachmentsList.remove(attachment) 原地移除首个同一对象（L32/L33）；\nWrite 用 filter 新建数组并移除全部同一对象（L88 正文第 193-195 行，回执 L89）；返修 MD-14 改 indexOf+splice（repair agent-a65f0f02d9fe9874b L405-L417）。\nTextHelper（Slice 1 worker e95edcb7:aef386d08f13edbfc）Bash sed 40-105 到 TextHelper.java parseTitleAndContent：content.trim() 后 limit(300) 追加 \"...\"，\nchecklist 分支 Html.fromHtml 做实体替换（L113/L114）；Write 用 JS trim()（去 Unicode 空白，Java 只去 ≤U+0020）、limit 用 substring+'...'，\n并在文件头声明「checklist 笔记不走本工具（Android 端 TextWorkerTask 异步文本任务，归 F002）」把 fromHtml 分支整段省略（L179 正文第 19-20、70-83 行，回执 L180；全文无 fromHtml）。\nF001-AC53 的「checklist 走异步文本任务」只是说明调用时机，TextWorkerTask 内部仍调 parseTitleAndContent。返修 3-09 实现 fromHtml（TagSoup 实体、空白折叠）、3-10 javaTrim（G1-list.md）。\nNoteInfosPage（converter bc655f68:a3c4f5955344fff6b）Read 到 Math.round((float) completed / items * 100)（L20/L21）；Write 用 double 运算，\n注释只处理了 Math.round(NaN)=0（L73 正文第 116-124 行，回执 L74）；返修 NI-04 以 Math.fround 逐步舍入（116 组百分比差 1；repair agent-a5d025f75cc08eb73 L469）。\nStorageHelper（Slice 16 worker fcc67332:a1b6e42d3192efc9d）Read 到 getMimeType(Context,Uri) 先 ContentResolver.getType 再回退 MimeTypeMap（L70/L71）；\nWrite 以静态扩展名表 EXT_TO_MIME 替代，getMimeTypeFromName 未知扩展名返回 '' 并让 getMimeTypeInternal 透传 ''（L204 正文第 62、271-277、292-295 行，回执 L205），\n而 Android 的 DocumentsProvider/FileProvider 对未知扩展名返回 application/octet-stream → 归 file/*；返修 F-04 回退 application/octet-stream 再归一（G3b-attachments.md）。\nTagsService（Slice 15 worker fcc67332:a1ec3834de2ea53e9）的 find 在源工程找不到 pixlui UrlCompleter.java（L42/L43、L54/L55 均无输出），\nF003 规格只给了「# 开头且后继非纯数字词」的口头契约（L27/L28），worker 据 TagsHelperTest 用例（L39/L40）写出锚定正则 /^#(\\\\p{L}[\\\\p{L}\\\\p{N}]*)/u 并注释为「契约」\n（L106 正文第 44-57 行，回执 L107）：单字符可识别、\\\\p{N} 含非 ASCII 数字、不做非锚定 find；原库 HASH_TAG 要求字母{1,}+字母数字{1,}（至少 2 字符）且 find 非锚定；\n返修 CT-07 移植原正则（G3a-detail.md）。同批 Base worker 曾用 curl 直接拉取 checklistview 4.1.0 的 Constants.java 取真值（agent-a5de99c92f8d9ae39 L116/L117），说明依赖库源码可取而未取。\n规格层（F010/F013/F006/F003/F001）对这些调用的描述是口语化的（「拒绝 /data 前缀与 ../」「非空白字符数」「其余（含 null 透传）→file/*」「后继非纯数字词」「checklist 走异步文本任务」），\n没有把库语义点写成契约，但各 worker 都直接读了源码，本卡把偏差落在实现环节，规格只作为次要缺口记录。\nCategoryPalette 的宽松颜色解析在生成期不在本文件内（见 unresolved_targets）。修复者不入图。\n",
+  "recommendations": [
+    "实现阶段把 Java/ICU/AOSP 调用替换为 JS 内建前，逐项列出语义差异再决定移植或标 GAP：HashMap/HashSet 迭代序（JS Map 是插入序，需模拟桶序或改用源端随后的排序结果）、String.split 去尾随空串、split(\"\") 按码点、trim 只去 ≤U+0020、compareToIgnoreCase 逐字符 toUpperCase→toLowerCase、Math.round((float)x) 需 Math.fround 逐步舍入且 NaN→0、Android ICU 正则 \\s=Unicode White_Space / \\p{L} 不含 \\p{M}、Pattern.quote 交替单遍替换、List.remove(Object) 原地移除首个 equals/同一元素、Base64.decode(DEFAULT) 的 SKIP/'=' 状态机、Uri.parse(path).path 的 scheme/authority 剥离与百分号解码、ContentResolver.getType 对未知扩展名返回 application/octet-stream。",
+    "注释里写「等价 / 直迁」之前先用一组边界输入核对（emoji、全角空格、大小写变体标签、尾随逗号、21/40 这类百分比、#a 单字符标签、file:///data/… 路径、含空白/非法字符的 Base64），对不上就按源算法逐分支移植，不要用近似实现加注释收口。",
+    "源码调用的第三方 jar（pixlui、checklistview）在工程内找不到源文件时，按坐标拉取发布版源码（同批 worker 已用 curl 取 checklistview 常量），从真实正则/常量迁移；不要从单元测试用例反推契约。",
+    "规格提取阶段遇到平台库调用时，把语义点写进契约而不是口语描述：写明迭代序依赖、分隔/截断规则、正则字符集所属引擎（ICU vs JS）、浮点精度与舍入、解码容错规则、未知值的平台默认（application/octet-stream），并标注「需逐语义移植」。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/database/DbHelper.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/java/it/feio/android/omninotes/db/DbHelper.java",
+          "at": "2026-10-01T10:07:37.744Z",
+          "reason": "正常输入：Read 回执含 getTags（:702-728）用 HashMap<String,Integer> 聚合 per-note TagsHelper.retrieveTags 结果、entrySet 迭代后 Collections.sort(compareToIgnoreCase)，getNotesByTag(String) 用 tag.split(\",\")，getNotesByTag(String[]) 用 \".*(\\\\s|^)tag(\\\\s|$).*\" MULTILINE find 精筛（migration/bc655f68…/subagents/agent-a5de99c92f8d9ae39.jsonl L32 请求、L35 回执）。足以看出排序前的顺序来自 HashMap 迭代序、split 与 \\s 是 Java 语义。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/java/it/feio/android/omninotes/utils/TagsHelper.java",
+          "at": "2026-10-01T10:09:30.785Z",
+          "reason": "正常输入：Bash sed -n '1,120p' 回执含 retrieveTags（:45-57）用 HashMap<String,Integer> 逐词计数并返回其 keySet 迭代序（同转录 L88 请求、L89 回执），即 per-note 层也是 HashMap 序。"
+        },
+        {
+          "key": "bc655f68-6f49-4bcf-ab64-aa45d7a58cc2:a5de99c92f8d9ae39",
+          "at": "2026-10-01T10:19:07.281Z",
+          "reason": "已读到上述源码，Write DbHelper.ets 把 getTags 写成 JS Map 插入序聚合 + 全串 toLowerCase 的 a<b 比较并注释「compareToIgnoreCase 等价（小写比较排序）」（正文第 496-521 行），getNotesByTag 写 tag.split(',')（不去尾随空串，第 529 行），精筛写 new RegExp('(\\\\s|^)'+tag+'(\\\\s|$)','m') 并注释「等价于词边界检索」（第 550-553 行）（同转录 L145 请求、L146 回执）。HashMap 迭代序、Java split、Java \\s 三处语义在此丢失；返修前仍保留（G8-data.md DB-37/38/39）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "Base G3 worker 用 Bash 执行 sed -n '1,120p' TagsHelper.java，回执返回 retrieveTags（:45-57）用 HashMap<String,Integer> 逐词计数并返回其 keySet 迭代序；这支持其写 DbHelper.ets 前已收到 per-note 层的 HashMap 序事实。",
+          "evidence": [
+            {
+              "source": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2/subagents/agent-a5de99c92f8d9ae39.jsonl",
+              "line": 88
+            },
+            {
+              "source": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2/subagents/agent-a5de99c92f8d9ae39.jsonl",
+              "line": 89
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/services/SecurityCrypto.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/java/it/feio/android/omninotes/utils/Security.kt",
+          "at": "2026-10-01T15:16:59.673Z",
+          "reason": "正常输入：Read 回执含 validatePath（:92-96）= Uri.parse(path).path?.replace(\"/+\",\"/\") 后拒绝 /data 前缀与 ../（!! 可 NPE），以及 decrypt 用 Base64.decode(value, Base64.DEFAULT)（:78）（migration/e95edcb7…/subagents/agent-a57a43c1c60941174.jsonl L33 请求、L34 回执）。足以看出路径先经 android.net.Uri 解析/解码、密文经 AOSP 解码器。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/spec/baseline/features/F010-password-lock.md",
+          "at": "2026-10-01T15:16:40.718Z",
+          "reason": "次要输入：Read 回执的服务层契约把 validatePath 写成「拒绝 /data 前缀与 ../ …本处仅规约算法语义」（第 66 行），Base64 行只要求「复刻 DEFAULT 换行形态」「接受带换行的 Base64 密文」（第 84-85 行）（同转录 L20 请求、L21 回执）；没有写 Uri.parse/解码与解码器容错规则，是规格侧口语化缺口，但源码已直接读到。"
+        },
+        {
+          "key": "e95edcb7-c619-475d-b56e-7bb84402a4ba:a57a43c1c60941174",
+          "at": "2026-10-01T15:29:57.456Z",
+          "reason": "已读到 Security.kt，Write SecurityCrypto.ets 的 validatePath 对原始串直接 replace(/\\/+/g,'/') 后判 startsWith('/data')，注释自述「Android 端经 Uri.parse().path 提取，本处对原始串直接折叠」（正文第 640-649 行）；base64DecodeLenient 只跳过 \\n \\r \\t 空格、遇其它字符 throw、'=' 只按个数校验（第 501-531 行）（同转录 L114 请求、L115 回执）。file:///data/… 等 Android 拒绝的路径被放行、部分 Android 可解的密文被原样返回（G7 SC-04/SC-07）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/services/CountFactory.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/java/it/feio/android/omninotes/helpers/count/WordCounter.java",
+          "at": "2026-10-01T16:37:59.700Z",
+          "reason": "正常输入：Read 回执含 sanitizeTextForWordsAndCharsCount 用 replaceAll(\"(\" + Pattern.quote(CHECKED_SYM) + \"|\" + Pattern.quote(UNCHECKED_SYM) + \")\", \"\") 单遍交替剔除（:31-34）（migration/fcc67332…/subagents/agent-a872ee6e98c7d68f0.jsonl L49 请求、L50 回执）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/java/it/feio/android/omninotes/helpers/count/DefaultWordCounter.java",
+          "at": "2026-10-01T16:38:00.011Z",
+          "reason": "正常输入：Read 回执含 countChars = Stream.of(text.split(\"\")).map(String::trim).filter(!isEmpty).count()（:51-57），countWords 逐字符 Character.isLetter（:26-42）（同转录 L51 请求、L52 回执）。Android 的 split(\"\") 由 ICU 正则按码点切分。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/java/it/feio/android/omninotes/helpers/count/IdeogramsWordCounter.java",
+          "at": "2026-10-01T16:38:00.409Z",
+          "reason": "正常输入：Read 回执含 countChars = Arrays.stream(text.split(\"\")).filter(s -> !s.matches(\"\\\\s\")).count()（:32-36）（同转录 L53 请求、L54 回执），\\s 在 Android ICU 引擎下是 Unicode White_Space。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/spec/baseline/features/F013-stats.md",
+          "at": "2026-10-01T16:37:41.542Z",
+          "reason": "次要输入：Read 回执 F013-AC08/AC09 把字符数口述为「标题+换行+正文中非空白字符数」「逐字符累计非空白字符」（第 86-87 行）（同转录 L24 请求、L25 回执），未写码点切分与 ICU 空白集；源码已直接读到。"
+        },
+        {
+          "key": "fcc67332-0774-45b4-a72c-d2b6a33207b8:a872ee6e98c7d68f0",
+          "at": "2026-10-01T16:45:15.048Z",
+          "reason": "已读到三份源码，Write CountFactory.ets：Default.countChars 用 for i<length 的 charCodeAt(i)>0x20 按 UTF-16 单元计数（注释却写「码点 > U+0020」，正文第 87-94 行）；Ideograms.countChars 用 split('') + JAVA_WS=/[ \\t\\n\\f\\r]/ 并注释「Java 正则 \\s 语义（仅 ASCII 空白）」（第 36-37、114-116 行）；JAVA_LETTER=/^[\\p{L}\\p{M}]$/u（第 39 行）；清单符号用 split(CHECKED_SYM).join('').split(UNCHECKED_SYM).join('') 两遍（第 56 行）（同转录 L145 请求、L146 回执）。emoji 计 2、全角空格被计数、组合记号算字母、\"[ [x] ] a\" 结果不同（G7 CF-03/04/05/07）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 5
+        },
+        {
+          "from": 2,
+          "to": 5
+        },
+        {
+          "from": 3,
+          "to": 5
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/models/Note.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/java/it/feio/android/omninotes/models/Note.java",
+          "at": "2026-10-01T08:54:49.763Z",
+          "reason": "正常输入：Read 回执含 removeAttachment（:115-119）= attachmentsList.remove(attachment) 后 setAttachmentsList 同一列表（migration/bc655f68…/subagents/agent-a924e4dd762f74cda.jsonl L32 请求、L33 回执）；List.remove(Object) 原地移除首个 equals 元素，Attachment 未覆写 equals 即同一性。"
+        },
+        {
+          "key": "bc655f68-6f49-4bcf-ab64-aa45d7a58cc2:a924e4dd762f74cda",
+          "at": "2026-10-01T09:01:30.090Z",
+          "reason": "已读到源码，Write Note.ets 的 removeAttachment 写成 this.attachmentsList = this.attachmentsList.filter((item: Attachment) => item !== attachment)（正文第 193-195 行）：新建数组并移除全部同一对象，@Trace 原地语义与「首个」语义均丢失（同转录 L88 请求、L89 回执）；返修 MD-14 改 indexOf+splice（G8-data.md）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/services/TextHelper.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/java/it/feio/android/omninotes/utils/TextHelper.java",
+          "at": "2026-10-01T14:43:41.410Z",
+          "reason": "正常输入：Bash sed -n '40,105p' 回执含 parseTitleAndContent：contentText = limit(note.getContent().trim(), 300, false, true)，checklist 且非空时 contentSpanned = Html.fromHtml(content.replace(CHECKED_SYM,CHECKED_ENTITY).replace(UNCHECKED_SYM,UNCHECKED_ENTITY)…)，limit 用 StringBuilder.setLength 后 append(\"...\")（migration/e95edcb7…/subagents/agent-aef386d08f13edbfc.jsonl L113 请求、L114 回执）。Java trim 只去 ≤U+0020，fromHtml 分支就在本方法内。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/spec/baseline/features/F001-notes-list.md",
+          "at": "2026-10-01T14:33:15.785Z",
+          "reason": "次要输入：Read 回执 F001-AC53 写「checklist 笔记走异步文本任务（标题/内容由任务产出）；非 checklist 走 parseTitleAndContent 同步解析」（第 245 行）（同转录 L20 请求、L21 回执）；只描述调用时机，未说明 TextWorkerTask 内部仍调同一方法的 fromHtml 分支。"
+        },
+        {
+          "key": "e95edcb7-c619-475d-b56e-7bb84402a4ba:aef386d08f13edbfc",
+          "at": "2026-10-01T14:57:34.736Z",
+          "reason": "已读到源码与规格，Write TextHelper.ets：parseTitleAndContent 用 JS note.content.trim()（去 Unicode 空白，正文第 72 行）、limit 用 value.length>length ? substring+'...'（第 81-83 行），并在文件头声明「checklist 笔记不走本工具（Android 端 TextWorkerTask 异步文本任务，归 F002）」（第 19-20 行），全文没有 fromHtml / 实体替换分支（同转录 L179 请求、L180 回执）。返修 3-09 实现 fromHtml、3-10 javaTrim（G1-list.md）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "Slice 1 worker 用 Bash 进入 Android 源目录执行 sed -n '40,105p' utils/TextHelper.java，回执返回 parseTitleAndContent 的 trim()+limit(300) 与 checklist 分支 Html.fromHtml 实体替换、limit 的 setLength+\"...\"；这支持其写 TextHelper.ets 前已收到源方法体。",
+          "evidence": [
+            {
+              "source": "migration/e95edcb7-c619-475d-b56e-7bb84402a4ba/subagents/agent-aef386d08f13edbfc.jsonl",
+              "line": 113
+            },
+            {
+              "source": "migration/e95edcb7-c619-475d-b56e-7bb84402a4ba/subagents/agent-aef386d08f13edbfc.jsonl",
+              "line": 114
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/pages/NoteInfosPage.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/java/it/feio/android/omninotes/NoteInfosActivity.java",
+          "at": "2026-10-01T09:20:31.980Z",
+          "reason": "正常输入：Read 回执含 getChecklistCompletionState（:67-71）= Math.round((float) completed / items * 100)（migration/bc655f68…/subagents/agent-a3c4f5955344fff6b.jsonl L20 请求、L21 回执）；(float) 强转说明除法与乘法均在 float32 逐步舍入。"
+        },
+        {
+          "key": "bc655f68-6f49-4bcf-ab64-aa45d7a58cc2:a3c4f5955344fff6b",
+          "at": "2026-10-01T09:26:18.678Z",
+          "reason": "已读到源码，Write NoteInfosPage.ets 的 checklistCompletionState 用 double 运算 completed / items * 100 再 Math.round，注释只处理「0 项时 Java Math.round(NaN)=0」而忽略 float 精度（正文第 116-124 行）（同转录 L73 请求、L74 回执）；21/40 等 116 组百分比差 1（G7 NI-04），返修改 Math.fround 逐步舍入（repair agent-a5d025f75cc08eb73 L469）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/services/StorageHelper.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/java/it/feio/android/omninotes/utils/StorageHelper.java",
+          "at": "2026-10-01T17:27:31.785Z",
+          "reason": "正常输入：Read 回执含 getMimeType(Context,Uri)（:360-366）先 ContentResolver.getType(uri)，为 null 才回退 getMimeType(url) 的 MimeTypeMap；getMimeTypeInternal(String)（:393-406）按 image→audio→video→else 归一（migration/fcc67332…/subagents/agent-a1b6e42d3192efc9d.jsonl L70 请求、L71 回执）。主路径是内容提供者给出的 MIME，而非扩展名表。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/spec/baseline/features/F006-attachments.md",
+          "at": "2026-10-01T17:26:24.251Z",
+          "reason": "次要输入：Read 回执跨栈映射行把 MediaStore/MimeTypeMap 写成「扩展名→mime 静态表（五常量）+ picker uri 直读」（第 117 行）（同转录 L25 请求、L26 回执），未写提供者对未知扩展名的默认 MIME；源码已直接读到。"
+        },
+        {
+          "key": "fcc67332-0774-45b4-a72c-d2b6a33207b8:a1b6e42d3192efc9d",
+          "at": "2026-10-01T17:36:45.230Z",
+          "reason": "已读到源码，Write StorageHelper.ets 用静态 EXT_TO_MIME 表替代 ContentResolver 路径（正文第 59-64 行），getMimeTypeFromName 未命中返回 ''（第 271-277 行），getMimeTypeInternal 对 '' 直接透传（第 290-295 行）（同转录 L204 请求、L205 回执）；Android 的 FileProvider/DocumentsProvider 对未知扩展名返回 application/octet-stream → 归 file/*，目标端却得到 ''：宫格不显示文件名、点击走错分支（G3b F-04）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/services/TagsService.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/spec/baseline/features/F003-tags.md",
+          "at": "2026-10-01T17:26:19.519Z",
+          "reason": "次要输入：Read 回执服务层契约写 parseHashtag「复刻 pixlui UrlCompleter.parseHashtag：# 开头且后继非纯数字词 → 返回带 # 的标签文本，否则返回 ''」（第 36 行）（migration/fcc67332…/subagents/agent-a1ec3834de2ea53e9.jsonl L27 请求、L28 回执）；口述契约，无原正则、无最小长度与 find 非锚定语义。规格作者的写前输入未追。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/test/java/it/feio/android/omninotes/utils/TagsHelperTest.java",
+          "at": "2026-10-01T17:26:29.862Z",
+          "reason": "正常输入：Read 回执含 #mixed/#tags/#tag/#numberedAfter123 合法、#123numbered 非法的用例（:39-43）（同转录 L39 请求、L40 回执）；只是样例，不含正则定义。随后 Bash find UrlCompleter.java 与 pixlui 源文件在源工程内均无结果（同转录 L42/L43、L54/L55），依赖库源码缺失是已核材料边界。"
+        },
+        {
+          "key": "fcc67332-0774-45b4-a72c-d2b6a33207b8:a1ec3834de2ea53e9",
+          "at": "2026-10-01T17:32:59.057Z",
+          "reason": "在未取得 UrlCompleter.java 的情况下，Write TagsService.ets 以 HASHTAG_WORD_PATTERN=/^#(\\p{L}[\\p{L}\\p{N}]*)/u 实现 parseHashtag 并注释为「pixlui UrlCompleter.parseHashtag 契约（spec F003 #服务层）」（正文第 44-57 行）（同转录 L106 请求、L107 回执）：锚定、单字符可识别、\\p{N} 含非 ASCII 数字；原库 HASH_TAG 为 # + 字母{1,} + 字母数字{1,} 且 find 非锚定（G3a CT-07）。未像同批 Base worker 那样拉取依赖源码（agent-a5de99c92f8d9ae39 L116/L117），也未把缺口标为 GAP。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "StorageHelper 分支未核到任何输入写明 FileProvider.getType 对未知扩展名的默认值；本卡只归因「以静态表替代 ContentResolver 路径且对未知值选 '' 透传」，不声称生成者已知 application/octet-stream。",
+    "TagsService 分支未追 F003 规格作者的写前输入；原库正则在迁移材料池中不存在，本卡把缺口记在实现环节（未拉取依赖源码），规格口述契约只作次要缺口。"
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/services/CategoryPalette.ets",
+      "reason": "已确认修改：返修新增 parseIntColor（Integer.parseInt 严格语义，CP-05/CA-18/CL-02/CL-03）与 shiftColor（alpha 置 255 + Math.fround，CP-02；repair agent-ad3d7b95ccbf0d799 L490/L545/L944、agent-aefc2f17edc072f7a L1415）。原生迁移转录中该文件由 fcc67332:ae5659e12c0fc505c 于 2026-10-01T16:42:35Z Write（agent-ae5659e12c0fc505c.jsonl L108），正文只含 CategoryPalette 调色板类，不含颜色解析/HSV 代码；宽松解析「兼容 #RRGGBB、非法返回 NaN」的生成来源在 pages/CategoryPage.ets 与 components/NavDrawerComponent.ets，返修把它们集中到本文件；该交接经返修者完成，CircleView.shiftColor 的 float32/alpha 偏差来源亦未在生成转录中核到，故未画图。"
+    }
+  ],
+  "job": "issue-e9189514e875ef00f96f",
+  "metadata": {
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.247",
+        "2.1.296",
+        "2.1.300"
+      ]
+    },
+    "source_set_id": "sources-fef5281fb5eb1e655dea",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos",
+        "at": "2026-10-01T08:07:31.804Z",
+        "ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1119",
+        "request_ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1117",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos",
+        "at": "2026-10-01T08:07:31.804Z",
+        "ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1119",
+        "request_ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1117",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes",
+        "at": "2026-10-13T15:34:04.077Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L121",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L120",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes",
+        "at": "2026-10-13T15:34:04.077Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L121",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L120",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes",
+        "at": "2026-10-14T01:47:40.558Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L159",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L158",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes",
+        "at": "2026-10-14T01:47:40.558Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L159",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L158",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.10"
+  },
+  "revision": "70962a835201462f5cdf9dc9d03b341d51dc0e830922cf32d7761f935762ea1b"
+}

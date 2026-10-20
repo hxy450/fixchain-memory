@@ -47,7 +47,7 @@
   - 情境：Android 源端以主题、values-vNN 覆盖或代码决定状态栏图标深浅：windowLightStatusBar、SYSTEM_UI_FLAG_LIGHT_STATUS_BAR、setSystemBarsAppearance(APPEARANCE_LIGHT_STATUS_BARS)、ImmersionBar darkMode(true) 等表示深色图标，全都没有时为白色图标，即使主题是 Theme.AppCompat.Light 一类、状态栏底色偏浅；目标全屏窗口用 setWindowSystemBarProperties 设置系统栏，沉浸式 skill 示意写“透明背景 + 浅色文字”，规格可能只要求底色 parity。
 - [自绘标题栏接入顶部安全区前先判定源端由谁避让：根 fitsSystemWindows 时 inset 放包住工具栏的主内容列（DrawerLayout 下不包抽屉，NavigationView 头部画到状态栏下并叠 insetForeground）、工具栏保持源高；工具栏自带固定顶距时顶距与 inset 只取一份并同步高度](lesson-cde4120ab9ad7412b1da.lesson.md)
   - 时机：界面实现阶段，为全屏页自绘标题栏/工具栏接入顶部系统安全区（topInset）并确定其高度与顶部内距时
-  - 情境：Android 全屏页工具栏为固定 dp 高度，状态栏避让由根布局 fitsSystemWindows=true 承担，或由工具栏自身的固定 paddingTop（如 80dp 高、40dp 顶距，根无 fitsSystemWindows）承担；目标页以窗口模型的 topInset 做前景避让，标题栏写固定 .height()。也包括根为 DrawerLayout、NavigationView android:fitsSystemWindows="true" 且有 app:headerLayout，目标用同时承载抽屉与工具栏的共享基座（SideBarContainer）。
+  - 情境：Android 全屏页工具栏为固定 dp 高度，状态栏避让由根布局 fitsSystemWindows=true 承担，或由工具栏自身的固定 paddingTop（如 80dp 高、40dp 顶距，根无 fitsSystemWindows）承担；目标页以窗口模型的 topInset 做前景避让，标题栏写固定 .height()。也包括根为 DrawerLayout、NavigationView android:fitsSystemWindows="true" 且有 app:headerLayout，目标用同时承载抽屉与工具栏的共享基座（SideBarContainer）。 也包括源 targetSdk≥35（常经 gradle.properties 间接定义）、运行在 Android 15 及以上而强制 edge-to-edge：根 fitsSystemWindows=false、无 WindowInsets 处理，工具栏叠放在铺满的内容之上；目标套用沉浸式分层范式，结构检查按页面类型要求前景避让。
   - 例外：页面内容原点已在状态栏 inset 之下（宿主已消费 inset），此时只补源端顶距的剩余部分，不再给标题栏加 topInset
 - [页面级安全区订阅从承载页面的主窗口取窗口对象：复用工程主窗口入口或入口 Ability 已维护的避让状态，不用 window.getLastWindow](lesson-8e0e9fe5373a2bbe47af.lesson.md)
   - 时机：界面实现或巡检修复阶段，为全屏页订阅 avoidAreaChange、调用 getWindowAvoidArea 取顶部与底部避让值并选择窗口对象时

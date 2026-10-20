@@ -1,14 +1,14 @@
 # data/parsing
 
-JSON 与 XML 解析：打包资源的字段必填与空值语义，源解析器（如 Gson）的标量宽松转换与源数据实际类型，接口响应容器 Bean 的取值层级，自写 fromJson 的运行期类型收窄，以及 @ohos.xml 拉取解析的回调顺序与命名空间作用域，org.json 构造的宽松语法与取值类型校验；org.json 写侧（put(null) 删键、“/”转义）与读侧取值强转
+JSON 与 XML 解析：打包资源的字段必填与空值语义，源解析器（如 Gson）的标量宽松转换与源数据实际类型，接口响应容器 Bean 的取值层级，自写 fromJson 的运行期类型收窄，以及 @ohos.xml 拉取解析的回调顺序与命名空间作用域，org.json 构造的宽松语法与取值类型校验；org.json 与 Gson 写侧（put(null) 删键、“/”转义；Gson 键序、省略 null 与 HTML 转义）与读侧取值强转
 
 [上一级](../index.md)
 
 ## 本级经验
 
-- [以 org.json 构造并输出 JSON（备份、导出）时按库语义序列化：put(null) 删除键、toString 把 “/” 转义为 “\\/”；不以 JSON.stringify 直出，也不从 Kotlin 可空字段推出“保留 null 键”](lesson-0caaa4efc70dad90a15f.lesson.md)
-  - 时机：规格提取与数据层实现阶段，把源端用 JSONObject.put、JSONArray.toString(n) 生成的备份、导出或请求 JSON 写成目标契约与序列化代码时
-  - 情境：源端 serialize() 对可空值直接 put（如 put(key, steps?.serialize())、put(key, time)），再以 JSONObject/JSONArray 的 toString() 或 toString(indent) 写文件；对应 Kotlin 字段声明为可空；目标准备用 DTO 加 JSON.stringify(obj, null, n) 输出，规格可能写“null 字段输出 JSON null（键保留）”。
+- [备份/导出 JSON 按 org.json 或 Gson 库语义序列化（null 删键或省略、“/”与 HTML 转义），不用 JSON.stringify](lesson-0caaa4efc70dad90a15f.lesson.md)
+  - 时机：规格提取与数据层实现阶段，把源端用 JSONObject.put、JSONArray.toString(n) 或 Gson.toJson 生成的备份、导出或请求 JSON 写成目标契约与序列化代码时
+  - 情境：源端 serialize() 对可空值直接 put（如 put(key, steps?.serialize())、put(key, time)），再以 JSONObject/JSONArray 的 toString() 或 toString(indent) 写文件；对应 Kotlin 字段声明为可空；目标准备用 DTO 加 JSON.stringify(obj, null, n) 输出，规格可能写“null 字段输出 JSON null（键保留）”。也包括源端以 Gson 反射序列化实体（new Gson().toJson(obj)，未调 serializeNulls/disableHtmlEscaping），目标手写 toJson 或照抄标注为推断的示例 JSON。
 - [显式 JSON 解码器按源解析器的接受范围和源数据的实际类型定规则：Gson 的数字与字符串互转要保留](lesson-871d3751cadde6dda1dc.lesson.md)
   - 时机：数据层与网络层实现阶段，把 Retrofit+Gson 的 Bean、响应壳或预置 JSON 资产的读取翻译成 ArkTS 显式解码器时
   - 情境：源端由 Gson 把 JSON 填进 Int/String 字段，或预置资产用字符串存放数值（"id": "43831"）；目标仓库提供只接受单一 typeof 的严格解码函数（string()/number() 类型不符即抛错），真实响应样例尚未采集，规格只写了“Gson → 显式 decoder、显式校验字段”。

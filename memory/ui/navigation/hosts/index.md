@@ -1,11 +1,15 @@
 # ui/navigation/hosts
 
-Navigation/@Entry宿主与页面注册（含根 Navigation 默认标题栏与工具栏）、嵌入页取栈、单 Activity 壳内 loadChildFragment 子页的壳内回退栈与嵌入承载、半透明卡片式 Activity 的透明 DIALOG 路由、路由跳板和跨页面共享生命周期，外部入口（推送、快捷方式）宿主导航执行器的可用性守卫；NavHost 四向自定义转场到 customNavContentTransition 与页面绑定，导航目的地内 LocalLifecycleOwner 的 ON_STOP/ON_RESUME 接到 onHidden/onShown；Activity 切换转场（overridePendingTransition(0,0) 与未调用时的主题默认窗口动画）
+Navigation/@Entry宿主与页面注册（含根 Navigation 默认标题栏与工具栏）、嵌入页取栈、单 Activity 壳内 loadChildFragment 子页的壳内回退栈与嵌入承载、半透明卡片式 Activity 的透明 DIALOG 路由、路由跳板和跨页面共享生命周期，外部入口（推送、快捷方式）宿主导航执行器的可用性守卫；NavHost 四向自定义转场到 customNavContentTransition 与页面绑定，导航目的地内 LocalLifecycleOwner 的 ON_STOP/ON_RESUME 接到 onHidden/onShown；Activity 切换转场（overridePendingTransition(0,0) 与未调用时的主题默认窗口动画）；单容器 Fragment 事务（replace+addToBackStack、popBackStack、finish）与 Activity/Fragment 生命周期回调到 NavPathStack、NavDestination 的映射
 
 [上一级](../index.md)
 
 ## 本级经验
 
+- [Fragment 事务与生命周期迁到 Navigation：按调用点与覆盖类型逐条映射，不压成同步 pop 与 onShown/onHidden](lesson-dedd435cae5c3c976be2.lesson.md)
+  - 时机：规格提取与页面实现阶段，把单 Activity 的 FragmentTransaction（replace+addToBackStack、popBackStack(Immediate)、finish）与 onPostCreate、onResume、onPause、onStop、onActivityCreated、onDestroyView 等回调映射到 NavPathStack 与 NavDestination 时
+  - 情境：源 Activity 用一个 fragment_container 承载列表与详情 Fragment：切换时 replace（每次新建 Fragment）并 addToBackStack，详情返回走 popBackStack，外部入口直达时 finish()；Fragment 依赖 onActivityCreated→init 在每次视图创建时重建界面，onResume/onPause 负责注册与挂起。目标用 pushPathByName/pop 与 NavDestination 的 onShown/onHidden/onReady，同名页面可能被栈复用。
+  - 例外：源端以 hide + add 叠加子 Fragment、视图不销毁时，不套用视图重建分支
 - [NavHost 的 enter/exit/popEnter/popExit 自定义转场迁到 Navigation：用 customNavContentTransition 驱动，各 NavDestination 把位移、透明度与缩放绑定到共享转场状态](lesson-9de3322165e533d6b790.lesson.md)
   - 时机：规格提取、计划派工与界面实现阶段，把 Compose NavHost（或目的地）上的 enterTransition/exitTransition/popEnterTransition/popExitTransition 落到 ArkUI Navigation 时
   - 情境：源端 NavHost 定义四向自定义转场（scaleIn/scaleOut、slideIn/slideOut、tween 时长与延迟等）；目标为 Navigation + NavDestination，在已观察的 API 中 customNavContentTransition 回调拿到的 NavContentInfo 不提供页面的 opacity、translate 属性；规格或派工可能写“customNavContentTransition 或默认转场”二选一，验收只核转场常量是否与源相等。

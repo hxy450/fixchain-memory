@@ -1,11 +1,12 @@
 # ui/dialog
 
-弹窗：V2 页面可用的弹窗载体、源端真弹窗不以页面叠层充当、按源 Dialog 类型选择呈现形态（路由约束不改变弹窗形态）、MaterialAlertDialog 的 Material3 卡片外观与统一遮罩、只靠平台默认外观的 AlertDialog 的可见契约与按钮角色槽位、弹窗内二级选择器的层级、按源布局还原弹窗内容、源 Dialog 用 setView 注入自定义内容时的承载方式，ComponentContent 弹窗回调的取值时机，页内对话框的打开触发点；源端委托共享详情弹窗与分享弹层时复用目标共享组件，依附式弹窗的宿主页归属，bindPopup 气泡的整体着色，展开后才加载数据的弹层；页内覆层承载 Activity 级 Dialog 时的挂载层级与按钮行定高；锚定下拉（PopupWindow showAsDropDown）的弹出容器，同页多个工具面板逐个选择形态；半模态 bindSheet 见子主题；源端应用内分享面板的形态与逐渠道映射，第三方 Helper 按配置对象渲染的弹窗；页内遮罩承载对话框时的无障碍模态（显示期间隐藏背景）
+弹窗：V2 页面可用的弹窗载体、源端真弹窗不以页面叠层充当、按源 Dialog 类型选择呈现形态（路由约束不改变弹窗形态）、弹窗内二级选择器的层级、按源布局还原弹窗内容、源 Dialog 用 setView 注入自定义内容时的承载方式，ComponentContent 弹窗回调的取值时机，源端每次调用新建的对话框按调用独立实例，页内对话框的打开触发点；源端委托共享详情弹窗与分享弹层时复用目标共享组件，依附式弹窗的宿主页归属，展开后才加载数据的弹层；页内覆层承载 Activity 级 Dialog 时的挂载层级与按钮行定高；锚定下拉（PopupWindow showAsDropDown、框架 ActionBar 溢出面板，含子菜单箭头与标题头）的弹出容器，同页多个工具面板逐个选择形态；源端应用内分享面板的形态与逐渠道映射，第三方 Helper 按配置对象渲染的弹窗；页内遮罩承载对话框时的无障碍模态（显示期间隐藏背景）；弹窗外观与窗口几何、半模态 bindSheet 见子主题
 
 [上一级](../index.md)
 
 ## 子主题
 
+- [appearance](appearance/index.md) — 弹窗外观与窗口几何：只靠平台默认外观的 AlertDialog 的可见契约与按钮角色槽位，MaterialAlertDialog 按主题代际的卡片外观与遮罩，三方库或 Dialog 主题决定的窗口宽度公式与遮罩、点外关闭、底色圆角，非全屏窗口下 openCustomDialog 的遮罩与状态栏，bindPopup 气泡的整体着色
 - [sheets](sheets/index.md) — 半模态 bindSheet：BottomSheetDialogFragment 的高度档与外壳参数，一个页面挂多个弹层的绑定节点，从半模态内打开的二级弹窗（层级与高度上限）与压入页面（SheetMode、targetId），自绘底部弹窗改 bindSheet 时的手势门禁；Compose ModalBottomSheet（skipPartiallyExpanded）的高度档
 
 ## 本级经验
@@ -16,25 +17,15 @@
 - [ComponentContent 构造即执行 builder：构造后才赋值的回调以延迟调用传入](lesson-1c27b6c7cf05c05733d9.lesson.md)
   - 时机：界面实现阶段，用 ComponentContent 加 wrapBuilder 加 openCustomDialog 封装弹窗并接线关闭、确认回调时
   - 情境：关闭回调需要构造后才得到的 content 句柄，只能在 new ComponentContent(...) 之后赋给 args；内容组件以 @Param 接收回调。
-- [MaterialAlertDialog 卡片外观按源主题代际取值，每个弹层显式设置取自源主题的遮罩](lesson-39077e6612d5f97b0731.lesson.md)
-  - 时机：界面实现与规格提取阶段，把 MaterialAlertDialogBuilder 对话框转换为 ArkUI 自绘卡片或弹层，确定卡片宽度、圆角、底色与遮罩时
-  - 情境：应用主题继承 Theme.Material3.*（或 MaterialComponents），对话框由 MaterialAlertDialogBuilder 构建；目标用 openCustomDialog、bindSheet 或页内遮罩自绘，工程中有被当作族先例的卡片，可能登记了按 M2 推断的近似值。
 - [从组件外的共享函数打开自定义弹窗时，用 wrapBuilder + ComponentContent 交给 openCustomDialog(content)：不在 options.builder 闭包里直接调用全局 @Builder](lesson-a3ac761b0d52a6bccb9f.lesson.md)
   - 时机：界面实现阶段，把路由页改成多个入口复用的自定义弹窗，确定弹窗内容的构建与挂载方式时
   - 情境：ArkTS V2（@ComponentV2）工程中，把 BottomSheetDialog/DialogFragment 一类弹窗迁成 UIContext.getPromptAction().openCustomDialog，并打算从组件外的导出函数（只持有 UIContext）为多个页面统一打开同一个自定义组件。
 - [依附式弹窗（AttachPopup）的宿主按锚点视图所在页面确定：提示挂在锚点页、按锚点实测坐标定位，弹出条件包含锚点可见](lesson-29f62d177a17d08b4e4f.lesson.md)
   - 时机：迁移审计与实现阶段，判定依附式弹窗的宿主归属、改写触发它的子页逻辑时
   - 情境：源端弹窗由子 Fragment 触发 show，但 atView 是父 Fragment 标题栏里的按钮，且只在该按钮可见、一次性标记未写入时显示；目标端已有一个画在子页内部、按固定边距定位的同文案浮层。
-- [只靠平台默认外观的 AlertDialog（含 DialogPreference 弹出的偏好对话框）迁移前写出完整可见契约：标题字号色与标题线、消息、按钮条与按钮集合、框体、宽度规则与进出场从源主题的平台资源取值；按钮按角色核对槽位，要求一比一时用共享自定义弹窗复刻；按钮排位与面板读对话框样式的 layout 资源，返回键与点外部两条取消路径分别核对](lesson-9c4de55af3c1ecd8eaa4.lesson.md)
-  - 时机：规格提取阶段为源端系统对话框（代码中 AlertDialog.Builder 构造，或 PreferenceActivity 中 EditTextPreference、ListPreference 等点击弹出）写转换决策时，以及界面实现阶段按该决策落地 ArkUI 系统弹窗或自定义弹窗时；规格整合时在几条来源之间裁定按钮排位、面板样式与取消方式时；页内复刻多个同时显示的对话框、安排遮罩与遮罩点击时
-  - 情境：源码用 AlertDialog.Builder 内联构造确认框，只设 title、message、setPositiveButton、setNegativeButton，无自定义布局或样式，外观由应用主题继承的平台默认警告框决定；目标准备用 ArkUI AlertDialog.show(primaryButton/secondaryButton) 等系统弹窗替代，项目要求与源端逐屏一致。 也包括应用主题为 Theme.Holo 等框架主题，多个对话框都由 Builder 或 DialogPreference 构造、没有自定义样式；规格只按经验摘要写了“标题左对齐、负左正右、遮罩、cancelable”几项，各页写者凭记忆或兄弟页先例自绘面板。 也包括 targetSdk≤20 或 values-v11/v14 中应用主题继承 Theme.Holo/Theme 的旧应用：Builder 未调用 setCancelable、setCanceledOnTouchOutside，源端可能同时叠放两个以上对话框；目标用页内遮罩加自绘面板复刻，同时要防止点击穿透到下层画面。
-  - 例外：项目明确接受目标系统弹窗的固有外观、只要求文案与按键行为一致；此时仍按角色核对按钮槽位
 - [按源弹层类型逐个选呈现形态：居中 CustomDialog/AlertDialog（含框架生成的 ListPreference 选项框：无确定钮、留 CANCEL）用居中卡片，底部面板才用 bindSheet，锚定菜单按锚点弹出；形态不同的面板不共用一个弹窗；定长密码框输满即校验](lesson-21db515a505be4845497.lesson.md)
   - 时机：页面接线与界面实现阶段，为源端 DialogHelper 一类函数弹出的确认或输入弹窗选择承载形态与校验触发方式时；对齐同页多个工具面板（如阅读页的设置、更多、发弹幕）的容器、锚点与交互步骤时
   - 情境：源端经 CustomDialog/AlertDialog 加自定义布局弹出居中卡片，卡内可能有定长格子密码框（输满即比对、失败提示），根视图点击关闭；目标公共弹窗封装只有确认/提示类，带输入的弹窗需要在页面内自建。也包括源端同页多个工具面板容器各不相同（底部 PopupWindow 面板、锚定在标题栏右上角带箭头的弹出菜单、先编辑再在内容上拖动定位的多步弹层），目标现有实现用一个固定高度、带拖动条与关闭按钮的 bindSheet 承载全部面板。也包括源端 MaterialAlertDialogBuilder（含 setView 输入、下拉）对话框，工程惯例或规格并列给出 bindSheet/CustomDialog。也包括 AlertDialog.Builder…setView(ListView) 的列表选择框被规格写成 bindSheet 半模态加 List；按钮的上下文菜单被写成锚定 bindPopup 或 bindMenu，丢了长按入口与标题图标。也包括 android.preference.ListPreference 的选项对话框：由框架生成的居中 AlertDialog，代码中看不到 Builder，规格却写成 Select 或 bindSheet。
-- [整体着色的气泡用 bindPopup 的 popupColor，而不是只给内容加背景](lesson-05dc4eb9548bf3fef6ae.lesson.md)
-  - 时机：界面实现阶段，把 Balloon、Tooltip 等带箭头的气泡迁移为 bindPopup 自定义 builder 时
-  - 情境：源 setBackgroundColor 作用于整个气泡（含箭头），目标的箭头与外框由 popup 容器绘制。
 - [源对话框带目标系统弹窗没有的槽位（setView 注入的复选框等自定义布局、Compose AlertDialog 的 icon）时改用自定义弹窗承载，不写成 AlertDialog.show 的参数，也不自行省略](lesson-18fca50f9c801cb282ec.lesson.md)
   - 时机：界面实现阶段，把 Android AlertDialog/MaterialAlertDialogBuilder 或 Compose AlertDialog 转换为 ArkUI 弹窗、确定弹窗 API 与参数结构时
   - 情境：源对话框在标题、正文和正负按钮之外还 setView 注入自定义布局（如“不再提示”复选框），确认回调读取其中控件的状态并写偏好；目标准备用 AlertDialog.show 弹出。也包括 Compose AlertDialog 传了 icon = { Icon(...) }，目标准备改用没有图标槽的 showAlertDialog/AlertDialog.show，并以“仅视觉降级”或“与兄弟页同模式”为由省略图标。
@@ -60,16 +51,16 @@
   - 时机：功能实现与审计阶段，接线页面中调用源端共享组件（XxxDialog.show、公共分享弹层）的入口，并决定这些入口背后的动作由谁实现时
   - 情境：源端列表项点击或按钮调用跨页面共享的对话框或弹层（带实体键参数），分享走公共底部分享弹层；目标工程已有同名或同职责的共享组件及其宿主接线，当前页面里却有一份自绘副本，副本中的部分动作尚未接通。
   - 例外：源端该入口本身是页面私有实现，没有委托给共享组件
+- [源端每次调用都新建的对话框，目标按调用创建独立弹窗实例并只关闭自身，不收敛为单例句柄](lesson-4d577c6a9451bd996e78.lesson.md)
+  - 时机：服务层或页面实现阶段，把源端封装的“请求输入/确认”类对话框方法（每次调用 new Builder()…show()）翻译成目标弹窗时
+  - 情境：源端帮助方法每次调用都新建一个对话框并在其回调里交付结果；目标准备在服务单例里保存一个 ComponentContent 或弹窗控制器字段，新调用前先关闭旧弹窗再打开。
 - [用页内覆层承载 Activity 级 Dialog 时挂在覆盖整窗的宿主根，按钮行先按源取值定高再让分隔线撑满（平台 AlertDialog 的按钮条取平台样式或实测，不默认 48vp）](lesson-0a26e0cfc44a183d3a02.lesson.md)
   - 时机：界面实现阶段，按项目已采用的页内覆层写法（条件渲染的全幅遮罩 + 卡片）改写 Android Dialog，确定覆层挂载层级与卡片、按钮行的高度约束时
   - 情境：源弹窗由 Activity 创建（如 Fragment 中 new XxxDialog(getActivity(), ...)），样式继承 Theme.Dialog、windowIsFloating=true，布局是固定宽、wrap_content 高的卡片，按钮行内有 layout_height=match_parent 的竖分隔 View；触发按钮位于 Tabs 子页或嵌套组件内。 也包括按钮由 AlertDialog.Builder 的 setPositive/Negative/NeutralButton 生成、源布局里没有按钮行，按钮条外观来自主题的平台对话框样式。
   - 例外：改用 openCustomDialog、bindSheet 等系统弹窗 API 时，全窗遮罩由系统窗口负责，按真弹窗写法处理
 - [锚定弹出的下拉（PopupWindow showAsDropDown 自定义下拉、框架 ActionBar 的溢出面板）按源样式与源主题锚定方式还原（Material 溢出面板盖住标题栏），遮罩与面板放同一承载层：不换成原生 Select、系统 Menu 或整页筛选视图](lesson-666a746081ba1e447322.lesson.md)
   - 时机：界面实现阶段，为筛选栏、排序栏等下拉选项选择 ArkUI 弹出容器、呈现位置与菜单样式时；为工具栏溢出菜单（showAsAction=never 或未上栏的项）选择承载方式、锚定位置与外观时；把页内浮层（锚定面板与点外关闭层）搬进共享标题栏等组件时
-  - 情境：源端点击筛选项后用 PopupWindow 加载自定义布局（固定宽度、固定行高、箭头图、勾选图标），以 showAsDropDown 锚定在触发器或置顶筛选栏下方原位展开；同页可能另有整屏的“更多筛选”面板；目标有现成的 Select 组件或已写好的整页筛选组件可用。 也包括源 Activity 用框架 ActionBar（Theme.Holo，或 values-v21 的 Theme.Material*），溢出菜单项由平台主题绘制的 ListPopupWindow 面板承载，源码里没有面板样式；目标准备用 ArkUI Menu/bindMenu，任务要求逐屏一致。 也包括溢出面板由共享标题栏组件绘制（组件节点内或 .overlay()），点外关闭的全幅捕获层按组件契约留给宿主页，声明在标题栏之后的兄弟层里。
-- [非全屏窗口用 openCustomDialog 承载源对话框窗口时，遮罩压不到系统绘制的状态栏、卡片按整窗居中：弹窗期间按 dim 切状态栏底色，按避让差下移卡片](lesson-4f60c8233a03d4676c92.lesson.md)
-  - 时机：界面实现阶段，用 openCustomDialog（或其他系统弹窗）承载 Android 对话框、确定遮罩与显示位置参数时，包括共享弹窗工具与各页宿主的打开处
-  - 情境：源主题由应用窗口绘制状态栏底色（Theme.Material 及以后 windowDrawsSystemBarBackgrounds=true、statusBarColor 不透明），对话框窗口 dim（主题 backgroundDimAmount，Material 为 0.6）覆盖整块屏幕，窗口在状态栏与导航栏之间居中；目标窗口保持非全屏，状态栏由系统按 statusBarColor 绘制，对话框用 openCustomDialog 加 maskColor 与 DialogAlignment.Center 打开。
+  - 情境：源端点击筛选项后用 PopupWindow 加载自定义布局（固定宽度、固定行高、箭头图、勾选图标），以 showAsDropDown 锚定在触发器或置顶筛选栏下方原位展开；同页可能另有整屏的“更多筛选”面板；目标有现成的 Select 组件或已写好的整页筛选组件可用。 也包括源 Activity 用框架 ActionBar（Theme.Holo，或 values-v21 的 Theme.Material*），溢出菜单项由平台主题绘制的 ListPopupWindow 面板承载，源码里没有面板样式；目标准备用 ArkUI Menu/bindMenu，任务要求逐屏一致。 也包括溢出面板由共享标题栏组件绘制（组件节点内或 .overlay()），点外关闭的全幅捕获层按组件契约留给宿主页，声明在标题栏之后的兄弟层里。 也包括溢出项带 &lt;menu/&gt; 子菜单（如排序），目标把它做成独立单选面板。
 - [页内对话框的可见性状态逐一落实打开触发点：卡片整体点击与卡内关闭按钮分开实现，留给后续任务的触发点要登记](lesson-f0d5a447e645bc253019.lesson.md)
   - 时机：界面转换与页内接线阶段，把源页面中可点击的卡片、按钮及其打开的页内对话框转换为 ArkUI 触发器与可见性状态时
   - 情境：源端 Compose Card 以 Modifier.clickable 打开对话框，卡内另有关闭或忽略按钮；目标以 @Local 可见性标志加 @Builder 覆盖层实现页内对话框，部分处理器以前向占位留给后续切片；页面规格的导航关系表列出“触发 → 对话框”。

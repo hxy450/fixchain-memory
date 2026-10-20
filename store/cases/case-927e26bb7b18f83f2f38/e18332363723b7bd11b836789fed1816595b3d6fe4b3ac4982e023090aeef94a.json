@@ -1,0 +1,277 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-927e26bb7b18f83f2f38",
+  "created_at": "2026-10-17T03:30:20.052257+00:00",
+  "migration_key": "/private/tmp/claude-502/-Users-fengyi-Workspace-migbot-set-l123-cc-glm53/a9f6942f-6659-40bd-bc16-6616949070fb/scratchpad/distill/pool2",
+  "title": "把源布局的 start/end 逻辑边距写成 left/right 物理边距，RTL 下不镜像",
+  "when": "界面实现阶段，把源布局的 paddingStart/paddingEnd、layout_marginEnd、layout_gravity=start|end 翻成 ArkUI 的 padding/margin/对齐参数时",
+  "description": "Android 清单 supportsRtl=true、应用带 ar/he/fa 等 RTL 语言资源，源布局 XML 用 Start/End 逻辑属性（paddingStart、layout_marginEnd、gravity=\"bottom|end\"）；目标为 ArkUI 组件，padding/margin 同时接受 left/right 与 start/end（LengthMetrics）两套键，Alignment.BottomEnd 等逻辑对齐会随布局方向镜像。",
+  "summary": "本问题 4 个目标里，生成期可核的偏差只有一类成因：实现者收到的源布局已明确是 Start/End 逻辑边距，输出却写成 left/right 物理边距。\n公共组件 worker（bc655f68…:a0880cb7aecba93f5，Base-6 任务）写 NoteListItem 前 Read 到 note_layout.xml 的 paddingStart=\"6dp\"/paddingEnd=\"16dp\"、\nlayout_gravity=\"top|start\"/\"end\"（agent-a0880cb7aecba93f5.jsonl:L45-L46，源 :44-45、:58-123）和 note_layout_expanded.xml 的日期 layout_marginEnd=\"15dp\"（L47-L48，源 :87），\nWrite 出的却是 .padding({ left: 6, right: DesignTokens.horizontalMargin })、.margin({ right: 15 })、.margin({ left: 4 })（payload 165-166、124、54 行；L99-L100），\n随后 Edit 重写同一 padding 块仍保留 left/right（L104-L105）。写 FabMenu 时它 Read 到 fab.xml 的 layout_gravity=\"bottom|end\" 与 layout_marginEnd=\"@dimen/fab_right_margin\"（L53-L54，源 :25、:30），\n头注释自己写下「marginEnd=fab_right_margin(8dp)」，代码却是 .margin({ bottom: …, right: DesignTokens.fabRightMargin }) 与标签 .margin({ right: 8 })，\n同时外层 Stack 用 Alignment.BottomEnd（payload 7、167、103、152 行；L116-L117）——逻辑对齐会镜像、物理边距不会，两者混用。\nMainActivity converter（e95edcb7…:ac81e9c5c719d73bc）条件更充分：它 Read 了 atomic 映射参考，回执含「android:layout_marginEnd → .margin({ end })」「android:paddingStart → .padding({ start })」\n及「Start/End 起始/结束边缘（RTL/LTR 感知）」（agent-ac81e9c5c719d73bc.jsonl:L36→L39，文件 :203、:209、:1438-1439），又读到 activity_main.xml 抽屉 layout_gravity=\"start\"（L19-L20，源 :62）\n和 fragment_navigation_drawer.xml / settings_view 的 paddingStart/paddingEnd（Bash cat，L83-L84）；Write NavDrawerComponent 仍全部写 .padding({ left: DesignTokens.horizontalMargin, right: … })\n（payload 143-144、170、175、198、203 行；L164-L165）。NavigationDrawerFragment converter（e95edcb7…:a62aeae8828ef4ef7）随后 cat 到 drawer_list_item.xml 的\npaddingStart=\"@dimen/icon_text_margin\"/paddingEnd=\"@dimen/horizontal_margin\" 与计数徽标 layout_marginEnd（agent-a62aeae8828ef4ef7.jsonl:L32-L33），\n重写整个文件时按同一方式写成 .padding({ left: DesignTokens.iconTextMargin, right: DesignTokens.horizontalMargin })、.margin({ right: DesignTokens.horizontalMargin })（payload 238、313、322 行；L98-L99）。\n这些 left/right 原样保留到返修前：NoteListItem :54/:124/:165-166、FabMenu :119-120/:169/:184、NavDrawerComponent（460 行）:323-324/:357/:432/:441\n（返修首读 agent-a6403a52e5ea00951.jsonl:L158-L161、agent-ad3d7b95ccbf0d799.jsonl:L72-L73）。\n返修改为 start/end LengthMetrics：NoteListItem 文字区 padding start/end、日期 margin end（agent-aea03558554c5b0c8.jsonl:L541-L542，2026-10-14）；\nFabMenu 外层 padding end 随方向镜像、内层 Column 固定 Direction.Ltr 并以 i18n.isRTL 取物理右对齐（同转录 L567、L571、L738）；\nNavDrawerComponent 标题 padding start/end、徽标 margin end（agent-aefc2f17edc072f7a.jsonl:L1466）。\n对 job 问题的回答：skill 的映射参考确实区分 start/end（atomic 参考 :203/:209），但公共组件 worker 没有读它，也没有读派工要求的 arkts-component-builder SKILL.md\n（该 skill 自身示例还写着 .padding({ left: 16, right: 16 })，:226）；ui-manifest / feature-base / page spec 均未登记 RTL 或 supportsRtl（spec/baseline 全文 0 处），\n迁移池里 RTL 只出现在翻译校验「RTL 语文（ar/fa）正常」（bc655f68 主会话 L1623）。\n与生成期无关的部分：DR-15 抽屉 translate 方向、DR-16 箭头 canvasRotate 与 9-07 ONDialog 多选行 margin left 都是返修第 1 轮新写入\n（agent-ad3d7b95ccbf0d799.jsonl:L536 payload 307/318/823 行；agent-a6403a52e5ea00951.jsonl:L1108 payload 208 行），生成期文件里没有抽屉拖动、箭头绘制或 multiChoiceRow，\n属修复中新生问题，后续轮次补 flipToPointRight / i18n.isRTL / margin start（agent-aefc2f17edc072f7a.jsonl:L1458、主会话 2026-10-15 ONDialog 脚本），不计入生成期归因。\n",
+  "recommendations": [
+    "实现阶段：源属性为 paddingStart/End、layout_marginStart/End 或 gravity=start|end 时，一律写 start/end（LengthMetrics.vp），只有源仅给 Left/Right 的地方才用物理键；写完后对目标文件 grep 'left:|right:'，逐条回对源 XML 是否为 Start/End。",
+    "实现阶段：同一元素不要混用逻辑对齐与物理边距——Alignment.BottomEnd / HorizontalAlign.End 会随 RTL 镜像，而 margin({ right }) 不会；二者要么都用逻辑键，要么都用物理键并说明理由。",
+    "规格提取阶段：清单 supportsRtl=true 且存在 RTL 语言资源时，在 ui-manifest 全局约定登记「布局方向镜像」要求，让所有 UI worker 的派工都带上这条；component builder skill 的示例代码应改用 start/end。",
+    "实现阶段：第三方容器（如 getbase FloatingActionsMenu）内部是否随 RTL 镜像要读其 onMeasure/onLayout 源码，不能由 Android 逻辑属性推断。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/components/common/NoteListItem.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/res/layout/note_layout.xml",
+          "at": "2026-10-01T09:09:55.304Z",
+          "reason": "正常输入：Base-6 worker 的 Read 回执给出文字区 android:paddingStart=\"6dp\" / android:paddingEnd=\"16dp\"（源 :44-45）及 layout_gravity=\"top|start\" / \"top|end\" / \"start\" / \"end\"（:58-123）；逻辑边距语义已明确（migration/bc655f68-…/subagents/agent-a0880cb7aecba93f5.jsonl:L45-L46）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/res/layout/note_layout_expanded.xml",
+          "at": "2026-10-01T09:09:55.567Z",
+          "reason": "正常输入：Read 回执给出日期 TextView 的 android:layout_marginEnd=\"15dp\"（源 :87，同时保留 marginRight 作旧版兼容）及 paddingStart/paddingEnd（:48-51）（agent-a0880cb7aecba93f5.jsonl:L47-L48）。"
+        },
+        {
+          "key": "bc655f68-6f49-4bcf-ab64-aa45d7a58cc2:a0880cb7aecba93f5",
+          "at": "2026-10-01T09:15:01.046Z",
+          "reason": "读到上述 Start/End 属性后，Write NoteListItem.ets 把文字区写成 .padding({ top…, left: 6, right: DesignTokens.horizontalMargin })、日期 .margin({ right: 15 })、分类色条 .margin({ left: 4 })（payload 165-166、124、54 行；agent-a0880cb7aecba93f5.jsonl:L99-L100）；随后 Edit 重写同一 padding 块仍为 left/right（L104-L105）。该片段原样保留到返修前（agent-a6403a52e5ea00951.jsonl:L159 R54/R124/R165-166），返修改为 start/end LengthMetrics（agent-aea03558554c5b0c8.jsonl:L541）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/components/common/FabMenu.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/res/layout/fab.xml",
+          "at": "2026-10-01T09:09:58.051Z",
+          "reason": "正常输入：Read 回执给出 FloatingActionsMenu 的 android:layout_gravity=\"bottom|end\"（源 :25）与 android:layout_marginEnd=\"@dimen/fab_right_margin\"（:30）；视图整体应随布局方向落到 end 侧（agent-a0880cb7aecba93f5.jsonl:L53-L54）。"
+        },
+        {
+          "key": "bc655f68-6f49-4bcf-ab64-aa45d7a58cc2:a0880cb7aecba93f5",
+          "at": "2026-10-01T09:16:11.306Z",
+          "reason": "读到上述属性后 Write FabMenu.ets：头注释写「marginEnd=fab_right_margin(8dp)」（payload 7 行），代码却为 .margin({ bottom: DesignTokens.fabMarginBottom, right: DesignTokens.fabRightMargin })（167 行）、标签 .margin({ right: 8 })（103 行），而外层 Stack 用会镜像的 Alignment.BottomEnd（152 行）——同一组件混用逻辑对齐与物理边距（agent-a0880cb7aecba93f5.jsonl:L116-L117）。保留到返修前（agent-a6403a52e5ea00951.jsonl:L161 R119-120/R169/R184）；返修改外层 padding end LengthMetrics、内层 Direction.Ltr + i18n.isRTL（agent-aea03558554c5b0c8.jsonl:L567、L738）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/components/NavDrawerComponent.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/.claude/skills/android-ui-graph-query/references/android-to-harmonyOS-ui-atomic-component-mapping-reference.md",
+          "at": "2026-10-01T11:08:17.134Z",
+          "reason": "正常输入：MainActivity converter 的 Read 回执含「android:layout_marginEnd → .margin({ end })」（:203）、「android:paddingStart → .padding({ start })」（:209）及「Start/End：起始/结束边缘（RTL/LTR 感知）」（:1438-1439）；目标侧应用逻辑键的规则已经给出（migration/e95edcb7-…/subagents/agent-ac81e9c5c719d73bc.jsonl:L36→L39）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/res/layout/activity_main.xml",
+          "at": "2026-10-01T11:07:37.569Z",
+          "reason": "正常输入：Read 回执给出 DrawerLayout 内 navigation_drawer 的 android:layout_gravity=\"start\"（源 :62），抽屉位置是逻辑 start 而非左侧（agent-ac81e9c5c719d73bc.jsonl:L19-L20）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/res/layout/fragment_navigation_drawer.xml",
+          "at": "2026-10-01T11:11:16.144Z",
+          "reason": "正常输入：Bash cat 回执给出抽屉标题 android:paddingStart/paddingEnd=\"@dimen/horizontal_margin\"（R48/R50）与 settings_view 行的 paddingStart/paddingEnd（R116-117）（agent-ac81e9c5c719d73bc.jsonl:L83-L84）。"
+        },
+        {
+          "key": "e95edcb7-c619-475d-b56e-7bb84402a4ba:ac81e9c5c719d73bc",
+          "at": "2026-10-01T11:23:20.692Z",
+          "reason": "已收到映射规则与源 XML 的 Start/End，Write NavDrawerComponent.ets 仍把标题、主菜单行、Settings 行全部写成 .padding({ left: DesignTokens.horizontalMargin, right: DesignTokens.horizontalMargin }) / .padding({ left: DesignTokens.iconTextMargin, … })（payload 143-144、170、175、198、203 行；agent-ac81e9c5c719d73bc.jsonl:L164-L165）。映射参考已给出 end/start 键，偏差落在实现者的属性翻译。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/res/layout/drawer_list_item.xml",
+          "at": "2026-10-01T11:35:59.244Z",
+          "reason": "正常输入：NavigationDrawerFragment converter 以 Bash cat 一次读取 fragment_navigation_drawer.xml、drawer_category_list_footer.xml、drawer_list_item.xml，回执含行标题 paddingStart=\"@dimen/icon_text_margin\" / paddingEnd=\"@dimen/horizontal_margin\"（R173-174）及计数徽标 paddingStart/End=7dp、layout_marginEnd（agent-a62aeae8828ef4ef7.jsonl:L32-L33）。"
+        },
+        {
+          "key": "e95edcb7-c619-475d-b56e-7bb84402a4ba:a62aeae8828ef4ef7",
+          "at": "2026-10-01T11:43:46.461Z",
+          "reason": "读到上述 XML 后重写整个 NavDrawerComponent.ets，分类/主菜单标题写成 .padding({ left: DesignTokens.iconTextMargin, right: DesignTokens.horizontalMargin })（payload 238、313 行）、徽标 .padding({ left: 7, right: 7, … }) .margin({ right: DesignTokens.horizontalMargin })（319、322 行）（agent-a62aeae8828ef4ef7.jsonl:L98-L99）。这些行即返修 MM-12 指的 :357/:432/:438/:441（agent-ad3d7b95ccbf0d799.jsonl:L73），返修改为 start/end LengthMetrics（agent-aefc2f17edc072f7a.jsonl:L1466）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "MainActivity converter 以 Bash cat 读取 fragment_navigation_drawer.xml 与 settings_view（drawer_category_list_footer.xml），回执返回抽屉标题与 Settings 行的 android:paddingStart/paddingEnd=\"@dimen/horizontal_margin\"；这是它写 NavDrawerComponent 前对该源布局的真实读取。",
+          "evidence": [
+            {
+              "source": "migration/e95edcb7-c619-475d-b56e-7bb84402a4ba/subagents/agent-ac81e9c5c719d73bc.jsonl",
+              "line": 83
+            },
+            {
+              "source": "migration/e95edcb7-c619-475d-b56e-7bb84402a4ba/subagents/agent-ac81e9c5c719d73bc.jsonl",
+              "line": 84
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": "target"
+        },
+        {
+          "from": 5,
+          "to": 6,
+          "force": true,
+          "reason": "NavigationDrawerFragment converter 以 Bash cat 一次读取 fragment_navigation_drawer.xml、drawer_category_list_footer.xml、drawer_list_item.xml，回执返回行标题 paddingStart=\"@dimen/icon_text_margin\" / paddingEnd=\"@dimen/horizontal_margin\" 及徽标 layout_marginEnd；这是它重写 NavDrawerComponent 前对该源布局的真实读取。",
+          "evidence": [
+            {
+              "source": "migration/e95edcb7-c619-475d-b56e-7bb84402a4ba/subagents/agent-a62aeae8828ef4ef7.jsonl",
+              "line": 32
+            },
+            {
+              "source": "migration/e95edcb7-c619-475d-b56e-7bb84402a4ba/subagents/agent-a62aeae8828ef4ef7.jsonl",
+              "line": 33
+            }
+          ]
+        },
+        {
+          "from": 6,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "公共组件 worker 的派工要求先 Read arkts-component-builder SKILL.md，转录里没有这次 Read，L3 实际注入的是 android-ui-graph-builder skill；本卡未追注入错 skill 的原因。",
+    "7-06「内层不应镜像」：生成者输入中没有 getbase FloatingActionsMenu 的 onLayout 源码（返修者反编译后才确认），生成期只能归因 marginEnd→right 与逻辑/物理键混用，不声称生成者明知内层应固定 LTR。"
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/components/common/ONDialog.ets",
+      "reason": "已确认修改：返修把多选行勾选框间距改为 .margin({ start: LengthMetrics.vp(…) })（9-07）。但生成期 ONDialog 只有 Base-6 worker 的一次 Write，payload 仅含对称 .padding({ top: 10, bottom: 10, left: 12, right: 12 })（agent-a0880cb7aecba93f5.jsonl:L124，52 行），返修首读仍是该内容（agent-a6403a52e5ea00951.jsonl:L174 R52），没有 multiChoiceRow；margin left 的多选行由返修第 1 轮 Write 新增（agent-a6403a52e5ea00951.jsonl:L1108 payload 208 行，2026-10-13T16:50Z），属修复中新生问题，生成期无可绑定的偏差写入，故不成图。"
+    }
+  ],
+  "job": "issue-927e26bb7b18f83f2f38",
+  "metadata": {
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.247",
+        "2.1.296",
+        "2.1.300"
+      ]
+    },
+    "source_set_id": "sources-fef5281fb5eb1e655dea",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos",
+        "at": "2026-10-01T08:07:31.804Z",
+        "ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1119",
+        "request_ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1117",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos",
+        "at": "2026-10-01T08:07:31.804Z",
+        "ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1119",
+        "request_ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1117",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes",
+        "at": "2026-10-13T15:34:04.077Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L121",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L120",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes",
+        "at": "2026-10-13T15:34:04.077Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L121",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L120",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes",
+        "at": "2026-10-14T01:47:40.558Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L159",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L158",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes",
+        "at": "2026-10-14T01:47:40.558Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L159",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L158",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.10"
+  },
+  "revision": "e18332363723b7bd11b836789fed1816595b3d6fe4b3ac4982e023090aeef94a"
+}

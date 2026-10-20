@@ -1,6 +1,6 @@
 # 编译修复只改报错定位的行与符号，不以删掉功能或语义不同的替代换取通过；必须整文件重写时逐段对照上一版，未报错的写法原样保留
 
-ID：`lesson-29744eb694376e8acaca` · 版本：7
+ID：`lesson-29744eb694376e8acaca` · 版本：8
 
 [本主题](index.md)
 
@@ -25,7 +25,7 @@ ID：`lesson-29744eb694376e8acaca` · 版本：7
 5. 类型不符时只转换类型、不换数据来源：Resource 赋给只收 string 的字段时，用 resourceManager.getStringSync($r(...).id) 一类写法取当前语言的字符串，或改用接受 Resource 或自定义 builder 的重载；不以枚举名、rawName 等字面串代替本地化文案。要以“源端本来如此”解释改动时，先回读对应源码。
 6. 不把修复按类比扩散到没有报错的文件；基于“未检索到关键字”得出的推断先用一个未报错的同型文件反证。UI DSL 的替代写法在编译门报告里列为需打开页面验证的项。
 
-来源支持：10 张卡 · 7 次迁移 · 7 个应用
+来源支持：11 张卡 · 已知 7 次迁移（部分未记录） · 已知 7 个应用（部分未记录）
 
 ## 来源（按需复核）
 
@@ -43,6 +43,8 @@ ID：`lesson-29744eb694376e8acaca` · 版本：7
   卡片版本：`c81c56fb66d294cfd767c2c43e5bcfb480ef9cccbdcfc212d5d607410c13675a`
 - [case-7ced02d9c41ab6f4919a](../../../store/cases/case-7ced02d9c41ab6f4919a/9fd2c38d185384a27ad8b217bf729215c10890cf8902cf113c94de01745a600d.json) · 结论：recommendation:4
   卡片版本：`9fd2c38d185384a27ad8b217bf729215c10890cf8902cf113c94de01745a600d`
+- [case-7f8dcb2d9341693d1225](../../../store/cases/case-7f8dcb2d9341693d1225/9bc002a9ae47b1515ae4f83a7641866747bdf2d6e5d4dae238785c21ea360875.json) · 结论：recommendation:3
+  卡片版本：`9bc002a9ae47b1515ae4f83a7641866747bdf2d6e5d4dae238785c21ea360875`
 - [case-9d7fa754a567e2ecec7e](../../../store/cases/case-9d7fa754a567e2ecec7e/08068dd456a4c32cc1327c39f339215b49dab4ffc8f5a25dc8024b7112ebbd28.json) · 结论：diagnosis, recommendation:2
   卡片版本：`08068dd456a4c32cc1327c39f339215b49dab4ffc8f5a25dc8024b7112ebbd28`
 - [case-abb1f63235ed950c4841](../../../store/cases/case-abb1f63235ed950c4841/f5b824a9ef757f00ab0eb7c877fdd33947c2fdd54420510962728ba20a259f79.json) · 结论：recommendation:1, recommendation:2

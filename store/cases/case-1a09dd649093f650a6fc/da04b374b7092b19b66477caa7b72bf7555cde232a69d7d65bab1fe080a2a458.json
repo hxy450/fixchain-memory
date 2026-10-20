@@ -1,0 +1,247 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-1a09dd649093f650a6fc",
+  "created_at": "2026-10-17T03:42:37.807792+00:00",
+  "migration_key": "/private/tmp/claude-502/-Users-fengyi-Workspace-migbot-set-l123-cc-glm53/a9f6942f-6659-40bd-bc16-6616949070fb/scratchpad/distill/pool2",
+  "title": "源端原始触摸状态机（阈值/跟手/取消）被规格断言或映射参考改写成 ArkUI 手势识别器",
+  "when": "规格提取阶段，把源码中显式的 MotionEvent 处理（阈值、按压时序、拖动取消）翻译成目标交互契约时；界面实现阶段，为列表项滑动、画廊点击/缩放等选择 onClick/SwipeGesture/PanGesture 还是 onTouch 逐事件移植时",
+  "description": "Android 源在 onInterceptTouchEvent/onTouch 或 ItemTouchHelper、ScaleGestureDetector、ViewPager 等框架/三方手势类里实现带阈值、跟手位移、速度判定与 CANCEL 的触摸状态机；目标为 ArkUI，候选是 Swiper/List 内建手势、SwipeGesture/PanGesture/PinchGesture 识别器或 onTouch 原始事件，且要求行为一比一",
+  "summary": "本问题 4 个目标中，生成期可核的偏差分两类成因，各完成一条代表链。\n（一）规格先断言「目标内建该语义」，实现者沿用（GalleryPage，GA-09）。\npage_0002 规格作者（bc655f68…:ac47c4d127b6ef65f）Read 到 GalleryActivity.java:55-83 的 screenTouches 状态机\n（DOWN 记坐标置 statusPressed、MOVE 位移 ≥30px 取消、UP 仍按下才 click；agent-ac47c4d127b6ef65f.jsonl:L55-L56），\nWrite 的页面规格却写「→ Stack onClick（ArkUI 原生点击/滑动天然分离，无需自判阈值）」并在转换决策表登记\n「InterceptorFrameLayout 触摸拦截 | 无需迁移」（L89-L90）；未核实 Swiper 开始拖动后 onClick 是否仍会触发。\nGalleryPage 生成者（bc655f68…:ad325164a2c22a4bf）读到该规格（L10-L11），同时也自己 Read 了 GalleryActivity.java（L19-L20）、\nInterceptorFrameLayout.java（L21-L22），并 grep 到 F006-AC42「图库单击判定阈值 MOVING_THRESHOLD=30…判:unit 阈值边界 29/30px」（L91-L92），\nWrite GalleryPage.ets 时仍在头注释写「InterceptorFrameLayout（触摸拦截 + 30px 点击/滑动自判）→ 不迁移：ArkUI onClick 与 Swiper 滑动手势内建分离」，\n页项只挂 .onClick(() => this.onItemClicked())（payload 17-18、273-277 行；L108-L109）。返修前快照 spec/parity-fix-work/_orig/…/GalleryPage.ets:18、212-214\n仍是这段结构；返修 G4 为根布局加 onGalleryRootTouch（DOWN/MOVE≥30px/UP 状态机）并在 Swiper.onGestureSwipe 时置 statusPressed=false\n（agent-a055878307a6b4b4f.jsonl:L556、L710；agent-ac8f4b88e9a5b9e6a.jsonl:L225、L227）。\n同一目标的缩放部分：GalleryViewPager/TouchImageView 来自三方 simplegallery 3.0.1，规格作者只在仓库内 find（L81），\n规格与生成者都写「三方库无源码 → Swiper + Image 自渲染」，生成期 GalleryPage 完全没有缩放/双击实现（迁移池中无任何 Write/Edit 含 PinchGesture；\n该词只出现在映射参考的读取回执里）。观察报告 GA-16/21/22/23 所指的「PinchGesture 按比值无门槛、PanGesture 识别后补偿位移」是返修第 1 轮\n（agent-a055878307a6b4b4f Write 2026-10-13T16:27:45Z 引入 PinchGesture/PanGesture）新生的问题，第 2 轮再改为 ScaleDetector 逐事件移植；\n返修者是从 gradle 缓存取出 simplegallery classes 用 javap 还原 TouchImageView 行为的（同转录 L49-L66），说明「无源码」是可补的材料缺口。\n对 job 问题的回答：skill 映射参考确把 ScaleGestureDetector→PinchGesture 写成「直接映射」（atomic 参考 2353 行）/「需配合手势系统」（interaction 参考 119-122 行），\n但生成期无人据此写过 PinchGesture；生成者未读过 TouchImageView 源码，仓库内也没有。\n（二）映射参考把框架手势类等同为识别器，实现者未读源方法体就沿用（NoteListPage，6-02）。\n列表页生成者（bc655f68…:a5e63b2207e98f693）读到 page_0013 规格「滑动: initSwipeGesture() ItemTouchHelper 左右滑 → swipeNote() → undo 栏」\n及决策「ItemTouchHelper 滑动 | ListItem swipeAction 或 PanGesture」（agent-a5e63b2207e98f693.jsonl:L10-L11），又 Read 了交互映射参考，\n其 162 行写「ItemTouchHelper Swipe | SwipeGesture + 状态 | ListItem().gesture(SwipeGesture().onAction(...))」、113 行「onFling → SwipeGesture 需要速度阈值判断」（L95-L96）。\n它对 ListFragment.java 的 sed 读取只覆盖 398-530/575-660/730-800 等段，没有读 initSwipeGesture 方法体（1199-1218）；思考中在 swipeAction 与\nSwipeGesture 间取舍（L120）后，Write 的 noteItem 挂 SwipeGesture({direction: Horizontal}).onAction(() => onNoteSwiped(ri.item))（payload 700-707 行；L159-L160），\n识别即触发：无跟手位移、无半宽/甩动阈值、无回弹。后续 Slice 10 worker（fcc67332…:ac7db1f1e97435d0a）只在同一 SwipeGesture 内补挂载条件（L272），\n返修前快照 _orig/…/NoteListPage.ets:1717 仍是 SwipeGesture；返修 G1 改为 PanGesture 跟手 + SWIPE_THRESHOLD 0.5 宽 / 120dp·s⁻¹ 甩动 / 回弹（agent-a37ab07ebd7bca6e3.jsonl:L1053 payload 245-248 行）。\n这里规格没有写错，但只给了方法名级描述；映射参考的「SwipeGesture」行是 skill 材料边界，作者与形成过程不在池内。\n",
+  "recommendations": [
+    "规格提取阶段：源码里显式的触摸状态机（阈值、按压时序、拖动后取消点击）要落成行为 AC，并与同一规格的转换决策表一致；不要以「目标平台内建该语义」为由登记「无需迁移」，除非已核实目标事件模型（例如 Swiper 开始拖动后子节点 onClick 是否仍触发）。",
+    "实现阶段：收到 MotionEvent 级源码（DOWN/MOVE 阈值/UP、CANCEL）时，用 onTouch 逐事件移植并与 Swiper/List 的拖动开始联动取消点击；onClick/SwipeGesture/PinchGesture 等识别器只在源端本身就是识别器回调时使用。检查方法：对照源方法逐项列出「跟手位移、阈值、速度、取消」在目标代码中各由哪一行承接，缺一项即为偏差。",
+    "实现阶段：ItemTouchHelper、ScaleGestureDetector、ViewPager 等框架/三方手势类，先读源方法体与框架默认参数（滑出阈值 0.5 宽、escape velocity、span slop、TAP_TIMEOUT），映射参考里的「直接映射 / SwipeGesture」行只作组件候选，不作行为等价证明。",
+    "规格/实现阶段：三方库「仓库内无源码」不等于行为不可知：到 gradle 缓存或 AAR 中用 javap/反编译核对其交互（如 TouchImageView 的缩放、双击、拦截），或至少在规格登记「缩放/双击行为缺口」，而不是静默降级为 Swiper + Image。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/pages/GalleryPage.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/java/it/feio/android/omninotes/GalleryActivity.java",
+          "at": "2026-10-01T07:10:09.672Z",
+          "reason": "正常输入：page_0002 规格作者 Read 回执含 screenTouches：MOVING_THRESHOLD=30，DOWN 记 x/y 置 statusPressed，MOVE 位移 ≥30 取消，UP 且 statusPressed 才 click（源 :55-83；migration/bc655f68-…/subagents/agent-ac47c4d127b6ef65f.jsonl:L55-L56）。状态机语义完整清楚。"
+        },
+        {
+          "key": "bc655f68-6f49-4bcf-ab64-aa45d7a58cc2:ac47c4d127b6ef65f",
+          "at": "2026-10-01T07:11:53.839Z",
+          "reason": "读到上述源码后，Write page_0002_GalleryActivity.md：手势语义行写「→ Stack onClick（ArkUI 原生点击/滑动天然分离，无需自判阈值）」，转换决策表写「InterceptorFrameLayout 触摸拦截 | 无需迁移（ArkUI onClick 与 Swiper 滑动手势天然分离）」（文件 L25、L34；agent-ac47c4d127b6ef65f.jsonl:L89-L90）。未核实 Swiper 拖动开始后 onClick 是否仍触发，把源端显式状态机裁成「无需迁移」。规格在此先偏离。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/spec/baseline/ui/page_0002_GalleryActivity.md",
+          "at": "2026-10-01T09:17:34.429Z",
+          "reason": "交付桥梁：GalleryPage 生成者的 Read 回执仍含「无需自判阈值」与决策表「无需迁移」行（migration/bc655f68-…/subagents/agent-ad325164a2c22a4bf.jsonl:L10-L11）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/spec/baseline/features/F006-attachments.md",
+          "at": "2026-10-01T09:23:45.155Z",
+          "reason": "正常输入：生成者 Bash grep -B3 -A25 GalleryParam 的回执含 F006-AC42「图库单击判定阈值 MOVING_THRESHOLD=30（位移 ≥30px 判为滑动不触发单击）…判:unit | 阈值边界 29/30px 两输入单击触发与否断言」（文件 L209；agent-ad325164a2c22a4bf.jsonl:L91-L92）。该 AC 要求阈值行为保留，与决策表「无需迁移」矛盾时应以 AC 为准。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/java/it/feio/android/omninotes/GalleryActivity.java",
+          "at": "2026-10-01T09:19:38.383Z",
+          "reason": "正常输入：生成者自己的 Read 回执同样含 screenTouches 全文（源 :55-83）及 binding.galleryRoot.setOnViewTouchedListener(screenTouches)（:119）（agent-ad325164a2c22a4bf.jsonl:L19-L20）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/java/it/feio/android/omninotes/models/views/InterceptorFrameLayout.java",
+          "at": "2026-10-01T09:19:38.865Z",
+          "reason": "正常输入：Read 回执含 onInterceptTouchEvent 把每个 MotionEvent 转发给 mOnViewTouchedListener 后 return super（源 :43-48），即根布局在子 ViewPager 拖动期间仍收到 MOVE/UP（agent-ad325164a2c22a4bf.jsonl:L21-L22）。"
+        },
+        {
+          "key": "bc655f68-6f49-4bcf-ab64-aa45d7a58cc2:ad325164a2c22a4bf",
+          "at": "2026-10-01T09:28:04.102Z",
+          "reason": "已收到源码状态机与 AC42，仍按规格断言 Write GalleryPage.ets：头注释「InterceptorFrameLayout（触摸拦截 + 30px 点击/滑动自判）→ 不迁移：ArkUI onClick 与 Swiper 滑动手势内建分离」，GalleryViewPager 写成 Swiper + ForEach，页项仅 .onClick(() => this.onItemClicked())，无 onTouch、无阈值、无拖动后取消（payload 17-19、100-110、273-277 行；agent-ad325164a2c22a4bf.jsonl:L108-L109）。同次 Write 也按「三方 simplegallery 无源码」不实现任何缩放。返修前快照 _orig/GalleryPage.ets:18、212-214 保留该结构；返修改为 onGalleryRootTouch 状态机 + onGestureSwipe 置 statusPressed=false。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 7
+        },
+        {
+          "from": 4,
+          "to": 7,
+          "force": true,
+          "reason": "GalleryPage 生成者写前以 Bash grep -n -B 3 -A 25 \"GalleryParam\" spec/baseline/features/F006-attachments.md 读取规格，回执返回 F006-AC40~AC44 段，其中 AC42 要求保留 MOVING_THRESHOLD=30 单击判定阈值并以 29/30px 边界断言；这是它 Write GalleryPage.ets 前对该规格的真实读取。",
+          "evidence": [
+            {
+              "source": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2/subagents/agent-ad325164a2c22a4bf.jsonl",
+              "line": 91
+            },
+            {
+              "source": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2/subagents/agent-ad325164a2c22a4bf.jsonl",
+              "line": 92
+            }
+          ]
+        },
+        {
+          "from": 5,
+          "to": 7
+        },
+        {
+          "from": 6,
+          "to": 7
+        },
+        {
+          "from": 7,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/pages/NoteListPage.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/spec/baseline/ui/page_0013_ListFragment.md",
+          "at": "2026-10-01T09:18:05.630Z",
+          "reason": "正常输入（方法名级）：Read 回执含「滑动: initSwipeGesture() ItemTouchHelper 左右滑 → swipeNote() → undo 栏 + onNoteSwipedPerformAction」及决策「ItemTouchHelper 滑动 | ListItem swipeAction（List 组件侧滑）或 PanGesture | 侧滑归档/回收」（文件 L34、L49；migration/bc655f68-…/subagents/agent-a5e63b2207e98f693.jsonl:L10-L11）。它指向源方法 ListFragment.java:1199-1218 并给出跟手类候选，未提议一次性识别器。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/.claude/skills/android-ui-graph-query/references/android-to-harmonyOS-ui-interaction-mapping-reference.md",
+          "at": "2026-10-01T09:20:16.451Z",
+          "reason": "偏差输入（skill 材料边界）：Read 回执 162 行「ItemTouchHelper Swipe | SwipeGesture + 状态 | 滑动删除 | ListItem().gesture(SwipeGesture().onAction(() => { /* 删除逻辑 */ }))」，113 行「onFling → SwipeGesture 需要速度阈值判断」（agent-a5e63b2207e98f693.jsonl:L95-L96）。把带跟手位移、滑出阈值、escape velocity 与回弹的 ItemTouchHelper 等同为一次性识别器；作者不在池内，缺口记录于此。"
+        },
+        {
+          "key": "bc655f68-6f49-4bcf-ab64-aa45d7a58cc2:a5e63b2207e98f693",
+          "at": "2026-10-01T09:36:04.114Z",
+          "reason": "读到上述规格与映射参考，未读 ListFragment.java 的 initSwipeGesture 方法体（其 sed 范围 398-530、575-600、599-660、730-800；L75、L80、L127），思考中在 swipeAction 与 SwipeGesture 间取舍（L120）后，Write NoteListPage.ets 的 noteItem 挂 SwipeGesture({ direction: SwipeDirection.Horizontal }).onAction(() => { if (!cabActive && PREF_ENABLE_SWIPE) this.onNoteSwiped(ri.item) })（payload 501-504、700-707 行；agent-a5e63b2207e98f693.jsonl:L159-L160）：识别即触发，无跟手位移、无半宽/甩动阈值、无回弹。返修前快照 _orig/NoteListPage.ets:1717 仍为该 SwipeGesture；返修 G1 改为 PanGesture 跟手 + 0.5 宽 / 120dp·s⁻¹ 阈值 + 回弹。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "交互映射参考（android-to-harmonyOS-ui-interaction-mapping-reference.md）与 atomic 参考的作者及形成过程未追（skill 材料边界）；本卡只核到它们把 ItemTouchHelper→SwipeGesture、ScaleGestureDetector→PinchGesture 写成等价映射。"
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/pages/IntroPage.ets",
+      "reason": "已确认修改：返修 G4 子代理重写 IntroPage（agent-ac8f4b88e9a5b9e6a.jsonl:L1198）并由主会话 2026-10-15 补 Edit，IN-14 把底栏非按钮节点改为 HitTestMode.None 透传横滑；IN-13 翻页物理记为平台差异 D-1 未改。生成期写者已定位（e95edcb7 之前的 bc655f68…:abb21f8d7c4ab6345 Write 2026-10-01T09:43:17.825Z，按 PD-C8-F014-01 自研 Swiper 壳），但 AppIntro 1.3.0 的 intro_layout2.xml 不在仓库、其写前输入（page_0007 规格、IntroActivity/IntroSlide 源）中未见底栏触摸透传或 ViewGroup.dispatchTouchEvent 的要求，尚未核到可绑定的输入-输出偏差，未成图。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/components/NavDrawerComponent.ets",
+      "reason": "已确认修改：返修 G2 子代理把列表行触摸改为 AbsListView 时序（TAP_TIMEOUT 100ms 显示按压、PRESSED_STATE_DURATION 64ms、TOUCH_SLOP/抽屉捕获撤销；agent-ad3d7b95ccbf0d799.jsonl:L536、agent-aefc2f17edc072f7a.jsonl:L398-L402）。生成期写者已定位（e95edcb7…:ac81e9c5c719d73bc Write 2026-10-01T11:23:20.692Z，行用 stateStyles + onClick + LongPressGesture），其转录中无 TAP_TIMEOUT/AbsListView 任何输入；AbsListView 为框架源码不在仓库，page_0016 规格与 NavigationDrawerFragment 源也未写按压时序要求，属材料缺口，未成图。"
+    }
+  ],
+  "job": "issue-1a09dd649093f650a6fc",
+  "metadata": {
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.247",
+        "2.1.296",
+        "2.1.300"
+      ]
+    },
+    "source_set_id": "sources-fef5281fb5eb1e655dea",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos",
+        "at": "2026-10-01T08:07:31.804Z",
+        "ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1119",
+        "request_ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1117",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos",
+        "at": "2026-10-01T08:07:31.804Z",
+        "ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1119",
+        "request_ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1117",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes",
+        "at": "2026-10-13T15:34:04.077Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L121",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L120",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes",
+        "at": "2026-10-13T15:34:04.077Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L121",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L120",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes",
+        "at": "2026-10-14T01:47:40.558Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L159",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L158",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes",
+        "at": "2026-10-14T01:47:40.558Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L159",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L158",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.10"
+  },
+  "revision": "da04b374b7092b19b66477caa7b72bf7555cde232a69d7d65bab1fe080a2a458"
+}

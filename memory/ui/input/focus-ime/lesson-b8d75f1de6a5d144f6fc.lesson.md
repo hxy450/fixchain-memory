@@ -1,6 +1,6 @@
 # 对话框里的 EditText 把焦点、软键盘与预填光标分三项迁移：只获焦不弹键盘时 TextInput/TextArea 设 enableKeyboardOnFocus(false)，setText 预填后光标置于开头
 
-ID：`lesson-b8d75f1de6a5d144f6fc` · 版本：2
+ID：`lesson-b8d75f1de6a5d144f6fc` · 版本：3
 
 [本主题](index.md)
 
@@ -33,5 +33,5 @@ ID：`lesson-b8d75f1de6a5d144f6fc` · 版本：2
 
 ## 来源（按需复核）
 
-- [case-1446bd8a3fc8a14b0a94](../../../store/cases/case-1446bd8a3fc8a14b0a94/fb6e49bb5629713c24983914208eda2fefbcb3374a3527d8ea29e518d7f15e63.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
+- [case-1446bd8a3fc8a14b0a94](../../../../store/cases/case-1446bd8a3fc8a14b0a94/fb6e49bb5629713c24983914208eda2fefbcb3374a3527d8ea29e518d7f15e63.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
   卡片版本：`fb6e49bb5629713c24983914208eda2fefbcb3374a3527d8ea29e518d7f15e63`

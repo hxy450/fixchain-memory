@@ -1,6 +1,6 @@
 # 整体着色的气泡用 bindPopup 的 popupColor，而不是只给内容加背景
 
-ID：`lesson-05dc4eb9548bf3fef6ae` · 版本：1
+ID：`lesson-05dc4eb9548bf3fef6ae` · 版本：2
 
 [本主题](index.md)
 
@@ -24,5 +24,5 @@ ID：`lesson-05dc4eb9548bf3fef6ae` · 版本：1
 
 ## 来源（按需复核）
 
-- [case-1907ba587e6b1439f17d](../../../store/cases/case-1907ba587e6b1439f17d/3b9e23602906ed8c186b14784339e4463fbb6d15d4980a92ce92cd6be7aa805a.json) · 结论：recommendation:2
+- [case-1907ba587e6b1439f17d](../../../../store/cases/case-1907ba587e6b1439f17d/3b9e23602906ed8c186b14784339e4463fbb6d15d4980a92ce92cd6be7aa805a.json) · 结论：recommendation:2
   卡片版本：`3b9e23602906ed8c186b14784339e4463fbb6d15d4980a92ce92cd6be7aa805a`

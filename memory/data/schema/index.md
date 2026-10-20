@@ -1,6 +1,6 @@
 # data/schema
 
-Room 到 relationalStore 的库名、schema 版本、建表语句（含标识符加引号与关键字列名）与升级路径（基线建表与迁移重放一致），以及手写插入语句对自增主键的处理；relationalStore 共享写入口的单语句执行与事务接口选择
+Room 到 relationalStore 的库名、schema 版本、建表语句（含标识符加引号与关键字列名）与升级路径（基线建表与迁移重放一致），以及手写插入语句对自增主键的处理；SQLiteOpenHelper 的建库时机与打开契约（版本分派、失败后重试），Cursor.getString 读数值列的文本形态；relationalStore 共享写入口的单语句执行与事务接口选择（事务体含 await 时用 Transaction 对象）
 
 [上一级](../index.md)
 
@@ -12,9 +12,9 @@ Room 到 relationalStore 的库名、schema 版本、建表语句（含标识符
 - [SQLiteOpenHelper 构造不建库，首个 getReadable/WritableDatabase 才建：目标不在启动 init 里预建库，依赖“库文件是否存在”的流程（备份失败、恢复建库）按源路径保留](lesson-519f6769ca714500d9c3.lesson.md)
   - 时机：规格提取与数据层实现阶段，把继承 SQLiteOpenHelper 的 helper 与其调用方映射为 relationalStore 初始化时
   - 情境：源 helper 继承 SQLiteOpenHelper，构造只调 super，启动路径只 new helper，DAO 可能没有调用方；目标准备在入口或服务构造里 getRdbStore/init 建库，备份读写依赖库文件是否存在。
-- [relationalStore 共享写入口：单条语句直接 await execute/insert/delete，多语句事务用 beginTransaction/commit/rollBack；不选 d.ts 声明 801 的 beginTrans()/execute(sql, txId) 事务 ID 接口](lesson-a078efd3361b4abe58e3.lesson.md)
+- [relationalStore 事务体含 await 时用 createTransaction，不用 beginTransaction；单语句直接 await](lesson-a078efd3361b4abe58e3.lesson.md)
   - 时机：数据层实现阶段，为 relationalStore 的 DAO 共享写入口选择单语句执行或事务接口时
-  - 情境：ArkTS 用 @kit.ArkData relationalStore 普通（非向量）关系库，DAO 的单条 INSERT/DELETE 经共享写入口执行；规格要求“写完才返回、失败不留半条记录、异常回滚”；SDK d.ts 中同时有 beginTransaction()/commit()/rollBack() 与 beginTrans(): Promise&lt;number&gt;、execute(sql, txId, args)、commit(txId)、rollback(txId) 两套事务写法，后者列出 801（Capability not supported）；data-layer skill 参考只给出前一套（API 14+ 另有 createTransaction()）。
+  - 情境：ArkTS 用 @kit.ArkData relationalStore 普通（非向量）关系库，DAO 的单条 INSERT/DELETE 经共享写入口执行；规格要求“写完才返回、失败不留半条记录、异常回滚”；SDK d.ts 中同时有 beginTransaction()/commit()/rollBack() 与 beginTrans(): Promise&lt;number&gt;、execute(sql, txId, args)、commit(txId)、rollback(txId) 两套事务写法，后者列出 801（Capability not supported）；data-layer skill 参考只给出前一套（API 14+ 另有 createTransaction()）。也包括事务体内要多次 await 异步写接口（insert/update/delete 或其他 DAO 方法），而同一 store 上可能同时有其他异步库操作或同一流程的并发调用。
 - [手写 relationalStore 建表 SQL 时给表名与列名统一加引号，关键字列名尤其不能裸写](lesson-c55c56444f5271471a64.lesson.md)
   - 时机：数据层实现阶段，把 Room 实体或列清单手写成 relationalStore 的建表与索引 SQL 字符串时；规格或侦察阶段为实现者整理表结构列清单时
   - 情境：源端表结构由 Room 注解生成，Room 导出的 createSql 会给表名、列名加反引号；目标端用字符串数组手写 DDL 并在 init 中顺序执行，实体列名可能是 to、order、group、index、default、key 一类 SQL 关键字；SQL 写在字符串里，ArkTS 编译不检查。
@@ -22,3 +22,9 @@ Room 到 relationalStore 的库名、schema 版本、建表语句（含标识符
   - 时机：数据层实现阶段，把 Room 实体与 @Insert 方法翻译成 relationalStore 手写 INSERT/INSERT OR REPLACE SQL、决定自增主键列是否写入时
   - 情境：源 Room 实体用 @PrimaryKey(autoGenerate = true) val id = 0，行由映射函数新建且 id 保持默认 0，再经 @Insert(onConflict = REPLACE) 批量写入；目标用 executeSql 手写插入，行接口保留 id 字段。
   - 例外：源端确实为该行指定了非 0 的真实主键（如按固定 id 播种），此时照源端写入该值
+- [源端以 Cursor.getString 读数值列时复刻 CursorWindow 的文本转换（REAL 按 %g），不直接换成 getString](lesson-58deb5f78fd00dfe7a3b.lesson.md)
+  - 时机：数据层实现阶段，把 SQLite Cursor 读取（尤其以 cursor.getString 读数值列）转成 relationalStore ResultSet 读取时
+  - 情境：源端以 cursor.getString(i) 读取 REAL 或 INTEGER 列，再交给模型的 String 入口解析或直接显示；目标准备一对一改成 resultSet.getString(columnIndex)。
+- [用 relationalStore 重写 SQLiteOpenHelper 子类时补齐基类打开契约：按版本号分派建表、升级与降级报错，打开失败后下次取库重试](lesson-65358a02b1bf9ef652d3.lesson.md)
+  - 时机：数据层实现阶段，用 relationalStore 重写 SQLiteOpenHelper 子类的打开、建表与版本处理时；规格写“升级路径不迁移”“onCreate 即唯一入口”一类决策时
+  - 情境：源 helper 以 super(context, name, factory, VERSION) 构造并覆写 onCreate/onUpgrade，DAO 每次经 getWritableDatabase/getReadableDatabase 取库；目标用 getRdbStore 单例、store.version 与缓存的初始化 Promise 实现。

@@ -1,0 +1,304 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-fb9e44071c44d06a6c71",
+  "created_at": "2026-10-17T05:58:32.717281+00:00",
+  "migration_key": "/private/tmp/claude-502/-Users-fengyi-Workspace-migbot-set-l123-cc-glm53/a9f6942f-6659-40bd-bc16-6616949070fb/scratchpad/distill/pool2",
+  "title": "SharedPreferences 同步读语义被异步载入+写队列替代；按读点不同的默认值被收敛成按键单一默认",
+  "when": "基础层偏好迁移阶段，设计偏好存储封装的初始化/读写时序并为每个读点确定缺省值时；以及派工者撰写该任务验收标准时",
+  "description": "源工程用 SharedPreferences/EasyPrefs，在 Application.onCreate 同步构建、此后任意读都阻塞至载入完成；同一键在不同读点使用不同缺省值（如数据过滤读 false、菜单显隐读 true），目标端改用 @ohos.data.preferences。",
+  "summary": "分支一（Prefs.ets 同步语义）：plan 的 Base-5 只要求“PreferencesUtil 单实例封装（EntryAbility onCreate 预热）；put 后 flush”，\nfeature-base 偏好节同样只写单实例预热、写后 flush。派工主会话此前已读到 OmniNotes.java:54-90\n（onCreate 中先同步 initSharedPreferences 再做其他事），却在派工验收标准里追加\n“异步初始化容错（context 未就绪时缓存写队列——对齐 OmniNotes.initSharedPreferences 语义）”\n（bc655f68…jsonl:L964、L1657）。Base-5 生成者自己也读到了同一段源码（agent-a904866f037f4dedb.jsonl:L27-L28），\n但按派工写出 getPreferences 异步载入 + 内存缓存 + pendingWrites 队列：注释明言“读取前不阻塞”，\n载入完成前读到调用方默认值；put/delete/clear 各自异步排队；就绪前 clear 只清缓存；replayPending 在 await 间隙后\n清空队列会丢新写（L60-L61、L72-L73）。返修把装载改为 getPreferencesSync + getAllSync，内存提交改 putSync/deleteSync/clearSync，\n增加 pendingClear 与变更监听（G8 PS-02~PS-06）。偏差起点是派工把“同步、先于一切读写”误述为“异步+写队列”，\n生成者照做且未用已读源码纠正。\n分支二（按读点默认值）：feature-base 键表对 settings_filter_past_reminders 明确写了\n“false（写读）；ListFragment.java:746 可见性判断读 true（读点不一致，按 false 为准 + 该读点特判）”。\n同一生成者在 PrefKeys.ets 只留“默认 false（DbHelper.java:345）”，OmniPrefs 也只提供以 false 读取的单一访问器\n（注释提到 746 特判却没有给出对应读法）；setFilterArchivedInCategories 关闭时写 false 而非 remove\n（feature-base 该行未写 remove 分支，属输入缺失，F001 spec AC76 才写明）。\nSlice 1 实现者读到 F001 spec“状态管理”节的 `settings_filter_past_reminders`(boolean, false) 与 PrefKeys 的单一默认后，\n把页面上原本正确的 `Prefs.getBoolean(PREF_FILTER_PAST_REMINDERS, true)`（菜单显隐读点）改成 false，并注释引 DbHelper.java:345\n（agent-aef386d08f13edbfc.jsonl:L20-L21、L44、L192-L196），未读 ListFragment:746。返修由 G1 在 NoteListPage 菜单显隐处恢复 true，\nOmniPrefs 注释澄清两处缺省不同、关闭模式键改 remove（PF-10/PF-11）。\n设置页首显持久化 XML defaultValue（PF-38）与详情页不读 checked_items_behavior（PF-26）属消费侧缺失，本卡未追到生成来源。\n",
+  "recommendations": [
+    "派工者写偏好层验收标准时，按源端真实时序表述：SharedPreferences 在 Application.onCreate 同步构建、读阻塞至载入完成；目标端应要求 getPreferencesSync/getSync/putSync 等同步 API 在 EntryAbility.onCreate 预热，不要把“写队列/异步容错”写成对齐语义。",
+    "实现偏好封装前，对照源端初始化代码确认“首次读是否可能拿到默认值”；若用异步 getPreferences，必须说明就绪前读的行为并与源端一致，否则改用同步装载；写入提交顺序用同步内存 API 保证，落盘再异步 flush。",
+    "键表中出现“读点不一致/该读点特判”时，不要把缺省值收敛到键常量一处：为每个特判读点保留调用方显式缺省值（或提供按读点命名的访问器），并在键常量注释里列出所有读点及其缺省值，防止下游按单一默认改写。",
+    "页面实现者修改某读点缺省值前，回到该读点的 Android 源码行（如 ListFragment.setActionItemsVisibility）核对，而不是以 feature spec 摘要或键常量注释中的单一默认值为准。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/preferences/Prefs.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/java/it/feio/android/omninotes/OmniNotes.java",
+          "at": "2026-10-01T08:00:09.742Z",
+          "reason": "正常输入：主会话为查initAcra执行的Bash grep回执连带返回onCreate中super.onCreate→initSharedPreferences()→其余初始化，偏好在任何读写前同步构建（bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L962、L964）。"
+        },
+        {
+          "key": "bc655f68-6f49-4bcf-ab64-aa45d7a58cc2:main",
+          "at": "2026-10-01T09:09:11.451Z",
+          "reason": "派工主会话：plan Base-5 仅要求单实例+onCreate预热+put后flush，派工却追加“异步初始化容错（context未就绪时缓存写队列——对齐initSharedPreferences语义）”，把同步时序误述成异步+写队列（同转录L1657 Agent调用）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/spec/baseline/feature-base.md",
+          "at": "2026-10-01T09:09:17.029Z",
+          "reason": "正常输入：偏好节写明单一preferences实例、EntryAbility onCreate预热、写后必须flush，未要求写队列（agent-a904866f037f4dedb.jsonl:L20-L21）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/java/it/feio/android/omninotes/OmniNotes.java",
+          "at": "2026-10-01T09:09:26.993Z",
+          "reason": "正常输入：生成者Read回执同样给出OmniNotes.java:55-90的同步initSharedPreferences（agent-a904866f037f4dedb.jsonl:L27-L28），足以纠正派工措辞。"
+        },
+        {
+          "key": "bc655f68-6f49-4bcf-ab64-aa45d7a58cc2:a904866f037f4dedb",
+          "at": "2026-10-01T09:14:17.630Z",
+          "reason": "Write Prefs.ets：getPreferences异步载入，注释“读取前不阻塞”，就绪前读返回默认值；put/delete异步各自排队；clear就绪前只清缓存；replayPending在await后清空队列（同转录L60-L61）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "主会话Bash grep -A12 initAcra读取OmniNotes.java，回执包含onCreate:54-60中同步调用initSharedPreferences()；这是派工前主会话实际收到的源端初始化时序。",
+          "evidence": [
+            {
+              "source": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl",
+              "line": 962
+            },
+            {
+              "source": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl",
+              "line": 964
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 5
+        },
+        {
+          "from": 3,
+          "to": 5
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/preferences/PrefKeys.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/spec/baseline/feature-base.md",
+          "at": "2026-10-01T09:09:17.029Z",
+          "reason": "正常输入：键表settings_filter_past_reminders行写“false（写读）；ListFragment.java:746可见性判断读true（读点不一致，按false为准+该读点特判）”（agent-a904866f037f4dedb.jsonl:L20-L21）。"
+        },
+        {
+          "key": "bc655f68-6f49-4bcf-ab64-aa45d7a58cc2:a904866f037f4dedb",
+          "at": "2026-10-01T09:17:49.260Z",
+          "reason": "Write PrefKeys.ets：该键注释只剩“默认false（DbHelper.java:345）”，丢掉746读点true的特判信息，默认值被收敛为按键单一值（同转录L64-L65）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/preferences/OmniPrefs.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/spec/baseline/feature-base.md",
+          "at": "2026-10-01T09:09:17.029Z",
+          "reason": "正常输入：同一键表行给出两处读点缺省不同；模式键行只写默认false，未写关闭时remove（该点属输入缺失）（agent-a904866f037f4dedb.jsonl:L20-L21）。"
+        },
+        {
+          "key": "bc655f68-6f49-4bcf-ab64-aa45d7a58cc2:a904866f037f4dedb",
+          "at": "2026-10-01T09:18:20.305Z",
+          "reason": "Write OmniPrefs.ets：isFilterPastReminders只以false读取，注释称746为可见性特判但未提供该读点的读法；setFilterArchivedInCategories关闭写false而非remove（同转录L68-L69）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/pages/NoteListPage.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/spec/baseline/feature-base.md",
+          "at": "2026-10-01T09:09:17.029Z",
+          "reason": "正常输入：键表写明746读点读true需特判（agent-a904866f037f4dedb.jsonl:L20-L21）。"
+        },
+        {
+          "key": "bc655f68-6f49-4bcf-ab64-aa45d7a58cc2:a904866f037f4dedb",
+          "at": "2026-10-01T09:17:49.260Z",
+          "reason": "Write PrefKeys.ets，把该键缺省收敛为单一false（DbHelper.java:345），丢失读点特判（同转录L64-L65）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/preferences/PrefKeys.ets",
+          "at": "2026-10-01T14:33:36.094Z",
+          "reason": "交付桥梁：Slice 1实现者Read回执中该键注释仍为“默认false（DbHelper.java:345）”（agent-aef386d08f13edbfc.jsonl:L43-L44）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/spec/baseline/features/F001-notes-list.md",
+          "at": "2026-10-01T14:33:15.785Z",
+          "reason": "输入：F001“状态管理”节列`settings_filter_past_reminders`(boolean, false)，未转述feature-base的746读点特判（agent-aef386d08f13edbfc.jsonl:L20-L21）。"
+        },
+        {
+          "key": "e95edcb7-c619-475d-b56e-7bb84402a4ba:aef386d08f13edbfc",
+          "at": "2026-10-01T14:58:35.553Z",
+          "reason": "页面已有菜单显隐读点Prefs.getBoolean(PREF_FILTER_PAST_REMINDERS, true)（L31回执），实现者未读ListFragment:746，按单一默认把@Local初值与aboutToAppear读取都改为false并注释引DbHelper.java:345（同转录L192-L196）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 5
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "F001 spec“状态管理”节把该键压缩为 (boolean, false) 的写入者未追查；本卡只确认实现者实际读到了这一摘要。"
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/components/SettingsContentComponent.ets",
+      "reason": "返修新增persistScreenDefaults首显持久化XML defaultValue（PF-38）已确认；生成期最早由e95edcb7主会话L532 Bash脚本写入，尚未核对该脚本写前收到的设置页spec是否要求首显持久化。"
+    }
+  ],
+  "job": "issue-fb9e44071c44d06a6c71",
+  "metadata": {
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.247",
+        "2.1.296",
+        "2.1.300"
+      ]
+    },
+    "source_set_id": "sources-fef5281fb5eb1e655dea",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos",
+        "at": "2026-10-01T08:07:31.804Z",
+        "ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1119",
+        "request_ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1117",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos",
+        "at": "2026-10-01T08:07:31.804Z",
+        "ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1119",
+        "request_ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1117",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes",
+        "at": "2026-10-13T15:34:04.077Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L121",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L120",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes",
+        "at": "2026-10-13T15:34:04.077Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L121",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L120",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes",
+        "at": "2026-10-14T01:47:40.558Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L159",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L158",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes",
+        "at": "2026-10-14T01:47:40.558Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L159",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L158",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.10"
+  },
+  "revision": "bf5d6bb212ef911888c7191fcdb2bb9477ac016ab3189fa909d1117ecde2f69b"
+}

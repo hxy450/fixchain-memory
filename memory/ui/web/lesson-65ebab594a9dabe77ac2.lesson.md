@@ -1,6 +1,6 @@
 # WebView 排版与缩放按源端 WebSettings（未做设置时取 Android WebView 默认值）在 ArkWeb 中显式落实：HTML 声明 viewport，缩放与 JS 逐项对齐
 
-ID：`lesson-65ebab594a9dabe77ac2` · 版本：2
+ID：`lesson-65ebab594a9dabe77ac2` · 版本：3
 
 [本主题](index.md)
 
@@ -27,7 +27,7 @@ ArkWeb 无 viewport 时按桌面宽排版再整体缩小，正文字极小；规
 
 - 首屏截图对照 Android：居中元素完整可见、正文字号一致，并试一次双指缩放核对缩放默认值
 
-来源支持：2 张卡 · 2 次迁移 · 2 个应用
+来源支持：3 张卡 · 已知 2 次迁移（部分未记录） · 已知 2 个应用（部分未记录）
 
 ## 来源（按需复核）
 
@@ -35,3 +35,5 @@ ArkWeb 无 viewport 时按桌面宽排版再整体缩小，正文字极小；规
   卡片版本：`4c9e9c004967e82833493fa2cf9fa6df0cf9cf14bf3fab9df3ada7255951c08c`
 - [case-68e0a1ed3d4f2117efdb](../../../store/cases/case-68e0a1ed3d4f2117efdb/aaeef50585350b84b245d01b7fa8c65456ad2bf20bc44821d926afd957f81720.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3, recommendation:6
   卡片版本：`aaeef50585350b84b245d01b7fa8c65456ad2bf20bc44821d926afd957f81720`
+- [case-9174c62c22f8d979372e](../../../store/cases/case-9174c62c22f8d979372e/eec4229b6f305745c835a372c2d8c2fb44e5a7937fa2f43696c8ce7707fe1efa.json) · 结论：diagnosis, recommendation:2
+  卡片版本：`eec4229b6f305745c835a372c2d8c2fb44e5a7937fa2f43696c8ce7707fe1efa`

@@ -1,0 +1,330 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-97e280ce0a8ddc7a54a1",
+  "created_at": "2026-10-16T16:50:51.690817+00:00",
+  "migration_key": "/private/tmp/claude-502/-Users-fengyi-Workspace-migbot-set-l123-cc-glm53/a9f6942f-6659-40bd-bc16-6616949070fb/scratchpad/distill/pool2",
+  "title": "把数据层全局加解密钩子的注入点放进业务单例的首次取用",
+  "when": "功能实现阶段，为基座预留的运行期钩子（数据层加解密等横切能力）确定注入位置与时机、并关闭对应 forward-ref 时；以及组收尾阶段，依据“已兑现”注释核对注入槽、做启动期装配时",
+  "description": "源端数据层在每次读写时无条件直接调用加解密工具；目标端由基座预先在 DAO 中留出 setter 接缝并带恒等/空实现的冷启动默认值，实现由后续功能切片注入，启动装配另由收尾者在 EntryAbility 完成。",
+  "summary": "Slice 3（F010 密码锁定）worker（e95edcb7:a57a43c1c60941174，主会话 L1331 于 15:16:17Z 派发）写前实际读到：\nF010 规格 AC07 要求 locked 笔记落库时 encryptNote、读出时自动 decryptNote、“密文形态对上层 UI 完全透明”，\nAC02 要求未设密码或关闭启动锁时冷启不弹任何验密框（agent-a57a43c1c60941174.jsonl:L20-L21）；\nbase-contracts 列出 P-B2-001~004 注入槽，并给出同类启动期接线的既有写法“DbHelper.init（HANDOFF P-B2-005：\nEntryAbility.onCreate 调用）”（同转录 L25-L26）；DbHooks.ets 明示 DbHookDefaults.CRYPTO 是 IdentityCryptoHook\n（恒等加解密），“各 Slice 实现就绪后经 DbHelper 对应 setter 注入”（L59-L60）；grep DbHelper.ets 返回\nmarker“FWD-REF: P-B2-001 resolve_by=Slice 3 Step 3c”及 updateNote/getNotes 两处 cryptoHook 调用（L62-L63）；\nAndroid DbHelper.java 的 sed 回执显示 updateNote 内 Security.encrypt、getNotes 内 Security.decrypt 无条件直接调用（L98-L99）。\n这些输入足以推出：钩子必须在任何数据库读写之前就位，而 PasswordService 在无密码/关闭启动锁场景下可能整个会话都不会被取用。\n本次输出却把 DbHelper.getInstance().setCryptoHook(SecurityCrypto.createHook()) 写进 PasswordService.getInstance()\n的首次构造分支，文件头注释“单例首次获取时注入……注入前 IdentityCryptoHook 兜底 = 空密码语义”（Write L118-L119，\n自检读回 L197-L198 第 25-27、160-166 行）；随后 Edit DbHelper.ets 删除 P-B2-001 marker，改写为\n“P-B2-001 已由 Slice 3 兑现：注入点 = services/PasswordService PasswordService.getInstance()”，未留下指向\nEntryAbility/启动期的 HANDOFF 断言（L157-L158）；信封回执给 closer 的接线说明只写 MainPage.checkPassword 在\nPasswordGate.checkOnLaunch() 为 true 时才调 PasswordService（主转录 e95edcb7 L1360）。\n偏差位于“注入槽与启动期接线写法已给出 → 选择注入时机”这一环，并沿 DbHelper 注释交付给后续核对者：\nG1 group-closer（fcc67332:a41d3f09ceeabb3d0）以 sed 读 DbHelper.ets:130-185 看到该“已兑现”注释\n（agent-a41d3f09ceeabb3d0.jsonl:L55-L56），据此判定“P-B2-001 均已实现”（L88），随后在 EntryAbility.onCreate 装配\nPrefs.init / DbHelper.init / CrashReporter 等四项 handoff 时没有加入钩子注入（L124-L125）——这正是本问题最终的修复位置；\n其后另一 G1 closer（a2d26f8cd32b0e332，L51-L52）与 Slice 15 worker（a1ec3834de2ea53e9，L78-L79）的 grep 同样只看到\nmarker 已清零、注入点在 getInstance，无人再追问冷启路径是否经过该入口。\nSlice 12 worker（fcc67332:af84ebfca37049844）按 Android BackupHelper 忠实转写 BackupService：导出走\nDbHelper.getAllNotes(false) 再 SecurityCrypto.encryptNote，导入先 decryptNote 再 DbHelper.updateNote\n（agent-af84ebfca37049844.jsonl:L39-L40、L128-L129、L215-L216）；它本身无偏差，但依赖 DbHelper 在读出/写回时真正加解密，\n钩子缺位时导出二次加密、导入落明文。\n返修期诊断为 G7 PW-28 / G6 B-19 / G9 ST-01 / G7 C-1：EntryAbility.onCreate 在 DbHelper.init 之后、dispatch 之前增加\nPasswordService.getInstance()（repair agent-a93099ab97c6034fa.jsonl:L1359-L1360，2026-10-13T22:11:12Z），BackupService\n在导出/导入任务开始前调用 ensureCryptoHook()（agent-a761fc44c7a5df1e2.jsonl:L466-L467），PasswordService 返修重写后仍保留\ngetInstance 内注入（agent-a5d025f75cc08eb73.jsonl:L511）。DbHelper 的 hook 接缝与恒等默认值在观察截止时仍保留，\n并未改成直接调用 Security（job 条目中“DbHelper 直接调用 Security”的改动描述与最终文件不符；返修期对 DbHelper 的 Edit\n为 WAL/注释等无关改动）。与重建材料上一稿相比，原生转录新增可核的 EntryAbility 交接链（G1 closer 读注释后做启动装配），\n故本稿不再将 EntryAbility 列为未决。\n",
+  "recommendations": [
+    "为数据层横切钩子（加解密、导航态等）选注入点时，先回答“目标文件的所有读写路径里，哪一条最早发生、它是否必经该注入入口”；源端在 DAO 内无条件调用的能力，注入必须放在应用启动序列（如 EntryAbility.onCreate 的 DbHelper.init 之后），不能挂在业务单例的首次取用上。",
+    "关闭基座留下的 FWD-REF/注入槽时，若注入落在另一文件的运行时机，要按 _common.md §2.1b 补带机械断言的 HANDOFF（owner=EntryAbility.onCreate what=调 PasswordService.getInstance 或 DbHelper.setCryptoHook verify=grep:…），不要只把 marker 换成“已兑现、注入点在 X”的注释。",
+    "组收尾/启动装配阶段核对注入槽时，不以“已兑现”注释为终点：对每个 setter 注入点追问其调用方在冷启路径上是否必经；若注入点挂在业务单例，应在 EntryAbility 启动序列补一次显式取用或直接 setXxxHook。",
+    "基座给 hook 配恒等/空实现默认值时，在实现阶段核对：默认值会不会把密文当明文写回（静默损坏）；若会，启动期注入之外还应让调用方在未注入时显式失败或先行注入（如备份任务前 ensureCryptoHook）。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/services/PasswordService.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/spec/baseline/features/F010-password-lock.md",
+          "at": "2026-10-01T15:16:40.718Z",
+          "reason": "正常输入：Read 回执含 AC07“保存时 locked 则 content 列=encryptNote…读出时自动 decryptNote，密文形态对上层 UI 完全透明”及 AC02“未设密码/关闭启动锁时冷启不弹任何验密框”，足以说明加解密必须在任何读写前生效且不能依赖验密流程被触发（agent-a57a43c1c60941174.jsonl:L20-L21）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/spec/execution/base-contracts.md",
+          "at": "2026-10-01T15:16:49.008Z",
+          "reason": "正常输入：Read 回执列出 DbHooks 四注入槽 P-B2-001~004，并给出同类启动期接线的既有写法“DbHelper.init（HANDOFF P-B2-005：EntryAbility.onCreate 调用）”（同转录 L25-L26）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/database/DbHooks.ets",
+          "at": "2026-10-01T15:17:48.837Z",
+          "reason": "正常输入：Read 回执显示 DbHookDefaults.CRYPTO 为 IdentityCryptoHook（冷启动默认实现，恒等加解密），注释写明“各 Slice 实现就绪后经 DbHelper 对应 setter 注入”；即注入前任何读写都按明文处理（同转录 L59-L60）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/java/it/feio/android/omninotes/db/DbHelper.java",
+          "at": "2026-10-01T15:22:22.252Z",
+          "reason": "正常输入：Bash sed 205-240/455-490 回执返回 updateNote 中 Security.encrypt(...) 与 getNotes 中 Security.decrypt(...) 的无条件直接调用，源端不存在“未注入”状态（同转录 L98-L99）。"
+        },
+        {
+          "key": "e95edcb7-c619-475d-b56e-7bb84402a4ba:a57a43c1c60941174",
+          "at": "2026-10-01T15:30:34.386Z",
+          "reason": "已收到上述输入，Write PasswordService.ets 却把 DbHelper.getInstance().setCryptoHook(SecurityCrypto.createHook()) 放进 getInstance() 的首次构造分支，注释称“单例首次获取时注入……注入前 IdentityCryptoHook 兜底 = 空密码语义”；未设密码或启动锁关闭时该入口不会被经过，冷启后列表读出密文再保存即二次加密（同转录 L118-L119，自检读回 L197-L198）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 5
+        },
+        {
+          "from": 2,
+          "to": 5
+        },
+        {
+          "from": 3,
+          "to": 5
+        },
+        {
+          "from": 4,
+          "to": 5,
+          "force": true,
+          "reason": "Slice 3 worker 写 PasswordService 前以 Bash sed 读取 Android DbHelper.java:205-240 与 455-490，回执返回 updateNote 内 Security.encrypt(...) 与 getNotes 内 Security.decrypt(...) 的无条件调用；这支持其写前已收到源端“每次读写恒加解密”的事实。",
+          "evidence": [
+            {
+              "source": "migration/e95edcb7-c619-475d-b56e-7bb84402a4ba/subagents/agent-a57a43c1c60941174.jsonl",
+              "line": 98
+            },
+            {
+              "source": "migration/e95edcb7-c619-475d-b56e-7bb84402a4ba/subagents/agent-a57a43c1c60941174.jsonl",
+              "line": 99
+            }
+          ]
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/database/DbHelper.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/spec/execution/base-contracts.md",
+          "at": "2026-10-01T15:16:49.008Z",
+          "reason": "正常输入：同上，P-B2-005 的“EntryAbility.onCreate 调用”HANDOFF 写法已在手边（agent-a57a43c1c60941174.jsonl:L25-L26）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/database/DbHooks.ets",
+          "at": "2026-10-01T15:17:48.837Z",
+          "reason": "正常输入：恒等默认值与“经 setter 注入”的说明（同转录 L59-L60）。"
+        },
+        {
+          "key": "e95edcb7-c619-475d-b56e-7bb84402a4ba:a57a43c1c60941174",
+          "at": "2026-10-01T15:32:29.825Z",
+          "reason": "Edit DbHelper.ets 删除“// FWD-REF: P-B2-001 resolve_by=Slice 3 Step 3c”标记，改写为“P-B2-001 已由 Slice 3 兑现：注入点 = services/PasswordService PasswordService.getInstance()”，未按 _common.md §2.1b 留下指向启动期的 HANDOFF 断言；该注释保留到返修前，后续 closer/worker 的读取只看到 marker 清零（同转录 L157-L158；agent-a41d3f09ceeabb3d0.jsonl:L55-L56、agent-a2d26f8cd32b0e332.jsonl:L51-L52、agent-a1ec3834de2ea53e9.jsonl:L78-L79）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/entryability/EntryAbility.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "nodes": [
+        {
+          "key": "e95edcb7-c619-475d-b56e-7bb84402a4ba:a57a43c1c60941174",
+          "at": "2026-10-01T15:32:29.825Z",
+          "reason": "偏差起点：同上，DbHelper 的加解密接缝自此被标注为“已兑现、注入点在 PasswordService.getInstance()”，而冷启路径并不必经该入口；也没有向启动装配者留下 HANDOFF（agent-a57a43c1c60941174.jsonl:L157-L158）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/database/DbHelper.ets",
+          "at": "2026-10-01T17:02:14.921Z",
+          "reason": "交付桥梁：G1 group-closer 以 Bash sed 读 DbHelper.ets:130-185，回执含“注入单笔记加解密实现（P-B2-001 已由 Slice 3 兑现：注入点 = services/PasswordService PasswordService.getInstance()…）”及 setCryptoHook 签名；不是只因文件同名就假设被消费（agent-a41d3f09ceeabb3d0.jsonl:L55-L56）。"
+        },
+        {
+          "key": "fcc67332-0774-45b4-a72c-d2b6a33207b8:a41d3f09ceeabb3d0",
+          "at": "2026-10-01T17:09:37.224Z",
+          "reason": "实际读到上述“已兑现”注释后判定“S2/S3 页内/S5/P-B2-001 均已实现”（同转录 L88），随后 Edit EntryAbility.onCreate 装配 Prefs.init / SettingsService / CrashReporter.init / DbHelper.getInstance().init 四项 handoff，没有在 DbHelper.init 之后取用 PasswordService 或调用 setCryptoHook（L124-L125）。本链确认传递：启动装配者的输入里没有指向本注入槽的 HANDOFF，不另推定其独立失职。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "G1 group-closer 以 Bash sed -n '130,185p' 读取 DbHelper.ets，回执返回 setCryptoHook 及其“P-B2-001 已由 Slice 3 兑现：注入点 = services/PasswordService PasswordService.getInstance()”注释；这支持其在装配 EntryAbility 启动序列前实际收到了该注释。",
+          "evidence": [
+            {
+              "source": "migration/fcc67332-0774-45b4-a72c-d2b6a33207b8/subagents/agent-a41d3f09ceeabb3d0.jsonl",
+              "line": 55
+            },
+            {
+              "source": "migration/fcc67332-0774-45b4-a72c-d2b6a33207b8/subagents/agent-a41d3f09ceeabb3d0.jsonl",
+              "line": 56
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/services/BackupService.ets",
+        "since": "2026-10-01T20:01:33Z",
+        "at": "2026-10-16T01:02:06Z"
+      },
+      "nodes": [
+        {
+          "key": "e95edcb7-c619-475d-b56e-7bb84402a4ba:a57a43c1c60941174",
+          "at": "2026-10-01T15:32:29.825Z",
+          "reason": "偏差起点：同上，DbHelper 的加解密接缝自此依赖 PasswordService.getInstance() 被经过才生效（agent-a57a43c1c60941174.jsonl:L157-L158）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos/entry/src/main/ets/database/DbHelper.ets",
+          "at": "2026-10-01T16:44:23.165Z",
+          "reason": "交付桥梁：Slice 12 worker 写前 Bash grep DbHelper.ets，回执返回 getInstance/init/updateNote/getAllNotes/getAllAttachments 签名行，随后直接以这些 DAO 作为备份读出与导入写回出口；该回执不含钩子是否已注入的信息（agent-af84ebfca37049844.jsonl:L128-L129）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes/src/main/java/it/feio/android/omninotes/helpers/BackupHelper.java",
+          "at": "2026-10-01T16:41:42.175Z",
+          "reason": "正常输入：Read 回执显示 exportNotes 取 DbHelper.getAllNotes(false) 后对 locked 笔记再 Security.encrypt，importNote 对 locked 笔记 Security.decrypt 后入库；源端 DAO 返回的是已解密明文（agent-af84ebfca37049844.jsonl:L39-L40）。"
+        },
+        {
+          "key": "fcc67332-0774-45b4-a72c-d2b6a33207b8:af84ebfca37049844",
+          "at": "2026-10-01T16:52:39.692Z",
+          "reason": "Write BackupService.ets 忠实转写：导出 DbHelper.getInstance().getAllNotes(false) → SecurityCrypto.encryptNote，导入 SecurityCrypto.decryptNote → DbHelper.getInstance().updateNote（同转录 L215-L216）。本链确认传递：其正确性依赖 DbHelper 已注入钩子，不另推定其独立失职。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 4,
+          "force": true,
+          "reason": "Slice 12 worker 写 BackupService 前以 Bash grep 读取 DbHelper.ets，回执返回 getInstance/init/updateNote/getAllNotes/getAllAttachments 等签名行；随后 Write 直接以这些 DAO 作为备份导出读出与导入写回出口。",
+          "evidence": [
+            {
+              "source": "migration/fcc67332-0774-45b4-a72c-d2b6a33207b8/subagents/agent-af84ebfca37049844.jsonl",
+              "line": 128
+            },
+            {
+              "source": "migration/fcc67332-0774-45b4-a72c-d2b6a33207b8/subagents/agent-af84ebfca37049844.jsonl",
+              "line": 129
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "尚未核到 Slice 3 worker 派发 prompt 或 a2h-execute 技能是否明文规定 P-B2-001 的注入位置；已核偏差是在手头输入（AC02 免锁冷启、P-B2-005 启动期 HANDOFF 写法、恒等默认值）足以排除该时机的情况下仍选了 getInstance。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-97e280ce0a8ddc7a54a1",
+  "metadata": {
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.247",
+        "2.1.296",
+        "2.1.300"
+      ]
+    },
+    "source_set_id": "sources-fef5281fb5eb1e655dea",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos",
+        "at": "2026-10-01T08:07:31.804Z",
+        "ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1119",
+        "request_ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1117",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/omni-notes-hmos",
+        "at": "2026-10-01T08:07:31.804Z",
+        "ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1119",
+        "request_ref": "migration/bc655f68-6f49-4bcf-ab64-aa45d7a58cc2.jsonl:L1117",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes",
+        "at": "2026-10-13T15:34:04.077Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L121",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L120",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes/omniNotes",
+        "at": "2026-10-13T15:34:04.077Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L121",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e.jsonl:L120",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes",
+        "at": "2026-10-14T01:47:40.558Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L159",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L158",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Omni-Notes",
+        "at": "2026-10-14T01:47:40.558Z",
+        "ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L159",
+        "request_ref": "repair/40790d98-e128-4480-9378-5c27fe3ba82e/subagents/agent-abb92fcadb53ed4c2.jsonl:L158",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.10"
+  },
+  "revision": "4fbcf9675b2ae7f717f11ff33565c2292c0c6ff00c290102009285e9705600e8"
+}
