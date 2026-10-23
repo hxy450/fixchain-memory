@@ -1,0 +1,319 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-7ef1335447ade047f4c7",
+  "created_at": "2026-10-23T14:33:12.971176+00:00",
+  "migration_key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/memory-distill-opencamera-20261023/pool",
+  "title": "相机会话输出未在提交前配齐：仅输入提交、拍照输出惰性挂接、录像会话缺视频档/帧率/输出启动与并发照片输出",
+  "when": "相机能力迁移的实现与跨文件接线阶段，为HarmonyOS CameraKit会话确定输入输出组合、提交时机，并接通录像通道与录像中拍照入口时",
+  "description": "源端Camera2 createCaptureSession一次传入预览surface、JPEG ImageReader及录像时的MediaRecorder surface；目标端改用PhotoSession/VideoSession的beginConfig→addInput/addOutput→commitConfig，以及AVRecorder输入surface→VideoOutput，同时要保留按尺寸+帧率选档与录像中拍照能力位。",
+  "summary": "预览/拍照会话（A2）：F001实现者ae5882c40105e3f01写前读到CameraController2.createCaptureSession，\n其中拍照态surfaces=Arrays.asList(preview_surface, imageReader.getSurface())，录像态在支持photo-video-recording时\n为preview+recorder+imageReader（CC2:5562/5578，agent-ae5882c40105e3f01.jsonl:L119-L120）；\n即“会话一次带齐全部输出再配置”已经给出。它在L204思考中自己写到input-only commitConfig“Risky”、\n“examples always add input+output together”，却仍在openInternal中只addInput就commitConfig，\ncreateSessionAndStart又在同一会话上beginConfig、再次addInput并只加preview(+metadata)，\n同一次Write还把能力位is_photo_video_recording_supported恒置true（源为LIMITED等级判定）\n（L236-L237，15:14:37Z）。该片段原样保留到c752566，Opus模拟器hilog即显示commit失败、预览黑屏。\nGroup 2 closer acb5c3d58575999a4读到这个无照片输出的会话后，在takePicture里写成\n“PhotoOutput惰性挂载→会话重配置”，延续了运行中再加输出的做法。\n录像会话（A32/A33）：同一closer写前读到P-S4-001“会话模式须切NORMAL_VIDEO”（L34-L35）、\nVideoRecordController中binder收到完整VideoProfile且takePhotoSnapshotSupported按能力位门控F003-AC41快照（L114-L115），\n以及VideoProfile含videoFrameRate/videoCaptureRate（L335-L336）。L340-L341的Edit却：\n预览档沿用findPreviewProfile（NORMAL_PHOTO能力面），findVideoProfile只比尺寸、失败回落profiles[0]、不带帧率；\ncommit后只session.start()而无videoOutput.start()；teardownForVideoSession移除并释放photoOutput，\n使录像会话里没有可用照片输出，但能力位与门控仍为真。随后PreviewEngine.attachVideoOutput（L365-L366）、\nMainPage的binder（L567-L568）只传videoFrameWidth/Height，MainPage只实现onTakePhotoSnapshot handler，\n录制控件组渲染pause_video却没有take_photo_when_video_recording按钮。\n最终Codex修复：新增createPhotoSession，以带JPEG PhotoOutput的探测会话取能力、正式会话preview+photo一并commit；\n录像改为NORMAL_VIDEO preview/video档、按帧率范围匹配且无匹配返回null，setFrameRate后await videoOut.start()；\ncanAddOutput接受时加并发snapshot PhotoOutput、失败释放仍录像，门控改canTakeVideoSnapshot，MainPage录像中显示快照按钮\n（codex 01a14aae L194→L198、L680→L683、L894→L898、L948→L953；6e4d L801→L804）。\n",
+  "recommendations": [
+    "会话实现时，按源端surfaces清单在同一次beginConfig中addInput并加齐preview与JPEG PhotoOutput后再commitConfig；需在开流前取能力时用带输出的探测会话或CameraManager静态能力，不提交仅含输入的会话，也不在运行中的会话上惰性addOutput。",
+    "建录像会话时，preview与video档都取自NORMAL_VIDEO能力面，按尺寸+帧率范围匹配，无匹配返回失败而非回落首项；commitConfig、session.start后调用videoOutput.start()，再启动AVRecorder。",
+    "源端由硬件等级推出的能力位（如photo_video_recording）在目标端按真实可加输出判定：NORMAL_VIDEO photoProfiles存在且canAddOutput接受才为真，录像中快照的门控与按钮查询会话里实际挂上的PhotoOutput。",
+    "跨文件接线时把上游VideoProfile中的尺寸与帧率/捕获率一路传到底层attach接口；规格或壳注释点名的按钮（如take_photo_when_video_recording）要在build中实际渲染并按门控显隐，不只实现handler。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/HmosCameraController.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/cameracontroller/CameraController2.java",
+          "at": "2026-10-01T15:00:19.068Z",
+          "reason": "正常输入：Read 4800-6500行回执含createCaptureSession，拍照态surfaces为preview_surface+imageReader(JPEG)，支持photo-video-recording的录像态为preview+recorder+imageReader（CC2:5562、5578）；足以确定会话应一次带齐预览与照片输出再配置（agent-ae5882c40105e3f01.jsonl:L119-L120）。"
+        },
+        {
+          "key": "agent-ae5882c40105e3f01.jsonl",
+          "at": "2026-10-01T15:14:37.185Z",
+          "reason": "收到上述源码后，L204思考已判断input-only commit有风险，Write仍让openInternal只addInput即commitConfig、startPreview复用该会话再addInput且只加preview(+metadata)，并把is_photo_video_recording_supported恒置true（同转录L204、L236-L237）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/placeholder-registry.md",
+          "at": "2026-10-01T17:29:12.866Z",
+          "reason": "正常输入：closer grep登记表返回P-S4-001：AVRecorder getInputSurface→CameraKit videoOutput→session.addOutput，且会话模式须切NORMAL_VIDEO（agent-acb5c3d58575999a4.jsonl:L34-L35）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/VideoRecordController.ets",
+          "at": "2026-10-01T17:32:21.405Z",
+          "reason": "正常输入：Read回执给出videoOutputBinder签名(surfaceId, profile: VideoProfile)，以及takePhotoSnapshotSupported按is_photo_video_recording_supported门控AC41录像中快照（agent-acb5c3d58575999a4.jsonl:L114-L115）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/models/VideoProfile.ets",
+          "at": "2026-10-01T18:26:29.389Z",
+          "reason": "正常输入：Bash读取模型返回videoFrameRate、videoCaptureRate、videoFrameWidth/Height字段，帧率随profile一并交给binder（agent-acb5c3d58575999a4.jsonl:L335-L336）。"
+        },
+        {
+          "key": "agent-acb5c3d58575999a4.jsonl",
+          "at": "2026-10-01T18:26:54.265Z",
+          "reason": "Edit新增takePicture惰性挂PhotoOutput；attachVideoOutput虽建NORMAL_VIDEO会话，预览档仍取NORMAL_PHOTO，findVideoProfile只比尺寸并回落profiles[0]、无帧率，无videoOutput.start()；teardownForVideoSession移除photoOutput，录像会话无照片输出而能力位仍真（同转录L329-L332、L340-L341）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        },
+        {
+          "from": 3,
+          "to": 6,
+          "force": true,
+          "reason": "closer以Bash grep -n \"P-S3-\\|P-S4-\\|…\" spec/placeholder-registry.md读取登记表（相对路径即工程根下该文件），回执返回P-S4-001行：videoOutput挂接且会话模式须切NORMAL_VIDEO；这是写录像会话前收到的要求。",
+          "evidence": [
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-acb5c3d58575999a4.jsonl",
+              "line": 34
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-acb5c3d58575999a4.jsonl",
+              "line": 35
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": 6
+        },
+        {
+          "from": 5,
+          "to": 6,
+          "force": true,
+          "reason": "closer以Bash sed -n '1,60p' entry/src/main/ets/models/VideoProfile.ets读取模型，回执列出videoFrameRate、videoCaptureRate与videoFrameWidth/Height；这是写attach接口前收到的帧率字段。",
+          "evidence": [
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-acb5c3d58575999a4.jsonl",
+              "line": 335
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-acb5c3d58575999a4.jsonl",
+              "line": 336
+            }
+          ]
+        },
+        {
+          "from": 6,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/PreviewEngine.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "summary": "closer读到binder收到完整VideoProfile、模型含videoFrameRate/videoCaptureRate后，在PreviewEngine新增\nattachVideoOutput(surfaceId, videoWidth, videoHeight)只把尺寸转给控制器，detachVideoOutput为同步void；\n帧率在引擎这一层即被丢弃。修复为attachVideoOutput增加frameRate参数并串行到configureVideoOutput，detach改async。\n",
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/VideoRecordController.ets",
+          "at": "2026-10-01T17:32:21.405Z",
+          "reason": "正常输入：binder签名为(surfaceId, profile: VideoProfile)，录像参数以整份profile交给接线方（agent-acb5c3d58575999a4.jsonl:L114-L115）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/models/VideoProfile.ets",
+          "at": "2026-10-01T18:26:29.389Z",
+          "reason": "正常输入：模型字段含videoFrameRate与videoCaptureRate（agent-acb5c3d58575999a4.jsonl:L335-L336）。"
+        },
+        {
+          "key": "agent-acb5c3d58575999a4.jsonl",
+          "at": "2026-10-01T18:27:57.792Z",
+          "reason": "Edit写入PreviewEngine.attachVideoOutput(surfaceId, videoWidth, videoHeight)→controller.attachVideoOutput仅传尺寸，detachVideoOutput同步；帧率契约未贯通（同转录L365-L366）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "closer以Bash sed -n '1,60p' entry/src/main/ets/models/VideoProfile.ets读取模型，回执列出videoFrameRate、videoCaptureRate与videoFrameWidth/Height；这是写attach接口前收到的帧率字段。",
+          "evidence": [
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-acb5c3d58575999a4.jsonl",
+              "line": 335
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-acb5c3d58575999a4.jsonl",
+              "line": 336
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/pages/MainPage.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "summary": "closer读到slice-04要求接通onTakePhotoSnapshot（录像中拍照快照）及录像状态绑定，MainPage壳中该handler注释点名\nImageButton#take_photo_when_video_recording，VideoProfile含帧率字段。其MainPage整页Write中binder只传\nprofile.videoFrameWidth/Height；录制控件组渲染pause_video，onTakePhotoSnapshot只有能力门控handler、无按钮调用。\n修复为binder追加profile.videoCaptureRate、detacher返回Promise，并在录像中按takePhotoSnapshotSupported与\ncanTakeVideoSnapshot显示快照按钮。\n",
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/plans/slices/slice-04-F003-video-record.md",
+          "at": "2026-10-01T17:28:48.534Z",
+          "reason": "正常输入：cross_slice_edits要求MainPage接通onTakePhotoSnapshot（录像中拍照快照，落slice-03管线）及isVideoRecording等录像状态绑定（agent-acb5c3d58575999a4.jsonl:L14-L15）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/pages/MainPage.ets",
+          "at": "2026-10-01T17:29:24.716Z",
+          "reason": "正常输入：壳页回执中onTakePhotoSnapshot注释为ImageButton#take_photo_when_video_recording·clickedTakePhotoVideoSnapshot，带FWD-REF P-S1-010，表明需对应界面按钮（agent-acb5c3d58575999a4.jsonl:L43-L44）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/models/VideoProfile.ets",
+          "at": "2026-10-01T18:26:29.389Z",
+          "reason": "正常输入：模型字段含videoFrameRate/videoCaptureRate（agent-acb5c3d58575999a4.jsonl:L335-L336）。"
+        },
+        {
+          "key": "agent-acb5c3d58575999a4.jsonl",
+          "at": "2026-10-01T18:37:38.589Z",
+          "reason": "整页Write中binder只传videoFrameWidth/Height；录制态只渲染pauseVideoButton，onTakePhotoSnapshot仅为门控handler、build中无快照按钮（同转录L559、L567-L568）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "closer以Bash sed -n '1,60p' entry/src/main/ets/models/VideoProfile.ets读取模型，回执列出videoFrameRate、videoCaptureRate与videoFrameWidth/Height；这是写attach接口前收到的帧率字段。",
+          "evidence": [
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-acb5c3d58575999a4.jsonl",
+              "line": 335
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-acb5c3d58575999a4.jsonl",
+              "line": 336
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/VideoRecordController.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "summary": "takePhotoSnapshotSupported由Slice 4 worker ad056b0d按F003-AC41与源端“设备支持且偏好开启”写成读取\nis_photo_video_recording_supported，该写法本身忠实于规格。closer读到这一门控后，先在控制器里写出不含照片输出的\n录像会话（见HmosCameraController图），随后对VideoRecordController做P-S4-001 binder接线，仍让快照门控依赖\n不由会话兑现的静态能力位（控制器里恒为true），录像中快照于是“能力为真却无输出”。修复改为\ncontroller.canTakeVideoSnapshot()，按会话中实际挂上的snapshot PhotoOutput判定。\n",
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/VideoRecordController.ets",
+          "at": "2026-10-01T17:32:21.405Z",
+          "reason": "正常输入：Read回执中takePhotoSnapshotSupported=supportsPhotoVideoRecording()&&usePhotoVideoRecording，前者取getCameraFeatures().is_photo_video_recording_supported（AC41），binder为P-S4-001挂接点（agent-acb5c3d58575999a4.jsonl:L114-L115）。"
+        },
+        {
+          "key": "agent-acb5c3d58575999a4.jsonl",
+          "at": "2026-10-01T18:27:21.949Z",
+          "reason": "在已写出移除photoOutput的录像会话（L340-L341）后，Edit接线VideoRecordController的P-S4-001 binder，未把快照门控对齐到会话实际输出（同转录L351-L352）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "未见closer写前收到“videoOutput须显式start且先于AVRecorder.start”的输入：F003 spec/plan、P-S4-001登记行都只写到切NORMAL_VIDEO，其d.ts grep也未返回VideoOutput接口；该子项按输入缺口记录，未归为明知违背。",
+    "hilog中的commit失败由仅输入提交本身还是startPreview在同一会话重复addInput触发，未逐项区分；本卡归因于二者同属的“会话未带齐输出即提交并复用”这一实现。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-7ef1335447ade047f4c7",
+  "metadata": {
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code",
+        "codex"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3",
+        "gpt-6-astra"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.163.0",
+        "2.1.247",
+        "2.1.299"
+      ]
+    },
+    "source_set_id": "sources-974a9086706364eed8b7",
+    "environment": [
+      {
+        "name": "android.compile_sdk",
+        "value": "36",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/.claude/skills",
+        "at": "2026-10-01T09:52:21.840Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-aa8064d19722381a1.jsonl:L11",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-aa8064d19722381a1.jsonl:L10",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos",
+        "at": "2026-10-01T12:27:45.961Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b.jsonl:L1565",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b.jsonl:L1563",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos",
+        "at": "2026-10-01T13:34:44.665Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae78a452b1664bc61.jsonl:L149",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae78a452b1664bc61.jsonl:L148",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.11.1"
+  },
+  "revision": "bb939270ce2f079636aa71c783c679489d384671641fd220baadb04d041adae7"
+}

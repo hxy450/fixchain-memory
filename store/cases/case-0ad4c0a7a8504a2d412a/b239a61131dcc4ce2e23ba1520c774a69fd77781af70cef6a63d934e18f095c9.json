@@ -1,0 +1,270 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-0ad4c0a7a8504a2d412a",
+  "created_at": "2026-10-23T14:43:03.220797+00:00",
+  "migration_key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/memory-distill-opencamera-20261023/pool",
+  "title": "主取景控件未消费 layoutUI 摆位输出，导航间隙与系统栏策略偏离源端",
+  "when": "取景页集成阶段：把布局控制器的摆位输出接入主页面按钮层、为控件补导航条间隙，以及迁移窗口系统栏显隐策略时",
+  "description": "源 Activity 由 MainUI.layoutUI 按 ui_placement×系统朝向运行时重排 RelativeLayout 控件，并按 navigation_gap 给主控件和图标面板加边距；AppTheme 设 windowFullscreen=true，沉浸切换只显隐导航栏。目标端由 ViewModel 产出 LayoutSpec/ControlPlacement、页面按钮层负责渲染，并用 window.setWindowSystemBarEnable 控制系统栏。",
+  "summary": "本问题有三个不同成因，分属两个职责阶段。\n① 页面集成（B18，MainPage）：Group-2 closer 写前读到 MainPage 壳的 controlsHost 槽位注释\n“MainUI.layoutUI 三态摆布与前景安全区避让在该层内容内实施”（L43-L44）、ViewfinderUiState 中\n“layoutSpec: layoutUI 全量输出（按钮层消费）”及 ControlPlacement 的 edge/offsetAlongEdge/margin 契约（L55-L56）、\nMainUIController.layoutUI 为 gallery/面板/take_photo 写 placements 的代码（L138-L139），以及 F004 实现映射\n“Stack 分层 + placement 参数化 @Builder，状态驱动重建”（L249-L250）。输入已正确且足够，\n但其 MainPage Write（L588）只取 layoutSpec.topPanel.buttonSizeVp，主控件列与面板列用固定百分比\nposition（{x:'76%',y:'44%'}/{x:'80%',y:'40%'}、panelPosition 固定值），未渲染 switch_video 与\nswitch_multi_camera 按钮，gallery 仅在 TOP 且已有缩略位图时显示；c752566 原样保留。\n② 布局控制器（B21 导航区避让，MainUIController）：Slice 5 worker 写前读到 F004 AC05/AC07/AC12\n（首尾按钮用 navigation_gap 占位、主控件全部按 navigation_gap 内缩、对侧归零），并读到 MainUI.java:384-696\n逐控件 setMarginsForSystemUI(…navigation_gap…)，其思考中也记下“首尾 navigation_gap”（L135）；\n但 layoutUI Write（L238）只加 privacy gap，全文件无 navigation gap，也未登记 forward-ref，\n于是即使页面消费 placements 也无导航区避让。\n③ 窗口策略（B21 系统栏，WindowFlagsController）：Slice 11 worker 写前读 MainActivity:3648-3957，\n其中 :3651 “we run in fullscreen mode all the time”、:3737 “only show/hide navigation bars, as we run\nwith system bars always hidden”；Write（L240）却在非沉浸态调用 setWindowSystemBarEnable(['status','navigation'])，\n把源端始终隐藏的状态栏显示出来。F011 spec 对栏类型未作规定，偏差在源码到实现这一环。\n交接问题：Slice 5 信封与调度汇总只写“uiPlacement 等状态绑定、组件 props 就绪”，未明示 placements\n需由按钮层解算渲染（仅在代码注释“由渲染层解释”）；这是遗漏，但 closer 已直接读到上述契约与代码，\n本卡将 MainPage 偏差归于 closer 的实现简化，而非交接缺失。\n修复（Codex parity_audit 5a2d）：L2672/L2695/L2723 新增 ViewfinderControlLayout.resolve 在实测 vp 视口解算并按朝向变换，\nMainPage 以 positioned* 构建器渲染 take_photo/switch_camera/switch_video/switch_multi_camera/pause/cancel_panorama/面板/gallery，\n并从 Android drawable 复制 6 个图标；L3009/L3027 将非沉浸改为 ['navigation']、attach 后重放请求的沉浸态、\nlayoutUI 传入 navigationGap*Vp。FINAL 2b66258 保留。\n",
+  "recommendations": [
+    "页面集成者填充按钮层槽位时，逐个消费布局状态中已有的 placements（take_photo、switch_camera、switch_video、switch_multi_camera、pause_video、cancel_panorama、gallery 及 panelOrder），先实现 edge/offset/margin 到实测视口坐标的解算再渲染；不要用固定百分比 position 代替 layoutUI 输出，也不要只取 topPanel 尺寸。",
+    "集成收尾时用 layoutSpec.placements 的键集合与源 activity_main.xml 控件清单对照，确认每个 id 都有渲染分支，包括无缩略图时 gallery 的默认入口。",
+    "实现布局控制器时，把源 layoutUI 中 navigation_gap / navigation_gap_landscape / navigation_gap_reverse_landscape 的边距写入对应 placement；间隙数据由并行切片提供时登记 forward-ref，不要静默省略；按 AC05/AC07/AC12 逐条自检。",
+    "迁移系统栏显隐前，先查源 AppTheme 的 windowFullscreen 和 setImmersiveMode 实际切换的栏类型；源端只切换导航栏时，非沉浸用 setWindowSystemBarEnable(['navigation'])、沉浸用 []，不要默认 ['status','navigation']。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/pages/MainPage.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "summary": "Group-2 closer 写前已读到 layoutSpec“按钮层消费”契约、layoutUI 的 placements 代码和 F004“placement 参数化 @Builder”映射，\nMainPage Write 却用固定百分比 position 摆主控件与面板，仅消费 topPanel.buttonSizeVp，并漏渲染 switch_video、switch_multi_camera\n和无缩略图时的 gallery；c752566 保留，修复改为 ViewfinderControlLayout 解算 + positioned* 渲染。\n",
+      "recommendations": [
+        "页面集成者填充按钮层时逐个消费 layoutSpec.placements，并先实现 edge/offset/margin 到视口坐标的解算；不要用固定百分比 position 代替。",
+        "收尾时用 placements 键集合与源 activity_main.xml 控件清单逐一对照渲染分支，包括 gallery 的默认入口。"
+      ],
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/ViewfinderUiState.ets",
+          "at": "2026-10-01T17:29:45.452Z",
+          "reason": "正常输入：closer Read 回执给出 ControlPlacement（edge/offsetAlongEdge/centerAlongEdge/sizeVp/margin*）、LayoutSpec.placements，以及 `@Trace layoutSpec … /** layoutUI 全量输出（按钮层消费） */`，足以说明按钮层须按 placements 摆位（agent-acb5c3d58575999a4.jsonl:L55-L56）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/MainUIController.ets",
+          "at": "2026-10-01T17:33:02.849Z",
+          "reason": "正常输入：closer 用 sed 读 MainUIController 120-260 行，回执含 layoutUI 为 panelOrder 各按钮、gallery 和 take_photo 生成 ControlPlacement 并写入 spec.placements（agent-acb5c3d58575999a4.jsonl:L138-L139）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F004-viewfinder-ui.md",
+          "at": "2026-10-01T18:06:39.828Z",
+          "reason": "正常输入：closer sed 读 F004 33-103 行，实现映射写明 RelativeLayout 运行时重排 → Stack 分层 + placement 参数化 @Builder（三套布局参数，状态驱动重建），对接点要求 uiPlacement/uiRotation ← layoutUI（agent-acb5c3d58575999a4.jsonl:L249-L250）。"
+        },
+        {
+          "key": "agent-acb5c3d58575999a4.jsonl",
+          "at": "2026-10-01T18:40:12.235Z",
+          "reason": "偏差输出：Group-2 closer 已读到上述契约以及 MainPage 槽位注释“layoutUI 三态摆布与前景安全区避让在该层内容内实施”（L43-L44），第二次整文件 Write MainPage 却写出 Column.position(isTopPlacement() ? {x:'76%',y:'44%'} : {x:'80%',y:'40%'}) 和固定 panelPosition()，只读取 layoutSpec.topPanel；不渲染 switch_video/switch_multi_camera，gallery 仅在 TOP 且 galleryBitmap 存在时出现（同转录 L588-L589；c752566 MainPage 同段保留）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4,
+          "force": true,
+          "reason": "closer 在 HarmonyOS 工程根（cwd）执行 sed -n '120,260p' entry/src/main/ets/viewmodels/MainUIController.ets，回执返回 layoutUI 为面板按钮、gallery 和 take_photo 生成 ControlPlacement 并写入 spec.placements 的代码；这是写 MainPage 前对该文件的真实读取。",
+          "evidence": [
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-acb5c3d58575999a4.jsonl",
+              "line": 138
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-acb5c3d58575999a4.jsonl",
+              "line": 139
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "closer 在工程根执行 sed -n '33,103p' spec/baseline/features/F004-viewfinder-ui.md，回执返回实现映射“Stack 分层 + placement 参数化 @Builder，状态驱动重建”和对接点；这是写 MainPage 前对该规格的真实读取。",
+          "evidence": [
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-acb5c3d58575999a4.jsonl",
+              "line": 249
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-acb5c3d58575999a4.jsonl",
+              "line": 250
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/WindowFlagsController.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "summary": "Slice 11 worker 写前读到 MainActivity.setImmersiveMode 只显隐导航栏、系统栏始终隐藏的注释，\nWindowFlagsController 却在非沉浸态调用 setWindowSystemBarEnable(['status','navigation'])，显示了源端始终隐藏的状态栏；\nc752566 保留，修复改为 ['navigation']，并在 attach 后重放请求的沉浸态、刷新导航间隙。\n",
+      "recommendations": [
+        "迁移系统栏显隐前先查源 AppTheme.windowFullscreen 与 setImmersiveMode 实际切换的栏类型；源端只切换导航栏时，非沉浸用 ['navigation']、沉浸用 []。"
+      ],
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/MainActivity.java",
+          "at": "2026-10-01T16:45:28.815Z",
+          "reason": "正常输入：Read 3648-3957 行，回执含 :3651 “we run in fullscreen mode all the time anyway”、:3737 “only show/hide navigation bars, as we run with system bars always hidden”，以及 :3754 非沉浸只恢复 saved_flags；足以确定非沉浸态不应显示状态栏（agent-a690eb1a2619c2d76.jsonl:L133-L134）。"
+        },
+        {
+          "key": "agent-a690eb1a2619c2d76.jsonl",
+          "at": "2026-10-01T16:54:51.662Z",
+          "reason": "偏差输出：Slice 11 worker Write 时，头注释映射写成 setWindowSystemBarEnable([]/['status','navigation'])，setImmersiveMode 非沉浸分支调用 win.setWindowSystemBarEnable(['status', 'navigation'])；所读 F011 spec 未规定栏类型，偏差位于源码到实现这一环（同转录 L240-L241；c752566 保留）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/MainUIController.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "summary": "Slice 5 worker 写前读到 F004 AC05/AC07/AC12 以及 MainUI.layoutUI 的 navigation_gap 边距规则，\nlayoutUI 却只写 privacy gap，从未把 navigation gap 写入任何 placement，也未登记 forward-ref；\nc752566 保留，修复后 layoutUI 把 navigationGapVp/LandscapeVp/ReverseLandscapeVp 传给 ViewfinderControlLayout.resolve。\n",
+      "recommendations": [
+        "实现布局控制器时把源 layoutUI 的 navigation_gap 三类边距写入对应 placement；数据来自并行切片时先登记 forward-ref，并按 AC05/AC07/AC12 自检。"
+      ],
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F004-viewfinder-ui.md",
+          "at": "2026-10-01T16:41:43.094Z",
+          "reason": "正常输入：Read 回执含 AC05“首/尾按钮用 navigation_gap 占位”、AC07“主控件……全部按 navigation_gap 内缩”、AC12“navigation_gap_landscape/reverse 按 ui_placement 归零对侧”，目标均标为 MainUIController.layoutUI（agent-a06740e73018ad308.jsonl:L25-L26）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/ui/MainUI.java",
+          "at": "2026-10-01T16:43:04.149Z",
+          "reason": "正常输入：Read 回执含 :384 navigation_gap = main_activity.getNavigationGap() 及 :461/:609/:623/:654-696 逐控件 setMarginsForSystemUI(…navigation_gap…)（agent-a06740e73018ad308.jsonl:L69-L70）。"
+        },
+        {
+          "key": "agent-a06740e73018ad308.jsonl",
+          "at": "2026-10-01T17:03:00.497Z",
+          "reason": "偏差输出：Slice 5 worker 的思考中已记下“首尾 navigation_gap”（L135），ViewfinderUiState 的 margin 注释也写明承载 navigation_gap（L145）；但 MainUIController Write 中 layoutUI 只设置 TOP_PRIVACY_GAP_LEFT_VP/PRIVACY_INDICATOR_GAP_VP/MULTI_CAM_GAP_VP，全文件无 navigation gap，P-S5 hooks 与 decision_gaps 也未登记（同转录 L238-L239、L342-L343；c752566 保留）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "未核 Slice 11 worker 写前是否读过 styles.xml 的 AppTheme windowFullscreen；③ 的归因只依据其已读到的 MainActivity:3651/3737 注释。"
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/ViewfinderControlLayout.ets",
+      "reason": "修复期新增的布局解算器（5a2d L2672 起），生成期不存在、没有生成写者；它补上的“placements→视口坐标”和导航间隙缺口已分别在 MainPage 图和 MainUIController 图中归因。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/ViewfinderUiState.ets",
+      "reason": "修复只为解算器新增承载字段（ControlPlacement.xVp/yVp、visiblePanel、viewport 宽高、navigationGap*Vp）。生成写者为 Slice 5 worker（agent-a06740e73018ad308 L145），其 LayoutSpec/ControlPlacement 契约本身未见偏离输入，因此未单列此文件的图。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/resources/base/media/switch_camera.png",
+      "reason": "修复为新渲染的控件从 Android drawable 复制到 base/media（5a2d L2695）；c752566 只在 mdpi/xldpi 等限定目录有转换产物，生成期 MainPage 使用 shortcut_*/take_photo_selector 资源。资源转换为何未落 base 目录没有追查，生成期未见直接写者。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/resources/base/media/take_photo.png",
+      "reason": "同 switch_camera.png：修复期从 Android drawable 新复制的 base/media 图标，生成期未见写者，资源转换路径没有追查。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/resources/base/media/take_video.png",
+      "reason": "同 switch_camera.png：修复期从 Android drawable 新复制的 base/media 图标（switch_video 按钮用），生成期未见写者。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/resources/base/media/baseline_add_a_photo_white_48.png",
+      "reason": "同 switch_camera.png：修复期为 switch_multi_camera 按钮复制到 base/media，生成期 c752566 只有 ldpi/mdpi/xldpi 等限定目录版本。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/resources/base/media/ic_play_circle_outline_white_48dp.png",
+      "reason": "同 switch_camera.png：修复期为暂停/继续按钮复制到 base/media，生成期只有限定目录版本，未见 base 写者。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/resources/base/media/ic_pause_circle_outline_white_48dp.png",
+      "reason": "同 switch_camera.png：修复期为暂停按钮复制到 base/media，生成期只有限定目录版本，未见 base 写者。"
+    }
+  ],
+  "job": "issue-0ad4c0a7a8504a2d412a",
+  "metadata": {
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code",
+        "codex"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3",
+        "gpt-6-astra"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.163.0",
+        "2.1.247",
+        "2.1.299"
+      ]
+    },
+    "source_set_id": "sources-974a9086706364eed8b7",
+    "environment": [
+      {
+        "name": "android.compile_sdk",
+        "value": "36",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/.claude/skills",
+        "at": "2026-10-01T09:52:21.840Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-aa8064d19722381a1.jsonl:L11",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-aa8064d19722381a1.jsonl:L10",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos",
+        "at": "2026-10-01T12:27:45.961Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b.jsonl:L1565",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b.jsonl:L1563",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos",
+        "at": "2026-10-01T13:34:44.665Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae78a452b1664bc61.jsonl:L149",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae78a452b1664bc61.jsonl:L148",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.11.1"
+  },
+  "revision": "b239a61131dcc4ce2e23ba1520c774a69fd77781af70cef6a63d934e18f095c9"
+}

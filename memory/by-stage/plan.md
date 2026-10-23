@@ -20,7 +20,7 @@
 - [日志迁移审计按源端调用边界列日志点，不只核对配置](../topics/app/cross-cutting/lesson-e23468a0e439f8cf53e9.lesson.md) · 信号：log2File, debugFile, BqLog, hilog.info
 - [退出登录先停同步再单事务清账号业务表并广播](../topics/app/cross-cutting/lesson-8b8e304a737e9fded451.lesson.md) · 信号：clearAllTables, RelationalStore, preferences, accessToken
 
-### [app/entry](../topics/app/entry/index.md) — 入口 Ability 与 module.json5 装配：初始化时序、全局守护、外部进入声明、扩展能力与卡片登记
+### [app/entry](../topics/app/entry/index.md) — 入口 Ability 与 module.json5 装配：初始化时序、全局守护、外部进入与结果回传、扩展能力与卡片登记
 
 - [form_config 规格与刷新从源卡片声明换算，不填默认](../topics/app/entry/lesson-bc48518f40742add0054.lesson.md) · 信号：form_config, supportDimensions, defaultDimension, updateEnabled
 
@@ -32,7 +32,7 @@
 
 - [代理提醒按自身 d.ts 映射按钮贪睡，写发布失败回退](../topics/app/notification/lesson-7f1bc7ddc88fab2d03bd.lesson.md) · 信号：reminderAgentManager, ActionButton, ActionButtonType, NotificationActionButton
 
-### [app/recreation](../topics/app/recreation/index.md) — 源端 Activity 重建语义：配置变化、进程回收与重启在不重建的 UIAbility 上显式处理与恢复
+### [app/recreation](../topics/app/recreation/index.md) — 源端 Activity 重建与新实例语义：配置变化、进程回收、重启与新请求在不重建的 UIAbility 上显式处理
 
 - [有随系统字号缩放的文本就声明跟随系统字号](../topics/app/recreation/lesson-ea965b7baf2488be23cd.lesson.md) · 信号：fontScale, configChanges, fontSizeScale, followSystem
 
@@ -53,7 +53,7 @@
 
 - [偏好入口同步装载，读写走 Sync 接口](../topics/data/preferences/lesson-93b3eeff61598bc42172.lesson.md) · 信号：getSharedPreferences, PreferenceManager.getDefaultSharedPreferences, getPreferencesSync, getPreferences
 
-### [data/storage](../topics/data/storage/index.md) — 本地持久化：relationalStore 建表与版本迁移、自增主键写入、预置数据内容与播种时机、fileIo 目录操作
+### [data/storage](../topics/data/storage/index.md) — 本地持久化：relationalStore 建表与迁移、自增主键写入、预置数据与播种时机、fileIo 文件与目录操作
 
 - [首次启动播种在启动路径落调用并保留标记门控](../topics/data/storage/lesson-dc3f2589254d02893b0e.lesson.md) · 信号：Application.onCreate, seedDemoDataOnFirstLaunch, has_seeded_demo_data, EntryAbility.onCreate
 ## process — 迁移流程中输入、规格、检查结论与跨任务移交在交接环节失真的机制

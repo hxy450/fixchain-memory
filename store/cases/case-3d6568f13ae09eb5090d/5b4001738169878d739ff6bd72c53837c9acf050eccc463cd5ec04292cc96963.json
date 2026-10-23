@@ -1,0 +1,165 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-3d6568f13ae09eb5090d",
+  "created_at": "2026-10-23T15:03:26.438055+00:00",
+  "migration_key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/memory-distill-opencamera-20261023/pool",
+  "title": "打开最新媒体时写死通配image/*、丢掉视频标记，且无URI时直接返回",
+  "when": "系统集成实现阶段，把Android打开或分享最近媒体的Intent（REVIEW/ACTION_VIEW、ACTION_SEND）翻译为HarmonyOS Want，确定uri、type、flags和无媒体分支时",
+  "description": "源端用MediaStore URI打开最近拍摄的照片或视频，不设MIME，无媒体时回落到图库；分享依赖ACTION_SEND隐式授予URI读权限。目标用startAbility的Want(uri/type/flags)拉起系统查看器或分享面板，媒体库查询结果已能区分照片和视频。",
+  "summary": "写前实际收到的F011规格把AC154写成gallery点击“打开最新媒体对应应用”“有媒体时外部查看器打开最新项”，\nAC110/AC114又要求按最近媒体setLastMediaScanned(uri,is_raw)；photo-access-helper参考也提醒photoAccessHelper\nURI含视频，不能当图片处理。这些输入足以说明“最新媒体”包括视频，查看入口要按该条媒体自身的类型打开。\nSlice 11实现者16:56写GalleryService时，已经按photoType算出isVideo并存入Media，同时暴露getLastMediaScanned()。\n45秒后它写ExternalIntentGateway.openGallery(latestUri)，却把type固定为'image/*'，并注释“无uri时不操作（源getLatestMedia==null return）”。\n它没有读clickedGallery委托的StorageUtils.openGallery。源码在这里不设MIME，由URI决定查看器；uri为空时回落到\nMediaStore.Images.EXTERNAL_CONTENT_URI打开图库。它在L194的设计思考里也记成“media uri或launcher”。\n17:09和17:12写MainPageVM时，clickedGallery与SHORTCUT_GALLERY两处都只传getLastMediaScannedUri()，视频标记没有传到网关。\n因此本项偏差位于“规格与已有媒体记录→查看Want”的实现环节；以上片段原样保留到检查点c752566。\n分享子项另属输入缺口：F011映射行只写“startAbility sendData + image/jpeg + EXTRA_STREAM uri”，源码没有显式授权标志\n（Android启动ACTION_SEND时会把EXTRA_STREAM迁入ClipData并附读授权），实现者读过的skill中也没有FLAG_AUTH_READ_URI_PERMISSION，\n于是写出了不带flags的sendData。\n最终修改：Codex 5a2d先给openGallery加isVideo，clickedGallery改传getLastMediaScanned()的video标记\n（rollout-…5a2d….jsonl:L221→L224）。session_archive随后从查看器日志确认HiPreview拒绝image/*、要求image/jpeg，\n于是按扩展名/UTD传精确MIME并附FLAG_AUTH_READ_URI_PERMISSION；打开失败或没有URI时改为拉起PhotoViewPicker\n（rollout-…0349….jsonl:L2214、L2513、L2530）。主代理再给分享补上读授权（rollout-…7c27….jsonl:L7344→L7348、L7378）。\n",
+  "recommendations": [
+    "外部查看入口实现阶段：沿锚点追到委托链末端的真实实现（如clickedGallery→StorageUtils.openGallery），逐支迁移“有URI、RAW、无URI回落图库”；没读到源码前，不在注释里断言“源直接return”。",
+    "确定Want.type时，按当前这条媒体记录取值：查询结果已有photoType或文件名时，把isVideo或精确MIME（如image/jpeg、video/mp4，或由UTD按扩展名推得）一起传给网关。不要写image/*这类通配，也不要只传URI而丢掉类型标记。",
+    "把媒体URI交给其他应用查看或分享时，Want加wantConstant.Flags.FLAG_AUTH_READ_URI_PERMISSION；规格提取阶段在ACTION_SEND/ACTION_VIEW映射行写明源端隐式授予的URI读权限。",
+    "最小检查：分别以最新照片、最新视频、无媒体（或无图库读权限）三种状态点击图库按钮，确认拉起的查看器和回落入口；再从分享面板选一个接收方，确认它能读到该URI。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/ExternalIntentGateway.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F011-app-integration.md",
+          "at": "2026-10-01T16:42:15.802Z",
+          "reason": "正常输入：Read回执中，AC154要求gallery点击“打开最新媒体对应应用”“有媒体时外部查看器打开最新项”，并以MainActivity.java:4390为锚点（该处委托StorageUtils.openGallery）；AC110/AC114要求记录最近媒体的uri与is_raw。规格没有要求任何MIME，“最新媒体”也不限于照片。分享映射行只写sendData+image/jpeg+EXTRA_STREAM，没有URI授权（agent-a690eb1a2619c2d76.jsonl:L27-L28）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/.claude/skills/arkts-system-capabilities/references/photo-access-helper.md",
+          "at": "2026-10-01T16:47:10.073Z",
+          "reason": "正常输入：Bash读取回执说明photoAccessHelper资源URI形如file://media/Photo/xxx，并警告视频URI不能当图片使用；这足以提示同一类URI可能是视频，需要按媒体类型区分（agent-a690eb1a2619c2d76.jsonl:L167-L168）。"
+        },
+        {
+          "key": "agent-a690eb1a2619c2d76.jsonl",
+          "at": "2026-10-01T16:57:38.094Z",
+          "reason": "Slice 11实现者在L267-L268写GalleryService时，已用photoType算出isVideo并存进Media、暴露getLastMediaScanned()。L283-L284 Write ExternalIntentGateway时，openGallery却只收latestUri、写死type:'image/*'，注释称“无uri时不操作（源getLatestMedia==null return）”。它没有读StorageUtils.openGallery：源码不设MIME，uri为空时回落图库，而它自己L194的思考还写着“media uri或launcher”。同次写出的startShare按规格只有sendData+image/jpeg，没有授权flags。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "实现者用Bash执行sed -n '1,110p'读取photo-access-helper.md，回执返回file://media/Photo/xxx形式的URI，以及“视频URI不能传给Image组件”的提示；这支持生成者写前已收到“同类URI可能是视频”的信息。",
+          "evidence": [
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-a690eb1a2619c2d76.jsonl",
+              "line": 167
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-a690eb1a2619c2d76.jsonl",
+              "line": 168
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/MainPageVM.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F011-app-integration.md",
+          "at": "2026-10-01T16:42:15.802Z",
+          "reason": "正常输入：AC154要求clickedGallery→openGallery“打开最新媒体对应应用”；AC23要求SHORTCUT_GALLERY直接打开最新媒体。两条都针对“最新媒体”，不限于照片（agent-a690eb1a2619c2d76.jsonl:L27-L28）。"
+        },
+        {
+          "key": "agent-a690eb1a2619c2d76.jsonl",
+          "at": "2026-10-01T17:12:12.971Z",
+          "reason": "同一实现者此前已在GalleryService中提供带video标记的getLastMediaScanned()（L267-L268）。L410-L411整文件重写MainPageVM时，clickedGallery与SHORTCUT_GALLERY两处仍只调用openGallery(this.galleryService.getLastMediaScannedUri())，没有把视频标记交给网关。这与17:09的首次Write（L395-L396）一致，片段保留到生成结束。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "分享读授权缺失的上游未追到规格作者：F011映射行和项目skills都没有提HarmonyOS跨应用URI授权，本卡只把它记为输入缺口，未核该行规格作者写前收到的材料。",
+    "HiPreview拒绝通配MIME是修复期日志才确认的平台行为，生成期输入中没有。本卡归因的是：源码和规格都没要求MIME时，实现者自行写入只适用于照片的通配类型；并不认为它明知查看器需要精确MIME。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-3d6568f13ae09eb5090d",
+  "metadata": {
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code",
+        "codex"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3",
+        "gpt-6-astra"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.163.0",
+        "2.1.247",
+        "2.1.299"
+      ]
+    },
+    "source_set_id": "sources-974a9086706364eed8b7",
+    "environment": [
+      {
+        "name": "android.compile_sdk",
+        "value": "36",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/.claude/skills",
+        "at": "2026-10-01T09:52:21.840Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-aa8064d19722381a1.jsonl:L11",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-aa8064d19722381a1.jsonl:L10",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos",
+        "at": "2026-10-01T12:27:45.961Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b.jsonl:L1565",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b.jsonl:L1563",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos",
+        "at": "2026-10-01T13:34:44.665Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae78a452b1664bc61.jsonl:L149",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae78a452b1664bc61.jsonl:L148",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.11.1"
+  },
+  "revision": "5b4001738169878d739ff6bd72c53837c9acf050eccc463cd5ec04292cc96963"
+}

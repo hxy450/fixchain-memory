@@ -7,7 +7,7 @@ ArkTS 语言与 ArkUI 声明层的编译约束：接口签名核对、严格类�
 ## 子主题
 
 - [api-signatures](api-signatures/index.md) — 调用 SDK/ArkUI 接口或引用跨文件声明时，参数类型、重载、成员名与语义注释须按声明核对而非凭记忆推定（7 条）
-- [async-mapping](async-mapping/index.md) — 源端同步调用、线程与事件投递改成 Promise/异步 API 后的时序、重入、线程与结果三态（5 条）
+- [async-mapping](async-mapping/index.md) — 源端同步调用、线程与事件投递改成 Promise/异步 API 后的时序、重入、线程与结果三态（8 条）
 - [java-stdlib](java-stdlib/index.md) — Java/Kotlin 标准库调用（集合序、字符串、正则、格式化、日历）与形似 JS API 的语义差异复刻（5 条）
 - [runtime-semantics](runtime-semantics/index.md) — 源端同步调用或数值运算改成 ArkTS 后的运行时差异：异步失败分支、初始化顺序、错误通道与 number 边界（7 条）
 - [strict-mode](strict-mode/index.md) — ArkTS 严格类型系统对对象字面量、接口实现、异常收窄与类声明顺序的限制，不编译时也会留到编译门（5 条）

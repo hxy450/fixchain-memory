@@ -1,0 +1,431 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-cbf23fa7a4ed42d37671",
+  "created_at": "2026-10-23T15:16:44.602309+00:00",
+  "migration_key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/memory-distill-opencamera-20261023/pool",
+  "title": "未核实就把按键不可达当作平台定论：规格收缩全部硬件键入口，取景实现漏迁键盘/遥控菜单导航",
+  "when": "规格提取阶段判定源端onKeyDown各类按键在目标端的接收通道时；取景UI实现与接线阶段迁移按键分发矩阵、遥控模式下弹层与曝光面板的逐行逐项选择时",
+  "description": "源端MainUI.onKeyDown同时分发音量/相机/媒体键与键盘SPACE、DPAD、NUMPAD、SLASH、FUNCTION等键，并用remote_control_mode驱动initRemoteControlForPopup/ExposureUI、processRemoteUp/DownButton、commandMenuPopup/Exposure及行/项高亮；BLE遥控与键盘共用这套导航；目标ArkUI页面只能经获焦组件的按键回调接收KeyEvent。",
+  "summary": "① 按键入口被整体收缩（A39）。c4-05规格作者（afd4474c6ba14aa22）写F004前完整读了MainUI.java，\n其中onKeyDown（2528–2747）除音量/媒体键外，还处理SPACE、DPAD、NUMPAD、SLASH、FUNCTION等键盘键。\n派工要求平台API映射先查feature-base与spec/ref，仍缺时在summary记明。它没有查到按键映射，\n也没读已加载的android-ui-graph-query技能所列interaction-mapping参考（参考给出onKeyEvent与KeyCode/方向键映射）。\n它在思考中写下“HMOS side volume keys not delivered”，没有任何工具读取支持。\n11:44 Write F004时，实现映射行写成「ArkUI无应用级音量键/媒体键分发（依据：@ohos.multimodalInput不向应用窗口投递音量键）」，\n决策栏却扩大为「HMOS端按键交互仅保留屏上控件路径」；同一文件的AC72/AC73仍要求onKeyAction分发全部键位。\n该行待Gate C铸号，决策台账中没有对应裁决。\nSlice 5实现者（a06740e73018ad308）把这一行当作已裁决：思考写“已裁决，不是TODO……MENU/导航等亦无系统键”。\n17:03写MainUIController时，注释写明HMOS不投递音量键，onKeyAction只供屏上控件与遥控调用。\n组closer（acb5c3d58575999a4）18:06读到同一映射行；18:37写MainPage时没加获焦属性和按键回调，于是onKeyAction在页面上没有入口。\n两处都保留到c752566。最终修复新增HardwareKeyRouter，把KeyCode映射成KeyAction；\nMainPage设focusable/defaultFocus/onKeyPreIme，只消费已处理的键，并在onHidden/aboutToDisappear清理；\nonKeyAction增加firstPress，音量自动对焦受isFocusWaiting约束。\n\n② 遥控/键盘菜单导航未迁移（B45，实现偏差）。Slice 5实现者写前读到F004 AC43（曝光面板遥控选择态：5行顺序、跳过不可见行、行/元素高亮色、up/down/ok三键），\n以及AC73「DPAD上下→遥控导航、FUNCTION/NUMPAD_MULTIPLY→togglePopupSettings」；\n它还读完MainUI.java 1560–3118，其中有initRemoteControlForPopup/ExposureUI、processRemoteUp/DownButton、commandMenu*及高亮函数。\n17:03的Write却把DPAD_UP/DOWN并入NUMPAD_MULTIPLY分支，直接togglePopupSettings；SPACE直接拍照，没有遥控模式分支；\n没有remote_control_mode状态，也没有processRemote*/commandMenu*方法，AC43未实现。\n它思考时以为“F009 BLE remote会调processRemote*”，source notes也把遥控高亮态族和space遥控分支“归F009，HMOS屏上路径不可达”。\n但F009 spec的AC28/AC30/AC31只把commandMenu*/processRemote*当作MainUI已有动作来调用，并未定义行导航，这项职责落在两个feature之间。\n同一实现者写的ViewfinderUiState没有遥控行/项状态；PopupPanelBuilder的PopupGroup是普通类，不可观察；\nPopupSettingsPanel用组件内@Local localIndex和@Local expanded保存选择与展开态；ManualSeekbars没有高亮入参。\n因此遥控选择无法由模型驱动。F004 spec对弹层行导航只有AC73的概括，没有单独AC，属规格的次要缺口；源码中的行为两次都已读到。\n\n③ 接线以近似替代（B45）。closer读到RemoteControlHost接口注释，其中写明对应MainUI.commandMenuExposure()，\nprocessRemoteUpButton返回true表示已消费；也读到handleMenu的分支：曝光面板未开时调toggleExposureUI，已开时调commandMenuExposure。\n它grep确认MainUIController缺这些方法后，没有读MainUI.java，凭记忆认定“commandMenuExposure calls toggleExposureUI”。\n于是把commandMenuExposure接到toggleExposureUI、commandMenuPopup接到togglePopupSettings，processRemoteUp/Down恒返回false，\n并自述“that changes behavior”。结果曝光面板打开时按遥控Menu会关闭面板，Up/Down永远回落到变焦。\n\n最终修复新增RemoteMenuNavigation，负责行清单与选择；MainUIController实现遥控模式及processRemote*/commandMenu*；\nViewfinderUiState增加remote*字段；PopupGroup加@ObservedV2/@Trace，去掉PopupArrayRow的localIndex，Radio展开态移入模型；\nPopupSettingsPanel和ManualSeekbars增加行/项高亮与滚动可见；HardwareKeyRouter映射DPAD与NUMPAD 8/2；\nMainPage的host改为委托mainUI.commandMenu*/processRemote*。\nSPACE重复按键被吞是修复中由c8dd617新引入的问题，同次集成已改回，不属生成偏差。\n",
+  "recommendations": [
+    "规格提取阶段：迁移源端按键分发时，按键类分别判定接收通道：键盘/DPAD等键经获焦组件onKeyEvent/onKeyPreIme接收，音量/媒体等系统键可能被拦截。写平台限制前必须引用实际读到的参考或d.ts；只对已核实不可达的键写行为收缩，其余键位保留接收入口与AC，并把待验证项交给Gate裁决。",
+    "规格提取阶段：源端有remote_control_mode这类键盘/遥控导航状态机时，弹层行/项与曝光面板各写AC，包括进入条件、行序与跳过规则、OK选择、高亮色和退出。在对接点写明状态机归属的feature，避免BLE遥控feature与取景feature互相推诿。",
+    "实现阶段：按spec键位表逐条核对KeyAction映射，例如DPAD上下不等于togglePopupSettings，遥控模式下SPACE先走commandMenu*。AC43这类遥控AC要么实现，要么登记带owner的FWD-REF，不能只在notes中写“归另一feature”。选择/展开态放进可观察模型（@ObservedV2/@Trace），不用组件@Local，以便按键驱动。",
+    "接线阶段：要桥接源端同名方法（commandMenuExposure、processRemoteUpButton）而目标端缺失时，先读源方法正文；不要用toggle或恒false近似后静默合入，应实现等价方法或回报缺口。页面根容器需设置focusable/defaultFocus并接入按键回调，否则分发矩阵没有入口。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/MainUIController.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/ui/MainUI.java",
+          "at": "2026-10-01T11:28:37.028Z",
+          "reason": "正常输入：规格作者分段Read MainUI.java。回执覆盖1541–3120，含遥控高亮/选择函数及onKeyDown 2528–2747；该方法除音量/媒体键外还分发SPACE、DPAD、NUMPAD、SLASH、FUNCTION等键盘键，足以说明按键入口不只涉及音量键（agent-afd4474c6ba14aa22.jsonl:L117-L120）。"
+        },
+        {
+          "key": "agent-afd4474c6ba14aa22.jsonl",
+          "at": "2026-10-01T11:44:18.665Z",
+          "reason": "派工要求平台API映射先查feature-base与spec/ref，仍缺则记明（L1）。它未读任何HMOS按键参考，也没读技能所列interaction-mapping参考（L4），只在思考中断言“HMOS side volume keys not delivered”（L274）。Write F004时，实现映射行以音量键为依据，却把决策扩成「按键交互仅保留屏上控件路径」；同文件AC73仍写DPAD上下→遥控导航（L276-L277；返回summary L327列为缺失平台API）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F004-viewfinder-ui.md",
+          "at": "2026-10-01T16:41:43.094Z",
+          "reason": "交付桥梁：Slice 5实现者Read F004，回执同时含上述「仅保留屏上控件路径」映射行、AC43曝光面板遥控选择态（5行、高亮RGB(183,28,28)/(244,67,54)、up/down/ok）和AC73键位表（agent-a06740e73018ad308.jsonl:L25-L26）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/ui/MainUI.java",
+          "at": "2026-10-01T16:43:07.859Z",
+          "reason": "正常输入：实现者两次Read读完MainUI.java（1–1559、1560–3118），含initRemoteControlForPopup/ExposureUI、processRemoteUp/DownButton、commandMenuPopup/Exposure，以及onKeyDown中DPAD在非遥控模式下进入遥控、遥控模式下处理上下键、SPACE在遥控模式下走commandMenu*的分支（agent-a06740e73018ad308.jsonl:L69-L73）。"
+        },
+        {
+          "key": "agent-a06740e73018ad308.jsonl",
+          "at": "2026-10-01T17:03:00.497Z",
+          "reason": "思考中把映射行当作“已裁决，不是TODO……MENU/导航等亦无系统键”（L113），并认为遥控选择态由F009消费（L123）。Write MainUIController时注释写HMOS不投递音量键，onKeyAction只供屏上控件与遥控；DPAD_UP/DOWN与NUMPAD_MULTIPLY同走togglePopupSettings，SPACE直接拍照；没有remote_control_mode和processRemote*/commandMenu*，AC43未落实（L238-L239）。source notes把遥控高亮态族与space遥控分支归F009（L324-L325）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 5
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/pages/MainPage.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/ui/MainUI.java",
+          "at": "2026-10-01T11:28:37.028Z",
+          "reason": "正常输入：规格作者读到onKeyDown全部键位，其中包括键盘键（agent-afd4474c6ba14aa22.jsonl:L117-L120）。"
+        },
+        {
+          "key": "agent-afd4474c6ba14aa22.jsonl",
+          "at": "2026-10-01T11:44:18.665Z",
+          "reason": "未核实平台依据，就在F004实现映射行写下「HMOS端按键交互仅保留屏上控件路径」（L274、L276-L277）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F004-viewfinder-ui.md",
+          "at": "2026-10-01T18:06:39.828Z",
+          "reason": "交付桥梁：closer用sed读F004 33–103行，回执含上述按键收缩映射行（agent-acb5c3d58575999a4.jsonl:L249-L250）。"
+        },
+        {
+          "key": "agent-a06740e73018ad308.jsonl",
+          "at": "2026-10-01T17:03:00.497Z",
+          "reason": "Slice 5实现者写出的MainUIController没有commandMenu*/processRemote*，也没有遥控模式（其输入与偏差见MainUIController图；同转录L238-L239）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/MainUIController.ets",
+          "at": "2026-10-01T18:23:12.483Z",
+          "reason": "交付桥梁：closer grep MainUIController，确认其中只有toggleExposureUI等方法，缺commandMenuExposure/commandMenuPopup/processRemoteUp/DownButton（agent-acb5c3d58575999a4.jsonl:L275-L276、L277）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/RemoteControlManager.ets",
+          "at": "2026-10-01T18:23:39.833Z",
+          "reason": "正常输入：RemoteControlHost注释写明commandMenuExposure对应MainUI.commandMenuExposure()，processRemoteUpButton返回true表示已消费（L156-L157）；handleMenu在曝光面板未开时调toggleExposureUI、已开时调commandMenuExposure，足以说明两者不是同一动作（L278-L279）。"
+        },
+        {
+          "key": "agent-acb5c3d58575999a4.jsonl",
+          "at": "2026-10-01T18:37:38.589Z",
+          "reason": "未读MainUI.java，凭记忆认定“commandMenuExposure calls toggleExposureUI”。Write MainPage时把commandMenuExposure/Popup接到toggle，processRemoteUp/Down恒false，并自述“that changes behavior”（L277、L567-L568）。同次写入按映射行只接屏上控件，没给页面加获焦属性和按键回调。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 7,
+          "force": true,
+          "reason": "closer在工程根执行sed -n '33,103p' spec/baseline/features/F004-viewfinder-ui.md，回执返回服务层与实现映射表，含「HMOS端按键交互仅保留屏上控件路径」一行；这是它写MainPage前对该spec的真实读取。",
+          "evidence": [
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-acb5c3d58575999a4.jsonl",
+              "line": 249
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-acb5c3d58575999a4.jsonl",
+              "line": 250
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": 7,
+          "force": true,
+          "reason": "closer执行grep -n 'commandMenuExposure|commandMenuPopup|processRemoteUpButton|processRemoteDownButton|…' entry/src/main/ets/viewmodels/MainUIController.ets，回执只有toggleExposureUI等行，随后思考写“MainUIController lacks commandMenuExposure/commandMenuPopup/processRemoteUpButton/processRemoteDownButton”；这支持它写前已读到Slice 5输出中缺失这些方法。",
+          "evidence": [
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-acb5c3d58575999a4.jsonl",
+              "line": 275
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-acb5c3d58575999a4.jsonl",
+              "line": 276
+            }
+          ]
+        },
+        {
+          "from": 6,
+          "to": 7,
+          "force": true,
+          "reason": "closer先用sed读RemoteControlManager.ets 60–100行的RemoteControlHost接口注释（L156-L157），再grep this.host.调用，回执列出handleMenu在曝光面板未开时调toggleExposureUI、已开时调commandMenuExposure，以及processRemoteUp/DownButton未消费时才回落变焦（L278-L279）；这是它写MainPage前对该文件的真实读取。",
+          "evidence": [
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-acb5c3d58575999a4.jsonl",
+              "line": 156
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-acb5c3d58575999a4.jsonl",
+              "line": 157
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-acb5c3d58575999a4.jsonl",
+              "line": 278
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-acb5c3d58575999a4.jsonl",
+              "line": 279
+            }
+          ]
+        },
+        {
+          "from": 7,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/ViewfinderUiState.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "summary": "Slice 5实现者写前已有F004 AC43和MainUI.java的遥控状态字段（mPopupLine/mPopupIcon/mExposureLine/mSelectingIcons/mSelectingLines，:87–96），\n16:51 Write的ViewfinderUiState却只建popup/曝光开合态，没有遥控模式与行/项状态。\n修复增加remoteControlMode、remotePopup*、remoteExposureLine/SelectingItem等@Trace字段。\n",
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F004-viewfinder-ui.md",
+          "at": "2026-10-01T16:41:43.094Z",
+          "reason": "正常输入：回执含AC43曝光面板遥控选择态，以及AC73的DPAD→遥控导航（agent-a06740e73018ad308.jsonl:L25-L26）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/ui/MainUI.java",
+          "at": "2026-10-01T16:43:07.859Z",
+          "reason": "正常输入：读完MainUI.java，含遥控状态字段与行/项选择函数（agent-a06740e73018ad308.jsonl:L69-L73）。"
+        },
+        {
+          "key": "agent-a06740e73018ad308.jsonl",
+          "at": "2026-10-01T16:51:18.469Z",
+          "reason": "Write ViewfinderUiState只含popup/曝光开合与selectedPopupGroup，没有remote_control_mode和行/项选择状态（L145-L146）；后续source notes把遥控高亮态族归F009（L324-L325）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/PopupPanelBuilder.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "summary": "同一实现者把PopupGroup写成普通类，selectedValue/currentIndex/checked/expanded不可观察，\n导致遥控在模型侧改选择或展开态时界面不刷新。修复加@ObservedV2与@Trace。\n",
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F004-viewfinder-ui.md",
+          "at": "2026-10-01T16:41:43.094Z",
+          "reason": "正常输入：AC43/AC73要求按键驱动遥控导航（agent-a06740e73018ad308.jsonl:L25-L26）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/ui/MainUI.java",
+          "at": "2026-10-01T16:43:07.859Z",
+          "reason": "正常输入：源码中的弹层遥控导航逐行逐项切换选择与展开（agent-a06740e73018ad308.jsonl:L69-L73）。"
+        },
+        {
+          "key": "agent-a06740e73018ad308.jsonl",
+          "at": "2026-10-01T16:58:41.149Z",
+          "reason": "Write PopupPanelBuilder时，PopupGroup为普通类，选择与展开字段只作一次性渲染输入，没有为遥控驱动留下可观察状态（L204-L205）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/components/viewfinder/PopupSettingsPanel.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "summary": "同一实现者在PopupArrayRow用@Local localIndex、在PopupRadioGroup用@Local expanded保存选择与展开，行没有遥控高亮和滚动定位。\n修复去掉localIndex，展开态移入模型，并增加remoteFirstOption/remoteItem行高亮与onRowArea滚动可见。\n",
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F004-viewfinder-ui.md",
+          "at": "2026-10-01T16:41:43.094Z",
+          "reason": "正常输入：AC73写DPAD上下→遥控导航，AC43给出遥控高亮色（agent-a06740e73018ad308.jsonl:L25-L26）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/ui/MainUI.java",
+          "at": "2026-10-01T16:43:07.859Z",
+          "reason": "正常输入：源码的弹层行/项高亮与选择（mPopupLine/mPopupIcon，:2187–2331）（agent-a06740e73018ad308.jsonl:L69-L73）。"
+        },
+        {
+          "key": "agent-a06740e73018ad308.jsonl",
+          "at": "2026-10-01T17:07:38.222Z",
+          "reason": "Write PopupSettingsPanel时，把数组行索引与Radio展开态放在组件@Local，行没有遥控高亮入参（L298-L299）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/components/viewfinder/ManualSeekbars.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "summary": "AC43要求曝光面板5行遥控高亮（行RGB(183,28,28)、元素RGB(244,67,54)），实现者写ManualExposurePanel与ManualSeekbars时没有高亮入参。\n修复增加remoteBackground，按remoteExposureLine/SelectingItem着色。\n",
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F004-viewfinder-ui.md",
+          "at": "2026-10-01T16:41:43.094Z",
+          "reason": "正常输入：AC43写明曝光面板5行顺序、跳过不可见行，以及行/元素高亮色（agent-a06740e73018ad308.jsonl:L25-L26）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/ui/MainUI.java",
+          "at": "2026-10-01T16:43:07.859Z",
+          "reason": "正常输入：源码中的highlightExposureUILine与曝光面板逐项选择（agent-a06740e73018ad308.jsonl:L69-L73）。"
+        },
+        {
+          "key": "agent-a06740e73018ad308.jsonl",
+          "at": "2026-10-01T17:06:29.052Z",
+          "reason": "Write ManualSeekbars/ManualExposurePanel时，5行均无遥控高亮背景或选择态入参，AC43未落实（L280-L281）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "未核实物理音量/相机/媒体键在真机上是否投递到应用窗口，FINAL仍写待设备验证。本卡只认定“未核实便把全部按键入口收缩到屏上控件”这一判断偏差，不声称音量键一定可接收。"
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/HardwareKeyRouter.ets",
+      "reason": "c752566中不存在，由Codex返修新建（01a14aae L1345→L1348，0349 L1036–L1065）。对应的生成偏差（MainPage无按键回调、onKeyAction无入口）已在MainPage/MainUIController图归因。文件内SPACE按重复吞键是c8dd617修复中新生，由parity_audit集成补丁去掉（5a2d L5716→L5719），没有生成期写者可绑定。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/RemoteMenuNavigation.ets",
+      "reason": "c752566中不存在，由parity_audit在提案副本中新建后集成（5a2d L5716→L5719）。生成期缺少的行清单与选择逻辑，已在MainUIController/ViewfinderUiState图归因为Slice 5实现者未迁移遥控导航；新文件本身没有生成写入可绑定。"
+    }
+  ],
+  "job": "issue-cbf23fa7a4ed42d37671",
+  "metadata": {
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code",
+        "codex"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3",
+        "gpt-6-astra"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.163.0",
+        "2.1.247",
+        "2.1.299"
+      ]
+    },
+    "source_set_id": "sources-974a9086706364eed8b7",
+    "environment": [
+      {
+        "name": "android.compile_sdk",
+        "value": "36",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/.claude/skills",
+        "at": "2026-10-01T09:52:21.840Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-aa8064d19722381a1.jsonl:L11",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-aa8064d19722381a1.jsonl:L10",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos",
+        "at": "2026-10-01T12:27:45.961Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b.jsonl:L1565",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b.jsonl:L1563",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos",
+        "at": "2026-10-01T13:34:44.665Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae78a452b1664bc61.jsonl:L149",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae78a452b1664bc61.jsonl:L148",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.11.1"
+  },
+  "revision": "013c03becf2fdb81fe5d3bb32c60d6635f41ed3de130131a61605958b50d27f5"
+}

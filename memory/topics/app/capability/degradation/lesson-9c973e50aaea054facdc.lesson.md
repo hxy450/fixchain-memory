@@ -1,6 +1,6 @@
 # 平台差异只收敛确实做不到的那一步：写“无对等”前查证并记录，替代方案只作用于源端同一路径，其余出口、分支与回退照源端保留
 
-ID：`lesson-9c973e50aaea054facdc` · 版本：4 · 阶段：spec/plan/execute · 主题：[app/capability/degradation](index.md)
+ID：`lesson-9c973e50aaea054facdc` · 版本：5 · 阶段：spec/plan/execute · 主题：[app/capability/degradation](index.md)
 
 概要：平台差异只收敛做不到的一步，其余出口照源保留
 
@@ -39,10 +39,10 @@ ID：`lesson-9c973e50aaea054facdc` · 版本：4 · 阶段：spec/plan/execute �
 - [成本类降级按范围裁剪，闸门自动批准不算改判](../../../process/unapproved-deviation/lesson-7827e0707780cb7546ee.lesson.md)（共享 6 张卡）
 - [源端可观察缺陷照迁并核次数，修正走待批决策](../../../process/unapproved-deviation/lesson-14411595fd9ac1e17683.lesson.md)（共享 3 张卡）
 - [后台计时降级只砍执行载体，保留逐拍刷新与回前台补算](lesson-30643cd3f209b896ffd1.lesson.md)（共享 2 张卡）
+- [跨文件补实现的功能登记带负责方与验证的移交项](../../../process/handoff-loss/lesson-4f81eeea17b94190c2de.lesson.md)（共享 2 张卡）
 - [规格与源码冲突按源实现，例外只认决策 ID](../../../process/secondary-over-source/lesson-7a065e8fe384b8c462cc.lesson.md)（共享 2 张卡）
-- [沿用已生成页面或兄弟写法前回源码核对语义](../../../process/secondary-over-source/lesson-e9c6e8ef1b29a6fe9c26.lesson.md)（共享 2 张卡）
 
-来源支持：17 张卡 · 已知 3 次迁移（部分未记录） · 已知 3 个应用（部分未记录）
+来源支持：18 张卡 · 已知 3 次迁移（部分未记录） · 已知 3 个应用（部分未记录）
 
 ## 来源（按需复核）
 
@@ -70,6 +70,8 @@ ID：`lesson-9c973e50aaea054facdc` · 版本：4 · 阶段：spec/plan/execute �
   卡片版本：`7d12da37377f7c970931508bbb172dfde97532993727638bbbfba2a8f413f627`
 - [case-ac823e7436e1b08612ba](../../../../../store/cases/case-ac823e7436e1b08612ba/001e12d63eb0e435e0b1844db82cdbae78fc17a4ab6d1e93e6e523d3d5f4f174.json) · 结论：rec-bc75f77fef
   卡片版本：`001e12d63eb0e435e0b1844db82cdbae78fc17a4ab6d1e93e6e523d3d5f4f174`
+- [case-cbf23fa7a4ed42d37671](../../../../../store/cases/case-cbf23fa7a4ed42d37671/013c03becf2fdb81fe5d3bb32c60d6635f41ed3de130131a61605958b50d27f5.json) · 结论：diagnosis, rec-5671dbac6c
+  卡片版本：`013c03becf2fdb81fe5d3bb32c60d6635f41ed3de130131a61605958b50d27f5`
 - [case-d923c5dbfc1e66ce5f8b](../../../../../store/cases/case-d923c5dbfc1e66ce5f8b/543d2282bb0caf83001b49301e407e5e4256669899f59d4fbf9d64c789925c37.json) · 结论：diagnosis, rec-6da66c9dbf, rec-92be2e528b, rec-7c5196d7cc
   卡片版本：`543d2282bb0caf83001b49301e407e5e4256669899f59d4fbf9d64c789925c37`
 - [case-d9c2b75062eb57796ca2](../../../../../store/cases/case-d9c2b75062eb57796ca2/c0e0684d2567560ee8d44f49d9c8eb3a4d4b3cc9ba5d7380a8e25a3b0f7792e8.json) · 结论：diagnosis, rec-6c7afe27cf, rec-b34265043b

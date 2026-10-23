@@ -1,0 +1,288 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-775c2298a494ebceb71c",
+  "created_at": "2026-10-23T15:19:30.133566+00:00",
+  "migration_key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/memory-distill-opencamera-20261023/pool",
+  "title": "凭记忆把实时ISO/曝光与录音振幅判为平台缺口而不接线，外设OSD初值误用断连占位",
+  "when": "跨切片接线收口阶段，发现注入源在工程中缺失、要判定是“工程尚未暴露”还是“平台无此API”并决定是否延迟为集成期PD时；以及服务层为事件驱动的外设OSD状态确定初值时",
+  "description": "目标取景覆盖层需要实时ISO/曝光时间与录像音频振幅等数据源（源端来自Camera2 capture result、MediaRecorder.getMaxAmplitude），对应getter在当前工程的控制器/录像引擎中尚不存在，生成环境装有HarmonyOS SDK d.ts；另有外设读数OSD，源端只在断连事件时写入“-- °C/-- m”。",
+  "summary": "① 实时ISO/曝光与录音振幅（A37/A38）：G3 group-closer（aab3f09ac0164fd78）收到的派工明确要求注入P-S6-001/002；\n它读到的placeholder-registry行写明“F002拍照管线注入捕获结果读面（AC31/AC38/AC45/AC61）”\n和“F003 AVRecorder getMaxAmplitude注入——AC35振幅表采样源”，F005 spec AC31要求ISO+曝光时间行。\n这些已经说明需要真实数据源，并指明振幅来自AVRecorder。派工中“Group 2已备齐getter、AvRecorderEngine已暴露振幅”\n是G2 closer未核实的retag说法；G3 closer用grep核到工程里确无这些getter（L114-L119、L128-L131），这一纠正本身正确。\n偏差在下一步：它把“工程未暴露”直接当成“平台无API”。它在L119写下“不记得HMOS AVRecorder公开面有getMaxAmplitude”，\n在L131又写“相信photo session没有capture-result元数据回调”，没有查本机SDK。\n这份SDK正是同批Slice 4 worker 17:01–17:03读过AVRecorder段的@ohos.multimedia.media.d.ts，\n其中L5851-5906就有getAudioCapturerMaxAmplitude（@since 11）。@ohos.multimedia.camera.d.ts里\nPhotoSession继承ManualIso.getIso()与ManualExposure.getExposureDuration()；生成的控制器已经在用同一接口的setIso、\ngetSupportedIsoRange和setExposureDuration。全会话没有出现任何d.ts读取。\n它把两项retag为“集成期PD决策（平台缺口）”，19:06:57把“HMOS photo session无capture-result元数据回调源”\n“HMOS AVRecorder无getMaxAmplitude等价API——注入不可达”写进PreviewOverlayViewModel注释，captureDataSource保留基类默认。\n同一轮它在MainPage只嵌入PreviewOverlay({ engine })（L170），在PreviewOverlay只登记onDrawPreviewSink（L193），\n没有建立把VM交给页面注入的通道。这些片段原样保留到c752566/c1abe5c，表现为ISO/曝光行为空、振幅表恒0。\n返修中Codex加入PreviewOverlay.onViewModelReady，由MainPage注入getLiveCaptureResult和\nVideoRecordController.getMaxAmplitude；控制器新增getCaptureResultIso/ExposureTime（session.getIso/getExposureDuration），\nAvRecorderEngine按media.d.ts L5851-5906用getAudioCapturerMaxAmplitude单飞采样（job证据0349 L747-L796、aae L302-L356）。\n帧时长、AE扫描、连拍进度、needsFlash、对焦距离至FINAL仍未接（P-S6-001 pending）。\n② Kraken OSD初值（B31）：Slice 9 worker（a8be0b5a9256ea386）写前读到的F009 spec规定remoteOsdLine“断连置-- °C/-- m”（L94、AC36），\n源BluetoothRemoteControl只在ACTION_GATT_DISCONNECTED分支调用onExtraOSDValuesChanged(\"-- °C\",\"-- m\")（L129-L133）。\n这些输入足以说明占位只由断连事件写入。17:00:26它却把RemoteControlState的两行初值写成同一断连常量，\n17:03:25又只把常量从OSD_PLACEHOLDER改名为OSD_DISCONNECT。于是从未连接外设时也显示断连占位。\nFINAL改为初值空串，只有读数或真实断连事件到达后才显示（job证据0349 L3983/L4017、6e4d L4470）。\n分工：收口/接线阶段在登记平台缺口前必须查SDK；服务实现阶段要区分事件写入值与初始态。\n",
+  "recommendations": [
+    "接线收口阶段：工程里找不到某个数据源getter时，先区分“工程未暴露”和“平台不支持”。把缺口登记为平台缺口或集成期PD前，到本机SDK d.ts中grep目标能力（如AVRecorder的getAudioCapturerMaxAmplitude、PhotoSession的getIso/getExposureDuration），并把d.ts行号写进登记理由；没有d.ts依据，不写“平台无API”。",
+    "接线收口阶段：确认平台有API、只是工程未暴露时，按单写者职责在控制器或录像引擎补getter，或回派给拥有该文件的切片；不能用基类默认值加延迟登记顶替。注入点在子组件内部创建的VM上时，同时建立页面可达的交接通道（如onViewModelReady回调），并补一条“注入后ISO/振幅非空”的单测。",
+    "服务实现阶段：源端只在某个事件分支写入的占位串（如断连时“-- °C/-- m”），不要同时用作状态初值。初值按源端未收到事件时的语义设置（DrawPreview的OSD行初始为null、不绘制），对应目标即空串；用“未连接时OSD为空、断连后显示占位”的单测核对。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/PreviewOverlayViewModel.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "nodes": [
+        {
+          "key": "a9bd9bd6-60ab-4adc-996c-11ded062d5c5.jsonl",
+          "at": "2026-10-01T18:56:35.418Z",
+          "reason": "派工：根编排者以Agent派发G3 closer，“重点接线”明确要求P-S6-001/002注入（捕获结果读面、AVRecorder振幅源，注入点在Slice 6自有VM）。其中“getter已备齐”的状态说法未经核实，但“需要注入真实源、振幅来自AVRecorder”的要求正确（a9bd9bd6主会话L735；agent-aab3f09ac0164fd78.jsonl:L1）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/placeholder-registry.md",
+          "at": "2026-10-01T18:56:49.186Z",
+          "reason": "正常输入：grep回执给出P-S6-001“F002拍照管线注入捕获结果读面……AC31/AC38/AC45/AC61显示域”与P-S6-002“F003 AVRecorder getMaxAmplitude注入——AC35振幅表采样源”，说明两项都要真实数据源（agent-aab3f09ac0164fd78.jsonl:L15-L16）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F005-preview-overlay.md",
+          "at": "2026-10-01T19:00:30.329Z",
+          "reason": "正常输入：grep回执给出F005-AC31“ISO+曝光时间+录像中帧时长以空格拼接，500ms缓存”等显示要求（agent-aab3f09ac0164fd78.jsonl:L106-L107）；AC35振幅表要求经上方registry行转达。"
+        },
+        {
+          "key": "agent-aab3f09ac0164fd78.jsonl",
+          "at": "2026-10-01T19:06:58.914Z",
+          "reason": "G3 closer核到AvRecorderEngine、控制器和引擎无对应getter后（L114-L119、L128-L131），凭记忆断定“HMOS AVRecorder无getMaxAmplitude”“photo session无capture-result元数据回调”，全会话未读任何SDK d.ts。它把P-S6-001/002 retag为集成期PD，并在L197 Edit把这两句平台缺口写进captureDataSource、maxAmplitudeSource注释，默认源保持基类全false、振幅恒0（L131、L134、L197-L198）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4,
+          "force": true,
+          "reason": "G3 closer在项目根执行grep \"P-S6-\\|P-S8-\" spec/placeholder-registry.md，回执返回P-S6-001/002两行的注入要求（F002捕获结果读面、F003 AVRecorder getMaxAmplitude——AC35）；这是它写前对该文件的真实读取。",
+          "evidence": [
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-aab3f09ac0164fd78.jsonl",
+              "line": 15
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-aab3f09ac0164fd78.jsonl",
+              "line": 16
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "G3 closer用grep读取spec/baseline/features/F005-preview-overlay.md的AC31/AC38/AC45/AC61，回执返回ISO+曝光时间行等显示要求；这是它写前对该spec的真实读取。",
+          "evidence": [
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-aab3f09ac0164fd78.jsonl",
+              "line": 106
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-aab3f09ac0164fd78.jsonl",
+              "line": 107
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/pages/MainPage.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "nodes": [
+        {
+          "key": "a9bd9bd6-60ab-4adc-996c-11ded062d5c5.jsonl",
+          "at": "2026-10-01T18:56:35.418Z",
+          "reason": "派工：要求G3 closer落地P-S1-005 overlayHost嵌入，同时完成P-S6-001/002注入（a9bd9bd6主会话L735；agent-aab3f09ac0164fd78.jsonl:L1）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/placeholder-registry.md",
+          "at": "2026-10-01T18:56:49.186Z",
+          "reason": "正常输入：P-S6-001/002行要求注入捕获结果读面与AVRecorder振幅源（agent-aab3f09ac0164fd78.jsonl:L15-L16）。"
+        },
+        {
+          "key": "agent-aab3f09ac0164fd78.jsonl",
+          "at": "2026-10-01T19:06:58.914Z",
+          "reason": "已先把两项判成“平台缺口、注入不可达”（L131、L134），19:06:22 Edit只把overlayHost写成PreviewOverlay({ engine: this.previewEngine })（L170）。VM由组件内部创建，页面拿不到它，也就无从注入captureDataSource、maxAmplitudeSource；FINAL改为经onViewModelReady注入。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "G3 closer在项目根grep spec/placeholder-registry.md，回执返回P-S6-001/002注入要求；这是它写MainPage前对该文件的真实读取。",
+          "evidence": [
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-aab3f09ac0164fd78.jsonl",
+              "line": 15
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-aab3f09ac0164fd78.jsonl",
+              "line": 16
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/components/viewfinder/PreviewOverlay.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "nodes": [
+        {
+          "key": "a9bd9bd6-60ab-4adc-996c-11ded062d5c5.jsonl",
+          "at": "2026-10-01T18:56:35.418Z",
+          "reason": "派工：要求G3 closer完成P-S11-002 onDrawPreviewSink接线与P-S6-001/002注入（a9bd9bd6主会话L735；agent-aab3f09ac0164fd78.jsonl:L1）。"
+        },
+        {
+          "key": "agent-aab3f09ac0164fd78.jsonl",
+          "at": "2026-10-01T19:06:58.914Z",
+          "reason": "在平台缺口判定之后（L131、L134），19:06:48 Edit只在aboutToAppear登记onDrawPreviewSink（L193），没有把内部VM交出供页面注入数据源；c1abe5c仍无此通道，FINAL新增onViewModelReady(model|null)。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/RemoteControlManager.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "summary": "Slice 9 worker读到F009 spec“断连置-- °C/-- m”（L94、AC36），源BluetoothRemoteControl也只在GATT_DISCONNECTED分支写占位；\n它仍把RemoteControlState.remoteOsdLine1/2初值写成断连常量，从未连接外设时即显示断连占位。该片段保留到c752566，FINAL改为空串初值。\n",
+      "recommendations": [
+        "服务实现阶段：事件分支写入的占位串不作状态初值；初值取源端未收到事件时的语义（OSD行null即不绘制），并用“未连接时OSD为空、断连后显示占位”的单测核对。"
+      ],
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F009-ble-remote.md",
+          "at": "2026-10-01T16:41:57.026Z",
+          "reason": "正常输入：Read回执L94“remoteOsdLine1 / remoteOsdLine2: string（PreviewOverlay左下两行；断连置\"-- °C\" / \"-- m\"）”、AC36“断连时置为\"-- °C\" / \"-- m\"”，占位只属于断连事件（agent-a8be0b5a9256ea386.jsonl:L27-L28）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/remotecontrol/BluetoothRemoteControl.java",
+          "at": "2026-10-01T16:42:24.378Z",
+          "reason": "正常输入：Read回执L129-L133显示，只有ACTION_GATT_DISCONNECTED分支调用onExtraOSDValuesChanged(\"-- \\u00B0C\", \"-- m\")，L157在收到传感器值时写读数（agent-a8be0b5a9256ea386.jsonl:L47-L48）。"
+        },
+        {
+          "key": "agent-a8be0b5a9256ea386.jsonl",
+          "at": "2026-10-01T17:03:25.238Z",
+          "reason": "17:00:26 Write把RemoteControlState的@Trace remoteOsdLine1/2初值写成OSD_PLACEHOLDER_LINE1/2（注释“断连OSD占位两行”）；17:03:25 Edit只改名为OSD_DISCONNECT_LINE1/2，初值仍是断连占位（同转录L252-L253、L296-L297）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/HmosCameraController.ets",
+      "reason": "已确认c1abe5c..c8dd617新增getCaptureResultIso/getCaptureResultExposureTime（session.getIso/getExposureDuration，后改为metadata缓存）。生成期该文件的写者是run1的Slice 1 worker ae5882c40105e3f01、G2 closer（18:26–18:27）、编译修复与final closer；F001 spec只有SENSOR_SENSITIVITY setter映射，没有capture-result读面要求。G2 closer 18:42承接P-S6-001后未补getter就retag给G3，但它最后一次写该文件早于这一判断；冻结缺口的G3 closer没写过此文件。未找到携带本偏差的写入或交接，暂不画图。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/AvRecorderEngine.ets",
+      "reason": "已确认c1abe5c..c8dd617新增getMaxAmplitude/sampleAmplitude/invalidateAmplitude（getAudioCapturerMaxAmplitude单飞采样）。生成期写者只有Slice 4 worker ad056b0d5327c12ec；它收到的F003 spec不含振幅要求，读media.d.ts时也只读到AVRecorder的prepare和事件段，不构成偏差。G3 closer的平台缺口判定没有写入此文件，缺少能入图的交接。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/VideoRecordController.ets",
+      "reason": "已确认FINAL新增getMaxAmplitude并经MainPage注入。生成期写者是Slice 4 worker与G2 closer（18:27接线，早于18:42对P-S6-002的retag）；F003 spec没有振幅输出要求，G3 closer未写此文件。未找到携带本偏差的写入或交接。"
+    }
+  ],
+  "job": "issue-775c2298a494ebceb71c",
+  "metadata": {
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code",
+        "codex"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3",
+        "gpt-6-astra"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.163.0",
+        "2.1.247",
+        "2.1.299"
+      ]
+    },
+    "source_set_id": "sources-974a9086706364eed8b7",
+    "environment": [
+      {
+        "name": "android.compile_sdk",
+        "value": "36",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/.claude/skills",
+        "at": "2026-10-01T09:52:21.840Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-aa8064d19722381a1.jsonl:L11",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-aa8064d19722381a1.jsonl:L10",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos",
+        "at": "2026-10-01T12:27:45.961Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b.jsonl:L1565",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b.jsonl:L1563",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos",
+        "at": "2026-10-01T13:34:44.665Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae78a452b1664bc61.jsonl:L149",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae78a452b1664bc61.jsonl:L148",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.11.1"
+  },
+  "revision": "d711688bb4178570fd5e418ae31c04b00870fc4ee4045447542f4db47b2c685f"
+}

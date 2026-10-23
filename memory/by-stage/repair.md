@@ -1,16 +1,29 @@
 # 阶段：修复（repair）
 
-本阶段可用的 92 条经验，按领域与主题分组；一条经验可属于多个阶段。
+本阶段可用的 97 条经验，按领域与主题分组；一条经验可属于多个阶段。
 
 [返回根索引](../index.md)
 
 ## app — 应用级装配与横切机制：入口清单、启动链路、平台能力与系统状态、媒体文件、混合桥接、模块与资源产物
 
+### [app/camera/capture](../topics/app/camera/capture/index.md) — 拍照触发与结果链：完成/失败回传与多帧交付、前屏补光、照片缓冲释放与资产回调
+
+- [前屏补光保留控制器判定出口与回退等待](../topics/app/camera/capture/lesson-b20eaa8108cae9476ca3.lesson.md) · 信号：CONTROL_AE_PRECAPTURE_TRIGGER, CONTROL_AE_STATE, LENS_FACING_FRONT, FLASH_MODE_CLOSE
+- [资产回调无请求 ID 时一拍一输出，超时退役不串帧](../topics/app/camera/capture/lesson-8a1d50b9fdcdee8a5752.lesson.md) · 信号：photoAssetAvailable, PhotoOutput, captureStartWithInfo, captureEnd
+
+### [app/camera/orientation](../topics/app/camera/orientation/index.md) — 预览 surface 的缩放居中变换，以及拍照旋转与传感器朝向的目标接口
+
+- [拍照旋转用设备角调 getPhotoRotation](../topics/app/camera/orientation/lesson-a211a70068ce00c94916.lesson.md) · 信号：JPEG_ORIENTATION, SENSOR_ORIENTATION, OrientationEventListener, PhotoCaptureSetting
+
+### [app/camera/session](../topics/app/camera/session/index.md) — CameraKit 会话的输入输出组成、提交时机、拍照 profile、拆卸重建顺序与相机就绪时机
+
+- [会话一次配齐输出再提交，拍照档不硬限 JPEG](../topics/app/camera/session/lesson-05cd365740c0003662a4.lesson.md) · 信号：createCaptureSession, ImageReader, beginConfig, addInput
+
 ### [app/capability/sdk-lookup](../topics/app/capability/sdk-lookup/index.md) — 判定无等价前先查 Kit、ohpm、SDK 声明与权限注解
 
 - [应用内开关蓝牙先查 access 开关接口再定方案](../topics/app/capability/sdk-lookup/lesson-7a081dc36013a60358ac.lesson.md) · 信号：enableBluetoothAsync, disableBluetoothAsync, @ohos.bluetooth.access, BluetoothAdapter.enable
 
-### [app/entry](../topics/app/entry/index.md) — 入口 Ability 与 module.json5 装配：初始化时序、全局守护、外部进入声明、扩展能力与卡片登记
+### [app/entry](../topics/app/entry/index.md) — 入口 Ability 与 module.json5 装配：初始化时序、全局守护、外部进入与结果回传、扩展能力与卡片登记
 
 - [shortcuts 元数据挂 Ability 下，不挂模块级](../topics/app/entry/lesson-67118603fcc769a5edc9.lesson.md) · 信号：ohos.ability.shortcuts, module.json5, $profile:, shortcuts_config
 - [前台服务改扩展能力先查基类导出，type 与基类成对](../topics/app/entry/lesson-16c24b9a44153d703f04.lesson.md) · 信号：extensionAbilities, ServiceExtensionAbility, AppServiceExtensionAbility, WorkSchedulerExtensionAbility
@@ -19,9 +32,13 @@
 
 - [兼容层返回对象保留宽高语义，大图先在原生侧缩放](../topics/app/hybrid/lesson-e85bdb26fa6acc0cc9f7.lesson.md) · 信号：AssetEntity, ImageSource, getImageInfo, compressAndGetFile
 
-### [app/media](../topics/app/media/index.md) — 媒体文件的用户可见出入口：安全控件与 picker 授权时序、沙箱落点与导出、播放 URI、预取与快照尺寸限制
+### [app/media](../topics/app/media/index.md) — 媒体文件出入口与图片处理：picker 与安全控件、沙箱导出、播放 URI、解码预取、PixelMap 释放与快照限制
 
 - [音频导入用 AudioViewPicker 并复制进沙箱](../topics/app/media/lesson-62ac5e65ac4aa51128bd.lesson.md) · 信号：AudioViewPicker, photoAccessHelper, MediaStore.Audio, READ_MEDIA_AUDIO
+
+### [app/media-library](../topics/app/media-library/index.md) — 系统媒体库直接读写：受限权限下的相机资产保存、最近媒体入口、删除确认与外部查看分享
+
+- [deleteAssets 先授权再删，取消与失败分开](../topics/app/media-library/lesson-dd3bd947a05103e1f5f0.lesson.md) · 信号：deleteAssets, MediaAssetChangeRequest.deleteAssets, WRITE_IMAGEVIDEO, ContentResolver.delete
 
 ### [app/modules](../topics/app/modules/index.md) — 多模块（壳 HAP + HAR）边界：构建常量来源、跨模块导入、资源闭包归属与可复用函数的模块放置
 
@@ -64,7 +81,7 @@
 
 - [@FieldMap 用表单编码，@Body 才用 JSON](../topics/data/network-request/lesson-1cc76f37fe0aea9fef25.lesson.md) · 信号：@FieldMap, @FormUrlEncoded, @Field, @Body
 
-### [data/storage](../topics/data/storage/index.md) — 本地持久化：relationalStore 建表与版本迁移、自增主键写入、预置数据内容与播种时机、fileIo 目录操作
+### [data/storage](../topics/data/storage/index.md) — 本地持久化：relationalStore 建表与迁移、自增主键写入、预置数据与播种时机、fileIo 文件与目录操作
 
 - [Room 迁移保留库名、schema 版本与显式升级分支](../topics/data/storage/lesson-a6f300f9295ba538f23b.lesson.md) · 信号：@Database(version, addMigrations, AutoMigration, fallbackToDestructiveMigration
 ## process — 迁移流程中输入、规格、检查结论与跨任务移交在交接环节失真的机制

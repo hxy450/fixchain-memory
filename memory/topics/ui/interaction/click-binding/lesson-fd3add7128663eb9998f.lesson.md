@@ -1,22 +1,22 @@
 # 点击事件挂在源端真正持有点击的节点上：源端只绑整栏就挂外层，只绑行内子 View 就只挂该子控件；带文字的 CheckBox/RadioButton 拆成勾选控件加 Text 时整体可点、命中区按源宽度
 
-ID：`lesson-fd3add7128663eb9998f` · 版本：4 · 阶段：execute/repair · 主题：[ui/interaction/click-binding](index.md)
+ID：`lesson-fd3add7128663eb9998f` · 版本：5 · 阶段：execute/repair · 主题：[ui/interaction/click-binding](index.md)
 
 概要：onClick 挂在源端真正持有点击的节点，整栏或子控件
 
-信号：`setOnClickListener`, `onClick`, `LinearLayout`, `DataBinding`, `Row`, `pushPath`, `clickable`, `CheckBox`, `RadioButton`, `HitTestMode.None`, `RadioGroup.addView`
+信号：`setOnClickListener`, `onClick`, `LinearLayout`, `DataBinding`, `Row`, `pushPath`, `clickable`, `CheckBox`, `RadioButton`, `HitTestMode.None`, `RadioGroup.addView`, `parallelGesture`
 
 ## 何时使用
 
-界面实现与返修阶段，为由多个子控件拼成的搜索栏、入口条或设置行决定 onClick 挂在哪一层，或清理、重写其中的点击绑定时；把带文字的 CheckBox/RadioButton 拆成 ArkUI 勾选控件加 Text 时
+界面实现与返修阶段，为由多个子控件拼成的搜索栏、入口条或设置行决定 onClick 挂在哪一层，或清理、重写其中的点击绑定时；把带文字的 CheckBox/RadioButton 拆成 ArkUI 勾选控件加 Text 时；把整行可点的设置项迁成可复用行组件、在列表页给每行挂动作时
 
 ## 适用情境
 
-源布局只在整条容器上绑定点击（如 LinearLayout 的 onClick 或 DataBinding 点击），内部图标、提示文字、“搜索”字样只负责展示；目标用 Row + Image + Text 模拟占位搜索框（不是 TextInput），点击后压栈进入目标页。也包括源端 Java 只对行内某个子 View（如右侧值文本）setOnClickListener，同页其他行绑定整行 layout；目标用 Row 承载这些设置行。也包括带文字的 CheckBox/RadioButton（XML 声明或代码动态创建，宽度来自 wrap_content、match_parent、alignParentLeft 加 toLeftOf 两端锚定或父容器默认 LayoutParams），目标 Checkbox/Radio 不带文字、需另配 Text；为折行给 Text 加 layoutWeight(1) 时连同点击挂在整行上。
+源布局只在整条容器上绑定点击（如 LinearLayout 的 onClick 或 DataBinding 点击），内部图标、提示文字、“搜索”字样只负责展示；目标用 Row + Image + Text 模拟占位搜索框（不是 TextInput），点击后压栈进入目标页。也包括源端 Java 只对行内某个子 View（如右侧值文本）setOnClickListener，同页其他行绑定整行 layout；目标用 Row 承载这些设置行。也包括带文字的 CheckBox/RadioButton（XML 声明或代码动态创建，宽度来自 wrap_content、match_parent、alignParentLeft 加 toLeftOf 两端锚定或父容器默认 LayoutParams），目标 Checkbox/Radio 不带文字、需另配 Text；为折行给 Text 加 layoutWeight(1) 时连同点击挂在整行上。 也包括 PreferenceScreen 中整行可点的设置项迁成 List/ListItem 内的可复用 @ComponentV2 行组件：行组件内层挂 onClick 转调带空默认值的 @Event，页面在外层 ListItem 上挂真实动作、调用处不传该事件。
 
 ## 原因
 
-给子控件额外挂同一回调会形成重复绑定；返修若按“重复绑定会重复压栈”的推测删掉外层容器的事件，整栏就只剩子控件可点，点中间提示区没有反应。来源中生成期写者正确绑定了整栏，又给“搜索”文字多挂了同一回调；返修者没查源布局也没复现，就删了整栏事件、保留文字事件，用户随即报告搜索框点击没反应。另一应用中返修者读到源端只给手机号行右侧的值文本绑定点击，上下文压缩后摘要只剩“四个点击入口”，重写该行时仍把 onClick 挂在整行 Row 上，后续审计才收窄到值文本。Android 复合按钮的框与文字是一个可点控件，命中区等于它的测量宽度；拆开后文字不挂点击就只剩方框可点，为折行加的 layoutWeight(1) 又会把命中区撑满整行。
+给子控件额外挂同一回调会形成重复绑定；返修若按“重复绑定会重复压栈”的推测删掉外层容器的事件，整栏就只剩子控件可点，点中间提示区没有反应。来源中生成期写者正确绑定了整栏，又给“搜索”文字多挂了同一回调；返修者没查源布局也没复现，就删了整栏事件、保留文字事件，用户随即报告搜索框点击没反应。另一应用中返修者读到源端只给手机号行右侧的值文本绑定点击，上下文压缩后摘要只剩“四个点击入口”，重写该行时仍把 onClick 挂在整行 Row 上，后续审计才收窄到值文本。Android 复合按钮的框与文字是一个可点控件，命中区等于它的测量宽度；拆开后文字不挂点击就只剩方框可点，为折行加的 layoutWeight(1) 又会把命中区撑满整行。 ArkUI 的点击按子组件优先裁决：内层节点已挂 onClick 时外层 onClick 不触发，不像 DOM 那样冒泡；外层改用 parallelGesture 绑定才会与内层同时响应（本机 API 24 SDK component/common.d.ts 的 priorityGesture、parallelGesture 注释）。内层转调的 @Event 没有传入时，整行点击没有任何动作。
 
 ## 做法
 
@@ -25,6 +25,7 @@ ID：`lesson-fd3add7128663eb9998f` · 版本：4 · 阶段：execute/repair · �
 3. 以 Java 中 setOnClickListener 实际绑定的 View 为准：只绑定行内子 TextView 时只给对应 Text 加 onClick，整行 layout 被绑定时才给 Row 加；重写行块时检查 onClick 的挂载位置与注释是否一致。
 4. 带文字的勾选控件把框与文字作为一个可点控件：外层容器统一 onClick，内层勾选控件 hitTestBehavior(HitTestMode.None) 避免双触发；命中区按源宽度，wrap_content 只覆盖框和文字，match_parent 或两端锚定才撑到右侧边界，为折行加的 layoutWeight(1) 不同时扩大可点范围。
 5. 代码动态创建的复合按钮按父容器默认 LayoutParams 判断宽度：RadioGroup.addView 默认 WRAP_CONTENT，竖向 LinearLayout.addView 默认 MATCH_PARENT 宽；显式 setLayoutParams 以其为准。
+6. 可复用行组件的点击只给一个归属：组件内挂 onClick 时由它转调 @Event，每个调用点都传入动作；动作挂在外层 ListItem 时组件内不挂 onClick。按 ArkUI 子组件优先推理，不按 DOM 冒泡；父子确需同时响应才给外层用 parallelGesture。
 
 ## 可选检查
 
@@ -39,7 +40,7 @@ ID：`lesson-fd3add7128663eb9998f` · 版本：4 · 阶段：execute/repair · �
 - [沿用已生成页面或兄弟写法前回源码核对语义](../../../process/secondary-over-source/lesson-e9c6e8ef1b29a6fe9c26.lesson.md)（共享 1 张卡）
 - [上下文压缩后按 spec_ref 与源码锚点重读再写计划代码](../../../process/unloaded-input/lesson-f616adca9430826b1661.lesson.md)（共享 1 张卡）
 
-来源支持：3 张卡 · 3 次迁移 · 3 个应用
+来源支持：4 张卡 · 已知 3 次迁移（部分未记录） · 已知 3 个应用（部分未记录）
 
 ## 来源（按需复核）
 
@@ -49,3 +50,5 @@ ID：`lesson-fd3add7128663eb9998f` · 版本：4 · 阶段：execute/repair · �
   卡片版本：`4dadc2a29166ec34c2d95e895727d71c2b35c547fb4a45b745dabb5e89d47ed5`
 - [case-adacd41d159c24498006](../../../../../store/cases/case-adacd41d159c24498006/52623310cff384d4d631931cb3ba7842cfaf2b307a632155d9385c258313b9a4.json) · 结论：diagnosis, rec-ae25743e4b, rec-bd3fb4cab2, rec-06238dffe0
   卡片版本：`52623310cff384d4d631931cb3ba7842cfaf2b307a632155d9385c258313b9a4`
+- [case-f6ac0fc6805f2fc8ff14](../../../../../store/cases/case-f6ac0fc6805f2fc8ff14/690f0502298e3c25a20e6fc4b2f9eefbfbb15ea7c609091af99b0b66a33f684e.json) · 结论：diagnosis, rec-97faa64502, rec-8933450d08, rec-40edff798a
+  卡片版本：`690f0502298e3c25a20e6fc4b2f9eefbfbb15ea7c609091af99b0b66a33f684e`

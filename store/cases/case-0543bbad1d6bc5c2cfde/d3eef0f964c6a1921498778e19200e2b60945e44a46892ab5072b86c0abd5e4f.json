@@ -1,0 +1,144 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-0543bbad1d6bc5c2cfde",
+  "created_at": "2026-10-23T14:28:25.530120+00:00",
+  "migration_key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/memory-distill-opencamera-20261023/pool",
+  "title": "把 Android Canvas+Paint 直译成 ArkUI Canvas：字号写成物理 px、回读 ctx.font/textAlign、三参数 drawImage 混用像素与 vp",
+  "when": "界面实现阶段，把 Android Canvas+Paint 的逐帧绘制翻译成 ArkUI CanvasRenderingContext2D 时，确定字体单位、文本状态的读取方式，以及位图绘制尺寸",
+  "description": "源端用 N×scaledDensity（sp）设置粗体字号，绘制文字底衬时从 Paint getter 读回字号和对齐，用 drawBitmap+Matrix 把位图像素映射到像素画布；目标是默认 vp 坐标的 ArkUI Canvas 自绘覆盖层，要绘制 OSD 文字底衬，以及缩略图、幽灵图、斑马纹、峰值对焦等 PixelMap。",
+  "summary": "Slice 6 生成者 agent-a3041d23e23f0d50e 写前实际收到三份材料。第一份是 F005 spec：\n实现映射行要求“坐标域: 源 px(=dp×density) → vp×密度一致换算；Paint 属性映射 Canvas 等价属性”，\n常量清单写明“字体 14/16/24/42sp”（L25-L26）。第二份是完整的 DrawPreview.java，\n其中有 p.setTypeface(…BOLD) 和 p.setTextSize(14/16/24/42 * scale_font + 0.5f)（L101-L108）。\n第三份是 MyApplicationInterface.drawTextWithBackground：padding 用 scaledDensity 缩放，\n对齐从 paint.getTextAlign() 读回，顶部对齐写作 top_y_diff = -text_bounds.top + padding - 1；\ntext_bounds.top 是基线以上的负值，所以文字向下移（L252-L253）。\n本卡含两类偏差，成因不同：\n\n① 输入正确且足够，实现偏离（B30 的生成部分）。生成者在 L297 自己推断过：Canvas 是 vp 坐标空间，\n用 px 字号会在高密度下变小，因此打算用 vp。到了 L455，它没有核实就改成\n“ctx.font = `${size}px sans-serif` — px interpreted in canvas vp space”。\nL457 的 Write 里 13 处 ctx.font 都写成固定的 '14px/16px/24px/42px sans-serif'，\n没有密度和字体缩放，也丢了源端的粗体。drawTextWithBackground 中还把顶部对齐写成\ntopYDiff = -boundsHeight + padding - 1，符号与源相反。\n\n② 输入缺失 API 语义，生成者按未经核实的假设实现（A1、B37）。spec 只写了\n“Paint 属性映射 Canvas 等价属性”；生成者在 L295-L296 检索 skill references，只得到\nctx.font = '24px sans-serif'、ctx.textAlign = 'center' 这类 setter 示例。\nF005 spec 作者的转录和 feature-base 的 Canvas 行里都没有这两条 API 语义：\nArkUI 的 ctx.font/ctx.textAlign 读回会得到 undefined；三参数 drawImage 按 PixelMap 原始像素尺寸绘制。\n生成者照搬 Paint 的状态读回，写出 fontSizeOf(ctx.font) 并读取 ctx.textAlign。\n它把 lastImageMatrix 和 setRectToRectCenter 的源矩形设为 PixelMap 的 info.size（像素），\n目标矩形设为画布 w/h（vp），再用 5 处 ctx.drawImage(bitmap, 0, 0) 绘制。\n生成阶段的转录只有 hvigorw 编译（24 次），没有 hdc/安装/启动，运行时 TypeError 因此没有暴露。\n\n这些片段在执行结束态 c752566 中原样保留：fontSizeOf 在 L1842/L1892，drawImage(…,0,0) 在\nL695/703/769/782/906，'Npx sans-serif' 和 topYDiff 也都在。之后 aab3f09/a8036fe 改过同一文件，\n但没有碰这些片段。\nOpus 在模拟器上取到 jscrash（PreviewOverlay.ets:1893 读到 undefined），用正则改成\nsetFont/setTextAlign 加 curFontPx/curTextAlign，并删除 fontSizeOf（487087e6 L293→L294，c1abe5c）。\n这次改写仍然写 `${px}px`，转录里看不到它讨论过 px 和 fp 的差异，因此 B30 留到了 Codex 返修。\nCodex 先由 0349 提案（L3983），再由 6e4d 复核并集成（L4389、L4470）：setFont 改为\nbold ${fp2px(fp)+0.5}px，同时记录 curFontVp/curPixelVp，文本框改用 TextMetrics 的上升/下降值。\nB37 由 6e4d 在 L5803 集成：幽灵图、上一张、斑马纹、峰值对焦、缩略图动画全部改用\ndrawImage(bm, 0, 0, info.size.width, info.size.height)。FINAL 2b66258 保留了这些修改。\n",
+  "recommendations": [
+    "实现阶段：源端字号是 N×scaledDensity（sp）时，目标 Canvas 的 font 字符串要用 fp2px(N)+0.5 换算出物理 px 再写入，并带上源 Typeface 的 bold；不要假设 'Npx' 在 vp 画布中按 vp 解释。检查方法：在密度≠1 的设备上量一行 OSD 文字的高度，与源对比。",
+    "实现阶段：把 Paint 的有状态读写翻译到 ArkUI Canvas 时，在组件内用 setFont/setTextAlign 自行记录当前字号和对齐，绘制逻辑只读这份记录，不从 CanvasRenderingContext2D 的 font/textAlign 等属性读回；文字高度用 measureText 的 actualBoundingBoxAscent/Descent。",
+    "实现阶段：绘制 PixelMap 时用五参数 drawImage(pm, 0, 0, w, h) 显式给出宽高，并且与变换矩阵用同一单位。矩阵源矩形用 getImageInfoSync().size 时，dw/dh 也用这对数值，不依赖三参数形式的默认尺寸。",
+    "实现阶段：移植 Android 文字对齐算法时，保留 text_bounds.top 是基线以上负值这一符号语义，顶部对齐应为 top_y_diff = ascent + padding - 1px。",
+    "规格提取和知识准备阶段：Canvas+Paint→ArkUI Canvas 的映射行要写明三点：上下文属性不能当状态读回；font 字符串里的 px 是物理像素；三参数 drawImage 按图片原始像素尺寸绘制。实现阶段生成 Canvas 组件后，至少在设备或模拟器上启动一次，以暴露只有运行时才出现的 TypeError。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/components/viewfinder/PreviewOverlay.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F005-preview-overlay.md",
+          "at": "2026-10-01T17:12:23.288Z",
+          "reason": "正常输入：Read 回执给出“坐标域: 源 px(=dp×density) → vp×密度一致换算”、“字体 14/16/24/42sp”，以及 AC32 的 24sp、AC36 的 42sp，足以要求 OSD 字号随密度和字体缩放。该映射行只写“Paint 属性映射 Canvas 等价属性”，没有说明 Canvas 属性能否读回，也没有说明三参数 drawImage 的尺寸单位（agent-a3041d23e23f0d50e.jsonl:L25-L26，spec 第 71、98、155、159 行）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/ui/DrawPreview.java",
+          "at": "2026-10-01T17:14:32.664Z",
+          "reason": "正常输入：分块 Read 回执给出 scale_font=scaledDensity、p.setTypeface(Typeface.create(DEFAULT, BOLD))，以及 OSD/角度/计时等文字的 p.setTextSize(N * scale_font + 0.5f)，足以确定字号要按 sp 换算并且是粗体（agent-a3041d23e23f0d50e.jsonl:L101-L108）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/MyApplicationInterface.java",
+          "at": "2026-10-01T17:23:20.865Z",
+          "reason": "正常输入：Bash sed 返回 drawTextWithBackground，其中 padding 按 scaledDensity 缩放，对齐通过 paint.getTextAlign() 从 Paint 读回，顶部对齐 top_y_diff = -text_bounds.top + padding - 1（top 为负，文字下移）。这些给出了正确的符号语义，也说明源端依赖的是 Paint 自身的状态（agent-a3041d23e23f0d50e.jsonl:L252-L253）。"
+        },
+        {
+          "key": "agent-a3041d23e23f0d50e.jsonl",
+          "at": "2026-10-01T18:26:35.393Z",
+          "reason": "收到上述输入后，生成者在 L297 推断过 px 字号在 vp 画布中会缩小，L455 却未经核实改为“px interpreted in canvas vp space”。L457 的 Write 写出 13 处固定的 'Npx sans-serif'，没有粗体，topYDiff 符号与源相反，这一部分是输入已足够而实现偏离。同一次 Write 还把 Paint 读回直译为 fontSizeOf(ctx.font) 和 ctx.textAlign 读取，并用像素尺寸的矩阵配合 5 处三参数 drawImage(bitmap,0,0)；在 L290-L296 检索到的 skill 示例只有 setter，没有 API 语义，这一部分记为输入缺口（同转录 L294、L297、L455、L457-L458）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "生成者的 Bash 先 cd 到 opencamera 源码包目录，再执行 sed -n '3241,3330p' MyApplicationInterface.java；回执返回 drawTextWithBackground 全文，含 scaledDensity、paint.getTextAlign() 读回和 top_y_diff 计算。这说明生成者写前已收到源端的文字底衬算法。",
+          "evidence": [
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-a3041d23e23f0d50e.jsonl",
+              "line": 252
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-a3041d23e23f0d50e.jsonl",
+              "line": 253
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "没有核到生成时期有官方资料说明 ctx.font/ctx.textAlign 读回会得到 undefined；该行为由 2026-10-14 Opus 在模拟器 6.1.0.126 上取得的 jscrash 证实（487087e6 L261-L262、L279）。A1、B37 因此归为知识缺口加未核实假设，不认定生成者明知仍违背。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-0543bbad1d6bc5c2cfde",
+  "metadata": {
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code",
+        "codex"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3",
+        "gpt-6-astra"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.163.0",
+        "2.1.247",
+        "2.1.299"
+      ]
+    },
+    "source_set_id": "sources-974a9086706364eed8b7",
+    "environment": [
+      {
+        "name": "android.compile_sdk",
+        "value": "36",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/.claude/skills",
+        "at": "2026-10-01T09:52:21.840Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-aa8064d19722381a1.jsonl:L11",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-aa8064d19722381a1.jsonl:L10",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos",
+        "at": "2026-10-01T12:27:45.961Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b.jsonl:L1565",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b.jsonl:L1563",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos",
+        "at": "2026-10-01T13:34:44.665Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae78a452b1664bc61.jsonl:L149",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae78a452b1664bc61.jsonl:L148",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.11.1"
+  },
+  "revision": "d3eef0f964c6a1921498778e19200e2b60945e44a46892ab5072b86c0abd5e4f"
+}

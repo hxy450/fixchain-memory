@@ -16,3 +16,4 @@ JSON 与二进制字节流到类型化模型的编解码规则：类型宽窄收
 - [命名常量替换字面区间时按每处用途选端点](lesson-1d0b6dde849cbd70ee8f.lesson.md) · 阶段：execute · 信号：substring(12,20), substring(12,18), GPB
 - [大整数 id 用 bigint，解析前给数字加引号保真](lesson-c066489fcf35ab37378c.lesson.md) · 阶段：spec/execute · 信号：JSON.parse, bigint, Long, 2^53
 - [显式解码器保留 Gson 数字与字符串互转的宽松规则](lesson-871d3751cadde6dda1dc.lesson.md) · 阶段：execute · 信号：Gson, string(), number(), typeof
+- [自研 EXIF 写入按库源码取语义，值区顺排](lesson-ac58c27e534158e65647.lesson.md) · 阶段：spec/execute · 信号：ExifInterface, setAttribute, setGpsInfo, TAG_GPS_TIMESTAMP

@@ -1,0 +1,214 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-aa27ff1b39767c02b1ec",
+  "created_at": "2026-10-23T14:31:48.646542+00:00",
+  "migration_key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/memory-distill-opencamera-20261023/pool",
+  "title": "相机手动参数映射与曝光面板初始化偏差：曝光时长µs当ns、EV值当档位、ISO列表当范围且未锁曝光、无限远取0、滑杆上限未初始化",
+  "when": "相机控制与取景UI实现阶段：把源端相机手动参数（曝光时长、曝光补偿、ISO、对焦距离）映射到目标相机会话API时，以及移植曝光面板滑杆的建表、上限与初始进度时",
+  "description": "源端Camera2以ns曝光时长、整数曝光补偿档位+步长、ISO上下限、屈光度对焦距离(0=无限远)表达能力与设定，目标CameraKit的ManualExposure/AutoExposure/ManualIso/ManualFocus使用µs、EV值、离散ISO列表、0..1归一化距离(0=最近)且手动ISO需锁定曝光模式；源端曝光面板滑杆由“建表+setMax+setProgress”一体工具初始化，调用点在Activity的相机就绪回调中，目标端按特性切片分别实现控制器、面板状态与页面VM。",
+  "summary": "两处偏差都在实现阶段，成因不同，分两图记录。\n（1）相机控制器（HmosCameraController，run 1 Slice 1/F001 worker ae5882c40105e3f01）：写前已读到 F001 规格与\nCameraController2 源码给出的源端语义——曝光时间字段为 ns、min/max_exposure 为补偿档位、infinity 为 focus_distance 0（屈光度）。\n它对 d.ts 的 grep 只返回签名（注释被过滤），写前自述 setExposureDuration 单位“可能是 µs，需核对文档”却未核对。\n整文件 Write 只在下发侧按 µs 做 /1000，能力探测却把同一 ManualExposure 接口返回的 dur 原样写入 ns 字段；\n同时把 EV 范围当档位、setExposureBias(档位)、ISO 取 iso[0]/iso[1]、setIso 前不锁曝光且解锁用 AUTO、无限远下发 0。\n规格侧缺口：F001 实现映射表未列这些接口的目标单位/值域，AC130 只写源端字面值 0。\n（2）曝光面板（MainUIController，run 2 Slice 5/F004 worker a06740e73018ad308）：写前已读到 ManualSeekbars.java 中\nsetProgressSeekbarISO/ShutterSpeed/WhiteBalance 建表后 setMax(size-1) 再定位进度，以及 F004 刻度表与 changeSeekbar 钳制 AC；\n输出把这些工具移植成只返回进度的 build*Scale，新增初值 0 的 *SeekbarMax 状态并绑定到滑杆组件，\n但 setupExposureUI 及任何调用点都未建表赋值，滑杆上限恒为 0；changeExposureAction 号称等价 MainActivity.changeExposure，\n却直接对偏好值 ±1，未读源端含 3 个 0 的 exposure_seekbar_values 表。源端初始化调用点 MainActivity.cameraSetup 不在其锚点内，\n并行的 Slice 11 MainPageVM 又把 setZoomSeekbar/setManualWBSeekbar 留空并注“UI 归 F004”，两侧均未移植。\n“m”预设固定 800 则是输入缺口：它 grep 控制器无 captureResult 读回通道（F001 规格也无此契约），按源兜底分支硬编码并记入决策缺口。\n返修（Codex 主会话 01a14aae 与 parity_audit 01a14ab0-5a2d）完成单位/档位/ISO/锁定/无限远换算，\n并新增 initializeExposureSeekbars、'm' 改取 getCaptureResultIso 与捕获曝光、重写曝光步进与越界保护；FINAL 保留。\n",
+  "recommendations": [
+    "相机控制器实现时，对同一目标接口的“能力范围/捕获结果读回”和“设定下发”使用同一单位换算；曝光时长下发按 ns/1000 转 µs，则 getSupportedExposureDurationRange 与 getExposureDuration 写入 ns 字段必须 ×1000。最小检查：mock [10, 1000000] µs → features [1e4, 1e9] ns。",
+    "查目标相机 d.ts 时连同方法上方注释一起读（如 grep -B12），逐项确认单位、值域与前置条件：曝光时长 µs；getExposureBiasRange 为 EV，档位按 getExposureBiasStep 取 ceil/floor(bias/step)、以 index*step 下发；getSupportedIsoRange 是离散标准值列表，过滤正值排序取首尾；setIso 仅在 EXPOSURE_MODE_LOCKED 下生效，解锁用 CONTINUOUS_AUTO；setFocusDistance 0.0 最近、1.0 最远，无限远下发 1.0。",
+    "规格提取时，实现映射表为每个手动相机参数写出源端与目标端单位/值域及换算点（ns↔µs、档位↔EV、屈光度↔归一化反向距离、范围↔离散列表、模式前置条件），并为下游需要的捕获结果读回（ISO、曝光时长）列出控制器接口。",
+    "移植“建表+setMax+setProgress”一体的滑杆工具时，把上限与初始进度一起写入状态，并在面板打开或相机就绪路径实际调用；新增的状态字段须在本切片找到赋值者，跨切片交出时登记 FWD-REF 并核对对方实现。最小检查：支持 ISO 范围时打开曝光面板后 isoSeekbarMax == isoValuesFor(min,max).length-1。",
+    "声称与源端步进入口等价前先读源实现；曝光补偿步进按含 3 个 0 的滑杆值表索引移动并跨过重复零，而非直接对偏好值 ±1。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/HmosCameraController.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "summary": "生成者（run 1 的 Slice 1/F001 worker）写前实际读到：F001 规格把能力字段定义为源端语义——setExposureTime(ns)、\nEXPOSURE_TIME_DEFAULT=1e9/30 ns、AC59 以 exp[1e4,1e9] 示例曝光时间范围、AC60/AC164 以 [-5,5]/0.5 与“列表含 11 项”\n说明 min/max_exposure 是档位索引、AC130 写 infinity→OFF+focus_distance 0；源码 CameraController2.getCameraFeatures\n也显示曝光时间取 SENSOR_INFO_EXPOSURE_TIME_RANGE（Long ns）、补偿取 Range<Integer> 档位与 Rational 步长。\n它对 d.ts 的查询只返回方法签名（grep 过滤了注释），但已看到 getSupportedExposureDurationRange 与 setExposureDuration\n同属 ManualExposure 接口；写前推理自述“setExposureDuration 单位可能是 µs，需核对文档”（L204）却没有核对。\n15:17:42 的整文件 Write 中，它在 setExposureTime 与会话重建里按“HMOS µs、Android ns”把下发值 /1000，\n能力探测却把同一接口返回的 dur[0]/dur[1] 原样写入 ns 字段 min/max_exposure_time，导致手动快门范围与显示偏差 1000 倍；\n同时把 getExposureBiasRange 的 EV 值原样当作档位索引 min/max_exposure，setExposureCompensation 与重建会话直接\nsetExposureBias(档位)；ISO 取 iso[0]/iso[1] 当上下限；setIso 前不切 EXPOSURE_MODE_LOCKED、AE 解锁用 AUTO；\nfocus_mode_infinity 直接下发 setFocusDistance(0)。同一 agent 15:33 写的 slice-01-source-notes 仍记录\n“时长单位 µs，源 ns → setExposureTime 下发 /1000”“bias 域为 EV 数值——与源 int 档位域不同”（L378），\n说明它已意识到域差，却只在下发一侧换算。偏差位于“已知源端单位/档位语义 → 目标会话读写实现”这一环；\n这些片段由同一 Write 写入，原样保留到执行结束检查点 c752566。\n规格侧缺口：F001 实现映射表未列 ManualExposure/ManualIso/ManualFocus/AutoExposure 的目标值域，\nAC130 仅给源端“距离 0”字面值，没有提示 HarmonyOS 0.0 为最近端、1.0 为最远端；setIso 需 LOCKED、ISO 接口返回离散标准值列表\n等前置条件也只在 d.ts 注释中。\n返修（Codex 01a14aae）将能力范围 ×1000、新增 getCaptureResultExposureTime（µs×1000），包围曝光基准 /1000 回到 µs；\n曝光补偿按 getExposureBiasStep 取 ceil/floor(bias/step) 并以 value*step 下发；ISO 取正值排序后的首尾；\n手动 ISO 或 AE 锁时切 LOCKED，否则 CONTINUOUS_AUTO；focus_mode_infinity 下发 1.0 并在读回时区分 infinity。FINAL 保留。\n",
+      "recommendations": [
+        "实现相机控制器时，对同一目标接口的“能力范围读回”和“设定下发”使用同一单位换算：若曝光时长下发按 ns/1000 转 µs，则 getSupportedExposureDurationRange 及捕获结果曝光值写入 ns 字段时必须 ×1000；最小检查：mock 范围 [10, 1000000] µs，断言 features 为 [1e4, 1e9] ns。",
+        "查目标相机 d.ts 时连同方法上方的文档注释一起读取（如 grep -B12），逐项确认单位、值域与前置条件，不用只匹配签名行的过滤：曝光时长为 µs；getExposureBiasRange 为 EV 值，源端档位需按 getExposureBiasStep 换算为 ceil/floor(bias/step) 并以 index*step 下发；getSupportedIsoRange 返回离散标准值列表，应过滤正值排序取首尾；setIso 仅在 EXPOSURE_MODE_LOCKED 下生效，解锁用 CONTINUOUS_AUTO；setFocusDistance 0.0 为最近、1.0 为最远，无限远应下发 1.0。",
+        "规格提取时，实现映射表为每个手动相机参数同时写出源端与目标端的单位/值域及换算点（ns↔µs、档位↔EV、屈光度↔归一化反向距离、范围↔离散列表、模式前置条件），不要只转写源端字面值（如“infinity→focus_distance 0”）。"
+      ],
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F001-camera-preview.md",
+          "at": "2026-10-01T14:57:03.096Z",
+          "reason": "正常输入：生成者Read回执含setExposureTime(ns)、EXPOSURE_TIME_DEFAULT=1e9/30 ns、AC59曝光时间范围示例exp[1e4,1e9]、AC60/AC164以[-5,5]/0.5及“列表含11项”表明min/max_exposure为档位索引、AC130 infinity→OFF+focus_distance 0；足以确定CameraFeatures的曝光时间字段是ns、补偿字段是档位（agent-ae5882c40105e3f01.jsonl:L23、L26）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/cameracontroller/CameraController2.java",
+          "at": "2026-10-01T15:00:08.713Z",
+          "reason": "正常输入：分块Read（offset 1500）返回getCameraFeatures源码，曝光时间取SENSOR_INFO_EXPOSURE_TIME_RANGE的Long值、补偿取CONTROL_AE_COMPENSATION_RANGE的Integer档位与STEP步长（CC2:2584-2634）（agent-ae5882c40105e3f01.jsonl:L115-L116）。"
+        },
+        {
+          "key": "/Applications/DevEco-Studio.app/Contents/sdk/default/openharmony/ets/api/@ohos.multimedia.camera.d.ts",
+          "at": "2026-10-01T15:04:20.026Z",
+          "reason": "目标API输入（仅签名）：Bash grep返回ManualFocus/ManualExposure/ManualIso方法签名，getSupportedExposureDurationRange与setExposureDuration同在ManualExposure接口；grep模式过滤了文档注释，“units: microseconds”、setIso需EXPOSURE_MODE_LOCKED、对焦距离0.0最近/1.0最远等语义未回到生成者（agent-ae5882c40105e3f01.jsonl:L185-L186；L206-L207同样只列签名）。"
+        },
+        {
+          "key": "agent-ae5882c40105e3f01.jsonl",
+          "at": "2026-10-01T15:17:42.192Z",
+          "reason": "写前自述setExposureDuration单位可能为µs、需核对文档但未核（L204）。整文件Write在setExposureTime/applySettingsToSession对下发值/1000，却把同一接口的dur[0]/dur[1]原样写入ns字段min/max_exposure_time；同时以bias[0]/bias[1]作档位min/max_exposure并setExposureBias(档位)、iso[0]/iso[1]作ISO上下限、setIso前不锁曝光模式且解锁用AUTO、infinity下发setFocusDistance(0)（同转录L246-L247）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "生成者用Bash设DTS为该d.ts路径，sed/grep ManualFocus/ManualExposure接口段，回执列出getSupportedExposureDurationRange、getExposureBiasStep、setExposureDuration、setFocusDistance、getSupportedIsoRange等签名；这是写前对目标API文件的真实读取（仅签名，注释被grep过滤）。",
+          "evidence": [
+            {
+              "source": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae5882c40105e3f01.jsonl",
+              "line": 185
+            },
+            {
+              "source": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae5882c40105e3f01.jsonl",
+              "line": 186
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/MainUIController.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "summary": "生成者（run 2 的 Slice 5/F004 worker a06740e73018ad308）写前完整读取了 ManualSeekbars.java：\nsetProgressSeekbarWhiteBalance/ISO/ShutterSpeed 每个都先建刻度表、seekBar.setMax(seekbar_values.size()-1)，再定位最近进度；\nF004 规格 AC46-48 给出刻度表、AC44 要求 changeSeekbar 钳制在 [0, max]、AC40 要求 auto→“m”回填捕获 ISO（无则 800）。\n输出中，它把这些工具移植为 ManualScale.isoValuesFor 等表函数与只返回进度的 buildIsoScale/buildShutterSpeedScale/\nbuildWhiteBalanceScale，丢掉了 setMax 这半；17:03:00 写入 MainUIController 的 setupExposureUI 只建 ISO 按钮与容器显隐，\n随后 17:03:31 给 ViewfinderUiState 加了初值 0 的 iso/exposureTime/whiteBalance/exposureSeekbarMax，17:06:29 让 ManualSeekbars 组件\n以 Math.max(1, *SeekbarMax) 作滑杆上限，但全工程没有任何代码调用 build*Scale 或给 *SeekbarMax 赋值，执行结束态滑杆上限恒为 0。\n同一 Write 的 changeExposureAction 注明“MainActivity.changeExposure 等价钳位”，却直接对曝光补偿偏好 ±1；\n该 worker 只 grep 过 MainActivity 的 supports* 方法，未读源端 changeExposure 及 cameraSetup 中含 3 个 0 的 exposure_seekbar_values 表。\n源端滑杆初始化调用点在 MainActivity.cameraSetup（F011 锚点，F011-AC201 把曝光零吸附表归 MainPageVM），\n并行的 Slice 11 worker（a690eb1a2619c2d76）17:12 写 MainPageVM 时把 setZoomSeekbar/setManualWBSeekbar 留空并注“UI 归 F004”，\nchangeExposure 同样是偏好值+change——两侧都以对方为归属，没人移植初始化；这一桥接只在说明中记录，图中绑定直接写入目标的 Slice 5。\n“m”固定 800 属输入缺口：该 worker 16:59 grep HmosCameraController 的 captureResult 无结果（L208-L209），\nF001 规格也无捕获结果读回契约，于是按源兜底分支写 MANUAL_ISO_FALLBACK=800 并在 slice-05-source-notes 记入决策缺口。\n返修由 Codex parity_audit（01a14ab0-5a2d L5338、L5716）完成：setupExposureUI 调 initializeExposureSeekbars，\n为 ISO/快门/白平衡建表并设上限与当前进度，曝光补偿表在 0 处重复 3 格并以中央零为零点；'m' 取 getCaptureResultIso 与捕获曝光；\nchangeExposureAction/applyExposureSeekbar 按表索引步进，applyIsoSeekbar 越界保护并刷新高亮。FINAL 保留。\n",
+      "recommendations": [
+        "移植“建表+setMax+setProgress”一体的滑杆工具时，把上限与初始进度一起写入状态，并在面板打开或相机就绪路径实际调用；新增状态字段须在本切片找到赋值者。最小检查：支持 ISO 范围时打开曝光面板后 isoSeekbarMax == isoValuesFor(min,max).length-1，曝光补偿表含 3 个 0 且上限为表长-1。",
+        "源端调用点（如 Activity 的相机就绪回调）不在本切片锚点内时，登记 FWD-REF 并核对接收切片的实现，不在两侧都写“UI 归对方”后留空。",
+        "声称与源端步进入口等价前先读源实现；曝光补偿步进按滑杆值表索引移动并跨过重复零，而非直接对偏好值 ±1。",
+        "需要捕获结果（ISO、曝光时长）而控制器未提供读回接口时，把缺口交回控制器所属切片补接口，不把源端兜底常量当作常规路径。"
+      ],
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F004-viewfinder-ui.md",
+          "at": "2026-10-01T16:41:43.094Z",
+          "reason": "正常输入：Read回执含AC40（auto→“m”回填捕获ISO、无捕获才800）、AC44（changeSeekbar钳制[0,max]）、AC46-48（ManualSeekbars刻度表→ManualScale），说明面板滑杆需有效上限并按刻度表定位（agent-a06740e73018ad308.jsonl:L25-L26）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/ui/ManualSeekbars.java",
+          "at": "2026-10-01T16:42:51.485Z",
+          "reason": "正常输入：完整Read返回setProgressSeekbarWhiteBalance/ISO/ShutterSpeed，各自建表后seekBar.setMax(seekbar_values.size()-1)（:120/:165/:252）并定位最近进度；足以说明移植时需同时产出上限与进度（agent-a06740e73018ad308.jsonl:L64-L65）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/HmosCameraController.ets",
+          "at": "2026-10-01T16:59:01.126Z",
+          "reason": "输入缺口：Bash grep该控制器的captureResult无任何结果，说明F001控制器未提供捕获ISO/曝光读回；“m”预设因此按源兜底写成固定800，属上游缺口而非本节点偏差（agent-a06740e73018ad308.jsonl:L208-L209）。"
+        },
+        {
+          "key": "agent-a06740e73018ad308.jsonl",
+          "at": "2026-10-01T17:03:00.497Z",
+          "reason": "已读到setMax与刻度表要求，却把setProgressSeekbar*移植成只返回进度的build*Scale；Write写出的setupExposureUI只建ISO按钮与容器矩阵，不建表也不设上限，随后新增的*SeekbarMax初值0且无赋值者（ViewfinderUiState L246、ManualSeekbars组件L280）；changeExposureAction自称等价MainActivity.changeExposure却直接偏好值±1（同转录L238-L239）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "生成者用Bash对HmosCameraController.ets执行grep -n \"captureResult\"，回执在分隔线前无任何匹配；这是写前对该控制器文件的真实读取，结果说明捕获值读回通道缺失。",
+          "evidence": [
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-a06740e73018ad308.jsonl",
+              "line": 208
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-a06740e73018ad308.jsonl",
+              "line": 209
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-aa27ff1b39767c02b1ec",
+  "metadata": {
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code",
+        "codex"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3",
+        "gpt-6-astra"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.163.0",
+        "2.1.247",
+        "2.1.299"
+      ]
+    },
+    "source_set_id": "sources-974a9086706364eed8b7",
+    "environment": [
+      {
+        "name": "android.compile_sdk",
+        "value": "36",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/.claude/skills",
+        "at": "2026-10-01T09:52:21.840Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-aa8064d19722381a1.jsonl:L11",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-aa8064d19722381a1.jsonl:L10",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos",
+        "at": "2026-10-01T12:27:45.961Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b.jsonl:L1565",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b.jsonl:L1563",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos",
+        "at": "2026-10-01T13:34:44.665Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae78a452b1664bc61.jsonl:L149",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae78a452b1664bc61.jsonl:L148",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.11.1"
+  },
+  "revision": "906e11a6d4db8499a201fa89399af8ef69da0775c2f68d23df299780adb7c59b"
+}

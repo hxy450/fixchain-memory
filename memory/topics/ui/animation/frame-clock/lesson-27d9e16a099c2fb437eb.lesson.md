@@ -1,10 +1,10 @@
 # View.invalidate 迁成唯一的“请求下一帧绘制一次”入口：待决标志合并请求，用 postFrameCallback 调度，只在动画活跃时续帧；SurfaceView 自建线程的 lockCanvas 循环不适用
 
-ID：`lesson-27d9e16a099c2fb437eb` · 版本：3 · 阶段：execute · 主题：[ui/animation/frame-clock](index.md)
+ID：`lesson-27d9e16a099c2fb437eb` · 版本：4 · 阶段：execute · 主题：[ui/animation/frame-clock](index.md)
 
 概要：invalidate 迁成单一下一帧入口，待决标志合并
 
-信号：`View.invalidate`, `invalidate()`, `onDraw`, `UIContext.postFrameCallback`, `postFrameCallback`, `setInterval`, `clearInterval`, `setTimeout`, `Choreographer`, `Handler.postDelayed`, `SurfaceView`
+信号：`View.invalidate`, `invalidate()`, `onDraw`, `UIContext.postFrameCallback`, `postFrameCallback`, `setInterval`, `clearInterval`, `setTimeout`, `Choreographer`, `Handler.postDelayed`, `SurfaceView`, `removeCallbacks`
 
 ## 何时使用
 
@@ -12,7 +12,7 @@ ID：`lesson-27d9e16a099c2fb437eb` · 版本：3 · 阶段：execute · 主题�
 
 ## 适用情境
 
-源端自定义 View 在 onDraw 尾部按动画状态 invalidate()（加 tick）自续帧，业务层也用 invalidate() 请求重绘；目标在 ArkUI Canvas 上全量重绘，需要选下一帧调度 API，并处理同帧多次请求、动画结束停止和页面销毁。 不包括 SurfaceView 子类配自建 Thread、run() 里循环 lockCanvas 的渲染循环。
+源端自定义 View 在 onDraw 尾部按动画状态 invalidate()（加 tick）自续帧，业务层也用 invalidate() 请求重绘；目标在 ArkUI Canvas 上全量重绘，需要选下一帧调度 API，并处理同帧多次请求、动画结束停止和页面销毁。 不包括 SurfaceView 子类配自建 Thread、run() 里循环 lockCanvas 的渲染循环。 也包括源端 tick 是 Handler.postDelayed 自续的 Runnable，宿主 onPause 时 removeCallbacks、onResume 时重启，onDraw 进入的 draw() 先判暂停、再做对焦框过期复位等非绘制逻辑；目标把 tick 与绘制放进 Canvas 覆盖层，这些逻辑留在另一个引擎类。
 
 ## 例外与边界
 
@@ -20,18 +20,20 @@ ID：`lesson-27d9e16a099c2fb437eb` · 版本：3 · 阶段：execute · 主题�
 
 ## 原因
 
-invalidate 只请求下一帧的一次 onDraw，多次请求会合并。写成定时器却在回调里只复位句柄、不清除，或在渲染尾部每帧新开定时器，旧定时器不会停，数量逐帧增加并在动画结束后继续全量重绘，占满 UI 线程。另留一条同步直调 render 的路径，会与自续帧的时序不一致，调用方也会依赖同步绘制的结果。 定时器回调排在 UI 线程任务队列里、不对齐 vsync，有最小粒度与排队延迟，实际频率可能明显低于 1000/周期；源端按帧计数的动画步进与速度会随之整体变慢。
+invalidate 只请求下一帧的一次 onDraw，多次请求会合并。写成定时器却在回调里只复位句柄、不清除，或在渲染尾部每帧新开定时器，旧定时器不会停，数量逐帧增加并在动画结束后继续全量重绘，占满 UI 线程。另留一条同步直调 render 的路径，会与自续帧的时序不一致，调用方也会依赖同步绘制的结果。 定时器回调排在 UI 线程任务队列里、不对齐 vsync，有最小粒度与排队延迟，实际频率可能明显低于 1000/周期；源端按帧计数的动画步进与速度会随之整体变慢。 源端 tick 随 onPause 停止；只绑定组件挂载与卸载的定时器在退后台或被设置页覆盖时仍按周期绘制。draw() 里的过期复位等逻辑拆到别的类后若没有每帧调用方，就再也不执行。
 
 ## 做法
 
 1. 实现一个 invalidate()：已有待决帧就返回；否则置待决标志，经 UIContext.postFrameCallback 在下一 vsync 绘制一次，回调先清标志再绘制。引擎桥、尺寸变化与绘制尾部的续帧都走这个入口，render 不再供外部同步调用；按源 onDraw 的顺序在绘制末尾判断动画是否活跃再 invalidate。 先确认源端是 View.invalidate/onDraw 式重绘；SurfaceView 自建线程循环见例外。
 2. 定时器只用于源端本就按固定周期 tick 的逻辑（Handler.postDelayed、Timer、带 sleep 的循环）：用 setTimeout 做一次性调度；用 setInterval 必须以同一句柄 clearInterval。页面销毁时置停止标志，丢弃之后到达的帧回调。 源端节拍跟 vsync（onDraw 尾部 invalidate 自续帧、Choreographer.postFrameCallback）且速度、周期按帧计时，不用 setInterval/setTimeout(16) 代替帧回调。
-3. 依赖绘制结果的状态（如按钮可用性）在消费时刻直读渲染器字段，不在请求重绘后立刻镜像，以免重绘改为异步后读到旧值。
+3. 源端 tick 随宿主 onPause 移除、onResume 重启时，目标定时器跟随同一暂停恢复通知启停（页面 onHidden/onShown，或由持有暂停态的引擎提供的生命周期监听），绘制入口再判一次暂停；不只在 Canvas.onReady 启动、aboutToDisappear 清除。每个 tick 按源 draw 的顺序执行：暂停守卫 → 源 draw 里的非绘制逻辑（过期复位、帧分析等，拆到引擎时由 tick 调用其钩子）→ 绘制。 不用相机 PreviewOutput.on('frameStart') 当逐帧时钟：它在预览开始出帧时回调（API 24 @ohos.multimedia.camera.d.ts L6937–L6949），不是逐帧回调，覆盖层的每帧逻辑仍由 tick 调用。
+4. 依赖绘制结果的状态（如按钮可用性）在消费时刻直读渲染器字段，不在请求重绘后立刻镜像，以免重绘改为异步后读到旧值。
 
 ## 可选检查
 
 - 对帧循环有疑问时，记录动画期间与结束后的待决调度数：任一时刻不超过 1，动画结束后为 0，页面销毁后不再绘制。
 - 规格声称定时器与源端 vsync 节拍等价时，在帧回调里计 1–2 秒帧数，与源端同场景比较。
+- 源端 tick 随暂停停止时，切后台或打开覆盖页后统计绘制回调次数应为 0，返回后恢复。
 
 ## 同源经验
 
@@ -39,9 +41,10 @@ invalidate 只请求下一帧的一次 onDraw，多次请求会合并。写成�
 
 - [SurfaceView 线程循环按实例迁，vsync 驱动](lesson-4da9eabca745b3b2be91.lesson.md)（共享 3 张卡）
 - [源端可观察缺陷照迁并核次数，修正走待批决策](../../../process/unapproved-deviation/lesson-14411595fd9ac1e17683.lesson.md)（共享 1 张卡）
+- [跨文件补实现的功能登记带负责方与验证的移交项](../../../process/handoff-loss/lesson-4f81eeea17b94190c2de.lesson.md)（共享 1 张卡）
 - [无 configChanges 时按源重建时序刷新关弹窗](../../../app/recreation/lesson-94715d0df4c03a8fb5a5.lesson.md)（共享 1 张卡）
 
-来源支持：4 张卡 · 2 次迁移 · 2 个应用
+来源支持：5 张卡 · 已知 2 次迁移（部分未记录） · 已知 2 个应用（部分未记录）
 
 ## 来源（按需复核）
 
@@ -51,5 +54,7 @@ invalidate 只请求下一帧的一次 onDraw，多次请求会合并。写成�
   卡片版本：`f52b572012bb921778066e276b5ebecd610f8263b432b09bccedfe8de4edeb49`
 - [case-5b4026f2fabf83812ff2](../../../../../store/cases/case-5b4026f2fabf83812ff2/43e98074974b2d60bab047b15264b217ca9d4855b956901208c3897b7e047c75.json) · 结论：diagnosis, rec-3fc9a173ba
   卡片版本：`43e98074974b2d60bab047b15264b217ca9d4855b956901208c3897b7e047c75`
+- [case-74192ad19ea88a31750b](../../../../../store/cases/case-74192ad19ea88a31750b/26f7ae0418e6dd6e5aa696876d4ecf0054271a1dbd8a8458dc0a1a8c62388566.json) · 结论：diagnosis, rec-c44b446aaa, rec-5d8548ab74, rec-a15cfddc76, rec-33a01f6a14
+  卡片版本：`26f7ae0418e6dd6e5aa696876d4ecf0054271a1dbd8a8458dc0a1a8c62388566`
 - [case-d3f1bcc562a64e5f56f7](../../../../../store/cases/case-d3f1bcc562a64e5f56f7/5c0afd723a88fe2ebd2bd100b43aeab602cd42264e70eb03e30e4e9cb7ea012f.json) · 结论：diagnosis, rec-935bebc610
   卡片版本：`5c0afd723a88fe2ebd2bd100b43aeab602cd42264e70eb03e30e4e9cb7ea012f`

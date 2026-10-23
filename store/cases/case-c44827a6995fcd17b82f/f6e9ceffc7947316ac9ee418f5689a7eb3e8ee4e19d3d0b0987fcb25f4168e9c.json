@@ -1,0 +1,369 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-c44827a6995fcd17b82f",
+  "created_at": "2026-10-23T14:51:01.652004+00:00",
+  "migration_key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/memory-distill-opencamera-20261023/pool",
+  "title": "拍照图元桥接被设计成单帧即发即弃：完成/失败不回传编排器，HDR/包围/连拍/NR 只拍一帧，按键入口绕过 takePicturePressed",
+  "when": "拍照编排实现阶段：设计编排器与相机拍照图元之间的桥接契约（完成/失败回调、单帧/多帧结果通道），以及登记、接线按键拍照入口通道时",
+  "description": "源端 Preview 以 camera_controller.takePicture(pictureCallback, errorCallback) 发起拍照，onCompleted 中复位 phase/cameraInOperation、续拍 repeat、按偏好暂停预览，ErrorCallback 重启预览；HDR/包围曝光/降噪/快速连拍由 burst 类型决定帧数，经 onBurstPictureTaken 整组交付；按键经 main_activity.takePicture 进入 takePicturePressed。目标端把拍照编排、相机控制器、保存 VM 与页面接线拆到不同切片，经注入的 bridge/通道连接。",
+  "summary": "核心偏差在 run 2 Slice 3/F002 worker（a46e99f7c0baf2d05）写 PhotoCaptureOrchestrator 时的桥接契约。\n写前它实际收到：F002 规格 AC85“一张保存完成后 takeRemainingRepeatPhotos() 按间隔续拍”、AC20/21 HDR 请求为 3 张；\nPreview.java 读回 takePhotoWhenFocused 尾部 camera_controller.takePicture(pictureCallback, errorCallback) 与 takeRemainingRepeatPhotos 全文；\nApplicationInterface 契约中 getPausePreviewPref（拍照后暂停预览）、cameraInOperation（含拍照后暂停预览）、\nonBurstPictureTaken(images[])、onPictureCompleted（所有图片回调返回后调用）。\n它自己在同一文件的 canTakeNewPhoto 里按包围曝光 N、NR 8/15、连拍 N 计算 nJpegs，说明已知多帧模式一次快门产生多张。\n然而 17:15 的 Write 把 CaptureEngineBridge.takePicture 定义为无参无回调的 () => void，\ntakePhotoWhenFocused 只置 TAKING_PHOTO 后调用一次 takePicture，并以 void continuousFastBurst 丢弃参数；\n编排器没有任何完成/失败入口：phase 与 cameraInOperation(true) 无复位点，takeRemainingRepeatPhotos 无调用者，暂停预览未实现；\n注释把“pictureCallback → onPictureTaken → saveImageJpeg”交给 Slice 11 装配。\n输入侧缺口：它计划读 takePhotoWhenFocused 头部，但 sed 6290-6360 返回的是录像代码（L169-L170），\nonCompleted（Preview.java:6669-6750）、onBurstPictureTaken 与 BURSTTYPE_CONTINUOUS 设置（:6855）未进入输入；\nF002 规格也没有覆盖 onCompleted/暂停预览与多帧采集执行的 AC（F001 写“拍照/连拍归 F002”、setupBurstMode“下发消费归 F002”，F002 R 组只写触发侧）。\n但已收到的 AC85、takePicture(pictureCallback, errorCallback) 与契约足以要求完成回传与整组结果通道。\n下游 group-closer（acb5c3d58575999a4）读到该编排器后按契约接线：MainPage 的 takePicture 只调 onPictureTaken、失败只 toast；\n控制器 takePicture 与引擎 capturePhoto 只做单次 PhotoOutput.capture（未消费已有 burstTypeValue）；\nMainPageVM.onPictureTakenHost 以 images=[data] 单图入队，包围曝光标注“多帧 _0/_1/_2 后缀”却只给一张，算出 isFastBurst 后 void 丢弃。\n另一独立分支：Slice 5/F004 worker（a06740e73018ad308）已读到 MainUI 按键调用 main_activity.takePicture(false) 与 MainPage 快门 P-S1-006→takePicturePressed，\n登记 P-S5-007 时却把按键拍照通道指向 PreviewEngine.takePhotoHook；closer 依此把 takePictureChannel 绑到 photoCapture.takePhoto，跳过定时/重复/全景判断。\n返修（Codex parity_audit 01a14ab0-5a2d 与主会话 01a14aae）为 bridge 增加 pauseCameraPreview/takePictureSequence/getCaptureResultIso/ExposureTime，\n编排器新增 onCaptureCompleted/onCaptureError 并按模式选帧（HDR 3 帧 ±2EV、包围 3/5、NR 按 ISO/曝光、FastBurst 偏好张数），\n控制器/引擎新增 capturePhotoSequence，CameraAppInterface 新增 onBurstPictureTaken，MainPageVM 抽出 saveCapturedImagesHost，\nMainPage 按 onPictureTaken 接受结果结算并把 takePictureChannel 改为 takePicturePressed。FINAL 保留。\n",
+  "recommendations": [
+    "拍照编排实现时，把源端 takePicture(pictureCallback, errorCallback) 的完成与失败语义写进桥接契约：图元返回完成/失败回调（或 Promise），编排器提供 onCaptureCompleted/onCaptureError，统一复位 phase 与 cameraInOperation(false)，并在完成入口续拍 takeRemainingRepeatPhotos、按 getPausePreviewPref 暂停预览，失败时重启预览。最小检查：repeat=3 桩下完成回调后再触发 2 次拍照；失败桩后 cameraPhase==NORMAL 且 cameraInOperation(false) 被调用。",
+    "编排器已按模式计算 nJpegs（包围曝光 N、NR 8/15、连拍 N）时，拍照图元必须按同一模式发起多帧并经 onBurstPictureTaken 整组交付；不要让 takePhotoWhenFocused 无视模式只调单帧 takePicture，也不要以 void 丢弃 continuousFastBurst/isFastBurst。最小检查：HDR 一次快门得到的保存请求 images.length==3，包围曝光 5 张时为 5。",
+    "读源端锚点前用 grep -n 定位方法签名（如 'private void takePhotoWhenFocused'），读到 errorCallback 定义结束并核对返回内容确是目标方法，确保 onCompleted/onBurstPictureTaken/ErrorCallback 主体进入输入，不凭估计行号 sed。",
+    "规格提取时，为拍照完成回调（phase 复位、repeat 续拍、暂停预览、错误恢复）与多帧采集执行（burst 类型→帧数→整组回调）指定归属 AC，不让 F001 写“归 F002”而 F002 只覆盖触发侧。",
+    "登记跨切片入口通道时按源端调用链指向同一入口：按键 main_activity.takePicture(false) 与快门 clickedTakePhoto 都进入 takePicturePressed，应指向编排器 takePicturePressed，而非引擎 takePhotoHook（对焦后拍照步）。",
+    "closer 接线发现桥接只有单帧、无完成回调，而 ApplicationInterface 已声明 onBurstPictureTaken/onPictureCompleted 时，登记 FWD-REF 回到编排器补契约，不在保存侧把多帧模式按单图入队。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/PhotoCaptureOrchestrator.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F002-photo-capture-save.md",
+          "at": "2026-10-01T16:41:34.309Z",
+          "reason": "正常输入：Read 回执含 AC85“一张保存完成后 takeRemainingRepeatPhotos() 按间隔续拍剩余张数”、AC20/21 HDR 请求为 3 张（1 张为 DRO）、AC88 takePhoto 对焦分支；足以说明拍照完成必须回到编排器续拍，HDR 一次快门需要 3 帧（agent-a46e99f7c0baf2d05.jsonl:L25-L26）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/preview/Preview.java",
+          "at": "2026-10-01T16:43:51.170Z",
+          "reason": "正常输入：Bash sed 6860-6925 回执含 takePhotoWhenFocused 尾部 camera_controller.takePicture(pictureCallback, errorCallback) 与 takeRemainingRepeatPhotos 全文，表明拍照经回调返回、续拍由完成侧驱动（agent-a46e99f7c0baf2d05.jsonl:L84-L85）。另一次计划读 takePhotoWhenFocused 头部的 sed 6290-6360 只返回录像代码，onCompleted 主体未进入输入（同转录 L169-L170）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/events/ApplicationInterface.ets",
+          "at": "2026-10-01T16:44:30.897Z",
+          "reason": "正常输入：Bash sed 回执列出 getPausePreviewPref（拍照后暂停预览）、cameraInOperation（含拍照后暂停预览）、onPictureTaken、onBurstPictureTaken(images: ArrayBuffer[])、onPictureCompleted（所有图片回调返回后调用）；足以说明单帧/多帧结果与完成通知是分开的契约（agent-a46e99f7c0baf2d05.jsonl:L107-L108）。"
+        },
+        {
+          "key": "agent-a46e99f7c0baf2d05.jsonl",
+          "at": "2026-10-01T17:15:12.762Z",
+          "reason": "已收到上述输入，Write 却把 CaptureEngineBridge.takePicture 定义为 () => void；takePhotoWhenFocused 只置 TAKING_PHOTO 并调用一次 takePicture、void continuousFastBurst；无完成/失败入口，takeRemainingRepeatPhotos 无调用者、cameraInOperation(true) 无复位、暂停预览未实现；同文件 canTakeNewPhoto 却按包围 N/NR 8/15/连拍 N 计算 nJpegs（同转录 L317-L318；设计推理 L305、L313 将 takePicture 定为“PhotoOutput.capture with picture callback routing”交 closer）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4,
+          "force": true,
+          "reason": "生成者用 Bash sed -n '6860,6925p' 读取该 Preview.java，回执返回 takePhotoWhenFocused 尾部 camera_controller.takePicture(pictureCallback, errorCallback) 与 takeRemainingRepeatPhotos 全文；这是写编排器前对源文件的真实读取。",
+          "evidence": [
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-a46e99f7c0baf2d05.jsonl",
+              "line": 84
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-a46e99f7c0baf2d05.jsonl",
+              "line": 85
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "生成者用 Bash sed -n '150,230p;300,380p' 读取 events/ApplicationInterface.ets，回执列出 getPausePreviewPref、cameraInOperation、onPictureTaken、onBurstPictureTaken(images: ArrayBuffer[])、onPictureCompleted；这是写编排器前对契约文件的真实读取。",
+          "evidence": [
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-a46e99f7c0baf2d05.jsonl",
+              "line": 107
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-a46e99f7c0baf2d05.jsonl",
+              "line": 108
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/pages/MainPage.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "summary": "MainPage 的两处片段由 group-closer（acb5c3d58575999a4）18:37 整文件 Write 写入，有两个独立起点。\n（1）完成/失败回传：closer 17:31 读到 Slice 3 编排器，CaptureEngineBridge 只有 takePicture: () => void，\n注释写明“pictureCallback → appInterface.onPictureTaken → ImageSaverService.saveImageJpeg 由 Slice 11 装配”；\n它据此把 takePicture 绑成 engine.capturePhoto(data → onPictureTaken, err → toast)，不回告编排器。偏差起点在 Slice 3 契约，closer 为传递。\n（2）按键通道：Slice 5/F004 worker 16:41 读到 MainPage 快门 P-S1-006（clickedTakePhoto → takePicturePressed），\n16:43 读到 MainUI.onKeyAction 各分支调用 main_activity.takePicture(false)，登记时也自述“P-S1-006 已有壳 handler”，\n16:50 写入 registry 的 P-S5-007 却是“→ PreviewEngine.takePhotoHook 拍照管线”。closer 17:29 grep registry 读到该行，\n把 takePictureChannel 绑到 photoCapture.takePhoto(false, false)（与 takePhotoHook 同一入口），跳过定时/重复/全景判断。\n两处在执行结束检查点 c752566 保持；返修改为按 onPictureTaken 接受结果调 onCaptureCompleted/onCaptureError，并把通道改为 takePicturePressed。\n",
+      "recommendations": [
+        "登记按键拍照通道时，以源端 MainUI → main_activity.takePicture(false) → takePicturePressed 为准，通道目标写编排器 takePicturePressed，并与快门 handler 共用入口。",
+        "接线拍照图元时，回调里在交付图片后通知编排器完成（或失败），契约缺这一入口时回到编排器所属切片补，而不是只 toast。"
+      ],
+      "nodes": [
+        {
+          "key": "agent-a46e99f7c0baf2d05.jsonl",
+          "at": "2026-10-01T17:15:12.762Z",
+          "reason": "偏差起点：Write 的 CaptureEngineBridge.takePicture 为 () => void，编排器无完成/失败入口，注释把 pictureCallback→onPictureTaken→saveImageJpeg 交给后续装配（agent-a46e99f7c0baf2d05.jsonl:L317-L318）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/PhotoCaptureOrchestrator.ets",
+          "at": "2026-10-01T17:31:13.534Z",
+          "reason": "交付桥梁：closer 完整 Read 编排器，回执含 takePicture: () => void、takePhotoWhenFocused 注释与 takePicturePressed 入口（agent-acb5c3d58575999a4.jsonl:L85-L86）。"
+        },
+        {
+          "key": "agent-a06740e73018ad308.jsonl",
+          "at": "2026-10-01T16:50:09.921Z",
+          "reason": "偏差起点：已读到 MainPage 快门 P-S1-006 → takePicturePressed（agent-a06740e73018ad308.jsonl:L34-L35）与 MainUI.onKeyAction 调 main_activity.takePicture(false)（L72-L73），计划中自述“P-S1-006 已有壳 handler”（L135）；Bash 追加 registry 时却把 P-S5-007 写成“→ PreviewEngine.takePhotoHook 拍照管线”（L137-L138）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/placeholder-registry.md",
+          "at": "2026-10-01T17:29:12.866Z",
+          "reason": "交付桥梁：closer grep registry 回执含 P-S5-007 行“F002 takePicture 通道：onKeyAction … → PreviewEngine.takePhotoHook 拍照管线”与 P-S3-003“closer 补 … PhotoOutput.capture 图元”（agent-acb5c3d58575999a4.jsonl:L34-L35）。"
+        },
+        {
+          "key": "agent-acb5c3d58575999a4.jsonl",
+          "at": "2026-10-01T18:37:38.589Z",
+          "reason": "传递：整文件 Write 把 bridge.takePicture 绑成 capturePhoto(data → onPictureTaken；err → toast)，不回告编排器；takePictureChannel 依 P-S5-007 绑到 photoCapture.takePhoto(false, false)（同转录 L567-L568）。同文件快门 handler 仍走 takePicturePressed，本链不另推定其独立失职。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 5
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "Slice 5 worker 用 Bash cat >> 追加 spec/placeholder-registry.md，正文含 P-S5-007 行“F002 takePicture 通道：onKeyAction CAMERA/SPACE/音量 take_photo 分支 → PreviewEngine.takePhotoHook 拍照管线”，回执返回 8 行计数；这是对 registry 的真实写入。",
+          "evidence": [
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-a06740e73018ad308.jsonl",
+              "line": 137
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-a06740e73018ad308.jsonl",
+              "line": 138
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": 5,
+          "force": true,
+          "reason": "closer 用 Bash grep 读取 spec/placeholder-registry.md 中 P-S3/P-S5/P-S11 等行，回执含 P-S5-007 指向 PreviewEngine.takePhotoHook 的登记；这是写 MainPage 前对 registry 的真实读取。",
+          "evidence": [
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-acb5c3d58575999a4.jsonl",
+              "line": 34
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-acb5c3d58575999a4.jsonl",
+              "line": 35
+            }
+          ]
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/MainPageVM.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "summary": "MainPageVM.onPictureTakenHost 的 `req.images = [data]` 与 `void isFastBurst` 由 group-closer（acb5c3d58575999a4）18:30 的 Edit 写入。\ncloser 此前读到的 Slice 3 编排器只有单帧 takePicture 契约，并把 pictureCallback → onPictureTaken → saveImageJpeg 定为保存链；\n它按此把 MyApplicationInterface.onPictureTaken 移植为单图入队：包围曝光标 processType HDR + forceSuffix“多帧 _0/_1/_2 后缀”，HDR/NR 也只给一张，\n计算出 isFastBurst 后 void 丢弃。closer 未读源码 onBurstPictureTaken，也未读到 ApplicationInterface 中的整组回调；\n本链确认单帧契约经编排器传到保存 VM，closer 的“多帧注释配单图”记为同一偏差的下游表现。\n返修抽出 saveCapturedImagesHost，onBurstPictureTaken 整组保存，HDR 要求 3 张、NR 至少 2 张，forceSuffix 与 saveExpo 规则修正。FINAL 保留。\n",
+      "recommendations": [
+        "保存侧移植 onPictureTaken 时，若照片模式需要多帧（HDR/包围/NR/FastBurst），先确认上游有整组回调（onBurstPictureTaken）；没有时登记缺口回到拍照编排补，而非把多帧模式按单图入队并 void 掉模式变量。"
+      ],
+      "nodes": [
+        {
+          "key": "agent-a46e99f7c0baf2d05.jsonl",
+          "at": "2026-10-01T17:15:12.762Z",
+          "reason": "偏差起点：Write 的拍照桥接只有单帧 takePicture: () => void，takePhotoWhenFocused 不按模式发起多帧，注释指定 pictureCallback→onPictureTaken→saveImageJpeg（agent-a46e99f7c0baf2d05.jsonl:L317-L318）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/PhotoCaptureOrchestrator.ets",
+          "at": "2026-10-01T17:31:13.534Z",
+          "reason": "交付桥梁：closer 完整 Read 编排器，回执含单帧 takePicture 契约与保存链注释（agent-acb5c3d58575999a4.jsonl:L85-L86）。"
+        },
+        {
+          "key": "agent-acb5c3d58575999a4.jsonl",
+          "at": "2026-10-01T18:30:06.744Z",
+          "reason": "传递：Edit 写出 onPictureTakenHost，req.images = [data] 单图入队，包围曝光注“多帧 _0/_1/_2 后缀”，算出 isFastBurst 后 void 丢弃（同转录 L411-L412；L427 保留 void isFastBurst）。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/HmosCameraController.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "summary": "HmosCameraController.takePicture 由 group-closer（acb5c3d58575999a4）按 P-S3-003“补相机 PhotoOutput.capture 图元”落地：\n惰性挂 PhotoOutput 后单次 capture，photoAvailable 取 JPEG 上抛，未消费同类中 F001 已有的 burstTypeValue/setBurstType（setupBurstMode 注“下发消费归 F002”）。\n它所实现的是 Slice 3 编排器的单帧 takePicture 契约。返修新增 capturePhotoSequence（按档位锁 ISO、逐帧改曝光时长并恢复）与捕获 ISO/曝光读回。FINAL 保留。\n",
+      "nodes": [
+        {
+          "key": "agent-a46e99f7c0baf2d05.jsonl",
+          "at": "2026-10-01T17:15:12.762Z",
+          "reason": "偏差起点：拍照桥接只定义单帧 takePicture，无多帧序列或整组结果通道（agent-a46e99f7c0baf2d05.jsonl:L317-L318）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/PhotoCaptureOrchestrator.ets",
+          "at": "2026-10-01T17:31:13.534Z",
+          "reason": "交付桥梁：closer Read 编排器得到 takePicture 图元契约（agent-acb5c3d58575999a4.jsonl:L85-L86）。"
+        },
+        {
+          "key": "agent-acb5c3d58575999a4.jsonl",
+          "at": "2026-10-01T18:26:54.265Z",
+          "reason": "传递：Edit 为控制器加入 takePicture(pictureCb, errorCb)，单次 PhotoOutput.capture，不读 burstTypeValue；17:32 已读到该字段（同转录 L123、L340-L341）。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/PreviewEngine.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "summary": "PreviewEngine.capturePhoto(pictureCb, errorCb) 由 group-closer 作为 CaptureEngineBridge.takePicture 的引擎透传加入，只转发控制器单帧 takePicture。\n返修增加 capturePhotoSequence 透传。FINAL 保留。\n",
+      "nodes": [
+        {
+          "key": "agent-a46e99f7c0baf2d05.jsonl",
+          "at": "2026-10-01T17:15:12.762Z",
+          "reason": "偏差起点：拍照桥接只定义单帧 takePicture（agent-a46e99f7c0baf2d05.jsonl:L317-L318）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/PhotoCaptureOrchestrator.ets",
+          "at": "2026-10-01T17:31:13.534Z",
+          "reason": "交付桥梁：closer Read 编排器得到 takePicture 图元契约（agent-acb5c3d58575999a4.jsonl:L85-L86）。"
+        },
+        {
+          "key": "agent-acb5c3d58575999a4.jsonl",
+          "at": "2026-10-01T18:27:57.792Z",
+          "reason": "传递：Edit 为引擎加入 capturePhoto，直接 controller.takePicture(pictureCb, errorCb) 单帧透传（同转录 L365-L366）。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/CameraAppInterface.ets",
+      "reason": "已确认返修新增 onBurstPictureTaken、HDR 按包围曝光 3 张 2 档计、非 FastBurst 时 burst 张数为 1；执行结束态由 Slice 11 worker（a690eb1a2619c2d76，17:06 Write）与 closer 写入，未核该 worker 写前是否收到 onBurstPictureTaken/getExpoBracketingNImagesPref 的源端语义及其缺失原因。"
+    }
+  ],
+  "job": "issue-c44827a6995fcd17b82f",
+  "metadata": {
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code",
+        "codex"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3",
+        "gpt-6-astra"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.163.0",
+        "2.1.247",
+        "2.1.299"
+      ]
+    },
+    "source_set_id": "sources-974a9086706364eed8b7",
+    "environment": [
+      {
+        "name": "android.compile_sdk",
+        "value": "36",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/.claude/skills",
+        "at": "2026-10-01T09:52:21.840Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-aa8064d19722381a1.jsonl:L11",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-aa8064d19722381a1.jsonl:L10",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos",
+        "at": "2026-10-01T12:27:45.961Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b.jsonl:L1565",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b.jsonl:L1563",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos",
+        "at": "2026-10-01T13:34:44.665Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae78a452b1664bc61.jsonl:L149",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae78a452b1664bc61.jsonl:L148",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.11.1"
+  },
+  "revision": "f6e9ceffc7947316ac9ee418f5689a7eb3e8ee4e19d3d0b0987fcb25f4168e9c"
+}

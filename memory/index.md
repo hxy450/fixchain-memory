@@ -1,6 +1,6 @@
 # 迁移经验
 
-经验库版本：`56fcfe88008c8437a7f8c59e6da726e5b68fb0b02005561a04b9171a6dcbe308`
+经验库版本：`276c45d921fb516691f9f45b45803e79886abb4bb9e1569dd57b2bb699fda6ed`
 
 ## 怎样召回
 
@@ -12,20 +12,20 @@
 
 ## 领域
 
-- [app](topics/app/index.md) — 应用级装配与横切机制：入口清单、启动链路、平台能力与系统状态、媒体文件、混合桥接、模块与资源产物（103 条）
-- [arkts](topics/arkts/index.md) — ArkTS 语言与 ArkUI 声明层的编译约束：接口签名核对、严格类型限制、组件 DSL 规则与运行时语义差异（35 条）
-- [data](topics/data/index.md) — 数据层：网络地址与请求鉴权、序列化解析、模型映射、本地持久化及多阶段数据流程在迁移中的语义保持（53 条）
-- [process](topics/process/index.md) — 迁移流程中输入、规格、检查结论与跨任务移交在交接环节失真的机制（66 条）
-- [ui](topics/ui/index.md) — 界面迁移：布局几何、主题图形、文本、状态反馈、导航、弹窗、交互输入与列表分页的机制级对照（293 条）
+- [app](topics/app/index.md) — 应用级装配与横切机制：入口清单、启动链路、平台能力与系统状态、媒体文件、混合桥接、模块与资源产物（127 条）
+- [arkts](topics/arkts/index.md) — ArkTS 语言与 ArkUI 声明层的编译约束：接口签名核对、严格类型限制、组件 DSL 规则与运行时语义差异（38 条）
+- [data](topics/data/index.md) — 数据层：网络地址与请求鉴权、序列化解析、模型映射、本地持久化及多阶段数据流程在迁移中的语义保持（56 条）
+- [process](topics/process/index.md) — 迁移流程中输入、规格、检查结论与跨任务移交在交接环节失真的机制（70 条）
+- [ui](topics/ui/index.md) — 界面迁移：布局几何、主题图形、文本、状态反馈、导航、弹窗、交互输入与列表分页的机制级对照（295 条）
 
 ## 阶段
 
-- [spec](by-stage/spec.md) — 规格提取（194 条）
+- [spec](by-stage/spec.md) — 规格提取（216 条）
 - [plan](by-stage/plan.md) — 计划与派工（42 条）
-- [execute](by-stage/execute.md) — 执行与实现（513 条）
+- [execute](by-stage/execute.md) — 执行与实现（548 条）
 - [verify](by-stage/verify.md) — 验证与判读（42 条）
-- [repair](by-stage/repair.md) — 修复（92 条）
-- [converge](by-stage/converge.md) — 收敛与移交（27 条）
+- [repair](by-stage/repair.md) — 修复（97 条）
+- [converge](by-stage/converge.md) — 收敛与移交（29 条）
 
 ## 阅读约定
 

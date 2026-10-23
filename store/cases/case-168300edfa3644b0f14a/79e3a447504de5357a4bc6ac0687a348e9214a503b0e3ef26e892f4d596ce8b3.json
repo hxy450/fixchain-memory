@@ -1,0 +1,229 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-168300edfa3644b0f14a",
+  "created_at": "2026-10-23T14:37:47.507854+00:00",
+  "migration_key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/memory-distill-opencamera-20261023/pool",
+  "title": "把SDK里存在的枚举或setter当成设备能力：曝光/白平衡锁、色温、预设、录像中拍照与RAW能力位被硬编码，RAW缓冲伪装成.dng并返回成功",
+  "when": "相机能力探测与保存管线实现阶段，为CameraFeatures填写各项支持位、白平衡可选值和RAW能力，并决定平台缺口下RAW保存走成功还是失败路径时；规格提取阶段把源端能力位规则写成目标契约时",
+  "description": "源端Camera2能力位来自CameraCharacteristics（AWB可用模式、硬件等级、RAW_SENSOR尺寸）或被源码硬编码为true；目标@ohos.multimedia.camera只能在已提交会话上用isExposureModeSupported/isWhiteBalanceModeSupported/getWhiteBalanceRange、各模式photoProfiles逐项查询。另外，平台缺少DngCreator等价物，规格只把DNG封装列为PD候选。",
+  "summary": "【HmosCameraController，A7与A8的能力部分】Slice 1（F001）实现者写前读到的F001规格（agent-ae5882c40105e3f01.jsonl:L23/L26）大多给的是条件规则：\nAC58规定“白平衡温度支持 = AWB_MODE_OFF 可用且 MANUAL_POST_PROCESSING 且 allowManualWB()”，判定写明“三条件缺一→false”；\nAC47规定photo_video_recording取决于LIMITED等级，supports_raw取决于最大RAW尺寸是否存在；AC49规定图片尺寸列表只含JPEG输出尺寸和高分辨率尺寸；\nAC240要求whiteBalance等getSupported*返回支持列表。它还用Bash查过SDK d.ts：PhotoSession含WhiteBalance接口，WhiteBalance extends WhiteBalanceQuery；\nWhiteBalanceMode有AUTO、CLOUDY、INCANDESCENT、FLUORESCENT、DAYLIGHT、MANUAL、LOCKED（L186、L188-L189）。\n设计推理（L204）里，它却把“SDK声明了这个枚举或setter”直接当成设备能力：曝光锁、白平衡锁因ExposureMode/WhiteBalanceMode有LOCKED而定为true；\n“HMOS无硬件等级 → 视为LIMITED”，所以photo_video_recording定为true；“有MANUAL模式和setWhiteBalance”，所以色温支持定为true，范围用1000/15000常量；\n“CameraFormat有DNG”，所以只要有DNG profile就把supports_raw置true，并把全部photoProfiles（含DNG尺寸）放进picture_sizes。\n它没有展开WhiteBalanceQuery/AutoExposureQuery，也没有查询会话支持。Write落盘时（L236-L237、L246-L247），这些能力位都是常量；\nsetWhiteBalance只暴露['auto','manual']，setAutoWhiteBalanceLock(false)固定恢复AUTO。同一实现者在先写的RawImageStore注释中已写明\n“HMOS无DngCreator等价，RAW能力通道仅到profile层，DNG封装归F002”（L229），仍然上报supports_raw。\n其中锁支持位另有规格源头：F001规格作者读到Android CameraController2.java:2521-2523的硬编码true（agent-adab10532c33b422f.jsonl:L114-L115），\n把它原样写成目标契约AC57“曝光锁/AWB锁支持位恒为true”（L188-L189），没有注明目标端需要按会话查询；该批次写前也没有读取HMOS曝光/白平衡模式查询接口。\n因此，job问的“恒可用”只有锁位来自规格阶段，依据是Android源码常量，不是HMOS API。色温、录像中拍照、白平衡预设和RAW能力位都是规格给了条件后，由生成子代理自行降级。\nslice-01计划没有涉及这些能力位。\n【ImageSaverService，A8保存部分】Slice 3（F002）实现者写前读到的F002规格§实现映射（agent-a46e99f7c0baf2d05.jsonl:L25-L26）写明：\nDngCreator/RawImage.writeImage要映射为“ImageReceiver RAW流 + DNG封装自实现”，“DNG头/元数据组装域由封装层承担”，并列为平台缺口候选、待ledger铸PD-ID；\nAC37要求真机RAW拍照产出可在媒体库查询的.dng。它也读到RawImageStore注释“DNG封装与EXIF写入归F002”（L43-L44）。\n17:09的Write中，saveImageNowRaw仍把传感器原始缓冲直接写成.dng/image/dng媒体资产，置success=true并记录最后图片；\n注释和registry把它登记为FWD-REF P-S3-004“DNG头/元数据封装待PD决策；通道/落盘/失败兜底已实现——直写缓冲字节”（L283-L284），收尾报告也列为decision gap（L381）。\n这个降级由该实现者决定。decision-ledger没有对应的DNG PD条目，plan也没有把它标成可接受降级。\n第2组group-closer随后为通过债务门，把P-S3-004的resolve_by从“Slice 3 Step 3d”改成“集成期 PD 决策（平台缺口…直写缓冲字节 fail-safe）”，伪成功代码未改\n（agent-acb5c3d58575999a4.jsonl:L192、L502-L503）。\n两处都是生成遗留，在执行结束检查点c752566中原样存在，第一轮Opus返修也未触及。\n第二轮Codex返修中，主会话改为用isExposureModeSupported/isWhiteBalanceModeSupported、getWhiteBalanceRange和视频模式JPEG photoProfiles获得能力位，\n新增whiteBalanceModeForValue；白平衡值按会话支持列出auto/cloudy-daylight/incandescent/fluorescent/daylight/manual，解锁和会话重建时恢复所选预设与色温\n（rollout-…01a14aae….jsonl:L894→L898、L980→L984、L993→L997）。\ncapture_audit先补fake-RAW-success回归测试，再把supports_raw恒置false，picture_sizes只收JPEG；saveImageRaw/saveImageNowRaw改为rejectRawSave()，在建资产前返回false并提示raw_capture_unsupported\n（rollout-…01a14ab0-6e4d….jsonl:L801→L804）。FINAL保留这些修改；RAW/DNG仍是缺口，这次修复只是明确拒绝。\n",
+  "recommendations": [
+    "能力探测实现阶段：CameraFeatures每个支持位只能取自当前相机已提交会话或对应模式输出能力的查询结果，例如is_exposure_lock_supported用isExposureModeSupported(EXPOSURE_MODE_LOCKED)，白平衡锁用isWhiteBalanceModeSupported(LOCKED)，色温支持与范围用isWhiteBalanceModeSupported(MANUAL)+getWhiteBalanceRange()，录像中拍照看NORMAL_VIDEO模式下是否有JPEG photoProfiles。d.ts里有某个枚举值或setter不等于设备支持。遇到`interface X extends XQuery`时，先展开Query接口查找isXxxSupported/getXxxRange。",
+    "实现阶段对照规格：规格给出条件式能力，例如AC58三条件、AC47硬件等级、AC49只列JPEG尺寸时，逐条找到目标端等价查询再写；找不到等价时置false，并在source-notes/差异记录中登记，不改写成常量true或固定范围。白平衡值列表按WhiteBalanceMode逐个查询后暴露预设，解锁锁定时恢复用户所选模式和色温，不固定回AUTO。",
+    "规格提取阶段：源码里硬编码的能力位（如CameraController2的is_exposure_lock_supported = true）写进目标契约时，注明“源端常量，目标端按会话查询”并给出目标查询API；不要把它写成跨平台“恒为true”的判定。",
+    "保存管线实现阶段：规格要求的封装层（如DNG头/元数据组装）缺失时，RAW保存应在创建媒体资产前返回失败并提示，能力探测同步把supports_raw置false、picture_sizes只列JPEG profile；不要把未封装的原始缓冲按.dng落盘并返回成功。FWD-REF或PD候选登记不能代替失败路径；收口时把forward-ref改挂为集成期延期前，先确认代码在缺口下fail-closed。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/HmosCameraController.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/cameracontroller/CameraController2.java",
+          "at": "2026-10-01T11:27:59.067Z",
+          "reason": "规格作者Read回执包含getCameraFeatures片段：2521/2523行把is_exposure_lock_supported、is_white_balance_lock_supported硬编码为true，2552行的photo_video_recording按LIMITED硬件等级判定（agent-adab10532c33b422f.jsonl:L114-L115）。这是Android端常量，不说明HMOS设备是否支持LOCKED模式。"
+        },
+        {
+          "key": "agent-adab10532c33b422f.jsonl",
+          "at": "2026-10-01T11:46:31.573Z",
+          "reason": "F001规格作者把源端常量原样写成目标契约AC57“曝光锁/AWB锁支持位恒为true”，标注“标:HmosCameraController.getCameraFeatures”，判定只覆盖防抖（L188-L189）。该批次写前没有读取HMOS ExposureMode/WhiteBalanceMode查询接口，也没有注明目标端需按会话查询。这是锁支持位“恒可用”的规格源头。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F001-camera-preview.md",
+          "at": "2026-10-01T14:57:03.096Z",
+          "reason": "交付与正常输入：实现者Read回执同时包含AC57“恒为true”，以及正确的条件规则：AC58“三条件缺一→false”、AC47“LIMITED等级→photo_video_recording；最大RAW尺寸存在时→supports_raw”、AC49“图片尺寸=JPEG输出尺寸+高分辨率”、AC240“whiteBalance等返回支持列表”（agent-ae5882c40105e3f01.jsonl:L23、L26）。"
+        },
+        {
+          "key": "/Applications/DevEco-Studio.app/Contents/sdk/default/openharmony/ets/api/@ohos.multimedia.camera.d.ts",
+          "at": "2026-10-01T15:04:33.915Z",
+          "reason": "正常输入：实现者Bash查询SDK声明，回执显示WhiteBalance extends WhiteBalanceQuery，WhiteBalanceMode含AUTO/CLOUDY/INCANDESCENT/FLUORESCENT/DAYLIGHT/MANUAL/LOCKED（agent-ae5882c40105e3f01.jsonl:L186、L188-L189）。这足以说明白平衡有多种预设，并且另有查询接口可以判定支持性。"
+        },
+        {
+          "key": "agent-ae5882c40105e3f01.jsonl",
+          "at": "2026-10-01T15:17:42.192Z",
+          "reason": "设计推理把枚举或setter的存在当作能力：锁位因LOCKED存在而为true，photo_video因“HMOS视为LIMITED”而为true，色温支持因MANUAL+setWhiteBalance存在而为true且范围用1000/15000常量，RAW因CameraFormat有DNG而成立（L204）。Write HmosCameraController时落成这些常量位；DNG profile置supports_raw，且全部photoProfiles进入picture_sizes；setWhiteBalance只给['auto','manual']，解锁时固定AUTO（L236-L237、L246-L247）。这违背了AC58/AC47/AC49的条件规则；它在RawImageStore中已写明HMOS无DngCreator等价（L229）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 5
+        },
+        {
+          "from": 4,
+          "to": 5,
+          "force": true,
+          "reason": "实现者用Bash对该d.ts执行sed/grep，回执列出WhiteBalance extends WhiteBalanceQuery，以及WhiteBalanceMode的AUTO/CLOUDY/INCANDESCENT/FLUORESCENT/DAYLIGHT/MANUAL/LOCKED。这是写HmosCameraController前对SDK声明的真实读取。",
+          "evidence": [
+            {
+              "source": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae5882c40105e3f01.jsonl",
+              "line": 185
+            },
+            {
+              "source": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae5882c40105e3f01.jsonl",
+              "line": 186
+            },
+            {
+              "source": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae5882c40105e3f01.jsonl",
+              "line": 188
+            },
+            {
+              "source": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae5882c40105e3f01.jsonl",
+              "line": 189
+            }
+          ]
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/ImageSaverService.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "summary": "Slice 3实现者读到的F002规格已经写明：RAW落盘必须由DNG封装层组装头和元数据，这是待PD决策的平台缺口；AC37要求真机产出可查询的.dng。\n它仍在saveImageNowRaw中把传感器原始缓冲直接写成.dng媒体资产，并返回成功，同时把缺口登记为FWD-REF P-S3-004。\ngroup-closer之后只把resolve_by改为“集成期 PD 决策”，伪成功逻辑一直保留到返修。\n返修改为rejectRawSave()，在建资产前返回false并提示raw_capture_unsupported。\n",
+      "recommendations": [
+        "保存管线实现阶段：规格要求的封装层缺失时，RAW保存在创建媒体资产前返回失败并提示；不得把原始缓冲按.dng落盘并返回成功。forward-ref登记不能代替失败路径。"
+      ],
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F002-photo-capture-save.md",
+          "at": "2026-10-01T16:41:34.309Z",
+          "reason": "正常输入：实现者Read回执中的§实现映射写明DngCreator/RawImage.writeImage要映射为“ImageReceiver RAW流 + DNG封装自实现”，“DNG头/元数据组装域由封装层承担”，并列为平台缺口候选、待铸PD-ID。AC37要求真机RAW拍照产出.dng且媒体库可查询（agent-a46e99f7c0baf2d05.jsonl:L25-L26）。这足以说明原始缓冲不等于DNG文件。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/RawImageStore.ets",
+          "at": "2026-10-01T16:41:57.466Z",
+          "reason": "正常输入：实现者Bash读取F001产物，注释写明“HMOS无DngCreator等价（RAW能力通道CAMERA_FORMAT_DNG仅到profile层）……DNG封装与EXIF写入归F002（ImageSaver侧）”（agent-a46e99f7c0baf2d05.jsonl:L43-L44），说明封装责任已经交给本slice。"
+        },
+        {
+          "key": "agent-a46e99f7c0baf2d05.jsonl",
+          "at": "2026-10-01T17:09:56.490Z",
+          "reason": "已知DNG封装缺失，Write ImageSaverService时，saveImageNowRaw仍用new Uint8Array(request.raw_image)直写.dng/image/dng资产，置success=true并记录最后图片。注释为“FWD-REF P-S3-004……DNG头/元数据封装待PD决策；通道/落盘/失败兜底已实现——直写缓冲字节”（L283-L284）。收尾报告把它列为decision gap，而不是失败路径（L381）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "实现者用Bash执行head -60读取RawImageStore.ets，回执包含“HMOS无DngCreator等价……DNG封装与EXIF写入归F002（ImageSaver侧）”注释。这是写ImageSaverService前的真实读取。",
+          "evidence": [
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-a46e99f7c0baf2d05.jsonl",
+              "line": 43
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-a46e99f7c0baf2d05.jsonl",
+              "line": 44
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "F001实现者没有展开WhiteBalanceQuery/AutoExposureQuery，转录中也没有出现isExposureModeSupported、isWhiteBalanceModeSupported、getWhiteBalanceRange等名字。本卡归因于“把枚举或setter的存在当作能力，并违背规格条件”，不声称它看到查询接口后仍然忽略。"
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/resources/base/element/string.json",
+      "reason": "已确认c1abe5c..c8dd617中，本issue相关改动只是新增raw_capture_unsupported文案，供返修新增的RAW拒绝路径使用；同批新增的video_*_unsupported属于其他issue。这是修复引入的新要求，生成期没有对应的偏差输出可归因，所以不画生成链。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/resources/zh_CN/element/string.json",
+      "reason": "同base：本issue相关改动只是新增raw_capture_unsupported简体文案，属修复新要求，无生成期偏差来源。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/resources/zh_TW/element/string.json",
+      "reason": "新增raw_capture_unsupported繁体文案，属修复新要求。diff中另有一行结尾空行或括号调整，job pending已列出，尚未核对是哪次Codex调用所改；该改动与生成偏差无关。"
+    }
+  ],
+  "job": "issue-168300edfa3644b0f14a",
+  "metadata": {
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code",
+        "codex"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3",
+        "gpt-6-astra"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.163.0",
+        "2.1.247",
+        "2.1.299"
+      ]
+    },
+    "source_set_id": "sources-974a9086706364eed8b7",
+    "environment": [
+      {
+        "name": "android.compile_sdk",
+        "value": "36",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/.claude/skills",
+        "at": "2026-10-01T09:52:21.840Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-aa8064d19722381a1.jsonl:L11",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-aa8064d19722381a1.jsonl:L10",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos",
+        "at": "2026-10-01T12:27:45.961Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b.jsonl:L1565",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b.jsonl:L1563",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos",
+        "at": "2026-10-01T13:34:44.665Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae78a452b1664bc61.jsonl:L149",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae78a452b1664bc61.jsonl:L148",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.11.1"
+  },
+  "revision": "79e3a447504de5357a4bc6ac0687a348e9214a503b0e3ef26e892f4d596ce8b3"
+}

@@ -1,0 +1,415 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-d5c3514ada560cb5134d",
+  "created_at": "2026-10-23T15:10:33.841002+00:00",
+  "migration_key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/memory-distill-opencamera-20261023/pool",
+  "title": "图库缩略图迁移：整库查询缺读权限即清空、采样与EXIF方向按Android语义直译、拍照缩略图未送达覆盖层、停录缩略图固定512×384",
+  "when": "图库与缩略图功能的实现和页面接线阶段，把Android最近媒体查询、BitmapFactory降采样、EXIF方向读取、拍照/停录缩略图分发落到HarmonyOS photoAccessHelper、ImageSource与Canvas覆盖层时",
+  "description": "源端经MediaStore查询最近媒体（scoped storage下应用天然可见自身媒体），用inSampleSize降采样并以整数读EXIF方向；updateThumbnail同时更新画廊按钮与DrawPreview缩略图动画/幽灵图，停录视频缩略图按画廊按钮宽等比缩放；目标为未获READ_IMAGEVIDEO受限授权的HarmonyOS应用，改用photoAccessHelper.getAssets、ImageSource.createPixelMap/getImageProperty(ORIENTATION)、PixelMap与Canvas覆盖层。",
+  "summary": "本问题含五类已核偏差，均为生成遗留；其中拍照缩略图送达覆盖层一项在返修中被部分接线后才暴露。\n1) 整库查询缺读权限（B33）：F011规格把「MediaStore查询/loadThumbnail」映射为photoAccessHelper.getAssets+getThumbnail，\n   未写读权限；同时Slice 11 worker读到permission-helper「READ_IMAGEVIDEO 读取媒体文件 user_grant」，\n   Slice 3 worker读到photo-access-helper「读相册用 ohos.permission.READ_IMAGEVIDEO」。\n   Slice 3 worker却按Android scoped storage记忆认定「HMOS媒体库在未授权时只显示本应用媒体」，\n   写出无权限守卫的StorageRepository.getLatestMediaCore；Slice 11 worker写GalleryService.getLatestMedia整库查询，\n   失败即resolve(null)→updateGalleryIconToBlank清空缩略图，也没有记录本应用保存的URI。\n   工程从未声明READ_IMAGEVIDEO（该权限属受限开放，FINAL同样不声明），设备上getAssets失败，恢复时缩略图被清空、冷启动丢失入口。\n   FINAL加MediaLibraryAccess.canReadLibrary守卫，保存成功的URI经rememberSavedMedia持久化到opencamera_gallery偏好，恢复时解码自有URI，删除时forgetDeletedMedia。\n2) 解码参数与EXIF方向（B34）：F011 AC106/AC107与MainActivity源码只给出Android的inSampleSize算法与rotateForExif语义。\n   Slice 11 worker在写前思考中直接断言「HMOS createPixelMap DecodingOptions.sampleSize 直接支持」，\n   并把getImageProperty(ORIENTATION)当数字解析（Number(orientationStr)）；F005 worker为幽灵选图同样写sampleSize，\n   思考中一度怀疑「sampleSize is not supported」随即改口未核。SDK d.ts写明ORIENTATION以「Right-top」等字符串返回，\n   生成期材料中没有任何一次读取该说明。设备上sampleSize=8使解码插件失败。该GalleryService路径在c752566尚无调用方，\n   返修恢复自有URI时才触发。FINAL改为desiredSize=原尺寸/sampleSize并用fd打开源、finally释放，ORIENTATION映射'right-top'等描述值。\n3) 拍照缩略图未送达覆盖层（B35）：ImageSaverService的updateThumbnail回调注明「applicationInterface.updateThumbnail 等价（F005 缩略图动画 seam）」，\n   registry P-S3-002要求closer接「F005 updateThumbnail/toast seam」，F011 AC110要求成功后同时DrawPreview.updateThumbnail。\n   Slice 11 worker定义的DrawPreviewFacade只有setCoverPreview/updateSettings/clearGhostImage/allowGhostImage，没有updateThumbnail，\n   GalleryService.onThumbnailUpdated也无人赋值；group-2 closer把回调写成只赋sessionState.galleryBitmap并void isVideo/wantAnimation，\n   并在复核时明确「Skip — direct write is fine」。返修c8dd617按该门面接入Overlay，仍无updateThumbnail，暂停回看不显示刚拍照片；\n   接通两路后Gallery与Canvas又共用同一PixelMap重复释放。FINAL经galleryService.updateGalleryIconWithThumbnail下发，\n   Overlay cloneSync独立持有、bindDrawPreview重建时补送、暂停回看triggerShowLastImage。\n4) 停录视频缩略图（B36）：F003-AC45写明「取末帧，宽度按 gallery 按钮宽度等比缩放并更新缩略图」。\n   Slice 4 worker读到GalleryService为媒体库视频缩略图（AC109 MINI_SIZE）定义的512×384后，\n   在VideoRecordController里以PixelMapParams 512×384取帧并直接写sessionState.galleryBitmap，绕过Gallery/Overlay。\n   FINAL按实测gallery宽度缩放（VideoThumbnailScaler），经videoThumbnailPublisher→MainPageVM.publishVideoThumbnail校验URI/前台/非intent后发布。\n5) 缩略图动画终点（B36）：F005-AC46要求终点为画廊按钮，DrawPreview源码以galleryButton实际left/top/width/height计算终点；\n   F005 worker改为按layoutSpec推导中心并写死size=60（ONSCREEN_BUTTON_SIZE_VP），不读实际渲染的画廊控件；\n   TOP模式下MainPage实际是40×40、position(86%, 8)的缩略图，与推导的位置和尺寸不一致。\n   FINAL改读onAreaChange实测的GalleryThumbnailBounds。\n",
+  "recommendations": [
+    "规格提取阶段：把MediaStore查询映射到photoAccessHelper.getAssets时，写明整库读取需要ohos.permission.READ_IMAGEVIDEO（受限开放权限，普通应用通常拿不到），HarmonyOS不像Android scoped storage那样默认可见本应用媒体；相机类应用的画廊入口应以自身保存成功的URI为准。",
+    "实现阶段：调用getAssets整库查询前先用abilityAccessCtrl.checkAccessTokenSync核对READ_IMAGEVIDEO，未授权时不查询；保存成功后记录并持久化该URI，恢复时直接解码它；查询失败或无结果不得清空已有缩略图，只在确认删除当前URI时置空。",
+    "实现阶段：Android降采样不要直译为DecodingOptions.sampleSize（设备上非1值会使解码失败），按原尺寸/sampleSize计算desiredSize；读EXIF方向前查image d.ts，ORIENTATION返回「Top-left/Right-top/Bottom-right/Left-bottom」等字符串，需映射为0/90/180/270，并兼容数字串。",
+    "页面接线/收口阶段：updateThumbnail这类F005 seam必须同时送达画廊（GalleryService.updateGalleryIconWithThumbnail）与覆盖层（updateThumbnail(thumbnail,isVideo,wantAnimation)，暂停预览时showLastImage）；覆盖层尚未就绪时保留FWD-REF或在门面接口预留updateThumbnail，不能用void丢弃参数后标为已解除。接通两路后明确PixelMap所有权，接收方cloneSync后各自释放。",
+    "实现阶段（录像）：停录缩略图按AC45取末帧后按实测画廊按钮宽等比缩放，不要借用媒体库MINI_SIZE 512×384；经画廊服务/VM统一发布并校验URI与前台状态，不直接写共享状态。",
+    "实现阶段（覆盖层）：源端按目标控件实际位置/尺寸计算动画终点时，目标端用onAreaChange等实测边界注入Canvas，不用布局常量（如60vp）推导。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/GalleryService.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "summary": "Slice 11 worker写GalleryService前读到F011规格（MediaStore查询→getAssets+getThumbnail、AC106 inSampleSize算法、AC107 EXIF旋转、AC110成功后DrawPreview.updateThumbnail）、\nMainActivity.loadThumbnailFromUri源码与permission-helper「READ_IMAGEVIDEO 读取媒体文件」。\nWrite的GalleryService以整库getAssets取最新媒体，失败resolve(null)后updateGalleryIconToBlank；loadThumbnailFromUri写sampleSize: sampleSize，\nrotateForExif写Number(orientationStr)。三处片段保留到c752566（loadThumbnailFromUri当时无调用方）。\nFINAL：canReadLibrary守卫+rememberSavedMedia持久化自有URI、失败不清空；desiredSize换算、fd打开并finally释放；ORIENTATION描述值映射；另加ownedGalleryBitmap所有权与视频缩略图缩放。\n",
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F011-app-integration.md",
+          "at": "2026-10-01T16:42:15.802Z",
+          "reason": "输入（部分有缺口）：Read回执第158行把「MediaStore 查询 / loadThumbnail(512,384)」映射为「photoAccessHelper.getAssets + getThumbnail」，未提读权限；第149行WRITE_EXTERNAL_STORAGE→不申请；AC106给出inSampleSize从1起×2的Android算法，AC107要求EXIF旋转校正后上屏，AC110要求成功后同时DrawPreview.updateThumbnail（agent-a690eb1a2619c2d76.jsonl:L27-L28）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/MainActivity.java",
+          "at": "2026-10-01T16:45:32.533Z",
+          "reason": "正常输入：Read回执（4040-4240）给出loadThumbnailFromUri的inSampleSize循环与ImageUtils.rotateForExif，以及照片走loadThumbnailFromUri(uri,8)、视频走loadThumbnail(512,384)；这些是要达到的源端语义，不含HarmonyOS解码参数约束（同转录L136-L137）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/.claude/skills/arkts-system-capabilities/references/permission-helper.md",
+          "at": "2026-10-01T16:47:09.542Z",
+          "reason": "正常输入：Bash sed回执第99行「ohos.permission.READ_IMAGEVIDEO | 读取媒体文件 | user_grant（需用户同意）」，第107行user_grant需声明+运行时请求；足以提示整库读取媒体依赖该权限（同转录L165-L166）。"
+        },
+        {
+          "key": "agent-a690eb1a2619c2d76.jsonl",
+          "at": "2026-10-01T16:56:53.456Z",
+          "reason": "写前思考（L194）只计划「updateGalleryIcon 用 photoAccessHelper.getAssets 查最新媒体」，未处理读权限，并断言「HMOS createPixelMap DecodingOptions.sampleSize 直接支持」、ORIENTATION「取角度」。Write的GalleryService（L267-L268）：getLatestMedia整库getAssets、catch后resolve(null)→updateGalleryIconToBlank清空；未记录自有保存URI；loadThumbnailFromUri写sampleSize: sampleSize；rotateForExif写Number(orientationStr)。其后落地module.json5权限时也未声明READ_IMAGEVIDEO（L449-L451）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "Slice 11 worker以Bash sed -n '1,120p'读取permission-helper.md，回执含READ_IMAGEVIDEO「读取媒体文件 user_grant」行；这是它写GalleryService前实际收到的权限参考。",
+          "evidence": [
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-a690eb1a2619c2d76.jsonl",
+              "line": 165
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-a690eb1a2619c2d76.jsonl",
+              "line": 166
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/repositories/StorageRepository.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "summary": "Slice 3 worker读到F002 AC06/AC57的最新媒体双库查询要求，以及photo-access-helper第177行「读相册用 ohos.permission.READ_IMAGEVIDEO」，\n却在写前思考中按Android scoped storage认定「HMOS media library only shows app's own media unless READ_IMAGEVIDEO granted. Fine.」，\nWrite的StorageRepository.getLatestMediaCore直接getAssets，失败只记日志返回null。该片段保留到c752566；FINAL在入口加MediaLibraryAccess.canReadLibrary()守卫。\n",
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F002-photo-capture-save.md",
+          "at": "2026-10-01T16:41:34.309Z",
+          "reason": "正常输入：Read回执AC06/AC57要求getLatestMediaCore按IMAGES/VIDEOS双库、DATE_TAKEN降序取前3并做DNG/特殊名替代，指向StorageRepository.getLatestMedia；规格本身未写读权限（agent-a46e99f7c0baf2d05.jsonl:L25-L26）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/.claude/skills/arkts-system-capabilities/references/photo-access-helper.md",
+          "at": "2026-10-01T16:46:25.933Z",
+          "reason": "正常输入：Read回执第163-175行给出READ_IMAGEVIDEO的requestPermissions声明与运行时请求，第177行「读相册用 ohos.permission.READ_IMAGEVIDEO」；足以说明查询媒体库依赖读权限（同转录L131-L132）。"
+        },
+        {
+          "key": "agent-a46e99f7c0baf2d05.jsonl",
+          "at": "2026-10-01T17:03:57.355Z",
+          "reason": "读到上述参考后，思考中写「HMOS media library only shows app's own media unless READ_IMAGEVIDEO granted. Fine.」（L136），把Android scoped storage可见自身媒体的语义套到HarmonyOS；Write新建StorageRepository，getLatestMediaCore无权限检查直接helper.getAssets，异常仅hilog后return null（L252-L253）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/PreviewOverlayViewModel.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "summary": "F005 worker读到AC53「按预览宽降采样（2 的幂）+ EXIF 旋转」与DrawPreview.loadBitmap的highestOneBit/inSampleSize，\n幽灵选图解码时把sample_size直接写进DecodingOptions.sampleSize；思考中一度写「sampleSize is not supported」，随即改口「supports sampleSize (1,2,4,8...)」而未核SDK。\n18:06的Edit只把createPixelMapSync改为createPixelMap，sampleSize原样保留到c752566；FINAL改为desiredSize=原尺寸/sampleSize。\n本文件的updateThumbnail克隆与返回值属B35返修接线，未在此图归因。\n",
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F005-preview-overlay.md",
+          "at": "2026-10-01T17:12:23.288Z",
+          "reason": "正常输入：Read回执AC53要求幽灵选图「按预览宽降采样（2 的幂）+ EXIF 旋转」，给出要达到的缩放语义（agent-a3041d23e23f0d50e.jsonl:L25-L26）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/ui/DrawPreview.java",
+          "at": "2026-10-01T17:14:26.947Z",
+          "reason": "正常输入：Read回执（660-1299）含loadBitmap：先inJustDecodeBounds取尺寸，sample_size=Integer.highestOneBit(ceil(image/display))，再options.inSampleSize解码（同转录L103-L104）。"
+        },
+        {
+          "key": "agent-a3041d23e23f0d50e.jsonl",
+          "at": "2026-10-01T17:37:26.778Z",
+          "reason": "写前思考L309先写「createPixelMap(options with desiredSize / sampleSize is not supported)」又改口「supports sampleSize (1,2,4,8...). Yes DecodingOptions.sampleSize exists」，L351沿用；Write的PreviewOverlayViewModel幽灵图解码写decodeOpts={sampleSize: sampleSize, desiredPixelFormat: RGBA_8888}（L381-L382）。未查SDK或设备验证即把Android inSampleSize直译。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/components/viewfinder/PreviewOverlay.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "summary": "F005 worker读到AC46「终点为画廊按钮」与DrawPreview.doThumbnailAnimation以galleryButton.getLeft/getTop/getWidth/getHeight计算终点，\n写PreviewOverlay时改为按layoutSpec.placements['gallery']推导中心，并写死const size = 60.0 // ONSCREEN_BUTTON_SIZE_VP；\nc752566中面板模式按钮外框恰为60（48图标+12），但TOP模式MainPage画的是40×40、position(86%, 8)的缩略图，动画终点尺寸与位置都与推导值不符。\nFINAL改用MainPage onAreaChange记录的GalleryThumbnailBounds。\n",
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F005-preview-overlay.md",
+          "at": "2026-10-01T17:12:23.288Z",
+          "reason": "正常输入：Read回执AC46「500ms 内缩略图自画布中心缩放+位移到画廊按钮中心，尺寸按 (全屏/目标) 宽高比收敛」「判：终点为画廊按钮」（agent-a3041d23e23f0d50e.jsonl:L25-L26）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/ui/DrawPreview.java",
+          "at": "2026-10-01T17:14:36.474Z",
+          "reason": "正常输入：Read回执（2479-2918）第2700-2713行取findViewById(R.id.gallery)，以getLeft()+getWidth()/2、getTop()+getHeight()/2为终点，nd_w/nd_h取按钮实际宽高；足以说明终点来自实际控件边界（同转录L109-L110）。"
+        },
+        {
+          "key": "agent-a3041d23e23f0d50e.jsonl",
+          "at": "2026-10-01T18:26:35.393Z",
+          "reason": "思考中决定「gallery button center ... derivation is layoutSpec-based ... no hook needed」（L309），并参照MainUIController「统一 60dp」（L276-L277）；Write的PreviewOverlay.galleryCenter按layoutSpec推导且size=60.0（L457-L458），18:28的Edit保留该常量（L483）。以布局常量代替实测画廊按钮边界。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/pages/MainPage.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "summary": "group-2 closer受派解除P-S3-002（ImageSaver uiCallbacks，含F005 updateThumbnail seam），读到ImageSaverService回调注释「applicationInterface.updateThumbnail 等价（F005 缩略图动画 seam）」。\n它先写「galleryBitmap = thumbnail + galleryService.updateGalleryIcon(thumbnail)」，重写时改为只赋sessionState.galleryBitmap并void isVideo、void wantAnimation，\n复核时明确跳过Android同时驱动画廊与DrawPreview的语义。该片段保留到c752566；返修c8dd617接入的DrawPreview门面也无updateThumbnail。\nFINAL改为vm.galleryService.updateGalleryIconWithThumbnail(thumbnail,isVideo,wantAnimation)，保存成功rememberSavedMedia，并bindDrawPreview把updateThumbnail接到Overlay。\n",
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/placeholder-registry.md",
+          "at": "2026-10-01T17:29:12.866Z",
+          "reason": "正常输入：Bash grep回执第404行P-S3-002「page_0001 savingImage/nRealImagesToSave/Processing/lastThumbnailUri 挂载 + F005 updateThumbnail/toast seam 接线」，派工也写明P-S3-002归该closer解除（agent-acb5c3d58575999a4.jsonl:L1、L34-L35）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/ImageSaverService.ets",
+          "at": "2026-10-01T17:30:41.461Z",
+          "reason": "正常输入：Read回执第98-100行updateThumbnail(thumbnail,isVideo,wantAnimation)注释「applicationInterface.updateThumbnail 等价（F005 缩略图动画 seam）」，说明该回调须送达覆盖层而不只是画廊位图（同转录L77-L78）。"
+        },
+        {
+          "key": "agent-acb5c3d58575999a4.jsonl",
+          "at": "2026-10-01T18:40:12.235Z",
+          "reason": "计划中把它简化为「updateThumbnail→galleryBitmap update」（L251）；18:37首写还调galleryService.updateGalleryIcon(thumbnail)（L567），18:40重写为只赋this.sessionState.galleryBitmap并void isVideo/void wantAnimation（L588-L589），随后复核写「Android also drives gallery icon ... Skip — direct write is fine」（L611）。F005参数被丢弃且未留FWD-REF，P-S3-002按已接线处理。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "group-2 closer在工程根以Bash grep spec/placeholder-registry.md列出P-S3/P-S11等条目，回执第404行为P-S3-002「F005 updateThumbnail/toast seam 接线」；这是它接线前收到的待解除项。",
+          "evidence": [
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-acb5c3d58575999a4.jsonl",
+              "line": 34
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-acb5c3d58575999a4.jsonl",
+              "line": 35
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/MainPageVM.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "summary": "Slice 11 worker读到F011 AC110「成功 → gallery 按钮设位图 + setLastMediaScanned + DrawPreview.updateThumbnail」与AC113视频缩略图上屏，\nWrite的MainPageVM却定义只有四个方法的DrawPreviewFacade（无updateThumbnail），GalleryService.onThumbnailUpdated始终无人赋值。\n返修c8dd617按此门面绑定Overlay，updateThumbnail仍缺。FINAL新增bindDrawPreview（重建时补送缩略图）、pausedReviewThumbnail/triggerShowLastImage、publishVideoThumbnail与销毁释放。\n",
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F011-app-integration.md",
+          "at": "2026-10-01T16:42:15.802Z",
+          "reason": "正常输入：Read回执AC110要求缩略图成功后「gallery 按钮设位图 + setLastMediaScanned(uri,is_raw) + DrawPreview.updateThumbnail」，AC113要求停录缩略图按gallery按钮宽等比缩放后上屏（agent-a690eb1a2619c2d76.jsonl:L27-L28）。"
+        },
+        {
+          "key": "agent-a690eb1a2619c2d76.jsonl",
+          "at": "2026-10-01T17:12:12.971Z",
+          "reason": "Write的MainPageVM中「F005 DrawPreview 门面」DrawPreviewFacade只声明setCoverPreview/updateSettings/clearGhostImage/allowGhostImage，没有updateThumbnail；同一worker在GalleryService留的onThumbnailUpdated seam在VM中未接（同转录L410-L411）。AC110的DrawPreview送达在门面层缺失。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/VideoRecordController.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "summary": "Slice 4 worker读到F003-AC45「停止后生成缩略图（取末帧），宽度按 gallery 按钮宽度等比缩放并更新缩略图」，\n又读到GalleryService为媒体库视频缩略图（AC109 MINI_SIZE）定义的512×384常量；写VideoRecordController时以PixelMapParams 512×384取末帧，\n并直接写sessionState.galleryBitmap/lastThumbnailUri，绕过Gallery与Overlay。该片段保留到c752566；\nFINAL取自然帧按实测gallery宽度缩放（scaleVideoThumbnailToWidth），经videoThumbnailPublisher交MainPageVM.publishVideoThumbnail校验后发布。\n",
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F003-video-record.md",
+          "at": "2026-10-01T16:54:35.858Z",
+          "reason": "正常输入：Read回执第147行F003-AC45「停止后生成缩略图（取末帧），宽度按 gallery 按钮宽度等比缩放并更新缩略图」，足以确定缩放基准是画廊按钮宽而非固定尺寸（agent-ad056b0d5327c12ec.jsonl:L24-L26）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/GalleryService.ets",
+          "at": "2026-10-01T16:58:02.222Z",
+          "reason": "旁证输入：Bash sed回执给出GalleryService头注「loadThumbnail(512,384) / getThumbnail(MINI_SIZE) … AC109 尺寸常量 512×384 沿用」与thumbnail_width=512，这是媒体库视频缩略图请求尺寸，不是AC45停录缩略图的缩放基准（同转录L133-L134）。"
+        },
+        {
+          "key": "agent-ad056b0d5327c12ec.jsonl",
+          "at": "2026-10-01T17:16:55.528Z",
+          "reason": "计划中写「AVImageGenerator 生成 pixelMap → MainSessionState.galleryBitmap 更新」（L242、L312），未计划按按钮宽缩放；Write的VideoRecordController定义thumbnail_width/height=512/384（注「GalleryConstants.thumbnail 等价档」），updateGalleryThumbnail以PixelMapParams{512,384}取末帧后直接写sessionState.galleryBitmap（L394-L395）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "Slice 4 worker在工程根以Bash sed -n '1,60p' entry/src/main/ets/services/GalleryService.ets读取头注与常量，回执含512×384（AC109）与thumbnail_width=512；随后VideoRecordController沿用该常量。",
+          "evidence": [
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-ad056b0d5327c12ec.jsonl",
+              "line": 133
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-ad056b0d5327c12ec.jsonl",
+              "line": 134
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "F011规格作者（run 1 agent-aa0dfce5d01f9eaa2）写MediaStore映射行时是否收到过READ_IMAGEVIDEO的说明未上溯；本卡以两位实现者写前已收到读权限要求为已核偏差。",
+    "生成期材料中未见说明DecodingOptions.sampleSize仅支持1的输入（SDK d.ts只写Sampling ratio），sampleSize一项归为未核平台语义即断言；ORIENTATION字符串语义在SDK d.ts可查，但生成者未读取。"
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/MediaLibraryAccess.ets",
+      "reason": "返修新建文件（canReadLibrary权限探测，B33修复载体），c752566不存在，无生成期写入；对应的生成偏差已在GalleryService/StorageRepository图归因。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/VideoThumbnailScaler.ets",
+      "reason": "返修新建文件（scaleVideoThumbnailToWidth，B36修复载体），c752566不存在；生成偏差已在VideoRecordController图归因。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/models/GalleryThumbnailBounds.ets",
+      "reason": "返修新建文件（实测画廊按钮边界，B36修复载体），c752566不存在；生成偏差已在PreviewOverlay图归因。"
+    }
+  ],
+  "job": "issue-d5c3514ada560cb5134d",
+  "metadata": {
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code",
+        "codex"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3",
+        "gpt-6-astra"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.163.0",
+        "2.1.247",
+        "2.1.299"
+      ]
+    },
+    "source_set_id": "sources-974a9086706364eed8b7",
+    "environment": [
+      {
+        "name": "android.compile_sdk",
+        "value": "36",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/.claude/skills",
+        "at": "2026-10-01T09:52:21.840Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-aa8064d19722381a1.jsonl:L11",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-aa8064d19722381a1.jsonl:L10",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos",
+        "at": "2026-10-01T12:27:45.961Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b.jsonl:L1565",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b.jsonl:L1563",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos",
+        "at": "2026-10-01T13:34:44.665Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae78a452b1664bc61.jsonl:L149",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae78a452b1664bc61.jsonl:L148",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.11.1"
+  },
+  "revision": "f08e3534f55b8cc6ebd570ff39c426fb4462edec6d303e3d2574fe5789a9b67f"
+}

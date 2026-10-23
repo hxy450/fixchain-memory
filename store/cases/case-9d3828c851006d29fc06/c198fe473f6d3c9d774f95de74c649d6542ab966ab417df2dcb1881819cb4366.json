@@ -1,0 +1,403 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-9d3828c851006d29fc06",
+  "created_at": "2026-10-23T15:01:42.207688+00:00",
+  "migration_key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/memory-distill-opencamera-20261023/pool",
+  "title": "截断的SDK枚举扫描被当成“能力缺失”导致录像配置被静默替换；默认质量档选择被延后却没有交接",
+  "when": "功能切片实现阶段：按目标SDK枚举和能力决定源端录像选项如何映射，或只实现某条AC的一部分、把剩余部分留给其他切片时",
+  "description": "源端录像选项包括编码（H264/HEVC）、容器（MP4/3GP/WebM）、音源（CAMCORDER/UNPROCESSED等）以及采集/播放帧率，需要逐项映射到AVRecorderProfile、CodecMimeType和AudioSourceType。源端在setupCamera中建立视频质量表，并按“保存值→FullHD→最高档”选出当前档；目标工程把这件事拆到预览引擎和录像服务两个切片里。",
+  "summary": "[A31 编码/音源被静默替换] Slice 4录像切片的worker（agent-ad056b0d5327c12ec）写代码前已经读到F003 spec：\nAC38要求“默认/audio_src_camcorder→CAMCORDER，audio_src_unprocessed→UNPROCESSED（低版本回落CAMCORDER）”，\nAC01要求按18个字段配置录制器（L24-L26）。它用的本机SDK文件@ohos.multimedia.media.d.ts（API 24）实际声明了\nAUDIO_SOURCE_TYPE_CAMCORDER = 13（@since 12，注释是camera recording scenarios），也声明了VIDEO_HEVC。\n但它用python从固定长度的字符窗口里提取枚举成员：CodecMimeType取src[i:i+2600]，AudioSourceType取src[i:i+1600]。\nVIDEO_HEVC距CodecMimeType枚举起点约3413个字符，CAMCORDER距AudioSourceType起点约1625个字符，都在窗口之外，\n所以回执列表停在AUDIO_VORBIS和VOICE_MESSAGE（L199-L200、L206-L207）。它把截断的回执当成完整枚举，\n在思考中断言“没有VIDEO_HEVC”“HMOS无CAMCORDER档”（L208）。随后它在slice-04-source-notes §11/§12写下\n“无HEVC录制枚举”“AudioSourceType无CAMCORDER/UNPROCESSED”（L326）。VideoProfileBuilder把camcorder和默认值映射为MIC，\n把unprocessed映射为VOICE_RECOGNITION，3gp/webm只改扩展名（L334）。AvRecorderEngine固定写VIDEO_AVC和CFT_MPEG_4，\ntoAudioSourceType遇到其他值都回落MIC，并且不论record_audio是否开启都下发音频四个字段（L342）。\n偏差出在“SDK文件已在手→得出能力结论”这一步；工具回执和spec AC38相互矛盾，也没有触发它复查。\n这些片段原样保留到检查点c752566。\n2026-10-17，Codex的capture_audit子会话（01a14ab0-6e4d）查API 24 SDK，确认HEVC、CAMCORDER和getAvailableEncoder都存在。\n修复内容：MP4容器下按配置选AVC或HEVC；CAMCORDER映射为13；用getAvailableEncoder校验编码器；关闭音频时省略音频字段；\n新增parseIntegerPreference，行为与Integer.parseInt一致。3GP/WebM容器、UNPROCESSED音源以及采集与播放帧率不同的情况，\n本SDK确实不支持；修复后会在创建资产前抛UnsupportedVideoConfigurationError，并新增四条本地化字符串。\n这一组改动是把“确无能力时静默降级”改成“明确报错”。生成时decision-ledger允许“应用层等效或降级”，\n所以本卡不把这一组算作输入与输出的偏差，只记录修复去向。\n修复过程中，session_archive子会话（01a14ab1-0349）在L747给pause加了一条裸`throw error`，引发ArkTS编译错误；\n主会话在L1447、L1506把它改成RecorderOperationError。这是修复中新出现的问题，不入图。\n[B38 当前质量档恒为空] Slice 1预览切片的worker（agent-ae5882c40105e3f01）写代码前已经读到F001-AC235：\n“保存的质量失效→默认FullHD，没有则选最高；没有任何可用质量→supports_video=false”（L23→L26）。\n它也读到了Preview.java 3168-3210的选档实现（L101→L102）。但它写PreviewEngine时，只按video_sizes是否非空设置supportsVideo，\n并写下注释“视频质量（AC235：默认FullHD…）”和“VideoQualityHandler全量归F003”，代码里没有任何选档逻辑。\nimpl-claims和slice-01-source-notes D8仍把AC235记为本切片已实现（写成“默认质量序列位”），也没有登记forward-ref（L272、L378）。\nSlice 4只通过grep看到“VideoQualityHandler全量归F003…”这一行（L124→L125）；F003 spec里没有AC235，\n它也没读Preview.java 3160-3210，所以没有拿到选档规则。它建的VideoQualityStore有setCurrentVideoQualityIndex，却没有任何调用方（L331）；\nVideoRecordController只在质量表为空时调用initialiseFromCameraFeatures（L547）；VideoProfileBuilder在当前档为null时返回dummy profile（L334）。\n结果是currentVideoQualityIndex始终为-1，录制器拿到空配置。\n修复（session_archive L2629、L2642）：VideoQualityStore新增selectVideoQuality（保存值→1920x1080→最高档）和qualityDimensions；\nPreviewEngine每次setup都重建质量表、选档并写回偏好，supportsVideo改为看当前档是否存在；VideoRecordController启动录制时同样重建并选档。\n",
+  "recommendations": [
+    "核对SDK枚举或接口成员时，要截取完整的枚举体（到对应的闭合括号为止），或直接按成员名grep（例如grep -n 'CAMCORDER\\|HEVC' d.ts），再下“不存在”的结论。固定字符窗口、head或sed +N截断的回执只能证明看到了哪些成员，不能证明缺了哪些。",
+    "SDK核查结果与spec映射要求冲突时（例如AC38要求CAMCORDER，回执里却没有），先按成员名定向复查SDK，再决定是否改映射；确认确实缺失后，把它记为平台差异。",
+    "源端选项在目标平台确实没有对应能力时（例如3GP/WebM容器、UNPROCESSED音源、独立采集速率），不要静默换成另一个选项。API提供能力查询（如getAvailableEncoder）时先查询，不支持就在创建录制资产前明确提示用户。",
+    "切片只实现某条AC的一部分时（例如只做supports_video、没做默认档选择），不要在注释、impl-claims或source-notes里声称这条AC已完成；把没做的具体行为（保存值→FullHD→最高档，并写回偏好）登记为forward-ref，指向承接的切片。",
+    "承接“全量归本切片”的状态容器时，逐个核对状态字段由谁写入。当前索引只有setter、没有调用方，而消费方遇到-1就返回dummy时，应按源端setupCamera的时机补上建表和选档，不要只在表为空时懒加载。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/VideoProfileBuilder.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "summary": "Slice 4的worker收到F003 AC38的CAMCORDER/UNPROCESSED映射要求，SDK d.ts里也实有AUDIO_SOURCE_TYPE_CAMCORDER = 13。\n但它的枚举扫描在1600个字符处截断，于是认定“无CAMCORDER”。VideoProfileBuilder把camcorder和默认值写成MIC，\nunprocessed写成VOICE_RECOGNITION，3gp/webm只改扩展名，文件头注释也写着“CAMCORDER/UNPROCESSED无对应枚举”。\n修复后改为CAMCORDER(13)；UNPROCESSED改为明确报错；按所选格式保留容器和编码常量，交给录制器校验。\n",
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F003-video-record.md",
+          "at": "2026-10-01T16:54:35.858Z",
+          "reason": "正常输入：Read回执给出AC38的六档音源映射（默认/camcorder→CAMCORDER，unprocessed→UNPROCESSED，低版本回落CAMCORDER），以及AC01按18个字段配置录制器。这足以说明不能把camcorder静默改成MIC（agent-ad056b0d5327c12ec.jsonl:L24-L26）。"
+        },
+        {
+          "key": "/Applications/DevEco-Studio.app/Contents/sdk/default/openharmony/ets/api/@ohos.multimedia.media.d.ts",
+          "at": "2026-10-01T17:02:10.717Z",
+          "reason": "生成者写前读取的SDK声明，文件里实有AUDIO_SOURCE_TYPE_CAMCORDER = 13（d.ts L7586）和VIDEO_HEVC（L8445）。但它用python按src[i:i+1600]/src[i:i+2600]截取枚举，回执列表因此不含这两个成员（同转录L199-L200、L206-L207）。文件内容正确且完整，截断来自它自己设计的查询。"
+        },
+        {
+          "key": "agent-ad056b0d5327c12ec.jsonl",
+          "at": "2026-10-01T17:11:23.662Z",
+          "reason": "生成者把截断的回执当作完整枚举（L208思考：HMOS无CAMCORDER档，没有VIDEO_HEVC），与AC38冲突也没有复查。它在source-notes §12写“AudioSourceType无CAMCORDER/UNPROCESSED”（L326）；Write VideoProfileBuilder时把camcorder和默认值写成MIC，unprocessed写成VOICE_RECOGNITION，3gp/webm只改扩展名（L334-L335）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "生成者用Bash内嵌python打开该d.ts，按固定窗口提取AudioSourceType等枚举成员；回执列出DEFAULT/MIC/VOICE_RECOGNITION/VOICE_COMMUNICATION/VOICE_MESSAGE，缺CAMCORDER。这是它写VideoProfileBuilder之前对该文件的真实读取。",
+          "evidence": [
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-ad056b0d5327c12ec.jsonl",
+              "line": 206
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-ad056b0d5327c12ec.jsonl",
+              "line": 207
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/AvRecorderEngine.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "summary": "同一个worker依据截断的CodecMimeType回执，认定“没有HEVC录制枚举”。AvRecorderEngine里固定写VIDEO_AVC和CFT_MPEG_4，\ntoAudioSourceType把其他值都回落为MIC，不论是否录音都下发音频四个字段，也没有调用d.ts中已有的getAvailableEncoder。\n修复后：按profile选择AVC或HEVC；用getAvailableEncoder校验；CAMCORDER映射为13；关闭音频时省略音频字段；\n不支持的容器、音源和独立采集速率改为抛UnsupportedVideoConfigurationError。\n修复中新出现的pause裸throw（session_archive L747）由主会话L1506改成RecorderOperationError，不入图。\n",
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F003-video-record.md",
+          "at": "2026-10-01T16:54:35.858Z",
+          "reason": "正常输入：AC01要求按VideoProfile的18个字段配置录制器（包含所选编码和容器），AC38要求CAMCORDER映射（agent-ad056b0d5327c12ec.jsonl:L24-L26）。"
+        },
+        {
+          "key": "/Applications/DevEco-Studio.app/Contents/sdk/default/openharmony/ets/api/@ohos.multimedia.media.d.ts",
+          "at": "2026-10-01T17:02:10.717Z",
+          "reason": "SDK声明里实有VIDEO_HEVC（枚举体内偏移约3413个字符）和getAvailableEncoder（d.ts L5933/L5951）。生成者用2600个字符的窗口提取CodecMimeType，回执只列到AUDIO_VORBIS，用1600个字符的窗口提取AudioSourceType，漏掉了CAMCORDER（同转录L199-L200、L206-L207）。"
+        },
+        {
+          "key": "agent-ad056b0d5327c12ec.jsonl",
+          "at": "2026-10-01T17:12:46.485Z",
+          "reason": "在截断回执上得出“videoCodec录制仅VIDEO_AVC（无HEVC枚举）→3gpp/webm/hevc档回落”的结论。Write AvRecorderEngine时固定写VIDEO_AVC和CFT_MPEG_4，toAudioSourceType默认回落MIC，音频四个字段始终下发（L342-L343）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "生成者用Bash内嵌python打开该d.ts：以2600字符窗口提取CodecMimeType，回执只列到AUDIO_VORBIS；再以1600字符窗口提取AudioSourceType，回执缺CAMCORDER。两次都是写AvRecorderEngine之前对该文件的真实读取。",
+          "evidence": [
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-ad056b0d5327c12ec.jsonl",
+              "line": 199
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-ad056b0d5327c12ec.jsonl",
+              "line": 200
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-ad056b0d5327c12ec.jsonl",
+              "line": 206
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-ad056b0d5327c12ec.jsonl",
+              "line": 207
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/PreviewEngine.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "summary": "Slice 1的worker已经读到F001-AC235和Preview.java中的选档实现。PreviewEngine里却只写了supportsVideo = video_sizes非空，\n外加注释“AC235：默认FullHD”和“VideoQualityHandler全量归F003”，没有选档代码，也没有登记forward-ref；impl-claims仍声称AC235已实现。\n修复后PreviewEngine每次setup都重建质量表，并调用selectVideoQuality（保存值→1080p→最高档）写回偏好，supportsVideo改为看当前档。\n",
+      "recommendations": [
+        "只实现AC的一部分时，不在注释或impl-claims中声称已完成；把未实现的选档规则登记为forward-ref，写明承接切片和具体行为。",
+        "源端在setupCamera中做的初始化（建表、选档、写回偏好），迁移时保持在相机每次setup的同一时机执行。"
+      ],
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F001-camera-preview.md",
+          "at": "2026-10-01T14:57:03.096Z",
+          "reason": "正常输入：Read回执里有F001-AC235：“保存质量失效→默认FullHD（1920x1080），无则最高；无任何可用质量→supports_video=false”，验收判据为“质量表含FullHD与4K→默认选FullHD”（agent-ae5882c40105e3f01.jsonl:L23、L26）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/preview/Preview.java",
+          "at": "2026-10-01T14:59:44.486Z",
+          "reason": "正常输入：Read（offset 2500，limit 1100）的回执包含setupCameraParameters 3168-3210：先匹配保存值，失效则默认FullHD、否则选最高档，再setVideoQualityPref；没有任何档位时supports_video=false（同转录L101-L102）。"
+        },
+        {
+          "key": "agent-ae5882c40105e3f01.jsonl",
+          "at": "2026-10-01T15:25:31.156Z",
+          "reason": "已收到上述要求和源码。L204的规划只保留“supports_video from features.video_sizes non-empty”。L272 Write PreviewEngine时写了注释“视频质量（AC235：默认FullHD…）”和“VideoQualityHandler全量归F003”，却没有选档代码；L378的source-notes D8把它记为“默认质量序列位”，没有登记forward-ref。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/VideoQualityStore.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "summary": "Slice 1把选档部分延后，只在PreviewEngine里留下注释“VideoQualityHandler全量归F003”。Slice 4通过grep看到这行注释，\n但没有拿到AC235的选档规则。它建的VideoQualityStore只保存currentVideoQualityIndex = -1和一个setter，没有任何选档入口。\n修复新增selectVideoQuality（保存值→1920x1080→最高档）和qualityDimensions，并在initialiseFromCameraFeatures末尾调用。\n",
+      "recommendations": [
+        "承接“全量归本切片”的状态容器时，确认每个状态字段由谁、在何时写入；当前索引只有setter而没有调用方时，应补上选档入口，或回到移交方核对源端规则。"
+      ],
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F001-camera-preview.md",
+          "at": "2026-10-01T14:57:03.096Z",
+          "reason": "正常输入：F001-AC235写明默认档选择规则（agent-ae5882c40105e3f01.jsonl:L23、L26）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/preview/Preview.java",
+          "at": "2026-10-01T14:59:44.486Z",
+          "reason": "正常输入：setupCameraParameters 3168-3210的选档实现（同转录L101-L102）。"
+        },
+        {
+          "key": "agent-ae5882c40105e3f01.jsonl",
+          "at": "2026-10-01T15:25:31.156Z",
+          "reason": "偏差起点：收到AC235和源码后只实现supports_video，在PreviewEngine里留下“VideoQualityHandler全量归F003”的注释。选档要求没有写进注释，也没有登记forward-ref；AC235仍被声称为已实现（L272、L378）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/PreviewEngine.ets",
+          "at": "2026-10-01T16:57:22.231Z",
+          "reason": "交接桥梁：Slice 4用grep查PreviewEngine的VideoQuality相关行，回执只返回第1237行“VideoQualityHandler全量归F003；本切片仅保证supports_video位与capture rate（AC237）”，没有AC235选档规则（agent-ad056b0d5327c12ec.jsonl:L124-L125）。"
+        },
+        {
+          "key": "agent-ad056b0d5327c12ec.jsonl",
+          "at": "2026-10-01T17:10:09.830Z",
+          "reason": "接收者：它的输入里没有AC235（F003 spec不含此AC，它也没读Preview.java 3160-3210）。Write VideoQualityStore时只保留currentVideoQualityIndex = -1和setter，initialiseFromCameraFeatures只建表、不选档（L331-L332）。本链确认缺口经由这次交接传到这里，不另认定它独立失职。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 5,
+          "force": true,
+          "reason": "Slice 4用Bash grep -n \"VideoQuality\\|video_quality\" 查PreviewEngine.ets；回执返回第1237行“VideoQualityHandler全量归F003；本切片仅保证supports_video位与capture rate（AC237）”。这是它对该文件交接内容的真实读取。",
+          "evidence": [
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-ad056b0d5327c12ec.jsonl",
+              "line": 124
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-ad056b0d5327c12ec.jsonl",
+              "line": 125
+            }
+          ]
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/VideoRecordController.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "summary": "Slice 4拿到的只是“全量归F003”这一句交接，没有选档规则。它在startRecording里只在质量表为空时initialiseFromCameraFeatures，\n注释假设“相机切换由closer显式刷新”，始终没有选档。VideoProfileBuilder遇到当前档为null时返回dummy profile，录制因此拿到空配置。\n修复后，启动录制时每次都重建质量表，调用selectVideoQuality并写回偏好；找不到可用档位时提示video_encoder_unsupported。\n",
+      "recommendations": [
+        "源端在setupCamera中做的建表和选档，不要改成“空表时懒加载”；相机切换或每次setup都要重建并重新选档。"
+      ],
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F001-camera-preview.md",
+          "at": "2026-10-01T14:57:03.096Z",
+          "reason": "正常输入：F001-AC235写明默认档选择规则（agent-ae5882c40105e3f01.jsonl:L23、L26）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/preview/Preview.java",
+          "at": "2026-10-01T14:59:44.486Z",
+          "reason": "正常输入：setupCameraParameters 3168-3210的选档实现（同转录L101-L102）。"
+        },
+        {
+          "key": "agent-ae5882c40105e3f01.jsonl",
+          "at": "2026-10-01T15:25:31.156Z",
+          "reason": "偏差起点：PreviewEngine里只实现了supports_video，选档部分只写成“VideoQualityHandler全量归F003”的注释，交给了F003，没有登记forward-ref（L272、L378）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/PreviewEngine.ets",
+          "at": "2026-10-01T16:57:22.231Z",
+          "reason": "交接桥梁：Slice 4用grep读到的唯一相关行是“VideoQualityHandler全量归F003…”，其中不含选档规则（agent-ad056b0d5327c12ec.jsonl:L124-L125）。"
+        },
+        {
+          "key": "agent-ad056b0d5327c12ec.jsonl",
+          "at": "2026-10-01T17:26:56.525Z",
+          "reason": "接收者：L545思考认为“Android在Preview.setupCamera喂表”、相机切换由closer刷新。L547 Edit在startRecording中只在质量表为空时initialiseFromCameraFeatures，没有选档；VideoProfileBuilder遇到null档返回dummy（L334）。缺口由此保留到c752566。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 5,
+          "force": true,
+          "reason": "Slice 4用Bash grep -n \"VideoQuality\\|video_quality\" 查PreviewEngine.ets；回执返回第1237行“VideoQualityHandler全量归F003；本切片仅保证supports_video位与capture rate（AC237）”。这是它对该文件交接内容的真实读取。",
+          "evidence": [
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-ad056b0d5327c12ec.jsonl",
+              "line": 124
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-ad056b0d5327c12ec.jsonl",
+              "line": 125
+            }
+          ]
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "d.ts中AVRecorderProfile.videoCodec的注释仍写着“Currently, VIDEO_AVC is supported”，生成者没有读到这段。HEVC在真机上能否录制要靠getAvailableEncoder在运行时判断；本卡只归因“枚举不存在”这一错误结论，不认定生成者明知HEVC可录。"
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/models/VideoProfile.ets",
+      "reason": "已确认修复只新增VideoProfileCodecs常量类（MPEG_4/THREE_GPP/WEBM/H264/HEVC/VP8/AAC/VORBIS），供VideoProfileBuilder和AvRecorderEngine保留并校验所选格式。生成期该文件由Base层写成（agent-aecd64595684a31d8 L85），只有18个字段的模型，没有本问题的偏差片段。编码和容器的偏差位于VideoProfileBuilder和AvRecorderEngine两张图，此文件属于修复配套新增，不另画生成链。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/resources/base/element/string.json",
+      "reason": "已确认修复新增video_format/capture_rate/audio_source/encoder_unsupported四条报错字符串。它们配合“确无能力时明确报错”的新处置；生成期采用静默降级，从未需要这些资源，没有可归因的生成写入片段。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/resources/zh_CN/element/string.json",
+      "reason": "与base相同：修复新增四条报错字符串的中文翻译，属于修复配套资源，没有生成期偏差片段。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/resources/zh_TW/element/string.json",
+      "reason": "与base相同，新增四条报错字符串的繁体翻译。另外，c1abe5c..c8dd617中有一行删除（结尾空行或括号调整），尚未定位到具体是哪次补丁调用（见job pending，CA L501/L532）。"
+    }
+  ],
+  "job": "issue-9d3828c851006d29fc06",
+  "metadata": {
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code",
+        "codex"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3",
+        "gpt-6-astra"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.163.0",
+        "2.1.247",
+        "2.1.299"
+      ]
+    },
+    "source_set_id": "sources-974a9086706364eed8b7",
+    "environment": [
+      {
+        "name": "android.compile_sdk",
+        "value": "36",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/.claude/skills",
+        "at": "2026-10-01T09:52:21.840Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-aa8064d19722381a1.jsonl:L11",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-aa8064d19722381a1.jsonl:L10",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos",
+        "at": "2026-10-01T12:27:45.961Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b.jsonl:L1565",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b.jsonl:L1563",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos",
+        "at": "2026-10-01T13:34:44.665Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae78a452b1664bc61.jsonl:L149",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae78a452b1664bc61.jsonl:L148",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.11.1"
+  },
+  "revision": "c198fe473f6d3c9d774f95de74c649d6542ab966ab417df2dcb1881819cb4366"
+}

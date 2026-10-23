@@ -1,6 +1,6 @@
 # 规格或派工与写前读到的源码、主题或映射参考冲突或遗漏时，按源端可观察行为实现并回报规格分歧；只有决策台账中带决策 ID 的取舍才例外，source-notes 登记与转述不算批准
 
-ID：`lesson-7a065e8fe384b8c462cc` · 版本：15 · 阶段：execute/repair · 主题：[process/secondary-over-source](index.md)
+ID：`lesson-7a065e8fe384b8c462cc` · 版本：16 · 阶段：execute/repair · 主题：[process/secondary-over-source](index.md)
 
 概要：规格与源码冲突按源实现，例外只认决策 ID
 
@@ -37,12 +37,12 @@ ID：`lesson-7a065e8fe384b8c462cc` · 版本：15 · 阶段：execute/repair · 
 由相同来源卡提炼的其他经验，按共享卡数排序；不是依赖关系。
 
 - [验收条目实读源码段落，照抄比较符并给边界样例](../enumeration-gaps/lesson-08854573a81a9fa03746.lesson.md)（共享 4 张卡）
+- [跨文件补实现的功能登记带负责方与验证的移交项](../handoff-loss/lesson-4f81eeea17b94190c2de.lesson.md)（共享 3 张卡）
 - [源端可观察缺陷照迁并核次数，修正走待批决策](../unapproved-deviation/lesson-14411595fd9ac1e17683.lesson.md)（共享 2 张卡）
-- [跨文件补实现的功能登记带负责方与验证的移交项](../handoff-loss/lesson-4f81eeea17b94190c2de.lesson.md)（共享 2 张卡）
+- [必读 skill 与源码逐份读全，截断即重读再写码](../unloaded-input/lesson-42df1ac4d4030421da34.lesson.md)（共享 2 张卡）
 - [PowerShell 读文件带 UTF8 编码，乱码视为未读](../unloaded-input/lesson-6a3a7f46c8fec282affa.lesson.md)（共享 2 张卡）
-- [平台差异只收敛做不到的一步，其余出口照源保留](../../app/capability/degradation/lesson-9c973e50aaea054facdc.lesson.md)（共享 2 张卡）
 
-来源支持：31 张卡 · 已知 15 次迁移（部分未记录） · 已知 14 个应用（部分未记录）
+来源支持：33 张卡 · 已知 15 次迁移（部分未记录） · 已知 14 个应用（部分未记录）
 
 ## 来源（按需复核）
 
@@ -90,6 +90,10 @@ ID：`lesson-7a065e8fe384b8c462cc` · 版本：15 · 阶段：execute/repair · 
   卡片版本：`20e8fe0eb12d923dd2187f8efe7cbc824971502cc6456d7985b1f26b5e5e94d9`
 - [case-8fced432ea0fe7c8b86f](../../../../store/cases/case-8fced432ea0fe7c8b86f/b4353b2e8b37ffe082eef91d15ac512e601071bb1ab5aaec8c56c4904d0256e7.json) · 结论：rec-e4438f67d5
   卡片版本：`b4353b2e8b37ffe082eef91d15ac512e601071bb1ab5aaec8c56c4904d0256e7`
+- [case-91084f18203ecc5e7036](../../../../store/cases/case-91084f18203ecc5e7036/b2ef3d93c321f92d42c3adeb2614a39fc4a1d58051f93808ce0ad907fbc2e561.json) · 结论：rec-1a38060fff
+  卡片版本：`b2ef3d93c321f92d42c3adeb2614a39fc4a1d58051f93808ce0ad907fbc2e561`
+- [case-9720ed67e580c21dbd65](../../../../store/cases/case-9720ed67e580c21dbd65/e28f20a327f221aadfca37acb42f61db9e173a49a49fc0416d970ee8aeafb602.json) · 结论：rec-be8e730b62
+  卡片版本：`e28f20a327f221aadfca37acb42f61db9e173a49a49fc0416d970ee8aeafb602`
 - [case-97a40a9d2dce65dc9f9c](../../../../store/cases/case-97a40a9d2dce65dc9f9c/6f204ffd524b55f7ea8cef5e4a2e75cc8330004f202fd635570857c43cef5a2a.json) · 结论：diagnosis, rec-e645901bde
   卡片版本：`6f204ffd524b55f7ea8cef5e4a2e75cc8330004f202fd635570857c43cef5a2a`
 - [case-9e50f3aa8db41be6d2fe](../../../../store/cases/case-9e50f3aa8db41be6d2fe/3d6143319a7bdfdbada20047728ad910934b06a242c61e2977d6a694908b4125.json) · 结论：diagnosis, rec-1c647a9ce8

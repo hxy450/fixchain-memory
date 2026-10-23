@@ -1,0 +1,361 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-4171cd43bbb420b4ee40",
+  "created_at": "2026-10-23T15:38:07.979944+00:00",
+  "migration_key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/memory-distill-opencamera-20261023/pool",
+  "title": "全景会话只迁移了引导点数学：启停、逐帧批次与取消未接线，陀螺容差和快门图标被臆填",
+  "when": "拍照编排的规格提取与实现阶段：把源端多方法全景会话（启动、逐帧累积、完成、取消）拆成验收项与 seam 接口，并在集成时绑定陀螺目标参数、停止链和全景快门图标时",
+  "description": "源 MyApplicationInterface 以 startPanorama / saveImage 的 Panorama 批处理分支 / setNextPanoramaPoint / finishPanorama / stopPanorama 组成全景会话，入口在 MainActivity.takePicture，陀螺目标用字面常量 target_angle=1°、upright_angle_tol=3°、too_far_angle=45°；界面由 MainUI.setTakePhotoIcon 的 baseline_check_white_48 与 cancel_panorama 的 baseline_close_white_48 呈现。目标端把会话编排、陀螺 sink、保存器批处理、页面按钮和停止链拆在不同切片与文件，经 seam 接口由 group-closer 绑定，且保存器为 async/await 实现。",
+  "summary": "本问题有五个可核成因，分属规格提取、编排实现、集成绑定、停止链占位和异步移植五个环节。\n① 规格提取（F002 §R，交叉验证追加）：C4.5 交叉验证 agent 读到 ref spec §5.3.1 第 6 条（引导点、最多 10 张、\n对齐才接受）和 §5.3.3 第 2/3 条（“全景中途取消 → clickedCancelPanorama() 丢弃或按 preference_panorama_save 保存”\n“全景张数超限 → 强制结束并合成”）（agent-aff960b24190a298d L48），却只追加了 F002-AC89，锚点仅\nsetNextPanoramaPoint(:2034)/常量(:94)，不含快门启动/完成（MainActivity.takePicture）、startPanorama 的陀螺录制与取消按钮、\nsaveImage 的批次累积与旋转矩阵、取消丢批（L198）。F008 spec 与 slice-08/07 计划都把“点位推进编排”交回 F002/slice-03，\nF011:86 只把 clickedCancelPanorama 列为“行为 AC 归属各消费 feature”的转发器，因此整段会话生命周期没有其他 AC 承接；\n1°/3°/45° 三个阈值也不在任何 spec 常量清单中（F007 只写“弧度域”）。\n② 编排实现（Slice 3，PhotoCaptureOrchestrator）：Slice 3 worker 写前读到 AC89“超限强制结束并交 PanoramaProcessor 合成；\n未对齐时该张不被接受”（L26），并 sed 读到 MyApplicationInterface 2024-2130，其中含 setTarget(x,y,z,1°,3°,45°,…)、\nonAchieved 只 disableTargetCallback 以便继续判断对齐、stopPanorama 取消时 flushImageBatch（L89）。Write（L317）却把\nPanoramaGuideSink.setTarget 定义为只收向量和两个回调，三个阈值仅留在注释的参数名里，P-S3-008 登记也只写\n“setTarget/onAchieved/清标记”；finishPanorama(false) 只清目标、计数和定时器，从不 finishImageBatch，也没有 start/stopRecording、\nisRecording/hasTarget/isTargetAchieved/getRotationMatrix 等会话接口；takePicturePressed 无全景分支。启动/取消缺口与 ① 的 spec\n缺口相连（该 worker 也未读 :1982-2023 的 start/finish/stop 头部）；“交合成”和阈值则是输入已给出而输出遗漏。\n③ 集成绑定（group-closer，MainPage）：closer 读到的 sink 接口不带阈值（L86），GyroSensorService.setTarget 要求三个弧度阈值（L274），\nViewfinderUiState 的 TakePhotoIconState.PANORAMA_RECORDING 注释指向 MainUI.java:1064-1104/F004-AC65（L56）。它没有回读源码，\n在 MainPage Write（L588）中写成 gyro.setTarget(x,y,z,0.0,Math.PI/18.0,Math.PI/6.0,…)（0°/10°/30°，源为 1°/3°/45°），\n并把 PANORAMA_RECORDING 回落到 take_photo_selector，注释“panorama_recording 资产未迁移”。该判断来自它只 ls 了 base/media（L541-L542）\n且凭记忆认为源端用 take_photo_recording（L554）；而 c752566 已在 ldpi/mdpi/xldpi/xxldpi/xxxldpi/media 迁有 baseline_check_white_48\n与 baseline_close_white_48，源 MainUI.java:1083 用的正是 baseline_check_white_48。页面也没有渲染 cancel_panorama。\n④ 停止链占位（Slice 11 → closer，MainPageVM）：Slice 11 worker 按 F011 AC85/AC188/AC192/AC211 在 openSettings、onPause、\ncameraClosed 等序列中调用 stopPanorama(true)，但其 stopPanorama 本体写成空方法，注释“F008 全景停止链（Slice 8 接线）”，\n既未登记 FWD-REF，也指错了属主（L395；_common.md 写明“未登记/自由文本一律 FAIL”）。closer 读到该空方法（L69）和编排器\nfinishPanorama(cancelled) “finishPanorama / stopPanorama 核心”（L86），Edit（L406）解除了相邻 waitUntilImageQueueEmpty 占位，\n却只给 stopPanorama 加了 void fromUser。它在 onPictureTakenHost Edit（L411）中把每帧当作单张 PANORAMA 请求（images=[data]）\n直接 saveImageJpeg；源 saveImage 的批处理分支没有 AC 承接、closer 也未读源码，这一点归入 ① 的规格缺口。\n⑤ 异步移植（Slice 3，ImageSaverService）：Slice 3 worker 读到 ImageSaver.finishImageBatch 在 UI 线程同步执行\naddRequest/saveImageNow 后清空 pending（L67），ArkTS 版却 await addRequest（队列满时让出事件循环）后才把\npendingImageAverageRequest 置空，可能清掉等待期间新建的批次（L283）。\n这些片段在 c752566 原样保留（编译门 a8036fe 只改回调字面量类型，Opus 首轮返修未触及这四个文件）。Codex parity_audit 5a2d\n（L801/L808/L848/L856/L876）补上 startPanorama/appendPanoramaFrame/finishPanorama/stopPanorama 生命周期、只有对准目标的帧\n携带旋转矩阵和视角入批、取消丢批并拒收迟到帧、阈值改为 0.01745329252/3×0.017452406437/45×0.01745329252，\nImageSaver 新增 startPanoramaBatch 并在等待前摘下批次；主会话 01a14aae（L948-L953）从 Android drawable-xxxhdpi 复制两枚 PNG 到\nbase/media，MainPage 增加 baseline_check 快门态与 baseline_close 取消按钮。FINAL 2b66258 保留。\n",
+  "recommendations": [
+    "规格提取时，把全景这类跨方法会话按生命周期逐条写 AC：MainActivity.takePicture 的开始/完成分支、startPanorama（陀螺 startRecording、显示 cancel_panorama）、saveImage 的 Panorama 分支（hasTarget && !isTargetAchieved 则拒帧；首帧 startImageBatch 并写 camera_view_angle_x/y；每帧 addImageBatch 附 getRotationMatrix）、finishPanorama（写 panorama_dir_left_to_right 后 finishImageBatch）、stopPanorama/clickedCancelPanorama（停陀螺、清目标、flushImageBatch）；ref spec 列出的取消规则必须落到某个 feature 的 AC。",
+    "规格常量清单要收录源端传给平台 API 的字面参数，例如 setNextPanoramaPoint(x,y,z) 中 target_angle=1.0f*0.01745329252f、upright_angle_tol=3.0f*0.017452406437f、too_far_angle=45.0f*0.01745329252f。",
+    "编排实现者定义 seam 时，若源调用带字面参数，由持有源码的一侧在实现里传值或在接口中写死值，不只在注释里保留参数名；读取会话源码时从 startPanorama(:1982) 读到 clearPanoramaPoint(:2123)，并按 AC89“强制结束并交合成”确认 finish 路径调用 finishImageBatch。",
+    "集成绑定 seam 时，若所需数值不在已读输入中，回到源锚点查值，不要自拟角度；判定资源缺失前，同时检查 base 与 ldpi/mdpi/xldpi/xxldpi/xxxldpi 等限定目录，并按源 MainUI.setTakePhotoIcon / activity_main.xml 核对实际 drawable 名（本例为 baseline_check_white_48、baseline_close_white_48）。",
+    "切片 worker 不能接线的跨切片方法要登记 FWD-REF 并写对属主（全景停止链属 F002 编排器）；closer 解除占位时，把 MainPageVM.stopPanorama(fromUser) 委托给编排器的停止核心，不以 void 参数消除告警了事。",
+    "把 Java 同步的“提交后清空挂起状态”移植到 async/await 时，先摘下挂起对象再 await 入队或保存，例如 finishImageBatch 先保存 pending 引用并置空，再 await addRequest，避免等待期间新建的批次被清掉或旧批次继续收帧。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/PhotoCaptureOrchestrator.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "summary": "两个起点：交叉验证 agent 把全景会话只写成 AC89 的引导点/上限/对齐，遗漏 ref spec 已给出的取消规则与启动、批次累积入口；\nSlice 3 worker 在 AC89 和源码 2024-2130 已给出“交合成”与 1°/3°/45° 的情况下，写出无阈值的 sink、不提交批次的\nfinishPanorama 和无全景分支的 takePicturePressed。c752566 保留，修复补全 start/append/finish/stop 生命周期。\n",
+      "recommendations": [
+        "规格提取按 start/逐帧累积/finish/cancel 逐条写全景 AC，并收录 1°/3°/45° 三个阈值。",
+        "编排实现时从 :1982 读到 :2123，sink 接口携带录制状态、对齐判定和旋转矩阵，finish 路径调用 finishImageBatch。"
+      ],
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/ref/opencamera_spec.md",
+          "at": "2026-10-01T11:58:01.597Z",
+          "reason": "正常输入：Read §5（420-769 行）回执含 §5.3.1 第 6 条全景引导点/10 张/对齐接受，§5.3.3 第 2 条“全景中途取消 → clickedCancelPanorama()（MainActivity.java:1879）丢弃或按 preference_panorama_save 保存已有帧”、第 3 条“全景张数超限 → 强制结束并合成”（agent-aff960b24190a298d.jsonl:L47-L48）。"
+        },
+        {
+          "key": "agent-aff960b24190a298d.jsonl",
+          "at": "2026-10-01T12:05:59.761Z",
+          "reason": "规格偏差：交叉验证 agent 只把规则 6 写成 F002-AC89（源锚点仅 setNextPanoramaPoint :2034 与常量 :94），未为取消规则及 startPanorama/finishPanorama/stopPanorama、MainActivity.takePicture 全景分支、saveImage 批次累积追加任何 AC；其思考中也只列 R6 并说“编排侧无 AC”（同转录 L174、L198-L199）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F002-photo-capture-save.md",
+          "at": "2026-10-01T16:41:34.309Z",
+          "reason": "交付桥梁与正常输入：Slice 3 worker Read 回执含 AC89“单次会话最多 10 张，超限强制结束并交 PanoramaProcessor 合成；陀螺未对齐时该张不被接受”及 AC17 批处理 API；同时缺少启动/取消/逐帧入批 AC（agent-a46e99f7c0baf2d05.jsonl:L25-L26）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/MyApplicationInterface.java",
+          "at": "2026-10-01T16:43:56.681Z",
+          "reason": "正常输入：sed 2024-2130 回执含 stopPanorama 取消时 flushImageBatch、setNextPanoramaPoint 达到 10 张调用 finishPanorama、setTarget(x,y,z,target_angle=1°,upright_angle_tol=3°,too_far_angle=45°,…)，以及 onAchieved 只 disableTargetCallback 以继续监测对齐（agent-a46e99f7c0baf2d05.jsonl:L88-L89）。"
+        },
+        {
+          "key": "agent-a46e99f7c0baf2d05.jsonl",
+          "at": "2026-10-01T17:15:12.762Z",
+          "reason": "实现偏差：Write 的 PanoramaGuideSink.setTarget 只收 (x,y,z,onAchieved,onTooFar)，阈值只剩注释参数名；finishPanorama(cancelled) 只清目标/定时器/计数，cancelled 时 flush，非取消时不 finishImageBatch；无 start/stopRecording、isRecording、hasTarget/isTargetAchieved、getRotationMatrix；takePicturePressed 无全景开始/完成分支（同转录 L313 设计说明“我的部分：序列数学+计数+上限”，L317-L318；c752566 保留）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 5
+        },
+        {
+          "from": 4,
+          "to": 5,
+          "force": true,
+          "reason": "Slice 3 worker 写编排器前用 Bash sed -n '2024,2130p' 读取 MyApplicationInterface.java，回执含 setTarget 的 1°/3°/45° 常量、10 张时 finishPanorama 与取消 flush，支持其写前已收到这些要求。",
+          "evidence": [
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-a46e99f7c0baf2d05.jsonl",
+              "line": 88
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-a46e99f7c0baf2d05.jsonl",
+              "line": 89
+            }
+          ]
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/pages/MainPage.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "summary": "Slice 3 worker 读到 1°/3°/45° 却交出不带阈值的 sink；closer 绑定时没有回读源码，自拟 0/π/18/π/6；\n又只盘点 base/media、凭记忆找 take_photo_recording，判定“panorama_recording 资产未迁移”，把全景快门态回落成普通快门，\n也未渲染 cancel_panorama。c752566 保留，修复改为源阈值、baseline_check 快门态和 baseline_close 取消按钮。\n",
+      "recommendations": [
+        "绑定 seam 缺数值时回源锚点取值；本例 setTarget 用 0.01745329252、3×0.017452406437、45×0.01745329252。",
+        "判定资源缺失前检查 base 与全部限定目录，并按源 MainUI.setTakePhotoIcon / activity_main.xml 核对 drawable 名。"
+      ],
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/MyApplicationInterface.java",
+          "at": "2026-10-01T16:43:56.681Z",
+          "reason": "正常输入：Slice 3 worker 的 sed 回执给出 target_angle=1.0f*0.01745329252f、upright_angle_tol=3.0f*0.017452406437f、too_far_angle=45.0f*0.01745329252f（agent-a46e99f7c0baf2d05.jsonl:L88-L89）。"
+        },
+        {
+          "key": "agent-a46e99f7c0baf2d05.jsonl",
+          "at": "2026-10-01T17:15:12.762Z",
+          "reason": "偏差起点：Write 的 PanoramaGuideSink.setTarget 删去三个阈值参数，只在注释写参数名；P-S3-008 登记文本只写“setTarget/onAchieved/清标记”，未把数值交给绑定方（同转录 L315、L317-L318）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/PhotoCaptureOrchestrator.ets",
+          "at": "2026-10-01T17:31:13.534Z",
+          "reason": "交付桥梁：closer Read 回执仍是无阈值的 sink.setTarget 接口和“gyroSensor.setTarget(x, y, z, target_angle, upright_tol, too_far_angle, callback)”注释（agent-acb5c3d58575999a4.jsonl:L85-L86）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/ViewfinderUiState.ets",
+          "at": "2026-10-01T17:29:45.452Z",
+          "reason": "正常输入：closer Read 回执含 TakePhotoIconState.PANORAMA_RECORDING（注释“MainUI.setTakePhotoIcon，MainUI.java:1064-1104，F004-AC65”）和 panoramaRecording 状态，足以指向源端全景快门图标（agent-acb5c3d58575999a4.jsonl:L55-L56）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/GyroSensorService.ets",
+          "at": "2026-10-01T18:23:07.034Z",
+          "reason": "正常输入：closer 用 sed 读 GyroSensorService 194-224 行，回执显示 setTarget(x,y,z,targetAngleRad,uprightAngleTolRad,tooFarAngleRad,cb) 需要三个弧度阈值（agent-acb5c3d58575999a4.jsonl:L273-L274）。"
+        },
+        {
+          "key": "agent-acb5c3d58575999a4.jsonl",
+          "at": "2026-10-01T18:40:12.235Z",
+          "reason": "绑定偏差：未回读源码，MainPage Write 写 gyro.setTarget(x, y, z, 0.0, Math.PI / 18.0, Math.PI / 6.0, …)；shutterIconRes 把 PANORAMA_RECORDING 回落 take_photo_selector 并注释“panorama_recording 资产未迁移”，依据只是 ls base/media（L541-L542）和误记源端用 take_photo_recording（L554）；页面无 cancel_panorama 按钮（同转录 L588-L589；c752566 保留）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "Slice 3 worker 定义 PanoramaGuideSink 前用 Bash sed -n '2024,2130p' 读取 MyApplicationInterface.java，回执含 target_angle/upright_angle_tol/too_far_angle 三个字面值。",
+          "evidence": [
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-a46e99f7c0baf2d05.jsonl",
+              "line": 88
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-a46e99f7c0baf2d05.jsonl",
+              "line": 89
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 6
+        },
+        {
+          "from": 4,
+          "to": 6
+        },
+        {
+          "from": 5,
+          "to": 6,
+          "force": true,
+          "reason": "closer 写 MainPage 前用 Bash sed -n '52,58p;194,224p' 读取 GyroSensorService.ets，回执显示 setTarget 需要 targetAngleRad/uprightAngleTolRad/tooFarAngleRad 三个弧度参数。",
+          "evidence": [
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-acb5c3d58575999a4.jsonl",
+              "line": 273
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-acb5c3d58575999a4.jsonl",
+              "line": 274
+            }
+          ]
+        },
+        {
+          "from": 6,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/MainPageVM.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "summary": "Slice 11 worker 按 F011 在各清理序列里调用 stopPanorama(true)，本体却是未登记、指错属主的空方法；closer 读到空方法与编排器的\n停止核心后仍只加 void fromUser，保存路径也把每帧当成单张 PANORAMA 请求。c752566 保留，修复委托 photoCapture.stopPanorama，\n并按全景 saveBase 偏好走 appendPanoramaFrame。\n",
+      "recommendations": [
+        "不能接线的跨切片方法登记 FWD-REF 并写对属主；closer 解除时把 stopPanorama 委托给编排器停止核心。"
+      ],
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F011-app-integration.md",
+          "at": "2026-10-01T16:42:15.802Z",
+          "reason": "正常输入：Read 回执含 AC85（openSettings 前置清理含 stopPanorama(true)）、AC188（onPause 序列含 stopPanorama(true)）、AC192（cameraClosed 级联 stopPanorama(true)）、AC211（clickedSwitchVideo 先 stopPanorama），要求这些路径真正停止全景（agent-a690eb1a2619c2d76.jsonl:L27-L28）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/.claude/skills/a2h-execute/references/agent-prompts/_common.md",
+          "at": "2026-10-01T16:42:11.089Z",
+          "reason": "正常输入：Read 回执 §2.1 写明合法占位只有已登记的 7 类 kind，“未登记 / 自由文本一律 FAIL”；slice worker 规范也要求“接线禁止留任何 placeholder / TODO / prose defer”（agent-a690eb1a2619c2d76.jsonl:L19-L22）。"
+        },
+        {
+          "key": "agent-a690eb1a2619c2d76.jsonl",
+          "at": "2026-10-01T17:09:24.559Z",
+          "reason": "占位偏差：MainPageVM Write 中 openSettings/onPause/cameraClosed 等均调用 this.stopPanorama(true)，但 stopPanorama(fromUser) 本体为空，只有注释“F008 全景停止链（Slice 8 接线；fromUser 语义保留）”，既无 FWD-REF 也无 registry 行；F008 与 slice-07 计划都把全景编排归 F002/slice-03（同转录 L395-L396）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/PhotoCaptureOrchestrator.ets",
+          "at": "2026-10-01T17:31:13.534Z",
+          "reason": "正常输入：closer Read 回执含 finishPanorama(cancelled)“MyApplicationInterface.finishPanorama / stopPanorama 核心……cancelled 时 flush”，可供 stopPanorama 委托（agent-acb5c3d58575999a4.jsonl:L85-L86）；同一 closer 之前已读到 MainPageVM 的空 stopPanorama（L68-L69）。"
+        },
+        {
+          "key": "agent-acb5c3d58575999a4.jsonl",
+          "at": "2026-10-01T18:30:06.744Z",
+          "reason": "未纠正并扩大：Edit 解除相邻 waitUntilImageQueueEmpty 占位，却只给 stopPanorama 加 void fromUser，空本体保留（L406-L407）；随后 onPictureTakenHost Edit 把 Panorama 模式每帧设为 processType=PANORAMA、images=[data] 直接 saveImageJpeg，不入批、不带旋转矩阵（L411-L412）。后者对应的源 saveImage 分支无 AC 且 closer 未读源码，作为规格缺口的下游记录（c752566 保留）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/ImageSaverService.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "summary": "Slice 3 worker 把源端在 UI 线程同步执行的 finishImageBatch 移植成 async，却保留“await 入队/保存之后才清空 pending”的顺序；\naddRequest 在队列满时 await 让出事件循环，等待期间新建的批次会被随后的置空清掉。c752566 保留；修复在 await 前摘下批次，\n并新增 startPanoramaBatch 供编排器从 JpegSaveRequest 建立全景批次（后者是修复设计的新接口）。\n",
+      "recommendations": [
+        "移植 Java 同步状态清理到 async/await 时，先取出并置空挂起对象再 await，例如 finishImageBatch 先 const pending=this.pendingImageAverageRequest; this.pendingImageAverageRequest=null 再 await addRequest。"
+      ],
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/ImageSaver.java",
+          "at": "2026-10-01T16:42:59.596Z",
+          "reason": "正常输入：Read 1-1000 行回执含 startImageBatch/addImageBatch/getImageBatchRequest，以及 finishImageBatch 在调用线程上同步 addRequest 或 waitUntilDone+saveImageNow 后 pending_image_average_request=null（agent-a46e99f7c0baf2d05.jsonl:L66-L67）。"
+        },
+        {
+          "key": "agent-a46e99f7c0baf2d05.jsonl",
+          "at": "2026-10-01T17:09:56.490Z",
+          "reason": "异步移植偏差：ImageSaverService Write 中 finishImageBatch 先 await this.addRequest(pending, cost)（addRequest 队列满时 await slotWaiters）或 await saveImageNow，再执行 this.pendingImageAverageRequest = null，清空的是等待结束时的当前批次（同转录 L283-L284；c752566 保留）。修复测试 5a2d L852“finishing batch detaches it before waiting and never clears a newer batch”针对此点。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "未核实只存在于限定目录、base 缺同名文件的 media 资源能否被 $r('app.media.baseline_check_white_48') 在本工程正常解析；本卡只确认资源已迁到限定目录、closer 的盘点只看了 base/media。"
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/resources/base/media/baseline_check_white_48.png",
+      "reason": "修复期新增文件：Codex 01a14aae L952 从 Android drawable-xxxhdpi 复制（字节与源及已迁移的 xxxldpi/media 版本相同）。生成期没有写者写 base/media 同名文件；c752566 已在 ldpi/mdpi/xldpi/xxldpi/xxxldpi/media 迁有该图。未使用它的原因已在 MainPage 图中归因于 closer 只盘点 base/media 的“资产未迁移”判断；资源转换为何不落 base 未追查。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/resources/base/media/baseline_close_white_48.png",
+      "reason": "同 baseline_check_white_48.png：修复期从 Android drawable-xxxhdpi 复制到 base/media（01a14aae L952），生成期无 base 写者，限定目录版本已存在；取消按钮缺失归入 MainPage 图与 PhotoCaptureOrchestrator 图的启动/取消缺口。"
+    }
+  ],
+  "job": "issue-4171cd43bbb420b4ee40",
+  "metadata": {
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code",
+        "codex"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3",
+        "gpt-6-astra"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.163.0",
+        "2.1.247",
+        "2.1.299"
+      ]
+    },
+    "source_set_id": "sources-974a9086706364eed8b7",
+    "environment": [
+      {
+        "name": "android.compile_sdk",
+        "value": "36",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/.claude/skills",
+        "at": "2026-10-01T09:52:21.840Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-aa8064d19722381a1.jsonl:L11",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-aa8064d19722381a1.jsonl:L10",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos",
+        "at": "2026-10-01T12:27:45.961Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b.jsonl:L1565",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b.jsonl:L1563",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos",
+        "at": "2026-10-01T13:34:44.665Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae78a452b1664bc61.jsonl:L149",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae78a452b1664bc61.jsonl:L148",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.11.1"
+  },
+  "revision": "0effbd77c7fda6b589b47193aaa322f49d48b23605a26ca7e52f15d9786494aa"
+}

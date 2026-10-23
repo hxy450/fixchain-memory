@@ -1,10 +1,41 @@
 # 阶段：执行与实现（execute）
 
-本阶段可用的 513 条经验，按领域与主题分组；一条经验可属于多个阶段。
+本阶段可用的 548 条经验，按领域与主题分组；一条经验可属于多个阶段。
 
 [返回根索引](../index.md)
 
 ## app — 应用级装配与横切机制：入口清单、启动链路、平台能力与系统状态、媒体文件、混合桥接、模块与资源产物
+
+### [app/camera/capture](../topics/app/camera/capture/index.md) — 拍照触发与结果链：完成/失败回传与多帧交付、前屏补光、照片缓冲释放与资产回调
+
+- [Photo 字节先复制或用完再 release，不释放后用](../topics/app/camera/capture/lesson-c81407857f6e70183c27.lesson.md) · 信号：photoAvailable, Photo.release, getComponent, byteBuffer
+- [前屏补光保留控制器判定出口与回退等待](../topics/app/camera/capture/lesson-b20eaa8108cae9476ca3.lesson.md) · 信号：CONTROL_AE_PRECAPTURE_TRIGGER, CONTROL_AE_STATE, LENS_FACING_FRONT, FLASH_MODE_CLOSE
+- [拍照桥接保留完成失败回传，多帧模式整组交付](../topics/app/camera/capture/lesson-91d254bb9a5187884b4b.lesson.md) · 信号：takePicture, captureBurst, CaptureCallback, onCaptureCompleted
+- [资产回调无请求 ID 时一拍一输出，超时退役不串帧](../topics/app/camera/capture/lesson-8a1d50b9fdcdee8a5752.lesson.md) · 信号：photoAssetAvailable, PhotoOutput, captureStartWithInfo, captureEnd
+
+### [app/camera/orientation](../topics/app/camera/orientation/index.md) — 预览 surface 的缩放居中变换，以及拍照旋转与传感器朝向的目标接口
+
+- [拍照旋转用设备角调 getPhotoRotation](../topics/app/camera/orientation/lesson-a211a70068ce00c94916.lesson.md) · 信号：JPEG_ORIENTATION, SENSOR_ORIENTATION, OrientationEventListener, PhotoCaptureSetting
+- [预览变换落到 surface 矩形并随尺寸重算](../topics/app/camera/orientation/lesson-5eb6fd167816b68db888.lesson.md) · 信号：TextureView, setTransform, onMeasure, XComponent
+
+### [app/camera/parameters](../topics/app/camera/parameters/index.md) — 手动曝光、ISO、对焦的单位值域，设备能力位查询与实时读数的取值通道
+
+- [实时 ISO/曝光/振幅经事件或单飞采样入缓存](../topics/app/camera/parameters/lesson-221830205a3dff3cb74b.lesson.md) · 信号：onCaptureCompleted, CaptureResult, getMaxAmplitude, onIsoInfoChange
+- [手动参数按 CameraKit 单位与值域换算，读写同口径](../topics/app/camera/parameters/lesson-2ce79e76ffde307832b9.lesson.md) · 信号：SENSOR_EXPOSURE_TIME, CONTROL_AE_EXPOSURE_COMPENSATION, SENSOR_SENSITIVITY, LENS_FOCUS_DISTANCE
+- [能力位按会话查询并在提交后快照](../topics/app/camera/parameters/lesson-b28eaf0ed2aefc219beb.lesson.md) · 信号：CameraCharacteristics, CONTROL_AWB_AVAILABLE_MODES, isExposureModeSupported, isWhiteBalanceModeSupported
+
+### [app/camera/recording](../topics/app/camera/recording/index.md) — 录像会话与 AVRecorder：profile 与帧率、启停串行、编码选项映射与应用层限额
+
+- [AVRecorder 启停串行：共享停止任务、启动可取消](../topics/app/camera/recording/lesson-d41878bcc79f7e356a54.lesson.md) · 信号：MediaRecorder.prepare, MediaRecorder.stop, MediaRecorder.release, AVRecorder.prepare
+- [应用层录像限额按已录时长计，保留停止分支](../topics/app/camera/recording/lesson-1957f0e6ad83f19258e8.lesson.md) · 信号：setMaxDuration, setMaxFileSize, OnInfoListener, MEDIA_RECORDER_INFO_MAX_DURATION_REACHED
+- [录像档取 NORMAL_VIDEO 按帧率匹配，先启输出再录](../topics/app/camera/recording/lesson-793682615c640e55d88a.lesson.md) · 信号：CamcorderProfile, MediaRecorder, NORMAL_VIDEO, VideoProfile
+- [录像选项按 AVRecorder 枚举映射，缺能力就报错](../topics/app/camera/recording/lesson-9826c047e0381581db09.lesson.md) · 信号：setVideoEncoder, setOutputFormat, setAudioSource, setCaptureRate
+
+### [app/camera/session](../topics/app/camera/session/index.md) — CameraKit 会话的输入输出组成、提交时机、拍照 profile、拆卸重建顺序与相机就绪时机
+
+- [一次性拍照请求在相机就绪回调消费，不用页面显示](../topics/app/camera/session/lesson-e3bf30ce225c1c8964aa.lesson.md) · 信号：StateCallback.onOpened, onConfigured, CameraInput.open, aboutToAppear
+- [会话一次配齐输出再提交，拍照档不硬限 JPEG](../topics/app/camera/session/lesson-05cd365740c0003662a4.lesson.md) · 信号：createCaptureSession, ImageReader, beginConfig, addInput
+- [会话拆卸逐步 await，复用输入先 removeInput](../topics/app/camera/session/lesson-50b1ee39a9ff2d60174e.lesson.md) · 信号：CameraDevice.close, CameraCaptureSession.close, Session.stop, Session.release
 
 ### [app/capability/degradation](../topics/app/capability/degradation/index.md) — 能力确实不可用时只降级做不到的一步，运行期显式提示
 
@@ -41,7 +72,7 @@
 - [诊断日志上传按源端打包清单与协议实现，收窄先确认](../topics/app/cross-cutting/lesson-d434bb5c16bc721d9a00.lesson.md) · 信号：usesCleartextTraffic, networkSecurityConfig, presignedUrl, http.request
 - [退出登录先停同步再单事务清账号业务表并广播](../topics/app/cross-cutting/lesson-8b8e304a737e9fded451.lesson.md) · 信号：clearAllTables, RelationalStore, preferences, accessToken
 
-### [app/entry](../topics/app/entry/index.md) — 入口 Ability 与 module.json5 装配：初始化时序、全局守护、外部进入声明、扩展能力与卡片登记
+### [app/entry](../topics/app/entry/index.md) — 入口 Ability 与 module.json5 装配：初始化时序、全局守护、外部进入与结果回传、扩展能力与卡片登记
 
 - [form_config 规格与刷新从源卡片声明换算，不填默认](../topics/app/entry/lesson-bc48518f40742add0054.lesson.md) · 信号：form_config, supportDimensions, defaultDimension, updateEnabled
 - [intent-filter 逐条映射为 skills](../topics/app/entry/lesson-daba8a5b555e6657d085.lesson.md) · 信号：intent-filter, ohos.want.action.sendData, maxFileSupported, SEND_MULTIPLE
@@ -50,6 +81,7 @@
 - [卡片按实际宽高选布局，getFormRect 下发尺寸](../topics/app/entry/lesson-7ad5a7d149de5bcec7da.lesson.md) · 信号：FormExtensionAbility, formProvider.getFormRect, onSizeChanged, formProvider.updateForm
 - [固定快捷方式用 productViewManager](../topics/app/entry/lesson-fe5cf66672ce205ee0d7.lesson.md) · 信号：requestPinShortcut, isRequestPinShortcutSupported, disableShortcuts, ShortcutManager
 - [外部入口页需确定快捷声明、Want 分支与参数写者](../topics/app/entry/lesson-c46f182cf1d01a97e05f.lesson.md) · 信号：ohos.ability.shortcuts, shortcuts_config.json, onNewWant, Want
+- [多处 setResult 合并为一次带结果结束](../topics/app/entry/lesson-2f8c5cc0c4cc4938ec79.lesson.md) · 信号：setResult, RESULT_OK, RESULT_CANCELED, terminateSelfWithResult
 - [深链声明 skills、domainVerify，隐式验收](../topics/app/entry/lesson-d77baa7494930d485425.lesson.md) · 信号：ohos.want.action.viewData, entity.system.browsable, pathStartWith, intent-filter
 - [需显式 init 的封装在入口 onCreate 最早处调用](../topics/app/entry/lesson-8a881c2e07f80f83447c.lesson.md) · 信号：UIAbility.onCreate, AbilityStage.onCreate, NetworkConfig.init, HttpClient
 
@@ -68,8 +100,9 @@
 - [预构建子页中原生地图可见时初始化、隐藏暂停、卸载释放](../topics/app/map/lesson-0e997c4e9745728b7db6.lesson.md) · 信号：MapViewComponent, XComponent, HitTestMode.Transparent, HitTestMode.None
 - [高德各单例分别设隐私与密钥，PoiQueryV2 必填城市](../topics/app/map/lesson-9477f662ac13df03778c.lesson.md) · 信号：PoiQueryV2, updatePrivacyShow, updatePrivacyAgree, setApiKey
 
-### [app/media](../topics/app/media/index.md) — 媒体文件的用户可见出入口：安全控件与 picker 授权时序、沙箱落点与导出、播放 URI、预取与快照尺寸限制
+### [app/media](../topics/app/media/index.md) — 媒体文件出入口与图片处理：picker 与安全控件、沙箱导出、播放 URI、解码预取、PixelMap 释放与快照限制
 
+- [PixelMap 定唯一所有者，成品覆盖变量只释放一次](../topics/app/media/lesson-d0769280aaee71a03ad1.lesson.md) · 信号：Bitmap.recycle, recycle(), PixelMap, PixelMap.release
 - [SaveButton 底色圆角设在控件自身，不靠外层容器画](../topics/app/media/lesson-e1211056a34f58403e3a.lesson.md) · 信号：SaveButton, Color.Transparent, backgroundColor, borderRadius
 - [SaveButton 授权回调只做快速写入，下载放点击前](../topics/app/media/lesson-089bb378b1ec034a3e84.lesson.md) · 信号：SaveButton, SaveButtonOnClickResult, photoAccessHelper, onClick
 - [公共目录产物改落沙箱时每条链写出导出步骤](../topics/app/media/lesson-b59097ee968fe827f70d.lesson.md) · 信号：WRITE_EXTERNAL_STORAGE, ACTION_MEDIA_SCANNER_SCAN_FILE, DocumentViewPicker.save, MediaScannerConnection
@@ -78,7 +111,15 @@
 - [本地路径接 Video src 前转为 file:// 地址](../topics/app/media/lesson-2b3d45c1a89dc1ead7e3.lesson.md) · 信号：Video, file://, fileUri.getUriFromPath, setUrl
 - [源端主动预取后续图片时用图片解码真实预取并限缓存](../topics/app/media/lesson-cde53c6eab199d1262b2.lesson.md) · 信号：image.createImageSource, createPixelMap, PixelMap.release, imageLoader.enqueue
 - [长内容存图先查快照尺寸限制，超一屏分段渲染拼接](../topics/app/media/lesson-e0f3b5b744e6b0518814.lesson.md) · 信号：componentSnapshot.createFromBuilder, SnapshotOptions, readPixels, writePixels
+- [降采样改 desiredSize，方向按字符串映射](../topics/app/media/lesson-c61656e804e536885d20.lesson.md) · 信号：inSampleSize, BitmapFactory.Options, TAG_ORIENTATION, DecodingOptions
 - [音频导入用 AudioViewPicker 并复制进沙箱](../topics/app/media/lesson-62ac5e65ac4aa51128bd.lesson.md) · 信号：AudioViewPicker, photoAccessHelper, MediaStore.Audio, READ_MEDIA_AUDIO
+
+### [app/media-library](../topics/app/media-library/index.md) — 系统媒体库直接读写：受限权限下的相机资产保存、最近媒体入口、删除确认与外部查看分享
+
+- [deleteAssets 先授权再删，取消与失败分开](../topics/app/media-library/lesson-dd3bd947a05103e1f5f0.lesson.md) · 信号：deleteAssets, MediaAssetChangeRequest.deleteAssets, WRITE_IMAGEVIDEO, ContentResolver.delete
+- [最近媒体以自存 URI 为准，未授权不整库查询](../topics/app/media-library/lesson-43781ac1c21274acd48b.lesson.md) · 信号：MediaStore, MediaStore.Images.Media.EXTERNAL_CONTENT_URI, getAssets, getThumbnail
+- [查看分享媒体 URI 用精确 MIME 并授读权限](../topics/app/media-library/lesson-044358011be198c5bf87.lesson.md) · 信号：ACTION_VIEW, ACTION_SEND, EXTRA_STREAM, startAbility
+- [相机产出走系统资产保存，不靠受限写权限](../topics/app/media-library/lesson-bc279ce222e98e0d5ede.lesson.md) · 信号：MediaStore, IS_PENDING, MediaRecorder, createAsset
 
 ### [app/modules](../topics/app/modules/index.md) — 多模块（壳 HAP + HAR）边界：构建常量来源、跨模块导入、资源闭包归属与可复用函数的模块放置
 
@@ -111,8 +152,9 @@
 - [错误只经 on('error') 报，调用接 catch](../topics/app/playback/lesson-d0736ecd82af68edb87a.lesson.md) · 信号：on('error'), stateChange, onPlayerError, ExoPlayer
 - [门面同步路径也要有源懒加载 getter 的回退来源](../topics/app/playback/lesson-cd4a69e85ec59eabf5b9.lesson.md) · 信号：seekTo, getPosition, getDuration
 
-### [app/recreation](../topics/app/recreation/index.md) — 源端 Activity 重建语义：配置变化、进程回收与重启在不重建的 UIAbility 上显式处理与恢复
+### [app/recreation](../topics/app/recreation/index.md) — 源端 Activity 重建与新实例语义：配置变化、进程回收、重启与新请求在不重建的 UIAbility 上显式处理
 
+- [singleton 收新请求时带版本重跑请求解析](../topics/app/recreation/lesson-45ae43a8f3ace3513834.lesson.md) · 信号：android:launchMode, launchType, onNewWant, onCreate
 - [保留实例按是否配置重建区分，不以单例存在代替](../topics/app/recreation/lesson-ed571550c44efdeb321e.lesson.md) · 信号：NonConfigurationInstance, onConfigurationUpdate, hasInstance, configChanges
 - [回收重建单列分支：仅系统回收时恢复整栈与原参数](../topics/app/recreation/lesson-b0405a29415547485ecb.lesson.md) · 信号：rememberNavController, NavHost, savedInstanceState, TaskStackBuilder
 - [无 configChanges 时按源重建时序刷新关弹窗](../topics/app/recreation/lesson-94715d0df4c03a8fb5a5.lesson.md) · 信号：android:configChanges, screenOrientation, onSaveInstanceState, savedInstanceState
@@ -174,8 +216,11 @@
 - [EventBus 需同步按引用投递时自建订阅表](../topics/arkts/async-mapping/lesson-9db967b1941da87f27be.lesson.md) · 信号：EventBus, EventBus.getDefault, @ohos.events.emitter, eventHub
 - [单线程执行器改 Promise 队列时给重入内部版本](../topics/arkts/async-mapping/lesson-cdc6de4ebcdeeadc287c.lesson.md) · 信号：Executor, runnable.run(), Promise
 - [后台拷贝用异步 IO 或 taskpool，不包 *Sync](../topics/arkts/async-mapping/lesson-c54d1c8af2177b819837.lesson.md) · 信号：AsyncTask, doInBackground, THREAD_POOL_EXECUTOR, fileIo.copyFileSync
+- [挂起对象先摘下置空，再 await 提交](../topics/arkts/async-mapping/lesson-bc21e9552e5b38bb27d7.lesson.md) · 信号：Promise, BlockingQueue.put, synchronized
 - [被拒与故障都 reject 时用单次适配器还原三态](../topics/arkts/async-mapping/lesson-47faf26b44bb4075b0d2.lesson.md) · 信号：BusinessError, Promise&lt;void&gt;, IOException, TagLostException
 - [连续同步平台调用改 Promise 时在网关内串行](../topics/arkts/async-mapping/lesson-ba0cb144aa48f9584060.lesson.md) · 信号：Vibrator.cancel, vibrate(pattern), stopVibration, startVibration
+- [阻塞等待改 Promise 后签名与调用链一路 await](../topics/arkts/async-mapping/lesson-c53d56284f178b5ab63f.lesson.md) · 信号：Thread.join, Object.wait, CountDownLatch.await, Future.get
+- [阻塞队列改 Promise 泵：先启泵，单项失败不卡队](../topics/arkts/async-mapping/lesson-256f088e149edbcb3e64.lesson.md) · 信号：BlockingQueue, ArrayBlockingQueue, LinkedBlockingQueue, take()
 
 ### [arkts/java-stdlib](../topics/arkts/java-stdlib/index.md) — Java/Kotlin 标准库调用（集合序、字符串、正则、格式化、日历）与形似 JS API 的语义差异复刻
 
@@ -259,15 +304,17 @@
 - [命名常量替换字面区间时按每处用途选端点](../topics/data/parsing/lesson-1d0b6dde849cbd70ee8f.lesson.md) · 信号：substring(12,20), substring(12,18), GPB
 - [大整数 id 用 bigint，解析前给数字加引号保真](../topics/data/parsing/lesson-c066489fcf35ab37378c.lesson.md) · 信号：JSON.parse, bigint, Long, 2^53
 - [显式解码器保留 Gson 数字与字符串互转的宽松规则](../topics/data/parsing/lesson-871d3751cadde6dda1dc.lesson.md) · 信号：Gson, string(), number(), typeof
+- [自研 EXIF 写入按库源码取语义，值区顺排](../topics/data/parsing/lesson-ac58c27e534158e65647.lesson.md) · 信号：ExifInterface, setAttribute, setGpsInfo, TAG_GPS_TIMESTAMP
 
 ### [data/preferences](../topics/data/preferences/index.md) — 偏好键值存储：装载时机与同步读写、批量提交原子性、读点缺省值与默认值落盘
 
 - [偏好入口同步装载，读写走 Sync 接口](../topics/data/preferences/lesson-93b3eeff61598bc42172.lesson.md) · 信号：getSharedPreferences, PreferenceManager.getDefaultSharedPreferences, getPreferencesSync, getPreferences
+- [偏好契约按源全部读写点定格式、缺键与持久性](../topics/data/preferences/lesson-bf7a5ff24d5ae4193eb4.lesson.md) · 信号：SharedPreferences, getString, putString, editor.putString
 - [同键多读点缺省不同时逐读点保留，不收敛为单一默认](../topics/data/preferences/lesson-11e4e15acdbadf579e07.lesson.md) · 信号：getBoolean, getString, getXxx
 - [批量 commit 改为先暂存校验再 putSync](../topics/data/preferences/lesson-24bc4929b771a9a33ef4.lesson.md) · 信号：SharedPreferences.Editor, editor.putX, putSync, flushSync
 - [设置页出现时为缺键写 XML 默认值并落盘](../topics/data/preferences/lesson-4283cc343b875489b851.lesson.md) · 信号：addPreferencesFromResource, PreferenceFragment, PreferenceActivity, PreferenceScreen
 
-### [data/storage](../topics/data/storage/index.md) — 本地持久化：relationalStore 建表与版本迁移、自增主键写入、预置数据内容与播种时机、fileIo 目录操作
+### [data/storage](../topics/data/storage/index.md) — 本地持久化：relationalStore 建表与迁移、自增主键写入、预置数据与播种时机、fileIo 文件与目录操作
 
 - [Room 迁移保留库名、schema 版本与显式升级分支](../topics/data/storage/lesson-a6f300f9295ba538f23b.lesson.md) · 信号：@Database(version, addMigrations, AutoMigration, fallbackToDestructiveMigration
 - [SQLiteOpenHelper 首次取库才建库，启动不预建](../topics/data/storage/lesson-519f6769ca714500d9c3.lesson.md) · 信号：SQLiteOpenHelper, getReadableDatabase, getWritableDatabase, relationalStore
@@ -278,6 +325,7 @@
 - [按 VERSION 分派建表升降级，打开失败可重试](../topics/data/storage/lesson-7d8f649aa2713323e072.lesson.md) · 信号：SQLiteOpenHelper, onCreate, onUpgrade, onDowngrade
 - [按日期实时计算的字段不改绑静态资产，先查内置能力](../topics/data/storage/lesson-6d259db1ffd8927834a2.lesson.md) · 信号：Lunar.fromDate, dayYi, dayJi, Intl.DateTimeFormat
 - [演示预置数据逐字段取自源种子工厂与 assets 不自拟](../topics/data/storage/lesson-1c513fdf2cf212354aa0.lesson.md) · 信号：DemoDataFactory, rawfile, LocalDate.now(), plusDays
+- [覆盖写加 TRUNC，按 writeSync 返回值写完](../topics/data/storage/lesson-89496d5566f87f197bba.lesson.md) · 信号：FileOutputStream, openOutputStream, OutputStream.write, fileIo.openSync
 - [首次启动播种在启动路径落调用并保留标记门控](../topics/data/storage/lesson-dc3f2589254d02893b0e.lesson.md) · 信号：Application.onCreate, seedDemoDataOnFirstLaunch, has_seeded_demo_data, EntryAbility.onCreate
 - [首次建库播种放进建表分支同一事务，手动补充不带 id](../topics/data/storage/lesson-488a3bd782acef92f5cf.lesson.md) · 信号：onCreate, RoomDatabase.Callback, copy(id = 0), ValuesBucket
 
@@ -309,6 +357,7 @@
 
 - [Application 注册的接收器读本体写入规格](../topics/process/enumeration-gaps/lesson-4fb1c103822a8fd30b2a.lesson.md) · 信号：BroadcastReceiver, registerReceiver, CONNECTIVITY_ACTION, @ohos.net.connection
 - [截图页范围含其入口直达二级页，不取最窄解释](../topics/process/enumeration-gaps/lesson-91c89aff3f8c5c47bd2a.lesson.md) · 信号：startActivity, Intent, Activity, setOnClickListener
+- [拆层后各层方法按源端覆写与调用全集核对](../topics/process/enumeration-gaps/lesson-61a9fc7190c51c663697.lesson.md) · 信号：@Override, Listener, Callback, Facade
 
 ### [process/handoff-loss](../topics/process/handoff-loss/index.md) — 跨阶段推进、批次收口、重新规划或转述派工时，移交项、全局动作与规则原文在传递中丢失
 
@@ -325,9 +374,10 @@
 - [辅助谓词与 getter 读到定义再翻译，不按名字推断](../topics/process/inferred-not-traced/lesson-b3f534eb740a768d95a6.lesson.md) · 信号：isPlayingState, playPause, LiveData&lt;String&gt;, PAUSED
 - [非空类型上的 null 判断按死分支迁移](../topics/process/inferred-not-traced/lesson-8c18bb22a8ecfe8c7f8a.lesson.md) · 信号：collectAsState, Flow&lt;Boolean&gt;, DataStore, == null
 
-### [process/lossy-transcription](../topics/process/lossy-transcription/index.md) — 逐句转写源端表达式与状态逻辑时简化改写，丢括号分支或合并不同生命周期的字段
+### [process/lossy-transcription](../topics/process/lossy-transcription/index.md) — 逐句转写源端表达式、条件与状态逻辑时简化改写：丢分支或条件、合并不同生命周期的字段
 
 - [复位函数只复位源端每局路径实际赋值的字段](../topics/process/lossy-transcription/lesson-e2a08b9a98504718cd24.lesson.md) · 信号：initGame
+- [多条件门控与行为参数逐项落码，不删不换不丢](../topics/process/lossy-transcription/lesson-dbffe1dd0333c713f94a.lesson.md) · 信号：&amp;&amp;, ||, canIUse
 - [布尔组合条件逐字保留括号并列真值表](../topics/process/lossy-transcription/lesson-381ebc5899e92cbd23a2.lesson.md) · 信号：LTR
 
 ### [process/secondary-over-source](../topics/process/secondary-over-source/index.md) — 规格、合成快照、清单映射或已生成代码等二手产物取代源码成为实现依据而发生漂移
@@ -356,6 +406,7 @@
 
 ### [process/unverified-as-fact](../topics/process/unverified-as-fact/index.md) — 把生成期无法核验的推测、自拟值或假设写成硬性结论、期望值或已实现项
 
+- [下“不存在”结论前确认检索覆盖完整声明与范围](../topics/process/unverified-as-fact/lesson-8b7a50eeb92fc3bdb1e7.lesson.md) · 信号：.d.ts, sed -n, head -n, grep -n
 - [结论先查本机 SDK 与依赖源，查不到才标置信度](../topics/process/unverified-as-fact/lesson-c0f990ea57a901951ba8.lesson.md) · 信号：HARD, dp, .gitmodules, ?android:attr
 ## ui — 界面迁移：布局几何、主题图形、文本、状态反馈、导航、弹窗、交互输入与列表分页的机制级对照
 
@@ -417,6 +468,7 @@
 
 ### [ui/graphics/canvas-text](../topics/ui/graphics/canvas-text/index.md) — Canvas 文字绘制：字体串与注册就绪、TextMetrics 度量字段选取、段落方向与基线取整
 
+- [Paint 状态读回改为自记，不读 ctx 属性](../topics/ui/graphics/canvas-text/lesson-c91afa108d966666d22b.lesson.md) · 信号：Paint.getTextSize, getTextSize, getTextAlign, ctx.font
 - [fillText 按串首强方向字符设 direction](../topics/ui/graphics/canvas-text/lesson-68717b80482f4bd12825.lesson.md) · 信号：Canvas.drawText, drawText, fillText, ctx.direction
 - [字体串用注册名不加引号，测宽前等字体就绪](../topics/ui/graphics/canvas-text/lesson-74295d12b4edc025569f.lesson.md) · 信号：ctx.font, font.registerFont, registerFont, Typeface.createFromAsset
 - [文字度量按源 API 分层选 TextMetrics 字段](../topics/ui/graphics/canvas-text/lesson-f876887b216b6caf9f39.lesson.md) · 信号：getTextBounds, Paint.ascent, getFontMetrics, measureText
@@ -473,7 +525,7 @@
 ### [ui/interaction/gestures](../topics/ui/interaction/gestures/index.md) — 触摸与手势移植：逐指派发过滤、自写状态机阈值、识别器默认参数、系统拖拽与长按触感
 
 - [onTouch 逐指派发按源端接收方式过滤](../topics/ui/interaction/gestures/lesson-68023ac5f088c72a775a.lesson.md) · 信号：onTouch, getAction, getActionMasked, ACTION_POINTER_DOWN
-- [手势起点 Image 写 draggable(false)](../topics/ui/interaction/gestures/lesson-b30da57443f68ab9046a.lesson.md) · 信号：.draggable(false), Image, onTouch, PanGesture
+- [按钮或手势起点的 Image 关闭 draggable](../topics/ui/interaction/gestures/lesson-b30da57443f68ab9046a.lesson.md) · 信号：.draggable(false), Image, onTouch, PanGesture
 - [自写触摸状态机按源阈值复刻，不换识别器](../topics/ui/interaction/gestures/lesson-b9f5cb5d3ae174e5bf70.lesson.md) · 信号：onTouch, dispatchTouchEvent, ItemTouchHelper, ScaleGestureDetector
 - [长按手势显式补系统长按触感](../topics/ui/interaction/gestures/lesson-8a752faf9f5dff52e3ff.lesson.md) · 信号：combinedClickable, onLongClick, hapticFeedbackEnabled, LongPressGesture
 
@@ -710,7 +762,7 @@
 
 - [@Monitor 监听数组路径时，生产方以新数组重新赋值](../topics/ui/state/observation/lesson-0cc7ae4eec0a59086202.lesson.md) · 信号：@Monitor, @Trace, StateFlow.update, .push(
 - [Activity 实例字段的会话态按页面实例建服务](../topics/ui/state/observation/lesson-d9143de006714935afe2.lesson.md) · 信号：getInstance, new Service()
-- [共享状态 key 只用字母数字下划线，禁连字符](../topics/ui/state/observation/lesson-7508ddc52eaf816887f0.lesson.md) · 信号：AppStorageV2.connect, PersistenceV2, @ObservedV2, kebab-case
+- [共享状态 key 只用字母数字下划线，禁连字符与点号](../topics/ui/state/observation/lesson-7508ddc52eaf816887f0.lesson.md) · 信号：AppStorageV2.connect, PersistenceV2, @ObservedV2, kebab-case
 - [拆 ViewModel 单例，跨页状态显式传递而非换 new](../topics/ui/state/observation/lesson-fc724027e2c995632733.lesson.md) · 信号：getInstance(), AppStorageV2, @Param, @Monitor
 - [换位列表的首尾序号按当前位置渲染时算](../topics/ui/state/observation/lesson-09a0bceae55d05616ecc.lesson.md) · 信号：itemsIndexed, ForEach, Repeat, itemGenerator
 - [替换对象时 ForEach 键并入显示字段；稳定键则原位更新](../topics/ui/state/observation/lesson-2e636699fa65aefd63f0.lesson.md) · 信号：ForEach, Repeat, RepeatItem, @Param
@@ -743,6 +795,7 @@
 - [动态文本字号行距按 dp×文字倍率落 vp，几何才乘画布比例](../topics/ui/text/typography/lesson-4c494b9f89c7e9db2b55.lesson.md) · 信号：dynamicTextScale, fontSizeScale, dpF, lineSpacing
 - [单行盒高与多行行距分开，lineHeight 不同名直映](../topics/ui/text/typography/lesson-2a2924aaebbfbea80780.lesson.md) · 信号：lineHeight, .lineHeight(), lineSpacing, LengthMetrics.fp
 - [单行省略补 BREAK_ALL，多行末行写差异](../topics/ui/text/typography/lesson-836a5414b52f0e062f1f.lesson.md) · 信号：maxLines, TextOverflow.Ellipsis, android:ellipsize, textOverflow
+- [卡片字号图标按源 sp/dp 等值，不放大](../topics/ui/text/typography/lesson-4c8d66cb58e835e61c3e.lesson.md) · 信号：appwidget-provider, textSize, drawableTop, designWidth
 - [可折叠正文按测量高度判溢出，默认 Clip](../topics/ui/text/typography/lesson-c61ac79c7db81729a544.lesson.md) · 信号：onTextLayout, didOverflowHeight, hasVisualOverflow, maxLines
 - [可能为空的 Text 保留一行高，不条件渲染](../topics/ui/text/typography/lesson-6668f8800d3ddaaf52ed.lesson.md) · 信号：TextView, wrap_content, INVISIBLE, Visibility.Hidden
 - [缺枚举的 FontWeight 写数值，不换近名](../topics/ui/text/typography/lesson-605038b091e03c26c005.lesson.md) · 信号：FontWeight.SemiBold, FontWeight.Light, FontWeight.ExtraBold, FontWeight.Thin

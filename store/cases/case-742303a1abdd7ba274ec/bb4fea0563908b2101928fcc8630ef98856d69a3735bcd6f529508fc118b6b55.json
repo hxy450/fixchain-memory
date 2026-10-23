@@ -1,0 +1,269 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-742303a1abdd7ba274ec",
+  "created_at": "2026-10-23T15:30:46.690435+00:00",
+  "migration_key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/memory-distill-opencamera-20261023/pool",
+  "title": "把Java阻塞的保图排空等待译成不被等待的Promise，销毁与重启不再排在保存之后",
+  "when": "跨切片接线与服务实现阶段，把源端阻塞式等待（waitUntilImageQueueEmpty/waitUntilDone、BlockingQueue常驻消费线程）转成ArkTS异步实现，并决定seam签名、调用方是否await、消费泵何时启动时",
+  "description": "源端在onDestroy、restartOpenCamera等路径上同步调用waitUntilImageQueueEmpty()→ImageSaver.waitUntilDone()阻塞到保存队列清空，保存线程以BlockingQueue常驻take()；目标端没有阻塞原语，队列等待只能是Promise，而spec接口清单仍写成void签名，AC要求“排空先于销毁/重启”。",
+  "summary": "① 等待链（MainPageVM/MainPage/ExternalIntentGateway）。源MainActivity.waitUntilImageQueueEmpty()直接调用\nimageSaver.waitUntilDone()阻塞；F011 spec的AC190要求“waitUntilImageQueueEmpty（保图先于销毁）→preview.onDestroy”，\nAC153要求“先waitUntilImageQueueEmpty再重启、保存队列排空先于重启”。但F011接口清单照搬Java签名，\n写成waitUntilImageQueueEmpty(): void、restartOpenCamera(): void，没有标出ArkTS里它必须是可await的Promise。\nSlice 11 worker读到AC153和MainActivity的阻塞实现后，把ExternalIntentGateway的seam定成(() => void)，\nrestartOpenCamera同步调用它后立即重启；MainPageVM的destroySequence也同步调用一个void桩。\n桩登记为P-S11-003，说明“destroySequence保图序AC190/restartOpenCamera AC153依赖”，交给Slice 3后接线。\nG2 group-closer读到这条registry，又读到ImageSaverService的async waitUntilDone(): Promise<void>。\n18:29:41它仍保留void签名，写成`void this.imageSaver?.waitUntilDone()`，把等待变成fire-and-forget。\n18:37:38它在MainPage.aboutToDisappear先调同步destroySequence()，随后又直接previewEngine.onDestroy()，\n注释却写“队列排空先于preview销毁AC190”。这些片段原样保留到c752566/c1abe5c：退出与重启不等保存完成。\n返修时Codex把waitUntilImageQueueEmpty/destroySequence改为async并await（5a2d L221→L224），\ngateway的seam改成(() => Promise<void>)，restartOpenCamera改为await后重启；\nMainPage改为void this.vm?.destroySequence()，并删去页面里多余的引擎销毁，由destroySequence在await之后完成。\n② 保存队列（ImageSaverService）。job问到plan是否给出容量与成本占位语义：slice-03 plan只引用F002 spec；\nF002 spec给出了队列容量34/12/8/6、成本JPEG 1/DNG 6（RAW+JPEG=7）、AC10“满队等待空位，入队后按cost-1追加DUMMY”，\n以及races#1“等待入队与计数分离”、状态机“线程start→运行（queue.take阻塞等待）”。源ImageSaver.run()是while(true)常驻消费。\nSlice 3 worker读过这些后，把常驻线程改写成按需启动的pumpLoop：addRequest先await全部DUMMY占位，最后才kickPump；\npumpLoop对saveImageNow不做异常隔离，pumping只在正常退出时复位。\n结果是队列在泵启动前就占满时（容量≤cost的小队列）占位永远等不到空位；单个保存抛错时，计数不再递减，\npumping一直为true，waitUntilDone永不返回，后续请求也不再处理。onDestroy只投递ON_DESTROY，不等已接收任务，\n这点与源一致，源端由调用方先排空。由于调用方的等待也已失效，关闭时不会等已接收的保存。\n返修中Codex先给泵加try/catch和toast（6e4d L269→L272）；随后改为admissionTail串行入队、同步预占整组成本、\n入队后立即kickPump；onDestroy先关闭接收，再投递哨兵并waitUntilDone（6e4d L926→L929）。FINAL保留。\n分工：spec提取要把阻塞等待写成Promise契约；实现与接线阶段，seam与调用链要一路await；\n服务实现阶段，常驻消费线程改写成Promise泵时，要保证消费者存活、单任务失败不阻塞队列。\n",
+  "recommendations": [
+    "接线收口阶段：把返回Promise的等待（如ImageSaverService.waitUntilDone）接到“X先于Y”的AC时，不得用void丢弃。等待方法、destroySequence和seam类型都改成async/Promise<void>并逐层await；无法await的生命周期回调（aboutToDisappear）只发起一个async序列，引擎销毁放在该序列await之后，不在页面里另行同步销毁。用“队列有在途图片时destroySequence/restartOpenCamera不先销毁或重启”的单测核对。",
+    "跨切片seam设计阶段：源端是阻塞等待（Java void方法内部wait/阻塞）且AC要求排序时，回调类型直接定为() => Promise<void>，调用方await后再执行后续动作；即使当前只是桩，也不要定成() => void，否则后续接线只能fire-and-forget。",
+    "规格提取阶段：接口清单不要照搬Java的void签名。源方法阻塞等待队列、线程或IO完成时，在ArkTS契约中写成Promise<void>，并在AC里写明调用方需await，例如waitUntilImageQueueEmpty(): Promise<void>、restartOpenCamera(): Promise<void>。",
+    "服务实现阶段：把BlockingQueue加常驻线程改写成Promise泵时，先入队并启动/保持泵，再等待成本占位，或同步预占整组成本；泵循环对每个请求try/catch，失败也递减计数并通知waiter，pumping在finally复位。至少用“容量1、cost 4的请求能排空”和“单个保存抛错后waitUntilDone仍返回、后续请求继续处理”两条单测核对。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/MainPageVM.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/placeholder-registry.md",
+          "at": "2026-10-01T17:29:12.866Z",
+          "reason": "正常输入：closer用grep读registry，回执给出P-S11-003（MainPageVM#waitUntilImageQueueEmpty）“F002 ImageSaver队列排空链接入——destroySequence保图序AC190/restartOpenCamera AC153依赖”，说明接线后这个方法必须真正等到队列排空（agent-acb5c3d58575999a4.jsonl:L34-L35）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/ImageSaverService.ets",
+          "at": "2026-10-01T18:29:21.412Z",
+          "reason": "正常输入：Bash sed回执显示`async waitUntilDone(): Promise<void>`在计数归零前循环await；接线者由此知道排空是异步完成的，必须await（agent-acb5c3d58575999a4.jsonl:L398-L399）。"
+        },
+        {
+          "key": "agent-acb5c3d58575999a4.jsonl",
+          "at": "2026-10-01T18:29:41.140Z",
+          "reason": "G2 group-closer已收到上述两项输入，也看到destroySequence注释“AC190：队列排空先于preview销毁”（L60-L61）。它却在L406把P-S11-003解除为`waitUntilImageQueueEmpty(): void { void this.imageSaver?.waitUntilDone(); }`，Promise被丢弃；destroySequence同步调用后立刻engine.onDestroy，gateway重启路径也拿到同一个不等待的函数。这个片段保留到c1abe5c，FINAL改为async并await。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "closer在项目根以Bash grep -n \"P-S3-…P-S11-\" spec/placeholder-registry.md读取registry，回执第414行即P-S11-003“destroySequence保图序AC190/restartOpenCamera AC153依赖”；这是它写前收到的排序要求。",
+          "evidence": [
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-acb5c3d58575999a4.jsonl",
+              "line": 34
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-acb5c3d58575999a4.jsonl",
+              "line": 35
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/pages/MainPage.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/placeholder-registry.md",
+          "at": "2026-10-01T17:29:12.866Z",
+          "reason": "正常输入：P-S11-003写明destroySequence保图序依赖AC190，即销毁要排在队列排空之后（agent-acb5c3d58575999a4.jsonl:L34-L35）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/ImageSaverService.ets",
+          "at": "2026-10-01T18:29:21.412Z",
+          "reason": "正常输入：waitUntilDone是async、返回Promise<void>（agent-acb5c3d58575999a4.jsonl:L398-L399）。"
+        },
+        {
+          "key": "agent-acb5c3d58575999a4.jsonl",
+          "at": "2026-10-01T18:37:38.589Z",
+          "reason": "同一closer在18:29:41把等待改成fire-and-forget之后，又于L567 Write MainPage.aboutToDisappear：先同步`this.vm?.destroySequence()`，随后直接`this.previewEngine?.onDestroy()`，注释写“P-S1-018：队列排空先于preview销毁AC190”。页面没有等保存，也绕过了VM的销毁顺序；18:40:12的重写（L588）保留了这段。FINAL改为void this.vm?.destroySequence()，引擎销毁由该async序列在await之后完成。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "closer在项目根以Bash grep -n \"P-S3-…P-S11-\" spec/placeholder-registry.md读取registry，回执第414行即P-S11-003“destroySequence保图序AC190/restartOpenCamera AC153依赖”；这是它写前收到的排序要求。",
+          "evidence": [
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-acb5c3d58575999a4.jsonl",
+              "line": 34
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-acb5c3d58575999a4.jsonl",
+              "line": 35
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/ExternalIntentGateway.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "summary": "Slice 11 worker读到F011 AC153“先waitUntilImageQueueEmpty（保图）再重启，保存队列排空先于重启”，\n以及MainActivity.waitUntilImageQueueEmpty()对imageSaver.waitUntilDone()的阻塞调用。\n它却把gateway的seam定成(() => void)，restartOpenCamera同步调用后立即重启。\nspec接口清单照搬的void签名是诱因，但AC与源码已经足以说明重启必须等排空完成。\n后来closer把等待接成fire-and-forget，这个同步seam原样保留到c1abe5c。\nFINAL改为(() => Promise<void>)，并在async restartOpenCamera中await后再重启。\n",
+      "recommendations": [
+        "跨切片seam设计阶段：源端阻塞等待且AC要求排序时，seam类型定为() => Promise<void>，调用方await后再执行重启等后续动作；桩阶段也按异步签名设计。",
+        "规格提取阶段：接口清单把阻塞等待写成Promise<void>，例如waitUntilImageQueueEmpty(): Promise<void>、restartOpenCamera(): Promise<void>，不照搬Java的void。"
+      ],
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F011-app-integration.md",
+          "at": "2026-10-01T16:42:15.802Z",
+          "reason": "输入：Read回执中AC153要求“先waitUntilImageQueueEmpty（保图）再…重启到首页”，判定条件为“保存队列排空先于重启”，排序要求清楚；同一文件的接口清单仍写waitUntilImageQueueEmpty(): void、restartOpenCamera(): void，没有标出要用异步契约（agent-a690eb1a2619c2d76.jsonl:L27-L28）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/MainActivity.java",
+          "at": "2026-10-01T16:53:19.018Z",
+          "reason": "正常输入：Read回执L1778-L1782显示waitUntilImageQueueEmpty()直接调用applicationInterface.getImageSaver().waitUntilDone()，是阻塞等待；按源语义，重启要排在保存完成之后（agent-a690eb1a2619c2d76.jsonl:L232-L233）。"
+        },
+        {
+          "key": "agent-a690eb1a2619c2d76.jsonl",
+          "at": "2026-10-01T16:58:02.827Z",
+          "reason": "Slice 11 worker在L283 Write ExternalIntentGateway时，把`waitUntilImageQueueEmpty: (() => void) | null`写成同步回调，restartOpenCamera(): void调用它后不等待；L289 Edit改成随即AppRestart.restart(this.context)。注释写着“先waitUntilImageQueueEmpty（保图）再重启”，签名却无法承载等待。FINAL改为Promise seam并await。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/ImageSaverService.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "summary": "Slice 3 worker读到F002 spec和ImageSaver.java，二者给出了容量、成本占位、满队背压，以及常驻消费线程的语义。\n它把常驻线程改写成按需启动的Promise泵：addRequest await全部DUMMY占位后才kickPump；pumpLoop不隔离saveImageNow异常，\npumping只在正常退出时复位。泵启动前队列就满时，占位永远等不到空位；单任务抛错时计数不递减，\nwaitUntilDone永不返回，后续请求也无人处理。这些片段保留到c1abe5c。\nFINAL改用admissionTail串行入队、同步预占整组成本、入队即kickPump；泵改为逐请求try/catch并toast；\nonDestroy先关闭接收，再投递哨兵并waitUntilDone。\n",
+      "recommendations": [
+        "服务实现阶段：BlockingQueue加常驻线程转Promise泵时，先入队并启动泵，再等待成本占位，或同步预占整组成本；泵逐请求try/catch，失败也递减计数、通知waiter，pumping在finally复位。用“容量1、cost 4的请求能排空”和“单个保存抛错后waitUntilDone仍返回”两条单测核对。"
+      ],
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F002-photo-capture-save.md",
+          "at": "2026-10-01T16:41:34.309Z",
+          "reason": "正常输入：Read回执给出映射行“worker线程+有界队列+Promise化waitUntilDone…满队用背压Promise等价”、AC07-AC10的容量34/12/8/6、成本1/6、“满队等待空位，入队后按cost-1追加DUMMY”；还有races#1“等待入队与计数分离”和状态机“线程start→运行（queue.take阻塞等待）”。这些说明消费者独立常驻，不依赖生产者先完成入队（agent-a46e99f7c0baf2d05.jsonl:L25-L26）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/ImageSaver.java",
+          "at": "2026-10-01T16:42:59.596Z",
+          "reason": "正常输入：Read回执显示run()为while(true)循环，queue.take()阻塞取请求（L524-L532），addRequest先put再循环addDummyRequest（L946-L990）。生产者等待空位时，消费线程始终在运行（agent-a46e99f7c0baf2d05.jsonl:L66-L67）。"
+        },
+        {
+          "key": "agent-a46e99f7c0baf2d05.jsonl",
+          "at": "2026-10-01T17:09:56.490Z",
+          "reason": "Slice 3 worker在L283 Write ImageSaverService，把常驻线程改成按需泵。addRequest先push，再`await this.addDummyRequest()`逐个占位，最后才kickPump；pumpLoop对saveImageNow/saveImageNowRaw不做try/catch，pumping只在循环正常结束时复位。于是消费者是否运行，取决于生产者能否完成入队；单个异常会让计数和pumping一起卡住。这些片段保留到c1abe5c。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-742303a1abdd7ba274ec",
+  "metadata": {
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code",
+        "codex"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3",
+        "gpt-6-astra"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.163.0",
+        "2.1.247",
+        "2.1.299"
+      ]
+    },
+    "source_set_id": "sources-974a9086706364eed8b7",
+    "environment": [
+      {
+        "name": "android.compile_sdk",
+        "value": "36",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/.claude/skills",
+        "at": "2026-10-01T09:52:21.840Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-aa8064d19722381a1.jsonl:L11",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-aa8064d19722381a1.jsonl:L10",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos",
+        "at": "2026-10-01T12:27:45.961Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b.jsonl:L1565",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b.jsonl:L1563",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos",
+        "at": "2026-10-01T13:34:44.665Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae78a452b1664bc61.jsonl:L149",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae78a452b1664bc61.jsonl:L148",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.11.1"
+  },
+  "revision": "bb4fea0563908b2101928fcc8630ef98856d69a3735bcd6f529508fc118b6b55"
+}

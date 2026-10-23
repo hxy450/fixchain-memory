@@ -1,0 +1,468 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-ef167da8e80990c31714",
+  "created_at": "2026-10-23T14:35:41.508703+00:00",
+  "migration_key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/memory-distill-opencamera-20261023/pool",
+  "title": "相机方向与旋转迁移：变换只记参数、朝向凭截断API写死、拍照旋转漏下发或语义错配、平面旋转索引行列颠倒",
+  "when": "相机功能实现阶段，把 Android 预览测量/变换、传感器朝向、拍照前旋转下发与位图 EXIF 旋转落到 HarmonyOS XComponent、CameraKit 与手写像素代码时",
+  "description": "源端依赖 TextureView.onMeasure/setTransform 做 4:3 letterbox，依赖 SENSOR_ORIENTATION 与拍照前 setRotation(getImageVideoRotation()) 写 JPEG_ORIENTATION，并用 Matrix 旋转位图；目标端改用 XComponent surface、CameraDevice/PhotoOutput 接口或同步手写像素平面。",
+  "summary": "本问题由四类已核偏差组成，均为生成遗留，B7 为修复中新生：\n1) 预览居中/尺寸变化（A4）：F001 规格已写明测量结果驱动 XComponent 容器布局、AC71 由 XComponent 变换承担、AC79 尺寸变化重配变换；\n   F001 实现者读到这些要求和 MyTextureView 的 onMeasure/setTransform，却让 CameraPreviewSurface.applyTransform 只把 scale/offset 记进 lastTransform\n   （注释“AC80 单测口径：矩阵参数断言”），预览宿主 XComponent 只注册 onLoad/onDestroy、宽高 100%，没有尺寸变化上报；\n   group-1 closer 原样把该宿主抽成 CameraPreview 组件。FINAL 改为 measurePreview + setXComponentSurfaceRect 居中，并接上 onAreaChange→onSurfaceSizeChanged。\n2) 传感器朝向写死（A4）：F001 实现者为判断 HMOS 是否提供传感器角度，只 sed 了 CameraDevice 声明的前 73 行（到 connectionType），\n   cameraOrientation 在同一 d.ts 后面未进入回执，便写下“HMOS 无 sensorOrientation 特征”并按 BACK 90/FRONT 270 写死；FINAL 改读 device.cameraOrientation。\n3) 拍照不下发旋转（A19）：Android 的 setRotation(getImageVideoRotation()) 位于 Preview.takePhotoWhenFocused 本体；F002 规格 §R 未单列这一副作用，\n   F002 worker 读了调用 takePhotoWhenFocused 的 takePhoto 段，却用错行号读“takePhotoWhenFocused head”（实际读到录像代码）后放弃深读，\n   把它写成“phase 置位 + engine.takePicture()”，桥接契约 takePicture 也不带旋转；group-2 closer 按该契约实现 PreviewEngine.capturePhoto 与控制器 takePicture，\n   均不调用 setRotation/不带 rotation。FINAL 在单拍与序列拍前 setRotation(getImageVideoRotation())。\n4) 修复中新生 B7：Codex 主代理改写 takePicture 时只 grep 到 PhotoCaptureSetting 的 rotation?: ImageRotation 字段，便把 Android 语义的绝对角度\n   toImageRotation(settings.rotation) 直接下发；HarmonyOS 原生层在未调用 getPhotoRotation 时会再叠加传感器角度，导致照片侧转。FINAL 改为按前后摄换算 deviceDegree 调 getPhotoRotation。\n5) 平面旋转索引（A20）：F008 实现者读到源端经 Matrix/rotateForExif 旋转、项目已有 ImageUtils 用 PixelMap.rotate，为同步 seam 改为手写 rotatePlane；\n   注释正确写出 (x,y)→(H−1−y, x)，索引却写成 (H−1−y)*out.width + x（把新 x 当行号），270° 同理；FINAL 改为 x*out.width+(H−1−y) 与 (W−1−x)*out.width+y。\n",
+  "recommendations": [
+    "实现阶段：源端作用于视图的测量/矩阵（onMeasure、setTransform）要落成目标端的真实调用（如 XComponentController.setXComponentSurfaceRect），并接上尺寸变化回调；AC 的单测断言面只是检查口径，不能只记录参数。",
+    "实现阶段：下“目标平台无某属性”的结论前，读完整个 interface 声明（如按 interface CameraDevice 起止定位整段），截断的 sed 区间不能作为否定依据。",
+    "实现阶段：移植某源函数时，用 grep -n '函数签名' 定位并读完本体再写，逐行对照其副作用（如 takePhotoWhenFocused 内的 setRotation、enableShutterSound），不能只凭调用方或函数名补写。",
+    "拍照旋转：Android 的 JPEG_ORIENTATION 已含传感器角度，HarmonyOS 应以设备角度调用 photoOutput.getPhotoRotation(deviceDegree) 得到 PhotoCaptureSetting.rotation；写前查该字段的计算接口，而非只看字段类型。",
+    "手写像素旋转：目标索引按 newY*outWidth+newX 写，并用非正方形小图（如 2×3）做 90°/270° 单测；能用平台 PixelMap.rotate 时优先复用。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/CameraPreviewSurface.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "summary": "F001 实现者写前读到规格的“测量/纵横比→页面布局”“previewAspect 驱动 XComponent 容器测量”、AC71“HMOS 端统一由 XComponent 变换承担”、\nAC72 示例 1080x2400→1080x1440，以及 MyTextureView 的 onMeasure/setTransform 实际作用于视图。Write 出的 CameraPreviewSurface\n却只计算并记录 lastTransform（scale/offset），仅经 applyPreviewRotation 下发旋转，measurePreview 结果无人用于设置 surface 尺寸与偏移。\n该片段保留到 c752566；Codex 主代理改为 measurePreview + setXComponentSurfaceRect 居中（job 证据 7c27 L577→L581）。\n",
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F001-camera-preview.md",
+          "at": "2026-10-01T14:57:03.096Z",
+          "reason": "正常输入：Read 回执给出数据流“preview_w×preview_h → CameraPreviewSurface（XComponent）测量/纵横比 → 页面布局”、对接点“previewAspect 驱动 XComponent 容器测量”、AC71“HMOS 端统一由 XComponent 变换承担”、AC72 4:3 竖屏 1080x2400→1080x1440、AC79 尺寸变化重配变换；足以说明测量与变换要作用到 XComponent（agent-ae5882c40105e3f01.jsonl:L23-L26）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/preview/camerasurface/MyTextureView.java",
+          "at": "2026-10-01T14:59:23.228Z",
+          "reason": "正常输入：源码回执显示 onMeasure 以 preview.getMeasureSpec 结果调用 super.onMeasure，setTransform 调 super.setTransform(matrix)，即测量与矩阵都实际作用于预览视图（agent-ae5882c40105e3f01.jsonl:L79-L80）。"
+        },
+        {
+          "key": "agent-ae5882c40105e3f01.jsonl",
+          "at": "2026-10-01T15:11:33.281Z",
+          "reason": "已收到上述输入，Write 的 CameraPreviewSurface 中 applyTransform 只把 scale/offset 写入 lastTransform（注释称“AC80 单测口径：矩阵参数断言”），物理上只经 applyPreviewRotation 下发旋转；measurePreview 不驱动任何 surface 尺寸/偏移。把检查口径当成实现目标，偏差在此（同转录 L231-L233）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/pages/MainPage.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "summary": "同一 F001 实现者在 Step 3d 写 MainPage.previewHost：XComponent 只接 onLoad→onSurfaceAvailable、onDestroy→onSurfaceDestroyed，\n宽高 100%，没有 onAreaChange 上报，也未绑定规格对接点中的 previewAspect；它自己在 PreviewEngine 写了 onSurfaceSizeChanged 却没有任何调用方。\ngroup-1 closer 后来把该宿主抽成 CameraPreview 组件，MainPage 改为 CameraPreview({...}) 但仍只传两条回调。\nFINAL 由 MainPage 把 CameraPreview 的 onSurfaceSizeChanged 转发给 PreviewEngine（job 证据 7c27 L592→L595）。\n",
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F001-camera-preview.md",
+          "at": "2026-10-01T14:57:03.096Z",
+          "reason": "正常输入：Read 回执含对接点“@Local previewAspect ← CameraEngineState.aspectRatio（驱动 XComponent 容器测量）”与 AC79“TextureView 尺寸变化…重配变换”，要求页面把纵横比与尺寸变化接到预览宿主（agent-ae5882c40105e3f01.jsonl:L23-L26）。"
+        },
+        {
+          "key": "agent-ae5882c40105e3f01.jsonl",
+          "at": "2026-10-01T15:31:31.984Z",
+          "reason": "Edit 写入 previewHost：XComponent 仅 onLoad/onDestroy、.width('100%').height('100%')，无尺寸变化上报、无 previewAspect 绑定；规格中的测量驱动与尺寸变化路径在页面侧缺失（同转录 L357-L358）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/components/common/CameraPreview.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "summary": "CameraPreview.ets 由 group-1 closer 新建：它读到 MainPage.previewHost（F001 实现者所写，仅 onLoad/onDestroy、宽高 100%），\n按 ui-manifest 共享组件表把它原样抽成 @ComponentV2 组件，只暴露 onSurfaceAvailable/onSurfaceDestroyed 两个 @Param。\n偏差起点仍是 F001 实现者未接尺寸变化；closer 只传递。FINAL 新增 onAreaChange→onSurfaceSizeChanged(vp2px)（c1abe5c..c8dd617）。\n",
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F001-camera-preview.md",
+          "at": "2026-10-01T14:57:03.096Z",
+          "reason": "正常输入：规格对接点要求 previewAspect 驱动 XComponent 容器测量，AC79 要求尺寸变化重配变换（agent-ae5882c40105e3f01.jsonl:L23-L26）。"
+        },
+        {
+          "key": "agent-ae5882c40105e3f01.jsonl",
+          "at": "2026-10-01T15:31:31.984Z",
+          "reason": "previewHost 的 XComponent 只写 onLoad/onDestroy，无尺寸变化上报（同转录 L357-L358）；这是 CameraPreview 后来继承的内容。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/pages/MainPage.ets",
+          "at": "2026-10-01T16:41:52.371Z",
+          "reason": "交付桥梁：group-1 closer 的 Read 回执（offset 80）返回第 186-203 行 previewHost，内容即上述只有 onLoad/onDestroy 的 XComponent（agent-a95befa9b2c5d6b63.jsonl:L22-L23）。"
+        },
+        {
+          "key": "agent-a95befa9b2c5d6b63.jsonl",
+          "at": "2026-10-01T16:46:47.453Z",
+          "reason": "按 ui-manifest 共享组件要求把 previewHost 原样抽成 CameraPreview 组件，Write 只保留 onLoad/onDestroy 两个回调（同转录 L125-L128）；本链确认传递，不另推定独立失职。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/HmosCameraController.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "summary": "本目标有三个起点。\n(a) 传感器朝向：F001 规格 AC209 要求 getCameraOrientation 读打开时缓存的 sensor_orientation，AC205/AC207 的旋转公式都依赖它；\nF001 实现者查 d.ts 时只 sed 了 CameraDevice 的第 1918-1990 行，回执止于 connectionType，cameraOrientation（第 2044 行）未返回，\n随后重写控制器时写“HMOS 无 sensorOrientation 特征 → BACK 90 / FRONT 270”。FINAL 改为 device.cameraOrientation。\n(b) 拍照不带旋转（A19 控制器侧）：F002 worker 交付的桥接契约 takePicture 不含旋转，group-2 closer 在控制器补 takePicture 时只 output.capture()，\n未把 setRotation 记录的 settings.rotation 放进 PhotoCaptureSetting。\n(c) 修复中新生 B7：Codex 主代理改写 takePicture 时只 grep 到 PhotoCaptureSetting 的字段声明 rotation?: ImageRotation，\n便写 rotation: this.toImageRotation(this.settings.rotation)；该值沿用 Android getImageVideoRotation 的绝对角度，原生层未调 getPhotoRotation 时再叠加传感器角度。\ncapture_audit 后续改为计算 deviceDegree→getPhotoRotation（6e4d L2522→L2527、L2539→L2542）。\n",
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F001-camera-preview.md",
+          "at": "2026-10-01T14:57:03.096Z",
+          "reason": "正常输入：Read 回执含 AC209“getCameraOrientation/getFacing 读取打开时缓存的 sensor_orientation/lens_facing”，AC205/AC207 用 cameraOrientation 计算旋转；要求读取真实传感器角度（agent-ae5882c40105e3f01.jsonl:L23-L26）。"
+        },
+        {
+          "key": "/Applications/DevEco-Studio.app/Contents/sdk/default/openharmony/ets/api/@ohos.multimedia.camera.d.ts",
+          "at": "2026-10-01T15:01:46.102Z",
+          "reason": "实际收到的 API 输入不完整：Bash 以 sed -n '1918,1990p' 读 CameraDevice，回执只到 cameraId/cameraPosition/cameraType/connectionType，同一 interface 的 cameraOrientation（第 2044 行）不在回执中（agent-ae5882c40105e3f01.jsonl:L147-L148）。"
+        },
+        {
+          "key": "agent-ae5882c40105e3f01.jsonl",
+          "at": "2026-10-01T15:17:42.192Z",
+          "reason": "规格要求读取真实朝向，却凭截断回执下否定结论，重写控制器时写“HMOS 无 sensorOrientation 特征 → 常规设备朝向默认（BACK 90 / FRONT 270）”并硬编码（同转录 L246-L247）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/preview/Preview.java",
+          "at": "2026-10-01T16:43:55.642Z",
+          "reason": "正常输入：F002 worker 的 sed 6441-6560 回执返回 takePhoto 多处调用 takePhotoWhenFocused(continuous_fast_burst)，表明需移植的函数本体在同一源文件后段（6600 起，6835 行即 camera_controller.setRotation(getImageVideoRotation())）（agent-a46e99f7c0baf2d05.jsonl:L86-L87）。"
+        },
+        {
+          "key": "agent-a46e99f7c0baf2d05.jsonl",
+          "at": "2026-10-01T17:15:12.762Z",
+          "reason": "曾以错误区间 6290-6360 读“takePhotoWhenFocused head”（回执是录像代码，L169-L170），随后放弃深读（L171），Write 的 PhotoCaptureOrchestrator 把 takePhotoWhenFocused 写成 phase 置位 + engine.takePicture()，CaptureEngineBridge.takePicture 契约不含旋转（L317-L318）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/PhotoCaptureOrchestrator.ets",
+          "at": "2026-10-01T17:31:13.534Z",
+          "reason": "交付桥梁：group-2 closer 的 Read 回执包含 CaptureEngineBridge，其中 takePicture 注为“camera_controller.takePicture(pictureCallback, errorCallback) 等价”、无旋转参数（agent-acb5c3d58575999a4.jsonl:L85-L86）。"
+        },
+        {
+          "key": "agent-acb5c3d58575999a4.jsonl",
+          "at": "2026-10-01T18:26:54.265Z",
+          "reason": "按桥接契约在控制器补 takePicture（注“P-S3-003 closer 落地”），只调用 output.capture()，未把 setRotation 记录的 settings.rotation 放入 PhotoCaptureSetting（同转录 L340-L341）；本链确认契约传递。"
+        },
+        {
+          "key": "/Applications/DevEco-Studio.app/Contents/sdk/default/openharmony/ets/api/@ohos.multimedia.camera.d.ts",
+          "at": "2026-10-17T16:30:19.598Z",
+          "reason": "修复期输入：Codex 主代理 rg 'interface PhotoCaptureSetting|quality:|rotation\\?' 只返回字段声明 rotation?: ImageRotation，未读取同文件 PhotoOutput.getPhotoRotation(deviceDegree)（rollout-2026-10-17T09-25-11-01a14aae-7c27-7970-aae5-6ee7ad3de05e.jsonl:L165、L169）。"
+        },
+        {
+          "key": "codex/2026/10/17/rollout-2026-10-17T09-25-11-01a14aae-7c27-7970-aae5-6ee7ad3de05e.jsonl",
+          "at": "2026-10-17T16:32:45.160Z",
+          "reason": "修复中新生偏差：exec python 改写 takePicture，setting 写 rotation: this.toImageRotation(this.settings.rotation)，把 Android JPEG_ORIENTATION 语义（已含传感器角度的 getImageVideoRotation）直接下发；原生层在未调 getPhotoRotation 时再叠加传感器角度，照片侧转（同转录 L194、L198；诊断见 6e4d L2477、L2583）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "F001 实现者以 Bash sed -n '1918,1990p' 读取 camera d.ts 的 CameraDevice 声明，回执止于 connectionType；这是它写“HMOS 无 sensorOrientation 特征”前实际查到的 API 输入。",
+          "evidence": [
+            {
+              "source": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae5882c40105e3f01.jsonl",
+              "line": 147
+            },
+            {
+              "source": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae5882c40105e3f01.jsonl",
+              "line": 148
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target"
+        },
+        {
+          "from": 4,
+          "to": 5,
+          "force": true,
+          "reason": "F002 worker 以 Bash sed -n '6441,6560p' 读取 Preview.java，回执返回 takePhoto 段及其对 takePhotoWhenFocused 的多处调用；这是该 worker 写 PhotoCaptureOrchestrator 前实际收到的源码输入。",
+          "evidence": [
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-a46e99f7c0baf2d05.jsonl",
+              "line": 86
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-a46e99f7c0baf2d05.jsonl",
+              "line": 87
+            }
+          ]
+        },
+        {
+          "from": 5,
+          "to": 6
+        },
+        {
+          "from": 6,
+          "to": 7
+        },
+        {
+          "from": 7,
+          "to": "target"
+        },
+        {
+          "from": 8,
+          "to": 9,
+          "force": true,
+          "reason": "Codex 主代理 exec 中以 rg 查询 camera d.ts 的 PhotoCaptureSetting，回执只返回 quality?/rotation?: ImageRotation 字段声明；这是它改写拍照设置前收到的 API 输入。",
+          "evidence": [
+            {
+              "source": "codex/2026/10/17/rollout-2026-10-17T09-25-11-01a14aae-7c27-7970-aae5-6ee7ad3de05e.jsonl",
+              "line": 165
+            },
+            {
+              "source": "codex/2026/10/17/rollout-2026-10-17T09-25-11-01a14aae-7c27-7970-aae5-6ee7ad3de05e.jsonl",
+              "line": 169
+            }
+          ]
+        },
+        {
+          "from": 9,
+          "to": "target",
+          "force": true,
+          "reason": "同一 exec 调用中的 python 脚本读入 HmosCameraController.ets、替换 takePicture 并 p.write_text(s) 写回，PhotoCaptureSetting 含 rotation: this.toImageRotation(this.settings.rotation)；第二个命令 exit_code 0 完成。",
+          "evidence": [
+            {
+              "source": "codex/2026/10/17/rollout-2026-10-17T09-25-11-01a14aae-7c27-7970-aae5-6ee7ad3de05e.jsonl",
+              "line": 194
+            },
+            {
+              "source": "codex/2026/10/17/rollout-2026-10-17T09-25-11-01a14aae-7c27-7970-aae5-6ee7ad3de05e.jsonl",
+              "line": 197
+            },
+            {
+              "source": "codex/2026/10/17/rollout-2026-10-17T09-25-11-01a14aae-7c27-7970-aae5-6ee7ad3de05e.jsonl",
+              "line": 198
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/PreviewEngine.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "summary": "F002 规格 §R 覆盖 takePicturePressed/takePhoto 的路由与对焦分支，但没有单列 takePhotoWhenFocused 本体里的 setRotation(getImageVideoRotation())；\nF002 worker 读到 takePhoto 段对 takePhotoWhenFocused 的调用，却未读到函数本体，写出不含旋转的 takePhotoWhenFocused 与 CaptureEngineBridge。\ngroup-2 closer 读该桥接契约后在 PreviewEngine 补 capturePhoto，只 controller.takePicture(pictureCb, errorCb)，于是 setRotation 无调用方。\n该片段保留到 c752566；capture_audit 在 capturePhoto/capturePhotoSequence 前加 setRotation(getImageVideoRotation())（6e4d L985→L988）。\n",
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F002-photo-capture-save.md",
+          "at": "2026-10-01T16:41:34.309Z",
+          "reason": "输入有缺口：Read 回执中 §R 的 AC83-AC88 描述 takePicturePressed 路由与 takePhoto 对焦分支（AC88 真:Preview.java:6441），没有写出 takePhotoWhenFocused 内拍照前 setRotation 的要求（agent-a46e99f7c0baf2d05.jsonl:L25-L26）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/preview/Preview.java",
+          "at": "2026-10-01T16:43:55.642Z",
+          "reason": "正常输入：sed 6441-6560 回执返回 takePhoto 多处调用 takePhotoWhenFocused(continuous_fast_burst)，指明要移植的函数本体就在同一锚点文件（本体 6600 起，6835 行 camera_controller.setRotation(getImageVideoRotation())）（agent-a46e99f7c0baf2d05.jsonl:L86-L87）。"
+        },
+        {
+          "key": "agent-a46e99f7c0baf2d05.jsonl",
+          "at": "2026-10-01T17:15:12.762Z",
+          "reason": "以错误区间 6290-6360 读“takePhotoWhenFocused head”得到录像代码（L169-L170），思考中“Let me not dig more”（L171）；Write 的 PhotoCaptureOrchestrator 头注声称移植 takePhotoWhenFocused（列 5555-5760、6441-6560、6870-6925，跳过本体所在段），实现只有 phase 置位 + engine.takePicture()，桥接契约也不含旋转（L317-L318）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/PhotoCaptureOrchestrator.ets",
+          "at": "2026-10-01T17:31:13.534Z",
+          "reason": "交付桥梁：group-2 closer 的 Read 回执包含 CaptureEngineBridge.takePicture（“camera_controller.takePicture 等价”）与只调 takePicture 的 takePhotoWhenFocused（agent-acb5c3d58575999a4.jsonl:L85-L86）。"
+        },
+        {
+          "key": "agent-acb5c3d58575999a4.jsonl",
+          "at": "2026-10-01T18:27:57.792Z",
+          "reason": "按桥接契约 Edit 补 CaptureEngineBridge 公开面，capturePhoto 仅 controller.takePicture(pictureCb, errorCb)，未调用 setRotation(getImageVideoRotation())（同转录 L365-L366）；本链确认传递。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "F002 worker 以 Bash sed -n '6441,6560p' 读取 Preview.java，回执返回 takePhoto 段及其对 takePhotoWhenFocused 的多处调用；这是该 worker 写 PhotoCaptureOrchestrator 前实际收到的源码输入。",
+          "evidence": [
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-a46e99f7c0baf2d05.jsonl",
+              "line": 86
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-a46e99f7c0baf2d05.jsonl",
+              "line": 87
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/PostProcessingSvc.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "summary": "F008 实现者读到 PostProcessing.java 通过 ImageUtils.loadBitmapWithRotation/rotateForExif 做 EXIF 旋转，\n以及项目已有 ImageUtils.ets 用 PixelMap.rotate(degrees) 实现同一语义；因 seam 为同步签名，决定手写 rotatePlane（L120）。\nWrite 时 90° 分支注释写对映射 (x,y)→(H−1−y, x)，索引却写 out.pixels[(H−1−y)*out.width + x]，把新 x 当成行号；\n270° 分支同样写成 [y*out.width + (W−1−x)]。非正方形图会错位或越界，正方形图也被翻转而非旋转。\n该片段保留到 c752566；parity_audit 以 photo-rotation 测试复现后改为 [x*out.width+(H−1−y)] 与 [(W−1−x)*out.width+y]（5a2d L315→L320）。\n",
+      "recommendations": [
+        "手写像素旋转时，先写出新坐标 (nx, ny)，再统一按 ny*outWidth+nx 计算目标下标；用 2×3 这类非正方形样例做 90°/270° 单测。",
+        "源端只是 Matrix/平台旋转时，优先复用项目已有 PixelMap.rotate 封装；确需同步实现，再对照既有实现的输出做等价测试。"
+      ],
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/PostProcessing.java",
+          "at": "2026-10-01T17:25:49.752Z",
+          "reason": "正常输入：Read 回执显示后处理经 ImageUtils.loadBitmapWithRotation / rotateForExif 按 EXIF 旋转位图，旋转语义来自 Matrix，本身不需要手算像素索引（agent-a598f7ce95d396889.jsonl:L114-L115）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/ImageUtils.ets",
+          "at": "2026-10-01T17:25:53.612Z",
+          "reason": "正常输入：Read 回执给出已有 HMOS 等价实现，头注“Matrix 旋转 → PixelMap.rotate（90/180/270 有效方向）”，rotateForExif 内 await bitmap.rotate(degrees)，提供了正确的旋转语义参照（agent-a598f7ce95d396889.jsonl:L118-L119）。"
+        },
+        {
+          "key": "agent-a598f7ce95d396889.jsonl",
+          "at": "2026-10-01T18:30:41.783Z",
+          "reason": "为同步 seam 改手写平面旋转（L120），Write 的 rotatePlane 90° 注释为 (x,y)→(H−1−y, x)，下标却写 (plane.height-1-y)*out.width + x，270° 写 y*out.width + (plane.width-1-x)，行列颠倒，与自己注释和 PixelMap.rotate 语义都不符（同转录 L289-L290）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "F002 规格 §R（交叉验证追加）为何未列出 takePhotoWhenFocused 内的 setRotation，规格作者一侧未上溯；本卡以 worker 未读函数本体为已核偏差。",
+    "Codex 推理内容加密，B7 只能依据可见调用判断其写前未查 getPhotoRotation；该写入在 6e4d 补上 setRotation 调用方（L985-L988）后才在实拍中显现。",
+    "PreviewEngine 中尺寸变化时调用 updatePreviewTexture 源自 F001-AC79 的 Android 语义，FINAL 删除属 HarmonyOS 适配，未作为生成偏差单独归因。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-ef167da8e80990c31714",
+  "metadata": {
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code",
+        "codex"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3",
+        "gpt-6-astra"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.163.0",
+        "2.1.247",
+        "2.1.299"
+      ]
+    },
+    "source_set_id": "sources-974a9086706364eed8b7",
+    "environment": [
+      {
+        "name": "android.compile_sdk",
+        "value": "36",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/.claude/skills",
+        "at": "2026-10-01T09:52:21.840Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-aa8064d19722381a1.jsonl:L11",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-aa8064d19722381a1.jsonl:L10",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos",
+        "at": "2026-10-01T12:27:45.961Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b.jsonl:L1565",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b.jsonl:L1563",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos",
+        "at": "2026-10-01T13:34:44.665Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae78a452b1664bc61.jsonl:L149",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae78a452b1664bc61.jsonl:L148",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.11.1"
+  },
+  "revision": "b0741045842d4ef96db79c2bd8c9a99425324ad7612422a92bb274517b7f68a8"
+}

@@ -1,6 +1,6 @@
 # 迁移设置开关、设置保存与持久化的界面状态时为每项落实运行期消费方：只调持久化 setter、只写远端设置不算完成
 
-ID：`lesson-4d0f0176b3d09c33f1eb` · 版本：4 · 阶段：execute · 主题：[app/cross-cutting](index.md)
+ID：`lesson-4d0f0176b3d09c33f1eb` · 版本：5 · 阶段：execute · 主题：[app/cross-cutting](index.md)
 
 概要：设置开关逐项落实运行期消费方，只调 setter 不算完成
 
@@ -33,12 +33,12 @@ ID：`lesson-4d0f0176b3d09c33f1eb` · 版本：4 · 阶段：execute · 主题�
 由相同来源卡提炼的其他经验，按共享卡数排序；不是依赖关系。
 
 - [解前向占位按触发文本逐项兑现，写常量不算闭合](../../process/deferred-fulfillment/lesson-eb4de4fd7452308a0483.lesson.md)（共享 2 张卡）
+- [拆层后各层方法按源端覆写与调用全集核对](../../process/enumeration-gaps/lesson-61a9fc7190c51c663697.lesson.md)（共享 1 张卡）
+- [功能对齐以代码落点为准，空回调不算实现](../../process/claimed-without-receipt/lesson-9147be4d87153de9c5b6.lesson.md)（共享 1 张卡）
 - [点击无响应先设备复现定位，未上机结论标未验证](../../process/unverified-as-fact/lesson-afae8d13e00941efe808.lesson.md)（共享 1 张卡）
 - [语言目录按源 values-* 全集与粒度镜像](../../ui/text/copy/lesson-b58df29f032cc6a8c9d6.lesson.md)（共享 1 张卡）
-- [重新规划时把已批准未执行规格逐条映射到新计划](../../process/handoff-loss/lesson-b843621a5b9c279b1b2b.lesson.md)（共享 1 张卡）
-- [编排者代写切片前加载 worker 的全部派工输入](../../process/unloaded-input/lesson-b90d7f55409a3a34253d.lesson.md)（共享 1 张卡）
 
-来源支持：5 张卡 · 3 次迁移 · 3 个应用
+来源支持：6 张卡 · 已知 3 次迁移（部分未记录） · 已知 3 个应用（部分未记录）
 
 ## 来源（按需复核）
 
@@ -50,5 +50,7 @@ ID：`lesson-4d0f0176b3d09c33f1eb` · 版本：4 · 阶段：execute · 主题�
   卡片版本：`b0032836632c952424844dd36317b057e3978e311730fb0f18415b55dc9cec96`
 - [case-8a522021d6d10fded125](../../../../store/cases/case-8a522021d6d10fded125/695193a757e708a77ef3560a9f73b4caf829f00fdfad9ee70368e51f842a04f9.json) · 结论：rec-0467c710bf
   卡片版本：`695193a757e708a77ef3560a9f73b4caf829f00fdfad9ee70368e51f842a04f9`
+- [case-dce365054567a94bd4db](../../../../store/cases/case-dce365054567a94bd4db/49d99db19d9b511c1e6e070605c989289944f7be60de1d7dbcec50a5c3b2e218.json) · 结论：diagnosis, rec-53e684c999
+  卡片版本：`49d99db19d9b511c1e6e070605c989289944f7be60de1d7dbcec50a5c3b2e218`
 - [case-ea1fc6a0711a8176b79c](../../../../store/cases/case-ea1fc6a0711a8176b79c/7eacf7d6fe6f97cf98c91ebecec4431cc188b0bc40b4866c5d4f39bc62b18a23.json) · 结论：diagnosis, rec-7cdb26e889, rec-053470abd8
   卡片版本：`7eacf7d6fe6f97cf98c91ebecec4431cc188b0bc40b4866c5d4f39bc62b18a23`

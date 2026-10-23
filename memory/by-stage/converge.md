@@ -1,6 +1,6 @@
 # 阶段：收敛与移交（converge）
 
-本阶段可用的 27 条经验，按领域与主题分组；一条经验可属于多个阶段。
+本阶段可用的 29 条经验，按领域与主题分组；一条经验可属于多个阶段。
 
 [返回根索引](../index.md)
 
@@ -32,7 +32,7 @@
 
 - [cryptoFramework 规格串只写算法位数，结果判空](../topics/data/network-request/lesson-3684e08592c85de82204.lesson.md) · 信号：cryptoFramework, createAsyKeyGenerator, convertPemKeySync, doFinalSync
 
-### [data/storage](../topics/data/storage/index.md) — 本地持久化：relationalStore 建表与版本迁移、自增主键写入、预置数据内容与播种时机、fileIo 目录操作
+### [data/storage](../topics/data/storage/index.md) — 本地持久化：relationalStore 建表与迁移、自增主键写入、预置数据与播种时机、fileIo 文件与目录操作
 
 - [首次启动播种在启动路径落调用并保留标记门控](../topics/data/storage/lesson-dc3f2589254d02893b0e.lesson.md) · 信号：Application.onCreate, seedDemoDataOnFirstLaunch, has_seeded_demo_data, EntryAbility.onCreate
 ## process — 迁移流程中输入、规格、检查结论与跨任务移交在交接环节失真的机制
@@ -57,6 +57,7 @@
 
 - [应用壳契约枚举源导航全部入口含深链与 scheme](../topics/process/enumeration-gaps/lesson-3348c580951ef82a9737.lesson.md) · 信号：NavPathStack, onNewWant, onCreate, module.json5
 - [截图页范围含其入口直达二级页，不取最窄解释](../topics/process/enumeration-gaps/lesson-91c89aff3f8c5c47bd2a.lesson.md) · 信号：startActivity, Intent, Activity, setOnClickListener
+- [拆层后各层方法按源端覆写与调用全集核对](../topics/process/enumeration-gaps/lesson-61a9fc7190c51c663697.lesson.md) · 信号：@Override, Listener, Callback, Facade
 
 ### [process/handoff-loss](../topics/process/handoff-loss/index.md) — 跨阶段推进、批次收口、重新规划或转述派工时，移交项、全局动作与规则原文在传递中丢失
 
@@ -71,6 +72,7 @@
 
 ### [process/unverified-as-fact](../topics/process/unverified-as-fact/index.md) — 把生成期无法核验的推测、自拟值或假设写成硬性结论、期望值或已实现项
 
+- [下“不存在”结论前确认检索覆盖完整声明与范围](../topics/process/unverified-as-fact/lesson-8b7a50eeb92fc3bdb1e7.lesson.md) · 信号：.d.ts, sed -n, head -n, grep -n
 - [点击无响应先设备复现定位，未上机结论标未验证](../topics/process/unverified-as-fact/lesson-afae8d13e00941efe808.lesson.md) · 信号：hitTestBehavior, uitest uiInput click, dumpLayout, hdc shell
 ## ui — 界面迁移：布局几何、主题图形、文本、状态反馈、导航、弹窗、交互输入与列表分页的机制级对照
 

@@ -1,0 +1,199 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-74192ad19ea88a31750b",
+  "created_at": "2026-10-23T15:02:57.446909+00:00",
+  "migration_key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/memory-distill-opencamera-20261023/pool",
+  "title": "把 CanvasView 定时 tick + Preview.draw 拆到引擎与 ArkUI Canvas 覆盖层时，逐帧钩子无人调用、tick 不随暂停停止",
+  "when": "相机预览迁移的引擎与覆盖层实现阶段，把 Android CanvasView 的定时 tick 和 Preview.draw（暂停跳过、对焦框过期复位、帧分析刷新）分到引擎类和 Canvas 自绘组件时，确定谁在每个 tick 调用引擎钩子，以及 tick 怎样随 onPause/onResume 停止和重启",
+  "description": "源端 CanvasView 用 Handler.postDelayed(getFrameRate()) 自驱 invalidate，onDraw 进入 Preview.draw：先判 is_paused，再做 focus_complete_time+1000ms 过期复位，最后分发 onDrawPreview；Preview.onPause/onResume 分别调用 canvasView.onPause/onResume，移除或重启 tick。目标端用 XComponent(surface) 预览，没有逐帧回调（PreviewOutput frameStart 只在流开始时回调）；覆盖层用 ArkUI Canvas+setInterval 自绘，引擎和覆盖层由不同切片分别生成。",
+  "summary": "本卡归因 B26（叠加层每帧未驱动对焦过期和帧分析）和 B29（后台/设置页仍以 32ms 定时绘制）。\n两项都是生成遗留，偏差发生在两个相继的生成切片。\n\n① 引擎切片（Slice 1，F001，agent-ae5882c40105e3f01）写前收到的 F001 spec 已经正确、足够（L23-L26）：\nAC82 写“每帧 invalidate 交由 Preview.draw 分发……暂停时不绘制 → PreviewOverlayCanvas.onFrame”；\nAC83 写“tick 周期 = getFrameRate，onPause 移除 tick、onResume 重启 → CanvasView.onResume → PreviewOverlayCanvas.onResume”；\nAC148 写“完成超 1000ms 自动复位 DONE，源 Preview.draw”；AC239 写“暂停时跳过、对焦框超时复位逻辑在调用前执行”。\n它还读到 Preview.java 中 onResume/onPause 对 canvasView.onResume()/onPause() 的调用（L109-L110）。\n输出却偏离了这些要求。L272 的 Write 写出 PreviewEngine.onPreviewFrameUpdated()，注释为\n“XComponent 帧率驱动；AC82/AC239 分发入口 + AC148 过期复位”，但没有写调用方。\n同一切片在 L232 给 CameraPreviewSurface 写的注释是“XComponent surface 无 tick 定时器 → 空实现”，与上述注释自相矛盾。\nonPause/onResume 只调 cameraSurface 的空实现，没有通知覆盖层停止或重启 tick。\nL405 返回信封的 Forward-Ref Hooks 只登记了 P-S1-024/025/026 和两条 HANDOFF，\n没有为逐帧钩子的调用方或覆盖层 tick 生命周期登记接线。\n\n② 覆盖层切片（Slice 6，F005，agent-a3041d23e23f0d50e）写前读到了 PreviewEngine 中这个钩子及其注释（L81-L82），\ngrep 只找到定义、没有调用方（L87-L88）。L91 它判断“nothing calls it yet — the per-frame tick will come later (Slice wiring)”，\n决定用 setInterval 自驱；这个判断没有登记或核实。它还完整读到 CanvasView.java（L119-L120）：\ntick 用 postDelayed 循环，onPause 执行 removeCallbacks(tick)，onResume 执行 tick.run()。\nL328 它已经写下“actually CanvasView.onResume starts the tick”，却仍决定“start tick in onReady, clear in aboutToDisappear… no onPageShow needed”。\nL457 的 Write 让 tick 在 Canvas.onReady 启动，只在 aboutToDisappear 时清除；drawFrame 没有暂停守卫，也不调用 engine.onPreviewFrameUpdated()。\nL549-L552 它读到 CameraAppInterface.onDrawPreview 的后台零绘制守卫，但只补了 redraw() 接口，\n并认为自驱 tick 可以“draws independently”（L550），因此后台守卫没有覆盖到自驱绘制。\nB26 的偏差由两次输出叠加形成：引擎留下无调用方、无登记的钩子，覆盖层看到它无人调用仍不调用。\nB29 的偏差主要在覆盖层：源码中 tick 跟随 onPause/onResume 启停，覆盖层却只绑定组件挂载和卸载；\n引擎没有提供暂停通知，也是一个原因。\n\n这些片段从 c752566 一直保留到 5f9655c：.onReady 中的 startTick 仍在，onPreviewFrameUpdated 没有调用方，\nonPause/onResume 也没有覆盖层通知。Opus 返修（c1abe5c）没有改动这些片段。\nCodex 根会话 L4986 修复 B26：在 drawFrame 中，当 !appPaused && previewVisible && !launchIntentChanging 时调用\nengine.onPreviewFrameUpdated()，并注明 frameStart 在该平台不是周期回调。\ncapture_audit L3835/L3869 修复 B29：新增 PreviewEngine.isOverlayDrawingEnabled()/setOverlayDrawLifecycleListener()，\n在 onResume/onPause/onDestroy 中发通知；Overlay 通过 bindEngineLifecycle 启停 tick，在 drawFrame 入口再判一次，\naboutToDisappear 只清空本组件持有的 sink（L3844 复现：暂停态 32 次回调仍清屏绘制）。\n以上修复进入 cb4c6d6，FINAL 2b66258 保留。\n\n同一 job 中另外两项未画图。B3（启动遮罩依赖 frameStart）：生成侧按 AC243 把 has_received_frame 映射为\npreviewOutput.on('frameStart')，与源端“首帧到达后取消遮盖”一致；写前材料中没有任何信息表明该模拟器不回调 frameStart，\nFINAL 也只对已知坏模拟器在 1000ms 后放行遮罩，因此归为平台适配。PreviewOverlay 中 'dimState.cover && false' 是临时诊断，已经还原，没有残留。\nB4（CreatePixelMapFromSurface 使 RenderService 崩溃）：生成侧使用公开的 createPixelMapFromSurface 取帧，\nFINAL 按 productModel+版本号拒绝取帧并 toast 提示，属于设备保护或新需求。\n",
+  "recommendations": [
+    "引擎（Preview 等价类）实现阶段：spec 把 Preview.draw/CanvasView tick 的 AC 指向覆盖层 onFrame/onResume 时，只在引擎里写一个钩子不够。要么写出实际调用方，要么在 placeholder registry 登记 FWD-REF/HANDOFF，指向覆盖层切片。注释里写的驱动源（如“XComponent 帧率驱动”）要先核实目标平台确实有这个逐帧回调；PreviewOutput frameStart 不是周期回调。检查方法：grep 钩子名，结果至少要有一处调用方或一条 registry 登记。",
+    "引擎实现阶段：Preview.onPause/onResume 中对 canvasView.onPause()/onResume() 的调用，要映射为对覆盖层的启停通知，例如 isOverlayDrawingEnabled() 加一个生命周期监听；不要只映射到 cameraSurface 的空 onPause/onResume。",
+    "覆盖层实现阶段：用 setInterval 代替 CanvasView tick 时，每个 tick 按 Preview.draw 的顺序执行：先做暂停守卫，再调用引擎的逐帧钩子（对焦框过期、帧分析刷新），最后绘制。发现钩子没有调用方时，由自身 tick 调用它或登记 FWD-REF，不要默认“后续接线会补”。",
+    "覆盖层实现阶段：tick 的启停要跟随引擎或页面的暂停/恢复（onPause 清 interval，onResume 重启，绘制入口再判一次暂停），不要只在 Canvas.onReady 启动、在 aboutToDisappear 清理。检查方法：切到后台或打开设置页后，统计 drawFrame 调用次数，应为 0；回到取景页后恢复。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/components/viewfinder/PreviewOverlay.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F001-camera-preview.md",
+          "at": "2026-10-01T14:57:03.096Z",
+          "reason": "正常输入：引擎切片的 Read 回执给出 AC82（每帧由 Preview.draw 分发、暂停时不绘制 → PreviewOverlayCanvas.onFrame）、AC83（onPause 移除 tick、onResume 重启 → PreviewOverlayCanvas.onResume）、AC148（完成超 1000ms 复位 DONE）和 AC239（暂停跳过、对焦框超时复位在调用前执行）。这些足以要求逐帧入口有实际驱动，并且随暂停启停（agent-ae5882c40105e3f01.jsonl:L23-L26，spec 第 301、302、380、502 行）。"
+        },
+        {
+          "key": "agent-ae5882c40105e3f01.jsonl",
+          "at": "2026-10-01T15:25:31.156Z",
+          "reason": "收到上述 AC 后，L272 的 Write 写出 PreviewEngine.onPreviewFrameUpdated()，注释为“XComponent 帧率驱动；AC82/AC239 分发入口 + AC148 过期复位”，但没有调用方；同一切片在 L232 给 CameraPreviewSurface 写的注释是“XComponent surface 无 tick 定时器”。onPause/onResume 不通知覆盖层。L405 的 Forward-Ref Hooks 没有登记这个钩子的调用方，也没有登记覆盖层 tick 生命周期。偏差在于把 AC 落成悬空钩子（同转录 L232、L272、L405）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/PreviewEngine.ets",
+          "at": "2026-10-01T17:13:48.672Z",
+          "reason": "交付桥梁：覆盖层切片的 Read 回执（offset 280）给出 onPreviewFrameUpdated 及其“AC82/AC239 分发入口 + AC148 过期复位”注释；随后 grep 只返回定义行 PreviewEngine.ets:373，没有调用方（agent-a3041d23e23f0d50e.jsonl:L81-L82、L87-L88）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/preview/CanvasView.java",
+          "at": "2026-10-01T17:14:53.727Z",
+          "reason": "正常输入：覆盖层切片的 Read 回执给出完整 CanvasView。tick 中执行 invalidate 和 postDelayed(getFrameRate())，onDraw 调用 preview.draw(canvas)，onPause 执行 handler.removeCallbacks(tick)，onResume 执行 tick.run()。这足以说明 tick 是逐帧驱动，并且必须随暂停/恢复启停（agent-a3041d23e23f0d50e.jsonl:L119-L120）。"
+        },
+        {
+          "key": "agent-a3041d23e23f0d50e.jsonl",
+          "at": "2026-10-01T18:26:35.393Z",
+          "reason": "L91 它已知钩子无人调用，却假定“the per-frame tick will come later (Slice wiring)”，决定自驱。L328 它写下“CanvasView.onResume starts the tick”，仍决定“start tick in onReady, clear in aboutToDisappear”。L457 的 Write 让 tick 在 .onReady 启动、只在 aboutToDisappear 清除，drawFrame 没有暂停守卫，也不调用 engine.onPreviewFrameUpdated()。这里是 B26 和 B29 在覆盖层的偏差（同转录 L91、L121、L328、L457-L458）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 5
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/PreviewEngine.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "summary": "本图只归因 PreviewEngine 中 B29 的生命周期通知：isOverlayDrawingEnabled/setOverlayDrawLifecycleListener，\n以及 onResume/onPause/onDestroy 中的 notifyOverlayDrawLifecycle。同一文件里 B4 的 toast 和字符串接线属于设备保护，不在本图。\n引擎切片收到 AC83/AC239 和 Preview.java 中的 canvasView.onPause/onResume 调用，但 L272 写出的 onPause/onResume\n只调 cameraSurface 的空实现，没有覆盖层通知。该片段在 c752566 原样保留（PreviewEngine.ets:838-866），\n由 capture_audit L3835 补上，进入 cb4c6d6，FINAL 保留。\n",
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F001-camera-preview.md",
+          "at": "2026-10-01T14:57:03.096Z",
+          "reason": "正常输入：Read 回执给出 AC83（onPause 移除 tick、onResume 重启 → CanvasView.onResume → PreviewOverlayCanvas.onResume）和 AC82/AC239（暂停时不绘制），说明引擎暂停/恢复必须传到覆盖层 tick（agent-ae5882c40105e3f01.jsonl:L23-L26）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/preview/Preview.java",
+          "at": "2026-10-01T14:59:59.218Z",
+          "reason": "正常输入：Read（offset 7800）回执给出 Preview.onResume 中的 canvasView.onResume() 和 onPause 中的 canvasView.onPause()（源 8023、8078 行），即引擎暂停/恢复直接控制覆盖层 tick（agent-ae5882c40105e3f01.jsonl:L109-L110）。"
+        },
+        {
+          "key": "agent-ae5882c40105e3f01.jsonl",
+          "at": "2026-10-01T15:25:31.156Z",
+          "reason": "收到上述输入后，L272 的 Write 写出的 PreviewEngine.onPause/onResume 只调用 cameraSurface.onPause()/onResume()；L232 已把这两个方法写成空实现（“XComponent surface 无 tick 定时器”）。代码中没有覆盖层启停通知，也没有为此登记 FWD-REF（同转录 L232、L272、L405）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/HmosCameraController.ets",
+      "reason": "B3 已确认修改（previewStartedAt、已知坏模拟器 1000ms 后放行遮罩、frameStart 输出身份校验，见 Codex 根会话 L2597/L3390 和 5f9655c..cb4c6d6）。生成侧 ae5882c40105e3f01 按 AC243 在 L236 把 has_received_frame 映射为 previewOutput.on('frameStart')，与源端首帧语义一致；写前 d.ts 只给出 on('frameStart') 签名，没有任何材料表明该模拟器不回调。没有找到“输入正确而输出偏离”的生成偏差，归为平台适配，不画链。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/SurfaceGrabSupport.ets",
+      "reason": "B4 新增文件，按 productModel+完整版本号判定已知坏设备。这是针对模拟器 RenderService 崩溃（harmony/17-render-service-crash.log）的设备保护或新需求，没有生成来源可归因。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/PreviewFrameAnalyzer.ets",
+      "reason": "B4 增加了 canReadSurface 守卫和 onUnavailable。生成侧按 F001 映射 D1 使用公开 API image.createPixelMapFromSurface 取帧；只有该模拟器版本会崩溃，写前材料中没有相关信息。归为平台适配，没有生成偏差链。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/resources/base/element/string.json",
+      "reason": "B4 新增 preview_analysis_device_unavailable 提示文案，属于设备保护带来的新需求，没有生成来源。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/resources/zh_CN/element/string.json",
+      "reason": "B4 新增 preview_analysis_device_unavailable 中文文案，属于设备保护带来的新需求，没有生成来源。"
+    }
+  ],
+  "job": "issue-74192ad19ea88a31750b",
+  "metadata": {
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code",
+        "codex"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3",
+        "gpt-6-astra"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.163.0",
+        "2.1.247",
+        "2.1.299"
+      ]
+    },
+    "source_set_id": "sources-974a9086706364eed8b7",
+    "environment": [
+      {
+        "name": "android.compile_sdk",
+        "value": "36",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/.claude/skills",
+        "at": "2026-10-01T09:52:21.840Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-aa8064d19722381a1.jsonl:L11",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-aa8064d19722381a1.jsonl:L10",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos",
+        "at": "2026-10-01T12:27:45.961Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b.jsonl:L1565",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b.jsonl:L1563",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos",
+        "at": "2026-10-01T13:34:44.665Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae78a452b1664bc61.jsonl:L149",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae78a452b1664bc61.jsonl:L148",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.11.1"
+  },
+  "revision": "26f7ae0418e6dd6e5aa696876d4ecf0054271a1dbd8a8458dc0a1a8c62388566"
+}

@@ -25,9 +25,18 @@
 
 旧版阅读包由 Git 历史保留，不按迁移复制多份。此前的 `runs/` 已退出当前 Git 树，本地的材料、稿件、报告与断点仍保留；原有提交没有改写。此次目录调整不改变卡片内容、经验语义或知识 revision。
 
-当前发布分支：`memory/multi-app-20261017`（旧目录结构，知识版本 `212330c6…`）。本分支 `memory/structure-v2-20261017` 是同一批 715 张卡、550 条经验的 v2 结构版本（知识版本 `9f396e97…`），对照评测后再定是否作为发布分支。留出 app ColorLines 的独立评测库在 `memory/colorlines-holdout`，不并入本分支。工作目录、转录、SQLite、模型日志、提案及本机调度信息不进入正式发布树。
+当前发布分支：`memory/multi-app-20261017`（旧目录结构，知识版本 `212330c6…`）。`memory/structure-v2-20261017` 是同一批 715 张卡、550 条经验的 v2 结构版本（知识版本 `9f396e97…`），对照评测后再定是否作为发布分支。本分支 `memory/opencamera-20261023` 在其上归并 OpenCamera（见下），待审核后合并。留出 app ColorLines 的独立评测库在 `memory/colorlines-holdout`，不并入本分支。工作目录、转录、SQLite、模型日志、提案及本机调度信息不进入正式发布树。
 
 机械检查保证格式、引用及所画历史关系符合契约，不等于归因语义认证或泛化效果证明。评测应冻结一个 Git commit / memory revision，在未入库应用上对照。
+
+## 2026-10-23：OpenCamera 归并（分支 memory/opencamera-20261023）
+
+起点 `56fcfe88…`（memory/structure-v2-20261017）。来源是 OpenCamera 的 a2h 迁移（GLM-5.3，hmigbot 1.7.0 claude_sdk，无 memory），以及两轮返修（Claude Opus 一处、Codex 其余）。迁移期原生转录从 OBS 原始切片按字节偏移重组，92 份与上传方 watermark 的长度和前缀 sha256 一致。发布器 0.11.1。
+
+- **入卡**（`50c978289b637ed98f68c2cf4e26271ec12f637c9af32acb7573a38226a992ea`）：101 个返修问题合成 44 个制卡任务，入卡 43 张（715 → 758）。job41（21 个语言目录未迁移）的目标文件只由返修脚本写出，索引没有记录、目标校验无 force 通道，没有正式卡，归因稿留在本地工作目录。
+- **归并**（`e548ed0ba4c7bf875453e5e0bf29f777d3d31d6de51465de52bc98e58aa50095`）：active 经验 550 → 586；新增 36、修订 17（增量，其中 1 条兼呈现）、只补证 10、退役 0；新增经验与新卡之比 0.84。新开 `app/camera/{session, parameters, orientation, capture, recording}` 与 `app/media-library`；改写 app/entry、app/media、app/recreation、data/storage、process/lossy-transcription 的主题描述。迁移会话没有加载经验，没有召回或使用失败记录。
+- **主题描述**（`276c45d921fb516691f9f45b45803e79886abb4bb9e1569dd57b2bb699fda6ed`）：补 app/camera/capture 与 app/camera/session 的描述，经验正文不变。
+- **校验**：lint 命中 72 处，均在原有文本中，本次新增与修改的句子零命中。
 
 ## 2026-10-17：按 v2 结构重建（分支 memory/structure-v2-20261017）
 

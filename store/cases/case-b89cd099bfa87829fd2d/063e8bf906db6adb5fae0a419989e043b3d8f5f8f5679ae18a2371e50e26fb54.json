@@ -1,0 +1,328 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-b89cd099bfa87829fd2d",
+  "created_at": "2026-10-23T14:58:21.218320+00:00",
+  "migration_key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/memory-distill-opencamera-20261023/pool",
+  "title": "把Android同步关闭/停录语义直译成即发即弃的异步调用：释放不等待、重开丢失、停录与启动竞态",
+  "when": "相机生命周期与录像编排的规格提取、实现和跨文件接线阶段，把Android后台线程阻塞式关闭相机、MediaRecorder同步stop/release映射为CameraKit与AVRecorder的Promise调用时",
+  "description": "源端在后台线程阻塞执行stopPreview+release，完成后才把CLOSING置为CLOSED并回调或重开；onDestroy最多等待关闭任务3000ms；MediaRecorder的prepare/start/stop/release同步完成，停止后立即置空并reconnectCamera。目标端的CameraInput.close、Session.stop/release、VideoOutput.release以及AVRecorder的prepare/start/stop/release都返回Promise，且需要在会话中挂接或拆卸录像输出。",
+  "summary": "本问题有三处已核实的偏差，分属不同阶段。\n（一）相机关闭/释放（A3），偏差在实现阶段。Slice 1实现者（agent-ae5882c40105e3f01）写前完整Read了F001规格（L23→L26）和状态机附录（L129→L130）：\nAC25要求“异步关闭完成后回调onClosed，reopen=true时自动重开”；AC30要求onDestroy等待关闭任务完成，上限3000ms；\nAC198要求release全清理，含关会话、close相机，退出后台线程并join；状态机第5行写明CLOSING→（后台完成）CLOSED；\n映射表把AsyncTask后台开/关映射为taskpool+Promise串接。它也查过d.ts，自己写的session.release()/cameraInput.close()调用都接了.catch，可见知道这些接口返回Promise。\n就本项决策而言，这些输入已经正确、足够。规格接口表沿用了Android的同步签名release(): void，这是次要缺口，但不改变“关闭完成后才置CLOSED”的要求。\n实际输出却是：HmosCameraController.closeQuietly对各output/session/input只发起调用，L389又用perl脚本补上.catch吞掉错误，全程没有await，release()也保持void（L246、L389-L390）。\nPreviewEngine.closeCamera的异步分支写成Promise.resolve().then(stopPreview+release)，注释为“taskpool语义经微任务串接”，因此CLOSED在一个微任务后就到来，早于CameraKit真正释放。\nstopVideoHook被定义为同步void，调用后立即释放控制器；onDestroy注释为“单线程模型下直接同步收尾”，并直接同步release（L272-L273）。\n同一实现者还在MainPage.aboutToDisappear中直接调用previewEngine.onDestroy()（L363-L364）。source-notes的A6把这一映射写成“单线程事件循环+Promise微任务串接”（L378）。\n（二）录像停止/启动（A28），先在规格提取阶段漏掉信息。F003规格作者（agent-afd4474c6ba14aa22）Read了Preview.java的stopVideo/videoRecordingStopped（L80→L81）。\n源端MediaRecorder.stop()在同一次调用中同步完成reset/release并置空video_recorder，然后reconnectCamera，重复stop在源端自然被挡住。\n作者全程没有读media.d.ts，却写下stopRecording(fromRestart): void；映射表把MediaRecorder→AVRecorder记为“状态机等价（d.ts AVRecorder状态含paused）·低风险”（L224-L225）。\n规格没有提出共享停止任务、准备期间停止要取消启动、关闭相机须等待停录、先拆录像输出再释放录制器等串行化要求。这也回答了job问题：F003规格没有给出AVRecorder异步状态机的串行化要求。\n（三）Slice 4实现者（agent-ad056b0d5327c12ec）读到上述规格（L24→L26）后，又自己查了AVRecorder d.ts：stop返回Promise，错误回调为BusinessError，码值5400101–5400107（L230→L231）。\n它也意识到异步窗口：为启动加了startInFlight防重（L489），L505修了restartVideo等待停止，L511修了maxDuration竞态。可是stopRecording只在stop()兑现后才把recorder置空，于是每次调用都会再执行一次recorder.stop()。\nprepare→start回调链从不检查取消；准备期间发生的stop在引擎中因started=false直接返回，之后录制仍可能开始。\nstop失败分支删除坏片后仍以原URI回调stoppedVideo；videoRecordingStopped无论由谁触发都会reopenCamera；AvRecorderEngine用error.message.includes('5400105')判定错误，stop失败时也不清除started（L342-L343、L394-L395、L451-L452、L460-L461、L506）。\n（四）接线阶段的group-closer（agent-acb5c3d58575999a4）落地P-S4-001时，把挂接binder改成了Promise并await，拆卸用的videoOutputDetacher却定义成() => void。\n它把detacher插在recorder.release()之后、reopenCamera之前；HmosCameraController.teardownForVideoSession对session.stop/output release只发起调用、不等待；MainPage里也以void包装engine.detachVideoOutput()（L340-L358，MainPage Write在18:40:12）。\n执行结束检查点c752566至返修前的c1abe5c，这五个文件的上述片段都没有变化。\n第二轮Codex返修的最终修改如下：Controller增加openPending/startPending/videoAttachPending/releasePending，以及releaseAsync、finishRelease和返回Promise的teardownForVideoSession，按video→session stop→outputs→session→input的顺序串行拆卸。\nPreviewEngine在CLOSING期间收到openCamera时记下closeReopen，关闭完成后重开；closeCamera先await stopVideoHook(false,false)，再执行releaseAsync，onDestroy改走closeCamera(true)；MainPage不再直接调用onDestroy。\nVideoRecordController改为共享stopTask、等待startTask，每步检查stopRequested，先await detach再release，坏片回传空URI，关相机时reconnect=false；AvRecorderEngine在finally中清除started，并按BusinessError.code数值判定错误。\n这些修改FINAL保留。\n",
+  "recommendations": [
+    "实现阶段（相机生命周期）：源端在后台线程阻塞完成stopPreview+release后才置CLOSED时，目标controller的释放应返回Promise，按“录像输出→session.stop→各output.release→session.release→input.close”逐步await；CLOSING→CLOSED、onClosed回调和reopen只能放在await完成之后。不要用Promise.resolve().then包裹void调用来冒充后台任务。最小检查：搜索release()/close()/stop()只接.catch、不await的写法，以及签名为void、内部却发起Promise的方法。",
+    "实现阶段（重开与销毁）：CLOSING期间到来的openCamera/onResume应记为待重开，在关闭完成后执行，不能直接丢弃；onDestroy与页面aboutToDisappear走同一条有序关闭路径（等待或设上限，如3000ms），不另写同步强释放。",
+    "规格提取阶段：把同步的MediaRecorder/CameraController接口映射到AVRecorder/CameraKit前，先查目标d.ts的返回类型；在接口表中把stop/release/detach写成Promise，并写明串行化契约：重复stop共享同一任务、准备期间stop要取消启动、关闭相机先等停录且不再重连、先拆录像输出再释放录制器。不能只写“状态机等价·低风险”。",
+    "实现阶段（录像编排）：在发起stop时就记下stopRequested并返回共享stopTask，prepare/bind/start每次await之后都检查是否已被取消；stop失败时删除坏片并回传空URI；错误按BusinessError.code数值分档，started在finally中复位。最小检查：单测覆盖连续两次stop、prepare期间stop、录像中关闭相机三种时序，断言recorder.stop只调用一次、未开始录制、没有自动重开。",
+    "跨文件接线阶段：为异步会话重建接入挂接/拆卸hook时，两者都返回Promise，由调用方按“await拆卸输出→释放录制器→重开/重连”的顺序执行；不要把挂接做成async，拆卸却留作void。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/HmosCameraController.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "summary": "Slice 1实现者已收到“异步关闭完成后才回调/重开”“release全清理并join”的要求，也知道CameraKit的release/close返回Promise。\n它仍把closeQuietly写成只发起调用、只接.catch、不等待，release()保持void。\ncloser为录像会话补写的teardownForVideoSession/detachVideoOutput同样是void，session.stop/output release/session.release都不等待；它在同一批改动里的attachVideoOutput却await了commitConfig和start。\n返修改为releaseAsync/finishRelease，teardownForVideoSession返回Promise，并按video→session stop→outputs→session→input的顺序串行拆卸。\n",
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F001-camera-preview.md",
+          "at": "2026-10-01T14:57:03.096Z",
+          "reason": "正常输入：Read回执给出AC24（停录像后按async后台或同步释放）、AC25（异步关闭完成后回调onClosed，reopen时重开）、AC30（onDestroy等待关闭任务，上限3000ms）、AC198（release全清理，关会话→close相机→退出后台线程并join），映射表写明AsyncTask后台开/关→taskpool+Promise串接；接口表沿用了release(): void（agent-ae5882c40105e3f01.jsonl:L23→L26，规格第85、157-158、235-241、445行）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F001-camera-preview.state-machine.md",
+          "at": "2026-10-01T15:00:37.432Z",
+          "reason": "正常输入：Read回执中的状态机表第5行为OPENED→closeCamera(async=true)→CLOSING→（后台完成）CLOSED，完成后回调onClosed，reopen=true时转openCamera；第9行为CLOSING期间onResume置reopen（agent-ae5882c40105e3f01.jsonl:L129→L130）。"
+        },
+        {
+          "key": "agent-ae5882c40105e3f01.jsonl",
+          "at": "2026-10-01T15:34:28.192Z",
+          "reason": "收到上述要求后，两次Write HmosCameraController都把closeQuietly写成直接调用metadataOutput/previewOutput/session.release()和cameraInput.close()，不等待，release()为void（L236、L246-L247）；L389的perl脚本以“bare Promise release/close calls → add .catch”为由补上.catch吞掉错误，仍然没有await（L389-L390）。CameraKit的释放因此与状态机脱钩。",
+          "problem": true
+        },
+        {
+          "key": "agent-acb5c3d58575999a4.jsonl",
+          "at": "2026-10-01T18:27:12.664Z",
+          "reason": "落地P-S4-001时，在HmosCameraController中新增void的teardownForVideoSession/detachVideoOutput，session.stop()、photoOutput/videoOutput.release()只发起调用不等待，session.release()只接.catch；同一批改动里的attachVideoOutput却await了commitConfig与start（同转录L340-L341），L347-L348又在closeQuietly中补上不等待的videoOutput.release()。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/PreviewEngine.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "summary": "同一实现者把“后台完成后才置CLOSED”写成了微任务里调用void的release，onCloseCompleted几乎立即触发，CLOSING窗口形同虚设。\nCLOSING期间的openCamera只记日志后返回；onDestroy按“单线程模型下直接同步收尾”直接同步release；stopVideoHook定义为同步void，closeCamera调用它之后立即释放控制器。\n返修后，openCamera在CLOSING期间置closeReopen，closeCamera先await stopVideoHook(false,false)再releaseAsync，onDestroy改走closeCamera(true)。\n",
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F001-camera-preview.md",
+          "at": "2026-10-01T14:57:03.096Z",
+          "reason": "正常输入：Read回执给出AC24“closeCamera…停录像…随后按async标志在后台或同步释放”、AC25“异步关闭完成后回调onClosed，reopen=true时自动重开”、AC27“CLOSING态resume→等关闭完成后才打开”、AC30“onDestroy等待关闭任务完成（上限3000ms），慢关闭5s→约3s返回”（agent-ae5882c40105e3f01.jsonl:L23→L26）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F001-camera-preview.state-machine.md",
+          "at": "2026-10-01T15:00:37.432Z",
+          "reason": "正常输入：状态机表写明CLOSING→（后台完成）CLOSED，并说明完成回调与reopen的时机（agent-ae5882c40105e3f01.jsonl:L129→L130）。"
+        },
+        {
+          "key": "agent-ae5882c40105e3f01.jsonl",
+          "at": "2026-10-01T15:25:31.156Z",
+          "reason": "Write PreviewEngine时，closeCamera异步分支写成Promise.resolve().then(()=>{stopPreview(true); release()}).then(onCloseCompleted)，注释为“taskpool语义经微任务串接”，release为void，CLOSED因此在微任务中就到来；stopVideoHook为((fromRestart)=>void)，调用后立即释放；onDestroy注释“关闭等待上限3000ms防阻塞——单线程模型下直接同步收尾”，直接同步release（L272-L273）。这些片段保留到c752566。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/pages/MainPage.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "summary": "A3：Slice 1实现者在aboutToDisappear中直接调用previewEngine.onDestroy()，由此进入同步强释放。closer后来重写MainPage，在这一行前面加了同步的vm.destroySequence()（其内部已调用一次engine.onDestroy()），但这一行仍然保留，于是页面销毁会执行两次同步强释放。\nA28：closer把videoOutputDetacher接成(): void => { engine.detachVideoOutput() }，拆卸Promise无人等待。\n返修后，aboutToDisappear只触发异步的destroySequence，由它排空保存队列后再关闭引擎；detacher改为返回engine.detachVideoOutput()的Promise。\n",
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F001-camera-preview.md",
+          "at": "2026-10-01T14:57:03.096Z",
+          "reason": "正常输入：AC30要求onDestroy等待帧分析任务与关闭任务完成（上限3000ms）（agent-ae5882c40105e3f01.jsonl:L23→L26）。"
+        },
+        {
+          "key": "agent-ae5882c40105e3f01.jsonl",
+          "at": "2026-10-01T15:31:53.777Z",
+          "reason": "Edit MainPage.aboutToDisappear，加入“Slice 1引擎拆卸（Preview.onDestroy等价）this.previewEngine?.onDestroy()”，页面销毁由此直接走同步release（L363-L364）。",
+          "problem": true
+        },
+        {
+          "key": "agent-acb5c3d58575999a4.jsonl",
+          "at": "2026-10-01T18:40:12.235Z",
+          "reason": "Write MainPage时，videoOutputBinder写成返回Promise的async函数，videoOutputDetacher却写成(): void => { engine.detachVideoOutput() }，拆卸结果无人等待；previewEngine?.onDestroy()保留在同步的vm.destroySequence()（其内部已调用engine.onDestroy()）之后（同转录18:37:38、18:40:12的两次Write）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/VideoRecordController.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "summary": "规格作者读到的源端停录是同步一次完成的，但规格没有把AVRecorder的异步差异写成串行化要求，接口仍为stopRecording(): void。\n实现者读到规格，也已知道stop返回Promise，仍把停止写成每次独立调用recorder.stop()：直到兑现才置空recorder，启动回调链不检查取消，失败分支仍回传URI，停止后总是reopenCamera。\ncloser又把void的detacher插在recorder.release()之后。\n返修后改为共享stopTask并等待startTask，各步检查stopRequested，先await detach再release，坏片回传空URI，关闭相机时reconnect=false。\n",
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/preview/Preview.java",
+          "at": "2026-10-01T11:27:42.009Z",
+          "reason": "正常输入：规格作者Read了第1188-1397行：stopVideo以video_recorder==null为守卫，同步执行video_recorder.stop()（RuntimeException分支删坏文件）后调用videoRecordingStopped，后者同步reset/release并置空video_recorder，再reconnectCamera；足以说明源端停录是单次、同步、不可重入的语义（agent-afd4474c6ba14aa22.jsonl:L80→L81）。"
+        },
+        {
+          "key": "agent-afd4474c6ba14aa22.jsonl",
+          "at": "2026-10-01T11:37:21.877Z",
+          "reason": "未读media.d.ts即Write F003规格：服务层接口写stopRecording(fromRestart: boolean): void，映射表写“MediaRecorder.pause/resume→AVRecorder…状态机等价（d.ts AVRecorder状态含paused）·低”，AC11只照搬源端的同步停止顺序，没有写共享停止、准备期间取消、关闭相机先等停录、先拆输出再释放等要求（L224-L225）。规格提取在源同步→目标异步的映射上漏掉了信息。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F003-video-record.md",
+          "at": "2026-10-01T16:54:35.858Z",
+          "reason": "交付桥梁：Slice 4实现者的Read回执包含stopRecording(fromRestart: boolean): void、“状态机等价·低”映射和AC11/AC12停止序列，没有任何串行化要求（agent-ad056b0d5327c12ec.jsonl:L24→L26）。"
+        },
+        {
+          "key": "agent-ad056b0d5327c12ec.jsonl",
+          "at": "2026-10-01T17:24:17.586Z",
+          "reason": "实现者另外查过AVRecorder d.ts（L230→L231），为启动加了startInFlight（L489），L505也修了restartVideo的异步时序。但Write/Edit的stopRecording只在recorder.stop()兑现后才在videoRecordingStopped中置空recorder，重复调用会再次stop；prepare→start的回调链不检查取消；AC12失败分支删除坏片后仍调用videoRecordingStopped，以原URI回调stoppedVideo；videoRecordingStopped总是reopenCamera（L394-L395、L451-L452、L506）。片段保留到c752566。",
+          "problem": true
+        },
+        {
+          "key": "agent-acb5c3d58575999a4.jsonl",
+          "at": "2026-10-01T18:27:35.575Z",
+          "reason": "落地P-S4-001时把videoOutputBinder改为Promise<boolean>并在prepare.then(async)中await，回调链同样不检查取消；新增的videoOutputDetacher却是(() => void)，插在videoRecordingStopped/videoRecordingAborted中recorder.release()之后、reopenCamera之前，形成“先释放录制器再拆输出、拆卸不等待”的顺序（同转录L351-L358）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/AvRecorderEngine.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "summary": "实现者已读到AVRecorder错误回调是BusinessError（5400105=Service died），却按error.message字符串判定SERVER_DIED；stop()无论成功与否都不复位started，只有release会复位。\n这一层沿用了规格中“同步MediaRecorder”的心智模型，没有为异步停止建立状态收尾。\n返修改为error.code === 5400105，stop用finally清除started。\n",
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F003-video-record.md",
+          "at": "2026-10-01T16:54:35.858Z",
+          "reason": "正常输入：AC47要求onVideoError的服务崩溃档（SERVER_DIED等价）与其余档分别toast，AC12要求stop异常判为坏片（agent-ad056b0d5327c12ec.jsonl:L24→L26）。"
+        },
+        {
+          "key": "/Applications/DevEco-Studio.app/Contents/sdk/default/openharmony/ets/api/@ohos.multimedia.media.d.ts",
+          "at": "2026-10-01T17:03:46.294Z",
+          "reason": "正常输入：Bash读取的d.ts回执给出AVRecorder的on('error', ErrorCallback)，错误为BusinessError，码值5400101–5400107（5400102 Operation not allowed、5400105 Service died），以及stateChange状态机文档（agent-ad056b0d5327c12ec.jsonl:L230→L231）。"
+        },
+        {
+          "key": "agent-ad056b0d5327c12ec.jsonl",
+          "at": "2026-10-01T17:21:40.416Z",
+          "reason": "Write AvRecorderEngine时stop()只在started为真时await recorder.stop()，无论成败都不复位started，只有release会复位（L342-L343）；L460的Edit把错误回调保留为(error: Error)，用error.message.includes('5400105')判定SERVER_DIED，没有读取BusinessError.code（L460-L461）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "实现者用Bash sed -n '5985,6060p'读取该d.ts的AVRecorder事件段，回执返回on('error', ErrorCallback)及BusinessError 5400101–5400107（含5400105 Service died）；这说明它在写AvRecorderEngine前已收到错误码是数值BusinessError。",
+          "evidence": [
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-ad056b0d5327c12ec.jsonl",
+              "line": 230
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-ad056b0d5327c12ec.jsonl",
+              "line": 231
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "F001规格接口表中的release(): void出自规格作者agent-adab10532c33b422f（11:45:17的Write），本卡未追溯它写前是否读过CameraKit d.ts。A3归因于实现者，依据是实现者已收到完成语义要求，也已知道这些接口返回Promise。",
+    "closer落地P-S4-001时，占位登记（P-S4-001）只描述了挂接通道，没有说明拆卸顺序；本卡依据closer自己的输出判定其偏差：挂接await、拆卸void，且位于release之后。没有找到更上游的拆卸顺序要求。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-b89cd099bfa87829fd2d",
+  "metadata": {
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code",
+        "codex"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3",
+        "gpt-6-astra"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.163.0",
+        "2.1.247",
+        "2.1.299"
+      ]
+    },
+    "source_set_id": "sources-974a9086706364eed8b7",
+    "environment": [
+      {
+        "name": "android.compile_sdk",
+        "value": "36",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/.claude/skills",
+        "at": "2026-10-01T09:52:21.840Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-aa8064d19722381a1.jsonl:L11",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-aa8064d19722381a1.jsonl:L10",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos",
+        "at": "2026-10-01T12:27:45.961Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b.jsonl:L1565",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b.jsonl:L1563",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos",
+        "at": "2026-10-01T13:34:44.665Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae78a452b1664bc61.jsonl:L149",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae78a452b1664bc61.jsonl:L148",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.11.1"
+  },
+  "revision": "063e8bf906db6adb5fae0a419989e043b3d8f5f8f5679ae18a2371e50e26fb54"
+}

@@ -1,0 +1,153 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-67ee41a265150362c3e5",
+  "created_at": "2026-10-23T14:55:52.208715+00:00",
+  "migration_key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/memory-distill-opencamera-20261023/pool",
+  "title": "自研 EXIF/TIFF 写入器替代 ExifInterface：值区重叠、转义层级、有符号与 NUL、标签号、GPS、容器与失败语义偏离",
+  "when": "数据层实现阶段：自写二进制元数据读写器替代源端库（androidx ExifInterface），编写 TIFF 序列化、tag 表、GPS 写入、图像容器拼接与失败兜底时",
+  "description": "源端经 androidx ExifInterface 按 tag 名读写 EXIF（setGpsInfo(location)、GPSTimeStamp 字符串、按策略删除 XMP/Interop 等），并对 JPEG/PNG/WebP 输出统一写 EXIF；目标平台无等价 API，规格要求自研 TIFF/EXIF 段写回，实现需自行处理多 IFD 值区、有符号类型、NUL 字节、数字 tag 号与各图像容器。",
+  "summary": "Slice 3 worker（agent-a46e99f7c0baf2d05）写前读到 F002 规格（L25-L26）、整份 ExifHandler.java（L63-L64）\n和 ImageSaver.java 2000 行以后（L70-L71）。其中以下要求已经给出且足够：\n① 源 setExifFromData 无早退，源图没有 EXIF 也照常 setExif → modifyExif → removeExifTags；updateExif 只\n   catch NoClassDefFoundError，方法本身 throws IOException（ExifHandler:827/856/902-921）；AC48 也只写\n   “ExifInterface 类缺失兜底不崩溃”。\n② ImageSaver:2072-2075 把 “if( request.image_format == STD )” 注释掉，并写明 “ExifInterface now supports WebP and PNG”；\n   AC05/AC34 要求 PNG/WEBP 走位图路径后调用 setExifFromData。\n③ 源与 AC42 的 UserComment 前缀 \"ASCII\\0\\0\\0\" 是真实 NUL；removeExifTags 会删除 TAG_CFA_PATTERN、\n   TAG_INTEROPERABILITY_INDEX、TAG_TRANSFER_FUNCTION、TAG_XMP（:399/:441/:475/:524）。\n④ 生成者自己在写前计划（L218）中写出：IFD0/Exif/GPS 目录块之后接一个值区；ASCII 去尾 NUL、UNDEFINED 按 Latin-1；\n   SRATIONAL 用 i32；GPSTimeStamp 是三个有理数 hh/1 mm/1 ss/1。\nL220 的 Write 却写成：serialize 的 assignData 对 ifd0/exif/gps 都从同一个 dataOffset 起分配，再取三者最大值，\n三个 IFD 的超长值写到同一区域、互相覆盖（A22）；getAttribute 对 SSHORT/SLONG 用 getUint16/32，setAttribute 中\nSLONG 与 parseRational 的分子分母都经 parseUint 把负值钳成 0，ASCII/UNDEFINED 读取跳过所有 NUL 字节（A23 有符号与 NUL）；\nspliceExifTiff 不看实际编码，一律在开头两字节后插入 APP1，ImageSaverService 对 packBitmap 产出的 PNG/WEBP 也这样调用（A26）；\nsetExifFromData 在源图无 EXIF 时 return targetJpeg，updateExif 用 catch (error) 吞掉全部异常并原样返回，\n注释写“源 :856-859 NoClassDefFoundError 兜底同义：吞错继续”（A27）；fixGPSTimestamp 把 'HH:mm:ss' 字符串\n交给通用有理数解析（A25 时间戳格式）。\n材料缺口（A24、A25 的时间与速度）：数字 tag 号和 setGpsInfo 的库内语义不在输入中。ExifHandler 只用\nExifInterface.TAG_* 名和 exif.setGpsInfo(location)（:742）；规格只写“约 90 tag 清单见 ExifHandler、字符串值域不变”，\n对接点写 location 只含 lat/lon/alt/accuracy（F002 第 134 行）。生成者凭记忆填 tag 号，L218 中写着\n“CFAPattern 0x828E? wait … Yes 0x828E”和 TransferFunction 0x0120；还特意把 XMP、InteroperabilityIndex 置为 -1，\n导致源端会删除的这两项成为空操作。setGpsInfo 用保存时刻 new Date() 写 GPS 时间，也不写 GPSSpeed/GPSSpeedRef。\n这两项记为“库内语义未交付，且生成者未查库源码”，不当作输入已经给出。\n转义（A23 常量）：Write 时代码里的 \\0 经工具 JSON 变成了原始 NUL（L243 定位到 6 个）。生成者在 L244 用 Python\nbytes 字面量把它们换成转义，但写了四个反斜杠，落盘为 'Exif\\\\u0000\\\\u0000'、'ASCII\\\\u0000\\\\u0000\\\\u0000'\n和 '\\\\u0001' / '\\\\u0000'，也就是字面反斜杠加 u0000。L245 回执用 print 输出时已经显示双反斜杠，L246 却把它当成\nrepr，认定文件里只有一个反斜杠。\n除 agent-a8036fe950e2a77e1 的构造器、Math.toDegrees、注释空格等无关编辑外，上述片段原样保留到 c752566；c1abe5c 未改动。\nF002 worker 验收只要求语法自检，判:unit 用例没有执行，生成期没有 EXIF 二进制往返测试。\nupdateExif 条件门不含 remove_device_exif，这一点与源相同：源端靠 PostProcessing.java:552 在 remove_device_exif≠OFF\n时强制重编码位图来去掉 EXIF，目标 PostProcessingSvc 未见这一分支。本卡没有追这个 seam，不把它归因于 ExifWriter 生成者。\n修复（Codex，c1abe5c..c8dd617，FINAL 2b66258 保留）：assignData 链式推进，ifdSize 统一为 2+12n+4；改用真实 NUL，\n有符号类型用 getInt16/32、setInt16/32，parseRational 分子分母都按有符号解析，ASCII 遇 NUL 截断；CFAPattern 改为 0xA302，\nTransferFunction 改为 0x012D，XMP 用 tag 700 并参与删除，单独解析和重建 Interop IFD 并重写 0xA005；GPSTimeStamp 写成\nH/1,M/1,S/1，按 location.timeStamp 写时间，速度按 m/s×3.6 换算并写 GPSSpeedRef='K'；新增 ExifContainer，按 JPEG/PNG/WebP\n写各自的原生 EXIF，截断或非法容器直接报错，按策略移除 XMP；源图无 EXIF 时 ?? new ExifDocument()，条件门加入\nremove_device_exif，失败时抛出 'failed to update image metadata'。\n",
+  "recommendations": [
+    "自研二进制序列化器时，按“各 IFD 目录块 → 共用值区”布局，值区偏移跨 IFD 依次推进，不要每个 IFD 都从同一 dataOffset 重新分配。写完用最小夹具跑一次 parse(serialize(doc)) 往返：ifd0/exif/gps 各放超过 4 字节的值，再放负的 SSHORT/SLONG/SRATIONAL 和含 NUL 的 UNDEFINED/UserComment，逐 tag 比对字节；规格标为 判:unit 的编解码项不能只做语法自检。",
+    "用代码替代库时，tag 号、setAttribute 的字符串→二进制转换（GPSTimeStamp 'HH:mm:ss' → 三个有理数）和 setGpsInfo 的语义（取定位时间；速度 m/s×3.6 写成 km/h，GPSSpeedRef='K'）都要从库源码取（源 build.gradle 声明 androidx.exifinterface:exifinterface:1.4.2），不凭记忆；查不到就登记待验证。源端会删除的 tag（TAG_XMP、TAG_INTEROPERABILITY_INDEX）要给出真实 tag 号或子 IFD，不能置 -1 变成空操作。",
+    "写 EXIF 前按输出的实际编码选择容器：JPEG 用 APP1，PNG 用带 CRC 的 eXIf 块，WebP 用 RIFF EXIF 块并置 VP8X 标志；不要把 JPEG 的 APP1 拼接套在 packBitmap 产出的 PNG/WEBP 上。",
+    "迁移异常和早退语义时，只对源端实际 catch 的异常类型（此处为 NoClassDefFoundError）做等价兜底；源方法 throws IOException 的写入失败要上抛，不要保存未处理的元数据。源端没有早退的路径（源图无 EXIF 仍执行 setExif/modifyExif），要用空 ExifDocument 继续，不新增 return。",
+    "用脚本把原始控制字符改成源码转义时，逐层计算反斜杠：Python bytes 字面量里的四个反斜杠会落盘成两个。替换后用 repr 或逐字节检查目标文件，确认恰好是一个反斜杠加 u0000；也可以改用 String.fromCharCode(0) 或显式字节数组，不要凭 print 输出推断。",
+    "规格提取阶段若决定自研替代库，映射中写清库覆盖的全部容器（ExifInterface 支持 JPEG/PNG/WebP，不只“JPEG 段级读写”），列出需复刻的库内隐式语义及其来源（数字 tag 号、字符串值的二进制转换、setGpsInfo 写入的字段）；判 中的“异常分支吞错继续”要限定为源端实际捕获的异常类型。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/ExifWriter.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F002-photo-capture-save.md",
+          "at": "2026-10-01T16:41:34.309Z",
+          "reason": "正常输入（部分缺口）：Read 回执含 AC05 三种输出格式、AC34 位图路径调用 setExifFromData、AC42 前缀 ASCII+三个 NUL、AC45 以 UTC 写 GPS 日期/时间、AC48 只要求 NoClassDefFoundError 兜底不崩溃，以及每条 判:unit 用例。映射行写的是“JPEG 段级读写；tag 名域（约 90 tag 清单见 ExifHandler）→ 字符串值域不变”，对接点 location 只列 lat/lon/alt/accuracy；规格没有给出数字 tag 号和 setGpsInfo 的库内语义（agent-a46e99f7c0baf2d05.jsonl:L25-L26，规格第 102、134、194-204 行）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/ExifHandler.java",
+          "at": "2026-10-01T16:42:55.123Z",
+          "reason": "正常输入：整文件 Read 回执含 :704 UserComment 前缀为真实 NUL；:742 exif.setGpsInfo(location)；:665/:674 GPS 时间写 'HH:mm:ss' 交给 ExifInterface；:827 updateExif throws IOException、:856 只 catch NoClassDefFoundError；:902-921 setExifFromData 无早退；removeExifTags 删除 CFA/Interop/TransferFunction/XMP（:399/:441/:475/:524）。足以确定失败与早退语义，以及这些 tag 必须真实生效；数字 tag 号和 setGpsInfo 内部字段不在其中（agent-a46e99f7c0baf2d05.jsonl:L63-L64）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/ImageSaver.java",
+          "at": "2026-10-01T16:43:07.112Z",
+          "reason": "正常输入：Read（offset 2000）回执含 :2072 注释掉的 “if( request.image_format == Request.ImageFormat.STD )”，以及 :2075 “ExifInterface now supports WebP and PNG”：位图路径对所有格式都调用 setExifFromData，足以说明 EXIF 写入要按 PNG/WebP 容器处理（agent-a46e99f7c0baf2d05.jsonl:L70-L71）。"
+        },
+        {
+          "key": "agent-a46e99f7c0baf2d05.jsonl",
+          "at": "2026-10-01T17:00:24.133Z",
+          "reason": "偏差输出：Slice 3 worker 已读到上述输入，写前计划（L218）也写明了共用值区、ASCII 去尾 NUL、SRATIONAL 用 i32、GPSTimeStamp 为三个有理数。整文件 Write ExifWriter 却写出：serialize 中三个 IFD 都从同一 dataOffset 调用 assignData（写入第 517-528 行）；SSHORT/SLONG 用 getUint16/32 读，parseRational/parseUint 把负值钳成 0，读 ASCII/UNDEFINED 时跳过所有 NUL（第 260-272、348-357 行）；spliceExifTiff 一律插入 APP1（第 612 行）；setExifFromData 遇源图无 EXIF 就 return，updateExif 用 catch (error) 吞错（第 782-816 行）；fixGPSTimestamp 写 'HH:mm:ss' 字符串（第 946 行）。tag 号凭记忆填写：TransferFunction 0x0120、CFAPattern 0x828E，XMP/InteroperabilityIndex 置 -1；setGpsInfo 用 new Date() 且不写速度——这是库内语义未交付时的臆补（同转录 L218、L220-L221；c752566 保留）。",
+          "problem": true
+        },
+        {
+          "key": "agent-a46e99f7c0baf2d05.jsonl",
+          "at": "2026-10-01T17:01:49.412Z",
+          "reason": "偏差输出（转义层级）：生成者在 L243 确认 Write 留下 6 个原始 NUL，打算改成 TS 的 \\u 转义；L244 的 Python heredoc 用 bytes 字面量写了四个反斜杠，落盘为字面反斜杠加 u0000：'Exif' 头、ASCII 前缀和 GPSAltitudeRef 都不再是 NUL/0x01 字节。L245 回执的 print 输出已显示双反斜杠，L246 却当作 repr，认定是单反斜杠（同转录 L243-L246；c752566 第 653、977、1015 行保留）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        },
+        {
+          "from": 2,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "未追 F002 规格作者（agent-a16ed681491aa40a7）为何把映射写成“JPEG 段级读写”、把 AC48 的判写成“异常分支吞错继续”；该转录中出现过 ImageSaver 的 “ExifInterface now supports WebP and PNG”。本卡以生成者已直接读到相应源码作为归因终点。",
+    "未确认生成期本机是否有可读的 AndroidX ExifInterface 源码副本；修复方是从网络查阅 androidx 仓库的 ExifInterface.java（6e4d L1066-L1091）。"
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/ExifContainer.ets",
+      "reason": "修复期新增文件（session_archive 0349 L839 起写入，主会话 L1362/L1371 接入 ExifWriter），生成期不存在，没有生成写者。它补上的 PNG/WebP 原生 EXIF 容器缺口，已在 ExifWriter 图中归因于 spliceExifTiff 对所有格式插入 APP1。"
+    }
+  ],
+  "job": "issue-67ee41a265150362c3e5",
+  "metadata": {
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code",
+        "codex"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3",
+        "gpt-6-astra"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.163.0",
+        "2.1.247",
+        "2.1.299"
+      ]
+    },
+    "source_set_id": "sources-974a9086706364eed8b7",
+    "environment": [
+      {
+        "name": "android.compile_sdk",
+        "value": "36",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/.claude/skills",
+        "at": "2026-10-01T09:52:21.840Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-aa8064d19722381a1.jsonl:L11",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-aa8064d19722381a1.jsonl:L10",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos",
+        "at": "2026-10-01T12:27:45.961Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b.jsonl:L1565",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b.jsonl:L1563",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos",
+        "at": "2026-10-01T13:34:44.665Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae78a452b1664bc61.jsonl:L149",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae78a452b1664bc61.jsonl:L148",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.11.1"
+  },
+  "revision": "fed669a375471b6bf755a7796b9fa43e5b39c7aae7de06e3d98a6abff42f2fcb"
+}

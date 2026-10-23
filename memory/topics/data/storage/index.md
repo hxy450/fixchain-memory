@@ -1,6 +1,6 @@
 # data/storage
 
-本地持久化：relationalStore 建表与版本迁移、自增主键写入、预置数据内容与播种时机、fileIo 目录操作
+本地持久化：relationalStore 建表与迁移、自增主键写入、预置数据与播种时机、fileIo 文件与目录操作
 
 [上一级](../index.md)
 
@@ -15,5 +15,6 @@
 - [按 VERSION 分派建表升降级，打开失败可重试](lesson-7d8f649aa2713323e072.lesson.md) · 阶段：execute · 信号：SQLiteOpenHelper, onCreate, onUpgrade, onDowngrade
 - [按日期实时计算的字段不改绑静态资产，先查内置能力](lesson-6d259db1ffd8927834a2.lesson.md) · 阶段：spec/execute · 信号：Lunar.fromDate, dayYi, dayJi, Intl.DateTimeFormat
 - [演示预置数据逐字段取自源种子工厂与 assets 不自拟](lesson-1c513fdf2cf212354aa0.lesson.md) · 阶段：spec/execute · 信号：DemoDataFactory, rawfile, LocalDate.now(), plusDays
+- [覆盖写加 TRUNC，按 writeSync 返回值写完](lesson-89496d5566f87f197bba.lesson.md) · 阶段：execute · 信号：FileOutputStream, openOutputStream, OutputStream.write, fileIo.openSync
 - [首次启动播种在启动路径落调用并保留标记门控](lesson-dc3f2589254d02893b0e.lesson.md) · 阶段：plan/execute/converge · 信号：Application.onCreate, seedDemoDataOnFirstLaunch, has_seeded_demo_data, EntryAbility.onCreate
 - [首次建库播种放进建表分支同一事务，手动补充不带 id](lesson-488a3bd782acef92f5cf.lesson.md) · 阶段：execute · 信号：onCreate, RoomDatabase.Callback, copy(id = 0), ValuesBucket

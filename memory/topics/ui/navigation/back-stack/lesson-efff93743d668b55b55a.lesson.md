@@ -1,10 +1,10 @@
 # 唯一页面被压在空的 Navigation 首页之上时，由栈底 NavDestination 自身的 onBackPressed 接管返回（不写在 @Entry 页，@Entry.onBackPress 收不到）：size()<=1 时 moveAbilityToBackground 退后台、不出栈露出空白宿主；源端未覆写返回时按 Activity finish() 同时执行 onDestroy 的释放并复位页面实例态，参照设备实测为 HOT 恢复时才保留实例
 
-ID：`lesson-efff93743d668b55b55a` · 版本：5 · 阶段：spec/plan/execute · 主题：[ui/navigation/back-stack](index.md)
+ID：`lesson-efff93743d668b55b55a` · 版本：6 · 阶段：spec/plan/execute · 主题：[ui/navigation/back-stack](index.md)
 
 概要：栈底 NavDestination 返回退后台不出栈
 
-信号：`onBackPressed`, `moveAbilityToBackground`, `terminateSelf`, `onBackPress`, `NavDestination`, `pushPathByName`, `onDestroy`, `BackHandler`, `OnBackPressedDispatcher`
+信号：`onBackPressed`, `moveAbilityToBackground`, `terminateSelf`, `onBackPress`, `NavDestination`, `pushPathByName`, `onDestroy`, `BackHandler`, `OnBackPressedDispatcher`, `OnBackPressedCallback`
 
 ## 何时使用
 
@@ -12,7 +12,7 @@ ID：`lesson-efff93743d668b55b55a` · 版本：5 · 阶段：spec/plan/execute �
 
 ## 适用情境
 
-安卓启动 Activity 未覆写 onBackPressed，也没有 OnBackPressedDispatcher、BackHandler 或 KEYCODE_BACK 处理（含 Compose NavHost 的起始目的地），返回键走 Activity 默认行为：默认 finish()，onDestroy 执行（如释放音乐、关闭数据源），实例态（输入框文字、所选值、播放位置）丢失，进程与静态单例保留；部分 Android 12+ 设备与启动方式下任务根 Activity 改为移到后台、onPause 存档、onResume 读档，以参照设备实测为准。目标按 Navigation + NavDestination 模板，用内容为空的 Navigation 首页在启动时 pushPathByName 压入唯一页面，或启动页已生成为 NavDestination、入口只能首次 push。
+安卓启动 Activity 未覆写 onBackPressed，也没有 OnBackPressedDispatcher、BackHandler 或 KEYCODE_BACK 处理（含 Compose NavHost 的起始目的地），返回键走 Activity 默认行为：默认 finish()，onDestroy 执行（如释放音乐、关闭数据源），实例态（输入框文字、所选值、播放位置）丢失，进程与静态单例保留；部分 Android 12+ 设备与启动方式下任务根 Activity 改为移到后台、onPause 存档、onResume 读档，以参照设备实测为准。目标按 Navigation + NavDestination 模板，用内容为空的 Navigation 首页在启动时 pushPathByName 压入唯一页面，或启动页已生成为 NavDestination、入口只能首次 push。 也包括源端根 Activity 经 OnBackPressedDispatcher 按状态启用多个回调（锁屏、暂停预览、弹出面板等），目标根页同样由入口 Navigation 压栈。
 
 ## 原因
 
@@ -20,8 +20,8 @@ ID：`lesson-efff93743d668b55b55a` · 版本：5 · 阶段：spec/plan/execute �
 
 ## 做法
 
-1. 在每个可能成为栈底的 NavDestination（冷启首页、首启引导页、清栈回根后的页，或它们共用的裁决函数）的 .onBackPressed 中按栈深判断：navPathStack.size() <= 1 时取 UIAbilityContext 调用 moveAbilityToBackground() 并 return true，消费返回、不出栈（不用 terminateSelf，以保留进程与静态单例）；不写在 @Entry 页的 onBackPress。源端未覆写返回时同时执行源 onDestroy 的释放并把页面实例态复位到 onCreate 初值，下次 onShown 重走 onCreate 的初始化，只有参照设备实测返回后再启动是 HOT 恢复原实例时才省略复位。栈深大于 1 时不拦截；页面上的对话框或抽屉打开时先由它们消费返回。
-2. 源端有返回处理时按源端逻辑实现；首屏不必是 NavDestination 时，也可把它作为 Navigation 根内容常驻、不压栈，空栈返回按系统默认处理。
+1. 在每个可能成为栈底的 NavDestination（冷启首页、首启引导页、清栈回根后的页，或它们共用的裁决函数）的 .onBackPressed 中按栈深判断：navPathStack.size() <= 1 时取 UIAbilityContext 调用 moveAbilityToBackground() 并 return true，消费返回、不出栈（不用 terminateSelf，以保留进程与静态单例）；不写在 @Entry 页的 onBackPress。源端未覆写返回时同时执行源 onDestroy 的释放并把页面实例态复位到 onCreate 初值，下次 onShown 重走 onCreate 的初始化，只有参照设备实测返回后再启动是 HOT 恢复原实例时才省略复位。栈深大于 1 时不拦截；页面上的对话框或抽屉打开时先由它们消费返回。 NavDestination.onBackPressed 自 API 10 起提供（本机 API 24 SDK component/nav_destination.d.ts），不因版本疑虑回避或改写成注释。
+2. 源端有返回处理时按源端逻辑实现：OnBackPressedDispatcher 的多个回调按“后添加先问、只问已启用者”（androidx.activity OnBackPressedDispatcher.kt 注释，androidx-main，访问于 2026-10-23）排成一个裁决函数，可放在 ViewModel，页面先关自己的页内弹层再调用它；都未消费时仍按上一步退后台，不 return false 出栈；首屏不必是 NavDestination 时，也可把它作为 Navigation 根内容常驻、不压栈，空栈返回按系统默认处理。
 3. 列出所有会把栈收成只剩根页的路径（冷启动首次 push、首启引导、深链清栈重建、删除或克隆后清栈回根），确认它们都由同一个栈底返回处理接管，不只覆盖冷启动。
 4. 规格提取时，源端根页没有返回处理、依赖 Activity 默认行为，也要在导航规格写出栈底返回的可验收项，锚点指向栈底页的 onBackPressed，不写“系统默认/默认退后台”：列出 finish 的可观察效果（onPause、onStop、onDestroy 各做什么，哪些实例态回初值，哪些静态单例保留），无法确认参照行为时把“返回后再启动的页面状态”写成待核验收项；编排派工不把经验的通用结论写成“源 Activity 默认 = …”的源码事实。
 
@@ -33,9 +33,11 @@ ID：`lesson-efff93743d668b55b55a` · 版本：5 · 阶段：spec/plan/execute �
 
 由相同来源卡提炼的其他经验，按共享卡数排序；不是依赖关系。
 
+- [宿主 onBackPressed 自顶向下关闭页内覆盖层](lesson-396d54479492828eeea3.lesson.md)（共享 1 张卡）
+- [跨文件补实现的功能登记带负责方与验证的移交项](../../../process/handoff-loss/lesson-4f81eeea17b94190c2de.lesson.md)（共享 1 张卡）
 - [子组件拦截返回由 @Entry 转调，多方后进先出](lesson-803ba029eea852122e77.lesson.md)（共享 1 张卡）
 
-来源支持：4 张卡 · 4 次迁移 · 4 个应用
+来源支持：5 张卡 · 已知 4 次迁移（部分未记录） · 已知 4 个应用（部分未记录）
 
 ## 来源（按需复核）
 
@@ -47,3 +49,5 @@ ID：`lesson-efff93743d668b55b55a` · 版本：5 · 阶段：spec/plan/execute �
   卡片版本：`b79edd83d22fd2ddea6ed7662cea1f10af19efc82bfb838db0fb9cf09d0ce6e7`
 - [case-e8db862eb02b52da96d0](../../../../../store/cases/case-e8db862eb02b52da96d0/3981a32e0ac4329767da495cc56061acd812eecc47c60a18eae0098f1d58831b.json) · 结论：diagnosis, rec-431067f467, rec-edc37f2468, rec-771af5f189
   卡片版本：`3981a32e0ac4329767da495cc56061acd812eecc47c60a18eae0098f1d58831b`
+- [case-f80e125586e1709cf157](../../../../../store/cases/case-f80e125586e1709cf157/fecace06d26f859eb79b3b559b68564da27cef284175b5b2db7124b9d1e57b2b.json) · 结论：diagnosis, rec-ef860e7e57, rec-b54b57e0af
+  卡片版本：`fecace06d26f859eb79b3b559b68564da27cef284175b5b2db7124b9d1e57b2b`

@@ -1,0 +1,230 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-91084f18203ecc5e7036",
+  "created_at": "2026-10-23T14:54:48.607038+00:00",
+  "migration_key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/memory-distill-opencamera-20261023/pool",
+  "title": "会话态与保存偏好未按源语义接入：NR 模式误作持久键，保存请求字段凭记忆组装",
+  "when": "规格提取与跨切片接线阶段，把源端设置项落成目标端偏好键/会话状态，或在拍照回调中组装保存请求字段时",
+  "description": "源端设置项分属 SharedPreferences 持久键与 ApplicationInterface 会话字段（如 nr_mode 经 setNRMode 只改会话）；保存请求由 MyApplicationInterface.saveImage 从字符串型偏好、模式相关 save_base 和传感器 has* 有效性标志组装；目标端偏好键、会话态、保存服务和回调宿主由并行切片分别产出，再由接线者合并。",
+  "summary": "NR 模式分支（PopupPanelBuilder）：run 1 的 F004 规格作者写前 Read PopupView.java，回执已含 :319 被注释的\neditor.putString(NRModePreferenceKey) 与 :320 getApplicationInterface().setNRMode(...)\n（agent-afd4474c6ba14aa22.jsonl:L129-L130），说明 NR 模式只改会话、不持久化；但其 Write 的 F004 规格第 91 行把\npreference_nr_mode 列入“读写偏好键”，并注“语义见 F006 权威表”，AC32 写成“切换写 NRMode”（同转录 L276-L277）。\nF006 实际没有任何 nr_mode 条目，F011 才把 sessionNrMode 登记为不持久化会话态（F011 第 147、238 行）。\nSlice 5 生成者读到该规格（agent-a06740e73018ad308.jsonl:L25-L26）和同一段源码（L75-L76），grep 发现\nPreferenceKeys 无此键、ApplicationInterface 无 setNRMode（L200-L201），推理时把“缺键”当成需要补的写键（L202），\nWrite 出局部常量 NR_MODE_PREFERENCE_KEY='preference_nr_mode' 与 commitNrMode → store().put(...)，\n注释“键语义权威 F006”（L204-L205）。该片段保留到 c752566/c1abe5c，拍照会话的 sessionNrMode 不随弹窗变化。\n修复删除该常量，改为 setNrModeSink → CameraAppInterface.setNRMode 写 state.sessionNrMode，MainPage 接线\n（codex 5a2d L1242-L1256）。偏差起点在规格把会话 setter 误归为偏好键；生成者手握相反的源码仍照规格写键，是第二处偏离。\n\n保存请求分支（MainPageVM.onPictureTakenHost）：group-2 closer 接管 P-S11-001，在 L411、L425、L427 三次 Edit 中组装\nJpegSaveRequest。写前实际收到：PreferenceKeys 中 FrontCameraMirrorKey、ImageFormatPreferenceKey（L403-L404）及\nNRSaveExpoPreferenceKey、PanoramaSaveExpoPreferenceKey（L417-L418）；ImageSaverService 中\nJpegSaveRequest.imageFormat（默认 STD）与 BatchRequest.saveBase（L77-L78）；PreviewEngine 的\nhasLevelAngle/hasPitchAngle/pitchAngle 状态与公开 hasLevelAngleFlag（L90-L91、L398-L399）。派工给出 Android 源根，\n但它全程没有打开 MyApplicationInterface.saveImage（源 :3399-3442、:3526-3548），却在注释中写“源 :2452-2536”\n（该区间实为视频缩略图代码）。输出把镜像读成 getBoolean(FrontCameraMirrorKey, true)（源为字符串 no/photo），\n不设 req.imageFormat（恒 STD），NR/全景 save-base 偏好不映射，storeGeoDirection/storeYpr 不检查有效性，\ngeoDirection 与 pitchAngle 写死 0 并注释“公开面未导出”，自动水平也不检查 hasLevelAngleStable。\n其中 pitch 并非未导出：PreviewEngine 自 run 1（15:25）已公开 getPitchAngle/hasPitchAngleFlag/hasLevelAngleStable，\ncloser 的 grep 未覆盖 pitch。地理方向当时只在并行 G3 切片的 PreviewOverlayViewModel（17:37 写入），\ncloser 被要求不碰 G3 文件，DrawPreviewFacade 也没有方向接口，这部分是 F005↔F002 跨切片接口缺口，\n生成结束时 MainPage overlayHost 仍未注入 facade。上述片段原样保留到 c752566。修复在 VM 中映射 PNG/WEBP/STD、\nNR/全景 saveBase，镜像按 'preference_front_camera_mirror_photo' 比较，方位来自 DrawPreview facade，俯仰来自\nPreviewEngine，YPR 需三者都有效，自动水平需 hasLevelAngleStable（codex 5a2d L221-L224、L278-L282、L595-L598、L663-L675）。\n\n其余目标：ImageSaverService 中 `saveExpo ? SAVEBASE_ALL : SAVEBASE_NONE` 是 Android ImageSaver.java:886\nsaveImageJpeg 的 1:1 翻译（源 NR/全景 save_base 走 startImageBatch），修复给 JpegSaveRequest 增加 saveBase\n是为 HMOS 单请求路径做接口适配。数值 JPEG 质量方面，PreviewEngine 调用了 controller.setJpegQuality，\n但 closer 写的拍照路径只调用 output.capture()，不带设置；CameraKit 只有 QualityLevel 三档，规格未记录这一点。\n修复改为以 HIGH 拍摄、保存时按数值质量重编码。这些未单独成链，列在未决目标中。\n",
+  "recommendations": [
+    "规格提取时，按源码实际执行的写路径区分持久偏好键与 ApplicationInterface 会话字段；被注释的 editor.putString 与 setXxx 调用并存时（如 PopupView :319/:320），登记为会话态 setter/getter 及其消费者（setNRMode → getNRModePref → 拍照会话），不列入“读写偏好键”清单。",
+    "实现者发现规格与已读源码冲突时，以源码执行路径为准并上报冲突；目标端缺少会话 setter 时，登记跨切片接口缺口（如 CameraAppInterface.setNRMode），不新建持久键代替。",
+    "接线者组装保存请求时，打开源方法（MyApplicationInterface.saveImage）逐字段对照：偏好值类型（FrontCameraMirrorKey 为 no/photo 字符串）、格式映射（ImageFormatPreferenceKey→PNG/WEBP/STD）、模式相关 save_base（NRSaveExpo/PanoramaSaveExpo），以及 hasLevelAngleStable/hasPitchAngle/hasGeoDirection 门控；注释“公开面未导出”前先 grep 对应 getter。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/PopupPanelBuilder.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/ui/PopupView.java",
+          "at": "2026-10-01T11:28:47.080Z",
+          "reason": "正常输入：规格作者 Read 回执含 :304 被注释的 getString(NRModePreferenceKey)、:305 getNRMode()、:319 被注释的 putString 及 :320 setNRMode(new_nr_mode_value)，足以判定 NR 模式是会话状态而非持久偏好（agent-afd4474c6ba14aa22.jsonl:L129-L130）。"
+        },
+        {
+          "key": "agent-afd4474c6ba14aa22.jsonl",
+          "at": "2026-10-01T11:44:18.665Z",
+          "reason": "读到上述源码后，Write F004 规格时把 preference_nr_mode 列入第 91 行“读写偏好键（写路径全部经本 feature UI）”并注“语义见 F006 权威表”，AC32 写成“切换写 NRMode 并 setupBurstMode”；F006 实际无 nr_mode 条目。源码到规格的状态归类在此偏离（同转录 L276-L277）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F004-viewfinder-ui.md",
+          "at": "2026-10-01T16:41:43.094Z",
+          "reason": "交付桥梁：Slice 5 生成者的 Read 回执仍含第 91 行偏好键清单中的 preference_nr_mode 与 AC32“切换写 NRMode”（agent-a06740e73018ad308.jsonl:L25-L26）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/ui/PopupView.java",
+          "at": "2026-10-01T16:43:29.492Z",
+          "reason": "正常输入：生成者自己的 Read 回执同样返回 :319 被注释的 putString 与 :320 setNRMode，和规格清单直接冲突（agent-a06740e73018ad308.jsonl:L75-L76）。"
+        },
+        {
+          "key": "agent-a06740e73018ad308.jsonl",
+          "at": "2026-10-01T16:58:41.149Z",
+          "reason": "grep 确认 PreferenceKeys 无 NR 键、ApplicationInterface 无 setNRMode（L200-L201）后，推理中按规格把它当缺失的写键（L202）；Write 出 NR_MODE_PREFERENCE_KEY='preference_nr_mode' 与 commitNrMode → store().put，注释“源 :320 setNRMode”“键语义权威 F006”，未登记会话 setter 缺口（L204-L205）。该片段保留到 c752566。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 5
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/MainPageVM.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "summary": "group-2 closer 已收到格式与 save-base 偏好键、JpegSaveRequest.imageFormat/BatchRequest.saveBase 字段及\nPreviewEngine 的角度有效性状态，却没有打开 MyApplicationInterface.saveImage，凭记忆组装保存请求：\n镜像按布尔读取、格式恒为 STD、save-base 偏好不映射、方位/俯仰写死 0、YPR 与自动水平不做有效性门控。\n这些片段保留到 c752566，最终由 codex 在 saveCapturedImagesHost 中逐项改为按源语义取值。\n地理方向一项另含 G3 并行切片接口缺口。\n",
+      "recommendations": [
+        "接线者组装保存请求时，打开源方法（MyApplicationInterface.saveImage）逐字段对照：偏好值类型（FrontCameraMirrorKey 为 no/photo 字符串）、格式映射（ImageFormatPreferenceKey→PNG/WEBP/STD）、模式相关 save_base（NRSaveExpo/PanoramaSaveExpo），以及 hasLevelAngleStable/hasPitchAngle/hasGeoDirection 门控；注释“公开面未导出”前先 grep 对应 getter。"
+      ],
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/preferences/PreferenceKeys.ets",
+          "at": "2026-10-01T18:30:15.259Z",
+          "reason": "正常输入：closer 的 grep 回执列出 ImageFormatPreferenceKey、FrontCameraMirrorKey（L403-L404），以及 NRSaveExpoPreferenceKey、PanoramaSaveExpoPreferenceKey、HDRSaveExpoPreferenceKey（L417-L418），足以说明格式与 NR/全景存底偏好都需要进入请求。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/ImageSaverService.ets",
+          "at": "2026-10-01T17:30:41.461Z",
+          "reason": "正常输入：Read 回执显示 JpegSaveRequest 有 imageFormat（默认 STD）、mirror、geoDirection、pitchAngle 字段，BatchRequest 有 saveBase，说明这些字段需要由宿主赋值（agent-acb5c3d58575999a4.jsonl:L77-L78）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/PreviewEngine.ets",
+          "at": "2026-10-01T18:29:21.412Z",
+          "reason": "正常输入：Read 回执含 hasLevelAngle/hasPitchAngle/pitchAngle 状态（L90-L91），grep 回执含公开 hasLevelAngleFlag（L398-L399）；同一文件自 run 1 起已公开 getPitchAngle/hasPitchAngleFlag/hasLevelAngleStable，角度值及其有效性均可取得。"
+        },
+        {
+          "key": "agent-acb5c3d58575999a4.jsonl",
+          "at": "2026-10-01T18:30:45.796Z",
+          "reason": "未打开源 saveImage 即写 onPictureTakenHost（L411-L412），随后两次 Edit（L425-L426、L427-L428）保留 mirror=getBoolean(FrontCameraMirrorKey,true)，不设 imageFormat，无 NR/全景 saveBase，storeYpr/storeGeoDirection 无有效性门控，geoDirection=0、pitchAngle=0 并注释“公开面未导出”，doAutoStabilise 不查 hasLevelAngleStable；注释引用的“源 :2452-2536”并非该逻辑。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4,
+          "force": true,
+          "reason": "closer 两次用 Bash grep 读取 PreferenceKeys.ets：L403 的回执 L404 返回 ImageFormatPreferenceKey 与 FrontCameraMirrorKey 行；L417 的回执 L418 返回 NRSaveExpoPreferenceKey、PanoramaSaveExpoPreferenceKey、HDRSaveExpoPreferenceKey 行。两次都在最终 Edit（L427-L428）之前，支持它写前已收到这些偏好键。",
+          "evidence": [
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-acb5c3d58575999a4.jsonl",
+              "line": 403
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-acb5c3d58575999a4.jsonl",
+              "line": 404
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-acb5c3d58575999a4.jsonl",
+              "line": 417
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-acb5c3d58575999a4.jsonl",
+              "line": 418
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "F002/F011 规格中没有核到任何一条 AC 覆盖 MyApplicationInterface.saveImage 的请求组装，closer 的规格输入缺这一项；本卡未追溯这一覆盖缺口是在哪次规格产出中形成的。",
+    "镜像的 no/photo 值域只写在 PreferenceKeys.ets 第 259 行注释中，closer 的 grep 回执只显示了第 260 行键名；本卡不声称它看到了字符串值域，只归因它没有对照源方法就自行认定为布尔值。"
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/CameraAppInterface.ets",
+      "reason": "已确认修复新增 setNRMode/getNRMode。生成者 Slice 11 worker（agent-a690eb1a2619c2d76，17:06:38 Write）登记了 sessionNrMode 和读会话态的 getNRModePref，但没有 setter。它读源时 sed 1607-1625（L355-L358）未覆盖 :1596 setNRMode；F011 只登记 sessionNrMode 与 AC162 存取档，没有 setter AC。尚缺：setter 漏登记的规格来源，未成链。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/pages/MainPage.ets",
+      "reason": "已确认修复接上 setNrModeSink，并在 overlay onViewModelReady 中构造带 hasGeoDirectionFlag/getGeoDirection 的 DrawPreviewFacade。生成结束时 overlayHost 仅为 PreviewOverlay({engine})，vm.drawPreview 未注入。这是上面两条链的下游接线缺口；尚未核对 G3 closer 和最终结构收口对 overlayHost 的派工与写入。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/ImageSaverService.ets",
+      "reason": "已确认修复给 JpegSaveRequest 增加 saveBase，并在没有处理后位图时解码后按数值质量编码。生成片段 `saveExpo ? SAVEBASE_ALL : SAVEBASE_NONE` 出自 Slice 3 worker（agent-a46e99f7c0baf2d05，17:09:56 Write），是 Android ImageSaver.java:886 的 1:1 翻译；字节直写也符合 F002-AC33。save-base 偏差已在 MainPageVM 链归因，质量补偿取决于 CameraKit 质量粗档，未在本文件另立生成偏差链。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/HmosCameraController.ets",
+      "reason": "已确认修复在 captureFrame 中加入 quality: QUALITY_LEVEL_HIGH。生成期拍照路径由 group-2 closer 在 18:26:54 写入（agent-acb5c3d58575999a4.jsonl:L340-L341），output.capture() 不带 PhotoCaptureSetting；PreviewEngine 调用了 controller.setJpegQuality(getImageQualityPref())，但拍摄时未使用这个值。生成结束时的规格中没有 QualityLevel 或三档质量的记录。尚缺：closer 写前是否读到 jpegQuality 设置面，以及平台粗档应在哪个规格阶段登记。"
+    }
+  ],
+  "job": "issue-91084f18203ecc5e7036",
+  "metadata": {
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code",
+        "codex"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3",
+        "gpt-6-astra"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.163.0",
+        "2.1.247",
+        "2.1.299"
+      ]
+    },
+    "source_set_id": "sources-974a9086706364eed8b7",
+    "environment": [
+      {
+        "name": "android.compile_sdk",
+        "value": "36",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/.claude/skills",
+        "at": "2026-10-01T09:52:21.840Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-aa8064d19722381a1.jsonl:L11",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-aa8064d19722381a1.jsonl:L10",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos",
+        "at": "2026-10-01T12:27:45.961Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b.jsonl:L1565",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b.jsonl:L1563",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos",
+        "at": "2026-10-01T13:34:44.665Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae78a452b1664bc61.jsonl:L149",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae78a452b1664bc61.jsonl:L148",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.11.1"
+  },
+  "revision": "b2ef3d93c321f92d42c3adeb2614a39fc4a1d58051f93808ce0ad907fbc2e561"
+}

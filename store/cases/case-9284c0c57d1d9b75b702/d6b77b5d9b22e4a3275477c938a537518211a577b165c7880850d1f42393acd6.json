@@ -1,0 +1,267 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-9284c0c57d1d9b75b702",
+  "created_at": "2026-10-23T15:50:23.841371+00:00",
+  "migration_key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/memory-distill-opencamera-20261023/pool",
+  "title": "返修重写相机会话时把拍照格式收窄为 JPEG 并在释放会话时连带关闭复用的 CameraInput",
+  "when": "返修阶段（尤其无法上设备验证时），重写相机会话生命周期、能力探测会话与拍照 profile 选择时",
+  "description": "HarmonyOS 相机实现需在打开相机后建探测会话、按 photoProfiles 选拍照输出，并在拍照/录像会话重建时复用同一个 CameraInput；拍照字节通路按 getComponent(JPEG) 取数据；目标运行环境包括只报告 RGBA_8888 拍照 profile 的模拟器。",
+  "summary": "Codex 返修主代理写前实际读到两份正确材料：parity-fix-progress.md 写明“运行时实测优先于源码阅读结论”，\n并把 HarmonyOS 模拟器 127.0.0.1:5557 列为运行环境、B0 计划为“探测会话取能力 → 正式会话 preview+photo 输出一次性配置”；\n现有 HmosCameraController 的 findPhotoProfile 对 photoProfiles 不看格式、无匹配回落首项（c1abe5c 与生成态 c752566 相同）。\n该代理随后自述设备验证受阻（ADB/HDC 不可用，7c27 L181），其宿主单测 mock 只提供一个 JPEG profile、session.release 不影响 input（L182）。\n[B1] 在这种情况下，它在 L194 的 python 改写中给 findPhotoProfile 加上 CAMERA_FORMAT_JPEG 过滤，\n并让新建的能力探测会话（openInternal）与 createSessionAndStart 在没有 JPEG profile 时抛 'no JPEG photo profile'。\n理由来自源码阅读：同一次改写中 takePicture 仍按 getComponent(JPEG) 取字节。这样一来，拍照字节格式的假设\n变成了打开相机的硬门槛；在只报 RGBA 拍照 profile 的 Mate60_API24 模拟器上，相机打开后探测即失败、会话被释放、预览黑屏\n（runtime-initial-review.md 与 7c27 L2156、L2243）。\n25 分钟后，capture_audit 读到 CameraFormat 枚举（含 RGBA_8888、DNG、YUV、JPEG）以及已带 JPEG 过滤的控制器，\n在 L801 按“DNG 不等于 RAW”的结论把 supports_raw 置 false。这一部分正确；但同一改写把 picture_sizes 也限成仅 JPEG，\n没有 JPEG 时抛 'no JPEG picture sizes'。root 在 L894 又把 is_photo_video_recording_supported 改为只认 JPEG。\n因此 job 问题 1 的答案是：findPhotoProfile 的过滤与探测会话的抛错先由 root L194 引入，早于 DNG 审计改动，\n依据是拍照字节通路只取 JPEG；“DNG≠RAW”只是能力枚举那部分的依据。\n返修中 root 先接受 RGBA 并加 CameraPhotoCodec（10-18 L2216），后改走 photoAssetAvailable。\nFINAL 改用 isSupportedPhotoProfile（JPEG|RGBA_8888）、JPEG 优先，能力枚举按尺寸去重，文案改为 'no supported photo profile'。\n[B2] 同一次 L194 改写还把 teardownForVideoSession 改成串行 await stop 再 await session.release()，期间没有先移除 input。\ncreateSessionAndStart 与 configureVideoOutput 每次都先拆掉旧会话，再新建会话并 addInput 同一个 cameraInput。\n探测会话因此在首次预览前就被 release，而 HarmonyOS 的 Session.release 会关闭仍挂载的 CameraInput，预览随即无法启动\n（root L2397 依设备日志与平台实现确认）。\njob 称 c752566 无 session.release，这一点需更正：生成期 group-2 closer（agent-acb5c3d58575999a4，2026-10-01T18:26:54Z）\n写的 teardownForVideoSession 已在录像挂接路径里不 await 地 release 会话后复用 input；L194 把这一模式扩展到每次预览启动，\n并改为先等 release 完成再复用。\n写前输入中没有“release 会关闭已挂载 input”这一平台事实（d.ts 只写 “Release capture session instance.”），B2 属输入缺口。\nFINAL 在 teardown 中改为 stop → beginConfig → removeInput(input) → release，保留输入供下一会话复用。\n",
+  "recommendations": [
+    "返修阶段收窄设备能力过滤（如 photo profile 格式）前，先在目标设备或模拟器打印 getSupportedOutputCapability 返回的 photoProfiles（format/size）。无法上设备时，保持既有的格式无关选择，或按 JPEG 优先、RGBA_8888 兜底；不要把拍照字节格式假设写成打开相机或探测会话的硬失败。",
+    "拍照字节通路只取 JPEG 组件时，同时为非 JPEG profile 安排处理方式（如 photoAssetAvailable 资产通路），能力枚举只排除确实无法处理的格式（DNG 不等于 RAW 支持），并按尺寸去重。",
+    "会话重建需复用同一个 CameraInput 时，释放旧会话前按 stop → beginConfig → removeInput(input) → release 的顺序处理；宿主 mock 要模拟“release 关闭仍挂载的 input”和“只有 RGBA 拍照 profile”两种设备行为，再以设备日志验收。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/HmosCameraController.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/parity-fix-progress.md",
+          "at": "2026-10-17T16:27:38.921Z",
+          "reason": "正常输入：root 的 cat 回执写明“事实源：Android 源码（只读）；运行时实测优先于源码阅读结论”，环境事实列出 HarmonyOS 模拟器 127.0.0.1:5557；B0 下一步为“重写 HmosCameraController 会话生命周期（探测会话取能力 → 正式会话 preview+photo 输出一次性配置）”，但没有交代跨会话如何处理 CameraInput（rollout-2026-10-17T09-25-11-01a14aae-7c27-7970-aae5-6ee7ad3de05e.jsonl:L58、L63）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/HmosCameraController.ets",
+          "at": "2026-10-17T16:28:22.340Z",
+          "reason": "正常输入（B1）：sed 2230-2580 的回执给出 findPhotoProfile 直接取 capability.photoProfiles、按尺寸匹配并回落 profiles[0]，不看格式，打开路径也不依赖拍照格式。同一回执还包含生成遗留：teardownForVideoSession 在未移除 input 的情况下 session.release()，随后 attachVideoOutput 复用 input（7c27 L83、L87）。"
+        },
+        {
+          "key": "codex/2026/10/17/rollout-2026-10-17T09-25-11-01a14aae-7c27-7970-aae5-6ee7ad3de05e.jsonl",
+          "at": "2026-10-17T16:32:45.160Z",
+          "reason": "修复中新生偏差：自述设备验证受阻（L181）后，L194 的 exec python 改写做了三件事。一是给 findPhotoProfile 加 CAMERA_FORMAT_JPEG 过滤，并让探测会话 openInternal 与 createSessionAndStart 在无 JPEG 时抛 'no JPEG photo profile'（B1）。二是把 teardownForVideoSession 改为 await stop、await session.release()，且不先 removeInput。三是每次预览/录像先拆旧会话再 createPhotoSession/createSession 并 addInput 同一 cameraInput（B2）。回执 L198 exit_code 0。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/HmosCameraController.ets",
+          "at": "2026-10-17T16:53:54.506Z",
+          "reason": "交付桥梁：capture_audit 的 sed 340-720、2150-2490 回执已含 root 写入的 findPhotoProfile(mode) 及 photoProfiles.filter(... CAMERA_FORMAT_JPEG)，仅 JPEG 的约定由此传到审计子代理（rollout-2026-10-17T09-27-18-01a14ab0-6e4d-77d2-b95b-b580fd710267.jsonl:L698、L703）。"
+        },
+        {
+          "key": "/Applications/DevEco-Studio.app/Contents/sdk/default/openharmony/ets/api/@ohos.multimedia.camera.d.ts",
+          "at": "2026-10-17T16:54:13.206Z",
+          "reason": "正常输入：sed 2500-2590 的回执返回 enum CameraFormat，依次为 CAMERA_FORMAT_RGBA_8888 = 3、CAMERA_FORMAT_DNG = 4、YUV、JPEG 等，说明拍照 profile 并不限于 JPEG（6e4d L712、L715）。"
+        },
+        {
+          "key": "codex/2026/10/17/rollout-2026-10-17T09-27-18-01a14ab0-6e4d-77d2-b95b-b580fd710267.jsonl",
+          "at": "2026-10-17T16:57:38.159Z",
+          "reason": "沿用并扩展偏差：L801 的 python 改写按“DNG 不等于 RAW”把 supports_raw 置 false，这部分正确；但同时把 readCameraFeatures 的 picture_sizes 限为 CAMERA_FORMAT_JPEG，无 JPEG 时抛 'no JPEG picture sizes'，注释写“Only JPEG output is wired to capture callbacks”。拍照能力枚举由此多了一个只认 JPEG 的失败点，回执 L804 测试通过。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "Codex 主代理在 exec 中执行 cat harmony/opencamera-hmos/spec/parity-fix-progress.md，回执返回“运行时实测优先于源码阅读结论”、HarmonyOS 模拟器环境与 B0 探测会话→正式会话计划；这是它改写会话生命周期前收到的任务输入。",
+          "evidence": [
+            {
+              "source": "codex/2026/10/17/rollout-2026-10-17T09-25-11-01a14aae-7c27-7970-aae5-6ee7ad3de05e.jsonl",
+              "line": 58
+            },
+            {
+              "source": "codex/2026/10/17/rollout-2026-10-17T09-25-11-01a14aae-7c27-7970-aae5-6ee7ad3de05e.jsonl",
+              "line": 63
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "Codex 主代理在 exec 中以 sed -n '2230,2580p' 等读取 HmosCameraController.ets，回执含格式无关的 findPhotoProfile 与不移除 input 的 teardownForVideoSession；这是 L194 改写前读到的现有实现。",
+          "evidence": [
+            {
+              "source": "codex/2026/10/17/rollout-2026-10-17T09-25-11-01a14aae-7c27-7970-aae5-6ee7ad3de05e.jsonl",
+              "line": 83
+            },
+            {
+              "source": "codex/2026/10/17/rollout-2026-10-17T09-25-11-01a14aae-7c27-7970-aae5-6ee7ad3de05e.jsonl",
+              "line": 85
+            },
+            {
+              "source": "codex/2026/10/17/rollout-2026-10-17T09-25-11-01a14aae-7c27-7970-aae5-6ee7ad3de05e.jsonl",
+              "line": 87
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target",
+          "force": true,
+          "reason": "同一 exec 调用中的 python 脚本读入 HmosCameraController.ets，替换 openInternal、createSessionAndStart、findPhotoProfile、teardownForVideoSession 后 p.write_text(s) 写回，含 JPEG 过滤、'no JPEG photo profile' 与 await session.release()；第二个命令 exit_code 0。",
+          "evidence": [
+            {
+              "source": "codex/2026/10/17/rollout-2026-10-17T09-25-11-01a14aae-7c27-7970-aae5-6ee7ad3de05e.jsonl",
+              "line": 194
+            },
+            {
+              "source": "codex/2026/10/17/rollout-2026-10-17T09-25-11-01a14aae-7c27-7970-aae5-6ee7ad3de05e.jsonl",
+              "line": 197
+            },
+            {
+              "source": "codex/2026/10/17/rollout-2026-10-17T09-25-11-01a14aae-7c27-7970-aae5-6ee7ad3de05e.jsonl",
+              "line": 198
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "同一 python 脚本 p.write_text(s) 写回 HmosCameraController.ets，加入 photoProfiles.filter(... CAMERA_FORMAT_JPEG)；capture_audit 随后读到的就是带此过滤的文件版本。",
+          "evidence": [
+            {
+              "source": "codex/2026/10/17/rollout-2026-10-17T09-25-11-01a14aae-7c27-7970-aae5-6ee7ad3de05e.jsonl",
+              "line": 194
+            },
+            {
+              "source": "codex/2026/10/17/rollout-2026-10-17T09-25-11-01a14aae-7c27-7970-aae5-6ee7ad3de05e.jsonl",
+              "line": 197
+            },
+            {
+              "source": "codex/2026/10/17/rollout-2026-10-17T09-25-11-01a14aae-7c27-7970-aae5-6ee7ad3de05e.jsonl",
+              "line": 198
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": 6,
+          "force": true,
+          "reason": "capture_audit 在 exec 中以 sed -n '340,720p' 与 '2150,2490p' 读取 HmosCameraController.ets（workdir 为工程根），回执含 root 写入的 JPEG 过滤 findPhotoProfile；这是它改 readCameraFeatures 前读到的控制器。",
+          "evidence": [
+            {
+              "source": "codex/2026/10/17/rollout-2026-10-17T09-27-18-01a14ab0-6e4d-77d2-b95b-b580fd710267.jsonl",
+              "line": 698
+            },
+            {
+              "source": "codex/2026/10/17/rollout-2026-10-17T09-27-18-01a14ab0-6e4d-77d2-b95b-b580fd710267.jsonl",
+              "line": 700
+            },
+            {
+              "source": "codex/2026/10/17/rollout-2026-10-17T09-27-18-01a14ab0-6e4d-77d2-b95b-b580fd710267.jsonl",
+              "line": 703
+            }
+          ]
+        },
+        {
+          "from": 5,
+          "to": 6,
+          "force": true,
+          "reason": "capture_audit 在 exec 中以 sed -n '2500,2590p' 读取 camera d.ts，回执含 enum CameraFormat 的 CAMERA_FORMAT_RGBA_8888 = 3、CAMERA_FORMAT_DNG = 4 等定义；这是它决定 picture_sizes 格式前收到的 API 输入。",
+          "evidence": [
+            {
+              "source": "codex/2026/10/17/rollout-2026-10-17T09-27-18-01a14ab0-6e4d-77d2-b95b-b580fd710267.jsonl",
+              "line": 712
+            },
+            {
+              "source": "codex/2026/10/17/rollout-2026-10-17T09-27-18-01a14ab0-6e4d-77d2-b95b-b580fd710267.jsonl",
+              "line": 714
+            },
+            {
+              "source": "codex/2026/10/17/rollout-2026-10-17T09-27-18-01a14ab0-6e4d-77d2-b95b-b580fd710267.jsonl",
+              "line": 715
+            }
+          ]
+        },
+        {
+          "from": 6,
+          "to": "target",
+          "force": true,
+          "reason": "capture_audit 的 exec python 脚本读入 entry/src/main/ets/services/HmosCameraController.ets（workdir 为 opencamera-hmos），把 readCameraFeatures 改为仅 JPEG picture_sizes 并抛 'no JPEG picture sizes' 后 p.write_text(s) 写回；随后 node --test 回执通过。",
+          "evidence": [
+            {
+              "source": "codex/2026/10/17/rollout-2026-10-17T09-27-18-01a14ab0-6e4d-77d2-b95b-b580fd710267.jsonl",
+              "line": 801
+            },
+            {
+              "source": "codex/2026/10/17/rollout-2026-10-17T09-27-18-01a14ab0-6e4d-77d2-b95b-b580fd710267.jsonl",
+              "line": 803
+            },
+            {
+              "source": "codex/2026/10/17/rollout-2026-10-17T09-27-18-01a14ab0-6e4d-77d2-b95b-b580fd710267.jsonl",
+              "line": 804
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "capture_audit 与 parity_audit 发给 root 的消息正文已加密，无法确认 root L194 的 JPEG 过滤是否直接受某条审计结论驱动；本卡只按 root 写前可读的文件内容与同次改写中的 takePicture 归因。",
+    "c752566 录像挂接路径里同类的 release 后复用 input 在设备上是否已经失败，未经运行核实；本卡把可观察回归归到 L194 的扩展与串行化。"
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/CameraPhotoCodec.ets",
+      "reason": "修复期临时文件，不是生成遗留。root 于 2026-10-18T02:13（7c27 L2216）为接受 RGBA 新增 RGBA→JPEG 编码器，parity_audit 在 5a2d L2247 修改；03:00（7c27 L4017）拍照改走 photoAssetAvailable 与 MediaAssetManager 后，该文件被归档到 diagnostic-source 并从应用删除，FINAL 不存在。它属于 B1 的过渡修复。以下未追查：为何没有一开始就采用资产通路；生成期 takePicture 写成 getComponent(JPEG) 时是否知晓 photoAssetAvailable（job 问题 2）。"
+    }
+  ],
+  "job": "issue-9284c0c57d1d9b75b702",
+  "metadata": {
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code",
+        "codex"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3",
+        "gpt-6-astra"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.163.0",
+        "2.1.247",
+        "2.1.299"
+      ]
+    },
+    "source_set_id": "sources-974a9086706364eed8b7",
+    "environment": [
+      {
+        "name": "android.compile_sdk",
+        "value": "36",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/.claude/skills",
+        "at": "2026-10-01T09:52:21.840Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-aa8064d19722381a1.jsonl:L11",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-aa8064d19722381a1.jsonl:L10",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos",
+        "at": "2026-10-01T12:27:45.961Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b.jsonl:L1565",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b.jsonl:L1563",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos",
+        "at": "2026-10-01T13:34:44.665Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae78a452b1664bc61.jsonl:L149",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae78a452b1664bc61.jsonl:L148",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.11.1"
+  },
+  "revision": "d6b77b5d9b22e4a3275477c938a537518211a577b165c7880850d1f42393acd6"
+}

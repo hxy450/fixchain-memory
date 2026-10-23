@@ -38,7 +38,7 @@ ArkUI 中没有 onClick 的容器同样参与命中测试（HitTestMode.Default 
 - [SaveButton 授权回调只做快速写入，下载放点击前](../../../app/media/lesson-089bb378b1ec034a3e84.lesson.md)（共享 1 张卡）
 - [Stack 子项 .align() 无效，对齐用满高容器](../../layout/constraints/lesson-92aee54a305ea0bde363.lesson.md)（共享 1 张卡）
 - [锚点坐标在点击回调即时取，onAreaChange 只兜底](lesson-963bf871aa4e910a8fc8.lesson.md)（共享 1 张卡）
-- [手势起点 Image 写 draggable(false)](../gestures/lesson-b30da57443f68ab9046a.lesson.md)（共享 1 张卡）
+- [按钮或手势起点的 Image 关闭 draggable](../gestures/lesson-b30da57443f68ab9046a.lesson.md)（共享 1 张卡）
 - [门面同步路径也要有源懒加载 getter 的回退来源](../../../app/playback/lesson-cd4a69e85ec59eabf5b9.lesson.md)（共享 1 张卡）
 
 来源支持：7 张卡 · 已知 5 次迁移（部分未记录） · 已知 5 个应用（部分未记录）

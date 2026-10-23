@@ -1,0 +1,308 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-64c8bd68e3bebd236c4d",
+  "created_at": "2026-10-23T14:43:44.581015+00:00",
+  "migration_key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/memory-distill-opencamera-20261023/pool",
+  "title": "移植预览手势与对焦框位置时只搬内层处理，漏掉触摸入口分派与 getFocusPos 读面",
+  "when": "功能切片实现阶段，移植源端预览 View 的事件入口及其下游处理、并确定供覆盖层读取的引擎读面时",
+  "description": "Android 预览表面 onTouchEvent 直接转给 Preview.touchEvent，再经 GestureDetector/ScaleGestureDetector 分派到点按对焦、双击拍照和捏合变焦；DrawPreview 通过 hasFocusArea()/getFocusPos() 把存储的相机坐标重投影到画布。目标端为 XComponent 预览宿主加 Canvas 覆盖层，按切片单写者分工，跨切片读面靠对接点或占位登记交付。",
+  "summary": "B17：Slice 1（F001）实现者 ae5882c4 写前已收到 F001 规格 AC133–136、AC110–111\n（源 Preview.touchEvent/handleSingleTouch/onDoubleTap/ScaleListener → 标 PreviewEngine.touchEvent/scaleZoom）\n和 AC251（真机对焦框须出现在触点），也读到 MySurfaceView.onTouchEvent 直接 return preview.touchEvent(event)、\nPreview.touchEvent 经两个手势检测器分派的源码。它却只把内层 handleSingleTouch、scaleZoom、onPinchZoomEnd\n写进 PreviewEngine，没有 touchEvent 分派；Step 3d 在自己负责的 MainPage previewHost XComponent 上只接\nonLoad/onDestroy，没有 onTouch/PinchGesture，这些处理函数因此在全工程没有 UI 调用方。\nF001 规格“对接点”段只列按钮/滑条回调，未列手势入口；worker 报 integration_points_done_count 1/1，\nrun 2 的 G1 closer a95befa9 也只按该清单补 5 个 C2 handler，并为满足 C4 嵌入检查把这段 XComponent 原样抽成\nCameraPreview.ets，缺口保留到 c752566。F004 规格没有手势 AC；手势 AC 归 F001，closer 的接线清单里没有这一项。\n返修新增 PreviewGestureRouter 复刻 GestureDetector/ScaleGestureDetector 阈值，CameraPreview 接 onTouch+PinchGesture\n并换算 surface 矩形，MainPage 提供对焦/拍照/缩放目标、在弹窗/锁屏/暂停时禁用并调整 hitTestBehavior\n（rollout-…-6e4d…jsonl:L1345–L1543）。\nB28：同一 worker 读到 Preview.hasFocusArea()/getFocusPos()（存相机坐标、绘制时经 getCameraToPreviewMatrix 重投影），\nPreviewEngine 却只保留私有 focusCameraX/Y 和 hasFocusAreaFlag，没有移植 getFocusPos。\nSlice 6（F005）实现者 a3041d23 写前收到 AC48“有对焦区域时用其位置否则画布中心”和 DrawPreview 的\nhasFocusArea→getFocusPos 分支，grep 引擎确认没有位置读面后，在 PreviewOverlay 无条件写 w/2、h/2，\n并在 source-notes 中把它记成“AC48 判据注明的降级位”这一已知近似；信封称“已本地重构”，没有登记跨切片占位。\nG3 closer aab3f09a 据此把它当作已记录近似放行（agent-aab3f09ac0164fd78.jsonl:L225），该片段保留到 c752566。\n返修在 PreviewEngine 增加 getFocusPos，按 cameraToPreviewMatrix 与 surface 偏移重投影，Overlay 改用该位置\n（rollout-…-6e4d…jsonl:L3372、L3397–L3401）。\n",
+  "recommendations": [
+    "预览/引擎切片实现阶段：对每条“源:X.touchEvent → 标:Y.touchEvent”式入口 AC，从源端 View.onTouchEvent 起逐层对照目标调用链（XComponent .onTouch/.parallelGesture(PinchGesture) → 分派器 → handleSingleTouch/scaleZoom）；收尾前 grep 每个处理函数在 UI 文件中的调用方，没有调用方就不算完成。",
+    "移植源类时，把源端被其他组件调用的公开读面（如 DrawPreview 调用的 Preview.hasFocusArea/getFocusPos）和存储字段一起移植；用“源端外部调用点 ↔ 目标公开方法”清单核对，不只按本 feature 对接点核对。",
+    "覆盖层等消费方实现阶段：AC 中“有 X 时用其位置，否则用默认值”的否则分支只对应没有 X 的状态；上游缺读面时，登记跨切片占位交给读面所属切片，不能把无条件默认值写成 AC 允许的近似。",
+    "规格对接点与接线收口：对接点除按钮回调外，还要列出预览表面的手势入口和跨 feature 读面；收口时再按 AC 的“标:”入口核对 UI 调用方，不只按对接点计数。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/pages/MainPage.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F001-camera-preview.md",
+          "at": "2026-10-01T14:57:03.096Z",
+          "reason": "正常输入：Read 回执含 F001-AC133–136（源 Preview.touchEvent/handleSingleTouch/onDoubleTap → 标 PreviewEngine.touchEvent）、AC110–111（ScaleListener → scaleZoom）和 AC251（真机对焦框位于触点），足以要求预览表面接入点按与捏合手势（agent-ae5882c40105e3f01.jsonl:L23、L26）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/preview/camerasurface/MySurfaceView.java",
+          "at": "2026-10-01T14:59:22.991Z",
+          "reason": "正常输入：Read 回执显示 onTouchEvent 直接 return preview.touchEvent(event)，即预览表面本身就是手势入口（同转录 L77–L78）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/preview/Preview.java",
+          "at": "2026-10-01T14:59:37.208Z",
+          "reason": "正常输入：Read 回执含 touchEvent 先交 gestureDetector/scaleGestureDetector、UP 时做 swipe 判定再进 handleSingleTouch，以及 ScaleListener、onDoubleTap（同转录 L97–L98）。"
+        },
+        {
+          "key": "agent-ae5882c40105e3f01.jsonl",
+          "at": "2026-10-01T15:31:31.984Z",
+          "reason": "收到上述输入后，Step 3d 只给自己负责的 previewHost XComponent 接 onLoad→onSurfaceAvailable 和 onDestroy，没有 onTouch/PinchGesture（L357–L358）；接线计划只列 P-S1-001 和 toast（L324）。PreviewEngine 中也只有 handleSingleTouch/scaleZoom/onPinchZoomEnd，没有 touchEvent 分派（L272–L273）。最终信封仍把 touchEvent/ScaleListener 写成 interceptor，并报 integration_points_done_count 1/1（L405）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/components/common/CameraPreview.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F001-camera-preview.md",
+          "at": "2026-10-01T14:57:03.096Z",
+          "reason": "正常输入：同 MainPage 图，F001-AC133–136/110–111 给出点按、双击与捏合入口（agent-ae5882c40105e3f01.jsonl:L23、L26）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/preview/camerasurface/MySurfaceView.java",
+          "at": "2026-10-01T14:59:22.991Z",
+          "reason": "正常输入：onTouchEvent → preview.touchEvent(event)（同转录 L77–L78）。"
+        },
+        {
+          "key": "agent-ae5882c40105e3f01.jsonl",
+          "at": "2026-10-01T15:31:31.984Z",
+          "reason": "偏差起点：previewHost XComponent 只接 surface 生命周期，没有触摸/捏合绑定（L357–L358）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/pages/MainPage.ets",
+          "at": "2026-10-01T16:41:52.371Z",
+          "reason": "交付桥梁：run 2 G1 closer 的 Read 回执显示 previewHost 中 XComponent 只有 onLoad/onDestroy，没有 onTouch（agent-a95befa9b2c5d6b63.jsonl:L22–L23）。"
+        },
+        {
+          "key": "agent-a95befa9b2c5d6b63.jsonl",
+          "at": "2026-10-01T16:46:47.453Z",
+          "reason": "传递：closer 的接线清单来自 F001 对接点，只含 5 个 C2 handler 和 C4 嵌入（L97–L99、L103）；为满足 C4 检查，它把这段 XComponent 原样抽成共享组件 CameraPreview，只保留 onLoad/onDestroy（L127–L128）。本链确认传递，不另推定其独立失职。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/PreviewEngine.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F001-camera-preview.md",
+          "at": "2026-10-01T14:57:03.096Z",
+          "reason": "正常输入：AC133 标 PreviewEngine.touchEvent；AC134 用逆矩阵换算触点并保存对焦区；AC251 要求真机对焦框出现在触点位置（agent-ae5882c40105e3f01.jsonl:L23、L26）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/preview/Preview.java",
+          "at": "2026-10-01T14:59:37.208Z",
+          "reason": "正常输入：touchEvent → gestureDetector/scaleGestureDetector → handleSingleTouch/ScaleListener 的分派层（同转录 L97–L98）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/preview/Preview.java",
+          "at": "2026-10-01T14:59:59.218Z",
+          "reason": "正常输入：Read 回执含 hasFocusArea() 和 getFocusPos()——用存储的 focus_camera_x/y 经 getCameraToPreviewMatrix 映射回预览坐标，注释说明不存屏幕坐标以应对旋转（同转录 L109–L110）。"
+        },
+        {
+          "key": "agent-ae5882c40105e3f01.jsonl",
+          "at": "2026-10-01T15:25:31.156Z",
+          "reason": "Write PreviewEngine 时保留私有 focusCameraX/Y、hasFocusAreaFlag 和 calculateCameraToPreviewMatrix，却没有移植 getFocusPos；也没有 touchEvent 分派，只写了 handleSingleTouch(x,y,touchOrigX,touchOrigY,…)、scaleZoom、onPinchZoomEnd，均无调用方（L272–L273）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/components/viewfinder/PreviewOverlay.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F005-preview-overlay.md",
+          "at": "2026-10-01T17:12:23.288Z",
+          "reason": "正常输入：Read 回执含 F005-AC48“有对焦区域时用其位置否则画布中心”，判据要求位置偏移正确（agent-a3041d23e23f0d50e.jsonl:L25–L26）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/ui/DrawPreview.java",
+          "at": "2026-10-01T17:14:36.474Z",
+          "reason": "正常输入：Read 回执含 doFocusAnimation 中 if (preview.hasFocusArea()) 取 getFocusPos()，否则才用画布中心（同转录 L109–L110）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/preview/Preview.java",
+          "at": "2026-10-01T14:59:59.218Z",
+          "reason": "上游正常输入：F001 实现者读到 getFocusPos 的相机坐标重投影实现（agent-ae5882c40105e3f01.jsonl:L109–L110）。"
+        },
+        {
+          "key": "agent-ae5882c40105e3f01.jsonl",
+          "at": "2026-10-01T15:25:31.156Z",
+          "reason": "上游偏差：PreviewEngine 只存私有 focusCameraX/Y，没有 getFocusPos 读面（同转录 L272–L273）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/PreviewEngine.ets",
+          "at": "2026-10-01T17:34:16.791Z",
+          "reason": "交付桥梁：F005 实现者 grep 引擎，getFocusPos 无结果，focusArea 只有私有 hasFocusArea/focusAreaTime（agent-a3041d23e23f0d50e.jsonl:L177–L180、L372–L373）。"
+        },
+        {
+          "key": "agent-a3041d23e23f0d50e.jsonl",
+          "at": "2026-10-01T18:26:35.393Z",
+          "reason": "已收到 AC48 和源码分支，并在 L376 认定缺读面后，Write 在 drawFocusAnimation 中无条件写 posX=w/2、posY=h/2，注释为“engine 未透出 getFocusPos（source-notes 决策缺口）→ 画布中心”（L457–L458）；source-notes 把它列为“AC48 判据注明的降级位”这一已知近似（L537），信封称“已本地重构”，没有登记跨切片占位（L561）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": 6
+        },
+        {
+          "from": 1,
+          "to": 6
+        },
+        {
+          "from": 2,
+          "to": 6
+        },
+        {
+          "from": 6,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "未追溯 F001 规格作者为何在对接点段漏掉手势入口和 getFocusPos 读面；本卡没有把规格作者标为偏差起点。"
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/PreviewGestureRouter.ets",
+      "reason": "返修新建文件（rollout-…-6e4d…jsonl:L1345 Add File，检查点 cb4c6d6 首次出现），生成期没有写入，无法用真实写入连到该目标。它承载的 touchEvent/GestureDetector/ScaleGestureDetector 分派正是生成期缺失的内容，成因已在 MainPage、CameraPreview、PreviewEngine 三张图中归因到 Slice 1 实现者。"
+    }
+  ],
+  "job": "issue-64c8bd68e3bebd236c4d",
+  "metadata": {
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code",
+        "codex"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3",
+        "gpt-6-astra"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.163.0",
+        "2.1.247",
+        "2.1.299"
+      ]
+    },
+    "source_set_id": "sources-974a9086706364eed8b7",
+    "environment": [
+      {
+        "name": "android.compile_sdk",
+        "value": "36",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/.claude/skills",
+        "at": "2026-10-01T09:52:21.840Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-aa8064d19722381a1.jsonl:L11",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-aa8064d19722381a1.jsonl:L10",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos",
+        "at": "2026-10-01T12:27:45.961Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b.jsonl:L1565",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b.jsonl:L1563",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos",
+        "at": "2026-10-01T13:34:44.665Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae78a452b1664bc61.jsonl:L149",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae78a452b1664bc61.jsonl:L148",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.11.1"
+  },
+  "revision": "f72244f7e6abf869ef8b6d570535554f85813bc64a8527e19c39c5b8e5134599"
+}

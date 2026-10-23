@@ -1,6 +1,6 @@
 # “不确定”“待补资源”“无等价”“延期”“契约未确认”这类占位只登记输入确实缺值的情况：登记前查源码、SDK 与写入时刻的目录，能实现的当场实现
 
-ID：`lesson-a2f6a4ae9a72be740de6` · 版本：8 · 阶段：plan/execute/verify/converge · 主题：[process/deferred-fulfillment](index.md)
+ID：`lesson-a2f6a4ae9a72be740de6` · 版本：9 · 阶段：plan/execute/verify/converge · 主题：[process/deferred-fulfillment](index.md)
 
 概要：占位只登记输入缺值的情况，能实现的当场实现
 
@@ -44,12 +44,14 @@ ID：`lesson-a2f6a4ae9a72be740de6` · 版本：8 · 阶段：plan/execute/verify
 - [animated-vector 按 atEnd 插值形变](../../ui/graphics/icons/lesson-e6b1f9094ec3b905cab5.lesson.md)（共享 2 张卡）
 - [沿用已生成页面或兄弟写法前回源码核对语义](../secondary-over-source/lesson-e9c6e8ef1b29a6fe9c26.lesson.md)（共享 2 张卡）
 
-来源支持：22 张卡 · 已知 6 次迁移（部分未记录） · 已知 5 个应用（部分未记录）
+来源支持：24 张卡 · 已知 6 次迁移（部分未记录） · 已知 5 个应用（部分未记录）
 
 ## 来源（按需复核）
 
 - [case-0ac442a09e1e8ee36a8a](../../../../store/cases/case-0ac442a09e1e8ee36a8a/a8ef5f4a3b6e86969bb09b0df9de25820f2b67887ac0349a98141071b3b6b276.json) · 结论：diagnosis, rec-cbae646744, rec-db2663e044
   卡片版本：`a8ef5f4a3b6e86969bb09b0df9de25820f2b67887ac0349a98141071b3b6b276`
+- [case-168300edfa3644b0f14a](../../../../store/cases/case-168300edfa3644b0f14a/79e3a447504de5357a4bc6ac0687a348e9214a503b0e3ef26e892f4d596ce8b3.json) · 结论：rec-5b92fc969b
+  卡片版本：`79e3a447504de5357a4bc6ac0687a348e9214a503b0e3ef26e892f4d596ce8b3`
 - [case-1907ba587e6b1439f17d](../../../../store/cases/case-1907ba587e6b1439f17d/3b9e23602906ed8c186b14784339e4463fbb6d15d4980a92ce92cd6be7aa805a.json) · 结论：rec-3f5492c9ad
   卡片版本：`3b9e23602906ed8c186b14784339e4463fbb6d15d4980a92ce92cd6be7aa805a`
 - [case-1cad884865343910ce02](../../../../store/cases/case-1cad884865343910ce02/27369625dcbbe450f68beab2e162e179bde87573f0d20d5282655293b42e24d3.json) · 结论：rec-f489991bbf
@@ -80,6 +82,8 @@ ID：`lesson-a2f6a4ae9a72be740de6` · 版本：8 · 阶段：plan/execute/verify
   卡片版本：`24570f598b1c5b1bdb181efddaac5a79a2aac2ad6e83f5f171a7107944d77842`
 - [case-75784c189c0578d026a6](../../../../store/cases/case-75784c189c0578d026a6/86dd42e7e9d78e101a4bd803a4210cddbe07659a8deb38852f8201fe10a1d261.json) · 结论：rec-cc2ad4e53e
   卡片版本：`86dd42e7e9d78e101a4bd803a4210cddbe07659a8deb38852f8201fe10a1d261`
+- [case-775c2298a494ebceb71c](../../../../store/cases/case-775c2298a494ebceb71c/d711688bb4178570fd5e418ae31c04b00870fc4ee4045447542f4db47b2c685f.json) · 结论：rec-33df8aecad
+  卡片版本：`d711688bb4178570fd5e418ae31c04b00870fc4ee4045447542f4db47b2c685f`
 - [case-77e4e8b4e16c3fc8e030](../../../../store/cases/case-77e4e8b4e16c3fc8e030/de5d2060d2228797992daa36c3c487459c5ec7e968bdca7f1d06ed589e393635.json) · 结论：rec-64637c3ed0
   卡片版本：`de5d2060d2228797992daa36c3c487459c5ec7e968bdca7f1d06ed589e393635`
 - [case-7d5b3583abd06943248f](../../../../store/cases/case-7d5b3583abd06943248f/be28e286f2c5961d3c34a8a57df28d77cd5a345f9b4ff620dd610bd4975f4baf.json) · 结论：rec-7df06d63b6

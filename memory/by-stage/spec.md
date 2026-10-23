@@ -1,10 +1,30 @@
 # 阶段：规格提取（spec）
 
-本阶段可用的 194 条经验，按领域与主题分组；一条经验可属于多个阶段。
+本阶段可用的 216 条经验，按领域与主题分组；一条经验可属于多个阶段。
 
 [返回根索引](../index.md)
 
 ## app — 应用级装配与横切机制：入口清单、启动链路、平台能力与系统状态、媒体文件、混合桥接、模块与资源产物
+
+### [app/camera/capture](../topics/app/camera/capture/index.md) — 拍照触发与结果链：完成/失败回传与多帧交付、前屏补光、照片缓冲释放与资产回调
+
+- [Photo 字节先复制或用完再 release，不释放后用](../topics/app/camera/capture/lesson-c81407857f6e70183c27.lesson.md) · 信号：photoAvailable, Photo.release, getComponent, byteBuffer
+- [拍照桥接保留完成失败回传，多帧模式整组交付](../topics/app/camera/capture/lesson-91d254bb9a5187884b4b.lesson.md) · 信号：takePicture, captureBurst, CaptureCallback, onCaptureCompleted
+
+### [app/camera/parameters](../topics/app/camera/parameters/index.md) — 手动曝光、ISO、对焦的单位值域，设备能力位查询与实时读数的取值通道
+
+- [手动参数按 CameraKit 单位与值域换算，读写同口径](../topics/app/camera/parameters/lesson-2ce79e76ffde307832b9.lesson.md) · 信号：SENSOR_EXPOSURE_TIME, CONTROL_AE_EXPOSURE_COMPENSATION, SENSOR_SENSITIVITY, LENS_FOCUS_DISTANCE
+- [能力位按会话查询并在提交后快照](../topics/app/camera/parameters/lesson-b28eaf0ed2aefc219beb.lesson.md) · 信号：CameraCharacteristics, CONTROL_AWB_AVAILABLE_MODES, isExposureModeSupported, isWhiteBalanceModeSupported
+
+### [app/camera/recording](../topics/app/camera/recording/index.md) — 录像会话与 AVRecorder：profile 与帧率、启停串行、编码选项映射与应用层限额
+
+- [AVRecorder 启停串行：共享停止任务、启动可取消](../topics/app/camera/recording/lesson-d41878bcc79f7e356a54.lesson.md) · 信号：MediaRecorder.prepare, MediaRecorder.stop, MediaRecorder.release, AVRecorder.prepare
+- [应用层录像限额按已录时长计，保留停止分支](../topics/app/camera/recording/lesson-1957f0e6ad83f19258e8.lesson.md) · 信号：setMaxDuration, setMaxFileSize, OnInfoListener, MEDIA_RECORDER_INFO_MAX_DURATION_REACHED
+- [录像选项按 AVRecorder 枚举映射，缺能力就报错](../topics/app/camera/recording/lesson-9826c047e0381581db09.lesson.md) · 信号：setVideoEncoder, setOutputFormat, setAudioSource, setCaptureRate
+
+### [app/camera/session](../topics/app/camera/session/index.md) — CameraKit 会话的输入输出组成、提交时机、拍照 profile、拆卸重建顺序与相机就绪时机
+
+- [一次性拍照请求在相机就绪回调消费，不用页面显示](../topics/app/camera/session/lesson-e3bf30ce225c1c8964aa.lesson.md) · 信号：StateCallback.onOpened, onConfigured, CameraInput.open, aboutToAppear
 
 ### [app/capability/degradation](../topics/app/capability/degradation/index.md) — 能力确实不可用时只降级做不到的一步，运行期显式提示
 
@@ -31,13 +51,14 @@
 - [开关控制的常驻通知由应用级服务持有，不随页面 VM](../topics/app/cross-cutting/lesson-e9f03fcc7f1e781c4b24.lesson.md) · 信号：notificationManager.publish, aboutToAppear, aboutToDisappear, NavDestination
 - [诊断日志上传按源端打包清单与协议实现，收窄先确认](../topics/app/cross-cutting/lesson-d434bb5c16bc721d9a00.lesson.md) · 信号：usesCleartextTraffic, networkSecurityConfig, presignedUrl, http.request
 
-### [app/entry](../topics/app/entry/index.md) — 入口 Ability 与 module.json5 装配：初始化时序、全局守护、外部进入声明、扩展能力与卡片登记
+### [app/entry](../topics/app/entry/index.md) — 入口 Ability 与 module.json5 装配：初始化时序、全局守护、外部进入与结果回传、扩展能力与卡片登记
 
 - [intent-filter 逐条映射为 skills](../topics/app/entry/lesson-daba8a5b555e6657d085.lesson.md) · 信号：intent-filter, ohos.want.action.sendData, maxFileSupported, SEND_MULTIPLE
 - [manifest 未声明的窗口缺省解析成目标值并指派](../topics/app/entry/lesson-c1d7ec16bb02aa152c33.lesson.md) · 信号：AndroidManifest, screenOrientation, windowSoftInputMode, auto_rotation_restricted
 - [前台服务改扩展能力先查基类导出，type 与基类成对](../topics/app/entry/lesson-16c24b9a44153d703f04.lesson.md) · 信号：extensionAbilities, ServiceExtensionAbility, AppServiceExtensionAbility, WorkSchedulerExtensionAbility
 - [固定快捷方式用 productViewManager](../topics/app/entry/lesson-fe5cf66672ce205ee0d7.lesson.md) · 信号：requestPinShortcut, isRequestPinShortcutSupported, disableShortcuts, ShortcutManager
 - [外部入口页需确定快捷声明、Want 分支与参数写者](../topics/app/entry/lesson-c46f182cf1d01a97e05f.lesson.md) · 信号：ohos.ability.shortcuts, shortcuts_config.json, onNewWant, Want
+- [多处 setResult 合并为一次带结果结束](../topics/app/entry/lesson-2f8c5cc0c4cc4938ec79.lesson.md) · 信号：setResult, RESULT_OK, RESULT_CANCELED, terminateSelfWithResult
 - [深链声明 skills、domainVerify，隐式验收](../topics/app/entry/lesson-d77baa7494930d485425.lesson.md) · 信号：ohos.want.action.viewData, entity.system.browsable, pathStartWith, intent-filter
 
 ### [app/hybrid](../topics/app/hybrid/index.md) — Flutter 与原生桥接契约：通道方法集、事件通道、路由映射，以及交给冻结 Dart 的对象语义与行为等价核对
@@ -49,12 +70,18 @@
 
 - [定位只给坐标时用逆地理编码取行政区名，不留空名](../topics/app/map/lesson-a317e16cd9f46aa34962.lesson.md) · 信号：geoLocationManager.getAddressesFromLocation, geoLocationManager.getCurrentLocation, AMapLocation, subLocality
 
-### [app/media](../topics/app/media/index.md) — 媒体文件的用户可见出入口：安全控件与 picker 授权时序、沙箱落点与导出、播放 URI、预取与快照尺寸限制
+### [app/media](../topics/app/media/index.md) — 媒体文件出入口与图片处理：picker 与安全控件、沙箱导出、播放 URI、解码预取、PixelMap 释放与快照限制
 
 - [公共目录产物改落沙箱时每条链写出导出步骤](../topics/app/media/lesson-b59097ee968fe827f70d.lesson.md) · 信号：WRITE_EXTERNAL_STORAGE, ACTION_MEDIA_SCANNER_SCAN_FILE, DocumentViewPicker.save, MediaScannerConnection
 - [图库选图用 PhotoViewPicker 并复制进应用目录](../topics/app/media/lesson-ad1db0aa0434c2e766fd.lesson.md) · 信号：PhotoViewPicker, READ_IMAGEVIDEO, MediaStore, photo_manager
 - [导入导出按源运行时语义：OOM 兜底与 DEFLATED](../topics/app/media/lesson-8534b92df38e546092fe.lesson.md) · 信号：OutOfMemoryError, RangeError, ZipOutputStream, setMethod
 - [音频导入用 AudioViewPicker 并复制进沙箱](../topics/app/media/lesson-62ac5e65ac4aa51128bd.lesson.md) · 信号：AudioViewPicker, photoAccessHelper, MediaStore.Audio, READ_MEDIA_AUDIO
+
+### [app/media-library](../topics/app/media-library/index.md) — 系统媒体库直接读写：受限权限下的相机资产保存、最近媒体入口、删除确认与外部查看分享
+
+- [最近媒体以自存 URI 为准，未授权不整库查询](../topics/app/media-library/lesson-43781ac1c21274acd48b.lesson.md) · 信号：MediaStore, MediaStore.Images.Media.EXTERNAL_CONTENT_URI, getAssets, getThumbnail
+- [查看分享媒体 URI 用精确 MIME 并授读权限](../topics/app/media-library/lesson-044358011be198c5bf87.lesson.md) · 信号：ACTION_VIEW, ACTION_SEND, EXTRA_STREAM, startAbility
+- [相机产出走系统资产保存，不靠受限写权限](../topics/app/media-library/lesson-bc279ce222e98e0d5ede.lesson.md) · 信号：MediaStore, IS_PENDING, MediaRecorder, createAsset
 
 ### [app/nfc](../topics/app/nfc/index.md) — NFC 读卡：能力三态前置检查、贴卡拉起的 skills 声明、按 UIAbility 前台派发与页面仿真
 
@@ -71,8 +98,9 @@
 - [短提示音保留混播与播放中 start 不重启语义](../topics/app/playback/lesson-5475edc47af05c1c6a5b.lesson.md) · 信号：MediaPlayer.create, requestAudioFocus, AudioFocusRequest, AudioSessionManager.activateAudioSession
 - [退后台续播时接 AVSession 与音频长时任务](../topics/app/playback/lesson-65db317135138c3181c7.lesson.md) · 信号：avSession.createAVSession, setAVPlaybackState, setBackgroundPlayMode, backgroundTaskManager.startBackgroundRunning
 
-### [app/recreation](../topics/app/recreation/index.md) — 源端 Activity 重建语义：配置变化、进程回收与重启在不重建的 UIAbility 上显式处理与恢复
+### [app/recreation](../topics/app/recreation/index.md) — 源端 Activity 重建与新实例语义：配置变化、进程回收、重启与新请求在不重建的 UIAbility 上显式处理
 
+- [singleton 收新请求时带版本重跑请求解析](../topics/app/recreation/lesson-45ae43a8f3ace3513834.lesson.md) · 信号：android:launchMode, launchType, onNewWant, onCreate
 - [保留实例按是否配置重建区分，不以单例存在代替](../topics/app/recreation/lesson-ed571550c44efdeb321e.lesson.md) · 信号：NonConfigurationInstance, onConfigurationUpdate, hasInstance, configChanges
 - [回收重建单列分支：仅系统回收时恢复整栈与原参数](../topics/app/recreation/lesson-b0405a29415547485ecb.lesson.md) · 信号：rememberNavController, NavHost, savedInstanceState, TaskStackBuilder
 - [无 configChanges 时按源重建时序刷新关弹窗](../topics/app/recreation/lesson-94715d0df4c03a8fb5a5.lesson.md) · 信号：android:configChanges, screenOrientation, onSaveInstanceState, savedInstanceState
@@ -108,6 +136,7 @@
 ### [arkts/async-mapping](../topics/arkts/async-mapping/index.md) — 源端同步调用、线程与事件投递改成 Promise/异步 API 后的时序、重入、线程与结果三态
 
 - [连续同步平台调用改 Promise 时在网关内串行](../topics/arkts/async-mapping/lesson-ba0cb144aa48f9584060.lesson.md) · 信号：Vibrator.cancel, vibrate(pattern), stopVibration, startVibration
+- [阻塞等待改 Promise 后签名与调用链一路 await](../topics/arkts/async-mapping/lesson-c53d56284f178b5ab63f.lesson.md) · 信号：Thread.join, Object.wait, CountDownLatch.await, Future.get
 
 ### [arkts/java-stdlib](../topics/arkts/java-stdlib/index.md) — Java/Kotlin 标准库调用（集合序、字符串、正则、格式化、日历）与形似 JS API 的语义差异复刻
 
@@ -150,14 +179,16 @@
 - [byte\[\] 常量逐下标转写核总长，冲突以源为准](../topics/data/parsing/lesson-0bba9db6a18f2e732334.lesson.md) · 信号：byte\[\], Uint8Array, KeyA, KeyB
 - [org.json 输出按库语义：null 删键、转义 /](../topics/data/parsing/lesson-0caaa4efc70dad90a15f.lesson.md) · 信号：JSONObject.put, JSONObject.NULL, JSONArray, toString(indent)
 - [大整数 id 用 bigint，解析前给数字加引号保真](../topics/data/parsing/lesson-c066489fcf35ab37378c.lesson.md) · 信号：JSON.parse, bigint, Long, 2^53
+- [自研 EXIF 写入按库源码取语义，值区顺排](../topics/data/parsing/lesson-ac58c27e534158e65647.lesson.md) · 信号：ExifInterface, setAttribute, setGpsInfo, TAG_GPS_TIMESTAMP
 
 ### [data/preferences](../topics/data/preferences/index.md) — 偏好键值存储：装载时机与同步读写、批量提交原子性、读点缺省值与默认值落盘
 
 - [偏好入口同步装载，读写走 Sync 接口](../topics/data/preferences/lesson-93b3eeff61598bc42172.lesson.md) · 信号：getSharedPreferences, PreferenceManager.getDefaultSharedPreferences, getPreferencesSync, getPreferences
+- [偏好契约按源全部读写点定格式、缺键与持久性](../topics/data/preferences/lesson-bf7a5ff24d5ae4193eb4.lesson.md) · 信号：SharedPreferences, getString, putString, editor.putString
 - [同键多读点缺省不同时逐读点保留，不收敛为单一默认](../topics/data/preferences/lesson-11e4e15acdbadf579e07.lesson.md) · 信号：getBoolean, getString, getXxx
 - [设置页出现时为缺键写 XML 默认值并落盘](../topics/data/preferences/lesson-4283cc343b875489b851.lesson.md) · 信号：addPreferencesFromResource, PreferenceFragment, PreferenceActivity, PreferenceScreen
 
-### [data/storage](../topics/data/storage/index.md) — 本地持久化：relationalStore 建表与版本迁移、自增主键写入、预置数据内容与播种时机、fileIo 目录操作
+### [data/storage](../topics/data/storage/index.md) — 本地持久化：relationalStore 建表与迁移、自增主键写入、预置数据与播种时机、fileIo 文件与目录操作
 
 - [SQLiteOpenHelper 首次取库才建库，启动不预建](../topics/data/storage/lesson-519f6769ca714500d9c3.lesson.md) · 信号：SQLiteOpenHelper, getReadableDatabase, getWritableDatabase, relationalStore
 - [手写建表 SQL 表名列名统一加引号，关键字不裸写](../topics/data/storage/lesson-c55c56444f5271471a64.lesson.md) · 信号：CREATE TABLE, createSql, relationalStore, executeSql
@@ -187,6 +218,7 @@
 - [导航目的地写页面入参契约：名、类型、可空与读取方式](../topics/process/enumeration-gaps/lesson-f4d335605b44a60116b9.lesson.md) · 信号：nav_graph, &lt;argument&gt;, requireArguments(), getString
 - [应用壳契约枚举源导航全部入口含深链与 scheme](../topics/process/enumeration-gaps/lesson-3348c580951ef82a9737.lesson.md) · 信号：NavPathStack, onNewWant, onCreate, module.json5
 - [截图页范围含其入口直达二级页，不取最窄解释](../topics/process/enumeration-gaps/lesson-91c89aff3f8c5c47bd2a.lesson.md) · 信号：startActivity, Intent, Activity, setOnClickListener
+- [拆层后各层方法按源端覆写与调用全集核对](../topics/process/enumeration-gaps/lesson-61a9fc7190c51c663697.lesson.md) · 信号：@Override, Listener, Callback, Facade
 - [窗口/控件封装类的分叉可见行为逐项写入契约](../topics/process/enumeration-gaps/lesson-5948050d3b6dc39239a4.lesson.md) · 信号：setOffline, setEnabled, FootBar, SharedPreferences
 - [系统表面降级为应用内页时写明入口位置与形式](../topics/process/enumeration-gaps/lesson-238588d3cceaf707ccfe.lesson.md) · 信号：Widget, AppWidget, FormExtensionAbility, LongPressGesture
 - [验收条目实读源码段落，照抄比较符并给边界样例](../topics/process/enumeration-gaps/lesson-08854573a81a9fa03746.lesson.md) · 信号：width &gt; 600, Linkify, ViewModel, setOnBannerListener
@@ -200,9 +232,10 @@
 - [页面入口只按布局与页面类实际绑定推导，不补源端没有的控件](../topics/process/inferred-not-traced/lesson-76aa7901a0ae1af9d544.lesson.md) · 信号：initView, setOnClickListener, ViewModel, onClick
 - [页面归属按实际 Service 调用判定，不按模块默认](../topics/process/inferred-not-traced/lesson-ad7d770bd5b826e58516.lesson.md) · 信号：resolve_by, Retrofit, Service, page_id
 
-### [process/lossy-transcription](../topics/process/lossy-transcription/index.md) — 逐句转写源端表达式与状态逻辑时简化改写，丢括号分支或合并不同生命周期的字段
+### [process/lossy-transcription](../topics/process/lossy-transcription/index.md) — 逐句转写源端表达式、条件与状态逻辑时简化改写：丢分支或条件、合并不同生命周期的字段
 
 - [复位函数只复位源端每局路径实际赋值的字段](../topics/process/lossy-transcription/lesson-e2a08b9a98504718cd24.lesson.md) · 信号：initGame
+- [多条件门控与行为参数逐项落码，不删不换不丢](../topics/process/lossy-transcription/lesson-dbffe1dd0333c713f94a.lesson.md) · 信号：&amp;&amp;, ||, canIUse
 
 ### [process/secondary-over-source](../topics/process/secondary-over-source/index.md) — 规格、合成快照、清单映射或已生成代码等二手产物取代源码成为实现依据而发生漂移
 
@@ -223,7 +256,9 @@
 
 ### [process/unverified-as-fact](../topics/process/unverified-as-fact/index.md) — 把生成期无法核验的推测、自拟值或假设写成硬性结论、期望值或已实现项
 
+- [下“不存在”结论前确认检索覆盖完整声明与范围](../topics/process/unverified-as-fact/lesson-8b7a50eeb92fc3bdb1e7.lesson.md) · 信号：.d.ts, sed -n, head -n, grep -n
 - [结论先查本机 SDK 与依赖源，查不到才标置信度](../topics/process/unverified-as-fact/lesson-c0f990ea57a901951ba8.lesson.md) · 信号：HARD, dp, .gitmodules, ?android:attr
+- [规格常量分应用参数与源平台取值，后者写目标取法](../topics/process/unverified-as-fact/lesson-d280d90bb76be18536f6.lesson.md) · 信号：static final, = true, .0f
 - [规格所需值上游缺失时回源码补或标待核，不自拟](../topics/process/unverified-as-fact/lesson-77ca67f164d77ec63cda.lesson.md) · 信号：api-inventory.json, auth_model, common.md, raw_apis.json
 ## ui — 界面迁移：布局几何、主题图形、文本、状态反馈、导航、弹窗、交互输入与列表分页的机制级对照
 
@@ -261,6 +296,7 @@
 
 ### [ui/graphics/canvas-text](../topics/ui/graphics/canvas-text/index.md) — Canvas 文字绘制：字体串与注册就绪、TextMetrics 度量字段选取、段落方向与基线取整
 
+- [Paint 状态读回改为自记，不读 ctx 属性](../topics/ui/graphics/canvas-text/lesson-c91afa108d966666d22b.lesson.md) · 信号：Paint.getTextSize, getTextSize, getTextAlign, ctx.font
 - [fillText 按串首强方向字符设 direction](../topics/ui/graphics/canvas-text/lesson-68717b80482f4bd12825.lesson.md) · 信号：Canvas.drawText, drawText, fillText, ctx.direction
 - [字体串用注册名不加引号，测宽前等字体就绪](../topics/ui/graphics/canvas-text/lesson-74295d12b4edc025569f.lesson.md) · 信号：ctx.font, font.registerFont, registerFont, Typeface.createFromAsset
 - [文字度量按源 API 分层选 TextMetrics 字段](../topics/ui/graphics/canvas-text/lesson-f876887b216b6caf9f39.lesson.md) · 信号：getTextBounds, Paint.ascent, getFontMetrics, measureText
@@ -405,6 +441,7 @@
 ### [ui/state/observation](../topics/ui/state/observation/index.md) — 共享可观察模型的订阅：@Trace 字段判定与直读、新数组赋值发变更、ForEach 键与原位更新、实例拆分。
 
 - [Activity 实例字段的会话态按页面实例建服务](../topics/ui/state/observation/lesson-d9143de006714935afe2.lesson.md) · 信号：getInstance, new Service()
+- [共享状态 key 只用字母数字下划线，禁连字符与点号](../topics/ui/state/observation/lesson-7508ddc52eaf816887f0.lesson.md) · 信号：AppStorageV2.connect, PersistenceV2, @ObservedV2, kebab-case
 - [判字段是否需 @Trace 前先读其修改方法与显示界面](../topics/ui/state/observation/lesson-4d1c980bbbd20275f5c3.lesson.md) · 信号：@Trace, @ObservedV2, data class, copy(
 
 ### [ui/text/copy](../topics/ui/text/copy/index.md) — 可见文案的来源：沿资源引用链取逐字值、静态页文案取自 XML、代码格式化文案建参数化资源、语言目录按源生成。

@@ -19,7 +19,7 @@
 - [日志迁移审计按源端调用边界列日志点，不只核对配置](../topics/app/cross-cutting/lesson-e23468a0e439f8cf53e9.lesson.md) · 信号：log2File, debugFile, BqLog, hilog.info
 - [诊断日志上传按源端打包清单与协议实现，收窄先确认](../topics/app/cross-cutting/lesson-d434bb5c16bc721d9a00.lesson.md) · 信号：usesCleartextTraffic, networkSecurityConfig, presignedUrl, http.request
 
-### [app/entry](../topics/app/entry/index.md) — 入口 Ability 与 module.json5 装配：初始化时序、全局守护、外部进入声明、扩展能力与卡片登记
+### [app/entry](../topics/app/entry/index.md) — 入口 Ability 与 module.json5 装配：初始化时序、全局守护、外部进入与结果回传、扩展能力与卡片登记
 
 - [shortcuts 元数据挂 Ability 下，不挂模块级](../topics/app/entry/lesson-67118603fcc769a5edc9.lesson.md) · 信号：ohos.ability.shortcuts, module.json5, $profile:, shortcuts_config
 
@@ -51,7 +51,7 @@
 
 - [先定目标 res.data 对应源端哪层类型，再逐层写取值键](../topics/data/parsing/lesson-dc5c370e370c2be803c1.lesson.md) · 信号：res.data, BaseResponse&lt;T&gt;, getObject, getArray
 
-### [data/storage](../topics/data/storage/index.md) — 本地持久化：relationalStore 建表与版本迁移、自增主键写入、预置数据内容与播种时机、fileIo 目录操作
+### [data/storage](../topics/data/storage/index.md) — 本地持久化：relationalStore 建表与迁移、自增主键写入、预置数据与播种时机、fileIo 文件与目录操作
 
 - [Room 迁移保留库名、schema 版本与显式升级分支](../topics/data/storage/lesson-a6f300f9295ba538f23b.lesson.md) · 信号：@Database(version, addMigrations, AutoMigration, fallbackToDestructiveMigration
 - [单语句直接写，事务含 await 用独立事务](../topics/data/storage/lesson-a078efd3361b4abe58e3.lesson.md) · 信号：createTransaction, beginTransaction, beginTrans, rollBack

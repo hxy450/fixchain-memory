@@ -1,0 +1,303 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-56249562721f5dc59148",
+  "created_at": "2026-10-23T15:34:00.444987+00:00",
+  "migration_key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/memory-distill-opencamera-20261023/pool",
+  "title": "长按快门连续快拍：编排器丢弃连拍标志、长按入口无人认领，松手停止被替换成取消重复拍照",
+  "when": "拍照编排实现与跨切片接线阶段：实现takePicturePressed/takePhoto的连续快拍参数，以及决定快门长按手势、松手停止回调和连拍状态由哪一方落地时",
+  "description": "源端快门同时有点击和长按两条入口：长按经allowLongPress、模式/分辨率/RAW门控调用takePicturePressed(false, true)，控制器以BURSTTYPE_CONTINUOUS持续出帧，ACTION_UP调用stopContinuousBurst，lastContinuousFastBurst影响暂停预览与保存命名；目标端相机会话没有连续burst类型，且spec把长按入口标到页面VM文件、把连拍循环归拍照编排切片。",
+  "summary": "【拍照编排，Slice 3/F002 实现者】写前读到的F002规格AC86写明：长按快门进入连续快拍，continuous_fast_burst=true传入takePicturePressed/takePhoto，\n松手调用stopContinuousBurst（F011-AC199停止侧），判定为“长按后连续多帧onPictureTaken”，入口标为MainPageVM.takePhotoButtonLongClick\n（agent-a46e99f7c0baf2d05.jsonl:L25-L26）。它还用sed读了MainActivity.longClickedTakePhoto，看到视频、fast burst、RAW-only门控后调用takePicturePressed(false, true)（L84-L85）。\n这些输入足以说明需要一条连拍循环和对应的停止入口。17:15写PhotoCaptureOrchestrator时，takePicturePressed保留了continuousFastBurst分支，\n注释也写“AC86长按快拍亦经此”；但takePhotoWhenFocused第一行就是`void continuousFastBurst`，只置TAKING_PHOTO并调用一次engine.takePicture()。\n编排器没有连拍循环、在途状态和stopContinuousBurst，长按得到的只是单拍（L317-L318）。\n它在16:56的设计推理中已认定“longClick handler是MainPage的（AC86标:MainPageVM.takePhotoButtonLongClick→closer），不是我的文件，不发P-ID，Skip”（L194）。\n它写前读过_common.md（L20-L21），那里规定跨文件移交必须登记FWD-REF/HANDOFF，“由xxx负责”这类散文注释一律FAIL。最终只在文件头写了“长按手势识别归MainPageVM”。\n【页面VM，Slice 11/F011 实现者】它读到F011-AC170（连续快拍后暂停预览否决）和AC199（松手若连拍进行中则stopContinuousBurst）（agent-a690eb1a2619c2d76.jsonl:L27-L28），\n也读到MainActivity的长按监听与ACTION_UP回调（L88-L89、L232-L233）。在source-notes中，它把longClickedTakePhoto记为“归F004”（L206）；规格实际标在F002-AC86。\n17:09写MainPageVM时，lastContinuousFastBurst()写成`return false; // F002 连拍状态注入后升级`，这个散文桩没有P-ID（L395-L396）；\n停止侧则正确登记为P-S11-005，“F002连续快拍停止入口stopContinuousBurst接管”。\n【第2组group-closer】它读了slice-03计划，快门handler写的是“takePhotoButtonPressed（…含AC83-89触发侧状态机）”（agent-acb5c3d58575999a4.jsonl:L12-L13）；\n也读了registry中的P-S11-005（L34-L35），以及编排器文件头里的“AC86经takePicturePressed(false, true)入口；长按手势识别归MainPageVM”（L85-L86）。\n它没有读F002/F011规格。推理中它发现编排器没有stopContinuousBurst，于是决定把cancelRepeat当作“最接近的语义”（L251）。\n18:29它把P-S11-005改为`this.photoCapture?.cancelRepeat()`并标为已解除（L408-L409），这是用重复拍照取消替换连拍停止；\n18:40组装MainPage时，快门Image只挂onClick→takePhotoButtonPressed→takePicturePressed(false, false)，没有长按手势（L588-L589）。\n执行结束检查点c752566保留了上述四处：快门无LongPressGesture、takePhotoButtonLongClickCancelled只cancelRepeat、lastContinuousFastBurst恒false、takePhotoWhenFocused丢弃标志。\n第一轮Opus返修未触及。第二轮Codex返修由capture_audit在临时工作树实现七文件窄补丁，并在生产git apply合入\n（rollout-…01a14ab0-6e4d….jsonl:L7509、L7513）。改动包括：MainPage快门加onGestureJudgeBegin+LongPressGesture；编排器新增ContinuousBurstContext、一帧在途状态机、stop/schedule/finish；\nMainPageVM按模式/尺寸/RAW/偏好门控startContinuousBurst，后台、销毁、换启动意图时停连拍，lastContinuousFastBurst读实际状态，保存请求带forceSuffix+suffixOffset。\nPreviewEngine与三层onPictureTaken接口另加停止钩子、AF后续拍延续和continuousBurstIndex。FINAL保留全部修改。\n",
+  "recommendations": [
+    "拍照编排实现阶段：spec的AC要求某个布尔参数改变行为时（如continuous_fast_burst要求“连续多帧onPictureTaken”），不要用`void param`吞掉。目标平台没有BURSTTYPE_CONTINUOUS时，在编排层自建连拍循环：记录在途帧，上一帧回调后检查队列再续拍，并提供stopContinuousBurst/isContinuousBurstInProgress。做不到时登记FWD-REF或PD，不能静默退化成单拍。",
+    "切片实现阶段：AC的目标符号落在他切片或共享文件时（如F002-AC86 标:MainPageVM.takePhotoButtonLongClick），按占位协议登记FWD-REF或带verify的HANDOFF，写清owner、入口签名和门控条件。不能只在文件头写“长按手势识别归MainPageVM”，也不能在推理里决定Skip。依赖他方状态的方法（如lastContinuousFastBurst）同样要登记，不写“注入后升级”式散文桩。",
+    "group-closer接线阶段：解除FWD-REF前，确认被调方提供了registry描述的语义，例如stopContinuousBurst。找不到时保留或升级缺口，不用名字相近的API（如cancelRepeat）顶替后标resolved。组装快门等控件时，对照slice计划的“含ACxx触发侧”和被调文件头的入口说明，逐个补齐点击、长按、松手回调。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/PhotoCaptureOrchestrator.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F002-photo-capture-save.md",
+          "at": "2026-10-01T16:41:34.309Z",
+          "reason": "正常输入：Slice 3实现者Read回执第306行F002-AC86写明长按快门进入连续快拍，continuous_fast_burst=true传至takePicturePressed/takePhoto，松手stopContinuousBurst；判定为“连续多帧onPictureTaken”（agent-a46e99f7c0baf2d05.jsonl:L25-L26）。这足以说明编排器必须处理连拍标志。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/MainActivity.java",
+          "at": "2026-10-01T16:43:51.170Z",
+          "reason": "正常输入：Bash sed回执给出longClickedTakePhoto全段：视频不响应；supportsFastBurst且当前尺寸supports_burst；Standard+RAW-only拒绝；Standard/FastBurst调用takePicturePressed(false, true)（agent-a46e99f7c0baf2d05.jsonl:L84-L85）。"
+        },
+        {
+          "key": "agent-a46e99f7c0baf2d05.jsonl",
+          "at": "2026-10-01T17:15:12.762Z",
+          "reason": "读到AC86与长按源码后，Write PhotoCaptureOrchestrator：takePicturePressed注释“AC86长按快拍亦经此”；takePhotoWhenFocused却以`void continuousFastBurst`丢弃标志，只拍一次，也没有连拍循环或stopContinuousBurst（L317-L318）。设计推理只把它写成“phase+takePicture”（L313），长按入口则决定Skip不登记（L194）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "Slice 3实现者写编排器前用Bash执行sed -n '1770,1810p'读取该MainActivity.java，回执含longClickedTakePhoto的视频/fast burst/RAW-only门控及takePicturePressed(false, true)；这是写前对源码长按入口的真实读取。",
+          "evidence": [
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-a46e99f7c0baf2d05.jsonl",
+              "line": 84
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-a46e99f7c0baf2d05.jsonl",
+              "line": 85
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/MainPageVM.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F011-app-integration.md",
+          "at": "2026-10-01T16:42:15.802Z",
+          "reason": "正常输入：Slice 11实现者Read回执含F011-AC170“getPausePreviewPref三否决：录像中/连续快拍后/全景”、AC199“ACTION_UP后若连续快拍进行中→stopContinuousBurst”（agent-a690eb1a2619c2d76.jsonl:L27-L28）。lastContinuousFastBurst需要真实连拍状态。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/.claude/skills/a2h-execute/references/agent-prompts/_common.md",
+          "at": "2026-10-01T16:42:11.089Z",
+          "reason": "正常输入：占位规则§2.1写明合法占位须为已登记的7类marker，“未登记/自由文本一律FAIL”，“待接入xxx后替换”类散文注释不得代替marker（agent-a690eb1a2619c2d76.jsonl:L21-L22）。"
+        },
+        {
+          "key": "agent-a690eb1a2619c2d76.jsonl",
+          "at": "2026-10-01T17:09:24.559Z",
+          "reason": "Write MainPageVM时把lastContinuousFastBurst写成`return false; // F002 连拍状态注入后升级`，未发P-ID，registry也无对应行（L395-L396）。同一实现者在source-notes中把longClickedTakePhoto误记为“归F004”（L206），因此没有任何一方认领长按开始入口。停止侧它正确登记了P-S11-005（L410起）。",
+          "problem": true
+        },
+        {
+          "key": "agent-a46e99f7c0baf2d05.jsonl",
+          "at": "2026-10-01T17:15:12.762Z",
+          "reason": "Slice 3写出的PhotoCaptureOrchestrator没有stopContinuousBurst/连拍状态，takePhotoWhenFocused丢弃continuousFastBurst（L317-L318）。P-S11-005指向的被调能力因此不存在。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/PhotoCaptureOrchestrator.ets",
+          "at": "2026-10-01T17:31:13.534Z",
+          "reason": "交付桥梁：closer的Read回执是Slice 3的编排器，只有cancelRepeat等重复拍照接口，没有连拍停止接口；文件头写“AC86经takePicturePressed(false, true)入口；长按手势识别归MainPageVM”（agent-acb5c3d58575999a4.jsonl:L85-L86）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/placeholder-registry.md",
+          "at": "2026-10-01T17:29:12.866Z",
+          "reason": "正常输入：closer grep registry的回执含P-S11-005“MainPageVM#takePhotoButtonLongClickCancelled｜F002连续快拍停止入口stopContinuousBurst接管——AC199松手即停”（agent-acb5c3d58575999a4.jsonl:L34-L35）。这已说明需要的是连拍停止语义。"
+        },
+        {
+          "key": "agent-acb5c3d58575999a4.jsonl",
+          "at": "2026-10-01T18:29:47.986Z",
+          "reason": "推理中确认编排器没有stopContinuousBurst，但决定“wire → orchestrator.cancelRepeat()（closest semantic）”（L251）。随后Edit把P-S11-005解除为`this.photoCapture?.cancelRepeat()`，注释为“F002编排器repeat取消通道”（L408-L409）。这是用重复拍照取消替换连拍停止，并关闭了缺口；lastContinuousFastBurst的散文桩也未处理。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": 7
+        },
+        {
+          "from": 6,
+          "to": 7,
+          "force": true,
+          "reason": "closer在工程根（cwd）用Bash grep spec/placeholder-registry.md列出组内P-S3…P-S11行，回执第416行即P-S11-005“F002连续快拍停止入口stopContinuousBurst接管——AC199松手即停”；这是解除该FWD-REF前对registry的真实读取。",
+          "evidence": [
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-acb5c3d58575999a4.jsonl",
+              "line": 34
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-acb5c3d58575999a4.jsonl",
+              "line": 35
+            }
+          ]
+        },
+        {
+          "from": 7,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/pages/MainPage.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F002-photo-capture-save.md",
+          "at": "2026-10-01T16:41:34.309Z",
+          "reason": "正常输入：F002-AC86把长按入口标为MainPageVM.takePhotoButtonLongClick，并给出偏好开/照片模式长按→连拍、视频模式拒绝的判定（agent-a46e99f7c0baf2d05.jsonl:L25-L26）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/.claude/skills/a2h-execute/references/agent-prompts/_common.md",
+          "at": "2026-10-01T16:41:26.988Z",
+          "reason": "正常输入：Slice 3实现者写前读到占位协议，规定跨文件移交须登记FWD-REF/HANDOFF，散文“由xxx负责”一律FAIL（agent-a46e99f7c0baf2d05.jsonl:L20-L21）。"
+        },
+        {
+          "key": "agent-a46e99f7c0baf2d05.jsonl",
+          "at": "2026-10-01T17:15:12.762Z",
+          "reason": "推理认定长按handler属于MainPage/closer，“no P-ID from me… Skip”（L194）。Write编排器时只在文件头写散文“长按手势识别归MainPageVM”（L317-L318）。长按入口没有进入registry或计划清单，后续接线者只能靠这句注释发现。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/PhotoCaptureOrchestrator.ets",
+          "at": "2026-10-01T17:31:13.534Z",
+          "reason": "交付桥梁：closer Read编排器，回执第15行“AC86长按连续快拍（经takePicturePressed(false, true)入口；长按手势识别归MainPageVM）”（agent-acb5c3d58575999a4.jsonl:L85-L86）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/plans/slices/slice-03-F002-photo-capture-save.md",
+          "at": "2026-10-01T17:28:48.091Z",
+          "reason": "正常输入：closer读到slice-03 cross_slice_edits，MainPage快门handler为“takePhotoButtonPressed（快门点击→拍照入口编排takePicturePressed/takePhoto，含AC83-89触发侧状态机）”（agent-acb5c3d58575999a4.jsonl:L12-L13）。AC86的长按触发属于这一范围，但计划没有把它单列成handler。"
+        },
+        {
+          "key": "agent-acb5c3d58575999a4.jsonl",
+          "at": "2026-10-01T18:40:12.235Z",
+          "reason": "已收到“含AC83-89触发侧”和“长按经takePicturePressed(false, true)”的提示，Write MainPage时快门Image仍只挂onClick→takePhotoButtonPressed→takePicturePressed(false, false)，没有长按手势或松手回调（L588-L589）。该组装一直保留到c752566。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 6
+        },
+        {
+          "from": 5,
+          "to": 6
+        },
+        {
+          "from": 6,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/PreviewEngine.ets",
+      "reason": "修复新增stopContinuousBurstHook、afterAutofocusCapture延续，并在closeCamera停连拍，用来支撑目标端自建连拍循环。生成期AF完成后takePhotoHook(false, false)与Android Preview.java:7132的takePhotoWhenFocused(false)同构，未找到独立偏差写入；缺口来自编排器没有实现连拍。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/CameraAppInterface.ets",
+      "reason": "修复给onPictureTaken链新增continuousBurstIndex参数并透传到onPictureTakenHost，用于连拍分组命名。这是模拟连拍的新接口，生成期签名与源接口一致，未单独归因。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/events/ApplicationInterface.ets",
+      "reason": "同上：onPictureTaken契约新增可选continuousBurstIndex，属于修复设计带来的新要求，生成期契约忠实于源接口:269。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/events/BasicApplicationInterface.ets",
+      "reason": "同上：默认实现签名随ApplicationInterface新增continuousBurstIndex，属于修复配套改动，未单独归因。"
+    }
+  ],
+  "job": "issue-56249562721f5dc59148",
+  "metadata": {
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code",
+        "codex"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3",
+        "gpt-6-astra"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.163.0",
+        "2.1.247",
+        "2.1.299"
+      ]
+    },
+    "source_set_id": "sources-974a9086706364eed8b7",
+    "environment": [
+      {
+        "name": "android.compile_sdk",
+        "value": "36",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/.claude/skills",
+        "at": "2026-10-01T09:52:21.840Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-aa8064d19722381a1.jsonl:L11",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-aa8064d19722381a1.jsonl:L10",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos",
+        "at": "2026-10-01T12:27:45.961Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b.jsonl:L1565",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b.jsonl:L1563",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos",
+        "at": "2026-10-01T13:34:44.665Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae78a452b1664bc61.jsonl:L149",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae78a452b1664bc61.jsonl:L148",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.11.1"
+  },
+  "revision": "96d52a064d3d02462086e833baf21aa8445479ee8ee000c27f3518b1a0190861"
+}
