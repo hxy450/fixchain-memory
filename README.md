@@ -2,6 +2,35 @@
 
 [从 memory/index.md 开始阅读](memory/index.md)
 
+## 仓库分工（迁移记忆系统）
+
+a2h 迁移记忆系统由四个仓库组成，三个代码仓在 fuxi-ailabs，经验库在 hxy450：
+
+```
+录制  fuxi-ailabs/a2h-migration-recordings
+        │ 会话录制包
+        ▼
+制卡 + 召回  fuxi-ailabs/a2h-memory
+  ├─ distill/                     制卡入口 ──卡/经验──▶ 经验库  hxy450/fixchain-memory
+  ├─ migloop/                     只放制卡要用的 skills/ 和 inquiry 内核     │ 导出包（memory/ + manifest.json）
+  └─ recall/ retrieval/ library/  召回 ◀──────────────────────────────────────┘
+        │ 迁移时注入
+        ▼
+评测与迭代  fuxi-ailabs/a2h-replay-bench
+  回放、设备评测、e2e 部署、结果账本、迭代 skill、经验候选清单
+        │ 钉版本、晋级 ──▶ 写回 fixchain-memory 的 refs
+```
+
+| 仓库 | 管什么 |
+|---|---|
+| [fuxi-ailabs/a2h-memory](https://github.com/fuxi-ailabs/a2h-memory) | 制卡（`distill/`、最小 `migloop/`）和召回（`recall/`、`retrieval/`、`library/`）；两边只靠导出包格式对接 |
+| [fuxi-ailabs/migloop](https://github.com/fuxi-ailabs/migloop) | migloop 全量：轨迹查看器、会话适配器、skill 源码、dist；a2h-memory 的 `migloop/` 从这里以 subtree 迁入 |
+| [fuxi-ailabs/a2h-replay-bench](https://github.com/fuxi-ailabs/a2h-replay-bench) | 评测与迭代：回放、设备评测、e2e 部署、结果、`skills/a2h-memory-iteration`、`results/lesson-candidates.md` |
+| [hxy450/fixchain-memory](https://github.com/hxy450/fixchain-memory) | 经验库本体：卡片、经验、各 revision；main 是生产线 |
+| [fuxi-ailabs/a2h-migration-recordings](https://github.com/fuxi-ailabs/a2h-migration-recordings) | 每次迁移和返修的完整录制，只追加 |
+
+整理过程和待办见 fixchain-memory `docs/memory-repos-plan.md`。
+
 ## 两层产物
 
 - `memory/`：开发维护用的渐进披露目录，保留每条经验的来源段，可直接点击到 `store/` 中对应版本的卡片。从根索引按任务进入相关主题，不必全量加载。
