@@ -1,6 +1,6 @@
 # 迁移记忆系统的代码仓整理方案
 
-日期：2026-10-23　｜　状态：待对齐（hxy450、夏仲天、fengyis）　｜　范围：a2h 迁移记忆的制卡、经验库、召回、评测、录制五个部分
+日期：2026-10-23　｜　状态：已决定全部仓库放在 fuxi-ailabs；其余待对齐（hxy450、夏仲天、fengyis）　｜　范围：a2h 迁移记忆的制卡、经验库、召回、评测、录制五个部分
 
 这一页只讲"哪个仓库管什么、怎么归位"。具体的迭代流程在 a2h-replay-bench 的 `skills/a2h-memory-iteration`（PR #1），经验候选清单在同一个 PR 的 `results/lesson-candidates.md`。
 
@@ -72,7 +72,7 @@
 |---|---|---|
 | 制卡的归属 | A. memory-engine 同步到 migloop 最新（24 个提交 + 0.11.1），之后只在 memory-engine 维护；B. 制卡继续在 migloop，memory-engine 只做通用引擎，定期从 migloop 取发布包 | 先问清 memory-engine 的时间表。它的目标是 FunctionGraph 上的通用引擎，a2h 制卡现在每周都在改；短期按 B，等 memory-engine 能跑通一次完整 a2h 制卡再切 A |
 | a2h-recall 的来源 | §3 的 A 或 B | B |
-| fixchain-memory、a2h-replay-bench、migloop 是否转到 fuxi-ailabs | 转移需要 hxy450 执行（fengyis 只有 push 权限）；或在 fuxi-ailabs 建镜像 | 转移。镜像会再多一份副本 |
+| fixchain-memory、a2h-replay-bench、migloop 转到 fuxi-ailabs | **已定（fengyis，10-23）：全部仓库放在 fuxi-ailabs。** 用 GitHub 的仓库转移，不建镜像：转移保留 issue、PR、star 和旧地址的自动跳转，镜像会多出一份要同步的副本。转移要由仓库所有者 hxy450 操作（fengyis 只有 push 权限）；hxy450 是 fuxi-ailabs 成员且有建仓权限，可直接在 Settings → Danger Zone → Transfer 里选 fuxi-ailabs，每个仓一次 | 转移后把本地 remote 改到新地址；`memory-refs.json`、`library/refs.json`、各 README 里的 `hxy450/...` 链接改成 `fuxi-ailabs/...` |
 | 评测三套口径 | bench 回放 + 设备评测、a2h-recall-eval、memory-eval L1–L3 | bench 做设备评测和迭代账本；a2h-recall-eval 做召回评测；memory-eval 的 L1 语义检查并入制卡的归并门禁，L2/L3 并入 bench。各自保留结果，不重跑 |
 | v2 结构线去留 | 合入生产线、或关闭 | 先做 v1/v2 对照（同一留出 app、同一召回、各 ≥2 次、同一模拟器），不和整理一起做 |
 
