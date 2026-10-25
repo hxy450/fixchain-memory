@@ -1,6 +1,6 @@
 # 平台差异只收敛确实做不到的那一步：写“无对等”前查证并记录，替代方案只作用于源端同一路径，其余出口、分支与回退照源端保留
 
-ID：`lesson-9c973e50aaea054facdc` · 版本：4
+ID：`lesson-9c973e50aaea054facdc` · 版本：5
 
 [本主题](index.md)
 
@@ -30,7 +30,7 @@ ID：`lesson-9c973e50aaea054facdc` · 版本：4
 6. 计划或台账写“执行已批准不可用 UX”一类汇总前，逐项核对所引决策是否覆盖该能力；不在内的单列为接入任务或待批决策。
 7. 实现者只按差异条目列明的出口收敛；条目没覆盖的行为照源端实现，确需降级时登记为显式偏离或占位，不写成已实现。收到与源端基类行为冲突的开关接口位（如源端无条件开启前台派发，接口却要求按开关注册）时，回报规格冲突。差异决策的前提可以就地核对时（手边 SDK 声明里查得到所称不存在的接口，或理由只有成本、复杂度），回报决策冲突，不照写恒定状态、无效设置行或最小降级。
 
-来源支持：21 张卡 · 已知 4 次迁移（部分未记录） · 已知 4 个应用（部分未记录）
+来源支持：25 张卡 · 已知 4 次迁移（部分未记录） · 已知 4 个应用（部分未记录）
 
 ## 来源（按需复核）
 
@@ -52,6 +52,8 @@ ID：`lesson-9c973e50aaea054facdc` · 版本：4
   卡片版本：`d62d1ca408ead4c6087ee8493ffc6be944e20a88c5230ed7af8f16298d439621`
 - [case-7456fcf259be55a8834b](../../../store/cases/case-7456fcf259be55a8834b/0fcbb858330dc0692a5ef76947e2ee1aae9990c5195f78148938c87b3ce94fe8.json) · 结论：recommendation:3
   卡片版本：`0fcbb858330dc0692a5ef76947e2ee1aae9990c5195f78148938c87b3ce94fe8`
+- [case-76fcde297f6a5406e58f](../../../store/cases/case-76fcde297f6a5406e58f/4fe7565a766323ef4f1d2f178dcd030e8db4d702b78336c519b17cf80d48da0d.json) · 结论：recommendation:4, recommendation:5
+  卡片版本：`4fe7565a766323ef4f1d2f178dcd030e8db4d702b78336c519b17cf80d48da0d`
 - [case-7e6984a7fa6d5845737b](../../../store/cases/case-7e6984a7fa6d5845737b/28061d97667de8051e1a704ca4104b16d7db6a03989478ec6a0298430dae5dba.json) · 结论：diagnosis, recommendation:3
   卡片版本：`28061d97667de8051e1a704ca4104b16d7db6a03989478ec6a0298430dae5dba`
 - [case-7f8dcb2d9341693d1225](../../../store/cases/case-7f8dcb2d9341693d1225/9bc002a9ae47b1515ae4f83a7641866747bdf2d6e5d4dae238785c21ea360875.json) · 结论：diagnosis, recommendation:1
@@ -64,6 +66,10 @@ ID：`lesson-9c973e50aaea054facdc` · 版本：4
   卡片版本：`7d12da37377f7c970931508bbb172dfde97532993727638bbbfba2a8f413f627`
 - [case-ac823e7436e1b08612ba](../../../store/cases/case-ac823e7436e1b08612ba/001e12d63eb0e435e0b1844db82cdbae78fc17a4ab6d1e93e6e523d3d5f4f174.json) · 结论：recommendation:1
   卡片版本：`001e12d63eb0e435e0b1844db82cdbae78fc17a4ab6d1e93e6e523d3d5f4f174`
+- [case-be892688a05d8782271e](../../../store/cases/case-be892688a05d8782271e/0ae36d4e4a546c82b4b5f7f45cbb7e9843fceab665aabf81d810a3236c2985c6.json) · 结论：recommendation:3
+  卡片版本：`0ae36d4e4a546c82b4b5f7f45cbb7e9843fceab665aabf81d810a3236c2985c6`
+- [case-cbf23fa7a4ed42d37671](../../../store/cases/case-cbf23fa7a4ed42d37671/013c03becf2fdb81fe5d3bb32c60d6635f41ed3de130131a61605958b50d27f5.json) · 结论：diagnosis, recommendation:1
+  卡片版本：`013c03becf2fdb81fe5d3bb32c60d6635f41ed3de130131a61605958b50d27f5`
 - [case-d923c5dbfc1e66ce5f8b](../../../store/cases/case-d923c5dbfc1e66ce5f8b/543d2282bb0caf83001b49301e407e5e4256669899f59d4fbf9d64c789925c37.json) · 结论：diagnosis, recommendation:2, recommendation:3, recommendation:4
   卡片版本：`543d2282bb0caf83001b49301e407e5e4256669899f59d4fbf9d64c789925c37`
 - [case-d9c2b75062eb57796ca2](../../../store/cases/case-d9c2b75062eb57796ca2/c0e0684d2567560ee8d44f49d9c8eb3a4d4b3cc9ba5d7380a8e25a3b0f7792e8.json) · 结论：diagnosis, recommendation:1, recommendation:2
@@ -72,6 +78,8 @@ ID：`lesson-9c973e50aaea054facdc` · 版本：4
   卡片版本：`a4237b5912157b58b0850e3ddd1757e5ca48ae3bbbf0bd425ee7c766aee19544`
 - [case-ea77ad96a8fa0f09fbc8](../../../store/cases/case-ea77ad96a8fa0f09fbc8/6cd1f556630841a2ecd89461200b4ea6d26d01cbaca3eb1b97acaec296947081.json) · 结论：recommendation:2, recommendation:5
   卡片版本：`6cd1f556630841a2ecd89461200b4ea6d26d01cbaca3eb1b97acaec296947081`
+- [case-ef167da8e80990c31714](../../../store/cases/case-ef167da8e80990c31714/b0741045842d4ef96db79c2bd8c9a99425324ad7612422a92bb274517b7f68a8.json) · 结论：recommendation:2
+  卡片版本：`b0741045842d4ef96db79c2bd8c9a99425324ad7612422a92bb274517b7f68a8`
 - [case-f3d590ba381f544833aa](../../../store/cases/case-f3d590ba381f544833aa/325219ee0b387ba129bb7f81d453f59f12c49ab4a600282dca41d129b45ee3f4.json) · 结论：recommendation:1
   卡片版本：`325219ee0b387ba129bb7f81d453f59f12c49ab4a600282dca41d129b45ee3f4`
 - [case-f4fef12b5d994df457b2](../../../store/cases/case-f4fef12b5d994df457b2/1df73908a2600045d97b85fa5e386b5b50972e141d1cd5505d5df882f5ebbad2.json) · 结论：diagnosis, recommendation:1

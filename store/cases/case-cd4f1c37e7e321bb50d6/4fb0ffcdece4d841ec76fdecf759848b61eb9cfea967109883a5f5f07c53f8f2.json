@@ -1,0 +1,114 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-cd4f1c37e7e321bb50d6",
+  "created_at": "2026-10-23T15:49:18.673286+00:00",
+  "migration_key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/memory-distill-opencamera-20261023/pool",
+  "title": "把系统删除确认框的用户取消当成权限失败提示",
+  "when": "返修实现阶段，为带系统确认框的媒体删除接口设计 Promise 拒绝后的用户提示与测试时",
+  "description": "目标平台删除接口（photoAccessHelper.MediaAssetChangeRequest.deleteAssets）先校验写图库权限、再弹出系统删除确认框；Promise 拒绝既可能是权限不足，也可能是用户在确认框点取消。源 Android 删除失败只记日志、不提示；现有测试已把“rejected or cancelled”删除定为不提示。",
+  "summary": "写前实际收到：session_archive（Codex 01a14ab1-0349）读取既有回归\ntests/gallery-persistence.test.cjs，其中 'actual rejected or cancelled URI deletion\npreserves current thumbnail and persistent target' 断言取消/拒绝后 toasts 为空\n（0349 L4584→L4587）；它本人也在提案前确认“删除确认框是在写图库权限检查之后才出现”\n（L4492），读到的 SDK d.ts 只把 201 记为 Permission denied、未记载取消返回码（L4577→L4580）。\n因此“存在用户取消这一拒绝路径、取消应保持静默”已经给出，取消返回什么码则尚未核实。\n本次输出却在删除反馈提案中新增 reportDeleteFailure，把所有 code===201 一律映射为\nphoto_delete_permission_denied、其余拒绝映射为 photo_delete_failed（临时树 L4614–L4616），\n随后以差分脚本把该片段合入生产 MainPageVM.ets，并把上述“cancelled”测试期望改成\n['photo_delete_failed']（L4724–L4727）。偏差位于“已知有取消路径 → 失败提示映射”这一环：\n取消没有被单列，201 被当作权限的唯一含义。\n同一 agent 在随后的删除权限提案中加入 ensurePhotoDeletePermission，使确认框在授权后真正可达，\n并把 deleteAssets 改为在外层 try 中 await，任何拒绝都进入 reportDeleteFailure；其测试\n'native denial or cancellation never forgets target' 把异步取消假定为 14000011 并期望失败提示，\nreview.md 也写明取消显示“truthful feedback”（L5178、L5352–L5355 patch 合入）。\n这一步考虑了取消，但用未核实的返回码建模，且保留 201→权限映射，没有回到设备核对。\nsigned26r1 设备上点 Cancel，系统以 201 + 'user deny' 拒绝 deleteAssets Promise，界面误报“此应用无权删除”\n（root 01a14aae L10132、L10179；日志 180-clean26r1-cancel-js.log）。\nFINAL 改为先取得 deleteAssets Promise，仅在内层异步拒绝且 code===201 && message==='user deny' 时\n视为取消：info 日志、不提示、不忘记媒体；同步异常与权限申请失败仍走 reportDeleteFailure\n（0349 L5936、L6047；root L10419 改 `as Error` 以通过 ArkTS 检查）。\n这是返修中新生问题，c752566 的生成代码删除失败只记日志，与 Android 一致。\n",
+  "recommendations": [
+    "实现删除等带系统确认框的接口提示前，把“用户取消”列为独立结果：先在设备上点一次取消，记录拒绝路径（同步抛出或 Promise 拒绝）及 code/message，再写提示映射；未核实前不要把 201 等错误码一律解释为权限不足。",
+    "改写已有测试中“rejected or cancelled”的期望前，先拆成取消与失败两个用例：取消保持仅日志、不提示、不清除媒体记录；只有真正失败才显示失败或权限提示。",
+    "测试替身中的取消返回值使用设备实测值（本任务为异步拒绝 201 + 'user deny'），并分别覆盖同步异常、权限申请失败与确认框取消；不要用假定的 14000011 代表取消。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/MainPageVM.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "nodes": [
+        {
+          "key": "01a14ab1-0349-7ef2-bfcf-3f537bcd7f67",
+          "at": "2026-10-18T04:42:58.270Z",
+          "reason": "写前输入：sed 读回既有回归 tests/gallery-persistence.test.cjs，'actual rejected or cancelled URI deletion preserves current thumbnail and persistent target' 对取消/拒绝断言 toasts 为空（rollout-…01a14ab1-0349….jsonl L4584→L4587）；自述系统删除确认框出现在写权限检查之后（L4492）；SDK d.ts 只列 201 Permission denied（L4577→L4580）。输出偏差：删除反馈提案写出 reportDeleteFailure，code===201 一律映射 photo_delete_permission_denied、其余拒绝映射 photo_delete_failed（临时树 L4614–L4616），差分脚本将该片段写入生产 MainPageVM.ets，并把 cancelled 用例期望改为 ['photo_delete_failed']（L4724–L4727）。没有单列取消，也没有核实取消返回码。",
+          "problem": true
+        },
+        {
+          "key": "01a14ab1-0349-7ef2-bfcf-3f537bcd7f67",
+          "at": "2026-10-18T05:42:00.353Z",
+          "reason": "写前输入：自己合入的 reportDeleteFailure 与“授权后才弹确认框”的判断（L5158）。输出偏差：删除权限提案加入 ensurePhotoDeletePermission，使授权后系统确认框可达，并把 deleteAssets 改为在外层 try 中 await，任何拒绝都交给 reportDeleteFailure；其测试把异步取消假定为 14000011 并期望 photo_delete_failed（L5178），review.md 写明取消也显示失败反馈，且保留 201→权限映射。patch -p1 合入生产 MainPageVM.ets，回执列出该文件（L5352–L5355）。这里考虑了取消，但取消返回码没有经过核实。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": "target"
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "图中未画写前输入节点：0349 在 04:42:51 的差分脚本写入（L4724–L4727）和 05:42 的 patch -p1 写入（L5352–L5355）都没有被索引解析，普通边只能绑定到它 02:40 对同一文件的较早、无关写入（L2216）。因此 04:37 读取测试文件这一输入（L4584→L4587）无法画成非倒序路径，只能在节点 reason 和 summary 中写出原文位置；图中的边只证明 0349 在相应时刻前写过目标文件。",
+    "本机 API24 photoAccessHelper.d.ts 的 deleteAssets 只列 201 Permission denied，未记载取消码；修复者联网查官方实现未取得 'user deny' 来源（0349 L5852–L5911）。FINAL 依据的是设备日志中的 201 + 'user deny'，不是 SDK 文档，该字符串是否为稳定契约尚未核实。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-cd4f1c37e7e321bb50d6",
+  "metadata": {
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code",
+        "codex"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3",
+        "gpt-6-astra"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.163.0",
+        "2.1.247",
+        "2.1.299"
+      ]
+    },
+    "source_set_id": "sources-974a9086706364eed8b7",
+    "environment": [
+      {
+        "name": "android.compile_sdk",
+        "value": "36",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/.claude/skills",
+        "at": "2026-10-01T09:52:21.840Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-aa8064d19722381a1.jsonl:L11",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-aa8064d19722381a1.jsonl:L10",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos",
+        "at": "2026-10-01T12:27:45.961Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b.jsonl:L1565",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b.jsonl:L1563",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos",
+        "at": "2026-10-01T13:34:44.665Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae78a452b1664bc61.jsonl:L149",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae78a452b1664bc61.jsonl:L148",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.11.1"
+  },
+  "revision": "4fb0ffcdece4d841ec76fdecf759848b61eb9cfea967109883a5f5f07c53f8f2"
+}

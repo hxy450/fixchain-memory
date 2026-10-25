@@ -1,0 +1,521 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-d5698429a34c85664785",
+  "created_at": "2026-10-23T14:44:09.819824+00:00",
+  "migration_key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/memory-distill-opencamera-20261023/pool",
+  "title": "能力门与设置快照契约按“近似”落地：intent/陀螺仪/burst 条件被删、Bundle 只填部分键、分辨率偏好自拟 WxH 且丢弃约束",
+  "when": "功能切片实现阶段，把 Android MainActivity.supports* 能力门、openSettings 能力快照 Bundle、分辨率偏好读写与尺寸约束翻译成 ArkTS ViewModel/页面契约时",
+  "description": "源端 supportsExpoBracketing/FocusBracketing/Panorama/FastBurst 先判 isImageCaptureIntent，全景要陀螺仪，FastBurst/NR 还要 preview.supportsBurst/supportsExposureTime；openSettings 用数十个 bundle.put 把尺寸数组、曝光/ISO/白平衡范围、video_quality(_string)/fps、is_multi_cam 等交给 PreferenceSub* 子屏；MyApplicationInterface 以 'W H' 存分辨率偏好，全景走 choosePanoramaResolution，HDR/NR 设 18MP 约束并由 Preview 过滤尺寸。目标工程按切片并行生成，能力判断、快照生产与消费、尺寸选择分散在多个 ViewModel/Page 文件，ApplicationInterface 契约可能暂缺 isImageCaptureIntent 等入口。",
+  "summary": "本卡四个子问题都发生在切片实现环节，写前输入大多已给出源条件，输出把它们“近似”掉了；成因分四类。\n\n① 设置快照生产方漏键、NR/FastBurst 只看内存（B13 生产侧、B14、B22 的 isMultiCam）。\nSlice 11 生成者 agent-a690eb1a2619c2d76 写前读到 F011 规格：AC86 要求 supports_* 家族（含 nr）\n与 min/max 数值域整包传入设置页，SettingsPage 契约写明 SettingsBundle 含“分辨率/视频质量/fps 表”，\nAC205 写“supportsNoiseReduction 需 ≥512MB（NR 另需 burst+exposureTime）”（L28）。它读到的 SettingsBundle.ets\n已声明 resolutionWidths/previewWidths/videoWidths、iso/曝光/白平衡范围、flashValues/focusValues、\nmin/maxZoomFactor、videoQuality、isMultiCam 等字段，并注明由“生产方（Slice 11 openSettings 接线）注入真实探测值”（L71）；\n它读的 MainActivity.openSettings 窗口（2620-2799）逐行列出 is_multi_cam、supports_jpeg_r、supports_burst_raw、supports_nr、\npreview_widths、resolution_widths、iso_range_min 等 bundle.put（L124）。L410 的 MainPageVM 重写中，\nbuildSettingsBundle 只填 cameraId、几个 supports 布尔和当前预览/照片尺寸，尺寸数组、各数值范围、闪光/对焦值、zoom、\n视频质量/fps、jpeg_r/nr/burst_raw、isMultiCam 都没填（features 变量已在手）；\nsupportsNoiseReduction/supportsFastBurst 都只写 return largeHeapMemory >= 512。NR 的额外条件规格已明写，属实现偏离；\nFastBurst 的 burst 条件规格 AC205 和阈值表只写“≥512MB”，生成者也没读 MainActivity.java:5588-5593，这一半是规格缺口加未查源码。\n之后 group closer acb5c3 只补了 GUI 子屏的 supports_flash 等 6 键（L448），上述缺口在执行结束态 c752566 原样保留。\n\n② 设置子屏消费方明知缺键却降级（B13 消费侧）。Slice 2 的 agent-a352fe0d1b03b0f9c 写前读完 PreferenceSubVideo.java，\n其中读取 cameraIdSPhysical、video_quality_string、video_fps、video_fps_high_speed、video_quality_preference_key、\nsupports_force_video_4k（L40）；当前 VideoSettingsPage 的 VideoSettingsParam 也已按这些键建模（L90）。\nL315 新增的 SettingsBundle 分支却只取 cameraOpen 等 5 项，注释写“SettingsBundle 未携带 video_quality_string/video_fps\n扩展键：画质条目回退 value 原串、帧率条目仅 default”，传入空数组，并丢掉 supportsForceVideo4k、cameraIdSPhysical、\nvideoQualityPreferenceKey。P-S2-0131/0132 就此算作解除，没有给生产方留下缺键占位，所以 closer 也没有补视频键。\n\n③ 拍照模式能力门删掉 intent 门、用自动水平代替陀螺仪（B22）。Slice 5 的 agent-a06740e73018ad308 写前读到\nMainActivity.supportsExpoBracketing/FocusBracketing/Panorama/FastBurst 的源码，四者都先判 isImageCaptureIntent，\n全景是 large_heap_memory >= 256 && getGyroSensor().hasSensors()（L131、L154）。它 grep ApplicationInterface.ets\n没找到 isImageCaptureIntent（L153-L155）后，在 ViewfinderCapabilities 中把注释写成“image capture intent 档 HMOS 无入口，\n恒 false 近似”，所有 intent 门都删掉；supportsPanorama 的注释写“陀螺仪”，实现却是 deviceSupportsAutoStabilise()\n（canIUse('SystemCapability.Sensors.Sensor')）（L172）。同一 agent 在 MainUIController 用 new ViewfinderCapabilities(engine, appInterface)\n构造能力对象，不注入任何 intent 来源（L238）；closer acb5c3 读到这个构造签名（L136-L137），在 MainPage 按原样\nnew MainUIController(engine, vm.appInterface, this.uiState, hostContext)（L567）。与此同时 Slice 11 已实现\nCameraAppInterface.isImageCaptureIntent，MainPageVM.supportsPanorama 也用了 GyroSensorService，两套能力判断从此不一致。\n\n④ 分辨率偏好格式与尺寸约束未按源实现（B15）。Slice 1 的 agent-ae5882c40105e3f01 写前读到 F001-AC101\n“约束不满足时选满足约束的最大（无则最小）”，ApplicationInterface 契约 getCameraResolutionPref(constraints)，\n以及 Preview.java:3066 的 getCameraResolutionPref(photo_size_constraints) 和 :7860-7885 getSupportedPictureSizes(check_supported) 的过滤逻辑\n（L26、L52、L102、L110）。PreviewEngine 写成 getCameraResolutionPref(null)，只做两分支，getSupportedPictureSizes() 不带过滤参数（L272）。\nSlice 5 读到 PopupView.java:383 的 getSupportedPictureSizes(true)，也读到 PreviewEngine 只有无参版本（L76、L104），\n于是 popup 分辨率列表直接用全量尺寸，没有登记缺口（L204）。Slice 11 写 CameraAppInterface 时读到契约的 constraints 参数，\nF011 常量表也写了“NR/HDR 分辨力上限 max_mp=18000000（MyApplicationInterface.java:618）”（L28、L62）。但它没读\nMyApplicationInterface.java:529-625/3116，就把 getCameraResolutionPref 写成无参、按 'x' 拆分，setCameraResolutionPref\n写 `${width}x${height}`；全景选择和 18MP 约束都没有实现（L387）。同工程 PopupPanelBuilder 与 PhotoSettingsPage 写的是 'W H'，\n设置页选的分辨率因此解析失败。closer 后来只把参数补成 _constraints，注释“constraints 未消费”。\n\n修复（Codex parity_audit，2026-10-18）：B13 在 SettingsBundle 中补 cameraIdSPhysical、videoQualityString/PreferenceKey、videoFps/HighSpeed、\njpeg_r/nr/burst_raw 等字段，buildSettingsBundle 全量填充并新增 settingsVideoDescription，VideoSettingsPage 改用 applyBundle 消费\n（L1879、L2171）。B14 让 FastBurst 额外要求 supports_burst，NR 再要求 supports_exposure_time（L2055）。\nB15 读取时兼容 'W H' 和 'WxH'，写入 'W H'；全景用 choosePanoramaResolution 且不写偏好，HDR/NR 设 max_mp=18e6，\nPreviewEngine 在会话内降档，并新增 getSupportedPictureSizes(checkSupported)，popup 用过滤版（L1942、L2363、L2371、L2380）。\nB22 给 ViewfinderCapabilities 注入 isImageCaptureIntent，全景改用 GyroSensorService.hasSensors，\nMainUIController/MainPage 逐层传入，bundle.isMultiCam 由 MultiCamSelector 填（L3329）。FINAL 2b66258 保留。\n",
+  "recommendations": [
+    "实现阶段：移植 MainActivity.supports* 能力门时，先把每个函数的全部源条件逐条列成“源条件 → 目标表达式”对照表（isImageCaptureIntent、large_heap_memory 阈值、getGyroSensor().hasSensors()、preview.supportsBurst()、preview.supportsExposureTime()），再写代码。不要用相近能力代替，例如自动水平设备位不能代替陀螺仪。",
+    "实现阶段：契约暂缺某个判断入口（例如 ApplicationInterface 没有 isImageCaptureIntent）时，在能力类构造参数中留注入点，或按发号协议登记 FWD-REF 交给拥有者，不要写“HMOS 无入口，恒 false 近似”删掉整条门控。并行切片已经实现同一判断时，复用那边的实现（例如 CameraAppInterface.isImageCaptureIntent、GyroSensorService）。",
+    "实现阶段（快照生产方）：构造设置能力快照时，以源 openSettings 的 bundle.put 清单和各 PreferenceSub* 的 bundle.get 清单为准逐键赋值。目标模型已声明但没有赋值的字段（尺寸数组、曝光/ISO/白平衡范围、flash/focus 值、zoom、video_quality(_string)/fps/high_speed、jpeg_r/nr/burst_raw、is_multi_cam、cameraIdSPhysical）要么补齐，要么登记缺口。检查方法：对源 bundle.put 的键名与目标赋值字段求差集，结果应为空或每项都有说明。",
+    "实现阶段（快照消费方）：子屏发现宿主快照缺少源端会传的键时，扩展共享模型，或给生产方登记 forward-ref。不要在注释里承认缺键后传空数组降级，同时把本页占位标成已解除。",
+    "实现阶段：偏好值的序列化格式以源函数和同工程其他读写方为准。实现 getCameraResolutionPref/setCameraResolutionPref 前，先读 MyApplicationInterface 中对应的函数：格式是 'W H'；全景用 choosePanoramaResolution，且不回写偏好；HDR/NR 设 constraints.max_mp=18000000。保留契约里的 constraints 参数。检查方法：用设置页或 popup 写入的值调用 getCameraResolutionPref，应解析回同一尺寸。",
+    "实现阶段：移植 Preview 的尺寸选择时，把 photo_size_constraints 传进 getCameraResolutionPref，并实现 AC 写明的“约束不满足时降到满足约束的最大尺寸”分支。getSupportedPictureSizes 要保留 check_supported 参数（按 burst/扩展/约束过滤），popup 这类调用 (true) 的消费方要用过滤版。",
+    "规格提取阶段：能力门组 AC 要逐项抄全源条件。F011-AC205 和阈值表对 FastBurst 只写了 ≥512MB，漏掉了 preview.supportsBurst()；源码锚点所在函数有多重条件时，在 AC 中逐条列出。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/MainPageVM.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F011-app-integration.md",
+          "at": "2026-10-01T16:42:15.802Z",
+          "reason": "正常输入（NR 部分足够，FastBurst 部分缺 burst 条件）。Read 回执给出三项内容：AC86 要求 supports_* 家族（含 nr）与 min/max 数值域整包传入设置页；SettingsPage 入参契约写明 SettingsBundle 含“分辨率/视频质量/fps 表”；AC205 写 supportsFastBurst/supportsNoiseReduction/supportsBurstRaw 需 ≥512MB（NR 另需 burst+exposureTime）。FastBurst 一项只写了内存条件（agent-a690eb1a2619c2d76.jsonl:L27-L28）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/models/SettingsBundle.ets",
+          "at": "2026-10-01T16:43:26.842Z",
+          "reason": "正常输入：Read 回执给出能力快照类，已声明 previewWidths/videoWidths/resolutionWidths、exposure/iso/whiteBalance 范围、isMultiCam、videoQuality、flashValues/focusValues、min/maxZoomFactor 等字段，并注明“其余由生产方（Slice 11 openSettings 接线）注入真实探测值”（同转录 L70-L71）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/MainActivity.java",
+          "at": "2026-10-01T16:45:20.394Z",
+          "reason": "正常输入：Read 回执给出 openSettings 第 2645-2783 行的全部 bundle.put，含 is_multi_cam、supports_jpeg_r、supports_burst_raw、supports_nr、exposure_compensation_min/max、iso_range_min/max、white_balance_temperature_min/max、min/max_zoom_factor、preview_widths、resolution_widths/supports_burst，足以确定快照键清单（同转录 L123-L124）。生成者读过的 MainActivity 窗口不含 5588-5599 的 supportsFastBurst/NR 源码。"
+        },
+        {
+          "key": "agent-a690eb1a2619c2d76.jsonl",
+          "at": "2026-10-01T17:12:12.971Z",
+          "reason": "收到上述输入后，L395 与 L410 两次 Write MainPageVM。buildSettingsBundle 里 features 已取到，却只填 cameraId/nCameras/几项 supports 布尔与当前预览、照片尺寸；尺寸数组、各数值范围、闪光/对焦值、zoom、videoQuality/fps、jpeg_r/nr/burst_raw、isMultiCam 均未赋值。supportsNoiseReduction 把规格已写明的 burst+exposureTime 条件丢了，supportsFastBurst 也只剩内存门，两者都是 return largeHeapMemory >= 512（同转录 L395-L396、L410-L411）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/CameraAppInterface.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F011-app-integration.md",
+          "at": "2026-10-01T16:42:15.802Z",
+          "reason": "正常输入（约束部分足够，存储格式未写）：Read 回执常量表写“NR/HDR 分辨力上限 max_mp=18000000（MyApplicationInterface.java:618）”，并在 AC156 写 CameraResolutionConstraints.satisfies 语义；锚点直接指向 getCameraResolutionPref 函数体（agent-a690eb1a2619c2d76.jsonl:L27-L28）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/events/ApplicationInterface.ets",
+          "at": "2026-10-01T16:43:11.679Z",
+          "reason": "正常输入：Read 回执给出契约 getCameraResolutionPref(constraints: CameraResolutionConstraints): number[] | null，以及带 has_max_mp/max_mp 的 CameraResolutionConstraints 类（同转录 L61-L62）。"
+        },
+        {
+          "key": "agent-a690eb1a2619c2d76.jsonl",
+          "at": "2026-10-01T17:06:38.291Z",
+          "reason": "收到上述输入后，没有读 MyApplicationInterface.java:529-625/3116 的源函数（已读窗口为 60-437、690-1189、2110-2240、2496-2706、2940-3059、3316-3361、3758-3962）。Write CameraAppInterface 时把 getCameraResolutionPref 写成无参，注释自称“动态键 WxH 解析”，按 'x' 拆分；没有全景 choosePanoramaResolution 分支，也没有 HDR/NR 的 max_mp 约束。setCameraResolutionPref 写入 `${width}x${height}`，全景模式也照写。源端格式实为 'W H'（同转录 L387-L388）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/ViewfinderCapabilities.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F004-viewfinder-ui.md",
+          "at": "2026-10-01T16:41:43.094Z",
+          "reason": "正常输入：Read 回执中 F004-AC17 要求照片模式分组的 NoiseReduction/DRO/HDR/Panorama/FastBurst/ExpoBracketing/FocusBracketing 按 main_activity.supports* 裁剪，即以 MainActivity 源能力门为准（agent-a06740e73018ad308.jsonl:L25-L26）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/MainActivity.java",
+          "at": "2026-10-01T16:49:05.329Z",
+          "reason": "正常输入：Bash grep 回执给出 supportsExpoBracketing/supportsFocusBracketing 首行都是 if( applicationInterface.isImageCaptureIntent() ) return false，supportsFastBurst 同样先判 intent（同转录 L130-L131）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/MainActivity.java",
+          "at": "2026-10-01T16:51:55.898Z",
+          "reason": "正常输入：sed 回执给出完整 supportsPanorama，即 image capture intent → false，否则 large_heap_memory >= 256 && applicationInterface.getGyroSensor().hasSensors()。同一调用 grep ApplicationInterface.ets 未命中 isImageCaptureIntent，生成者由此知道契约缺这个入口（同转录 L153-L155）。"
+        },
+        {
+          "key": "agent-a06740e73018ad308.jsonl",
+          "at": "2026-10-01T16:53:57.207Z",
+          "reason": "收到上述源条件后，Write ViewfinderCapabilities：构造函数只收 engine/appInterface，注释写“image capture intent 档 HMOS 无入口，恒 false 近似”，supportsExpoBracketing/FocusBracketing/Panorama/FastBurst 都没有 intent 门，也没有登记占位。supportsPanorama 的注释写“非 capture intent + 内存 ≥256MB + 陀螺仪”，实现却是 largeHeapMemoryMb >= 256 && deviceSupportsAutoStabilise()，即 canIUse('SystemCapability.Sensors.Sensor')（同转录 L172-L173）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4,
+          "force": true,
+          "reason": "生成者 Bash grep -A 6 读取 MainActivity.java 的 supports* 函数，回执返回 supportsExpoBracketing/supportsFocusBracketing/supportsFastBurst 开头的 isImageCaptureIntent 判断，说明它写前已收到 intent 门控条件。",
+          "evidence": [
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-a06740e73018ad308.jsonl",
+              "line": 130
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-a06740e73018ad308.jsonl",
+              "line": 131
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "生成者 Bash sed -n '5577,5587p' 读取 MainActivity.java，回执返回完整 supportsPanorama（intent 门 + 内存 ≥256MB + getGyroSensor().hasSensors()）；同一调用 grep ApplicationInterface.ets 未命中 isImageCaptureIntent。说明它写前已收到全景源条件，也知道契约缺这个入口。",
+          "evidence": [
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-a06740e73018ad308.jsonl",
+              "line": 153
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-a06740e73018ad308.jsonl",
+              "line": 154
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/MainUIController.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/MainActivity.java",
+          "at": "2026-10-01T16:51:55.898Z",
+          "reason": "正常输入：supportsPanorama 源码回执写明能力门依赖 applicationInterface.isImageCaptureIntent() 和陀螺仪；生成者同时确认 ApplicationInterface 契约缺这个入口（agent-a06740e73018ad308.jsonl:L153-L155）。"
+        },
+        {
+          "key": "agent-a06740e73018ad308.jsonl",
+          "at": "2026-10-01T17:03:00.497Z",
+          "reason": "在 ViewfinderCapabilities 删去 intent 门之后，Write MainUIController 时构造函数只接 engine/appInterface/state/context，并以 new ViewfinderCapabilities(engine, appInterface) 创建能力对象，没有给 intent 判断留注入点。这是能力门缺口在控制器层的延续（同转录 L238-L239）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "生成者 Bash sed -n '5577,5587p' 读取 MainActivity.java，回执返回完整 supportsPanorama（intent 门 + 内存 ≥256MB + getGyroSensor().hasSensors()）；同一调用 grep ApplicationInterface.ets 未命中 isImageCaptureIntent。说明它写前已收到全景源条件，也知道契约缺这个入口。",
+          "evidence": [
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-a06740e73018ad308.jsonl",
+              "line": 153
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-a06740e73018ad308.jsonl",
+              "line": 154
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/pages/MainPage.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/MainActivity.java",
+          "at": "2026-10-01T16:51:55.898Z",
+          "reason": "正常输入：supportsPanorama 等源能力门依赖 isImageCaptureIntent，生成者已读到（agent-a06740e73018ad308.jsonl:L153-L155）。"
+        },
+        {
+          "key": "agent-a06740e73018ad308.jsonl",
+          "at": "2026-10-01T17:03:00.497Z",
+          "reason": "偏差起点：MainUIController 的构造签名不含 intent 来源，能力对象按 new ViewfinderCapabilities(engine, appInterface) 创建（同转录 L238-L239）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/MainUIController.ets",
+          "at": "2026-10-01T17:32:59.259Z",
+          "reason": "交付桥梁：group closer 的 sed 读取回执包含 constructor(engine, appInterface, state, context) 和 this.caps = new ViewfinderCapabilities(engine, appInterface)（agent-acb5c3d58575999a4.jsonl:L136-L137）。"
+        },
+        {
+          "key": "agent-acb5c3d58575999a4.jsonl",
+          "at": "2026-10-01T18:37:38.589Z",
+          "reason": "按读到的签名 Write MainPage，写出 new MainUIController(engine, vm.appInterface, this.uiState, hostContext)；此时 vm.appInterface.isImageCaptureIntent 已存在，但没有传入。本链只确认签名缺口被传递到页面，不另推定 closer 独立失职（同转录 L567-L568）。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "生成者 Bash sed -n '5577,5587p' 读取 MainActivity.java，回执返回完整 supportsPanorama（intent 门 + 内存 ≥256MB + getGyroSensor().hasSensors()）；同一调用 grep ApplicationInterface.ets 未命中 isImageCaptureIntent。说明它写前已收到全景源条件，也知道契约缺这个入口。",
+          "evidence": [
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-a06740e73018ad308.jsonl",
+              "line": 153
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-a06740e73018ad308.jsonl",
+              "line": 154
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "group closer Bash sed -n '1,120p' 读取 MainUIController.ets，回执包含 constructor(engine, appInterface, state, context) 和 this.caps = new ViewfinderCapabilities(engine, appInterface)，说明它写 MainPage 前已收到不带 intent 来源的构造签名。",
+          "evidence": [
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-acb5c3d58575999a4.jsonl",
+              "line": 136
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-acb5c3d58575999a4.jsonl",
+              "line": 137
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/pages/VideoSettingsPage.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/PreferenceSubVideo.java",
+          "at": "2026-10-01T14:58:02.647Z",
+          "reason": "正常输入：Read 回执给出子屏从 bundle 读取的键，包括 cameraId、cameraIdSPhysical、camera_open、video_quality、video_quality_string、video_fps、video_fps_high_speed、supports_tonemap_curve、supports_video_stabilization、supports_force_video_4k、video_quality_preference_key、video_is_high_speed，足以确定消费契约（agent-a352fe0d1b03b0f9c.jsonl:L39-L40）。"
+        },
+        {
+          "key": "agent-a352fe0d1b03b0f9c.jsonl",
+          "at": "2026-10-01T15:15:15.464Z",
+          "reason": "已知上述键，读到的现有页面也有按这些键建模的 VideoSettingsParam（L89-L90）。Edit onReady 新增 SettingsBundle 分支时只取 cameraOpen/supportsTonemapCurve/supportsVideoStabilization/videoHighSpeed/cameraId，注释承认“SettingsBundle 未携带 video_quality_string/video_fps 扩展键”。随后传空数组，画质条目退回原串，帧率只剩 default；supportsForceVideo4k、cameraIdSPhysical、videoQualityPreferenceKey 都没取。它没有扩展共享模型，也没有给生产方登记占位（同转录 L315-L316）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/PreviewEngine.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F001-camera-preview.md",
+          "at": "2026-10-01T14:57:03.096Z",
+          "reason": "正常输入：Read 回执中 F001-AC101 写明图片分辨率初始选择分三支：保存值命中→用保存值；未保存/失效→最大面积项；约束不满足时选满足约束的最大（无则最小）。AC100 另要求 burst/扩展模式下回退（agent-ae5882c40105e3f01.jsonl:L23、L26）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/events/ApplicationInterface.ets",
+          "at": "2026-10-01T14:57:56.598Z",
+          "reason": "正常输入：Read 回执给出 CameraResolutionConstraints（has_max_mp/max_mp/satisfies），以及要求传入约束对象的 getCameraResolutionPref(constraints) 契约（同转录 L51-L52）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/preview/Preview.java",
+          "at": "2026-10-01T14:59:44.486Z",
+          "reason": "正常输入：Read 回执第 3066 行为 applicationInterface.getCameraResolutionPref(photo_size_constraints)，随后是按约束选尺寸的逻辑（同转录 L101-L102）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/preview/Preview.java",
+          "at": "2026-10-01T14:59:59.218Z",
+          "reason": "正常输入：Read 回执第 7860-7885 行是 getSupportedPictureSizes(boolean check_supported)，check_supported 为真且处于 burst/扩展/有约束时，按 supportsRequirements 与 photo_size_constraints.satisfies 过滤（同转录 L109-L110）。"
+        },
+        {
+          "key": "agent-ae5882c40105e3f01.jsonl",
+          "at": "2026-10-01T15:25:31.156Z",
+          "reason": "收到上述输入后 Write PreviewEngine：注释标“AC101 三分支”，实际写 appInterface.getCameraResolutionPref(null)，只实现保存值和最大面积两支，没有约束降档；getSupportedPictureSizes() 去掉 check_supported 参数，直接返回 photoSizes，不做过滤（同转录 L272-L273）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 5
+        },
+        {
+          "from": 2,
+          "to": 5
+        },
+        {
+          "from": 3,
+          "to": 5
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/PopupPanelBuilder.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/preview/Preview.java",
+          "at": "2026-10-01T14:59:59.218Z",
+          "reason": "正常输入：Slice 1 生成者读到 getSupportedPictureSizes(check_supported) 的过滤语义（agent-ae5882c40105e3f01.jsonl:L109-L110）。"
+        },
+        {
+          "key": "agent-ae5882c40105e3f01.jsonl",
+          "at": "2026-10-01T15:25:31.156Z",
+          "reason": "偏差起点：PreviewEngine 只提供无参 getSupportedPictureSizes()，丢掉 check_supported 过滤（同转录 L272-L273）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/PreviewEngine.ets",
+          "at": "2026-10-01T16:46:05.952Z",
+          "reason": "交付桥梁：Slice 5 生成者 grep PreviewEngine 公开方法，回执列出 3167: getSupportedPictureSizes(): CameraSize[]，确认只有无参版本（agent-a06740e73018ad308.jsonl:L103-L104）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/ui/PopupView.java",
+          "at": "2026-10-01T16:43:29.492Z",
+          "reason": "正常输入：Read 回执第 383 行为 new ArrayList<>(preview.getSupportedPictureSizes(true))，popup 分辨率列表要用过滤后的尺寸（agent-a06740e73018ad308.jsonl:L75-L76）。"
+        },
+        {
+          "key": "agent-a06740e73018ad308.jsonl",
+          "at": "2026-10-01T16:58:41.149Z",
+          "reason": "已读源码 (true)，也知道 engine 只有无参版本。Write PopupPanelBuilder 时 appendPhotoResolutionGroup 直接用 engine.getSupportedPictureSizes().slice()，没有在 engine 侧补过滤参数，也没有登记缺口，所以 HDR/NR 约束和 burst 下不可用的尺寸都会出现在 popup（同转录 L204-L205）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 5,
+          "force": true,
+          "reason": "Slice 5 生成者 Bash grep 列出 PreviewEngine.ets 公开方法，回执含 3167: getSupportedPictureSizes(): CameraSize[]，说明它写 PopupPanelBuilder 前已确认 engine 只有无参、不过滤的尺寸接口。",
+          "evidence": [
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-a06740e73018ad308.jsonl",
+              "line": 103
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-a06740e73018ad308.jsonl",
+              "line": 104
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "F011 规格中 FastBurst 缺 supports_burst 条件的形成过程没有上溯，未查 F011 规格作者写前是否读过 MainActivity.java:5588-5593。本卡对 FastBurst 的归因限于规格缺口加生成者未读锚点源码。"
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/models/SettingsBundle.ets",
+      "reason": "已确认修复只在模型中补了 cameraIdSPhysical、videoQualityString/PreferenceKey、videoFps/HighSpeed、supports_jpeg_r/burst_raw/optimise_focus_latency/nr、max_expo_bracketing_n_images、supports_photo_video_recording（git 5f9655c..cb4c6d6）。这些都是 PreferenceSubPhoto/Video 读取的键。生成时该文件由 page_0002 converter aba46e19 创建，字段按 MyPreferenceFragment 消费的键建模（3315ff15 子代理 agent-aba46e19d4dc669fe.jsonl:L98）；closer acb5c3 只按 P-S2-0123/0145/0150 补了 GUI/Processing 键（agent-acb5c3d58575999a4.jsonl:L439-L443）。尚未核实 page_0002 规格或 coverage-matrix 是否要求该文件覆盖子屏键，所以缺字段的偏差边界（模型作者的建模范围，还是 Slice 2 降级后没有留下占位）尚未确定。消费侧的成因已归入 VideoSettingsPage 图。"
+    }
+  ],
+  "job": "issue-d5698429a34c85664785",
+  "metadata": {
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code",
+        "codex"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3",
+        "gpt-6-astra"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.163.0",
+        "2.1.247",
+        "2.1.299"
+      ]
+    },
+    "source_set_id": "sources-974a9086706364eed8b7",
+    "environment": [
+      {
+        "name": "android.compile_sdk",
+        "value": "36",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/.claude/skills",
+        "at": "2026-10-01T09:52:21.840Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-aa8064d19722381a1.jsonl:L11",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-aa8064d19722381a1.jsonl:L10",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos",
+        "at": "2026-10-01T12:27:45.961Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b.jsonl:L1565",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b.jsonl:L1563",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos",
+        "at": "2026-10-01T13:34:44.665Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae78a452b1664bc61.jsonl:L149",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae78a452b1664bc61.jsonl:L148",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.11.1"
+  },
+  "revision": "7ab31e28c5c952c7e5c7b20548bde4e7bd5dbfb464237ece26dfb1b81c2cebe0"
+}

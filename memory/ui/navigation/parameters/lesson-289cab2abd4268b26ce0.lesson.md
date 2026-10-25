@@ -1,6 +1,6 @@
 # 源页面从 arguments、Intent extras 或缓存接收的实体键与数据，在目标以显式入参承接并由宿主真实传入
 
-ID：`lesson-289cab2abd4268b26ce0` · 版本：3
+ID：`lesson-289cab2abd4268b26ce0` · 版本：4
 
 [本主题](index.md)
 
@@ -26,7 +26,7 @@ ID：`lesson-289cab2abd4268b26ce0` · 版本：3
 
 - 从宿主进入该页时，组件收到的实体键有效（如 cityCode > 0），事件回调已绑定到导航。
 
-来源支持：4 张卡 · 2 次迁移 · 2 个应用
+来源支持：5 张卡 · 已知 2 次迁移（部分未记录） · 已知 2 个应用（部分未记录）
 
 ## 来源（按需复核）
 
@@ -36,5 +36,7 @@ ID：`lesson-289cab2abd4268b26ce0` · 版本：3
   卡片版本：`e1713f686b8590a165e453057fb4f6b19ec40d66876b9ae7c88631b33bc7ced5`
 - [case-5d12548f9d559985c27d](../../../../store/cases/case-5d12548f9d559985c27d/608dbd2b1d6e008fc1af336ba33a164d3fc8a14bc9efa8aaf99219ea3d4be3a0.json) · 结论：diagnosis
   卡片版本：`608dbd2b1d6e008fc1af336ba33a164d3fc8a14bc9efa8aaf99219ea3d4be3a0`
+- [case-d5698429a34c85664785](../../../../store/cases/case-d5698429a34c85664785/7ab31e28c5c952c7e5c7b20548bde4e7bd5dbfb464237ece26dfb1b81c2cebe0.json) · 结论：diagnosis, recommendation:3
+  卡片版本：`7ab31e28c5c952c7e5c7b20548bde4e7bd5dbfb464237ece26dfb1b81c2cebe0`
 - [case-e7af91622703010ed47f](../../../../store/cases/case-e7af91622703010ed47f/ca3bef0c958a548e08983f174d26cced13cdd7ea2a57be3536b0c7ea8d2a7c32.json) · 结论：recommendation:3
   卡片版本：`ca3bef0c958a548e08983f174d26cced13cdd7ea2a57be3536b0c7ea8d2a7c32`

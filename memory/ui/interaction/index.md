@@ -1,6 +1,6 @@
 # ui/interaction
 
-点击命中与手势：Stack/弹窗覆盖层对下层点击的影响（含按钮上叠的进度环）、hitTestBehavior与防穿透、事件绑定和点击副作用、侧滑行的手势归属与滑删方向，以及事件触发时的坐标与锚点取值；含状态按钮的内容分支；源端监听回调被注释（死按钮）时的迁移与审计；根级硬件键盘快捷键与聚焦输入框的事件归属，Activity 级按键回调的挂载节点；源端只跟随首指的触控分支对 ArkUI 逐指派发的过滤；带文字的勾选控件拆成勾选框加文字时的可点范围；Compose 点击修饰符默认按压指示的补齐，combinedClickable 长按自带的系统触感；源端 clickable 吞触摸时的 Block/BLOCK_HIERARCHY，组件实例通用属性生成的包装节点与窗口级 ComponentContent 的命中，拖拽柄 Image 的默认系统拖拽；源端自写触摸状态机与框架手势助手（ItemTouchHelper、ScaleGestureDetector）按阈值与取消逐事件移植
+点击命中与手势：Stack/弹窗覆盖层对下层点击的影响（含按钮上叠的进度环）、hitTestBehavior与防穿透、事件绑定和点击副作用、侧滑行的手势归属与滑删方向，以及事件触发时的坐标与锚点取值；含状态按钮的内容分支；源端监听回调被注释（死按钮）时的迁移与审计；根级硬件键盘快捷键与聚焦输入框的事件归属，Activity 级按键回调的挂载节点；源端只跟随首指的触控分支对 ArkUI 逐指派发的过滤；带文字的勾选控件拆成勾选框加文字时的可点范围；Compose 点击修饰符默认按压指示的补齐，combinedClickable 长按自带的系统触感；源端 clickable 吞触摸时的 Block/BLOCK_HIERARCHY，组件实例通用属性生成的包装节点与窗口级 ComponentContent 的命中，拖拽柄 Image 的默认系统拖拽；源端自写触摸状态机与框架手势助手（ItemTouchHelper、ScaleGestureDetector）按阈值与取消逐事件移植；可复用行组件与外层 ListItem 的点击归属（子组件点击优先），键盘/遥控逐行导航的选择态放可观察模型
 
 [上一级](../index.md)
 
@@ -16,9 +16,9 @@
   - 时机：界面实现阶段，把 Compose combinedClickable(onLongClick = …) 的长按交互转写为 ArkUI LongPressGesture 或长按事件时
   - 情境：源端条目用 combinedClickable(onLongClick = …) 处理长按，hapticFeedbackEnabled 为 true（未显式关闭）；长按回调里可能另有业务振动（如跳步时的重击感）；目标用 LongPressGesture 只回调业务逻辑。
   - 例外：源端显式写 hapticFeedbackEnabled = false
-- [Image 作拖拽柄或按钮并自绘触摸拖拽时设 draggable(false)：ArkUI Image 默认可被系统拖出，长按会接管输入](lesson-7389433391eddbaea827.lesson.md)
-  - 时机：界面实现阶段，用 Image 承载拖拽柄、按钮或可点图标，并在其上挂 onTouch、PanGesture 等自绘拖拽或按压逻辑时
-  - 情境：源端在 ACTION_DOWN 或 onTouch 中立即开始自定义拖拽（如清单条目拖拽排序），或图标只是点击按钮；目标用 Image 组件实现，未设置 draggable。
+- [Image 承载点击/长按按钮或自绘拖拽柄时设 draggable(false)：ArkUI Image 默认可被系统拖出，按住会进入拖拽并接管输入](lesson-7389433391eddbaea827.lesson.md)
+  - 时机：界面实现阶段，用 Image 承载按钮、可点图标或拖拽柄时：在 Image 或其外层 Stack/Button 上挂 onClick、长按手势，或在其上挂 onTouch、PanGesture 等自绘拖拽或按压逻辑时
+  - 情境：源端在 ACTION_DOWN 或 onTouch 中立即开始自定义拖拽（如清单条目拖拽排序），或图标只是点击、长按按钮（ImageButton/可点 ImageView，如快门、缩略图入口、屏上开关图标），没有任何拖放行为；目标用 Image 组件实现（可外包挂点击的 Stack/Button），未设置 draggable。
   - 例外：源端本就允许把图片拖出到其他位置或应用时保留系统拖拽
 - [Stack 上层全尺寸容器和页面级遮罩会参与命中测试：不处理点击的覆盖层显式 Transparent，贴底内容栏直接锚定而不套全屏壳，条件遮罩与一次性动效层用根 Stack 条件子节点](lesson-4a4f8d845a204ffa244b.lesson.md)
   - 时机：界面实现与巡检修复阶段，把 FrameLayout 或 Compose Box 叠放层转成 ArkUI Stack、确定各层 hitTestBehavior 与贴底栏的定位方式时；为页面加保存中、引导等全屏遮罩时；实现彩纸等一次性全屏动效的覆盖层时
@@ -52,6 +52,9 @@
 - [源端在触发瞬间读取锚点窗口位置时，目标在点击回调里取本次手势坐标或即时查询，onAreaChange 缓存只作兜底；锚点取源端传入的同一元素](lesson-963bf871aa4e910a8fc8.lesson.md)
   - 时机：界面实现与修复阶段，为从点击处发出的动效或气泡（完成彩纸、锚点提示）确定起点坐标与锚点元素时
   - 情境：源端在动效或弹窗被调用时用 getLocationInWindow 读取传入锚点 View 的当下窗口中心；目标列表项存在 translate 平移、LazyForEach/Repeat 节点复用或弹层内滚动，写者准备用 onAreaChange 缓存控件位置。
+- [源端用键盘或遥控逐行逐项导航弹层与面板时，行/项选择与展开态放进可观察模型由按键处理层驱动，不存在组件 @Local](lesson-583f996e5a7bad4f5735.lesson.md)
+  - 时机：规格提取与菜单、弹层、参数面板实现阶段，迁移源端遥控或键盘导航模式（方向键在行间移动、确认键选中、行与项高亮）并确定选择态归属时
+  - 情境：源端以遥控模式一类状态在按键回调里调用 processRemoteUp/Down、commandMenu* 与 init*ForRemote 等方法，逐行、逐项高亮弹层与曝光面板并跳过不可见行；BLE 遥控与键盘共用这套导航。目标弹层把当前行索引、展开态写在组件 @Local 或不可观察的普通类里，按键分发与面板分属不同文件或 feature。
 - [源端监听回调体被注释时按无响应控件迁移；审计不因“已裁定/集成点”注释放行与源端运行态相背的接线](lesson-f3e614f295aa409485fd.lesson.md)
   - 时机：1:1 对齐审计与修复阶段，判定目标端交互接线是否与安卓运行态一致，或重写组件时决定是否保留随行的 onClick 时
   - 情境：安卓控件注册了 setOnClickListener，但回调体被整段注释（如选图调用被注释），XML 也可能写着 clickable；目标端按规格集成点把它接成可用功能，代码注释自述源码为死码并写着“裁定/集成点”；项目要求 1:1 忠实复刻（含源码缺陷）。
@@ -67,6 +70,10 @@
 - [点击事件挂在源端真正持有点击的节点上：源端只绑整栏就挂外层，只绑行内子 View 就只挂该子控件；带文字的 CheckBox/RadioButton 拆成勾选控件加 Text 时整体可点、命中区按源宽度](lesson-fd3add7128663eb9998f.lesson.md)
   - 时机：界面实现与返修阶段，为由多个子控件拼成的搜索栏、入口条或设置行决定 onClick 挂在哪一层，或清理、重写其中的点击绑定时；把带文字的 CheckBox/RadioButton 拆成 ArkUI 勾选控件加 Text 时
   - 情境：源布局只在整条容器上绑定点击（如 LinearLayout 的 onClick 或 DataBinding 点击），内部图标、提示文字、“搜索”字样只负责展示；目标用 Row + Image + Text 模拟占位搜索框（不是 TextInput），点击后压栈进入目标页。也包括源端 Java 只对行内某个子 View（如右侧值文本）setOnClickListener，同页其他行绑定整行 layout；目标用 Row 承载这些设置行。也包括带文字的 CheckBox/RadioButton（XML 声明或代码动态创建，宽度来自 wrap_content、match_parent、alignParentLeft 加 toLeftOf 两端锚定或父容器默认 LayoutParams），目标 Checkbox/Radio 不带文字、需另配 Text；为折行给 Text 加 layoutWeight(1) 时连同点击挂在整行上。
+- [行组件内挂了 onClick 时外层 ListItem 的 onClick 收不到点击：点击只设一个归属，动作经 @Event 传入或组件内不挂点击](lesson-f122d4c4d386c60fd8d5.lesson.md)
+  - 时机：界面实现阶段，为可复用的列表行、设置行子组件定义点击接口，并在父页面为每行挂接动作时
+  - 情境：源端整行可点（PreferenceScreen 的 Preference/ListPreference 行、子屏入口等），目标把行抽成 @ComponentV2 子组件放进 ListItem 或容器；组件内部声明带空默认实现的 @Event（如 onTap: () =&gt; void = () =&gt; {}）并在内层 Row 挂 .onClick 调用它，调用点却不传该事件，而把真实动作挂在外层 ListItem().onClick 上。
+  - 例外：父子确需响应同一次点击（如内层另有独立动作、外层仍要处理）时，按 ArkUI 手势规则给子元素改用 parallelGesture 等并行手势，不依赖冒泡
 - [迁移带点击绑定的控件时按源点击处理器的分支逐项迁移副作用，不只做状态取反和换图](lesson-55e33a0621c3008ab8b3.lesson.md)
   - 时机：界面迁移阶段，为布局中带 onClick 绑定、状态选图或滑动面板的控件编写 ArkUI 事件与状态逻辑时
   - 情境：源布局控件用 android:onClick/数据绑定声明点击，或按 ViewModel 状态选图；实际行为（按键音、振动、偏好持久化、历史面板展开与回填）写在 Fragment 统一点击处理器、ViewModel 或第三方面板组件中；目标页需复刻这些开关与面板。 也包括源端 ViewModel 的选择与写操作（再次点击同一项即取消、前置为空即失败、同商品同规格累加写入本地购物车）由页面弹层触发。

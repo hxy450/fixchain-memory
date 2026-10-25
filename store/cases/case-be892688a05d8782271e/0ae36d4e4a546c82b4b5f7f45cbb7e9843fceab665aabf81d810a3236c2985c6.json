@@ -1,0 +1,174 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-be892688a05d8782271e",
+  "created_at": "2026-10-23T15:01:19.938360+00:00",
+  "migration_key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/memory-distill-opencamera-20261023/pool",
+  "title": "录像限额迁到应用层定时/轮询与异步启动后，暂停计入时长上限、有限重复次数被补满、无自动重启时到达文件上限不停止",
+  "when": "录像功能实现阶段，用应用层定时器、文件大小轮询和异步启停替代Android录制器原生的时长/文件大小上限与重启计数时",
+  "description": "源端依赖MediaRecorder.setMaxDuration/setMaxFileSize由录制器自行计时、停止并回调onInfo，pause/resume只累计已录时长，restartVideo依赖takePicture同步返回后再递减剩余重复次数；目标AVRecorder的prepare/start为异步Promise，录制上限改由应用层setTimeout或statSize轮询承接。",
+  "summary": "三处偏差都在Slice 4视频录制worker（ad056b0d5327c12ec）17:16:55首次Write的VideoRecordController中形成，\n经17:24补写的停止回调及closer的binder接线后原样保留到c752566。job问题中的「remaining初始化」片段也出自这次Write。\n返修前它们分别表现为A29、A30的两项。\n\n① 有限重复次数被补满（A30）：worker写前读到的F003 spec AC18要求remaining在takePicture之后递减，\n并给出判据「restart=2时三段录制，remaining依次为2→1→0」；设计时它也引用了这条判据。\n它读到的Preview.restartVideo注释说明，这样排序是为了不让takePicture重置remaining_restart_video；\n源端videoRecordingStarted中的「remaining==0且非maxfilesize段才初始化」会在takePicture内同步执行。\nworker把这段初始化放进recorder.prepare().then→start().then之后才执行的videoRecordingStarted，\nrestartVideo却在startRecording()同步返回后就执行remainingRestartVideo--。\n剩余1次时，计数先减到0，异步启动完成后又按偏好补满，有限次数因此变成无限重复。\n输入正确、足够，偏差在把依赖同步时序的计数逐行搬进异步启动。\n最终修复给startRecording增加repeating参数，只在首次启动（非repeating、非maxfilesize重启）时同步初始化，\n并删除videoRecordingStarted中的初始化。\n\n② 暂停计入时长上限（A29）：spec AC13要求getVideoTime不含暂停区间；AC05/AC06及源端startVideoRecording\n用video_accumulated_time扣减setMaxDuration的值，而pauseVideo只把已录区间累加进去，所以上限按已录时长计。\nworker核实AVRecorderConfig有maxDuration后，在videoRecordingStarted里另设一次性setTimeout(videoMaxDurationMs)\n来触发MAX_DURATION_REACHED；pauseResumeVideo既不停表也不重排。17:24–17:25它又因担心与原生停止竞态，\n删除了AvRecorderEngine的原生maxDuration，这个按墙钟计时的定时器成了唯一的时长限额，暂停5秒也会耗尽1秒的上限。\nF003 spec的AC18只写重启计数，没有提到暂停与时长上限的关系；映射表也没有setMaxDuration行，\n只把MEDIA_RECORDER_INFO_*的语义交给实现层。因此本项归因于实现者接管录制器原生限额时，\n没有沿用输入中按已录时长计算的语义。最终修复新增scheduleDurationLimit：暂停时清除计时，\n恢复后按「上限−已录时长」重排；pause/resume加pauseInFlight防重入。\n\n③ 未开启自动重启时到达文件上限不停止（A30）：源端onVideoInfo的末分支在未开启自动重启、\n收到MAX_FILESIZE_REACHED时调用stopVideo(false)。规格作者afd4474c6ba14aa22（c4-05批）写F003前读到了这一分支，\n但spec只为APPROACHING、NEXT_OUTPUT_FILE_STARTED、带restart的手动重启路径（AC17/AC20–22）和toast（AC48）写了AC，\n没有写这一分支，AC20还写成「到达上限走AC17」。worker收到这份spec，自己读源码时只读到5753–5860，没读到末分支；\n它用statSize轮询合成MAX_FILESIZE_REACHED来替代原生setMaxFileSize，\nonRecorderInfo却只在videoRestartOnMaxFilesize为真时处理。于是未开启重启时，到达上限后仍继续录制。\n该项先在源码到spec的分支覆盖处偏离，再由spec传给实现；worker承接原生限额时也没补上停止语义。\n最终修复把这一分支改为restart时restartVideo(true)，否则stopRecording(false)；同时新增restartCancelled，用于在关闭时取消进行中的重启。\n\n分工：规格提取阶段要覆盖事件处理的每个分支；实现阶段在替换原生限额、改写同步计数时，要保持已录时长语义和计数时序。\n",
+  "recommendations": [
+    "实现阶段：用应用层定时器替代录制器原生时长上限时，以不含暂停的已录时长为预算。暂停时清除定时器，恢复时按「上限−已录时长」重新安排；并用「暂停5s不消耗1s上限」的单测核对。",
+    "实现阶段：把依赖同步调用顺序的计数（takePicture后递减、videoRecordingStarted中remaining==0才初始化）迁到异步启动时，改在发起端同步初始化，并用显式参数区分首次段与重复段，不依赖回调晚于递减的时序；按spec判据「restart=2→三段、remaining为2→1→0」写单测。",
+    "实现阶段：用statSize轮询合成MAX_FILESIZE_REACHED替代原生setMaxFileSize时，同时实现auto_restart=false时到达上限即stopRecording(false)；读源码事件分发函数时要读完整个if/else链，不在中间分支截断。",
+    "规格提取阶段：抽取onVideoInfo这类多分支事件处理时，每个what分支（包括未开启自动重启、到达文件上限即停止）都写AC或写明跳过理由。平台缺少原生限额（如AVRecorder无maxFileSize）时，在映射表登记替代方式及其暂停、停止语义。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/VideoRecordController.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/preview/Preview.java",
+          "at": "2026-10-01T11:28:18.574Z",
+          "reason": "规格作者Read 5745–5884的回执包含onVideoInfo全部分支，含5875–5876「MAX_FILESIZE_REACHED（未开启自动重启）→stopVideo(false)」，足以写出该分支的AC（agent-afd4474c6ba14aa22.jsonl:L104-L105）。"
+        },
+        {
+          "key": "agent-afd4474c6ba14aa22.jsonl",
+          "at": "2026-10-01T11:37:21.877Z",
+          "reason": "c4-05批规格作者写F003时，只为APPROACHING、NEXT_OUTPUT_FILE_STARTED、带restart的手动重启（AC17/AC20–22）和toast（AC48）写了AC，遗漏已读到的「未开启重启时到达文件上限即停止」分支，AC20还写成到达上限走AC17（同转录L224-L225）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F003-video-record.md",
+          "at": "2026-10-01T16:54:35.858Z",
+          "reason": "worker的Read回执给出AC18「remaining在takePicture之后递减，restart=2时三段录制，remaining依次为2→1→0」、AC13「getVideoTime不含暂停区间」、AC05/AC06（时长上限扣减已累计时长），这些已足以确定重复计数与时长预算；回执中没有未开启重启时到达文件上限即停止的AC，交付的是规格作者的遗漏（agent-ad056b0d5327c12ec.jsonl:L24、L26）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/preview/Preview.java",
+          "at": "2026-10-01T16:56:19.630Z",
+          "reason": "worker用sed读取startVideoRecording（setMaxDuration扣减video_accumulated_time）、videoRecordingStarted与pauseVideo（remaining==0才初始化，暂停只累加已录区间），以及restartVideo（注释说明takePicture之后才递减，以免takePicture重置remaining_restart_video）（agent-ad056b0d5327c12ec.jsonl:L83-L88）；它对onVideoInfo只读到5860（L89-L90）。"
+        },
+        {
+          "key": "agent-ad056b0d5327c12ec.jsonl",
+          "at": "2026-10-01T17:16:55.528Z",
+          "reason": "设计时引用了AC18的2→1→0判据（L392），Write中却把remaining初始化放在prepare().then→start().then之后的videoRecordingStarted，restartVideo在startRecording()返回后立即递减，计数会被补满；时长上限写成一次性setTimeout(videoMaxDurationMs)，pauseResumeVideo不停表；MAX_FILESIZE_REACHED只在videoRestartOnMaxFilesize为真时处理，沿用了spec遗漏（L394-L395）。17:24重写的停止回调保留了同样的递减顺序（L508），17:24–17:25又删除原生maxDuration，墙钟定时器成为唯一时长限额（L512-L529）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 5
+        },
+        {
+          "from": 4,
+          "to": 5,
+          "force": true,
+          "reason": "worker在写前三次用Bash sed读取Preview.java：6029–6300的startVideoRecording（setMaxDuration扣减video_accumulated_time），6300–6460的videoRecordingStarted与pauseVideo（remaining==0才初始化，暂停只累加已录区间），1188–1340的stopVideo与restartVideo（takePicture之后才递减remaining，注释说明原因）。回执内容支持worker写前已收到这些源端时序与时长语义。",
+          "evidence": [
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-ad056b0d5327c12ec.jsonl",
+              "line": 83
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-ad056b0d5327c12ec.jsonl",
+              "line": 84
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-ad056b0d5327c12ec.jsonl",
+              "line": 85
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-ad056b0d5327c12ec.jsonl",
+              "line": 86
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-ad056b0d5327c12ec.jsonl",
+              "line": 87
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-ad056b0d5327c12ec.jsonl",
+              "line": 88
+            }
+          ]
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "未核AVRecorderConfig.maxDuration原生计时是否排除暂停区间；A29的依据是源端按已录时长扣减上限，以及最终修复的语义。"
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/AvRecorderEngine.ets",
+      "reason": "已确认c1abe5c..c8dd617给pause/resume增加了paused标志，但FINAL中该标志只用于getMaxAmplitude/sampleAmplitude的振幅门控，不参与时长上限计算。A29的修复落在VideoRecordController.scheduleDurationLimit。生成期pause()出自同一worker（17:12:46 Write），它在17:24:59–17:25:28删除原生maxDuration的决定FINAL仍保留，不构成本问题的偏差。该标志对应的生成偏差（疑属振幅相关的其他issue）未在本卡归因。"
+    }
+  ],
+  "job": "issue-be892688a05d8782271e",
+  "metadata": {
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code",
+        "codex"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3",
+        "gpt-6-astra"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.163.0",
+        "2.1.247",
+        "2.1.299"
+      ]
+    },
+    "source_set_id": "sources-974a9086706364eed8b7",
+    "environment": [
+      {
+        "name": "android.compile_sdk",
+        "value": "36",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/.claude/skills",
+        "at": "2026-10-01T09:52:21.840Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-aa8064d19722381a1.jsonl:L11",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-aa8064d19722381a1.jsonl:L10",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos",
+        "at": "2026-10-01T12:27:45.961Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b.jsonl:L1565",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b.jsonl:L1563",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos",
+        "at": "2026-10-01T13:34:44.665Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae78a452b1664bc61.jsonl:L149",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae78a452b1664bc61.jsonl:L148",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.11.1"
+  },
+  "revision": "0ae36d4e4a546c82b4b5f7f45cbb7e9843fceab665aabf81d810a3236c2985c6"
+}

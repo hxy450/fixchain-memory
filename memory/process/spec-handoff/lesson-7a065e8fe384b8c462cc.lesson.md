@@ -1,6 +1,6 @@
 # 规格或派工与写前读到的源码、主题或映射参考冲突或遗漏时，按源端可观察行为实现并回报规格分歧；只有决策台账中带决策 ID 的取舍才例外，source-notes 登记与转述不算批准
 
-ID：`lesson-7a065e8fe384b8c462cc` · 版本：14
+ID：`lesson-7a065e8fe384b8c462cc` · 版本：15
 
 [本主题](index.md)
 
@@ -30,7 +30,7 @@ ID：`lesson-7a065e8fe384b8c462cc` · 版本：14
 6. 上游审计或规格加入源码没有的属性（去重、条数上限、点击清空）或漏写源码分支时，同样以源码为准实现，在交接里写明冲突；确需目标侧保护的另列为适配策略，说明对可见结果的影响后交负责方确认。
 7. “标注差异”只记录规格与源码的分歧，实现仍按源端；目标相对源端少了可见行为（弹窗个数、回调次数、Toast）时不属于可标注的差异，要么按源端实现，要么作为待批决策写入台账或 handback 的 decision_gaps 等待裁决，source-notes 与注释里的登记不算批准。
 
-来源支持：31 张卡 · 已知 15 次迁移（部分未记录） · 已知 14 个应用（部分未记录）
+来源支持：32 张卡 · 已知 15 次迁移（部分未记录） · 已知 14 个应用（部分未记录）
 
 ## 来源（按需复核）
 
@@ -78,6 +78,8 @@ ID：`lesson-7a065e8fe384b8c462cc` · 版本：14
   卡片版本：`20e8fe0eb12d923dd2187f8efe7cbc824971502cc6456d7985b1f26b5e5e94d9`
 - [case-8fced432ea0fe7c8b86f](../../../store/cases/case-8fced432ea0fe7c8b86f/b4353b2e8b37ffe082eef91d15ac512e601071bb1ab5aaec8c56c4904d0256e7.json) · 结论：recommendation:2
   卡片版本：`b4353b2e8b37ffe082eef91d15ac512e601071bb1ab5aaec8c56c4904d0256e7`
+- [case-91084f18203ecc5e7036](../../../store/cases/case-91084f18203ecc5e7036/b2ef3d93c321f92d42c3adeb2614a39fc4a1d58051f93808ce0ad907fbc2e561.json) · 结论：recommendation:2
+  卡片版本：`b2ef3d93c321f92d42c3adeb2614a39fc4a1d58051f93808ce0ad907fbc2e561`
 - [case-97a40a9d2dce65dc9f9c](../../../store/cases/case-97a40a9d2dce65dc9f9c/6f204ffd524b55f7ea8cef5e4a2e75cc8330004f202fd635570857c43cef5a2a.json) · 结论：diagnosis, recommendation:3
   卡片版本：`6f204ffd524b55f7ea8cef5e4a2e75cc8330004f202fd635570857c43cef5a2a`
 - [case-9e50f3aa8db41be6d2fe](../../../store/cases/case-9e50f3aa8db41be6d2fe/3d6143319a7bdfdbada20047728ad910934b06a242c61e2977d6a694908b4125.json) · 结论：diagnosis, recommendation:1

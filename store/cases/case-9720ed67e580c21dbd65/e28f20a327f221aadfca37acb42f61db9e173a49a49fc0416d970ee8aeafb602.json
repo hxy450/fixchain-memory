@@ -1,0 +1,330 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-9720ed67e580c21dbd65",
+  "created_at": "2026-10-23T15:39:32.634257+00:00",
+  "migration_key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/memory-distill-opencamera-20261023/pool",
+  "title": "把相机打开回调映射成页面显示时机，卡片拍照请求在相机就绪前被消费；卡片尺寸凭猜测放大导致文字裁切",
+  "when": "规格提取与跨切片接线阶段，确定外部入口一次性拍照请求在目标中的消费时点和挂载点时；界面实现阶段，确定服务卡片图标与文字尺寸时",
+  "description": "源端由桌面小部件或快捷入口置位一次性拍照标志，在Preview.cameraOpened等相机打开回调中读后即清，再经setupCamera按对焦模式延时拍照；目标按页面生命周期（aboutToAppear/onPageShow/onShown）、预览引擎和跨切片placeholder分工承接该请求。另含把Android小部件布局（textSize sp、drawableTop、wrap_content、最小40dp）转换为ArkTS服务卡片。",
+  "summary": "【C3 拍照请求消费点】F010规格作者写前读到Preview.cameraOpened：相机打开后读取并清除TakePhoto.TAKE_PHOTO，再setupCamera(take_photo)\n（agent-afd4474c6ba14aa22.jsonl:L204-L205）。同一次Write中AC03正文写对了：“相机打开完成后（cameraOpened等价回调）读取标志、读后即清……\n先开后拍，不抢在预览建立前”；但目标锚点写成`源:Preview.cameraOpened → 标:MainPage.onPageShow`，对接点写成\n“aboutToAppear/onPageShow → consumeTakePhotoRequest() → true时触发一次快门”（L304-L305）。相机打开回调在这里被映射成页面生命周期，偏差先落在规格。\n计划作者读到该规格，把slice-10的cross_slice_edits写成“MainPage aboutToAppear/onPageShow → consumeTakePhotoRequest()”\n（agent-a889e1ce7e934e827.jsonl:L53-L54、L88-L89）。MainPage骨架作者读到计划，在aboutToAppear和onShown里登记P-S1-017\n（agent-adf63c82c3b3b532f.jsonl:L58-L59、L115-L116）。\nF001实现者读到这份骨架（P-S1-017归MainPage）、F001-AC98（take_photo时连续对焦延时1500ms、其他500ms后拍照）和Preview.java的cameraOpened源码。\n它在PreviewEngine.cameraOpened写了`const takePhoto = false; // 通道归 F010`，没有像takePhotoHook那样留注入点或登记FWD-REF\n（agent-ae5882c40105e3f01.jsonl:L272-L273），所以引擎侧setupCamera的延时拍照分支始终不会触发。\nF010实现者按AC03把QuickEntryDispatcher的消费约定写对了：在“相机打开完成回调内调用……先开后拍”。Group-2收口者读到了计划里的aboutToAppear/onPageShow接线，\n也读到了这条约定（agent-acb5c3d58575999a4.jsonl:L22-L23、L57-L58）。思考中已提到“相机打开完成回调”和setupCamera的onPreviewOpened，\n却选了“simpler: in onShown and aboutToAppear”（L251）。Write在aboutToAppear与onShown里调用consumeQuickEntryOnShow，注释为“相机打开完成等价时机 = 页面显示”，\n拿到请求后立即调用takePhotoButtonPressed（L567-L568）；L588-L589的整页重写保留了这一做法，只把注释改为“页面显示时机”。\nc752566中这些片段都原样保留：页面显示时请求已被读后清除，相机还没打开，编排器拒绝拍照；PreviewEngine仍是takePhoto=false。\n返修时，根会话在Mate60_API24上点击卡片，等待8秒没有新增照片（rollout-…01a14aae…jsonl:L11124）。parity_audit在隔离副本中做了以下修改（5a2d L8741、L8828，27项通过）：\nPreviewEngine.openCamera按revision消费请求，预览启动后按对焦模式延时调用startupPhotoHook；MainPage删除onShow直接拍照，并在onHidden/aboutToDisappear作废请求；\nQuickEntryDispatcher与Orchestrator补上revision和canCapture校验。根会话联合合入生产（L11565-L11567），clean29冷启动、暖启动各保存1张（L11795）。\n【C4 卡片尺寸】见TakePhotoCard分支：F010实现者读到源布局textSize=12sp，却没有查证就假定designWidth 720需要放大，\n写出固定120vp×120vp图标和24fp文字。桌面卡片文字被截断，最终改为图片width 100%+layoutWeight(1)、文字12fp满宽居中。\n",
+  "recommendations": [
+    "规格提取阶段：源端在相机打开或预览建立回调中读取一次性入口标志时，AC的`标:`锚点和对接点要落在目标的相机打开/预览启动回调（本例PreviewEngine.cameraOpened→setupCamera），不能写成aboutToAppear/onPageShow；写完逐条核对AC正文的时序（“相机打开完成后”）与锚点、对接点是否一致。",
+    "跨切片分工时：标志归另一切片所有，也要在引擎回调处保留可注入的读取/消费hook并登记FWD-REF或HANDOFF（同takePhotoHook），不能把源端读取写成常量false。",
+    "接线收口阶段：计划给出的挂载点和已实现的契约冲突时（计划写onPageShow，QuickEntryDispatcher写相机打开完成回调内调用），以源端时序和AC正文为准。把消费放进相机打开回调，并沿用setupCamera的take_photo延时（连续对焦1500ms、其他500ms）；不要用页面显示代替相机就绪，也不要改走受定时、连拍偏好影响的快门按钮入口。",
+    "最小检查：在设备上分别冷启动和从后台返回后点击卡片，各应新增一张照片；页面显示后立即拍照被编排器拒绝，说明消费点早于相机就绪。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/pages/MainPage.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/preview/Preview.java",
+          "at": "2026-10-01T11:30:14.036Z",
+          "reason": "正常输入：规格作者Read回执给出cameraOpened L1942-L1963，相机打开后读取TAKE_PHOTO并读后即清，随后设置方向、setPreviewDisplay、setupCamera；足以确定消费时点是相机打开回调（agent-afd4474c6ba14aa22.jsonl:L204-L205）。"
+        },
+        {
+          "key": "agent-afd4474c6ba14aa22.jsonl",
+          "at": "2026-10-01T11:49:05.266Z",
+          "reason": "读到上述源码后，Write F010规格：AC03正文写“相机打开完成后读取标志、先开后拍”，目标锚点却写`标:MainPage.onPageShow`，对接点写“aboutToAppear/onPageShow → consumeTakePhotoRequest() → true时触发一次快门”。源端相机回调在此被映射成页面生命周期（L304-L305）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F010-quick-entry.md",
+          "at": "2026-10-01T12:32:08.649Z",
+          "reason": "交付桥梁：计划作者Read回执中包含上述对接点与AC03锚点（agent-a889e1ce7e934e827.jsonl:L53-L54）。"
+        },
+        {
+          "key": "agent-a889e1ce7e934e827.jsonl",
+          "at": "2026-10-01T12:38:00.286Z",
+          "reason": "沿用规格对接点，Write slice-10计划，cross_slice_edits为MainPage“aboutToAppear/onPageShow → QuickEntryDispatcher.consumeTakePhotoRequest()”（L88-L89）。本节点只确认传递。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/plans/slices/slice-10-F010-quick-entry.md",
+          "at": "2026-10-01T17:28:54.206Z",
+          "reason": "交付桥梁：收口者Read回执L15给出MainPage handler为aboutToAppear/onPageShow → consumeTakePhotoRequest()（agent-acb5c3d58575999a4.jsonl:L22-L23）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/QuickEntryDispatcher.ets",
+          "at": "2026-10-01T17:29:45.777Z",
+          "reason": "正常输入：收口者Read回执中，TakePhotoRequestState注释为“MainPage相机打开完成后读后即清——F010-AC03先开后拍”，consumeTakePhotoRequest文档为“相机打开完成回调内调用”；足以排除页面显示时机（agent-acb5c3d58575999a4.jsonl:L57-L58）。"
+        },
+        {
+          "key": "agent-acb5c3d58575999a4.jsonl",
+          "at": "2026-10-01T18:40:12.235Z",
+          "reason": "思考中已提到“相机打开完成回调”与setupCamera的onPreviewOpened，却选了simpler的onShown/aboutToAppear（L251）。L567 Write在aboutToAppear与onShown调用consumeQuickEntryOnShow，注释“相机打开完成等价时机 = 页面显示”，取到请求即takePhotoButtonPressed；L588-L589整页重写保留该片段。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": 7
+        },
+        {
+          "from": 6,
+          "to": 7
+        },
+        {
+          "from": 7,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/PreviewEngine.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/preview/Preview.java",
+          "at": "2026-10-01T11:30:14.036Z",
+          "reason": "正常输入：规格作者Read回执给出cameraOpened中读取并清除TAKE_PHOTO后进入setupCamera（agent-afd4474c6ba14aa22.jsonl:L204-L205）。"
+        },
+        {
+          "key": "agent-afd4474c6ba14aa22.jsonl",
+          "at": "2026-10-01T11:49:05.266Z",
+          "reason": "F010规格把消费点锚定为MainPage.onPageShow，对接点写aboutToAppear/onPageShow；引擎侧消费点从此不在契约中（L304-L305）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F010-quick-entry.md",
+          "at": "2026-10-01T12:32:08.649Z",
+          "reason": "交付桥梁：计划作者Read回执包含该对接点（agent-a889e1ce7e934e827.jsonl:L53-L54）。"
+        },
+        {
+          "key": "agent-a889e1ce7e934e827.jsonl",
+          "at": "2026-10-01T12:38:00.286Z",
+          "reason": "Write slice-10计划，把MainPage aboutToAppear/onPageShow → consumeTakePhotoRequest()列入cross_slice_edits（L88-L89）。只确认传递。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/plans/slices/slice-10-F010-quick-entry.md",
+          "at": "2026-10-01T13:26:04.009Z",
+          "reason": "交付桥梁：骨架作者Bash cat回执中的slice-10段落给出上述handler（agent-adf63c82c3b3b532f.jsonl:L58-L59）。"
+        },
+        {
+          "key": "agent-adf63c82c3b3b532f.jsonl",
+          "at": "2026-10-01T13:34:22.912Z",
+          "reason": "Write MainPage骨架，在aboutToAppear写“QuickEntryDispatcher.consumeTakePhotoRequest() … FWD-REF: P-S1-017”，onShown写“onPageShow等价：QuickEntryDispatcher消费 / P-S1-017”（L115-L116）。只确认传递。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/pages/MainPage.ets",
+          "at": "2026-10-01T14:57:35.062Z",
+          "reason": "交付桥梁：F001实现者Read回执中看到P-S1-017把consumeTakePhotoRequest挂在MainPage aboutToAppear/onShown（agent-ae5882c40105e3f01.jsonl:L33-L34）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F001-camera-preview.md",
+          "at": "2026-10-01T14:57:03.096Z",
+          "reason": "正常输入：F001-AC98要求take_photo时连续对焦1500ms、其他500ms后自动拍照，标在PreviewEngine.setupCamera；说明引擎需要拿到take_photo（agent-ae5882c40105e3f01.jsonl:L23-L26）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/preview/Preview.java",
+          "at": "2026-10-01T14:59:40.252Z",
+          "reason": "正常输入：F001实现者Read L1200-L2500，回执含cameraOpened读取TAKE_PHOTO并传入setupCamera（agent-ae5882c40105e3f01.jsonl:L99-L100）。"
+        },
+        {
+          "key": "agent-ae5882c40105e3f01.jsonl",
+          "at": "2026-10-01T15:25:31.156Z",
+          "reason": "收到源码与AC98后，Write PreviewEngine：cameraOpened写`const takePhoto = false; // TakePhoto.TAKE_PHOTO 通道归 F010`，setupCamera的take_photo延时分支由此成为死分支；同批为takePhotoHook等登记了FWD-REF，此处却未留注入点（L272-L273）。上游P-S1-017归MainPage是它这样写的背景。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": 6,
+          "force": true,
+          "reason": "骨架作者在写MainPage前用Bash cat逐个输出各slice计划，其中包含slice-10-F010-quick-entry.md；回执中slice-10段落给出MainPage aboutToAppear/onPageShow → consumeTakePhotoRequest()的handler，支持它写P-S1-017前已收到该接线要求。",
+          "evidence": [
+            {
+              "source": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-adf63c82c3b3b532f.jsonl",
+              "line": 58
+            },
+            {
+              "source": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-adf63c82c3b3b532f.jsonl",
+              "line": 59
+            }
+          ]
+        },
+        {
+          "from": 6,
+          "to": 7
+        },
+        {
+          "from": 7,
+          "to": 10
+        },
+        {
+          "from": 8,
+          "to": 10
+        },
+        {
+          "from": 9,
+          "to": 10
+        },
+        {
+          "from": 10,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/widget/pages/TakePhotoCard.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "summary": "F010实现者写卡片前用Bash读到widget_layout_take_photo.xml：按钮宽match_parent、高wrap_content，drawableTop图标，textSize=12sp白字带阴影；\nwidget_info最小40dp×40dp（agent-a33c38104438e1a8d.jsonl:L142-L143）。page_0014与F010规格都没有给卡片尺寸，2*2规格是该实现者自行选定的。\n它在思考中先写“12sp→12fp faithful”，随后推测designWidth 720下12fp会太小，自述“Let me not overthink”，在120vp图标、28fp文字之间权衡（L196）。\nWrite最终写出固定120vp×120vp图标和24fp文字（L210-L211），报告把它列为“2*2卡比例换算而非12sp字面直译，visual-verify阶段可调”的风险（L241-L242）。\n偏差位于源尺寸到卡片元素尺寸的实现换算：没有核实designWidth与vp/fp的关系就放大源值，并用固定尺寸代替随卡片高度分配的图标。\n该片段在c752566保留，Mate60_API24桌面卡片文字被截断（rollout-…01a14aae…jsonl:L11124）。parity_audit改为Image width 100%+layoutWeight(1)、Text 12fp满宽居中\n（5a2d L8820），合入后卡片文字完整（L11795）。\n",
+      "recommendations": [
+        "界面实现阶段转换服务卡片时：字号先按源sp等值写fp（本例12sp→12fp），不凭designWidth推测放大；确需换算时，先查目标SDK或文档，确认designWidth影响哪些单位。",
+        "卡片图标不写固定vp宽高：文字取固有高度，图片width('100%')+layoutWeight(1)占剩余空间并objectFit(Contain)；在所支持的最小规格（本例2*2）上截图，确认文字完整。"
+      ],
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/res/layout/widget_layout_take_photo.xml",
+          "at": "2026-10-01T16:49:33.262Z",
+          "reason": "正常输入：Bash cat回执给出按钮match_parent/wrap_content、drawableTop=ic_launcher_take_photo、textSize=12sp、白字阴影，同次输出widget最小40dp；足以说明文字应约12fp、图标随可用空间而非放大成固定尺寸（agent-a33c38104438e1a8d.jsonl:L142-L143）。"
+        },
+        {
+          "key": "agent-a33c38104438e1a8d.jsonl",
+          "at": "2026-10-01T16:56:23.538Z",
+          "reason": "收到12sp源值后，推测designWidth 720需要放大（L196），Write TakePhotoCard把图标写成width/height 120vp、文字fontSize 24fp（L210-L211）；自报为未经视觉验证的比例换算（L241-L242）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "F010实现者在写卡片前用Bash cat读取widget_layout_take_photo.xml与widget_info_take_photo.xml，回执返回textSize=12sp、drawableTop、match_parent/wrap_content及minWidth/minHeight 40dp，支持它写卡片尺寸前已收到源尺寸。",
+          "evidence": [
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-a33c38104438e1a8d.jsonl",
+              "line": 142
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-a33c38104438e1a8d.jsonl",
+              "line": 143
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "未查SDK或文档核实ArkTS卡片designWidth对vp/fp的确切作用；C4只归因实现者未核实就放大源尺寸并用固定尺寸，不断言designWidth的具体行为。"
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/QuickEntryDispatcher.ets",
+      "reason": "修改已确认（eae556d..585de09：TakePhotoRequestState加revision，新增getTakePhotoRequestId/isTakePhotoRequestCurrent/cancelTakePhotoRequest，dispatchWant先作废旧请求）。生成期该文件已按AC03把消费约定写成相机打开完成回调内读后即清，没有与本问题相悖的生成输出；revision/作废机制是修复把消费移到开相机并延时后新增的配套要求，Android静态标志没有对应物，未找到独立的生成偏差来源。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/PhotoCaptureOrchestrator.ets",
+      "reason": "修改已确认（新增takeStartupPhoto、canCapture沿takePictureDispatch/takePhoto/takePhotoWhenFocused透传、startupCaptureIssuedGeneration防重复，补光等待后再校验）。这些是为PreviewEngine启动拍照新增的入口与校验；生成期编排器在相机未开时拒绝拍照属正常防护，过早调用已归入MainPage分支。未核到该文件自身的独立生成偏差。"
+    }
+  ],
+  "job": "issue-9720ed67e580c21dbd65",
+  "metadata": {
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code",
+        "codex"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3",
+        "gpt-6-astra"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.163.0",
+        "2.1.247",
+        "2.1.299"
+      ]
+    },
+    "source_set_id": "sources-974a9086706364eed8b7",
+    "environment": [
+      {
+        "name": "android.compile_sdk",
+        "value": "36",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/.claude/skills",
+        "at": "2026-10-01T09:52:21.840Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-aa8064d19722381a1.jsonl:L11",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-aa8064d19722381a1.jsonl:L10",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos",
+        "at": "2026-10-01T12:27:45.961Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b.jsonl:L1565",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b.jsonl:L1563",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos",
+        "at": "2026-10-01T13:34:44.665Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae78a452b1664bc61.jsonl:L149",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae78a452b1664bc61.jsonl:L148",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.11.1"
+  },
+  "revision": "e28f20a327f221aadfca37acb42f61db9e173a49a49fc0416d970ee8aeafb602"
+}

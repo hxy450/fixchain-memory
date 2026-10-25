@@ -1,6 +1,6 @@
 # 依赖 API 的单位、默认行为或作用范围时，源端与目标端都读到语义说明：行为级契约写出源 API 实际的作用区域与度量，不只抄字面参数，也不以签名存在推定等价
 
-ID：`lesson-f5cf8413ebea57f3b415` · 版本：4
+ID：`lesson-f5cf8413ebea57f3b415` · 版本：5
 
 [本主题](index.md)
 
@@ -31,7 +31,7 @@ ID：`lesson-f5cf8413ebea57f3b415` · 版本：4
 
 - 只有实现与声明仍有冲突时，局部对照实际用到的字段与结果。
 
-来源支持：13 张卡 · 5 次迁移 · 4 个应用
+来源支持：15 张卡 · 已知 5 次迁移（部分未记录） · 已知 4 个应用（部分未记录）
 
 ## 来源（按需复核）
 
@@ -57,7 +57,11 @@ ID：`lesson-f5cf8413ebea57f3b415` · 版本：4
   卡片版本：`0c0854b7bb53f48c15425a1148239e8e459db928eb8f9600f5e5b1e1cc5042f4`
 - [case-77c6596fcdf362f9e832](../../../store/cases/case-77c6596fcdf362f9e832/c81c56fb66d294cfd767c2c43e5bcfb480ef9cccbdcfc212d5d607410c13675a.json) · 结论：recommendation:2
   卡片版本：`c81c56fb66d294cfd767c2c43e5bcfb480ef9cccbdcfc212d5d607410c13675a`
+- [case-aa27ff1b39767c02b1ec](../../../store/cases/case-aa27ff1b39767c02b1ec/906e11a6d4db8499a201fa89399af8ef69da0775c2f68d23df299780adb7c59b.json) · 结论：diagnosis, recommendation:2
+  卡片版本：`906e11a6d4db8499a201fa89399af8ef69da0775c2f68d23df299780adb7c59b`
 - [case-deff0a401e40f1faa419](../../../store/cases/case-deff0a401e40f1faa419/01aa104a1dc162efa931752102cd5466e8c021daa1c90803852be9bb7fc4109a.json) · 结论：diagnosis, recommendation:1
   卡片版本：`01aa104a1dc162efa931752102cd5466e8c021daa1c90803852be9bb7fc4109a`
+- [case-ef167da8e80990c31714](../../../store/cases/case-ef167da8e80990c31714/b0741045842d4ef96db79c2bd8c9a99425324ad7612422a92bb274517b7f68a8.json) · 结论：recommendation:4
+  卡片版本：`b0741045842d4ef96db79c2bd8c9a99425324ad7612422a92bb274517b7f68a8`
 - [case-f4fef12b5d994df457b2](../../../store/cases/case-f4fef12b5d994df457b2/1df73908a2600045d97b85fa5e386b5b50972e141d1cd5505d5df882f5ebbad2.json) · 结论：recommendation:5
   卡片版本：`1df73908a2600045d97b85fa5e386b5b50972e141d1cd5505d5df882f5ebbad2`

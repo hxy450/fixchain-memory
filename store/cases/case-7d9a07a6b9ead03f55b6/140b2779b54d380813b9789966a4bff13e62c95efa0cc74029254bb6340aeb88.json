@@ -1,0 +1,301 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-7d9a07a6b9ead03f55b6",
+  "created_at": "2026-10-23T15:39:02.607359+00:00",
+  "migration_key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/memory-distill-opencamera-20261023/pool",
+  "title": "声控监听只创建不启动、图标乐观取反且未接状态回调，触发守卫漏掉弹窗打开",
+  "when": "功能实现与跨切片接线阶段，把Android声控监听的启停顺序、图标状态回调和audioTrigger守卫落到ArkTS VM、服务与页面门面，或解除对应FWD-REF占位时",
+  "description": "源端AudioListener构造即创建并startRecording，调用方须再start()启动采样线程，线程退出时释放录音器；MainActivity.startAudioListener在status()成功后调用start()并经mainUI.audioControlStarted切换图标，freeAudioListener后audioControlStopped；OnScreenIcons.clickedAudioControl按hasAudioListener()决定启停；audioTrigger先拒绝popup打开。目标端把这些职责拆到异步create()/start()的服务类、VM、MainUiFacade门面与图标控制器的FWD-REF占位，由不同切片和group-closer分别写入。",
+  "summary": "MainPageVM（C6启动与C7守卫）：Slice 11 worker（a690eb1a2619c2d76）写前整文件读到F011规格，\nAC147列出popup打开/相机后台/正在拍照或计时/正在录像四项守卫，AC148要求创建成功后toast并audioControlStarted，\nAC150要求freeAudioListener后audioControlStopped；17:03的grep回执也给出NoiseLevelListener的\ncreate()（内部await capturer.start()）、status()与start(): void。它以「remaining budget」跳过了\nMainActivity.java speak/audio窗口（L132、L135），17:09与17:12两次整文件Write中：\naudioTrigger注释照抄四项守卫，代码只判cameraInBackground、isVideoRecording、isTakingPhotoOrOnTimer，\n未调用同次新增的popupIsOpenProbe（closer随后把它接到uiState.popupVisible，生成末已可用）；\nstartAudioListener在create()成功后只赋字段、置hasAudioListenerFlag并toast，没有listener.start()，\n也没有audioControlStarted；freeAudioListener不发audioControlStopped，MainUiFacade只有5个UI成员。\n编译门（a8036fe950e2a77e1）只把回调改成对象字面量，这些片段原样保留到c752566。\n因而NoiseLevelListener.create已启动原生录音器，却没有采样循环读数；release(false)只置isRunning，\n无循环时没有路径释放录音器。parity_audit以真实VM+监听器复现read 0、native release 0及弹窗打开仍触发一次快门。\njob所述「audioTrigger只检查后台」不准确：生成版有三项守卫，只漏popup。\n\nOnScreenIconController（图标乐观显示）：Slice 5 worker（a06740e73018ad308）按F004-AC61写clickedAudioControl时，\n因F011未落地留下FWD-REF占位，只取反audioControlActive，注释和P-S5-004登记都写明\n激活态应由audioControlStarted/Stopped回调写入。group-2 closer（acb5c3d58575999a4）读到登记行、\n该占位以及VM的startAudioListener/freeAudioListener/hasAudioListener，18:32:52的Edit解除P-S5-004时\n仍保留取反，作为「取反先行乐观更新」，并按取反后的图标态选择start或free（L485把源端理解为按新状态启停；\n源OnScreenIcons.java:717按hasAudioListener()判断）。由于VM从不发图标回调，权限未授予或create失败时图标也显示已开启。\n\nMainPage（状态转发）：closer在18:37/18:40两次Write中把hooks接到vm.startAudioListener/freeAudioListener(false)，\nvm.mainUi只按VM接口提供5个成员，没有把声控状态转发到onScreenIcons.audioControlStarted/Stopped；\n随后在group_02_intent中将P-S5-004列为resolved。此缺口一端来自Slice 11的门面设计，一端来自closer\n已收到「图标回调」登记却未补桥接。\n\n返修（Codex 2026-10-17/18）：session_archive在隔离副本修复并跑通33项音频测试，根会话L11372联合编辑\n为MainUiFacade增加audioControlStarting/Started/Stopped，并把提案的this.mainUi?.popupIsOpen()替换为\nthis.popupIsOpenProbe()，L11565合入生产。FINAL中audioTrigger为\n!this.canResumeCamera() || this.popupIsOpenProbe()；VM以generation/revision管理异步create/start并在成功后\naudioControlStarted；MainPage转发三项状态；图标控制器按audioControlActive||pending决定free/start。\nclean30设备上创建/启动/释放可见，但读回调超时、QEMU报express-mic错误，原生声控验收未通过；本卡只归因生成期代码偏差。\n",
+  "recommendations": [
+    "功能实现阶段：按AC清单逐条落实守卫与回调。实现audioTrigger时把AC147的popup、后台、拍照或计时、录像四项都写成分支，已有popupIsOpenProbe就调用；写完逐项核对注释列出的条件与代码分支，可用「popup打开时调用audioTrigger不产生takePicture」的单测检查。",
+    "功能实现阶段：调用跨切片服务前，把它的公开方法与源调用顺序对齐。NoiseLevelListener提供create()/status()/start()/release()时，按MainActivity.startAudioListener的顺序在创建成功后调用start()，并在成功与释放处发audioControlStarted/Stopped；因预算跳过源码窗口时，至少读对应方法体（MainActivity.java:6050-6105、1134-1160）。",
+    "跨切片接线阶段：解除FWD-REF占位时不要沿用占位里的本地取反。启停判断使用真实监听状态（hasAudioListener或启动中标志），图标只由audioControlStarted/Stopped回调更新；VM门面缺少这些回调时，先补门面成员，再在页面把它们转发到图标控制器，最后才把登记项标为resolved。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/MainPageVM.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F011-app-integration.md",
+          "at": "2026-10-01T16:42:15.802Z",
+          "reason": "正常输入：Slice 11 worker整文件Read的回执中，第433行AC147列出popup打开/相机后台/正在拍照或计时/正在录像四项守卫，判据为四守卫桩均不产生拍照；第434行AC148要求创建成功后toast并audioControlStarted；第436行AC150要求free后audioControlStopped。足以确定守卫集合和图标回调时点（agent-a690eb1a2619c2d76.jsonl:L27-L28）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/NoiseLevelListener.ets",
+          "at": "2026-10-01T17:03:38.327Z",
+          "reason": "正常输入：worker grep监听器公开API，回执列出create(): Promise<boolean>（其中await this.capturer.start()）、status()与start(): void（capturer非空且循环未启动时启动），说明create只建并启动录音器，采样还要另调start()（同转录L372-L373）。L374思考只记下create/status/回调。"
+        },
+        {
+          "key": "agent-a690eb1a2619c2d76.jsonl",
+          "at": "2026-10-01T17:12:12.971Z",
+          "reason": "17:09:24首写（L395-L396）与17:12:12整文件重写（L410-L411）中，audioTrigger注释照抄AC147四项，代码只判cameraInBackground、isVideoRecording、isTakingPhotoOrOnTimer，未用同次新增的popupIsOpenProbe；startAudioListener在create()成功后只赋字段并toast，未调用listener.start()，也未发audioControlStarted；freeAudioListener不发audioControlStopped。写前以remaining budget跳过MainActivity.java的speak/audio窗口（L132、L135）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "Slice 11 worker在写VM前用Bash grep NoiseLevelListener.ets的公开方法，回执列出create()（内含capturer.start()）、status()与start(): void；这是它写前对该文件的真实读取。",
+          "evidence": [
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-a690eb1a2619c2d76.jsonl",
+              "line": 372
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-a690eb1a2619c2d76.jsonl",
+              "line": 373
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/OnScreenIconController.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/placeholder-registry.md",
+          "at": "2026-10-01T17:29:12.866Z",
+          "reason": "正常输入：closer grep登记表，P-S5-004行写明由Slice 11 Step 3d接入「startAudioListener/freeAudioListener等价：noise档监听启停 + audioControlStarted/Stopped图标回调」，即图标状态应由回调驱动（agent-acb5c3d58575999a4.jsonl:L34-L35）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/MainPageVM.ets",
+          "at": "2026-10-01T17:29:50.303Z",
+          "reason": "正常输入：closer列出VM方法，回执含startAudioListener、freeAudioListener、stopAudioListeners和hasAudioListener()，可以按真实监听状态决定启停（同转录L62-L63）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/OnScreenIconController.ets",
+          "at": "2026-10-01T17:33:09.662Z",
+          "reason": "占位输入：closer读取P-S5-004站点，Slice 5 worker的FWD-REF占位只做audioControlActive取反，注释写明激活态应经audioControlStarted/Stopped回调写入state（同转录L141-L142）。"
+        },
+        {
+          "key": "agent-acb5c3d58575999a4.jsonl",
+          "at": "2026-10-01T18:32:52.343Z",
+          "reason": "解除P-S5-004的Edit保留了占位取反，改称取反先行乐观更新，并按取反后的图标态选择startAudioListener或freeAudioListener；没有用hasAudioListener，也没有接入图标回调（同转录L488-L489；L485思考把源端理解为按新状态启停）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4,
+          "force": true,
+          "reason": "closer用Bash grep登记表中P-S3至P-S11前缀行，回执含P-S5-004要求监听启停加audioControlStarted/Stopped图标回调；这是它解除该占位前的真实读取。",
+          "evidence": [
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-acb5c3d58575999a4.jsonl",
+              "line": 34
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-acb5c3d58575999a4.jsonl",
+              "line": 35
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 4,
+          "force": true,
+          "reason": "closer用Bash grep MainPageVM.ets方法大纲，回执列出startAudioListener、freeAudioListener、stopAudioListeners与hasAudioListener；支持它写前知道可用的真实监听状态。",
+          "evidence": [
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-acb5c3d58575999a4.jsonl",
+              "line": 62
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-acb5c3d58575999a4.jsonl",
+              "line": 63
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "closer用Bash sed读取OnScreenIconController.ets的P-S5-004站点，回执给出占位取反与「激活态经audioControlStarted/Stopped回调写入」的注释；随后它在同文件解除该占位。",
+          "evidence": [
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-acb5c3d58575999a4.jsonl",
+              "line": 141
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-acb5c3d58575999a4.jsonl",
+              "line": 142
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/pages/MainPage.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F011-app-integration.md",
+          "at": "2026-10-01T16:42:15.802Z",
+          "reason": "正常输入：同上Read回执中AC148/AC150要求创建成功后audioControlStarted、释放后audioControlStopped（agent-a690eb1a2619c2d76.jsonl:L27-L28）。"
+        },
+        {
+          "key": "agent-a690eb1a2619c2d76.jsonl",
+          "at": "2026-10-01T17:12:12.971Z",
+          "reason": "Slice 11 worker写出的MainUiFacade只有closePopup/destroyPopup/closeExposureUI/layoutUI/setImmersiveMode，start/free路径也不发图标回调，AC148/AC150的状态回调没有出口（同转录L410-L411）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/MainPageVM.ets",
+          "at": "2026-10-01T17:29:48.321Z",
+          "reason": "交付桥梁：closer grep VM大纲，回执中的MainUiFacade只有上述5个成员（agent-acb5c3d58575999a4.jsonl:L60-L61）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/placeholder-registry.md",
+          "at": "2026-10-01T17:29:12.866Z",
+          "reason": "正常输入：P-S5-004登记要求接线包含audioControlStarted/Stopped图标回调（同转录L34-L35）。"
+        },
+        {
+          "key": "agent-acb5c3d58575999a4.jsonl",
+          "at": "2026-10-01T18:40:12.235Z",
+          "reason": "closer两次整文件Write MainPage（L567-L568、L588-L589）只把hooks接到vm.startAudioListener/freeAudioListener(false)，vm.mainUi按VM接口给出5个成员，没有把声控状态转发到onScreenIcons.audioControlStarted/Stopped；随后在group_02_intent中把P-S5-004列为resolved（L838）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 5,
+          "force": true,
+          "reason": "closer用Bash grep MainPageVM.ets的export与方法大纲，回执中MainUiFacade只有closePopup/destroyPopup/closeExposureUI/layoutUI/setImmersiveMode；它随后在MainPage按此接口给vm.mainUi赋值。",
+          "evidence": [
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-acb5c3d58575999a4.jsonl",
+              "line": 60
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-acb5c3d58575999a4.jsonl",
+              "line": 61
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": 5,
+          "force": true,
+          "reason": "closer用Bash grep登记表，回执含P-S5-004要求audioControlStarted/Stopped图标回调；它随后在MainPage接线并把P-S5-004列为resolved。",
+          "evidence": [
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-acb5c3d58575999a4.jsonl",
+              "line": 34
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-acb5c3d58575999a4.jsonl",
+              "line": 35
+            }
+          ]
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/NoiseLevelListener.ets",
+      "reason": "已确认FINAL重写为readData订阅与幂等create/start/release。生成版由Slice 3 worker（a46e99f7c0baf2d05，16:57:23 Write）写入：create即启动录音器、start启动循环、循环退出才释放，沿用AudioListener.java的结构（构造即startRecording，线程退出释放）和F002-AC65/AC67。观察到的无采样、无原生释放由MainPageVM未调用start()触发，未单独定为该文件的生成偏差。弃用read的选择属于输入缺口：worker grep skill参考时没有AudioCapturer条目（L139-L140、L150-L151），编译门（a8036fe950e2a77e1 L281-L282）只看到read(size, isBlockingRead)签名行，没有看到@deprecated注释。"
+    }
+  ],
+  "job": "issue-7d9a07a6b9ead03f55b6",
+  "metadata": {
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code",
+        "codex"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3",
+        "gpt-6-astra"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.163.0",
+        "2.1.247",
+        "2.1.299"
+      ]
+    },
+    "source_set_id": "sources-974a9086706364eed8b7",
+    "environment": [
+      {
+        "name": "android.compile_sdk",
+        "value": "36",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/.claude/skills",
+        "at": "2026-10-01T09:52:21.840Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-aa8064d19722381a1.jsonl:L11",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-aa8064d19722381a1.jsonl:L10",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos",
+        "at": "2026-10-01T12:27:45.961Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b.jsonl:L1565",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b.jsonl:L1563",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos",
+        "at": "2026-10-01T13:34:44.665Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae78a452b1664bc61.jsonl:L149",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae78a452b1664bc61.jsonl:L148",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.11.1"
+  },
+  "revision": "140b2779b54d380813b9789966a4bff13e62c95efa0cc74029254bb6340aeb88"
+}

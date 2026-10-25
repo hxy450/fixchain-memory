@@ -1,0 +1,327 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-385cf581f059f55e4e3b",
+  "created_at": "2026-10-23T15:27:09.429403+00:00",
+  "migration_key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/memory-distill-opencamera-20261023/pool",
+  "title": "应用接口错误回调只迁了规格点名的三个：相机/拍照/重连/建文件/录像启停错误继承空实现而无提示，快门失败在页面桥里以裸资源键 toast，录像错误特征串与停录 profile 被简化",
+  "when": "规格提取阶段，从源端应用接口实现类清点需覆写的 on* 错误/信息回调并写入服务层清单与 AC 时；以及实现阶段，移植错误回调、错误特征串与失败提示接线时",
+  "description": "源端 Activity 级应用接口（MyApplicationInterface extends BasicApplicationInterface）在一段连续区域覆写 onFailedStartPreview/onCameraError/onPhotoError/onVideoError/onVideoRecordStartError/onVideoRecordStopError/onFailedReconnectError/onFailedCreateVideoFileError，各自以 showToast 显示本地化错误；基类对这些方法是空默认实现，预览引擎、录像控制器、拍照编排在失败时只回调接口、不自行提示；录像错误文案由 Preview.getErrorFeatures(VideoProfile) 按实际录制档位与偏好拼接。目标端以继承空基类的应用接口 + VM sink 接线 + 页面拍照桥实现同一链路。",
+  "summary": "主因在规格提取：F011 规格作者（run 1 c4-02，aa0dfce5d01f9eaa2）Read 了 MyApplicationInterface.java 2000–3959 全段，\n回执含 2740–2812 连续九个回调及其提示（camera_error、failed_to_take_picture、failed_to_reconnect_camera、failed_to_save_video、\nsorry/features/not_supported 或 failed_to_record_video、video_may_be_corrupted），并在推理中逐行清点了 2717–2809 全部九个；\n派工要求“可枚举分支各单独成 AC”。但写出的 CameraAppInterface 服务层清单只列 onVideoInfo/onVideoError/onFailedStartPreview，\nAC 只有 AC194–196，夹在其间的 onCameraError、onPhotoError 与其后的 onVideoRecordStart/StopError、onFailedReconnectError、\nonFailedCreateVideoFileError 既无清单项也无 AC，也未声明归属他处。F001 只在调用侧写“上抛 onCameraError/onFailedReconnectError”；\nF003-AC09/AC12 虽写出“toast 含不支持特性列表”“toast video_may_be_corrupted”，但把源 MyApplicationInterface.onVideoRecordStartError 标到 VideoRecordController.onRecorderError，\n判据只要求回调各一次，应用接口一侧的提示仍无规格归属。\nSlice 11 worker（run 2，a690eb1a2619c2d76）按该规格把 CameraAppInterface 定为“14 abstract + F011 AC 覆写族”，\n源码窗口跳过 2706–2939，只覆写三项并在 MainPageVM 接三条 sink；其余六个错误回调继承 BasicApplicationInterface 空实现。\n预览引擎（onCameraError/onFailedReconnectError/onVideoRecordStopError）与录像控制器（prepare 后 start/binder 失败调 onVideoRecordStartError）的调用因此全部静默。\n三条独立分支同时存在：\n（1）Slice 1 worker（run 1，ae5882c40105e3f01）已读到 Preview.getErrorFeatures(VideoProfile)（3840×2160 且 force4K 偏好、error_features_4k 资源）\n与 stopVideo 以 getVideoProfile() 上报停录错误，却写成 getErrorFeatures(force4k: boolean) 推字面量 '4K'，\nonVideoStopRuntimeError(deleteUnused) 无 profile 参数并以 new VideoProfile() 空档位上报；Slice 4 worker 读到该引擎 API 后沿用，VideoRecordController 不保存/传递当次档位。\n（2）group-closer（acb5c3d58575999a4）写 MainPage 拍照桥时，错误回调直接 engine.showToast('failed_to_take_photo', true)：\n已读到 showToast 接收显示文本、同仓 toast(key) 先 getStringByNameSync 的写法，并自述“key needs localization … pass raw key … keep simple”，\n结果既绕过 onPhotoError，又显示不存在的资源名（源为 failed_to_take_picture）。Codex 返修把同一裸键复制到序列分支并在其前加 onCaptureError，\n一旦 onPhotoError 实现即会重复提示。\n返修（Codex session_archive 01a14ab1-0349 L4217 临时、L4324 patch 合入、L4340 停录 profile）：CameraAppInterface 覆写六个回调并经 errorToastSink、\nonVideoRecordStart/StopErrorSink 由 MainPageVM 以 showToastFake(stringOf(key)) 提示，start/stop 文案按 getErrorFeatures(profile) 拼接；\nPreviewEngine.getErrorFeatures 改收 VideoProfile 并按源谓词与 error_features_4k；VideoRecordController 保存 recordingProfile 传入 onVideoStopRuntimeError(deleteUnused, profile)；\n删除 MainPage 两处裸键 toast。FINAL 2b66258 保留。\n",
+  "recommendations": [
+    "规格提取时，对源应用接口实现类（继承空默认基类者）按 @Override 逐方法清点，服务层清单与 AC 覆盖全部 on* 错误/信息回调；本例需逐一写出 onCameraError→camera_error、onPhotoError→failed_to_take_picture、onFailedReconnectError→failed_to_reconnect_camera、onFailedCreateVideoFileError→failed_to_save_video、onVideoRecordStartError→sorry+features+not_supported 或 failed_to_record_video、onVideoRecordStopError→video_may_be_corrupted(+features)。最小检查：源文件 @Override 方法名与规格服务层方法名做差集，非空即补 AC 或写明归属 feature。",
+    "实现应用接口切片时，以源实现类的覆写全集核对目标子类，不只以规格点名为准；对基类空默认、而源子类有覆写的方法，补覆写或登记缺口。按方法签名 grep 定位源锚点窗口，确认 on* 回调区段确实读到。",
+    "迁移错误特征/错误上报接口时保留源签名的对象参数：getErrorFeatures(VideoProfile) 以 3840×2160 且 getForce4KPref() 判 4K、标签取 error_features_4k 等资源并以“/”连接；停录错误传当次 getVideoProfile()，不以 boolean 或 new VideoProfile() 占位。档位由下游控制器持有时，引擎 API 预留 profile 参数。",
+    "页面接线拍照失败时走 applicationInterface.onPhotoError()（源 errorCallback 的唯一提示出口），不在桥里另行 toast；确需直接提示时 showToast 只传已本地化文本，资源键与源一致。最小检查：grep \"showToast\\('[a-z_]+'\" 找出裸键调用，并核对每个失败路径只产生一次提示。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/CameraAppInterface.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/MyApplicationInterface.java",
+          "at": "2026-10-01T11:27:18.788Z",
+          "reason": "正常输入：规格作者 Read offset 2000 回执含 L2740 onFailedStartPreview、L2746 onCameraError→showToast(camera_error)、L2751 onPhotoError→failed_to_take_picture、L2756 onVideoError、L2776 onVideoRecordStartError（getErrorFeatures(profile)+sorry/not_supported，否则 failed_to_record_video）、L2791 onVideoRecordStopError（video_may_be_corrupted+features）、L2804 onFailedReconnectError→failed_to_reconnect_camera、L2809 onFailedCreateVideoFileError→failed_to_save_video；足以列出九个回调及其提示（agent-aa0dfce5d01f9eaa2.jsonl:L88-L89）。"
+        },
+        {
+          "key": "agent-aa0dfce5d01f9eaa2.jsonl",
+          "at": "2026-10-01T11:45:39.051Z",
+          "reason": "已读上述源码并在推理中逐行清点 2717–2809 九个回调（同转录 L104），派工要求可枚举分支各单独成 AC（L1）；Write 的 CameraAppInterface 服务层清单却只列 onVideoInfo/onVideoError/onFailedStartPreview（L114-L115），Edit 只写 AC194–196（L138-L139）；onCameraError、onPhotoError、onVideoRecordStart/StopError、onFailedReconnectError、onFailedCreateVideoFileError 无清单项、无 AC、未声明归属。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F011-app-integration.md",
+          "at": "2026-10-01T16:42:15.802Z",
+          "reason": "交付桥梁：Slice 11 worker Read 回执中 CameraAppInterface 服务层清单只含三项 on* 错误/信息回调，AC194–196 同；其余六个错误回调不在规格内（agent-a690eb1a2619c2d76.jsonl:L27-L28）。"
+        },
+        {
+          "key": "agent-a690eb1a2619c2d76.jsonl",
+          "at": "2026-10-01T17:06:38.291Z",
+          "reason": "传递：按规格把 CameraAppInterface 定为“14 abstract + F011 AC 覆写族”（L332）；源码窗口读 MyApplicationInterface 60–1188、2110–2239、2496–2705、2940–3059 等，跳过 2706–2939 回调区（L96-L117）；已读到 BasicApplicationInterface 对这些方法为空默认（L64-L65）。Write 只覆写 onFailedStartPreview/onVideoInfo/onVideoError 并配 sink，其余六个错误回调继承空实现（同转录 L387-L388）。本链确认传递，不另推定其独立失职。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/MainPageVM.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "summary": "MainPageVM.wireServices 的应用接口 sink 接线由同一 Slice 11 worker 写入：只为 onFailedStartPreviewSink/onVideoInfoSink/onVideoErrorSink 接 toast。\nCameraAppInterface 没有其余六个错误回调的 sink，VM 也就没有相应接线；偏差起点同为 F011 规格漏列。\n返修在 onVideoInfoSink 之前插入 errorToastSink（showToastFake(stringOf(key))）与 onVideoRecordStart/StopErrorSink（getErrorFeatures(profile) 拼接 sorry/not_supported、video_may_be_corrupted），FINAL 保留。\n",
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/MyApplicationInterface.java",
+          "at": "2026-10-01T11:27:18.788Z",
+          "reason": "正常输入：规格作者 Read 回执含 2740–2812 九个错误/信息回调及各自 showToast 资源（agent-aa0dfce5d01f9eaa2.jsonl:L88-L89）。"
+        },
+        {
+          "key": "agent-aa0dfce5d01f9eaa2.jsonl",
+          "at": "2026-10-01T11:45:39.051Z",
+          "reason": "偏差起点：服务层清单与 AC 只保留 onVideoInfo/onVideoError/onFailedStartPreview 三项，其余六个错误回调漏列（同转录 L104 清点、L114-L115、L138-L139）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F011-app-integration.md",
+          "at": "2026-10-01T16:42:15.802Z",
+          "reason": "交付桥梁：Slice 11 worker Read 回执中的 CameraAppInterface 清单只含三项回调（agent-a690eb1a2619c2d76.jsonl:L27-L28）。"
+        },
+        {
+          "key": "agent-a690eb1a2619c2d76.jsonl",
+          "at": "2026-10-01T17:12:12.971Z",
+          "reason": "传递：MainPageVM 的 Write（L395-L396）与重写（L410-L411）只为三条 sink 接 toast；CameraAppInterface 同批未提供其余六个错误回调的 sink，VM 无相应接线。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/PreviewEngine.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "summary": "PreviewEngine 的两处片段由 run 1 Slice 1 worker（ae5882c40105e3f01）写入，规格与源码都已正确给出。\n它读到 Preview.getErrorFeatures(VideoProfile)：3840×2160 且 getForce4KPref() 才记 4K，标签取 error_features_4k/bitrate/frame_rate/slow_motion；\n也读到 stopVideo 在 >2000ms 时以 getVideoProfile() 调 onVideoRecordStopError(profile)；F001-AC245/AC202 亦要求特征串逐项拼接、停录错误上报。\n15:25 的 Write 却写 getErrorFeatures(force4k: boolean)，为真即推字面量 '4K'；onVideoStopRuntimeError(deleteUnused) 无 profile 参数，\n先以 null as object 上报，15:26 的 perl 改为 new VideoProfile() 空档位。两处在执行结束检查点保持，getErrorFeatures 无生产调用者。\n返修改为 getErrorFeatures(profile: VideoProfile) 按源谓词与 error_features_4k，onVideoStopRuntimeError 增加 profile 参数。FINAL 保留。\n",
+      "recommendations": [
+        "迁移 getErrorFeatures/停录错误上报时保留 VideoProfile 参数与源 4K 谓词（3840×2160 且 force4K 偏好），4K 标签取 error_features_4k 资源；停录错误传当次录制档位，不以 new VideoProfile() 占位。"
+      ],
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F001-camera-preview.md",
+          "at": "2026-10-01T14:57:03.096Z",
+          "reason": "正常输入：Read 回执含 F001-AC245 getErrorFeatures 4K 强制/码率/帧率/慢动作逐项拼接（报错文案供 F003）与 AC202 stopVideo 过早停止 >2000ms 才上报 onVideoRecordStopError（agent-ae5882c40105e3f01.jsonl:L23、L26）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/preview/Preview.java",
+          "at": "2026-10-01T14:59:40.252Z",
+          "reason": "正常输入：Read offset 1200 回执含 stopVideo RuntimeException 分支：>2000ms 时 VideoProfile profile = getVideoProfile(); applicationInterface.onVideoRecordStopError(profile)；足以确定停录错误需携带当次档位（同转录 L99-L100）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/preview/Preview.java",
+          "at": "2026-10-01T14:59:51.511Z",
+          "reason": "正常输入：Read offset 5000 回执含 getErrorFeatures(VideoProfile profile) 全文：profile 为 3840×2160 且 getForce4KPref() 才记 4K，标签取 R.string.error_features_4k 等并以“/”连接（同转录 L105-L106）。"
+        },
+        {
+          "key": "agent-ae5882c40105e3f01.jsonl",
+          "at": "2026-10-01T15:26:46.305Z",
+          "reason": "已收到上述输入，Write 却写 getErrorFeatures(force4k: boolean) 推字面量 '4K'，onVideoStopRuntimeError(deleteUnused) 无 profile 参数并上报 onVideoRecordStopError(null as object)（同转录 L272-L273）；随后 Bash perl 改为 new VideoProfile() 空档位（L289-L290）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/VideoRecordController.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "summary": "VideoRecordController 停录异常分支调 engine.onVideoStopRuntimeError(删除回调)，由 run 2 Slice 4 worker（ad056b0d5327c12ec）写入。\n它此前用 Bash sed 读到 Slice 1 引擎的 onVideoStopRuntimeError(deleteUnused) 无 profile 参数、内部以 new VideoProfile() 上报；\n虽也读到源 stopVideo 以 getVideoProfile() 上报，仍按“他切片文件禁改”复用引擎 API，未保存/传递当次 profile，也未登记缺口。\n偏差起点为 Slice 1 的引擎 API，本链确认传递。另：prepare 后 binder/start 失败调 onVideoRecordStartError 本身正确，静默来自 CameraAppInterface 空实现（见 CameraAppInterface 图）。\n返修新增 recordingProfile，在 prepareAndStartRecorder 记录、停止/中止时清除，并传入 onVideoStopRuntimeError(deleteUnused, recordingProfile)。FINAL 保留。\n",
+      "recommendations": [
+        "录像控制器发现引擎错误上报 API 缺少源所需的录制档位参数时，登记跨切片缺口（FWD-REF）要求引擎补参数，并在本侧保存当次 VideoProfile，而非沿用空档位。"
+      ],
+      "nodes": [
+        {
+          "key": "agent-ae5882c40105e3f01.jsonl",
+          "at": "2026-10-01T15:26:46.305Z",
+          "reason": "偏差起点：已读源 stopVideo 的 getVideoProfile() 上报（agent-ae5882c40105e3f01.jsonl:L99-L100），Write 的 onVideoStopRuntimeError(deleteUnused) 无 profile 参数（L272-L273），perl 改为 onVideoRecordStopError(new VideoProfile())（L289-L290）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/PreviewEngine.ets",
+          "at": "2026-10-01T16:55:09.575Z",
+          "reason": "交付桥梁：Slice 4 worker 的 Bash sed 2920–3010 回执含 onVideoStopRuntimeError(deleteUnused: () => void) 及其中 onVideoRecordStopError(new VideoProfile())、getErrorFeatures(force4k: boolean)（agent-ad056b0d5327c12ec.jsonl:L47-L48）。"
+        },
+        {
+          "key": "agent-ad056b0d5327c12ec.jsonl",
+          "at": "2026-10-01T17:16:55.528Z",
+          "reason": "传递：L392 决定复用 engine 的 AC202/203 护栏、L445 认定 onVideoRecordStopError 只是 toast；Write 的 stopRecording 异常分支只向 onVideoStopRuntimeError 传删除回调，不保存/传递当次 profile（同转录 L394-L395）。它在 L87-L88 读到源 getVideoProfile() 上报，但未登记缺口；本链确认传递。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "Slice 4 worker 在工程根（cwd=opencamera-hmos）用 Bash sed -n '2920,3010p' 读取 entry/src/main/ets/viewmodels/PreviewEngine.ets，回执返回 onVideoStopRuntimeError(deleteUnused: () => void) 全文及其中 onVideoRecordStopError(new VideoProfile())；这是写 VideoRecordController 前对引擎 API 的真实读取。",
+          "evidence": [
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-ad056b0d5327c12ec.jsonl",
+              "line": 47
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-ad056b0d5327c12ec.jsonl",
+              "line": 48
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/pages/MainPage.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "summary": "MainPage.buildCaptureEngineBridge 的拍照失败提示由 group-closer（acb5c3d58575999a4）18:37 整文件 Write 写入。\n写前它读到 PhotoCaptureOrchestrator 的 toast(key) 先经 getStringByNameSync 解析再 showToast，以及 PreviewEngine.showToast(message: string, …) 接收显示文本；\n却在 takePicture 错误回调里直接 engine.showToast('failed_to_take_photo', true)，推理中自述“key needs localization … pass raw key … keep simple”（L569）。\n结果既绕过源 errorCallback 的出口 applicationInterface.onPhotoError()，又会把不存在的资源名原样显示（源资源为 failed_to_take_picture）。\nCodex 返修（c1abe5c→c8dd617）把同一裸键复制到 takePictureSequence 分支，并在其前加 photoCapture.onCaptureError()（内部调 onPhotoError），\nonPhotoError 一旦实现即重复提示。最终删除两处裸键 toast，失败提示统一由 onPhotoError→errorToastSink 产生。FINAL 保留。\n",
+      "recommendations": [
+        "页面接线拍照失败时只回告编排器/应用接口（onCaptureError→onPhotoError），不在桥里另行 toast；需要直接提示时先把资源键解析为本地化文本，键名与源一致（failed_to_take_picture）。"
+      ],
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/PhotoCaptureOrchestrator.ets",
+          "at": "2026-10-01T17:31:13.534Z",
+          "reason": "正常输入：closer 完整 Read 回执含 toast(key) → showToast(this.str(context, key), true)（str 经 resourceManager.getStringByNameSync 解析），以及 CaptureEngineBridge.takePicture 为 camera_controller.takePicture(pictureCallback, errorCallback) 等价（agent-acb5c3d58575999a4.jsonl:L85-L86）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/PreviewEngine.ets",
+          "at": "2026-10-01T17:31:56.427Z",
+          "reason": "正常输入：closer Read 3130–3264 回执含 showToast(message: string, useFakeToast: boolean, …)（AC232-234），参数为显示文本、不解析资源键（同转录 L103-L104）。"
+        },
+        {
+          "key": "agent-acb5c3d58575999a4.jsonl",
+          "at": "2026-10-01T18:37:38.589Z",
+          "reason": "已收到上述输入，整文件 Write 的 bridge.takePicture 错误回调却直接 engine.showToast('failed_to_take_photo', true)：未走 onPhotoError，传未本地化且资源中不存在的键（同转录 L567-L568）；L569 自述需要本地化但“pass raw key … keep simple”。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-385cf581f059f55e4e3b",
+  "metadata": {
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code",
+        "codex"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3",
+        "gpt-6-astra"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.163.0",
+        "2.1.247",
+        "2.1.299"
+      ]
+    },
+    "source_set_id": "sources-974a9086706364eed8b7",
+    "environment": [
+      {
+        "name": "android.compile_sdk",
+        "value": "36",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/.claude/skills",
+        "at": "2026-10-01T09:52:21.840Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-aa8064d19722381a1.jsonl:L11",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-aa8064d19722381a1.jsonl:L10",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos",
+        "at": "2026-10-01T12:27:45.961Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b.jsonl:L1565",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b.jsonl:L1563",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos",
+        "at": "2026-10-01T13:34:44.665Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae78a452b1664bc61.jsonl:L149",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae78a452b1664bc61.jsonl:L148",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.11.1"
+  },
+  "revision": "a745a003d9157e649ef4555548b8cba1220f2c13ff68a01bed50659a5e107e26"
+}

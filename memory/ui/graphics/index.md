@@ -1,12 +1,12 @@
 # ui/graphics
 
-图标与图形资源：动画矢量的状态帧、Lottie 动画层的接入、被注释的自定义绘制绑定、系统符号替代、资源迁移中的静态化标注，图标固有尺寸与 scaleType（含 vector 转来的 SVG），整屏背景图的缩放方式，自定义图片组件的形状与裁剪（含被父级自定义 Layout 放置时），自绘图表的坐标原点，按使用场景区分的资源变体映射，自绘视图自适应尺寸公式的参照基数，按产品 flavor 覆盖的 layer-list 根背景逐层落地与位图暂缺时的引用保留，以及多个指标共用的绘制分支按源端通用参数（线宽、描边）统一实现，缺失原图时从 Android 复制且不以近名图标或着色替代，文字字符按钮的字形；自绘 View 移植到 Canvas 的单位、帧循环、位图缓存语义与文字度量见子主题 canvas；自绘角标与圆点按调用分支推导尺寸（半径与直径）；动画矢量（AVD）两态之间的形变过渡；Coil 全局 ImageLoader 的默认占位、错误图与解码器（动图是否播放）写进图片契约
+图标与图形资源：动画矢量的状态帧、Lottie 动画层的接入、被注释的自定义绘制绑定、系统符号替代、资源迁移中的静态化标注，图标固有尺寸与 scaleType（含 vector 转来的 SVG），整屏背景图的缩放方式，自定义图片组件的形状与裁剪（含被父级自定义 Layout 放置时），自绘图表的坐标原点，按使用场景区分的资源变体映射，自绘视图自适应尺寸公式的参照基数，按产品 flavor 覆盖的 layer-list 根背景逐层落地与位图暂缺时的引用保留，以及多个指标共用的绘制分支按源端通用参数（线宽、描边）统一实现，缺失原图时从 Android 复制且不以近名图标或着色替代，文字字符按钮的字形；自绘 View 移植到 Canvas 的单位、帧循环、位图缓存语义与文字度量见子主题 canvas；自绘角标与圆点按调用分支推导尺寸（半径与直径）；动画矢量（AVD）两态之间的形变过渡；Coil 全局 ImageLoader 的默认占位、错误图与解码器（动图是否播放）写进图片契约；Bitmap.recycle 迁成 PixelMap.release 的唯一所有者，降采样与 EXIF 方向迁到 ImageSource
 
 [上一级](../index.md)
 
 ## 子主题
 
-- [canvas](canvas/index.md) — 自绘 View（onDraw、Paint）移植到 ArkUI Canvas：上下文单位域与跨域换算，invalidate 与帧循环，每帧起始画面（清屏），预烘焙位图改每帧绘制时的取值时机与缩放语义，字体串格式与字体就绪，文字基线度量与段落方向，SurfaceView 自建线程渲染循环的实例结构、vsync 驱动与 surface 失效，位图按密度解码与预缩放采样
+- [canvas](canvas/index.md) — 自绘 View（onDraw、Paint）移植到 ArkUI Canvas：上下文单位域与跨域换算，invalidate 与帧循环，每帧起始画面（清屏），预烘焙位图改每帧绘制时的取值时机与缩放语义，字体串格式与字体就绪，文字基线度量与段落方向，SurfaceView 自建线程渲染循环的实例结构、vsync 驱动与 surface 失效，位图按密度解码与预缩放采样，Paint 状态读回改为组件自记（上下文属性只写不读）
 
 ## 本级经验
 
@@ -14,6 +14,9 @@
   - 时机：规格提取与界面实现阶段，为 AnimatedImageVector/animated-vector 图标确定实现方案、各状态显示的帧与状态切换时的过渡时；以及资源迁移阶段遇到 animated-vector 时
   - 情境：源码用 AnimatedImageVector.animatedVectorResource 与 rememberAnimatedVectorPainter(icon, atEnd)，atEnd 由完成、运行等状态决定，animated-vector 的 objectAnimator 以 pathData 的 valueFrom/valueTo、duration 与 interpolator 描述两态形变；目标没有直接等价组件，资源目录里的同名媒体是资源迁移从起始帧导出的静态 SVG；规格可能允许资源动画或等价符号，或写“图标态切换即可满足”。
   - 例外：决策记录以编号批准省略形变过渡、差异验收与之一致时，按批准的两态静态帧或等价符号实现，仍按状态分别给出起止帧
+- [Bitmap.recycle 迁成 PixelMap.release 前先定唯一所有者：成品只释放一次，多方持有时各自 cloneSync](lesson-df776e3d7e58109f25cc.lesson.md)
+  - 时机：图像处理与保存实现阶段，把 Android Bitmap 的后处理、缩略图生成与 recycle 迁成 PixelMap 调用，或把同一张图同时交给多个消费方（画廊图标、Canvas 覆盖层）时
+  - 情境：源端后处理函数返回新位图并释放输入，调用处把返回值赋回同一变量，缩略图与末尾 recycle 都针对成品；调用方另外再 recycle（Java 的 recycle 可重复调用，冗余调用无害）。目标 PixelMap.release 后对象不再可用，同一张图还可能经回调分发给多个组件。
 - [Coil 全局 ImageLoader 的占位、错误图与解码器写进图片契约：没装 GIF 解码器时只显示动图首帧](lesson-544f9fa8eff09aca5f52.lesson.md)
   - 时机：规格提取阶段整理图片加载管线与设置位归属时；界面实现阶段把 Coil AsyncImage 映射为 ArkUI Image 时
   - 情境：Android 图片组件经应用的 ImageLoaderFactory 或 Coil.setImageLoader 加载，默认 loader 设 placeholder、error、crossfade 并只装部分解码器，autoPlayGifs 一类设置位切换到带 GIF 解码器的 loader；目标用 ArkUI Image（默认播放动图）与 alt 实现。
@@ -58,3 +61,6 @@
 - [自绘图表的折线点与节点标签共用同一坐标原点：点坐标已含顶部留白时，不再给图形节点加同向 position 偏移](lesson-dca31bed776aaf7cb328.lesson.md)
   - 时机：界面实现阶段，把 Android 自定义 ItemDecoration/Canvas 图表（温度折线、趋势图）转换为 ArkUI Canvas、Polyline 或 Shape 时
   - 情境：源端在同一画布坐标里用 valToY 一类函数（已含 paddingTop 与文字高度）画折线和节点标签；目标把折线画在 Polyline/Shape 上并用 position 定位，标签另用 Text 定位。
+- [降采样与 EXIF 方向迁到 ImageSource：用 desiredSize 而非 sampleSize，ORIENTATION 的描述字符串映射成角度](lesson-108eabea8042e1daf064.lesson.md)
+  - 时机：图片解码与缩略图实现阶段，把 Android inSampleSize 降采样与 ExifInterface 整数方向读取翻译为 image.ImageSource 的 createPixelMap 与 getImageProperty 时
+  - 情境：源端按 inSampleSize 算法降采样解码，并以整数读取 EXIF 方向后旋转；目标准备把 sampleSize 直接填进 DecodingOptions，把 getImageProperty(ORIENTATION) 的返回值 Number() 成角度。

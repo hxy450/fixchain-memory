@@ -1,6 +1,6 @@
 # ui/graphics/canvas
 
-自绘 View（onDraw、Paint）移植到 ArkUI Canvas：上下文单位域与跨域换算，invalidate 与帧循环，每帧起始画面（清屏），预烘焙位图改每帧绘制时的取值时机与缩放语义，字体串格式与字体就绪，文字基线度量与段落方向，SurfaceView 自建线程渲染循环的实例结构、vsync 驱动与 surface 失效，位图按密度解码与预缩放采样
+自绘 View（onDraw、Paint）移植到 ArkUI Canvas：上下文单位域与跨域换算，invalidate 与帧循环，每帧起始画面（清屏），预烘焙位图改每帧绘制时的取值时机与缩放语义，字体串格式与字体就绪，文字基线度量与段落方向，SurfaceView 自建线程渲染循环的实例结构、vsync 驱动与 surface 失效，位图按密度解码与预缩放采样，Paint 状态读回改为组件自记（上下文属性只写不读）
 
 [上一级](../index.md)
 
@@ -32,6 +32,9 @@
 - [源端位图按密度解码、createScaledBitmap 预缩放后原尺寸绘制时，目标在 PixelMap 上按同一采样预缩放](lesson-c3bd9c8b2f24c209a659.lesson.md)
   - 时机：规格提取阶段把源端位图的解码、预缩放与绘制方式写成画布绘制契约时；渲染实现阶段按契约装载并绘制这些位图时
   - 情境：源端自绘 View 用 BitmapFactory.decodeResource 解码只放在单一密度目录（如 drawable-ldpi）的位图，再用 Bitmap.createScaledBitmap(raw, w, h, filter) 缩到运行时算出的尺寸，onDraw 里 drawBitmap(bmp, x, y, paint) 按原尺寸绘制；目标在 ArkUI Canvas 上用 drawImage 移植。
+- [源端绘制函数从 Paint 读回字号或对齐时，目标在组件内自记字体与对齐，不读回 ctx.font、ctx.textAlign](lesson-8b1a03e44c59e371ff57.lesson.md)
+  - 时机：渲染实现阶段，把依赖 Paint getter（getTextSize、getTextAlign 等）读回状态的绘制辅助函数（如带底衬的文字绘制）移植到 ArkUI Canvas 时；规格提取阶段写 Paint→Canvas 映射行时
+  - 情境：源端多个绘制调用共用一个 Paint：调用方先 setTextSize/setTextAlign/setTypeface，被调的辅助函数再用 getter 读回当前字号与对齐，计算底衬框、内边距或文字偏移；目标把 Paint 设置译成 ctx.font、ctx.textAlign 赋值，规格映射只写“Paint 属性映射 Canvas 等价属性”。
 - [移植 Paint 文字度量前先按源 API 分层：getTextBounds/Rect 包围盒直接对应 actualBoundingBox*（各自 Math.ceil）；Paint.ascent/descent 字体级基线修正才实测选与 hhea 吻合的 TextMetrics 字段，不凭字段名或先例推定；源式取整原样保留](lesson-f876887b216b6caf9f39.lesson.md)
   - 时机：渲染实现阶段，把源端 Canvas 文字居中或基线修正（如 (int)((descent+ascent)/2)）移植为 measureText 的 TextMetrics 计算，或决定能否关闭“需实测校正”的字段映射标记时；规格提取阶段写文字基线映射时；把 Paint.getTextBounds 取得的文字高度映射为行高或间距时
   - 情境：源端以 Paint.ascent()/descent()（字体级上/下伸，ascent 为负）计算基线偏移，供数字、标题、说明等文字使用；目标用 CanvasRenderingContext2D.measureText 返回的 fontBoundingBox*、emHeight*、actualBoundingBox* 取等价度量，并注册了自定义字体。 也包括源端用 Paint.getTextBounds(text, start, end, Rect) 取一段具体字符的墨迹包围盒高度来定行高或间距（如 HUD 标签与数值的行距、自适应字号循环）。

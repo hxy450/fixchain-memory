@@ -1,0 +1,346 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-58c3f872e3c907fb4b68",
+  "created_at": "2026-10-23T14:52:08.941090+00:00",
+  "migration_key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/memory-distill-opencamera-20261023/pool",
+  "title": "相机照片/录像默认经受限的 createAsset 系列写入媒体库（201），应改用相机系统资产保存；改用资产回调后又因无 capture ID 串帧",
+  "when": "相机拍照与录像的保存实现阶段，为相机产出的照片/视频选择媒体库写入接口和 PhotoOutput/AVRecorder 输出回调时",
+  "description": "源端经 MediaStore insert（IS_PENDING 两段写）或 MediaRecorder 输出文件保存相机拍摄的照片与视频；目标为未配置受限权限签名授权的 HarmonyOS 普通应用，需在 photoAccessHelper createAsset/createAssetRequest、PhotoOutput photoAvailable/photoAssetAvailable、AVRecorder fileGenerationMode APP_CREATE/AUTO_CREATE_CAMERA_SCENE 之间选择保存路线。",
+  "summary": "本卡含三类成因，分别对应照片保存（B5）、录像保存（B39）和返修中新生的串帧（B6）。\n\n① 参考资料先偏离，生成者照用（B5 照片保存）。Slice 3 worker agent-a46e99f7c0baf2d05 写前读到的\nF002 spec 只把 MediaStore insert 映射为“photoAccessHelper PhotoAsset 创建/提交（IS_PENDING 两段写）”，\n没有写写入权限是否可得（L25-L26，spec 第 99 行）。它随后读到的\narkts-system-capabilities/references/photo-access-helper.md 把\nMediaAssetChangeRequest.createAssetRequest + addResource + applyChanges 写成“编译校验过”的保存范式，\n并把 ohos.permission.WRITE_IMAGEVIDEO 写成“user_grant：module.json5 声明 + 运行时请求”。\n这份参考没有说明该权限属于受限开放权限、需要受限权限签名授权，也没有相机拍摄场景可用的系统资产路线（L131-L132）。\n生成者把这份参考当作已验证范式，并据此认为权限只需运行时请求一次（L133、L146、L194）。\n它在 StorageRepository 写出 createPendingMediaAsset/commitPendingMediaAsset（L252-L253），\n在 ImageSaverService 把默认媒体库通道接到这组两段写（L283-L284），\n再登记 P-S3-007，把 WRITE_IMAGEVIDEO 的声明交给 Slice 11（L199）。\n这一偏差在参考资料描述权限性质时已经形成，生成者只是按参考传递。\ngroup-closer agent-acb5c3d58575999a4 后来假设“HMOS 媒体库模式下无存储权限门”，\n没有声明权限，也没有复核，就把 P-S3-007 标为 resolved（同转录 L166、L814）。\n它还按 Android onPictureTaken 的字节回调，在 HmosCameraController 写出 photoAvailable → getComponent(JPEG)\n的字节上抛（L340-L341）。这样，照片保存链从取帧到落盘都依赖受限写入。\n这些片段原样保留到执行结束态 c752566。\n\n② 输入只给出总体方向，生成者凭记忆选了受限接口（B39 录像保存）。Slice 4 worker agent-ad056b0d5327c12ec\n收到的 D-006 只规定“AVRecorder 录制 + photoAccessHelper 媒体库落盘”（L32-L33）。\n它读 SDK 时，回执已列出 AVRecorderConfig.fileGenerationMode 字段，\n以及 FileGenerationMode 的 APP_CREATE / AUTO_CREATE_CAMERA_SCENE 两个值（L204-L207）。\nregistry 尾部也写明媒体库写入需要 WRITE_IMAGEVIDEO（P-S3-007，L314-L315）。\n但它在 API 小结中略去了 fileGenerationMode（L208），按“官方 cameraRecorder 示例”的记忆，\n选用 helper.createAsset(VIDEO,'mp4') → fileIo.openSync(uri) → fd:// 这条应用自建资产的路线（L297）。\n它没有核对 createAsset 的权限要求，也没有为此登记权限依赖（L559）。\nAvRecorderEngine 在 L342-L343 写出这条路线。VideoRecordController 中按 fd statSize 轮询 maxFilesize、\n失败时 deleteAsset 清理，都建立在这条应用自建 fd 上（L394-L395）。\n\n返修期间，Codex 根代理在模拟器上确认快门和解码都正常，写入相册时系统返回权限错误 201（01a14aae L2575）。\nsession_archive 写出替代路线提案（0349 L1764），复现录像默认路径的受限 createAsset 201（L1815），\n并确认图库写权限需要受限权限签名授权，而当前构建没有签名配置（L4774）。\nFINAL 的照片路线：PhotoOutput 在 commitConfig 前注册 photoAssetAvailable，\nCameraPhotoAssetStore 用 requestImageData 读取资产字节并以 WeakMap 关联，\nImageSaverService 把处理后的 JPEG 经 saveCameraPhoto 写回同一资产，未用的资产 discard，\nPNG/WebP 和多输出（HDR 底图/NR/全景）明确提示不支持。\nFINAL 的录像路线：默认 fileGenerationMode=AUTO_CREATE_CAMERA_SCENE，stop 后等待 photoAssetAvailable 再 saveCameraPhoto，\n超时、释放或出错时 discard；只有调用方给出 URI 时才用 fd；系统资产模式下 maxFileSize 与续录明确提示不支持。\n\n③ 返修中新生（B6）。Codex 根代理改用 photoAssetAvailable 前，rg 回执已显示该回调只携带\nPhotoAsset、没有 capture ID（01a14aae L2551-L2555）。它在 L2648-L2652 写入的补丁新增了 30s 超时取消，\n超时后只清空 captureResultSink，同一 PhotoOutput 的回调仍然把之后到达的资产交给当时唯一的 sink。\n于是上一张超时后迟到的资产会被下一次拍摄接收。parity_audit 复现了这次串帧（5a2d L2424），\n修复为失败或超时即退役该 PhotoOutput（retiredPhotoOutput），用 recoverPhotoPreview 重建拍照预览会话，\n后续 takePicture/capturePhotoSequence 等待恢复完成（5a2d L2502-L2506、L2515-L2519）。FINAL 保留了这些修改。\n",
+  "recommendations": [
+    "实现阶段：相机产出的照片默认在 commitConfig 前为 PhotoOutput 注册 photoAssetAvailable（不要同时订阅 photoAvailable）。拿到资产后用 requestImageData 读取字节，完成 EXIF/水印/HDR 等处理，再用 MediaAssetChangeRequest(asset) 的 addResource、saveCameraPhoto 和 applyChanges 写回同一资产；未使用的资产要 discard。",
+    "实现阶段：AVRecorder 默认录像用 fileGenerationMode=AUTO_CREATE_CAMERA_SCENE，在 prepare 前订阅 photoAssetAvailable，stop 后等待资产保存成功再上报 URI 或释放录制器。只有调用方显式给出输出 URI 时才用 APP_CREATE+fd；系统建资产模式下无法轮询文件大小，maxFileSize 和续录要明确提示不支持。",
+    "实现阶段：选定任何媒体库写入 API 前，先在 SDK d.ts 查它的 @permission，再查该权限是否为受限开放权限（需签名授权）。当前工程没有对应授权时，createAsset、createAssetRequest、createAssetWithShortTermPermission 都不能作为默认保存路线；读 SDK 时出现的模式枚举（如 FileGenerationMode）要逐项评估，不要凭记忆中的示例跳过。",
+    "知识准备与规格提取阶段：photoAccessHelper 参考资料和 MediaStore→photoAccessHelper 映射行要写明：WRITE_IMAGEVIDEO 为受限开放权限，需签名授权，不能只靠 module.json5 声明加运行时请求获得；相机拍摄的照片和视频应走相机系统资产路线（photoAssetAvailable + saveCameraPhoto），应用自生成图片应走用户授权的保存控件或弹窗。",
+    "收口阶段：处理权限类 deferred-work 时，要实际核对 module.json5 声明，并确认该权限可以获得（是否受限、是否需要签名授权）；不要依据其他条目“无存储权限门”之类的说明直接标为 resolved。",
+    "返修阶段：改用 photoAssetAvailable 这类没有请求 ID 的回调时，按一次拍摄独占一个输出来设计。出现超时或失败时，退役该 PhotoOutput 并重建会话，等恢复完成后再接受下一次拍摄；不要把迟到的资产交给当时唯一的结果接收者。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/repositories/StorageRepository.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F002-photo-capture-save.md",
+          "at": "2026-10-01T16:41:34.309Z",
+          "reason": "正常但不充分的输入：Read 回执第 99 行把 MediaStore insert/update 映射为“@ohos.file.photoAccessHelper PhotoAsset 创建/提交（IS_PENDING 两段写语义）”，第 184 行 AC32 要求媒体库通道两段写。这些只定了 photoAccessHelper 这一方向，没有写写入权限能否获得，也没有写相机场景的资产路线（agent-a46e99f7c0baf2d05.jsonl:L25-L26）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/.claude/skills/arkts-system-capabilities/references/photo-access-helper.md",
+          "at": "2026-10-01T16:46:25.933Z",
+          "reason": "有缺陷的外部参考（材料边界）：Read 回执第 117-151 行把 createAssetRequest + addResource + applyChanges 写成编译校验过的保存范式，权限一栏写“WRITE_IMAGEVIDEO（user_grant：module.json5 声明 + 运行时 abilityAccessCtrl 请求，缺一不可）”，第 177 行再次写“两者都是 user_grant，须声明 + 运行时请求”。它没有说明该权限为受限开放权限、需要签名授权，也没有相机系统资产路线。这份 skill 随插件分发，材料池中没有它的生成会话，上溯在此停止（agent-a46e99f7c0baf2d05.jsonl:L131-L132）。",
+          "problem": true
+        },
+        {
+          "key": "agent-a46e99f7c0baf2d05.jsonl",
+          "at": "2026-10-01T17:03:57.355Z",
+          "reason": "传递者：读到上述参考后，生成者在 L133 把三步范式记为 verified pattern，在 L146、L194 认定 WRITE_IMAGEVIDEO 是 user_grant、运行时请求一次即可。L252 的 Write 新建 StorageRepository，写出 createPendingMediaAsset（MediaAssetChangeRequest.createAssetRequest）和 commitPendingMediaAsset（addResource + applyChanges），并在 L199 登记 P-S3-007 交由 Slice 11 声明权限。本链确认参考内容被传到目标文件，不另推定生成者独立失职（同转录 L252-L253）。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/ImageSaverService.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/.claude/skills/arkts-system-capabilities/references/photo-access-helper.md",
+          "at": "2026-10-01T16:46:25.933Z",
+          "reason": "有缺陷的外部参考：同 StorageRepository 图。它把 createAssetRequest 两段写写成保存范式，又把 WRITE_IMAGEVIDEO 写成普通 user_grant，没有提到受限签名授权和相机资产路线（agent-a46e99f7c0baf2d05.jsonl:L131-L132）。",
+          "problem": true
+        },
+        {
+          "key": "agent-a46e99f7c0baf2d05.jsonl",
+          "at": "2026-10-01T17:09:56.490Z",
+          "reason": "传递者：L283 的 Write 新建 ImageSaverService，非 SAF 的默认通道写成 storage.createPendingMediaAsset(extension, false, …) 和 commitPendingMediaAsset。RAW 分支同样走 createPendingMediaAsset('dng', …)。照片默认落盘因此完全依赖受限写入（同转录 L283-L284；L194 写有通道设计）。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/AvRecorderEngine.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "summary": "Slice 4 worker 收到的 D-006 只规定“AVRecorder + photoAccessHelper 媒体库落盘”。\nSDK 读取回执已列出 FileGenerationMode 的 APP_CREATE / AUTO_CREATE_CAMERA_SCENE，\nregistry 尾部也写明媒体库写入需要 WRITE_IMAGEVIDEO。它却凭“官方 cameraRecorder 示例”的记忆，\n写出 helper.createAsset(VIDEO,'mp4') + fileIo.openSync + fd://，既没有核对 createAsset 的权限，\n也没有评估相机场景自动建资产模式。FINAL 默认改为 AUTO_CREATE_CAMERA_SCENE + photoAssetAvailable + saveCameraPhoto，\n只有调用方给出 URI 时才用 fd。\n",
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/decision-ledger.md",
+          "at": "2026-10-01T16:54:47.670Z",
+          "reason": "正常但不具体的输入：Bash sed 回执返回 D-006，内容为“AVRecorder 录制 + photoAccessHelper 媒体库落盘”。它只规定了 kit 方向，没有指定 createAsset，也没有排除系统建资产的模式；FINAL 的 saveCameraPhoto 同样属于 photoAccessHelper（agent-ad056b0d5327c12ec.jsonl:L32-L33）。"
+        },
+        {
+          "key": "/Applications/DevEco-Studio.app/Contents/sdk/default/openharmony/ets/api/@ohos.multimedia.media.d.ts",
+          "at": "2026-10-01T17:02:10.717Z",
+          "reason": "已给出替代选项：生成者用 python 读取 SDK d.ts，L205 回执列出 AVRecorderConfig.fileGenerationMode?: FileGenerationMode，L207 回执列出 FileGenerationMode => APP_CREATE=0、AUTO_CREATE_CAMERA_SCENE=1。这说明写前已经看到相机场景可由系统创建录像文件的选项（agent-ad056b0d5327c12ec.jsonl:L204-L207）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/placeholder-registry.md",
+          "at": "2026-10-01T17:08:25.426Z",
+          "reason": "正常输入：Bash tail 回执包含 P-S3-007：“媒体库写权限 ohos.permission.WRITE_IMAGEVIDEO 声明缺失（photoAccessHelper MediaAssetChangeRequest 落盘通道需要）”，提示媒体库写入需要该权限（agent-ad056b0d5327c12ec.jsonl:L314-L315）。"
+        },
+        {
+          "key": "agent-ad056b0d5327c12ec.jsonl",
+          "at": "2026-10-01T17:12:46.485Z",
+          "reason": "收到上述输入后，生成者在 L208 的 API 小结中略去 fileGenerationMode，并写“url: string（required，fd://）”。L297 它凭记忆认定“AVRecorder 官方示例正是 createAsset → fs.openSync(uri, READ_WRITE) → fd://”，没有核对 createAsset 的 @permission。L342 的 Write 新建 AvRecorderEngine，prepare 中写 helper.createAsset(photoAccessHelper.PhotoType.VIDEO, …) + fileIo.openSync(assetUri, READ_WRITE)，L362 再固定为 'mp4'。L559 只为 MICROPHONE 登记权限缺口，没有为 createAsset 登记写权限依赖。偏差在于从已给出的模式中选错了保存路线（同转录 L208、L297、L342-L343、L362-L363、L559）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4,
+          "force": true,
+          "reason": "生成者 Bash 执行 sed -n '120,160p' spec/decision-ledger.md（工作目录为 opencamera-hmos 工程根），回执返回 D-006“AVRecorder 录制 + photoAccessHelper 媒体库落盘”全文；这证明写前已收到该决策。",
+          "evidence": [
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-ad056b0d5327c12ec.jsonl",
+              "line": 32
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-ad056b0d5327c12ec.jsonl",
+              "line": 33
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 4,
+          "force": true,
+          "reason": "生成者 Bash 内 python 以 open() 读取 @ohos.multimedia.media.d.ts，并按枚举名提取成员；回执返回 FileGenerationMode => APP_CREATE / AUTO_CREATE_CAMERA_SCENE，以及 AVRecorderProfile 字段。这证明写前已收到相机场景系统建文件的选项。",
+          "evidence": [
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-ad056b0d5327c12ec.jsonl",
+              "line": 206
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-ad056b0d5327c12ec.jsonl",
+              "line": 207
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "生成者 Bash 执行 tail -5 spec/placeholder-registry.md（工程根相对路径），回执包含 P-S3-007 行，说明媒体库写入需要 WRITE_IMAGEVIDEO；读取发生在 AvRecorderEngine 写入之前。",
+          "evidence": [
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-ad056b0d5327c12ec.jsonl",
+              "line": 314
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-ad056b0d5327c12ec.jsonl",
+              "line": 315
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/VideoRecordController.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "summary": "录像控制器跟随 AvRecorderEngine 的应用自建资产路线：maxFilesize 用 recorder.statSize() 轮询 fd，\n启动失败和停止异常时调用 recorder.deleteAsset() 删除自建资产。路线切到系统建资产后，\n停止前不交付资产，也无法轮询大小。FINAL 只在调用方给出 URI 时轮询，系统资产模式下 maxFileSize 和续录明确提示不支持，\n删除改为 discard 相机资产。\n",
+      "nodes": [
+        {
+          "key": "/Applications/DevEco-Studio.app/Contents/sdk/default/openharmony/ets/api/@ohos.multimedia.media.d.ts",
+          "at": "2026-10-01T17:02:10.717Z",
+          "reason": "已给出替代选项：同 AvRecorderEngine 图，回执列出 FileGenerationMode 的 APP_CREATE / AUTO_CREATE_CAMERA_SCENE（agent-ad056b0d5327c12ec.jsonl:L204-L207）。"
+        },
+        {
+          "key": "agent-ad056b0d5327c12ec.jsonl",
+          "at": "2026-10-01T17:16:55.528Z",
+          "reason": "同一生成者在选定 createAsset+fd 路线后，L394 的 Write 新建 VideoRecordController：videoMaxFilesize>0 时每秒用 recorder.statSize() 轮询，失败与异常路径调用 nextRecorder/recorder.deleteAsset()。这些都以应用自建的可写 fd 为前提，是同一选型偏差在控制器中的延续（同转录 L394-L395；c752566 版本第 374-377、432-441 行）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "生成者 Bash 内 python 以 open() 读取 @ohos.multimedia.media.d.ts，并按枚举名提取成员；回执返回 FileGenerationMode => APP_CREATE / AUTO_CREATE_CAMERA_SCENE，以及 AVRecorderProfile 字段。这证明写前已收到相机场景系统建文件的选项。",
+          "evidence": [
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-ad056b0d5327c12ec.jsonl",
+              "line": 206
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-ad056b0d5327c12ec.jsonl",
+              "line": 207
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/HmosCameraController.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "summary": "本图只画返修中新生的 B6。该文件 B5 部分的 photoAvailable → JPEG 字节上抛由 group-closer\n在生成期按 Android 字节回调写入（agent-acb5c3d58575999a4.jsonl:L340-L341），\n是成因①照片保存链的取帧端，返修时随路线切换改为 bindPhotoAssetOutput。\n没有核到 closer 在取帧接口上另收到过更正确的输入，因此不单独标为偏差起点。\nB6：Codex 根代理已读到 photoAssetAvailable 回调只携带 PhotoAsset，却在补丁中让唯一 sink\n接收任何后到的资产，同时新增的 30s 超时只清空 sink、不退役输出，导致迟到资产串到下一次拍摄。\nparity_audit 复现后改为失败即退役 PhotoOutput，并重建拍照预览会话。\n",
+      "nodes": [
+        {
+          "key": "/Applications/DevEco-Studio.app/Contents/sdk/default/openharmony/ets/api/@ohos.multimedia.camera.d.ts",
+          "at": "2026-10-18T02:24:46.030Z",
+          "reason": "正常输入：根代理的 rg 回执返回 camera.d.ts:7865 on(type: 'photoAssetAvailable', callback: AsyncCallback<photoAccessHelper.PhotoAsset>)，回调只交付资产本身，不带 capture 或请求 ID，足以说明后到的资产无法按拍摄区分（rollout-2026-10-17T09-25-11-01a14aae-7c27-7970-aae5-6ee7ad3de05e.jsonl:L2551、L2555）。"
+        },
+        {
+          "key": "01a14aae-7c27-7970-aae5-6ee7ad3de05e",
+          "at": "2026-10-18T02:27:30.039Z",
+          "reason": "收到上述输入后，L2648 的 apply_patch 新增 bindPhotoAssetOutput：photoAssetAvailable 回调一律取当时的 this.captureResultSink 交付。同一补丁在 captureFrame 中新增 30s 超时 finish(null)，超时后只清空 sink，PhotoOutput 保持订阅。上一张超时后迟到的资产因此被下一次拍摄接收。这是返修中新引入的偏差，回执 L2652 显示补丁已应用（同转录 L2648、L2652）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "根代理在 exec 脚本中调用 tools.exec_command 运行 rg，检索 @ohos.multimedia.camera.d.ts 中的 photoAssetAvailable；回执返回 7865 行 on(type: 'photoAssetAvailable', callback: AsyncCallback<photoAccessHelper.PhotoAsset>)，可见回调只交付资产。这次读取早于 L2648 的 bindPhotoAssetOutput 补丁。",
+          "evidence": [
+            {
+              "source": "codex/2026/10/17/rollout-2026-10-17T09-25-11-01a14aae-7c27-7970-aae5-6ee7ad3de05e.jsonl",
+              "line": 2551
+            },
+            {
+              "source": "codex/2026/10/17/rollout-2026-10-17T09-25-11-01a14aae-7c27-7970-aae5-6ee7ad3de05e.jsonl",
+              "line": 2555
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "生成期材料中没有找到说明 WRITE_IMAGEVIDEO 受限、也没有找到 saveCameraPhoto 或相机资产路线的输入（已在 c752566 的 .claude 与 spec/baseline 中检索）。照片侧因此归为参考资料缺口，不认定生成者明知仍违背。录像侧也只核到生成者收到了 AUTO_CREATE_CAMERA_SCENE 枚举名和 P-S3-007，没有核到它收到过该模式的语义文档。"
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/CameraPhotoAssetStore.ets",
+      "reason": "返修期由 capture_audit 新建（6e4d L1735-L1739），生成期没有这个文件。其中 onDataPrepared 被系统脱离 this 调用，是返修中新生的问题，由同一 agent 依据真机现象自行修复（6e4d L2294、L2301-L2305）。没有核到写前是否有输入说明系统会脱离实例调用该回调，所以未画链。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/VideoProfileBuilder.ets",
+      "reason": "修复只把 getVideoMaxFileSizeUserPref 改为公开，供 AvRecorderStartOptions.maxFileSize 使用，属于路线切换的配套接线。生成期该方法本身没有偏差，未单独归因。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/resources/base/element/string.json",
+      "reason": "修复新增 camera_extra_outputs_unsupported、camera_photo_format_unsupported、video_max_filesize_unsupported、video_filesize_restart_unsupported 等提示文案，属于新路线下明确降级所需的新要求，不是生成遗留，未画生成链。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/resources/zh_CN/element/string.json",
+      "reason": "同 base/element/string.json，为新路线降级提示新增的中文文案，属于新要求。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/resources/zh_TW/element/string.json",
+      "reason": "同 base/element/string.json，为新路线降级提示新增的繁体文案，属于新要求。job 中 c1abe5c..c8dd617 有一行删除尚未定位到具体调用，与本问题无关。"
+    }
+  ],
+  "job": "issue-58c3f872e3c907fb4b68",
+  "metadata": {
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code",
+        "codex"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3",
+        "gpt-6-astra"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.163.0",
+        "2.1.247",
+        "2.1.299"
+      ]
+    },
+    "source_set_id": "sources-974a9086706364eed8b7",
+    "environment": [
+      {
+        "name": "android.compile_sdk",
+        "value": "36",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/.claude/skills",
+        "at": "2026-10-01T09:52:21.840Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-aa8064d19722381a1.jsonl:L11",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-aa8064d19722381a1.jsonl:L10",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos",
+        "at": "2026-10-01T12:27:45.961Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b.jsonl:L1565",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b.jsonl:L1563",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos",
+        "at": "2026-10-01T13:34:44.665Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae78a452b1664bc61.jsonl:L149",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae78a452b1664bc61.jsonl:L148",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.11.1"
+  },
+  "revision": "8f81496786965152a90c44e6cfca277833ac24fc4296e7268a881109215d0a36"
+}

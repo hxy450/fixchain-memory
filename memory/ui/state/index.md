@@ -1,14 +1,14 @@
 # ui/state
 
-ArkUI V2 状态刷新与订阅：@Builder 参数（含异步重赋值的数组与对象）、复用开关组件的事件值、页面与共享模型的绑定、共享状态 key 的命名、按状态显隐、只在回调执行后才成立的显示状态与控件自带的前置过滤、负责上抛自身可见性的组件须常建、事件驱动的重新加载、生命周期回调迁入 ViewModel 时的成对状态、单例 ViewModel 的取消语义与页面加载入口单飞、ForEach 键与子组件刷新、变更信号与 @Monitor 数组路径的配套、可观察字段的判定、监听的注册与释放、乐观更新与访问器兜底，多个 ViewModel 实例间的跨页面状态（拆单例、弹窗与宿主），稳定列表键与可观察实例原位更新，Repeat 条目的传参，离开组合即销毁的复位与框架会恢复的界面状态，Activity 实例会话态的作用域，每次可见时的初始化与只在可见时接收的监听；Compose remember 的求值与重建时机（无键、带 key、条件挂载、无 key 惰性项），以引用比较实现的未保存检测
+ArkUI V2 状态刷新与订阅：@Builder 参数（含异步重赋值的数组与对象）、复用开关组件的事件值、页面与共享模型的绑定、共享状态 key 的命名、按状态显隐、只在回调执行后才成立的显示状态与控件自带的前置过滤、负责上抛自身可见性的组件须常建、事件驱动的重新加载、生命周期回调迁入 ViewModel 时的成对状态、单例 ViewModel 的取消语义与页面加载入口单飞、ForEach 键与子组件刷新、变更信号与 @Monitor 数组路径的配套、可观察字段的判定、监听的注册与释放、乐观更新与访问器兜底，多个 ViewModel 实例间的跨页面状态（拆单例、弹窗与宿主），稳定列表键与可观察实例原位更新，Repeat 条目的传参，离开组合即销毁的复位与框架会恢复的界面状态，Activity 实例会话态的作用域，每次可见时的初始化与只在可见时接收的监听；Compose remember 的求值与重建时机（无键、带 key、条件挂载、无 key 惰性项），以引用比较实现的未保存检测；只在断连等事件分支写入的占位不作状态初值
 
 [上一级](../index.md)
 
 ## 本级经验
 
-- [AppStorageV2/PersistenceV2 的 key 只用字母、数字和下划线，不沿用 kebab-case 文件名](lesson-7508ddc52eaf816887f0.lesson.md)
-  - 时机：状态管理实现阶段，为 AppStorageV2.connect 或 PersistenceV2 共享状态类确定 key 字符串，或复用工程已有 key 时
-  - 情境：ArkTS V2 工程以 AppStorageV2.connect(Cls, key, creator) 跨页面共享 @ObservedV2 状态；模块文件名采用 kebab-case（如 window-model.ets），状态管理 skill 只给出签名和一致性示例；编译期不校验 key 内容。
+- [AppStorageV2/PersistenceV2 的 key 只用字母、数字、下划线：不沿用 kebab-case 文件名或点号命名空间，规格键也先校验](lesson-7508ddc52eaf816887f0.lesson.md)
+  - 时机：规格提取阶段为跨组件共享状态写 AppStorageV2/PersistenceV2 键名时；状态管理实现阶段，为 AppStorageV2.connect 或 PersistenceV2 共享状态类确定 key 字符串、把规格键名落成键常量，或复用工程已有 key 时
+  - 情境：ArkTS V2 工程以 AppStorageV2.connect(Cls, key, creator) 跨页面共享 @ObservedV2 状态；模块文件名采用 kebab-case（如 window-model.ets），状态管理 skill 只给出签名和一致性示例；编译期不校验 key 内容。也包括源端只有成员字段或回调、没有现成存储键，规格作者为新增共享状态自拟“领域.字段”式点号键，实现者按“与规格逐字一致”照抄进 connect 或键常量。
 - [共享单例 ViewModel 按规格的键丢弃过期响应，页面各加载入口先做单飞，不写成“新请求取消上一请求”](lesson-c883a0ff96c32dfbd9ba.lesson.md)
   - 时机：页面接线阶段，把 aboutToAppear、Refresh 的 onRefreshing、@Monitor 等多个加载入口接到共享单例 ViewModel 或 Service 时
   - 情境：目标 ViewModel 为单例，run() 对任何新请求先取消上一请求；页面同时存在 aboutToAppear、Refresh（refreshing 初值可能为 true）与切城监听等入口；规格要求按 areaId 一类键丢弃旧城市的迟到响应、一次刷新只产生一次请求。
@@ -46,6 +46,9 @@ ArkUI V2 状态刷新与订阅：@Builder 参数（含异步重赋值的数组�
 - [源端以引用比较判断“有未保存改动”时，先确认未改动时两侧是同一对象；ArkUI V2 中改用显式改动标志，不拿 @Local 数组与另存的原数组或新字面量做 ===](lesson-5d6e099ff0c8965f2b3c.lesson.md)
   - 时机：界面实现阶段，把编辑页的未保存检测（离开前确认、canSafelyExit 一类）从 Compose 翻译到 ArkUI V2 状态时
   - 情境：源端编辑页以 remember(x){ mutableStateOf(x) } 一类写法让编辑状态的初值就是入参对象，修改时整体替换成新列表，再用 !== / === 引用比较判断是否改动；目标用 @Local 数组承载编辑状态，另存一份初始数组，或在新增模式把两者各自初始化为 \[\]。
+- [源端只在断连等事件分支写入的占位文本不作状态初值：初值按源端尚未收到事件时的显示（常为空、不绘制）](lesson-ea759569c71526092f2b.lesson.md)
+  - 时机：服务层或 ViewModel 实现阶段，为事件驱动的状态显示（外设读数、连接状态行、OSD 文本）确定初值时
+  - 情境：源端显示内容只由事件回调写入，例如外设断连时写入“--”一类占位、收到读数时写入数值，字段初始为 null、绘制时跳过；目标把状态声明为带初值的 @Trace/@Local 字段，常量表里已有该占位串。
 - [源端用带兜底的访问器取显示值时，目标调用已移植的等价访问器，不改读原始字段再自拟兜底](lesson-1fa08bf929cfced0ff34.lesson.md)
   - 时机：功能接线阶段，把源端刷新函数里的显示赋值（如 text = Manager.getX()）翻译成目标组件状态，或把登录判定与用户名显示映射成身份文案表达式时
   - 情境：源端在某一分支调用带空值兜底的访问器（如已登录但昵称为空时返回“用户{id}”或默认昵称），另一分支才显示“未登录”等占位文案；登录判定来自 token/session。目标侧会话或仓库层保留原始字段（昵称可为空），可能已移植同名兜底方法，组件状态是普通字段，工程里有现成的未登录占位字符串资源。也包括源端经工具类把数值码映射为显示文案（天气码、空气质量、风向）的情形。

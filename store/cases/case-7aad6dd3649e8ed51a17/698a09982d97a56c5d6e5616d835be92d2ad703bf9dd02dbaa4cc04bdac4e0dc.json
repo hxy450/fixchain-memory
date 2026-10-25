@@ -1,0 +1,425 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-7aad6dd3649e8ed51a17",
+  "created_at": "2026-10-23T15:42:12.895432+00:00",
+  "migration_key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/memory-distill-opencamera-20261023/pool",
+  "title": "前屏补光事件链在切片间丢失：控制器不判定、编排器不触发、VM 不转发白屏；返修提案的取消与暂停预览分支又偏离原语义",
+  "when": "相机拍照实现与修复提案阶段，迁移前屏补光（flash_frontscreen_on/auto）的触发、自动判定、亮度与白色覆盖层，并为补光等待补取消、完成或暂停预览复位时",
+  "description": "源端由 CameraController2.runFakePrecapture（或 CameraController1.takePicture 的 1000ms 回退）经 Preview 内 PictureCallback.onFrontScreenTurnOn 调 ApplicationInterface.turnFrontScreenFlashOn，同时提亮窗口并让 DrawPreview 画全屏白；auto 仅当当前 ISO≥750；cameraInOperation(false) 复位亮度、白层并 showGUI(true)，暂停预览分支只走 hasPausedPreview(true)。目标端把它拆到相机控制器、拍照编排器、页面 VM/门面与覆盖层多个切片，CameraKit 无 AE 状态事件。",
+  "summary": "本问题由生成遗留 C5 与修复中新生 C10/C11 组成，均以已核写前输入对照。\n1) 控制器不判定、无事件出口（HmosCameraController）：F001 实现者读到规格范围含「CC2.autoFocus/cancelAutoFocus/fake precapture」、AC151 frontscreen_auto 暗光判定，\n   并读入 CameraController2 6500-7700：runFakePrecapture 对 frontscreen_auto/on 调 picture_cb.onFrontScreenTurnOn()，fireAutoFlashFrontScreen 以 ISO≥750 判定，needsFrontScreenFlash 覆写。\n   写出的控制器只把 flash_frontscreen_* 下发为 FLASH_MODE_CLOSE 并注释「前屏闪光由 UI 层承担（F004/F002）」，保留 useFakePrecaptureMode 标志，却没有 needsFrontScreenFlash/ISO 判定，也没有任何补光事件出口；\n   其 source-notes C2 只写「HMOS AE 状态不可观测 → F002 走 fake-precapture 近似」，没有为前屏补光登记占位或消费方。\n2) 编排器不触发（PhotoCaptureOrchestrator、经桥接契约传到 MainPage）：F002 worker 读到 takePhoto 段多处调用 takePhotoWhenFocused、函数尾 camera_controller.takePicture(pictureCallback, errorCallback)，\n   以及 HMOS ApplicationInterface 声明的 turnFrontScreenFlashOn（light screen until cameraInOperation(false)）；但从未读函数本体 6600-6860（6814 行 PictureCallback.onFrontScreenTurnOn→applicationInterface.turnFrontScreenFlashOn），\n   写出的 takePhotoWhenFocused 只有 phase 置位 + engine.takePicture()，CaptureEngineBridge 也没有补光查询。group-2 closer 读该契约后按原样写 MainPage.buildCaptureEngineBridge。\n3) VM 只提亮不转发白层（MainPageVM）：F011 worker 读到 AC186「turnFrontScreenFlashOn 强制全亮 + used_front_screen_flash；cameraInOperation(false) 恢复亮度」，\n   AC 文本只写亮度，但锚点指向 MyApplicationInterface.turnFrontScreenFlashOn（真:MyApplicationInterface.java:2840）。它在思考中计划读 cameraInOperation(2840)，实际 Read 只覆盖 2496-2706、2940-3060 等窗口，\n   未读 2837-2855（cameraInOperation→drawPreview.cameraInOperation+showGUI；turnFrontScreenFlashOn→drawPreview.turnFrontScreenFlashOn）。\n   写出的 frontScreenFlashSink 只 setBrightnessForCamera(true)，cameraInOperationSink 只恢复亮度，DrawPreviewFacade 只有 cover/settings/ghost 四个方法；c752566 的 MainPage 也未绑定 drawPreview。\n以上片段保留到 c752566。FINAL 由 capture_audit 的 screen-flash 提案（6e4d L7799、L7836、L7975）经根会话联合合入（7c27 L11565→L11567）补齐：控制器 needsFrontScreenFlash（前摄、on 或 auto 且当前 ISO≥750），\ntakePhotoWhenFocused 首次调用 turnFrontScreenFlashOn 并按 CameraController1 的 1000ms 回退再拍，VM 提亮一次并开白层、restoreFrontScreenFlash 多路径复位，门面增 turnFrontScreenFlashOn/cameraInOperation 并由 MainPage 绑定；clean29 实测白屏、亮度复位与后台取消（7c27 L11879、L11985）。\n4) 修复中新生 C10/C11：capture_audit 写提案前读回现有编排器（6e4d L7720→L7723）：takePhoto 捕获 generation、stopContinuousBurst 以 continuousGeneration++ 作废旧请求；onCaptureCompleted 暂停预览分支只 pauseCameraPreview，else 才 cameraInOperation(false,false)；\n   同一调用返回 MyApplicationInterface.cameraInOperation(false)→showGUI(true) 与 hasPausedPreview 管理分享/删除。L7836 在提案副本写 cancelPendingFrontScreenFlash：连拍分支走 stopContinuousBurst，非连拍分支只复位 phase/cameraInOperation，未递增 continuousGeneration（C10）；\n   又在暂停预览分支前插入 appInterface.cameraInOperation(false,false)（C11），使审阅界面恢复普通拍摄按钮。L7975 冻结为 proposal.patch。\n   根会话 L11319 以 git apply 带入联合副本，与快捷拍照 canCapture 合并后，L11458 红测复现取消后迟到 AF 回调仍拍照，L11488 补 continuousGeneration++ 与引擎变化分支复位 phase；\n   L11542 回归发现暂停预览 GUI 回退，L11534 删去该调用并由 hasPausedPreview(true) 先 restoreFrontScreenFlash；L11565 合入生产。两缺陷都在合入前修正，未进入任何检查点。\n",
+  "recommendations": [
+    "相机控制器实现阶段：源端控制器内产生 UI 回调的分支（runFakePrecapture 的 onFrontScreenTurnOn、fireAutoFlashFrontScreen/needsFrontScreenFlash 的 ISO≥750 判定）即使显示交给 UI，也要在控制器保留「是否需要补光」查询与触发出口；跨切片延后时登记占位和具体消费方，不只把硬件闪光设为 CLOSE 并注释由 UI 承担。",
+    "拍照编排实现阶段：移植 takePhotoWhenFocused 这类函数时，用 grep -n 定位签名并读完本体，逐个列出其构造的 PictureCallback 回调（onFrontScreenTurnOn、onCompleted 等）在目标端的落点；桥接契约要包含这些回调所需的查询或事件。",
+    "应用接口/VM 实现阶段：spec 给出源锚点时读完锚点函数体（如 MyApplicationInterface.java 2837-2855），把 drawPreview.turnFrontScreenFlashOn/cameraInOperation 的转发写进门面接口，不能只实现 AC 文本中的亮度部分；读计划中的窗口要核对确实读过。",
+    "平台差异：CameraKit 无 AE 状态事件时，在生成阶段就把前屏补光等待写成明确的回退时序（如 CameraController1 的 1000ms）并标注与 Camera2 AE 驱动时序的差异，交给触发方实现。",
+    "修复提案阶段：新增取消路径时复用现有作废机制（如 continuousGeneration++）同时作废已登记的 AF continuation，并加「取消后迟到回调不拍照」测试；在拍后暂停预览分支复位补光时，不调用会 showGUI(true) 的 cameraInOperation(false)，改在 hasPausedPreview(true) 只复位亮度与白层，并对照源端该分支是否调用同一接口。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/HmosCameraController.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "summary": "F001 实现者写前读到规格范围「自动对焦引擎交互（CC2.autoFocus/cancelAutoFocus/fake precapture/precapture 超时）」与 AC151 frontscreen_auto 暗光判定，\n并读入 CameraController2 的 runFakePrecapture（picture_cb.onFrontScreenTurnOn）、fireAutoFlashFrontScreen（ISO≥750）与 needsFrontScreenFlash 覆写。\n重写控制器时只把 flash_frontscreen_* 映射为 FLASH_MODE_CLOSE 并注释「前屏闪光由 UI 层承担（F004/F002）」，无 needsFrontScreenFlash，也无事件出口；该片段保留到 c752566。\nFINAL 增 needsFrontScreenFlash（前摄、未释放/暂停，on 或 auto 且当前 ISO≥750），由 capture_audit 提案（6e4d L7836）经联合合入（7c27 L11565→L11567）进入生产。\n",
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F001-camera-preview.md",
+          "at": "2026-10-01T14:57:03.096Z",
+          "reason": "正常输入：Read 回执第 53 行把 fake precapture 列入本切片范围，AC151 写 frontscreen_auto 按暗光判定；说明前屏补光的 fake precapture 判定属控制器职责（agent-ae5882c40105e3f01.jsonl:L23-L26）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/cameracontroller/CameraController2.java",
+          "at": "2026-10-01T15:00:23.325Z",
+          "reason": "正常输入：Read 6500-7700 回执含 runFakePrecapture 对 frontscreen_auto/on 置 turn_frontscreen_on 并调 picture_cb.onFrontScreenTurnOn()（7297-7332）、fireAutoFlashFrontScreen 的 iso_threshold=750（7370-7374）与 needsFrontScreenFlash 覆写（7656-7659），足以指导判定与触发（agent-ae5882c40105e3f01.jsonl:L121-L122）。"
+        },
+        {
+          "key": "agent-ae5882c40105e3f01.jsonl",
+          "at": "2026-10-01T15:17:42.192Z",
+          "reason": "已收到上述输入，Write 的控制器（首版 L236-L237，重写 L246-L247）把 flash_frontscreen_auto/on/torch 归入 FLASH_MODE_CLOSE 并注「前屏闪光由 UI 层承担（F004/F002）」，只保留 useFakePrecaptureMode 标志；全文无 needsFrontScreenFlash、无 ISO 判定、无补光事件出口。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/PhotoCaptureOrchestrator.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "summary": "本目标有两个起点。\n(a) C5 生成遗留：F002 worker 读到 takePhoto 段对 takePhotoWhenFocused 的调用、函数尾 camera_controller.takePicture(pictureCallback, errorCallback)，以及 ApplicationInterface.turnFrontScreenFlashOn 契约；\n未读本体中的 PictureCallback.onFrontScreenTurnOn（Preview.java:6814），写出 phase 置位 + engine.takePicture()，无补光触发。保留到 c752566；FINAL 在 takePhotoWhenFocused 首次调用 turnFrontScreenFlashOn 并 1000ms 后再拍，完成/错误/连拍结束清理。\n(b) C10/C11 修复中新生：capture_audit 读回编排器与 MyApplicationInterface 后，在提案副本写出不作废旧请求的 cancelPendingFrontScreenFlash，并在暂停预览分支插入 cameraInOperation(false,false)；\n冻结的 proposal.patch 由根会话带入联合副本，根会话在合入生产前补 continuousGeneration++、删去该调用（7c27 L11488、L11534），再以 shutil.copy2 写回生产（L11565→L11567）。图中最后一边绑定的是这次整合写入，缺陷本身未进入生产文件。\n",
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/preview/Preview.java",
+          "at": "2026-10-01T16:43:51.170Z",
+          "reason": "正常输入：sed 6860-6925 回执是 takePhotoWhenFocused 尾部 camera_controller.takePicture(pictureCallback, errorCallback)，表明回调对象在同一函数本体内构造（agent-a46e99f7c0baf2d05.jsonl:L84-L85）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/preview/Preview.java",
+          "at": "2026-10-01T16:43:55.642Z",
+          "reason": "正常输入：sed 6441-6560 回执返回 takePhoto 多处调用 takePhotoWhenFocused，指明要移植的函数本体在同一锚点文件（本体 6600 起，6814 行 onFrontScreenTurnOn→applicationInterface.turnFrontScreenFlashOn）（agent-a46e99f7c0baf2d05.jsonl:L86-L87）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/events/ApplicationInterface.ets",
+          "at": "2026-10-01T16:44:30.897Z",
+          "reason": "正常输入：sed 回执含 turnFrontScreenFlashOn(): void 及注释 front-screen flash required; light screen until cameraInOperation(false)，说明目标端已有补光事件契约待调用（agent-a46e99f7c0baf2d05.jsonl:L107-L108）。"
+        },
+        {
+          "key": "agent-a46e99f7c0baf2d05.jsonl",
+          "at": "2026-10-01T17:15:12.762Z",
+          "reason": "以错误区间 6290-6360 读「takePhotoWhenFocused head」得录像代码后放弃深读（L169-L171）；Write 的 takePhotoWhenFocused 注为「phase 置位 + 相机拍照图元」，只 engine.takePicture()，未移植 PictureCallback.onFrontScreenTurnOn，CaptureEngineBridge 无补光查询（L317-L318）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/MyApplicationInterface.java",
+          "at": "2026-10-18T06:31:23.600Z",
+          "reason": "正常输入（修复期）：capture_audit 的 sed 2818-2861 回执给出 hasPausedPreview 管理分享/删除与返回键，cameraInOperation(false) 则 drawPreview.cameraInOperation + getMainUI().showGUI(!in_operation)；说明暂停预览审阅态不能调用会恢复普通 GUI 的接口（rollout-2026-10-17T09-27-18-01a14ab0-6e4d-77d2-b95b-b580fd710267.jsonl:L7720、L7723）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/PhotoCaptureOrchestrator.ets",
+          "at": "2026-10-18T06:31:23.600Z",
+          "reason": "正常输入（修复期）：同一调用 sed 360-650 回执显示 takePhoto 捕获 generation、各 AF 回调携 generation 进入 takePhotoWhenFocused、stopContinuousBurst 以 continuousGeneration++ 作废旧请求；onCaptureCompleted 暂停预览分支只 pauseCameraPreview，else 才 cameraInOperation(false,false)（6e4d L7720、L7723）。"
+        },
+        {
+          "key": "codex/2026/10/17/rollout-2026-10-17T09-27-18-01a14ab0-6e4d-77d2-b95b-b580fd710267.jsonl",
+          "at": "2026-10-18T06:41:25.120Z",
+          "reason": "修复中新生偏差：L7836 python 改写提案副本，cancelPendingFrontScreenFlash 非连拍分支只复位 phase 与 cameraInOperation，未递增 continuousGeneration（C10）；暂停预览分支前插 appInterface.cameraInOperation(false, false)（C11）；L7975 将四个改动文件冻结为 proposal.patch，回执 changed 4（L7978）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/fix-opencamera-codex/emulator-20261017/screen-flash-proposal/proposal.patch",
+          "at": "2026-10-18T06:53:36.780Z",
+          "reason": "交付桥梁：根会话 L11312 cat 该补丁，输出含两处缺陷 hunk（L11315），L11319 在新建联合副本 /private/tmp/opencamera-joint-repair-proposal-20261017 中 git apply --reject（回执 screen returncode 1，takePhotoWhenFocused hunk 冲突后于 L11348 手工合并），cancel 与暂停预览 hunk 原样进入联合副本（rollout-2026-10-17T09-25-11-01a14aae-7c27-7970-aae5-6ee7ad3de05e.jsonl:L11312-L11323）。"
+        },
+        {
+          "key": "codex/2026/10/17/rollout-2026-10-17T09-25-11-01a14aae-7c27-7970-aae5-6ee7ad3de05e.jsonl",
+          "at": "2026-10-18T07:05:11.553Z",
+          "reason": "接收并整合：L11458 写 cancel-af-red 红测复现取消后迟到 AF 回调仍拍照，L11488 在联合副本 else 分支补 continuousGeneration++；L11534 删去暂停预览分支 cameraInOperation；L11565 将联合副本 20 个文件 shutil.copy2 回生产，回执 Integrated 20 files（L11567）。本节点是交接与纠正，不作偏差起点。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4,
+          "force": true,
+          "reason": "F002 worker 以 Bash sed -n '6860,6925p' 读取 Preview.java，回执是 takePhotoWhenFocused 尾部 camera_controller.takePicture(pictureCallback, errorCallback)；这是它写编排器前实际收到的源码输入。",
+          "evidence": [
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-a46e99f7c0baf2d05.jsonl",
+              "line": 84
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-a46e99f7c0baf2d05.jsonl",
+              "line": 85
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 4,
+          "force": true,
+          "reason": "F002 worker 以 Bash sed -n '6441,6560p' 读取 Preview.java，回执返回 takePhoto 段及其对 takePhotoWhenFocused 的多处调用；这是它写编排器前实际收到的源码输入。",
+          "evidence": [
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-a46e99f7c0baf2d05.jsonl",
+              "line": 86
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-a46e99f7c0baf2d05.jsonl",
+              "line": 87
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "F002 worker 以 Bash sed -n '150,230p;300,380p' 读取 HMOS ApplicationInterface.ets，回执含 turnFrontScreenFlashOn(): void 及 light screen until cameraInOperation(false) 注释；这是它写编排器前收到的目标端契约。",
+          "evidence": [
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-a46e99f7c0baf2d05.jsonl",
+              "line": 107
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-a46e99f7c0baf2d05.jsonl",
+              "line": 108
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": "target"
+        },
+        {
+          "from": 5,
+          "to": 7,
+          "force": true,
+          "reason": "capture_audit 的 exec 调用 sed -n '2818,2861p' 读取 MyApplicationInterface.java，输出含 hasPausedPreview 与 cameraInOperation→drawPreview.cameraInOperation+showGUI(!in_operation)；这是它写提案前收到的源端语义。",
+          "evidence": [
+            {
+              "source": "codex/2026/10/17/rollout-2026-10-17T09-27-18-01a14ab0-6e4d-77d2-b95b-b580fd710267.jsonl",
+              "line": 7720
+            },
+            {
+              "source": "codex/2026/10/17/rollout-2026-10-17T09-27-18-01a14ab0-6e4d-77d2-b95b-b580fd710267.jsonl",
+              "line": 7723
+            }
+          ]
+        },
+        {
+          "from": 6,
+          "to": 7,
+          "force": true,
+          "reason": "同一 exec 调用 sed -n '360,650p' 读取生产 PhotoCaptureOrchestrator.ets，输出含 generation 作废机制与 onCaptureCompleted 暂停预览分支只 pauseCameraPreview 的现状；这是它改写提案副本前的读回。",
+          "evidence": [
+            {
+              "source": "codex/2026/10/17/rollout-2026-10-17T09-27-18-01a14ab0-6e4d-77d2-b95b-b580fd710267.jsonl",
+              "line": 7720
+            },
+            {
+              "source": "codex/2026/10/17/rollout-2026-10-17T09-27-18-01a14ab0-6e4d-77d2-b95b-b580fd710267.jsonl",
+              "line": 7723
+            }
+          ]
+        },
+        {
+          "from": 7,
+          "to": 8,
+          "force": true,
+          "reason": "capture_audit 在 L7836 改写 /private/tmp 提案副本后，L7975 的 python 脚本对 before/after 做 unified_diff 并 (out/'proposal.patch').write_text 写出该补丁，回执 changed 4 与 patch 哈希（L7978）。",
+          "evidence": [
+            {
+              "source": "codex/2026/10/17/rollout-2026-10-17T09-27-18-01a14ab0-6e4d-77d2-b95b-b580fd710267.jsonl",
+              "line": 7836
+            },
+            {
+              "source": "codex/2026/10/17/rollout-2026-10-17T09-27-18-01a14ab0-6e4d-77d2-b95b-b580fd710267.jsonl",
+              "line": 7838
+            },
+            {
+              "source": "codex/2026/10/17/rollout-2026-10-17T09-27-18-01a14ab0-6e4d-77d2-b95b-b580fd710267.jsonl",
+              "line": 7975
+            },
+            {
+              "source": "codex/2026/10/17/rollout-2026-10-17T09-27-18-01a14ab0-6e4d-77d2-b95b-b580fd710267.jsonl",
+              "line": 7978
+            }
+          ]
+        },
+        {
+          "from": 8,
+          "to": 9,
+          "force": true,
+          "reason": "根会话 L11312 cat 该补丁，输出含 cancelPendingFrontScreenFlash 非连拍分支与暂停预览分支插入的 cameraInOperation(false, false)（L11315）；L11319 在联合副本对其 git apply --reject，回执 screen returncode 1（L11323）。",
+          "evidence": [
+            {
+              "source": "codex/2026/10/17/rollout-2026-10-17T09-25-11-01a14aae-7c27-7970-aae5-6ee7ad3de05e.jsonl",
+              "line": 11312
+            },
+            {
+              "source": "codex/2026/10/17/rollout-2026-10-17T09-25-11-01a14aae-7c27-7970-aae5-6ee7ad3de05e.jsonl",
+              "line": 11315
+            },
+            {
+              "source": "codex/2026/10/17/rollout-2026-10-17T09-25-11-01a14aae-7c27-7970-aae5-6ee7ad3de05e.jsonl",
+              "line": 11319
+            },
+            {
+              "source": "codex/2026/10/17/rollout-2026-10-17T09-25-11-01a14aae-7c27-7970-aae5-6ee7ad3de05e.jsonl",
+              "line": 11323
+            }
+          ]
+        },
+        {
+          "from": 9,
+          "to": "target",
+          "force": true,
+          "reason": "根会话 L11565 的 python 脚本遍历联合副本 entry/src/main/ets 与 tests，对有差异文件 shutil.copy2(f, harmony/opencamera-hmos/...) 写回生产并输出 Integrated 20 files（L11567）；PhotoCaptureOrchestrator.ets 列于 integration-manifest。",
+          "evidence": [
+            {
+              "source": "codex/2026/10/17/rollout-2026-10-17T09-25-11-01a14aae-7c27-7970-aae5-6ee7ad3de05e.jsonl",
+              "line": 11565
+            },
+            {
+              "source": "codex/2026/10/17/rollout-2026-10-17T09-25-11-01a14aae-7c27-7970-aae5-6ee7ad3de05e.jsonl",
+              "line": 11567
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/MainPageVM.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "summary": "F011 worker 读到 AC186（亮度部分 + 锚点 MyApplicationInterface.turnFrontScreenFlashOn → CameraAppInterface.turnFrontScreenFlashOn，真:MyApplicationInterface.java:2840），\n计划读 cameraInOperation(2840) 却未读 2837-2855；写出的 frontScreenFlashSink 只提亮度，cameraInOperationSink 只恢复亮度，DrawPreviewFacade 不含 turnFrontScreenFlashOn/cameraInOperation，白层永远收不到通知。\n该片段保留到 c752566（parity_audit 以真实 VM sink 复现 overlay 0 vs 1，5a2d L8487、L8543）。FINAL：sink 在不可用时抛错、只提亮一次并开白层，restoreFrontScreenFlash 在 cameraInOperation(false)/cameraClosed/onInactive/receiveLaunchIntent/destroy/暂停预览时复位，bindDrawPreview 重建时补发；\n其中 hasPausedPreview(true) 先 restoreFrontScreenFlash 是 C11 的配套修正（7c27 L11534）。\n",
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F011-app-integration.md",
+          "at": "2026-10-01T16:42:15.802Z",
+          "reason": "输入部分充分：Read 回执第 480 行 AC186 写 turnFrontScreenFlashOn 强制全亮 + used_front_screen_flash、cameraInOperation(false) 恢复亮度，文本未写白层；但给出锚点 MyApplicationInterface.turnFrontScreenFlashOn→CameraAppInterface.turnFrontScreenFlashOn 与 真:MyApplicationInterface.java:2840，按锚点读即可见 drawPreview 转发（agent-a690eb1a2619c2d76.jsonl:L27-L28）。"
+        },
+        {
+          "key": "agent-a690eb1a2619c2d76.jsonl",
+          "at": "2026-10-01T17:12:12.971Z",
+          "reason": "思考中列出 cameraInOperation(2840) 待读（L113），实际 Read 窗口为 60-438、690-1189、2110-2240、2496-2706、2940-3060、3316-3361、3758-3963，跳过 2837-2855（L96-L117）；Write 的 MainPageVM（首版 L395-L396，重写 L410-L411）中 frontScreenFlashSink 只 setBrightnessForCamera(true)，DrawPreviewFacade 只含 setCoverPreview/updateSettings/clearGhostImage/allowGhostImage。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/pages/MainPage.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "summary": "MainPage 的改动是补光修复的页面接线。本图绑定桥接契约这一传递：F002 worker 写出的 CaptureEngineBridge 无前屏补光查询、takePhotoWhenFocused 无触发；\ngroup-2 closer 读该契约后在 MainPage.buildCaptureEngineBridge 按成员逐一绑定，自然也没有 needsFrontScreenFlash。c752566 MainPage 另未绑定 DrawPreviewFacade（门面形状来自 F011 worker 的四方法定义）。\nFINAL 在桥接中加 needsFrontScreenFlash 转发控制器、在 DrawPreview 门面绑定中加 turnFrontScreenFlashOn/cameraInOperation，并在 stopContinuousBurstHook 中先 cancelPendingFrontScreenFlash（6e4d L7836 提案，7c27 L11565→L11567 合入）。\n",
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/preview/Preview.java",
+          "at": "2026-10-01T16:43:55.642Z",
+          "reason": "正常输入：F002 worker 的 sed 6441-6560 回执返回 takePhoto 对 takePhotoWhenFocused 的调用，函数本体（含 6814 onFrontScreenTurnOn）在同一锚点文件（agent-a46e99f7c0baf2d05.jsonl:L86-L87）。"
+        },
+        {
+          "key": "agent-a46e99f7c0baf2d05.jsonl",
+          "at": "2026-10-01T17:15:12.762Z",
+          "reason": "未读函数本体即写出 takePhotoWhenFocused = phase 置位 + engine.takePicture()，CaptureEngineBridge 契约不含补光查询或触发成员（L169-L171、L317-L318）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/PhotoCaptureOrchestrator.ets",
+          "at": "2026-10-01T17:31:13.534Z",
+          "reason": "交付桥梁：group-2 closer 全文 Read 编排器，回执含 CaptureEngineBridge 成员表（takePicture 注「camera_controller.takePicture 等价」，无前屏补光成员）与只调 takePicture 的 takePhotoWhenFocused（agent-acb5c3d58575999a4.jsonl:L85-L86）。"
+        },
+        {
+          "key": "agent-acb5c3d58575999a4.jsonl",
+          "at": "2026-10-01T18:40:12.235Z",
+          "reason": "按契约写 MainPage.buildCaptureEngineBridge（注「P-S3-003：PreviewEngine → CaptureEngineBridge 适配」），首版 L567-L568、重写 L588-L589，桥接无 needsFrontScreenFlash；本链确认契约传递，不另推定独立失职。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "F002 worker 以 Bash sed -n '6441,6560p' 读取 Preview.java，回执返回 takePhoto 段及其对 takePhotoWhenFocused 的多处调用；这是它写编排器与桥接契约前实际收到的源码输入。",
+          "evidence": [
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-a46e99f7c0baf2d05.jsonl",
+              "line": 86
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-a46e99f7c0baf2d05.jsonl",
+              "line": 87
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "F011 规格 AC186 为何只写亮度、未写 drawPreview.turnFrontScreenFlashOn/cameraInOperation，规格作者一侧未上溯；本卡以 worker 未读锚点函数体为已核偏差。",
+    "c752566 MainPage 未绑定 DrawPreviewFacade；bindDrawPreview 在 Codex 5f9655c..cb4c6d6 间才出现，按 F011 四方法门面绑定，该接线写入者未逐条核，本卡 MainPage 图只绑定桥接契约这一传递。",
+    "C10 在独立提案中非连拍路径本不按 generation 校验，直到与快捷拍照 canCapture 合并后才被根会话红测暴露；提案阶段测试未覆盖「取消补光+已登记 AF 回调」。Codex 推理内容加密，只能依据可见调用判断其写前输入。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-7aad6dd3649e8ed51a17",
+  "metadata": {
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code",
+        "codex"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3",
+        "gpt-6-astra"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.163.0",
+        "2.1.247",
+        "2.1.299"
+      ]
+    },
+    "source_set_id": "sources-974a9086706364eed8b7",
+    "environment": [
+      {
+        "name": "android.compile_sdk",
+        "value": "36",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/.claude/skills",
+        "at": "2026-10-01T09:52:21.840Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-aa8064d19722381a1.jsonl:L11",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-aa8064d19722381a1.jsonl:L10",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos",
+        "at": "2026-10-01T12:27:45.961Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b.jsonl:L1565",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b.jsonl:L1563",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos",
+        "at": "2026-10-01T13:34:44.665Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae78a452b1664bc61.jsonl:L149",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae78a452b1664bc61.jsonl:L148",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.11.1"
+  },
+  "revision": "698a09982d97a56c5d6e5616d835be92d2ad703bf9dd02dbaa4cc04bdac4e0dc"
+}

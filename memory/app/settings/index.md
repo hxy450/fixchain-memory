@@ -1,6 +1,6 @@
 # app/settings
 
-设置项迁移：偏好存储的同步装载与读写时序，偏好键与默认值（同一键按读点的不同缺省值）之外，每个开关的运行期消费方与应用入口；onPreferenceChange 返回值决定的落值时刻与验证补偿；设置保存的副作用（远端、本地缓存、刷新事件）与切换即持久化界面状态的恢复，应用内语言切换的即时生效；应用壳下传的页面显示设置：占位初值来源与壳层一次计算的派生判定
+设置项迁移：偏好存储的同步装载与读写时序，偏好键与默认值（同一键按读点的不同缺省值）之外，每个开关的运行期消费方与应用入口；onPreferenceChange 返回值决定的落值时刻与验证补偿；设置保存的副作用（远端、本地缓存、刷新事件）与切换即持久化界面状态的恢复，应用内语言切换的即时生效；应用壳下传的页面显示设置：占位初值来源与壳层一次计算的派生判定；只改会话字段的选项不建偏好键，以 null 区分缺键而空串合法时的存在性判断
 
 [上一级](../index.md)
 
@@ -18,6 +18,12 @@
 - [源端 SharedPreferences.Editor 累积 put 后一次 commit 的流程（恢复、导入），目标先暂存、全部校验通过后再 put 并 flush：preferences.putSync 立即改共享实例，中途失败不能留下部分写入](lesson-24bc4929b771a9a33ef4.lesson.md)
   - 时机：数据层实现阶段，迁移 Editor 批量写入后 commit/apply 的恢复或导入流程时
   - 情境：源端遍历输入逐键 editor.putX，遇到未知键或格式错误时抛出，末尾才 commit；目标准备逐键 putSync 到共享 preferences 实例。
+- [源端用 getString(key, null) 区分缺键、空串又是合法值时，偏好封装提供 has 判断，不以空串作缺省哨兵](lesson-463f8ca86a0d06dd5022.lesson.md)
+  - 时机：数据层与设置实现阶段，迁移以 null 默认值区分“键不存在”的偏好读取（历史列表、可选路径等）时
+  - 情境：源端 SharedPreferences.getString(key, null) 只把缺键当作不存在，空串是合法值（例如表示根目录或默认位置）；目标偏好封装只提供 get(key, def)，没有存在性判断。
+- [源端选项只经 setter 改会话字段、不写持久偏好时，目标落成会话态并接到读取它的流程，不新建偏好键](lesson-372d4a11039d986a573d.lesson.md)
+  - 时机：规格提取阶段整理“读写偏好键”清单，以及实现与接线阶段为弹层或设置选项确定写入目标（持久偏好还是会话状态）时
+  - 情境：源端选项回调里写偏好的 editor.putString 被注释或不存在，只调用应用接口的 setXxx 改会话字段，业务流程经对应 getter 读取；目标的偏好键表、会话状态与应用接口由不同切片产出，规格可能把该项列入持久键或引用并不包含它的权威键表，实现者在目标端找不到对应的会话 setter。
 - [设置页由 addPreferencesFromResource/PreferenceFragment 挂载时，缺持久值的偏好会写入 android:defaultValue：目标在设置页出现时按 XML 顺序为缺键补写默认值并落盘，不只在读取时回退默认](lesson-4283cc343b875489b851.lesson.md)
   - 时机：规格提取与设置页实现阶段，迁移带 android:defaultValue 的 PreferenceScreen XML 时
   - 情境：源设置页由 PreferenceFragment/PreferenceActivity 以 XML 挂载偏好，各项有 defaultValue；目标偏好服务只在读取时回退默认值；偏好文件内容会被备份等流程读取。

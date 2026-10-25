@@ -1,6 +1,6 @@
 # values 批量转 element JSON 按目标格式出口：颜色只写 hex 或已定义的 $color:，数组项写成 {value} 对象并映射引用，不可解析值不原样写出
 
-ID：`lesson-94a3f7a5ec5ad8f8a3e8` · 版本：1
+ID：`lesson-94a3f7a5ec5ad8f8a3e8` · 版本：2
 
 [本主题](index.md)
 
@@ -22,7 +22,7 @@ HarmonyOS 资源编译只接受 #rgb/#argb/#rrggbb/#aarrggbb 或指向已定义�
 2. strarray/intarray 的 value 写成对象数组，每项 {"value": ...}；plural 写成 {quantity, value} 对象数组。数组项里的 @string/、@color/ 引用与标量值走同一套映射（@string/x → $string:x）。
 3. 写完 element JSON、镜像到 zh_CN 等限定目录之前，按规则扫描产物：颜色值全文正则、$color:/$string: 目标存在、数组项都是含 value 键的对象、没有残留 @ 前缀引用；unresolved 清单按值形态分组列出（@android:、@color/、?attr），结果为零再宣布资源阶段通过。
 
-来源支持：2 张卡 · 1 次迁移 · 1 个应用
+来源支持：3 张卡 · 已知 1 次迁移（部分未记录） · 已知 1 个应用（部分未记录）
 
 ## 来源（按需复核）
 
@@ -30,3 +30,5 @@ HarmonyOS 资源编译只接受 #rgb/#argb/#rrggbb/#aarrggbb 或指向已定义�
   卡片版本：`a668b37585e092e10f862a75cefefce50ae7d604fbfea6e2d82f302822a41ab1`
 - [case-6f9262e95abc71d3d226](../../../store/cases/case-6f9262e95abc71d3d226/ebab5464ffd9b729b37c56b2359ad4809980ad92d0cff0a559e58291b8285ba8.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
   卡片版本：`ebab5464ffd9b729b37c56b2359ad4809980ad92d0cff0a559e58291b8285ba8`
+- [case-a0ce76f2b62e29f7e625](../../../store/cases/case-a0ce76f2b62e29f7e625/685a7008b68cbb1654bdc78ced08355677ac078b506b6128ce591e666fef9692.json) · 结论：diagnosis, recommendation:1
+  卡片版本：`685a7008b68cbb1654bdc78ced08355677ac078b506b6128ce591e666fef9692`

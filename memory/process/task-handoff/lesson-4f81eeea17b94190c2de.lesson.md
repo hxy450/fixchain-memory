@@ -1,6 +1,6 @@
 # 要靠其他文件或任务补实现的功能，登记成带负责方、验证方式和源端确定值的移交项，不只写在注释或动作摘要里
 
-ID：`lesson-4f81eeea17b94190c2de` · 版本：13
+ID：`lesson-4f81eeea17b94190c2de` · 版本：14
 
 [本主题](index.md)
 
@@ -26,7 +26,7 @@ ID：`lesson-4f81eeea17b94190c2de` · 版本：13
 6. 修复轮核出、但本轮不修的相邻偏差，当轮写入持久的偏差台账（如迁移报告的“已知未修偏差”），写明源端条件与文件位置；不只留在思考或会话上下文里，压缩会丢掉这类判断。
 7. 当场做不完的源行为登记为占位，不只写进报告的“保真缺口”；UI 阶段规格写明交互留给后续切片时登记占位，不照兄弟页写成与源端不符的真实实现。
 
-来源支持：29 张卡 · 已知 14 次迁移（部分未记录） · 已知 13 个应用（部分未记录）
+来源支持：38 张卡 · 已知 14 次迁移（部分未记录） · 已知 13 个应用（部分未记录）
 
 ## 来源（按需复核）
 
@@ -54,12 +54,24 @@ ID：`lesson-4f81eeea17b94190c2de` · 版本：13
   卡片版本：`528d09b041c06639c78c05521087576cda7b79594f84cb4fcc278d8c2c62a75b`
 - [case-3ca3658855acd903c4ca](../../../store/cases/case-3ca3658855acd903c4ca/d0ba935e82dce8bcb9f5694089a9e6dbc438222f1b51a6dcd0b46a87967216cb.json) · 结论：recommendation:5
   卡片版本：`d0ba935e82dce8bcb9f5694089a9e6dbc438222f1b51a6dcd0b46a87967216cb`
+- [case-4171cd43bbb420b4ee40](../../../store/cases/case-4171cd43bbb420b4ee40/0effbd77c7fda6b589b47193aaa322f49d48b23605a26ca7e52f15d9786494aa.json) · 结论：recommendation:3, recommendation:4
+  卡片版本：`0effbd77c7fda6b589b47193aaa322f49d48b23605a26ca7e52f15d9786494aa`
 - [case-47b9e1107e4e4ecd40bd](../../../store/cases/case-47b9e1107e4e4ecd40bd/87b0c345ca3fa21bf70b01c74e3a2714a0880c4a2e5531942fe4d81a24d85b98.json) · 结论：recommendation:6
   卡片版本：`87b0c345ca3fa21bf70b01c74e3a2714a0880c4a2e5531942fe4d81a24d85b98`
 - [case-4ecfc0b10264caacad49](../../../store/cases/case-4ecfc0b10264caacad49/23ae043b4ec073a5f76c24cd0e8182ec63aae669f723a247cb685df9abde36f2.json) · 结论：diagnosis, recommendation:1
   卡片版本：`23ae043b4ec073a5f76c24cd0e8182ec63aae669f723a247cb685df9abde36f2`
+- [case-56249562721f5dc59148](../../../store/cases/case-56249562721f5dc59148/96d52a064d3d02462086e833baf21aa8445479ee8ee000c27f3518b1a0190861.json) · 结论：recommendation:2
+  卡片版本：`96d52a064d3d02462086e833baf21aa8445479ee8ee000c27f3518b1a0190861`
 - [case-5dc757ad90507a893798](../../../store/cases/case-5dc757ad90507a893798/18a2456f40974f82b2393cee85af61357923b351dd4954b8d0c59ab3a2a01bfb.json) · 结论：recommendation:3
   卡片版本：`18a2456f40974f82b2393cee85af61357923b351dd4954b8d0c59ab3a2a01bfb`
+- [case-64c8bd68e3bebd236c4d](../../../store/cases/case-64c8bd68e3bebd236c4d/f72244f7e6abf869ef8b6d570535554f85813bc64a8527e19c39c5b8e5134599.json) · 结论：recommendation:3
+  卡片版本：`f72244f7e6abf869ef8b6d570535554f85813bc64a8527e19c39c5b8e5134599`
+- [case-74192ad19ea88a31750b](../../../store/cases/case-74192ad19ea88a31750b/26f7ae0418e6dd6e5aa696876d4ecf0054271a1dbd8a8458dc0a1a8c62388566.json) · 结论：recommendation:1
+  卡片版本：`26f7ae0418e6dd6e5aa696876d4ecf0054271a1dbd8a8458dc0a1a8c62388566`
+- [case-76fcde297f6a5406e58f](../../../store/cases/case-76fcde297f6a5406e58f/4fe7565a766323ef4f1d2f178dcd030e8db4d702b78336c519b17cf80d48da0d.json) · 结论：recommendation:4
+  卡片版本：`4fe7565a766323ef4f1d2f178dcd030e8db4d702b78336c519b17cf80d48da0d`
+- [case-7aad6dd3649e8ed51a17](../../../store/cases/case-7aad6dd3649e8ed51a17/698a09982d97a56c5d6e5616d835be92d2ad703bf9dd02dbaa4cc04bdac4e0dc.json) · 结论：recommendation:1
+  卡片版本：`698a09982d97a56c5d6e5616d835be92d2ad703bf9dd02dbaa4cc04bdac4e0dc`
 - [case-7b64dd743c1260eb910f](../../../store/cases/case-7b64dd743c1260eb910f/298567a76aee47097df89ce461b5d22ce36838d3b34afa1f21008596f2358535.json) · 结论：recommendation:3
   卡片版本：`298567a76aee47097df89ce461b5d22ce36838d3b34afa1f21008596f2358535`
 - [case-8128c57ee5fb2e4f49d1](../../../store/cases/case-8128c57ee5fb2e4f49d1/d0184e877064d037eceb8bc968cb0949b5d0bffb239f02ec1d1a93bf7a391713.json) · 结论：recommendation:3
@@ -72,14 +84,20 @@ ID：`lesson-4f81eeea17b94190c2de` · 版本：13
   卡片版本：`d69f7835e048a354e4c7c612b2f7e0328d97fd7ba75e120259ab9422d1065342`
 - [case-9618601c4a21f2f18560](../../../store/cases/case-9618601c4a21f2f18560/870a2d98075a73dc88a2cfd3ac2fb801bc3d216cf1120c6f9583496d9f1c6941.json) · 结论：recommendation:4
   卡片版本：`870a2d98075a73dc88a2cfd3ac2fb801bc3d216cf1120c6f9583496d9f1c6941`
+- [case-9720ed67e580c21dbd65](../../../store/cases/case-9720ed67e580c21dbd65/e28f20a327f221aadfca37acb42f61db9e173a49a49fc0416d970ee8aeafb602.json) · 结论：recommendation:2
+  卡片版本：`e28f20a327f221aadfca37acb42f61db9e173a49a49fc0416d970ee8aeafb602`
 - [case-97e280ce0a8ddc7a54a1](../../../store/cases/case-97e280ce0a8ddc7a54a1/4fbcf9675b2ae7f717f11ff33565c2292c0c6ff00c290102009285e9705600e8.json) · 结论：recommendation:2
   卡片版本：`4fbcf9675b2ae7f717f11ff33565c2292c0c6ff00c290102009285e9705600e8`
 - [case-9d195db79dc4cccc7d1a](../../../store/cases/case-9d195db79dc4cccc7d1a/3ef58b6e05f43ead616304c92324166e074aa81e33e4c6ecad7b4910b60126e9.json) · 结论：recommendation:6
   卡片版本：`3ef58b6e05f43ead616304c92324166e074aa81e33e4c6ecad7b4910b60126e9`
+- [case-9d3828c851006d29fc06](../../../store/cases/case-9d3828c851006d29fc06/c198fe473f6d3c9d774f95de74c649d6542ab966ab417df2dcb1881819cb4366.json) · 结论：recommendation:4
+  卡片版本：`c198fe473f6d3c9d774f95de74c649d6542ab966ab417df2dcb1881819cb4366`
 - [case-9f9881c4a9db00d14d07](../../../store/cases/case-9f9881c4a9db00d14d07/7112bcd3f96e30d029bb4a952c0f31ba43b6c4c490f4d17be1641d5148185649.json) · 结论：recommendation:3
   卡片版本：`7112bcd3f96e30d029bb4a952c0f31ba43b6c4c490f4d17be1641d5148185649`
 - [case-be2a579e8fcdcb8b0a16](../../../store/cases/case-be2a579e8fcdcb8b0a16/9c98f133d2d180ce8945ef872ba85a87c32bae1189de1efd3949fb241137d4c5.json) · 结论：recommendation:5
   卡片版本：`9c98f133d2d180ce8945ef872ba85a87c32bae1189de1efd3949fb241137d4c5`
+- [case-cbf23fa7a4ed42d37671](../../../store/cases/case-cbf23fa7a4ed42d37671/013c03becf2fdb81fe5d3bb32c60d6635f41ed3de130131a61605958b50d27f5.json) · 结论：recommendation:3
+  卡片版本：`013c03becf2fdb81fe5d3bb32c60d6635f41ed3de130131a61605958b50d27f5`
 - [case-d9c2b75062eb57796ca2](../../../store/cases/case-d9c2b75062eb57796ca2/c0e0684d2567560ee8d44f49d9c8eb3a4d4b3cc9ba5d7380a8e25a3b0f7792e8.json) · 结论：recommendation:3
   卡片版本：`c0e0684d2567560ee8d44f49d9c8eb3a4d4b3cc9ba5d7380a8e25a3b0f7792e8`
 - [case-ef4b9ae3acaea9323135](../../../store/cases/case-ef4b9ae3acaea9323135/224b39c5df19751e0b18f8c6328b47d00202ad917de1149b4faf5dde5c73fe9d.json) · 结论：diagnosis, recommendation:1

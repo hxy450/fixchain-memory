@@ -1,6 +1,6 @@
 # ui/layout/constraints
 
-ConstraintLayout/RelativeLayout的锚点、叠放与默认对齐（含 Compose Column/Row 的默认对齐），Compose Box 子项在 Stack 中的定位，基线对齐与逐行内距的 Row 组，及ArkUI容器中的子项定位。
+ConstraintLayout/RelativeLayout的锚点、叠放与默认对齐（含 Compose Column/Row 的默认对齐），Compose Box 子项在 Stack 中的定位，基线对齐与逐行内距的 Row 组，及ArkUI容器中的子项定位。源端运行时按设置与朝向重排控件时，页面按控制器的逐控件摆位解算渲染。
 
 [上一级](../index.md)
 
@@ -26,6 +26,9 @@ ConstraintLayout/RelativeLayout的锚点、叠放与默认对齐（含 Compose C
 - [摘要行、价格行一类 Row 组：自定义组件不靠 Flex 基线对齐，内距逐行复制，靠右标签补文本对齐](lesson-c4990fef246323ffda03.lesson.md)
   - 时机：页面转换阶段，翻译摘要行、价格行等由若干 Row 组成的列表块时
   - 情境：源 Row 用 alignBy(LastBaseline) 对齐文本与自定义组件（如数量选择器）；各子 Row 各自 padding(horizontal)，分隔线在行外全宽；标签用 weight(1) + wrapContentWidth(End) 靠右。
+- [源端代码按设置与朝向重排控件时，页面按控制器产出的逐控件摆位解算渲染，不用固定百分比 position 代替](lesson-3166d9aa706cae5dbae1.lesson.md)
+  - 时机：界面集成阶段，把布局控制器或 ViewModel 产出的逐控件摆位（贴靠边、沿边偏移、边距、顺序）接到页面按钮层时；实现该布局控制器、为贴边控件写边距时
+  - 情境：源 Activity 在运行时按界面方位设置（如左右手布局）与系统朝向改写 RelativeLayout 规则与边距（addRule、setMargins），并给贴边控件加导航栏间隙；目标把这段逻辑移植为产出 placements 的控制器，页面按钮层负责消费；页面可能只读取其中的尺寸字段，或按默认方位写死坐标。
 - [源端默认起始对齐和贴顶要显式写出：Android 与 Compose 的纵向容器默认贴起始边、Compose Row 默认贴顶，ArkUI Column/Row 交叉轴默认居中，Scroll 内不满一屏的内容默认居中](lesson-08b9064f678f1635e647.lesson.md)
   - 时机：界面实现阶段，把纵向 LinearLayout、带 constraintStart/Top 的 ConstraintLayout 或 ScrollView/NestedScrollView 转成 ArkUI Column 与 Scroll 时；以及把 Compose Column 中的文本块转成 ArkUI Column 子项时；把未写 verticalAlignment 的 Compose Row 转成 ArkUI Row 时；把 Compose LazyColumn 等从顶部排列的纵向列表落成 Scroll 包裹 Column 时
   - 情境：源纵向 LinearLayout 没写 gravity（子项默认贴起始边），或 wrap_content 子项以 constraintStart_toStartOf=parent 靠起始边、卡片以 constraintTop_toTopOf=parent 贴顶；目标 Column 宽度撑满，子项为固定或内容宽度；滚动页内容常不满一屏。或显示卡片用 layoutWeight 分高，源端卡内内容 wrap_content 自上而下排列并带上内边距。也包括 Compose Column 未声明 horizontalAlignment（默认 Start），文本只带水平 padding 而无 fillMaxWidth，仅个别项以 fillMaxWidth + TextAlign.Center 居中。也包括 Compose Row 未写 verticalAlignment（默认 Top），子项高度不等。 也包括源端 LazyColumn(fillMaxSize)/RecyclerView 的条目从顶部排列，目标写成 Scroll { Column { ForEach } }.layoutWeight(1)，条目可能不足一屏。也包括 Stack 中应贴顶的块未设 alignContent（默认 Center），或修复缩短头部、内容后 Scroll 子项矮于视口。也包括列表页空态：空态容器是 wrap_content 的滚动容器、在父 RelativeLayout 中未声明居中，内层 LinearLayout 写 gravity=center；工程已有全高居中的空态 Builder 可以照搬。

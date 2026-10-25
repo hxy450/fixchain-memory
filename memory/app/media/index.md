@@ -1,6 +1,6 @@
 # app/media
 
-媒体与文件的用户可见性：SaveButton 安全控件的样式与授权时序、picker 导入导出、沙箱产物的导出、本地文件的播放 URI，以及按序浏览媒体时后续项的图片预取，以及长内容保存为图片时的快照尺寸限制与分段渲染；保存到相册或文件的权限、URI 取 fd 与下载任务生命周期
+媒体与文件的用户可见性：SaveButton 安全控件的样式与授权时序、picker 导入导出、沙箱产物的导出、本地文件的播放 URI，以及按序浏览媒体时后续项的图片预取，以及长内容保存为图片时的快照尺寸限制与分段渲染；保存到相册或文件的权限、URI 取 fd 与下载任务生命周期；本应用最近媒体以自身保存的 URI 为准（整库查询的读权限）、带系统确认框接口的用户取消与失败区分、查看或分享媒体的 Want 类型与读授权
 
 [上一级](../index.md)
 
@@ -19,10 +19,21 @@
 - [保存媒体到相册或文件：缺写入权限时用 showAssetsCreationDialog，picker 返回的 URI 先 openSync 取 fd](lesson-0ce9fe04eb82e77d219f.lesson.md)
   - 时机：系统能力与媒体功能实现阶段，编写下载到缓存、保存到相册或文件、复制到剪贴板的调用代码时
   - 情境：源端用 OkHttp 下载、MediaStore 入库、SAF CreateDocument 存 Downloads、FileProvider URI 复制；目标改用 request.agent、photoAccessHelper、DocumentViewPicker 与 pasteboard，实现者依据参考模板片段或规格映射落码。
+  - 例外：保存的是相机会话刚拍摄的照片或录像：走相机系统资产路线（photoAssetAvailable + saveCameraPhoto、AVRecorder AUTO_CREATE_CAMERA_SCENE），不逐张弹授权框，也不用 createAsset 系列
+- [媒体 URI 交给外部查看或分享的 Want：type 取该条媒体的精确 MIME，并附 FLAG_AUTH_READ_URI_PERMISSION](lesson-c78d27d0ebcb9885f3a0.lesson.md)
+  - 时机：系统集成实现阶段，把 Android 打开或分享媒体的 Intent（ACTION_VIEW、REVIEW、ACTION_SEND）翻译为 startAbility 的 Want，确定 uri、type、flags 与无媒体分支时
+  - 情境：源端用 MediaStore URI 打开最近的照片或视频，不设 MIME、由 URI 决定查看器，无媒体时回落到图库；分享依赖 ACTION_SEND 启动时把 EXTRA_STREAM 迁入 ClipData 并附读授权，源码里看不到显式授权标志。目标的媒体查询结果已能区分照片与视频（photoType、文件名）。
+- [带系统确认框的媒体接口（如 deleteAssets）被拒时单列用户取消：按设备实测判别，不把 201 一律报成权限不足](lesson-c2f15aa3af3945ddfa8e.lesson.md)
+  - 时机：实现或返修带系统确认框的媒体删除、写入接口的失败提示与测试替身时
+  - 情境：目标接口先校验权限再弹系统确认框，Promise 拒绝既可能是权限不足，也可能是用户点了取消；d.ts 只把 201 记为 Permission denied，未记载取消码。源端失败只记日志、不提示；已有测试可能把“拒绝或取消”定为不提示。
 - [把任意长度内容保存为图片时不靠单次离屏快照：先查快照尺寸限制，内容可能超过一屏就按视口分段渲染再拼接，并校验输出高度](lesson-e0f3b5b744e6b0518814.lesson.md)
   - 时机：界面实现阶段，为“保存完整长内容为图片”或分享长图选择截图、离屏渲染方案时
   - 情境：源端按内容总高度创建 Bitmap 后整体绘制（如 getBitmapFromView、Canvas.draw），高度随文本无上限增长；目标拟用 componentSnapshot.createFromBuilder 等单次快照，Builder 根组件只定宽、高度随内容撑开。
   - 例外：内容高度有明确上限且不超过一屏时，可以单次快照
+- [显示本应用最近拍摄的媒体以自身保存成功的 URI 为准：整库 getAssets 需受限的 READ_IMAGEVIDEO，失败不清空缩略图](lesson-bb7ca42bb395b84d0a77.lesson.md)
+  - 时机：规格提取与实现阶段，把 Android MediaStore 最近媒体查询（画廊按钮缩略图、打开最新照片或视频）映射到 photoAccessHelper 时
+  - 情境：源端在 scoped storage 下查询 MediaStore 最近媒体，应用天然可见自己写入的媒体；目标为没有 READ_IMAGEVIDEO 授权的普通应用（该权限受限开放），实现者计划用 photoAccessHelper.getAssets 整库查最新项，失败分支清空缩略图。
+  - 例外：应用已具备 READ_IMAGEVIDEO 的申请资格并获授权，且功能确需展示其他应用写入的媒体
 - [本地文件路径接到 ArkUI Video 前规范成 file:// URI，并分清缓存接口返回的是路径还是播放地址](lesson-2b3d45c1a89dc1ead7e3.lesson.md)
   - 时机：页面转换与跨页接线阶段，把路由参数或缓存/预载接口给出的本地文件接到 Video src 时
   - 情境：源端把缓存文件路径交给第三方播放器 setUrl(path)（其内部把本地文件转成 Uri）；目标用 ArkUI Video；工程缓存单例可能同时提供返回裸沙箱路径和返回 file:// 播放地址的两个方法。

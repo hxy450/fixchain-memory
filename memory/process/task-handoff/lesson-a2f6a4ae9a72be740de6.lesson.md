@@ -1,6 +1,6 @@
 # “不确定”“待补资源”“无等价”“延期”“契约未确认”这类占位只登记输入确实缺值的情况：登记前查源码、SDK 与写入时刻的目录，能实现的当场实现
 
-ID：`lesson-a2f6a4ae9a72be740de6` · 版本：7
+ID：`lesson-a2f6a4ae9a72be740de6` · 版本：8
 
 [本主题](index.md)
 
@@ -26,13 +26,13 @@ ID：`lesson-a2f6a4ae9a72be740de6` · 版本：7
 2. 页面置信度 medium 不要求产出不确定标记；引用陷阱表条目时核对它给的修法与自己的实现一致。
 3. 收口或验收阶段处理这类条目时先回看条目指向的源码与代码现状；能实现就实现，只有确需真机数据或依赖确在仓外（三方 SDK 或平台 API 缺失）时才改为 deferred。不把占位改挂到没有切片认领的“集成期”“死码域披露”或外部视觉核验阶段来消除债务闸，也不按降级现状翻为 resolved：源行为明确的视觉保真项交回有写权的实现步骤，只有确需渲染才能判定的项才交验证阶段，该阶段本轮不运行时在交付摘要列为未完成项。已转换并注册路由的死码页，要么撤销转换与注册，要么按源码兑现页内占位。
 4. 写 fail-loud 或不可用提示前逐项核对：源端该动作是否已有实现、目标端是否已有等价组件或服务；两者都有就接线复用；只有平台凭据等真实外部缺口才给阻断提示，并在提示和交接中写明具体缺口。
-5. 登记“无等价”前在本地 SDK 的 .d.ts（含 hms/ets/kits）按能力语义检索：对应枚举、属性名、属性集合读取（如 getXxxProperties）、设置模块的键与候选模块文件，不只猜对称的 getter 名；把检索词与结论写进登记；同工程已有可行写法时直接沿用。
-6. 写“资源未就绪、暂用降级”或沿用他人 pending 登记前，在写入时刻重新列出目标资源目录，或执行登记里的可机读触发条件，确认确实缺失。
+5. 登记“无等价”前在本地 SDK 的 .d.ts（含 hms/ets/kits）按能力语义检索：对应枚举、属性名、属性集合读取（如 getXxxProperties）、设置模块的键与候选模块文件，不只猜对称的 getter 名。“不存在”只能来自按成员名检索为空，或读到声明体闭合处的完整枚举；固定字符窗口、head 或按行数截断的回执只证明看到了哪些成员，工程里找不到 getter 只说明工程未暴露，凭记忆的判断不算查证；检索结果与规格映射要求冲突时先按成员名定向复查。把检索词与结论写进登记；同工程已有可行写法时直接沿用。
+6. 写“资源未就绪、暂用降级”或沿用他人 pending 登记前，在写入时刻重新列出目标资源目录，或执行登记里的可机读触发条件，确认确实缺失。列目录时覆盖 base 与各限定目录（如各密度的 media），并按源端调用点（设置图标的方法、布局 XML）核对实际资源名；资源只在限定目录时，按工程资源约定补 base 副本或确认其解析方式，不判为未迁移。
 7. 派发复审或切片工单时只给已登记条目与证据，不预写“保留”，要求执行者对照 SDK 与同工程已有实现复核后再裁决。
 8. 下结论前同时查对应 Options/Attribute 类型声明和构建生成目录（如 hvigor 生成的 BuildProfile）；规格或已批准决策明确写出的条件，不以“release 语义一致”等理由自行删掉一腿，确认无等价时登记决策缺口交审批。
 9. 确实采用近似时，在占位登记或转换报告写明具体差异，供验收逐项核对，不只写在代码注释里。
 
-来源支持：22 张卡 · 已知 6 次迁移（部分未记录） · 已知 5 个应用（部分未记录）
+来源支持：26 张卡 · 已知 6 次迁移（部分未记录） · 已知 5 个应用（部分未记录）
 
 ## 来源（按需复核）
 
@@ -44,6 +44,8 @@ ID：`lesson-a2f6a4ae9a72be740de6` · 版本：7
   卡片版本：`27369625dcbbe450f68beab2e162e179bde87573f0d20d5282655293b42e24d3`
 - [case-265e1cc8347c261db79d](../../../store/cases/case-265e1cc8347c261db79d/125931927fbc468c3e5693050724034362006e87a40785f9580987d32edde5bb.json) · 结论：diagnosis, recommendation:2
   卡片版本：`125931927fbc468c3e5693050724034362006e87a40785f9580987d32edde5bb`
+- [case-4171cd43bbb420b4ee40](../../../store/cases/case-4171cd43bbb420b4ee40/0effbd77c7fda6b589b47193aaa322f49d48b23605a26ca7e52f15d9786494aa.json) · 结论：recommendation:4
+  卡片版本：`0effbd77c7fda6b589b47193aaa322f49d48b23605a26ca7e52f15d9786494aa`
 - [case-4a3784fb5b509485e8c7](../../../store/cases/case-4a3784fb5b509485e8c7/10ee1fec7f8e9e20fc5ee9d9bf61db4ee40a307889ad49783b41d4ac71d8c2ec.json) · 结论：recommendation:2
   卡片版本：`10ee1fec7f8e9e20fc5ee9d9bf61db4ee40a307889ad49783b41d4ac71d8c2ec`
 - [case-4f627840679361f165a3](../../../store/cases/case-4f627840679361f165a3/8b0f7cc40d821777a77dc3bf68c6739f335039023414e9bcb04404d5b4ac02e8.json) · 结论：recommendation:4
@@ -68,14 +70,20 @@ ID：`lesson-a2f6a4ae9a72be740de6` · 版本：7
   卡片版本：`24570f598b1c5b1bdb181efddaac5a79a2aac2ad6e83f5f171a7107944d77842`
 - [case-75784c189c0578d026a6](../../../store/cases/case-75784c189c0578d026a6/86dd42e7e9d78e101a4bd803a4210cddbe07659a8deb38852f8201fe10a1d261.json) · 结论：recommendation:4
   卡片版本：`86dd42e7e9d78e101a4bd803a4210cddbe07659a8deb38852f8201fe10a1d261`
+- [case-775c2298a494ebceb71c](../../../store/cases/case-775c2298a494ebceb71c/d711688bb4178570fd5e418ae31c04b00870fc4ee4045447542f4db47b2c685f.json) · 结论：diagnosis, recommendation:1, recommendation:2
+  卡片版本：`d711688bb4178570fd5e418ae31c04b00870fc4ee4045447542f4db47b2c685f`
 - [case-77e4e8b4e16c3fc8e030](../../../store/cases/case-77e4e8b4e16c3fc8e030/de5d2060d2228797992daa36c3c487459c5ec7e968bdca7f1d06ed589e393635.json) · 结论：recommendation:3
   卡片版本：`de5d2060d2228797992daa36c3c487459c5ec7e968bdca7f1d06ed589e393635`
 - [case-7d5b3583abd06943248f](../../../store/cases/case-7d5b3583abd06943248f/be28e286f2c5961d3c34a8a57df28d77cd5a345f9b4ff620dd610bd4975f4baf.json) · 结论：recommendation:5
   卡片版本：`be28e286f2c5961d3c34a8a57df28d77cd5a345f9b4ff620dd610bd4975f4baf`
+- [case-9d3828c851006d29fc06](../../../store/cases/case-9d3828c851006d29fc06/c198fe473f6d3c9d774f95de74c649d6542ab966ab417df2dcb1881819cb4366.json) · 结论：diagnosis, recommendation:1, recommendation:2
+  卡片版本：`c198fe473f6d3c9d774f95de74c649d6542ab966ab417df2dcb1881819cb4366`
 - [case-cfcb1be64b70e328ad81](../../../store/cases/case-cfcb1be64b70e328ad81/3149ab3429330e943123e716dd39905b242a535966c5e16dffe17278714a0381.json) · 结论：recommendation:3
   卡片版本：`3149ab3429330e943123e716dd39905b242a535966c5e16dffe17278714a0381`
 - [case-d23537ecc4c87801075a](../../../store/cases/case-d23537ecc4c87801075a/82aba2b2aeb3562e5d2c48260683b0f99162c182846f0e6771624298a1d71ff5.json) · 结论：recommendation:3
   卡片版本：`82aba2b2aeb3562e5d2c48260683b0f99162c182846f0e6771624298a1d71ff5`
+- [case-d5698429a34c85664785](../../../store/cases/case-d5698429a34c85664785/7ab31e28c5c952c7e5c7b20548bde4e7bd5dbfb464237ece26dfb1b81c2cebe0.json) · 结论：recommendation:1, recommendation:2
+  卡片版本：`7ab31e28c5c952c7e5c7b20548bde4e7bd5dbfb464237ece26dfb1b81c2cebe0`
 - [case-ddbf301e2e83a466c644](../../../store/cases/case-ddbf301e2e83a466c644/dab3bcf4ca202ab2876fe7261e1bd211d29a2f32dae0da3a88e1ed005df5fda9.json) · 结论：recommendation:1, recommendation:3
   卡片版本：`dab3bcf4ca202ab2876fe7261e1bd211d29a2f32dae0da3a88e1ed005df5fda9`
 - [case-f4f67940ef03672d639c](../../../store/cases/case-f4f67940ef03672d639c/0c84d1476bf96ef042d71bcce5b94c7ae01ad2cf21e2004e85cd794b9ed5ca63.json) · 结论：recommendation:4

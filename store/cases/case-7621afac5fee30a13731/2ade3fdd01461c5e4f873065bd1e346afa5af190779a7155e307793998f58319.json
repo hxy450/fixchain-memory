@@ -1,0 +1,220 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-7621afac5fee30a13731",
+  "created_at": "2026-10-23T15:14:46.122287+00:00",
+  "migration_key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/memory-distill-opencamera-20261023/pool",
+  "title": "外部拍摄want：前后摄extras键凭记忆补写，onNewWant新请求只写快照无人重读",
+  "when": "集成接线阶段，在入口Ability与共享状态中落地第三方拉起want（onCreate/onNewWant）的参数解析与消费时；以及主线程把切片worker信封转述给集成者时",
+  "description": "Android相机Activity未设launchMode（standard），每个第三方IMAGE_CAPTURE/VIDEO_CAPTURE intent都在onCreate里一次性读getIntent extras（CAMERA_FACING、LENS_FACING_FRONT/BACK、USE_FRONT_CAMERA等）并setResult；目标UIAbility为singleton，新want经onNewWant到达已运行实例，且want解析职责由切片worker移交给集成者在共享入口文件实现。",
+  "summary": "B25（前后摄extras）：Slice 11 worker写前读到F011 AC25–27与MainActivity.java:889-920，\n在source notes和最终信封中正确列出CAMERA_FACING{0,1}→LENS_FACING_FRONT→LENS_FACING_BACK→USE_FRONT_CAMERA短路链，\n并在decision_gaps③把“EntryAbility→MainPageVM.launchIntent/facing的want解析注入点”交给closer。\n主线程派group-closer时，Slice 11摘要只保留P-S1-024、P-S1-018..022、P-B5-001等登记项，\n丢掉了③及键域，只给slice-11计划路径（其spec_refs指向F011）与“逐条内容顺链接读spec”。closer从MainPageVM注释看到\n“AC25-27由EntryAbility dispatchWant解析注入”，思考中自认不确定（“CAMERA_FACING_FRONT?”），\n却未grep F011或MainActivity，按“两个已知键”写出parseFacing：任意number的CAMERA_FACING按===1判前摄，\n另加源码不存在的CAMERA_FACING_FRONT(boolean)，漏掉LENS_FACING_FRONT/BACK与USE_FRONT_CAMERA，\n常量注释还写“spec §实现映射intent行原串保留”。该片段原样保留到c752566。\n修复（5a2d L3643）把CAMERA_FACING限定0/1，补三键并按源顺序短路，厂商别名放最后；\nsetModeFromIntents(newLaunch)在新启动时重置doneFacing并重新判定朝向。\n\nB24（已运行时的新外部请求）：OpenCamera的MainActivity为standard启动，新外部intent即新Activity与新getIntent/结果通道；\nF011 spec服务层只给EntryAbility.onCreate与aboutToAppear内setModeFromIntents，\nAC221把clearTaskOnLaunch映射为launchType singleton，没有“已运行时再收到外部拍摄want”的条目，\n即spec未覆盖新Activity语义（closer也未读F011，此缺口未进入其写前输入）。\ncloser自身读过QuickEntryDispatcher契约（onNewWant为singleton切回挂载点、onPageShow读后即清消费），\n也为F010写了consumeQuickEntryOnShow；但为F011设计的LaunchIntentState快照只在onCreate/onNewWant写入，\nMainPageVM仅在构造时拷贝一次（注释却称“新want覆盖旧值”），MainPage不观察快照，也无revision。\n于是warm want只更新快照，模式、朝向、输出uri与结果回传仍沿用旧请求。\n修复增加LaunchIntentState.revision，由MainPage @Monitor触发applyLaunchIntent，串行等待旧相机、录像、保存后再应用；\nlaunchIntentChanging期间禁用交互，finishAsIntentResult按revision防重放；PreviewEngine补pauseForLaunchIntent/cameraIdleWaiters\n（5a2d L3643、L3657、L3761、L3791）。\n",
+  "recommendations": [
+    "集成者实现外部协议键（intent extras、action字符串）前，grep当前feature spec的AC/实现映射行和源码对应行，逐键核对键名、类型、取值域与短路顺序；思考中带“?”的键名先查证再落码，注释不得声称“原串保留”而未读原文。",
+    "主线程向closer转述worker信封时，原样保留decision_gaps与跨文件注入项及其值域（如四个facing键与优先级），不要只列已登记的P-编号。",
+    "源Activity为standard启动、目标UIAbility为singleton时，规格提取与集成都把“已运行时收到新拉起want”列为独立场景：新want带revision，页面/VM观察后先结束旧相机、录像和保存，再重跑setModeFromIntents，并使旧请求结果失效。",
+    "设计want快照时，逐个写入点核对消费点：onNewWant写入的状态必须由已存在的页面或VM观察（@Monitor或回调），不能只在构造期读取一次。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/CameraAppInterface.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F011-app-integration.md",
+          "at": "2026-10-01T16:42:15.802Z",
+          "reason": "正常输入：Slice 11 worker Read回执含F011-AC25 CAMERA_FACING∈{0,1}、AC26 LENS_FACING_FRONT/BACK=1、AC27 USE_FRONT_CAMERA=true及短路优先级，足以确定四键契约（agent-a690eb1a2619c2d76.jsonl:L27-L28）。"
+        },
+        {
+          "key": "agent-a690eb1a2619c2d76.jsonl",
+          "at": "2026-10-01T17:19:05.005Z",
+          "reason": "正确传递：又读MainActivity.java 760-1040（L91-L92），在slice-11-source-notes写出四键短路链（L206），最终信封重复该链，并以decision_gaps③把want解析注入点交给closer（L528）。本节点未偏离。"
+        },
+        {
+          "key": "a9bd9bd6-60ab-4adc-996c-11ded062d5c5.jsonl",
+          "at": "2026-10-01T17:28:38.632Z",
+          "reason": "该节点为派工端起点：主线程已收到Slice 11信封（task-notification含四键短路链与③，L397），派closer-g2的Slice 11摘要只列P-S1-024/018..022、P-B5-001等，丢掉③、want解析注入项与facing键域，只给slice-11计划路径（spec_refs指向F011）和“逐条内容顺链接读spec”（L426）。交接在此丢失要求。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/MainPageVM.ets",
+          "at": "2026-10-01T17:29:53.581Z",
+          "reason": "交接桥梁：worker写入（L410-L411）的MainPageVM被closer读回，launchIntent/launchIntentFacing字段注释为“EntryAbility dispatchWant / closer注入；AC25-27”，只交职责不交键名（agent-acb5c3d58575999a4.jsonl:L65-L66；L159-L160 grep又返回“AC25-27由EntryAbility dispatchWant解析注入”）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/QuickEntryDispatcher.ets",
+          "at": "2026-10-01T17:29:45.777Z",
+          "reason": "正常输入：closer Read回执给出F010同类契约：dispatchWant挂在onCreate与onNewWant（singleton切回），MainPage在onPageShow/aboutToAppear读后即清消费；说明已运行实例会收到新want且需在页面侧重新消费（agent-acb5c3d58575999a4.jsonl:L57-L58）。"
+        },
+        {
+          "key": "agent-acb5c3d58575999a4.jsonl",
+          "at": "2026-10-01T18:25:01.693Z",
+          "reason": "已读slice-11计划（L24-L25，spec_refs指向F011），L284思考中仍把键写成“CAMERA_FACING_FRONT?”、仅凭记忆决定“keep to the two known keys”，写前未读F011或MainActivity；L301-L302 Edit新增LaunchIntentState（无revision，注释“MainPageVM构造时读取”）、captureLaunchWant与虚构的EXTRA_CAMERA_FACING_FRONT；L304-L305 Edit写parseFacing：number即按===1判定，再读boolean别名，漏三项Android键。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 3,
+          "to": 6
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 6
+        },
+        {
+          "from": 5,
+          "to": 6
+        },
+        {
+          "from": 6,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/MainPageVM.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/QuickEntryDispatcher.ets",
+          "at": "2026-10-01T17:29:45.777Z",
+          "reason": "正常输入：closer读到onNewWant为singleton切回挂载点、页面在onPageShow读后即清消费入口意图的契约，足以说明新want到达已运行实例时VM/页面必须重新应用（agent-acb5c3d58575999a4.jsonl:L57-L58）。"
+        },
+        {
+          "key": "agent-acb5c3d58575999a4.jsonl",
+          "at": "2026-10-01T18:29:13.559Z",
+          "reason": "已让EntryAbility.onNewWant调用captureLaunchWant（L321-L322），却在MainPageVM构造函数中只拷贝一次LaunchIntentState，并注释“新want覆盖旧值”（L393-L394）；无观察、无revision，warm want后setModeFromIntents与finishAsIntentResult仍用旧launchIntent。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/pages/MainPage.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/QuickEntryDispatcher.ets",
+          "at": "2026-10-01T17:29:45.777Z",
+          "reason": "正常输入：同上，onNewWant挂载与onPageShow消费契约（agent-acb5c3d58575999a4.jsonl:L57-L58）。"
+        },
+        {
+          "key": "agent-acb5c3d58575999a4.jsonl",
+          "at": "2026-10-01T18:40:12.235Z",
+          "reason": "Write MainPage时在aboutToAppear只new一次MainPageVM，为F010写了consumeQuickEntryOnShow（onPageShow消费），但未观察F011的LaunchIntentState快照（L567-L568、L588-L589）；c752566中MainPage无LaunchIntentState引用，修复补@Monitor→applyLaunchIntent与launchIntentChanging禁用。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/PreviewEngine.ets",
+      "reason": "B24修复新增pauseForLaunchIntent/cameraIdleWaiters及open/close异常时释放等待者（5a2d L3643、L3761、L3791），属串行切换的新增支撑与修复中复现的竞态；生成期无对应输入要求，未归因到生成写者。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/MainSessionState.ets",
+      "reason": "B24修复仅新增@Trace launchIntentChanging标志（5a2d L3643），为串行切换期间禁用交互服务；生成期无对应要求，未单独归因。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/VideoRecordController.ets",
+      "reason": "job列入B24修改文件，但5a2d的B24补丁调用（L3643/L3657/L3755/L3761/L3791/L3799）均未改此文件；configureVideoCaptureIntent实际位于MainPage，c752566..2b66258中setCaptureIntent的captureIntentActive改动来自视频缩略图提案（5a2d L6177起），未核定其与本问题的关系。"
+    }
+  ],
+  "job": "issue-7621afac5fee30a13731",
+  "metadata": {
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code",
+        "codex"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3",
+        "gpt-6-astra"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.163.0",
+        "2.1.247",
+        "2.1.299"
+      ]
+    },
+    "source_set_id": "sources-974a9086706364eed8b7",
+    "environment": [
+      {
+        "name": "android.compile_sdk",
+        "value": "36",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/.claude/skills",
+        "at": "2026-10-01T09:52:21.840Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-aa8064d19722381a1.jsonl:L11",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-aa8064d19722381a1.jsonl:L10",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos",
+        "at": "2026-10-01T12:27:45.961Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b.jsonl:L1565",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b.jsonl:L1563",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos",
+        "at": "2026-10-01T13:34:44.665Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae78a452b1664bc61.jsonl:L149",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae78a452b1664bc61.jsonl:L148",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.11.1"
+  },
+  "revision": "2ade3fdd01461c5e4f873065bd1e346afa5af190779a7155e307793998f58319"
+}

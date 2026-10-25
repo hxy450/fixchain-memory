@@ -1,11 +1,14 @@
 # data/files
 
-文件系统操作与导入导出：fileIo 建目录、移动与复制在目标已存在时的行为与幂等写法；导入导出按源端运行时与库默认语义实现（OOM 兜底、选择数量上限、zip 压缩方式、picker 显示名解码）；源端后台线程里的拷贝与导入改用异步 IO 或 taskpool
+文件系统操作与导入导出：fileIo 建目录、移动与复制在目标已存在时的行为与幂等写法；导入导出按源端运行时与库默认语义实现（OOM 兜底、选择数量上限、zip 压缩方式、picker 显示名解码）；源端后台线程里的拷贝与导入改用异步 IO 或 taskpool；OutputStream 覆盖写改 fileIo 时的 TRUNC、短写与字节视图切片
 
 [上一级](../index.md)
 
 ## 本级经验
 
+- [OutputStream 覆盖写改成 fileIo：打开加 TRUNC，按 writeSync 返回值写完，字节视图按偏移切出 ArrayBuffer](lesson-4c93cca5dde48080b008.lesson.md)
+  - 时机：数据与服务层实现阶段，把 Java FileOutputStream/openOutputStream 加 write(data) 的整文件写入翻译为 fileIo.openSync/writeSync，或把 Uint8Array 字节交给要求 ArrayBuffer 的接口时
+  - 情境：源端以非追加方式打开输出流后一次 write(data) 覆盖整个文件；目标照参考示例写 openSync(WRITE_ONLY | CREATE) 加一次 writeSync，示例针对新建文件与字符串内容；要写的字节可能是 subarray 视图（如元数据写入器返回的切片）。
 - [fileIo.mkdirSync 对已存在目录会抛 13900015：翻译“确保目录存在”时先判断或只放过该错误码，覆盖写先处理已存在目标](lesson-3f6b5d0b0ea6806a1b0c.lesson.md)
   - 时机：数据与服务层实现阶段，把 Android 的建目录、文件移动/复制落盘步骤翻译成 @kit.CoreFileKit fileIo 调用时
   - 情境：源端用 createOrExistsDir、mkdirs、getExternalFilesDir 保证目录存在，并在同一固定目录内重复下载、复制或覆盖（ignoreFilePathOccupy、exists 后 delete 再 copyTo）；目标用 fileIo.mkdirSync / moveFileSync / copyFileSync 实现同一管线。

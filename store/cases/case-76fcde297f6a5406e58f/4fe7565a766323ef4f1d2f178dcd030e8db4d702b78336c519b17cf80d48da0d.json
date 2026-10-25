@@ -1,0 +1,468 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-76fcde297f6a5406e58f",
+  "created_at": "2026-10-23T15:14:32.353578+00:00",
+  "migration_key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/memory-distill-opencamera-20261023/pool",
+  "title": "外部拍照/录像意图：结果回传、输出 URI 与限制参数在移植中丢失或被伪造成功",
+  "when": "功能切片实现与组内接线阶段，移植第三方拍照/录像意图的结果回传、输出位置和时长/大小/质量限制时",
+  "description": "源 Android 应用响应 ACTION_IMAGE_CAPTURE/ACTION_VIDEO_CAPTURE，依赖 setResult(RESULT_OK/RESULT_CANCELED, data)+finish()、EXTRA_OUTPUT、EXTRA_VIDEO_QUALITY/EXTRA_DURATION_LIMIT/EXTRA_SIZE_LIMIT 和 inline-data 位图；目标 HarmonyOS 由 want 拉起，结果需经 UIAbilityContext.terminateSelfWithResult 一次性回传 AbilityResult。",
+  "summary": "生成期各写者实际收到的输入均已覆盖本问题：F011 规格把 ACTION_IMAGE_CAPTURE/ACTION_VIDEO_CAPTURE 列为 HARD，\n映射写明“setResult/finish → abilityResult 回传”，AC40 要求“回传码与结束调用一一对应”，AC31/37/38 要求 EXTRA_OUTPUT、\n时长、大小进入录像；F003 规格 AC05/AC29/AC44 要求意图质量/时长优先、“URI（第三方 intent 指定输出）→ setResult 回传”；\nImageSaver.java:2145-2149 写明意图拍照保存后 setResult(RESULT_OK)+finish。输出却在四处偏离：\n(1) Slice 11 实现者写 MainPageVM.finishAsIntentResult 时，ok/uri 两个分支都只调用 terminateSelf()，注释声称调用方会读回 want，\n结果码与 uri 实际被丢弃；同一实现者写 CameraAppInterface 时照搬源中 broadcastVideo→finishVideoIntent 与 stoppedVideo 两处 setResult，\n却把它们接到一次性终止回调 onIntentResult 上，因而录像意图结果回传两次，且 uri 为空时先以 (true, '') 成功结束。\nAndroid 中 setResult 可被后一次覆盖、finish 幂等，移植成“先到先终止”后语义改变。\n(2) Slice 4 实现者读到 F003 的意图条款，也从决策账本看到 F011 负责 Intent 协议，却判定“HMOS 无第三方 video capture intent 入口”：\nVideoProfileBuilder 只留默认 null 的 VideoCaptureIntentOptions/setCaptureIntent 且源码笔记注明“运行时无注入路径”，未登记交接；\nAvRecorderEngine 总是 photoAccessHelper.createAsset，VideoRecordController 总以 VideoMethod.MEDIASTORE 回调 stoppedVideo。\n意图质量、时长、大小和调用方 outputUri 因而从未到达录像器。\n(3) Slice 3 实现者读过 ImageSaver.java 全文，但 ImageSaverService 的 uri 分支只 writeUri 并记成功，没有任何结果出口；\n只有无 uri 的 inline 分支有 intentResultHook。F002-AC31 对 uri 分支只写“成品写入该 uri”，规格不完整，但源码回执已足以说明回传要求。\n(4) 组 2 收口者读取登记表 P-S3-006（inline-data ≤128px 位图回传并结束页面）和已只会 terminateSelf 的 finishAsIntentResult 后，\n自行写下“HMOS terminateSelf 无 setResult 数据通道 → inline-data 平台缺口：仅结束拍照页（ok=true）”，新增 completeImageCaptureIntent\n以 finishAsIntentResult(true, null) 把无数据的 inline 请求报成成功，并在 MainPage 把 intentResultHook 接到它；\n同时按 VideoRecordController 的“媒体库直落”实现挂载录像器，未注入意图参数。该说法不见于 F011 规格或计划，是收口时的实现判断。\n上述片段在执行结束检查点 c752566 与第二轮返修前 c1abe5c 之间未变。Codex 第二轮返修（c1abe5c..c8dd617，FINAL 保留语义）：\nfinishAsIntentResult 改为 async，先等待保存队列，再以 terminateSelfWithResult({resultCode: -1/0, want.uri}) 回传；\ninline 请求释放位图后按取消结束；新增 completeImageCaptureUriResult 与 ImageSaverCallbacks.intentUriResultHook，由 MainPage 接线；\nMainPage 依 launchIntent 构造 VideoCaptureIntentOptions（含 outputUri）并调用 setCaptureIntent；AvRecorderEngine 打开调用方 URI（TRUNC），\n且不删除调用方资产（ownsAsset，FINAL 为 systemAssetMode）；VideoRecordController 对外部输出回调 VideoMethod.URI；CameraAppInterface\n删除 broadcastVideo 内重复的 finishVideoIntent，空 uri 视为未完成；VideoProfileBuilder 在意图质量为 0/1 时走意图质量档。\n",
+  "recommendations": [
+    "实现阶段移植 Activity 结果协议时，把 setResult(code, data)+finish() 映射为一次 terminateSelfWithResult({resultCode: RESULT_OK=-1 / RESULT_CANCELED=0, want: {uri}})；写完后检查结果函数中的 ok/uri 是否真正写入 AbilityResult，不能只调用 terminateSelf()。",
+    "源中 setResult 可被后续调用覆盖、finish 幂等时，先列出全部 setResult/finish 调用点（如 broadcastVideo 内 finishVideoIntent 与 stoppedVideo 末尾），合并为唯一的最终出口，并把空 uri 或失败判为 RESULT_CANCELED，避免一次性终止回调被调用两次。",
+    "移植保存或录像管线的意图分支时，按源码逐分支列出“写入 → 回传结果 → 结束页面”：带 EXTRA_OUTPUT 的分支在写入完成后也要调用结果出口（对应 ImageSaver.java 中写入 uri 后的 setResult(RESULT_OK)+finish），且先等保存完成再结束。",
+    "规格或决策账本已把外部意图入口归到其他 feature（如 F011 Intent 协议）时，不要判定“目标平台无入口”；为 EXTRA_VIDEO_QUALITY/DURATION_LIMIT/SIZE_LIMIT/EXTRA_OUTPUT 保留注入面并登记跨切片 FWD-REF，写明由入口页面从 launch want 构造并注入；录像器在 outputUri 存在时打开调用方 fd，按 VideoMethod.URI 完成，不删除调用方资产。",
+    "组内接线阶段声明“平台缺口”前，先查目标 API（如 UIAbilityContext.terminateSelfWithResult），不能以上游临时实现为准；源数据确实无法携带（如 Want 无法携带 inline-data Bitmap）时，按 RESULT_CANCELED 处理，不能报成功。另检查每个 worker 留下的 setXxx 注入面（如 setCaptureIntent）是否都有调用方。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/MainPageVM.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F011-app-integration.md",
+          "at": "2026-10-01T16:42:15.802Z",
+          "reason": "正常输入：Read 回执第 155 行把 ACTION_IMAGE_CAPTURE/ACTION_VIDEO_CAPTURE 接收协议列为 HARD，映射为“setResult/finish → abilityResult 回传”；AC40 要求成功回传 RESULT_OK+uri、失败回传 RESULT_CANCELED，并要求“回传码与结束调用一一对应”。这足以说明结束页面时必须带回结果码和 uri（agent-a690eb1a2619c2d76.jsonl:L27-L28）。"
+        },
+        {
+          "key": "agent-a690eb1a2619c2d76.jsonl",
+          "at": "2026-10-01T17:12:12.971Z",
+          "reason": "Slice 11 实现者在收到上述规格后两次 Write MainPageVM：17:09 版本的 ok+uri 与其他分支都只写 this.context.terminateSelf()；17:12 版本先把 ok=false 的 uri 置空，仍只调用 terminateSelf()，注释却声称调用方会读回 want。结果码和 uri 都没有进入回传（同转录 L395-L396、L410-L411）。该片段一直保留到执行结束。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/MainPageVM.ets",
+          "at": "2026-10-01T17:29:58.305Z",
+          "reason": "交接桥梁：组 2 收口者 Read MainPageVM 1466-1675 行，回执显示 finishAsIntentResult 只调用 terminateSelf()，onPictureTakenHost 注释称与 P-S3-006 intentResultHook 同链（agent-acb5c3d58575999a4.jsonl:L70-L71）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/placeholder-registry.md",
+          "at": "2026-10-01T17:29:12.866Z",
+          "reason": "正常输入：收口者 grep 登记表，回执中 P-S3-006 写明“image_capture_intent 无 uri 分支的 inline-data 回传（≤128px 位图 + finish 拍照页）归 F011 统一认领”。这里要求回传数据，没有授权在无数据时报告成功（agent-acb5c3d58575999a4.jsonl:L34-L35）。"
+        },
+        {
+          "key": "agent-acb5c3d58575999a4.jsonl",
+          "at": "2026-10-01T18:30:06.744Z",
+          "reason": "收口者思考中写到“MainPageVM.finishAsIntentResult only terminates … HMOS terminateSelf can't return data”（L251），于是 Edit 新增 completeImageCaptureIntent，注释“HMOS terminateSelf 无 setResult 数据通道 → inline-data 平台缺口：仅结束拍照页（ok=true）”，函数体为 finishAsIntentResult(true, null)，把没有数据的 inline 请求报成成功（同转录 L411-L412）。该说法不见于规格或计划，平台缺口的依据是上游的临时实现。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 5
+        },
+        {
+          "from": 4,
+          "to": 5,
+          "force": true,
+          "reason": "收口者在工程根（cwd=opencamera-hmos）用 Bash 执行 grep -n \"P-S3-\\|P-S4-\\|…\\|P-S11-\" spec/placeholder-registry.md，回执第 408 行为 P-S3-006：inline-data 回传 ≤128px 位图并结束拍照页，归 F011 统一认领。这是写前对该登记表的真实读取。",
+          "evidence": [
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-acb5c3d58575999a4.jsonl",
+              "line": 34
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-acb5c3d58575999a4.jsonl",
+              "line": 35
+            }
+          ]
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/CameraAppInterface.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F011-app-integration.md",
+          "at": "2026-10-01T16:42:15.802Z",
+          "reason": "正常输入：AC40 规定 stoppedVideo 在成功时回传 RESULT_OK+uri、失败时回传 RESULT_CANCELED，判据是“回传码与结束调用一一对应”；AC41 说明 broadcastVideo 中 MEDIASTORE 分支调用 finishVideoIntent；第 155 行把回传映射到 abilityResult（agent-a690eb1a2619c2d76.jsonl:L27-L28）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/MyApplicationInterface.java",
+          "at": "2026-10-01T16:45:07.343Z",
+          "reason": "正常输入：Read 2496-2705 行，回执显示 stoppedVideo 先调用 broadcastVideo；MEDIASTORE+intent 时 broadcastVideo 内的 finishVideoIntent 已 setResult(OK)+finish，随后 stoppedVideo 再按 done 结果 setResult(OK/CANCELED)+finish。Android 以最后一次 setResult 为准，finish 可重复调用。这足以看出两处调用必须合并为一个最终结果（agent-a690eb1a2619c2d76.jsonl:L109-L110）。"
+        },
+        {
+          "key": "agent-a690eb1a2619c2d76.jsonl",
+          "at": "2026-10-01T17:06:38.291Z",
+          "reason": "Write CameraAppInterface 时，把“setResult+finish”合成一次性终止回调 onIntentResult，同时保留源中的两处调用：broadcastVideo 在 MEDIASTORE+intent 时调用 finishVideoIntent(uri === null ? '' : uri)，进而调用 onIntentResult(true, uri)；stoppedVideo 随后再次调用 onIntentResult(done, outputUri)。结果因此回传两次，空 uri 也先以成功结束（同转录 L387-L388）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/VideoProfileBuilder.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F003-video-record.md",
+          "at": "2026-10-01T16:54:35.858Z",
+          "reason": "正常输入：Read 回执中 AC05 规定 video capture intent 的 EXTRA_DURATION_LIMIT×1000 优先；AC29 规定 EXTRA_VIDEO_QUALITY 0/1 对应最低/最高质量档；AC44 规定“URI（第三方 intent 指定输出）→ setResult 回传”（agent-ad056b0d5327c12ec.jsonl:L24、L26）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/decision-ledger.md",
+          "at": "2026-10-01T16:57:47.391Z",
+          "reason": "正常输入：grep intent 的回执为“F011：应用入口与系统集成（权限/Intent 协议/锁屏/画廊）”，表明意图入口由 F011 实现，不是平台上不存在（agent-ad056b0d5327c12ec.jsonl:L129-L130）。"
+        },
+        {
+          "key": "agent-ad056b0d5327c12ec.jsonl",
+          "at": "2026-10-01T17:11:23.662Z",
+          "reason": "Slice 4 实现者在思考中写下“HMOS 无此入口……运行时无 intent 注入路径”（L128、L242）；随后 Write VideoProfileBuilder，文件头写“HMOS 无第三方 intent 入口，F011 归属”，captureIntent 默认 null，只提供 setCaptureIntent。源码笔记也写“运行时无注入路径”，没有登记交接。因而意图质量、时长和大小从未进入录像配置（同转录 L334-L335）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "Slice 4 实现者在工程根（cwd=opencamera-hmos）用 Bash 执行 grep -n \"intent\\|Intent\\|want\" spec/decision-ledger.md，回执返回“F011：应用入口与系统集成（权限/Intent 协议/锁屏/画廊）”。这是写前对该账本的真实读取，相对路径即本节点文件。",
+          "evidence": [
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-ad056b0d5327c12ec.jsonl",
+              "line": 129
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-ad056b0d5327c12ec.jsonl",
+              "line": 130
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/AvRecorderEngine.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F003-video-record.md",
+          "at": "2026-10-01T16:54:35.858Z",
+          "reason": "正常输入：AC44 要求按 VideoMethod 完成录像，其中“URI（第三方 intent 指定输出）→ setResult 回传”，即调用方指定的输出位置必须作为写入目标（agent-ad056b0d5327c12ec.jsonl:L24、L26）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/decision-ledger.md",
+          "at": "2026-10-01T16:57:47.391Z",
+          "reason": "正常输入：账本回执显示 Intent 协议归 F011 实现（agent-ad056b0d5327c12ec.jsonl:L129-L130）。"
+        },
+        {
+          "key": "agent-ad056b0d5327c12ec.jsonl",
+          "at": "2026-10-01T17:12:46.485Z",
+          "reason": "在思考中把 AC44 的三条完成路径并成“媒体库直落”，并写“URI → setResult 无（无 intent）”（L242）；随后 Write AvRecorderEngine，落盘固定为 photoAccessHelper.createAsset(VIDEO) → fd，没有调用方 outputUri 参数（同转录 L342-L343）。之后补的 deleteAsset 也只面向自建资产。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "Slice 4 实现者在工程根（cwd=opencamera-hmos）用 Bash 执行 grep -n \"intent\\|Intent\\|want\" spec/decision-ledger.md，回执返回“F011：应用入口与系统集成（权限/Intent 协议/锁屏/画廊）”。这是写前对该账本的真实读取，相对路径即本节点文件。",
+          "evidence": [
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-ad056b0d5327c12ec.jsonl",
+              "line": 129
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-ad056b0d5327c12ec.jsonl",
+              "line": 130
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/VideoRecordController.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F003-video-record.md",
+          "at": "2026-10-01T16:54:35.858Z",
+          "reason": "正常输入：AC44 规定 stopRecording 按 FILE/SAF-MEDIASTORE/URI 三种方法分别完成，video capture intent 下 setResult(RESULT_OK)（agent-ad056b0d5327c12ec.jsonl:L24、L26）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/decision-ledger.md",
+          "at": "2026-10-01T16:57:47.391Z",
+          "reason": "正常输入：账本回执显示 Intent 协议归 F011 实现（agent-ad056b0d5327c12ec.jsonl:L129-L130）。"
+        },
+        {
+          "key": "agent-ad056b0d5327c12ec.jsonl",
+          "at": "2026-10-01T17:16:55.528Z",
+          "reason": "Write VideoRecordController 时，完成回调固定为 this.appInterface?.stoppedVideo(VideoMethod.MEDIASTORE, uri, filename)，注释为“HMOS 收敛媒体库直落”；控制器没有 setCaptureIntent 或输出 URI 入口，与 L242 的“VideoMethod.URI 恒不生成”一致（同转录 L394-L395）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "Slice 4 实现者在工程根（cwd=opencamera-hmos）用 Bash 执行 grep -n \"intent\\|Intent\\|want\" spec/decision-ledger.md，回执返回“F011：应用入口与系统集成（权限/Intent 协议/锁屏/画廊）”。这是写前对该账本的真实读取，相对路径即本节点文件。",
+          "evidence": [
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-ad056b0d5327c12ec.jsonl",
+              "line": 129
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-ad056b0d5327c12ec.jsonl",
+              "line": 130
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/ImageSaverService.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/ImageSaver.java",
+          "at": "2026-10-01T16:43:07.112Z",
+          "reason": "正常输入：Read 2000 行之后的回执包含 2145-2149 行：image_capture_intent 保存到 uri 后 setResult(RESULT_OK) 并 finish。这足以说明 uri 分支写入完成后也必须回传结果并结束页面（agent-a46e99f7c0baf2d05.jsonl:L70-L71）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F002-photo-capture-save.md",
+          "at": "2026-10-01T16:41:34.309Z",
+          "reason": "辅助输入：AC31 写“intent 带 uri → 成品写入该 uri；无 uri → inline-data 返回并结束拍照页”，第 109 行把回传机制归 F011。规格对 uri 分支只写了写入，没有写回传；源码回执补足了这一要求（agent-a46e99f7c0baf2d05.jsonl:L25-L26）。"
+        },
+        {
+          "key": "agent-a46e99f7c0baf2d05.jsonl",
+          "at": "2026-10-01T17:09:56.490Z",
+          "reason": "Slice 3 实现者 Write ImageSaverService：uri 分支只做 writeUri(target.saveUri, bytes) 并设 success=true，没有结果出口；回调只为 inline 分支定义 intentResultHook。写入完成后不回传成功或失败，这一状态保留到执行结束（同转录 L283-L284）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/pages/MainPage.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/placeholder-registry.md",
+          "at": "2026-10-01T17:29:12.866Z",
+          "reason": "正常输入：P-S3-006 要求 inline-data 回传 ≤128px 位图并结束拍照页，归 F011 统一认领（agent-acb5c3d58575999a4.jsonl:L34-L35）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/MainPageVM.ets",
+          "at": "2026-10-01T17:29:58.305Z",
+          "reason": "上游输入：收口者读到 Slice 11 写成的 finishAsIntentResult，它只调用 terminateSelf()（agent-acb5c3d58575999a4.jsonl:L70-L71）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F003-video-record.md",
+          "at": "2026-10-01T16:54:35.858Z",
+          "reason": "正常输入：AC05/AC29/AC44 要求录像器使用意图质量/时长优先规则，并在 URI 输出时回传结果（agent-ad056b0d5327c12ec.jsonl:L24、L26）。"
+        },
+        {
+          "key": "agent-ad056b0d5327c12ec.jsonl",
+          "at": "2026-10-01T17:16:55.528Z",
+          "reason": "Slice 4 实现者判定 HMOS 无录像意图入口，VideoRecordController 固定按 MEDIASTORE 完成，VideoProfileBuilder 的意图参数“运行时无注入路径”，也没有登记交接（同转录 L242、L394-L395）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/VideoRecordController.ets",
+          "at": "2026-10-01T17:32:24.024Z",
+          "reason": "交接桥梁：收口者 Read VideoRecordController，回执第 460-461 行为“HMOS 收敛媒体库直落”和 stoppedVideo(VideoMethod.MEDIASTORE, …)（agent-acb5c3d58575999a4.jsonl:L116-L117）。"
+        },
+        {
+          "key": "agent-acb5c3d58575999a4.jsonl",
+          "at": "2026-10-01T18:40:12.235Z",
+          "reason": "收口者 Write MainPage：把 imageSaver.callbacks.intentResultHook 接到 vm.completeImageCaptureIntent，注释“inline-data 平台缺口收敛 + finish 拍照页”，使无数据的 inline 请求被报成成功；只有 inline 钩子，没有 uri 结果接线；VideoRecordController.attach 后也没有从 launchIntent 注入意图参数或输出 URI（同转录 L588-L589）。其中 inline 伪成功是本节点自身的判断偏差，录像参数缺失沿用了 Slice 4 未交接的实现。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 6,
+          "force": true,
+          "reason": "收口者在工程根（cwd=opencamera-hmos）用 Bash 执行 grep -n \"P-S3-\\|P-S4-\\|…\\|P-S11-\" spec/placeholder-registry.md，回执第 408 行为 P-S3-006：inline-data 回传 ≤128px 位图并结束拍照页，归 F011 统一认领。这是写前对该登记表的真实读取。",
+          "evidence": [
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-acb5c3d58575999a4.jsonl",
+              "line": 34
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-acb5c3d58575999a4.jsonl",
+              "line": 35
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 6
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": 6
+        },
+        {
+          "from": 6,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "第二轮返修中 Codex 子会话的派工正文已加密；本卡只用其实际编辑作为修改参照，未据此推断分工。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-76fcde297f6a5406e58f",
+  "metadata": {
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code",
+        "codex"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3",
+        "gpt-6-astra"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.163.0",
+        "2.1.247",
+        "2.1.299"
+      ]
+    },
+    "source_set_id": "sources-974a9086706364eed8b7",
+    "environment": [
+      {
+        "name": "android.compile_sdk",
+        "value": "36",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/.claude/skills",
+        "at": "2026-10-01T09:52:21.840Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-aa8064d19722381a1.jsonl:L11",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-aa8064d19722381a1.jsonl:L10",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos",
+        "at": "2026-10-01T12:27:45.961Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b.jsonl:L1565",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b.jsonl:L1563",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos",
+        "at": "2026-10-01T13:34:44.665Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae78a452b1664bc61.jsonl:L149",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae78a452b1664bc61.jsonl:L148",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.11.1"
+  },
+  "revision": "4fe7565a766323ef4f1d2f178dcd030e8db4d702b78336c519b17cf80d48da0d"
+}

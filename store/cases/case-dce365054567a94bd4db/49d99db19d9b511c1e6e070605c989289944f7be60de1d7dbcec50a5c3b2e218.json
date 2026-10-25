@@ -1,0 +1,212 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-dce365054567a94bd4db",
+  "created_at": "2026-10-23T14:39:10.807316+00:00",
+  "migration_key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/memory-distill-opencamera-20261023/pool",
+  "title": "界面动作与相机回调只写偏好或落到空默认，未驱动引擎与界面刷新",
+  "when": "ViewModel实现阶段，把源Activity按钮动作与ApplicationInterface相机回调落到目标ViewModel、回调适配器和UI门面时",
+  "description": "源端按钮处理经Preview完成会话切换（setCamera/switchVideo），相机就绪与拍摄期回调经ApplicationInterface实现类转到Activity与MainUI（cameraSetup→MainActivity.cameraSetup、cameraInOperation→MainUI.showGUI）；目标端拆为引擎、ApplicationInterface实现类（继承带空默认的Basic基类）、ViewModel、UI门面多层，并另设与引擎并行的UI镜像状态（如isVideoMode）。",
+  "summary": "Slice 11（F011）实现者写前Read了F011规格（agent-a690eb1a2619c2d76.jsonl:L27-L28）。其中AC209写明userSwitchToCamera\n“完成setCamera后恢复”，AC211写明clickedSwitchVideo“reset(false)+dim → switchVideo → 图标刷新”，AC208与服务层清单\n列出多摄选择对话框、clickedSwitchMultiCamera、showSwitchMultiCamIcon；AC73/74/206/212以MainPageVM.cameraSetup作为\nMainActivity.cameraSetup的落点。它还Read了ApplicationInterface契约（cameraSetup为“相机(重新)设置完成”回调，L61-L62），\n以及BasicApplicationInterface中cameraSetup/cameraInOperation的空默认实现（L64-L65）。派工要求CameraAppInterface实现该契约（L1）。\n这些输入对本项决策已经正确、足够；当时PreviewEngine也已提供setCamera/switchVideo/isVideoMode，并在预览启动回调中调用\nappInterface.cameraSetup()。不过实现者用于探查引擎API的grep被head -60截断（L146-L147），之后也没有补查。\n实现者在L144的计划里写了“clickedSwitchVideo → reset/dim/switchVideo”，MainPageVM两次Write的注释也写着“→ switchVideo”。\n但实际输出（L395、L410-L411）中，userSwitchToCamera只调setCameraIdPref+reset(true)；clickedSwitchVideo只调\nsetVideoPref+reset(false)，再翻转state.isVideoMode；两处都没有调用引擎，多摄相关方法全部缺失。\nCameraAppInterface的Write（L387-L388）没有覆写cameraSetup，因此引擎回调落到Basic基类的空实现，\n导致MainPageVM.cameraSetup在生成结束时没有任何调用者。L194已把它当作疑问（“归F001 PreviewEngine.cameraSetup？”），却没有核对。\ncameraInOperationSink只处理前屏补光；实现者自定义的MainUiFacade也只有closePopup/destroyPopup/closeExposureUI/layoutUI/setImmersiveMode，没有showGUI。\n偏差位于“规格已给出的引擎调用与回调转发”到“VM和回调适配器实现”这一环。\n第二组closer（agent-acb5c3d58575999a4）Read了MainPageVM的门面接口和sink（L60-L66），随后按该接口写MainPage接线（L567-L568、L588-L589）。\n它只能注入门面中已有的五个方法，onScreenIconUpdater也只接到onScreenIcons.updateAll。closer在本链中只负责传递。\n[B48]是同一断链的后果：MainSessionState.isVideoMode默认false，规格§对接点也只列出setVideoPref与setModeFromIntents两个来源。\n冷启动时引擎按偏好恢复录像模式，就绪回调又落空，镜像状态因此始终没有同步。\n执行结束检查点c752566仍保留上述全部片段。第二轮Codex返修中，parity_audit先报告“动作只更新偏好、没有调用相机引擎”与“相机准备完成事件落到空实现”\n（rollout-…5a2d.jsonl:L2694、L2942），后在L6361确认冷启动模式未同步。最终修改如下：\nuserSwitchToCamera改为调用engine.setCamera；clickedSwitchVideo改为调用engine.switchVideo，并从engine.isVideoMode()回读；\n补上多摄选择器与ActionSheet；CameraAppInterface新增cameraSetup()→cameraSetupSink，在VM中接到cameraSetup、图标刷新与drawPreview.updateSettings；\ncameraInOperationSink改为调用mainUi.showGUI，门面加入showGUI；MainPageVM.cameraSetup开头同步isVideoMode。FINAL保留这些修改。\n",
+  "recommendations": [
+    "实现阶段：把规格AC中写明的引擎调用（如setCamera、switchVideo）逐条落到方法体，不能只写偏好、再reset代替会话切换；写前完整列出引擎公开方法（不截断），确认签名，并核对注释写到的每一步都已出现在方法体中。",
+    "实现ApplicationInterface具体类时：逐项对照源实现类的@Override清单（cameraSetup、cameraInOperation等）决定覆写；Basic基类的空默认不能作为终态。同时搜索确认VM上的同名落点（如MainPageVM.cameraSetup）有实际调用者。",
+    "定义VM到UI的门面时：把源回调里会调用的UI方法（如MainUI.showGUI、图标刷新）列入门面并在sink中调用；否则下游接线者只能按缺项的接口接线。",
+    "引入与引擎并行的UI镜像状态（如isVideoMode）时：在相机就绪回调里从引擎回读实际模式，不能只在用户切换或意图入口写入；冷启动恢复偏好的路径也要覆盖。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/MainPageVM.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F011-app-integration.md",
+          "at": "2026-10-01T16:42:15.802Z",
+          "reason": "正常输入：Read回执给出AC209“完成setCamera后恢复”、AC211“reset(false)+dim → switchVideo → 图标刷新”、AC208多摄对话框与clickedSwitchMultiCamera/showSwitchMultiCamIcon，并以MainPageVM.cameraSetup作为MainActivity.cameraSetup落点；足以要求动作调用引擎、就绪回调驱动VM（agent-a690eb1a2619c2d76.jsonl:L27-L28，规格第84-91、506-510行）。"
+        },
+        {
+          "key": "agent-a690eb1a2619c2d76.jsonl",
+          "at": "2026-10-01T17:12:12.971Z",
+          "reason": "L144计划写“clickedSwitchVideo → reset/dim/switchVideo”，Write注释也写“→ switchVideo”，方法体却只有setVideoPref+reset+翻转isVideoMode；userSwitchToCamera只有setCameraIdPref+reset(true)，未调setCamera；多摄方法缺失；cameraInOperationSink只处理前屏补光，MainUiFacade无showGUI（同转录L395-L396、L410-L411）。这些片段保留到c752566。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/CameraAppInterface.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "summary": "实现者已收到ApplicationInterface中cameraSetup是相机就绪回调的定义、Basic基类中的空默认，\n以及规格中“CameraAppInterface为MyApplicationInterface等价物”“MainPageVM.cameraSetup为MainActivity.cameraSetup落点”的要求。\n然而CameraAppInterface的Write没有覆写cameraSetup，cameraInOperation也只转给一个不调showGUI的sink。\n引擎在预览启动后调用appInterface.cameraSetup()，实际落到空实现。该文件此后的生成期写者未补这一覆写。\n最终修改新增cameraSetup()→cameraSetupSink，由MainPageVM接到cameraSetup、图标刷新与drawPreview.updateSettings。\n",
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/events/ApplicationInterface.ets",
+          "at": "2026-10-01T16:43:11.679Z",
+          "reason": "正常输入：Read回执给出“called when the camera is (re-)set up”的cameraSetup(): void，以及cameraInOperation(inOperation, isVideo)契约（agent-a690eb1a2619c2d76.jsonl:L61-L62）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/events/BasicApplicationInterface.ets",
+          "at": "2026-10-01T16:43:20.550Z",
+          "reason": "正常输入：Read回执显示cameraSetup(){}与cameraInOperation(){}是Basic基类的空默认（标注源:432-435、:520-523），表明具体实现类需要自行覆写（agent-a690eb1a2619c2d76.jsonl:L64-L65）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F011-app-integration.md",
+          "at": "2026-10-01T16:42:15.802Z",
+          "reason": "正常输入：规格写明CameraAppInterface是MyApplicationInterface的等价物，并以MainPageVM.cameraSetup承接MainActivity.cameraSetup的AC73/74/206/212（agent-a690eb1a2619c2d76.jsonl:L27-L28）。"
+        },
+        {
+          "key": "agent-a690eb1a2619c2d76.jsonl",
+          "at": "2026-10-01T17:06:38.291Z",
+          "reason": "Write CameraAppInterface时未覆写cameraSetup，就绪回调因此停在Basic空默认；cameraInOperation只转给sink。L194已自问“cameraSetup归F001 PreviewEngine.cameraSetup？”，却未读源MyApplicationInterface.cameraSetup（:1966），也未读PreviewEngine的调用点（同转录L387-L388）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/pages/MainPage.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "summary": "MainPage是共享文件，Slice 11实现者不能修改，由第二组closer按VM接口接线。\nVM生成者定义的MainUiFacade没有showGUI，也没有就绪回调槽，并且不提供多摄API。\ncloser读到这一接口后，只注入closePopup/destroyPopup/closeExposureUI/layoutUI/setImmersiveMode，\nonScreenIconUpdater接到onScreenIcons.updateAll，也没有多摄入口。\n最终修改在门面中加入showGUI→mainUI.showGUI，把onScreenIconUpdater改为mainUI.attach+setSeekbarZoom，\n并新增按showSwitchMultiCamIcon显示的多摄按钮及ActionSheet。本图归因于VM接口缺项的跨文件传递，closer仅作传递。\n",
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F011-app-integration.md",
+          "at": "2026-10-01T16:42:15.802Z",
+          "reason": "正常输入：VM生成者收到的规格列出了多摄对话框、clickedSwitchMultiCamera/showSwitchMultiCamIcon，以及cameraSetup落点（agent-a690eb1a2619c2d76.jsonl:L27-L28）。"
+        },
+        {
+          "key": "agent-a690eb1a2619c2d76.jsonl",
+          "at": "2026-10-01T17:12:12.971Z",
+          "reason": "Write MainPageVM时定义的MainUiFacade只有五个方法、没有showGUI，也没有提供多摄API或就绪回调槽，下游接线只能以此为准（同转录L410-L411）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/MainPageVM.ets",
+          "at": "2026-10-01T17:29:53.581Z",
+          "reason": "交付桥梁：closer用grep与Read读到MainUiFacade五方法接口、mainUi/onScreenIconUpdater槽，以及只处理补光的cameraInOperationSink（agent-acb5c3d58575999a4.jsonl:L60-L61、L65-L66）。"
+        },
+        {
+          "key": "agent-acb5c3d58575999a4.jsonl",
+          "at": "2026-10-01T18:40:12.235Z",
+          "reason": "按读到的VM接口写MainPage：vm.mainUi只注入五个方法，onScreenIconUpdater接到updateAll，没有多摄入口（同转录L567-L568、L588-L589）。本链确认传递，不另推定其独立失职。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "未追溯F011规格§对接点“isVideoMode ← setVideoPref / setModeFromIntents”这一行作者（3315ff15子代理aa0dfce5d01f9eaa2，2026-10-01T11:40:40Z的Edit）的写前输入；B48中规格是否独立偏离尚未判定，本卡把B48归入就绪回调断链。",
+    "MainPage侧的多摄入口图标可能也涉及F004屏上图标层（Slice 5）的职责，本卡未核对该切片写前输入；图中只归因VM未提供多摄API和门面方法这一条。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-dce365054567a94bd4db",
+  "metadata": {
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code",
+        "codex"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3",
+        "gpt-6-astra"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.163.0",
+        "2.1.247",
+        "2.1.299"
+      ]
+    },
+    "source_set_id": "sources-974a9086706364eed8b7",
+    "environment": [
+      {
+        "name": "android.compile_sdk",
+        "value": "36",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/.claude/skills",
+        "at": "2026-10-01T09:52:21.840Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-aa8064d19722381a1.jsonl:L11",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-aa8064d19722381a1.jsonl:L10",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos",
+        "at": "2026-10-01T12:27:45.961Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b.jsonl:L1565",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b.jsonl:L1563",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos",
+        "at": "2026-10-01T13:34:44.665Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae78a452b1664bc61.jsonl:L149",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae78a452b1664bc61.jsonl:L148",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.11.1"
+  },
+  "revision": "49d99db19d9b511c1e6e070605c989289944f7be60de1d7dbcec50a5c3b2e218"
+}

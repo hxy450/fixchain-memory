@@ -1,0 +1,566 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-f80e125586e1709cf157",
+  "created_at": "2026-10-23T15:14:40.081233+00:00",
+  "migration_key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/memory-distill-opencamera-20261023/pool",
+  "title": "把可被 Back 关闭的对话框与返回回调改写为页内弹层/注释，NavDestination 未接 onBackPressed",
+  "when": "界面实现与跨页接线阶段，把 Android 对话框、弹出面板或 OnBackPressedCallback 改写到 NavDestination 页面，并确定系统返回键的处理链时",
+  "description": "源端用 AlertDialog/ListPreference 对话框、popup 面板或 OnBackPressedCallback（锁屏、暂停预览、popup）消费返回键；目标端页面由 Navigation 压栈的 NavDestination 承载（相机根页也被入口 Navigation 压栈），弹层改为 Stack 条件渲染的页内覆盖层。",
+  "summary": "[B27 设置页] 设置主屏转换者实际读到 page_0002 规格：about 的 AlertDialog 映射为 showDialog/CustomDialog、ListPreference 为\n“Select / 单选弹层”（agent-aba46e19d4dc669fe.jsonl:L9-L10），MyPreferenceFragment.java 使用 AlertDialog（L21/L24），\nui-migration-pitfalls P-27 给出的页面级方案是 levelMode EMBEDDED 或 NavDestinationMode.DIALOG（L22-L23）。这些方案都保留\n“对话框先吃掉 Back”的系统语义。转换者却自建 Stack 遮罩面板（L80），并认为返回只需 NavDestination 默认 pop（L84），\n写出 SettingsListPicker（SettingsGroup.ets，L102）与 SettingsPage.ets 三个页内弹层，均无 onBackPressed（L112）。\nPhoto/Video/Gui/Preview/Processing/Licences 子屏转换者写前都读了 SettingsGroup.ets（Licences 还 sed 读了 SettingsPage 弹层实现），\n沿用同一页内弹层且未接返回；SettingsManager 转换者与之并行、独立地把规格中的 CustomDialog/bindSheet 改成页内 Stack 弹层，\n并写明“NavDestination needs no back handling”（agent-ac3cb8b3a46d0818b.jsonl:L10-L11、L121、L129）。\n[B47 相机根页] Slice 11 worker 写前读到 F011 规格 AC174（ScreenLockOnBackPressedCallback→锁间按返回仅提示不离开）与 AC115\n（暂停预览时返回=恢复预览）（agent-a690eb1a2619c2d76.jsonl:L27-L28），以及 MainActivity 注册三个返回回调的源码（L88-L89、L123-L124）；\n写出的 MainPageVM 只在 lockScreen 时 toast，并以注释声称“PausePreview back 恢复语义由 Navigation back 拦截承载”，\n既无返回决策入口也未登记交接（L395、L410）。group-closer 读到这些说明（agent-acb5c3d58575999a4.jsonl:L62-L63、L70-L71），\n作为 MainPage Navigation 宿主写者重写 MainPage.ets 时仍未接 onBackPressed（L567）；它曾怀疑 NavDestination.onBackPressed\n只在较新 API 可用而回避（L251）。更早的 run1 页面转换者读到 lockScreen 中 enableScreenLockOnBackPressedCallback(true)\n（agent-adf63c82c3b3b532f.jsonl:L72-L73），自述 Android 根页 Back 应关 popup/退出，却因 wiring map 未列而跳过且未登记占位（L95、L115）。\n入口 CameraEntry 把 MainPage 作为根 NavDestination 压栈，因此未拦截的 Back 会把它弹出，只剩黑色 Navigation 外壳。\n生成期所有写入均未出现 .onBackPressed。返修时 8 个设置页各加 dismissSettingsOverlay 并绑定 onBackPressed\n（01a14ab0-5a2d L4264 红测、L4282 批改）；MainPage.onBackPressed 先关信息/水印弹层再调 vm.onRootBackPressed：\n锁屏提示→恢复暂停预览→关 popup→capture intent 返回取消，否则 moveAbilityToBackground，始终返回 true（L5966 集成、L6018 清单）。\n",
+  "recommendations": [
+    "界面实现阶段把 AlertDialog/ListPreference 对话框改成页内 Stack 弹层时，在同一宿主 NavDestination 上补 onBackPressed：按弹层优先级逐个关闭并返回 true，无弹层才返回 false 交给栈 pop；或改用 levelMode EMBEDDED、NavDestinationMode.DIALOG 等自带返回关闭的方案。检查：页面中每个 *Visible/activeXxx 弹层状态都在 onBackPressed 有关闭分支。",
+    "共享弹层组件只提供遮罩点击关闭时，在组件注释或接口中写明“宿主页须在 onBackPressed 关闭本弹层”，复用该组件的页面逐一核对。",
+    "VM 实现阶段遇到源端 OnBackPressedCallback（锁屏、暂停预览、popup）时，提供单一返回决策方法，按源优先级返回是否已消费；宿主页归他人时登记 FWD-REF/交接到 MainPage.onBackPressed，不用“由 Navigation 拦截承载”的注释代替实现。",
+    "接线/closer 阶段，被入口 Navigation 压栈的相机根页 NavDestination 必须实现 onBackPressed 并始终消费：先关页内弹层，再走 VM 返回链，否则 moveAbilityToBackground 或按 capture intent 返回取消结果。检查：根页按 Back 后栈深度不变、应用退到后台而非露出黑壳。对 API 可用性有疑问时查文档或编译验证，不因猜测回避。",
+    "规格与规划阶段，页面跳转表补“系统返回”行（根页：后台/退出；有弹层：先关弹层），并在 wiring map 指派宿主页 onBackPressed 的负责切片。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/pages/SettingsPage.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/ui/page_0002_MyPreferenceFragment.md",
+          "at": "2026-10-01T13:24:31.037Z",
+          "reason": "正常输入：Read 回执给出 about AlertDialog→showDialog/CustomDialog、ListPreference→Select/单选弹层，系统返回→pop 回 page_0001；所给映射都是自带 Back 关闭的系统弹窗/菜单（agent-aba46e19d4dc669fe.jsonl:L9-L10）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/MyPreferenceFragment.java",
+          "at": "2026-10-01T13:24:38.180Z",
+          "reason": "正常输入：源码以 AlertDialog 实现 about/隐私等弹窗并集中管理 dialogs，Android 可取消对话框默认先消费 Back（同转录 L21、L24）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/.claude/skills/android-ui-graph-query/references/ui-migration-pitfalls.md",
+          "at": "2026-10-01T13:24:37.985Z",
+          "reason": "正常输入：P-27 指出需要页面级弹窗时用 openCustomDialog levelMode EMBEDDED 或 NavDestinationMode.DIALOG，普通确认框不必页面级；这些方案仍保留系统返回关闭（同转录 L22-L23）。"
+        },
+        {
+          "key": "agent-aba46e19d4dc669fe.jsonl",
+          "at": "2026-10-01T13:36:17.716Z",
+          "reason": "偏差起点：L80 决定以 Stack 遮罩自实现 CustomDialog 语义，L84 认为返回由 NavDestination 默认 pop 处理；L102 写 SettingsListPicker 仅有遮罩点击 onDismiss，L112 Write SettingsPage.ets 含 activePicker/deviceInfoDialogVisible/privacyDialogVisible 三个页内弹层而无 onBackPressed。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/pages/SettingsManagerPage.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/ui/page_0011_PreferenceSubSettingsManager.md",
+          "at": "2026-10-01T13:28:17.564Z",
+          "reason": "正常输入：Read 回执给出保存文件名 AlertDialog→CustomDialog/bindSheet+TextInput、恢复/重置确认→showDialog，系统返回→pop；映射方案自带返回关闭（agent-ac3cb8b3a46d0818b.jsonl:L10-L11）。"
+        },
+        {
+          "key": "agent-ac3cb8b3a46d0818b.jsonl",
+          "at": "2026-10-01T13:39:51.029Z",
+          "reason": "偏差起点：L121 认为“NavDestination needs no back handling (default back behavior pops)”，L129 Write 把保存弹窗与文件选择做成 showSaveDialog/showFileChooser 页内 Stack 弹层且无 onBackPressed；L156 自述以页内弹层替代规格中的 CustomDialog/bindSheet。与设置主屏并行、未读其实现，属同因独立实例。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/pages/PhotoSettingsPage.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/ui/page_0002_MyPreferenceFragment.md",
+          "at": "2026-10-01T13:24:31.037Z",
+          "reason": "正常输入：设置主屏规格把 AlertDialog/ListPreference 映射到自带返回关闭的系统弹窗或 Select（agent-aba46e19d4dc669fe.jsonl:L9-L10）。"
+        },
+        {
+          "key": "agent-aba46e19d4dc669fe.jsonl",
+          "at": "2026-10-01T13:32:32.248Z",
+          "reason": "偏差起点：改用 Stack 遮罩自实现单选弹层（L80），L102 Write SettingsGroup.ets 定义 SettingsListPicker，只提供遮罩点击 onDismiss，注释称由页面级 Stack 承载，未说明宿主须处理 Back。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/components/settings/SettingsGroup.ets",
+          "at": "2026-10-01T13:40:28.467Z",
+          "reason": "交付桥梁：照片子屏转换者写前 Read 该共享组件，回执含 SettingsListPicker 页内弹层范式（agent-ae78a452b1664bc61.jsonl:L181-L182）；随后还读了 SettingsPage.ets 宿主写法（L195-L196）。"
+        },
+        {
+          "key": "agent-ae78a452b1664bc61.jsonl",
+          "at": "2026-10-01T13:45:42.433Z",
+          "reason": "沿用范式：L206 Write PhotoSettingsPage.ets，以 SettingsListPicker、TextEditPanel、RawInfoPanel 三个页内弹层替代源 ListPreference/EditTextPreference/AlertDialog，NavDestination 无 onBackPressed。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/pages/VideoSettingsPage.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/ui/page_0002_MyPreferenceFragment.md",
+          "at": "2026-10-01T13:24:31.037Z",
+          "reason": "正常输入：设置主屏规格把 AlertDialog/ListPreference 映射到自带返回关闭的系统弹窗或 Select（agent-aba46e19d4dc669fe.jsonl:L9-L10）。"
+        },
+        {
+          "key": "agent-aba46e19d4dc669fe.jsonl",
+          "at": "2026-10-01T13:32:32.248Z",
+          "reason": "偏差起点：L102 Write SettingsGroup.ets 的 SettingsListPicker 只有遮罩点击关闭，未约定宿主 Back 处理（决策见 L80、L84）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/components/settings/SettingsGroup.ets",
+          "at": "2026-10-01T13:45:17.427Z",
+          "reason": "交付桥梁：视频子屏转换者写前 Read 该共享组件（agent-af2eafd76dccfc7a1.jsonl:L19-L20），并读了 SettingsPage.ets 宿主写法（L49-L50）。"
+        },
+        {
+          "key": "agent-af2eafd76dccfc7a1.jsonl",
+          "at": "2026-10-01T13:54:48.627Z",
+          "reason": "沿用范式：L102 Write VideoSettingsPage.ets，用 activePicker 驱动 SettingsListPicker 页内弹层，NavDestination 无 onBackPressed。本图只归因返回处理，不涉及同文件 applyBundle 等其他修改。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/pages/GuiSettingsPage.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/ui/page_0002_MyPreferenceFragment.md",
+          "at": "2026-10-01T13:24:31.037Z",
+          "reason": "正常输入：设置主屏规格把 AlertDialog/ListPreference 映射到自带返回关闭的系统弹窗或 Select（agent-aba46e19d4dc669fe.jsonl:L9-L10）。"
+        },
+        {
+          "key": "agent-aba46e19d4dc669fe.jsonl",
+          "at": "2026-10-01T13:32:32.248Z",
+          "reason": "偏差起点：L102 Write SettingsGroup.ets 的 SettingsListPicker 只有遮罩点击关闭，未约定宿主 Back 处理（决策见 L80、L84）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/components/settings/SettingsGroup.ets",
+          "at": "2026-10-01T13:45:19.207Z",
+          "reason": "交付桥梁：界面子屏转换者写前 Read 该共享组件（agent-aab6ae4bd21ea6161.jsonl:L23-L24），并分段读了 SettingsPage.ets（L56-L69）。"
+        },
+        {
+          "key": "agent-aab6ae4bd21ea6161.jsonl",
+          "at": "2026-10-01T13:51:17.259Z",
+          "reason": "沿用范式：L110 Write GuiSettingsPage.ets，以 activePicker 驱动 SettingsListPicker 页内弹层，NavDestination 无 onBackPressed。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/pages/PreviewSettingsPage.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/ui/page_0002_MyPreferenceFragment.md",
+          "at": "2026-10-01T13:24:31.037Z",
+          "reason": "正常输入：设置主屏规格把 AlertDialog/ListPreference 映射到自带返回关闭的系统弹窗或 Select（agent-aba46e19d4dc669fe.jsonl:L9-L10）。"
+        },
+        {
+          "key": "agent-aba46e19d4dc669fe.jsonl",
+          "at": "2026-10-01T13:32:32.248Z",
+          "reason": "偏差起点：L102 Write SettingsGroup.ets 的 SettingsListPicker 只有遮罩点击关闭，未约定宿主 Back 处理（决策见 L80、L84）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/components/settings/SettingsGroup.ets",
+          "at": "2026-10-01T13:51:50.121Z",
+          "reason": "交付桥梁：预览子屏转换者写前 Read 该共享组件（agent-a6ab3c81f445b1d12.jsonl:L25-L26）。"
+        },
+        {
+          "key": "agent-a6ab3c81f445b1d12.jsonl",
+          "at": "2026-10-01T13:58:21.467Z",
+          "reason": "沿用范式：L123 Write PreviewSettingsPage.ets，以 activePicker 驱动 SettingsListPicker 页内弹层，NavDestination 无 onBackPressed。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/pages/ProcessingSettingsPage.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/ui/page_0002_MyPreferenceFragment.md",
+          "at": "2026-10-01T13:24:31.037Z",
+          "reason": "正常输入：设置主屏规格把 AlertDialog/ListPreference 映射到自带返回关闭的系统弹窗或 Select（agent-aba46e19d4dc669fe.jsonl:L9-L10）。"
+        },
+        {
+          "key": "agent-aba46e19d4dc669fe.jsonl",
+          "at": "2026-10-01T13:32:32.248Z",
+          "reason": "偏差起点：L102 Write SettingsGroup.ets 的 SettingsListPicker 只有遮罩点击关闭，未约定宿主 Back 处理（决策见 L80、L84）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/components/settings/SettingsGroup.ets",
+          "at": "2026-10-01T13:58:34.582Z",
+          "reason": "交付桥梁：处理子屏转换者写前 Read 该共享组件（agent-a6fa6424a925c3b25.jsonl:L24-L25）。"
+        },
+        {
+          "key": "agent-a6fa6424a925c3b25.jsonl",
+          "at": "2026-10-01T14:04:28.783Z",
+          "reason": "沿用范式：L125 Write ProcessingSettingsPage.ets，以 activePicker 驱动 SettingsListPicker 页内弹层，NavDestination 无 onBackPressed。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/pages/LicencesSettingsPage.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/ui/page_0002_MyPreferenceFragment.md",
+          "at": "2026-10-01T13:24:31.037Z",
+          "reason": "正常输入：设置主屏规格把 AlertDialog/ListPreference 映射到自带返回关闭的系统弹窗或 Select（agent-aba46e19d4dc669fe.jsonl:L9-L10）。"
+        },
+        {
+          "key": "agent-aba46e19d4dc669fe.jsonl",
+          "at": "2026-10-01T13:32:32.248Z",
+          "reason": "偏差起点：L102 Write SettingsGroup.ets 的 SettingsListPicker 只有遮罩点击关闭，未约定宿主 Back 处理（决策见 L80、L84）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/components/settings/SettingsGroup.ets",
+          "at": "2026-10-01T14:06:30.047Z",
+          "reason": "交付桥梁：许可子屏转换者写前 Read 该共享组件（agent-abb02daf255491653.jsonl:L27-L28），并 sed 读取 SettingsPage 的弹层实现段（L66-L67）。"
+        },
+        {
+          "key": "agent-abb02daf255491653.jsonl",
+          "at": "2026-10-01T14:11:44.396Z",
+          "reason": "沿用范式：L91 Write LicencesSettingsPage.ets，以 activeLicenceTitle 驱动许可正文页内弹层，NavDestination 无 onBackPressed。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/MainPageVM.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F011-app-integration.md",
+          "at": "2026-10-01T16:42:15.802Z",
+          "reason": "正常输入：Read 回执含 AC174（ScreenLockOnBackPressedCallback.handleOnBackPressed→MainPageVM.lockScreen，锁定后按返回仅提示、不离开页面）与 AC115（暂停预览启用 back 回调，返回=恢复预览），要求清楚（agent-a690eb1a2619c2d76.jsonl:L27-L28）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/MainActivity.java",
+          "at": "2026-10-01T16:45:20.394Z",
+          "reason": "正常输入：Read 回执含三组 OnBackPressedCallback 注册（L88-L89）及 openSettings 中三回调禁用（L123-L124），可确定源端返回链。"
+        },
+        {
+          "key": "agent-a690eb1a2619c2d76.jsonl",
+          "at": "2026-10-01T17:12:12.971Z",
+          "reason": "偏差起点：L395/L410 Write MainPageVM.ets，lockScreen 只在上锁时 toast，hasPausedPreview 注释称“PausePreview back 恢复语义由 Navigation back 拦截承载（AC115）”，但没有返回决策方法、FWD-REF 或交接；最终信封也未提返回处理（L528）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/pages/MainPage.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/MainActivity.java",
+          "at": "2026-10-01T13:27:42.063Z",
+          "reason": "正常输入：run1 页面转换者 sed 读取 L4890-4930，回执含 lockScreen 中 enableScreenLockOnBackPressedCallback(true) // also disable back button（agent-adf63c82c3b3b532f.jsonl:L72-L73）。"
+        },
+        {
+          "key": "agent-adf63c82c3b3b532f.jsonl",
+          "at": "2026-10-01T13:34:22.912Z",
+          "reason": "偏差起点（run1）：L95 自述 Android MainActivity 返回会关 popup/退出、属 Slice 11/5 行为，却因 wiring map 未列而跳过 onBackPressed 且未登记占位；L115 Write 的 MainPage NavDestination 含 popupVisible 等弹层但无 onBackPressed。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F011-app-integration.md",
+          "at": "2026-10-01T16:42:15.802Z",
+          "reason": "正常输入：AC174 锁间按返回仅提示不离开、AC115 暂停预览按返回恢复（agent-a690eb1a2619c2d76.jsonl:L27-L28）。"
+        },
+        {
+          "key": "agent-a690eb1a2619c2d76.jsonl",
+          "at": "2026-10-01T17:12:12.971Z",
+          "reason": "偏差起点（run2）：Write MainPageVM 时把返回语义写成“由 Navigation back 拦截承载”的注释，未提供返回入口或交接（L395、L410）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/viewmodels/MainPageVM.ets",
+          "at": "2026-10-01T17:29:58.305Z",
+          "reason": "交付桥梁：group-closer Read 的回执含 lockScreen“锁间返回仅提示”与 hasPausedPreview“由 Navigation back 拦截承载”（agent-acb5c3d58575999a4.jsonl:L62-L63、L70-L71）。"
+        },
+        {
+          "key": "agent-acb5c3d58575999a4.jsonl",
+          "at": "2026-10-01T18:37:38.589Z",
+          "reason": "宿主接线偏差：作为 MainPage Navigation 宿主写者，读到上述声明后 L567 Write 重写 MainPage.ets，仅有 lockerLayer 触摸拦截，无 onBackPressed；L251 曾以“onBackPressed 可能是 API 14/18”为由回避该接口。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "run1 页面转换者在写 MainPage 前用 Bash sed -n '4890,4930p' 读取 MainActivity.java，回执含 lockScreen 调用 enableScreenLockOnBackPressedCallback(true)；这是该 agent 写前对源文件的真实读取，支持其已知根页 Back 被源端回调接管。",
+          "evidence": [
+            {
+              "source": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-adf63c82c3b3b532f.jsonl",
+              "line": 72
+            },
+            {
+              "source": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-adf63c82c3b3b532f.jsonl",
+              "line": 73
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": "target"
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": 6
+        },
+        {
+          "from": 6,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-f80e125586e1709cf157",
+  "metadata": {
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code",
+        "codex"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3",
+        "gpt-6-astra"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.163.0",
+        "2.1.247",
+        "2.1.299"
+      ]
+    },
+    "source_set_id": "sources-974a9086706364eed8b7",
+    "environment": [
+      {
+        "name": "android.compile_sdk",
+        "value": "36",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/.claude/skills",
+        "at": "2026-10-01T09:52:21.840Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-aa8064d19722381a1.jsonl:L11",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-aa8064d19722381a1.jsonl:L10",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos",
+        "at": "2026-10-01T12:27:45.961Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b.jsonl:L1565",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b.jsonl:L1563",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos",
+        "at": "2026-10-01T13:34:44.665Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae78a452b1664bc61.jsonl:L149",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae78a452b1664bc61.jsonl:L148",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.11.1"
+  },
+  "revision": "fecace06d26f859eb79b3b559b68564da27cef284175b5b2db7124b9d1e57b2b"
+}

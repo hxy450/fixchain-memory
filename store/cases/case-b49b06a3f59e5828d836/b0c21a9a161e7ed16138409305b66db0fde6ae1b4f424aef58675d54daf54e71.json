@@ -1,0 +1,199 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-b49b06a3f59e5828d836",
+  "created_at": "2026-10-23T15:26:16.332078+00:00",
+  "migration_key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/memory-distill-opencamera-20261023/pool",
+  "title": "拍照保存链路丢失原生缓冲所有权与整文件写入语义：先释放Photo再用JPEG缓冲、位图重复释放且缩略图取原图、单次writeSync不截断",
+  "when": "拍照与图像保存实现阶段，把Android的Image/Bitmap/OutputStream处理改写为ArkTS的Photo/PixelMap/fileIo调用、确定原生缓冲的复制与释放时机以及文件写入方式时",
+  "description": "源端在onImageAvailable中先把JPEG复制成byte[]再image.close()；saveSingleImageNow把postProcessBitmap的返回值重新赋给bitmap，缩略图和末尾recycle都针对成品，调用方另外recycle（Java的recycle可重复调用）；保存时用new FileOutputStream/openOutputStream加OutputStream.write(data)整文件覆盖写入。目标改用photoAvailable回调里的component.byteBuffer、PixelMap.release()和fileIo.openSync/writeSync，字节以Uint8Array视图传递，拍得的图像排入后台队列异步保存。",
+  "summary": "A9（HmosCameraController.takePicture）：Stage 3 group-2 closer（acb5c3d58575999a4）按P-S3-003为拍照补PhotoOutput.capture图元。\n它写前读到PhotoCaptureOrchestrator的说明「pictureCallback → onPictureTaken → ImageSaverService.saveImageJpeg」，\n以及ImageSaverService中JpegSaveRequest的images: ArrayBuffer[]和doInBackground=true，可知回调交出的字节会排队后台保存；\nSDK回执也显示Photo只有main: image.Image和release()。18:26:54的Edit却在getComponent之后立即photo.release()，\n再把同一个component.byteBuffer交给pictureCb，中间没有复制。偏差位于原生缓冲释放时机的实现判断。\n源端CameraController2.onImageAvailable先把JPEG复制到byte[]再image.close()（:650-659）。\nF001规格作者（adab10532c33b422f）和Slice 1 worker（ae5882c40105e3f01）生成期都读过这几行，\n但F001只抽出「无回调时立即close」（AC199），并把拍照保存管线划给F002；交给closer的P-S3-003也只要求补capture图元。\ncloser没有读源码或F001，这一缺口没有交付到它，本链因此以它写前实际收到的异步消费契约为输入。\n该片段原样保留到c752566。Codex静态返修改为await getComponent → byteBuffer.slice(0) → finally中release；\nFINAL的emulator阶段把拍照通道换成photoAssetAvailable，这段代码已不存在。\n\nA16（ImageSaverService位图所有权）：Slice 3 worker（a46e99f7c0baf2d05）写前通读了ImageSaver.java和F002 spec。\n源端saveSingleImageNow把postProcessBitmap的返回值重新赋给bitmap（:1910-1911），缩略图和末尾recycle（:2273）都针对后处理成品；\nF002 spec §132写明postProcessBitmap的release_bitmaps语义（处理完只保留成品）由F008实现。\n17:09:56的Write却把后处理结果放进try块内的局部workBitmap，缩略图打包和末尾release仍用入参bitmap，\n后处理返回的新位图无人释放；HDR/NR/全景三处调用方又在saveSingleImageNow返回后各自release同一位图。\nF008的PostProcessingSvc（a598f7ce95d396889，18:30写入）按源端语义在替换时释放输入，于是原位图会被二次乃至三次释放，\n缩略图也可能取自已释放或未处理的位图。Java的recycle可重复调用，源端调用方的recycle只是冗余；\nworker把它逐行照搬成PixelMap.release()，没有收敛到单一所有者。17:10自查时它注意到workBitmap出了作用域，\n仍判定缩略图用入参bitmap即可（L285）。三处*.release()与saveSingleImageNow末尾的释放都出自这次Write，\n17:11的Python整理只把workBitmapOwned/bitmap?.release()改写为等价的if (bitmap !== null) bitmap.release()。\n\nA17（ImageSaverService写入）：源端用new FileOutputStream(picFile)/openOutputStream(saveUri)加OutputStream.write(data)整文件覆盖写入（:2039-2056）。\nworker写前读到的document-picker.md示例针对新建的picker文件，只写了openSync(WRITE_ONLY|CREATE)和一次writeSync(content)。\n同一次Write的writeFile/writeUri照搬了这个模式：不加TRUNC，也不检查writeSync返回的字节数；\ncommitPendingMediaAsset直接传bytes.buffer，而bytes可能是ExifWriter返回的subarray视图。\n生成期没有找到它参考过writeSync返回写入字节数的文档。19:40编译门（a8036fe950e2a77e1）只补了as ArrayBuffer，语义未变。\nCodex返修删除三处调用方release，让workBitmap只承载最终位图并在末尾释放一次；\n同时新增writeAllBytes循环写、TRUNC和imageBytesBuffer精确切片。FINAL保留这些修改。\n\n分工：实现阶段负责原生缓冲的复制与释放顺序、位图的单一所有者，以及写入完整性；\n规格提取阶段在抽取原生图像回调时，应把「先复制再close」写成AC并明确归属。\n",
+  "recommendations": [
+    "拍照接线/实现阶段：从photoAvailable回调取component.byteBuffer时，若字节会交给异步队列（如saveImageJpeg后台保存），先byteBuffer.slice(0)复制再release Photo，或在消费完成后的finally中release；不要先释放再使用同一个ArrayBuffer。",
+    "图像保存实现阶段：迁移Bitmap.recycle前先确定每个PixelMap的唯一所有者。后处理替换输入并释放旧图时，用返回值覆盖同一变量，编码、缩略图和末尾release都针对这个成品；调用方不再重复release。可用「DRO/HDR保存后release只调用一次」的单测核对。",
+    "文件写入实现阶段：把Java的FileOutputStream/openOutputStream覆盖写改为fileIo时，打开模式加TRUNC，按writeSync返回值循环写到完成，零进度时报错；Uint8Array转ArrayBuffer按byteOffset/byteLength切片，不直接传.buffer。照搬skill示例前先确认示例场景（新建文件、字符串内容）与本次是否一致。",
+    "规格提取阶段：抽取onImageAvailable这类原生图像回调时，把「先复制字节再close/release」写成AC；拍照管线跨F001/F002划分时，为控制器侧的JPEG取帧指明归属，避免两边都声明out of scope。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/HmosCameraController.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/ImageSaverService.ets",
+          "at": "2026-10-01T17:30:41.461Z",
+          "reason": "正常输入：closer读取60–240行，回执中JpegSaveRequest含images: ArrayBuffer[]与doInBackground=true，说明拍得的JPEG字节会排入队列后台保存，在回调返回后才被消费（agent-acb5c3d58575999a4.jsonl:L77-L78）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/PhotoCaptureOrchestrator.ets",
+          "at": "2026-10-01T17:31:13.534Z",
+          "reason": "正常输入：closer读取的回执写明takePicture经CaptureEngineBridge由closer绑定（P-S3-003），并说明pictureCallback → appInterface.onPictureTaken → ImageSaverService.saveImageJpeg；结合上一节点，可知pictureCb交出的缓冲需在release之后仍然有效（同转录L85-L86）。"
+        },
+        {
+          "key": "/Applications/DevEco-Studio.app/Contents/sdk/default/openharmony/ets/api/@ohos.multimedia.camera.d.ts",
+          "at": "2026-10-01T18:22:51.819Z",
+          "reason": "正常输入：closer用grep/sed查看SDK声明，回执给出Photo { main: image.Image; release(): Promise<void> }；JPEG组件取自photo.main，属于Photo所持的原生图像（同转录L263-L266）。"
+        },
+        {
+          "key": "agent-acb5c3d58575999a4.jsonl",
+          "at": "2026-10-01T18:26:54.265Z",
+          "reason": "group-2 closer的Edit写入takePicture：在photo.main.getComponent(JPEG)的then中先取component.byteBuffer，随即photo.release()，再把同一个ArrayBuffer交给pictureCb，没有复制。这与它写前收到的异步保存契约冲突，构成释放后使用；它没有读源端onImageAvailable的先复制后close（同转录L340-L341）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "closer两次用Bash以D=…/@ohos.multimedia.camera.d.ts为变量grep/sed该SDK声明文件，回执给出interface Photo的main: image.Image与release(): Promise<void>；路径经shell变量传入，未被自动解析。该读取发生在18:26的takePicture Edit之前，支持closer写前已收到Photo持有main图像且需显式释放。",
+          "evidence": [
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-acb5c3d58575999a4.jsonl",
+              "line": 263
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-acb5c3d58575999a4.jsonl",
+              "line": 264
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-acb5c3d58575999a4.jsonl",
+              "line": 265
+            },
+            {
+              "source": "claude-glm-migration/a9bd9bd6-60ab-4adc-996c-11ded062d5c5/subagents/agent-acb5c3d58575999a4.jsonl",
+              "line": 266
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/ImageSaverService.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F002-photo-capture-save.md",
+          "at": "2026-10-01T16:41:34.309Z",
+          "reason": "正常输入：worker整文件Read的回执第132行写明F008 seam postProcessBitmap输入输出均为PixelMap，release_bitmaps语义（处理完只保留成品）由F008实现；足以说明保存侧应只持有并释放后处理返回的成品（agent-a46e99f7c0baf2d05.jsonl:L25-L26）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/ImageSaver.java",
+          "at": "2026-10-01T16:43:07.112Z",
+          "reason": "正常输入：worker分段Read全文。1000–1999段含1485/1556/1716调用方recycle，以及1910–1911「bitmap = postProcessBitmapResult.bitmap」（同转录L68-L69）；2000–末段含2039–2056用new FileOutputStream/openOutputStream加outputStream.write(data)整文件写入，以及2220–2273缩略图取自（后处理后的）bitmap、末尾bitmap.recycle()（L70-L71）。这些足以确定位图所有权与覆盖写语义。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/.claude/skills/arkts-system-capabilities/references/document-picker.md",
+          "at": "2026-10-01T16:47:19.433Z",
+          "reason": "参考输入：worker Read的skill示例只为新建的picker文档写了openSync(WRITE_ONLY|CREATE)+一次writeSync(content)，没有TRUNC与短写处理；示例场景（新建文件、字符串内容）与覆盖写入图像字节不同。worker的writeFile/writeUri沿用了这个模式（同转录L144-L145）。"
+        },
+        {
+          "key": "agent-a46e99f7c0baf2d05.jsonl",
+          "at": "2026-10-01T17:09:56.490Z",
+          "reason": "Slice 3 worker首次Write ImageSaverService：后处理结果只赋给try块内的局部workBitmap，缩略图packBitmap(bitmap)与末尾release仍用入参，后处理成品不释放；HDR/NR/全景调用方在saveSingleImageNow后各自再release同一位图；writeFile/writeUri用WRITE_ONLY|CREATE加单次writeSync，commitPendingMediaAsset传bytes.buffer（同转录L283-L284）。17:10自查认为缩略图用入参bitmap即可（L285），17:11的Python整理只改写了等价的释放判断（L293-L294）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "SDK声明没有写明byteBuffer在Photo.release后的有效期，closer的grep也过滤了注释行。A9说输入足够，依据是异步消费契约和Photo对main的所有权，而非明文警告。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-b49b06a3f59e5828d836",
+  "metadata": {
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code",
+        "codex"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3",
+        "gpt-6-astra"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.163.0",
+        "2.1.247",
+        "2.1.299"
+      ]
+    },
+    "source_set_id": "sources-974a9086706364eed8b7",
+    "environment": [
+      {
+        "name": "android.compile_sdk",
+        "value": "36",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/.claude/skills",
+        "at": "2026-10-01T09:52:21.840Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-aa8064d19722381a1.jsonl:L11",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-aa8064d19722381a1.jsonl:L10",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos",
+        "at": "2026-10-01T12:27:45.961Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b.jsonl:L1565",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b.jsonl:L1563",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos",
+        "at": "2026-10-01T13:34:44.665Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae78a452b1664bc61.jsonl:L149",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae78a452b1664bc61.jsonl:L148",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.11.1"
+  },
+  "revision": "b0c21a9a161e7ed16138409305b66db0fde6ae1b4f424aef58675d54daf54e71"
+}

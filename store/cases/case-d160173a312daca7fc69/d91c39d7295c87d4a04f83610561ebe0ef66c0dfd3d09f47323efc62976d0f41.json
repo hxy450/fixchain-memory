@@ -1,0 +1,207 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-d160173a312daca7fc69",
+  "created_at": "2026-10-23T15:28:23.494818+00:00",
+  "migration_key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/memory-distill-opencamera-20261023/pool",
+  "title": "把源端缓存读取的相机能力与 capture result 写成按需同步相机服务调用",
+  "when": "相机控制器实现阶段，为 Android 中读取缓存元数据的 getter（能力枚举、capture result ISO/曝光时间）确定 HarmonyOS 取值通道与调用成本时",
+  "description": "源端在打开时缓存 CameraCharacteristics、或由 onCaptureCompleted 回调写入 capture_result_* 字段，调用方在 UI 访问、定时绘制或会话切换中频繁读取；目标端对应接口（getSupportedOutputCapability、session.isFocusModeSupported/getSupportedIsoRange、getIso/getExposureDuration）为同步相机服务调用，另有 onIsoInfoChange/onExposureInfoChange 事件可用。",
+  "summary": "本卡含两条成因不同的分支，修复都落在 HmosCameraController.ets。\n【B10 能力枚举，生成遗留】F001 slice worker 写前读到 F001 spec 的 AC43“能力枚举入口在打开后调用一次”与\nAC209“高频 getter 读取打开时缓存、零开销”（agent-ae5882c40105e3f01.jsonl:L23、L26），\nAndroid Preview.java 在 L2505 打开时取一次 getCameraFeatures 存入字段、supportsExpoBracketing 只返回字段（同转录 L101-L102、L107-L108），\nCameraController2 打开时一次 getCameraCharacteristics（L1184），getCameraFeatures 只读该本地对象（L1748；同转录 L113-L116）。\n这些输入已足以说明能力是打开期一次性数据。其 Write（L236-L237）虽写了“能力缓存字段（getCameraFeatures 填充后复用，避免逐帧底层查询 AC209）”，\ngetCameraFeatures 本体却每次新建 CameraFeatures，重新调用 manager.getSupportedOutputCapability 及 session 上\nisFocusModeSupported/getSupportedIsoRange/getSupportedExposureDurationRange/getExposureBiasRange 等同步接口，并依赖调用时的 session 状态，\n没有打开期快照。偏差位于“打开一次的能力契约 → 控制器公开 getter 的成本语义”这一环；该片段原样保留到 c752566/c1abe5c。\nrun 2 其他 slice 在 MainPageVM（a690eb1a2619c2d76）、ViewfinderCapabilities/MainUIController（a06740e73018ad308）的 UI 访问器中直接调用\ncontroller.getCameraFeatures()，放大了重复同步 IPC；session_archive 审阅指出该问题（01a14ab1-0349 L2963-L2964）。\ncapture_audit 补 6 项回归后改为初次 photo 会话 commit 后 readCameraFeatures 快照、显示尺寸/zoom 在内存派生、未就绪抛异常\n（01a14ab0-6e4d L3040-L3044），并补关闭期间旧 UI 引用读取兼容（L3143-L3147）。\n【B9 capture result ISO/曝光，修复中新生】Codex 根会话为 NR 张数与包围曝光基准补 capture result 时，读到 CameraController2\n以 capture_result_has_iso/capture_result_iso、capture_result_exposure_time 字段参与包围曝光基准与 sceneIsLowLight 判定\n（rollout-…01a14aae….jsonl:L618-L621、L648-L652），又在 SDK d.ts 中按名 grep 到 ManualIso.getIso()/getExposureDuration()，\n所读片段止于 IsoInfo typedef（L656-L659、L663-L666）。源码已表明这些值是回调写入的缓存字段、读取本身无相机服务往返；\n但 Android 赋值点 onCaptureCompleted（CameraController2 L8401-L8402）与 SDK 的 onIsoInfoChange/onExposureInfoChange 注册都未打开。\nL680 脚本（回执 L682-L683）写出 getCaptureResultIso(){ return this.session?.getIso() }、getCaptureResultExposureTime() 同步查询，\n保留“CaptureResult”命名却改成即时同步调用。偏差位于“源端回调缓存 → 目标取值通道”的映射。\n随后 session_archive 在 L711-L714 读到这段同步实现，L747 把它接入 PreviewOverlayViewModel.captureDataSource（overlay 定时绘制），\n主线程冻结栈显示定时器等待 getIso（root L4590）。根会话先后加的守卫（L2762）与 5 秒退避（L3179）均被替换；\ncapture_audit 最终以 bindCaptureMetadata 订阅 onIsoInfoChange/onExposureInfoChange 写缓存，会话停止/替换/暂停清空，getter 只读缓存\n（01a14ab0-6e4d L2893-L2896、L2915-L2918）。\n",
+  "recommendations": [
+    "控制器实现时，源端 getter 若读的是打开期缓存或回调写入字段，先核对目标 API 是否为同步相机服务调用；是则改为打开/会话 commit 后一次快照或事件订阅缓存，公开 getter 只读内存。",
+    "迁移 capture_result_* 一类字段时，先打开源端赋值点（如 onCaptureCompleted）确认数据来自逐帧回调，再在目标 SDK 检索对应事件（onIsoInfoChange/onExposureInfoChange），不只按 getter 名 grep。",
+    "按 AC43 这类“打开后一次”的能力契约，把 getCameraFeatures 设计为快照：在初始 photo 会话 commit 后读取，显示尺寸/zoom 等派生值在内存更新，未就绪时明确报错而非返回部分结果。",
+    "UI 绘制、定时器或访问器消费控制器值前，查看该 getter 实现是否含 session./manager. 同步调用；含则读缓存或请控制器提供事件缓存。可用计数 mock 断言多次 UI 访问不增加原生调用次数。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/entry/src/main/ets/services/HmosCameraController.ets",
+        "since": "2026-10-01T20:25:45.024Z",
+        "at": "2026-10-18T07:49:11Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/spec/baseline/features/F001-camera-preview.md",
+          "at": "2026-10-01T14:57:03.096Z",
+          "reason": "正常输入：Read 回执给出 F001-AC43“能力枚举入口在打开后调用一次”与 AC209“getter 读取打开时缓存、高频调用零开销”，足以确定能力数据应在打开期一次取得并复用（agent-ae5882c40105e3f01.jsonl:L23、L26）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/preview/Preview.java",
+          "at": "2026-10-01T14:59:54.986Z",
+          "reason": "正常输入：分块 Read 返回 L2505 打开时一次 camera_controller.getCameraFeatures() 并拷入字段，以及 L7714-L7717 supportsExpoBracketing 只返回字段，表明 UI 查询走缓存而非重新枚举（同转录 L101-L102、L107-L108）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/cameracontroller/CameraController2.java",
+          "at": "2026-10-01T15:00:08.713Z",
+          "reason": "正常输入：Read 返回打开时 L1184 一次 getCameraCharacteristics，以及 L1748 getCameraFeatures 从该本地对象构造结果；源端枚举不经相机服务往返（同转录 L113-L116）。"
+        },
+        {
+          "key": "3315ff15-a42f-4344-8a74-ca300122ca2b:ae5882c40105e3f01",
+          "at": "2026-10-01T15:14:37.185Z",
+          "reason": "已收到上述输入，Write 却把 getCameraFeatures 写成每次调用都执行 getSupportedOutputCapability 与 session 同步查询、依赖当时 session 的实时枚举，无打开期快照，只在注释声称缓存复用（同转录 L236-L237；L246-L247 重写保留同一片段）。B10 分支在此停止上溯。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/OpenCamera/app/src/main/java/net/sourceforge/opencamera/cameracontroller/CameraController2.java",
+          "at": "2026-10-17T16:43:50.848Z",
+          "reason": "正常输入：根会话 sed 回执返回包围曝光基准 iso = capture_result_iso（L618-L621）与 NR 分支 capture_result_has_iso && capture_result_has_exposure_time → sceneIsLowLight（L648-L652），表明源端读取的是回调写入的缓存字段。"
+        },
+        {
+          "key": "/Applications/DevEco-Studio.app/Contents/sdk/default/openharmony/ets/api/@ohos.multimedia.camera.d.ts",
+          "at": "2026-10-17T16:44:20.306Z",
+          "reason": "输入（部分）：grep/sed 回执给出 ManualIso.getIso()、getExposureDuration() 同步签名及 IsoInfo typedef 开头（rollout-…01a14aae….jsonl:L648-L652、L656-L659、L663-L666）；onIsoInfoChange/onExposureInfoChange 注册不在所读范围内。"
+        },
+        {
+          "key": "01a14aae-7c27-7970-aae5-6ee7ad3de05e",
+          "at": "2026-10-17T16:45:17.302Z",
+          "reason": "读到源端缓存字段用法后，L680 脚本把 getCaptureResultIso/getCaptureResultExposureTime 写成 this.session?.getIso()/getExposureDuration() 即时同步查询，未查源端 onCaptureCompleted 赋值点或 SDK 事件通道（回执 L682-L683）。该片段保留到 c8dd617，后被 overlay 定时绘制调用。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        },
+        {
+          "from": 5,
+          "to": 7,
+          "force": true,
+          "reason": "根会话 exec 调用 sed -n '6650,6718p'、'7090,7132p' 读取 CameraController2.java，回执返回 capture_result_has_iso/capture_result_iso 参与 NR 张数判定的源码；这是写前对该源文件的真实读取。",
+          "evidence": [
+            {
+              "source": "codex/2026/10/17/rollout-2026-10-17T09-25-11-01a14aae-7c27-7970-aae5-6ee7ad3de05e.jsonl",
+              "line": 648
+            },
+            {
+              "source": "codex/2026/10/17/rollout-2026-10-17T09-25-11-01a14aae-7c27-7970-aae5-6ee7ad3de05e.jsonl",
+              "line": 652
+            }
+          ]
+        },
+        {
+          "from": 6,
+          "to": 7,
+          "force": true,
+          "reason": "根会话 exec 调用 rg 'getIso\\(|getExposureDuration\\(' 与 sed -n '3705,3804p'、'6625,6650p' 读取 @ohos.multimedia.camera.d.ts，回执返回 getIso()/getExposureDuration() 同步签名及 IsoInfo typedef 开头；均在 L680 写入之前。",
+          "evidence": [
+            {
+              "source": "codex/2026/10/17/rollout-2026-10-17T09-25-11-01a14aae-7c27-7970-aae5-6ee7ad3de05e.jsonl",
+              "line": 656
+            },
+            {
+              "source": "codex/2026/10/17/rollout-2026-10-17T09-25-11-01a14aae-7c27-7970-aae5-6ee7ad3de05e.jsonl",
+              "line": 659
+            },
+            {
+              "source": "codex/2026/10/17/rollout-2026-10-17T09-25-11-01a14aae-7c27-7970-aae5-6ee7ad3de05e.jsonl",
+              "line": 663
+            },
+            {
+              "source": "codex/2026/10/17/rollout-2026-10-17T09-25-11-01a14aae-7c27-7970-aae5-6ee7ad3de05e.jsonl",
+              "line": 666
+            }
+          ]
+        },
+        {
+          "from": 7,
+          "to": "target",
+          "force": true,
+          "reason": "根会话 exec 运行 python 脚本，对 HmosCameraController.ets 执行 read_text/replace/write_text，插入 getCaptureResultIso(){ return this.session?.getIso() } 与 getCaptureResultExposureTime() 同步查询；CommandExecution 以 exit_code 0 完成，该片段与 c8dd617 检查点一致。",
+          "evidence": [
+            {
+              "source": "codex/2026/10/17/rollout-2026-10-17T09-25-11-01a14aae-7c27-7970-aae5-6ee7ad3de05e.jsonl",
+              "line": 680
+            },
+            {
+              "source": "codex/2026/10/17/rollout-2026-10-17T09-25-11-01a14aae-7c27-7970-aae5-6ee7ad3de05e.jsonl",
+              "line": 682
+            },
+            {
+              "source": "codex/2026/10/17/rollout-2026-10-17T09-25-11-01a14aae-7c27-7970-aae5-6ee7ad3de05e.jsonl",
+              "line": 683
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "parity_audit 发给根会话的分工消息（01a14ab0-5a2d L541、L576、L617）为加密内容，无法确认其是否指定了 getCaptureResultIso 的取值方式；本卡只归因根会话依据已读源码与 SDK 作出的同步映射。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-d160173a312daca7fc69",
+  "metadata": {
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code",
+        "codex"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3",
+        "gpt-6-astra"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.163.0",
+        "2.1.247",
+        "2.1.299"
+      ]
+    },
+    "source_set_id": "sources-974a9086706364eed8b7",
+    "environment": [
+      {
+        "name": "android.compile_sdk",
+        "value": "36",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos/.claude/skills",
+        "at": "2026-10-01T09:52:21.840Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-aa8064d19722381a1.jsonl:L11",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-aa8064d19722381a1.jsonl:L10",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos",
+        "at": "2026-10-01T12:27:45.961Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b.jsonl:L1565",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b.jsonl:L1563",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/opencamera-hmos",
+        "at": "2026-10-01T13:34:44.665Z",
+        "ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae78a452b1664bc61.jsonl:L149",
+        "request_ref": "claude-glm-migration/3315ff15-a42f-4344-8a74-ca300122ca2b/subagents/agent-ae78a452b1664bc61.jsonl:L148",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.11.1"
+  },
+  "revision": "d91c39d7295c87d4a04f83610561ebe0ef66c0dfd3d09f47323efc62976d0f41"
+}
