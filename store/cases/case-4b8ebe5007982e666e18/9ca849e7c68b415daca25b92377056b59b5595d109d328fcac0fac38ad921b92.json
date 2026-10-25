@@ -1,0 +1,478 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-4b8ebe5007982e666e18",
+  "created_at": "2026-10-24T14:59:49.345558+00:00",
+  "migration_key": "jerboa-e7cc4044-4f78-441c-8b49-3a097937f665",
+  "title": "把依赖库语义的URL工具函数写成近似实现：toHttps原样返回、hostName取authority、WEB_URL前缀匹配、ktor Url换成WHATWG URL、openLinkRaw丢弃自定义标签页参数",
+  "when": "工具函数与链接解析实现阶段，把源端String/URL工具函数和链接打开分支移植为ArkTS实现、或复用工程内已有等价函数时",
+  "description": "源码工具函数的行为由Kotlin/Java/Android库语义决定（String.replaceFirst、java.net.URL.host、Patterns.WEB_URL.matcher().matches()、io.ktor.http.Url、CustomTabsIntent与Intent extras、startActivitySafe），目标端准备改用手写正则、@ohos.url URL（WHATWG语义）或单一want；源仓库另有覆盖这些函数的单测（UtilsKtTest、PostLinkTypeTest）。",
+  "summary": "四个目标的偏差都出现在生成期写入，并原样保留到生成检查点e9a547a，之后才被返修。\n共同模式：写前已拿到源码（多数还拿到spec），却把库语义近似成“看起来等价”的实现，\n且没有用源端样例核对输出。\n1) Utils.ets（Base-6公共组件worker，e919f2a1 agent-ae528ff69625ec6ac）：派工要求“Utils.kt工具函数精确值迁移”；\n写前Read了Utils.kt全文（L90-L91），回执中有以下内容：toHttps在startsWith(\"http://\", true)时执行\nreplaceFirst(\"http\",\"https\",true)；hostName=URL(url).host，Malformed时返回null；hostNameCleaned用Kotlin replace，\n会全部替换；openLinkRaw按usePrivateTab组装incognito/private_browsing extras，并按useCustomTab分CustomTabs与\nACTION_VIEW两条通道；startActivitySafe失败时Toast no_activity_found。feature-base跨栈基线只写“CustomTabs→want，\nopenLinkRaw等价”。Write（L228）却写出以下实现：toHttps返回'h'+url.substring(1)，结果与原串相同；hostName用\n^scheme://([^/?#]+)正则，返回含userinfo和端口的authority，也接受任意协议；hostNameCleaned只替换首个www.；\nopenLinkRaw只发一个viewData want，注释称useCustomTab/usePrivateTab“仅保留签名兼容”；失败只console.error。\n输入充分，偏差在“已读源码→实现”这一环。之后Slice 18（e7cc4044 agent-a6946767c2a0231e4）读到F015-AC22，\n该条明确要求双通道、私密参数和toast，它却在L85把这一条记为“Base-6已实现✓”。它没有写Utils.ets，因此只在此说明，\n这是一次漏掉的纠正机会。返修按java.net.URL语义重写hostName；toHttps改为'https'+url.substring(4)；\nopenLinkRaw改为按useCustomTab分startAbility(browsable)与openLink两条通道，透传private extras，失败时toast\n（repair agent-a557f4f80a218650e L769）。\n2) PostLinkType.ets（Slice 4 F013 worker，e919f2a1 agent-a67860e4032034d23）：写前Read了PostLinkType.kt（L85-L86），\n可见import io.ktor.http.Url、runCatching{Url(url)}、segments、encodedPath与parameters[\"url\"]，同时读到F013 AC73-76。\n思考中（L223）它已意识到ktor Url很宽松，却以“Edge-case parity is acceptable; unit ACs sample standard absolute\nURLs”为由改用@ohos.url URL，配合pathname、searchParams和decodeURIComponent容错（Write L319）。\n后果有两点：无scheme的\"test.jpg\"会被判为Link；畸形百分号转义会被容错，而不是解析失败。这与源仓库PostLinkTypeTest\n不符；生成期没有agent读过该单测。返修自写了ktor兼容解析器（repair agent-a4d3a35dbb3029087 L935）。\n3) CreatePostPage.ets isWebUrl（Stage 1页面转换，7b318df2 agent-a5156feee2628e3a6）：写前读了CreatePostScreen.kt\n（L21-L22，两处Patterns.WEB_URL.matcher(url).matches()），也读了F005实现映射“移植等价正则isWebUrl，行为等价”。\n思考中（L136）它认为Patterns.WEB_URL太复杂，改用通用的“classic Web URL regex”，只锚^不锚$（Write L199）。\nmatches()的整串语义因此丢失，\"example.com is great\"这样的句子也会判为URL。Slice 14之后的接线没有改这个正则。\n返修移植了完整的Patterns.WEB_URL并改为整串匹配（repair agent-a86be485f8706091e L804）。\n4) DeepLinkRouter.ets（Slice 18 F015 worker）：F015实现映射写明Patterns.WEB_URL.matcher(text).matches()，\n契约为“判定域须与WEB_URL等价……普通句子假”（L21-L22）；它也读到了MainActivity.kt:459（L37-L38）。\n但读到CreatePostPage里已有的isWebUrl（L93-L94，正则无$）后，它直接判定“WEB_URL判定已实现”，\nWrite（L198）时import复用，没有用自身契约中的反例核对。返修在DeepLinkRouter内补$锚，实现整串匹配\n（repair agent-add2feb65b4442f27 L863）。\n",
+  "recommendations": [
+    "实现阶段移植源端String/URL工具函数时，对每个库原语确认确切语义再写目标代码：replaceFirst(ignoreCase)、java.net.URL.host（去userinfo和端口，未知协议抛错）、Kotlin replace（全部替换）、matcher().matches()（整串匹配）、ktor Url（接受相对路径，转义畸形时抛错）。写完至少用一条源端样例自测，例如toHttps('http://example.com')应得'https://example.com'。",
+    "源仓库有对应单测（如app/src/test/.../UtilsKtTest.kt、PostLinkTypeTest.kt）时，先读单测，把其中用例当作移植的行为样例；目标平台URL类（@ohos.url，WHATWG）不接受相对路径、转义处理方式也不同，选用它替代ktor或java.net.URL之前，先用这些用例逐条核对，不以“边缘情况可接受”跳过。",
+    "源码中的平台分支（useCustomTab两通道、usePrivateTab extras、startActivitySafe失败toast）要映射为目标平台的对应分支，并透传能传的参数；平台确实没有等价能力时，在决策账本登记差异，不把参数降级为“仅保留签名兼容”。",
+    "复用工程内已有的“等价”判定或解析函数前，先用自身spec契约中的正例和反例核对（如F015“普通句子假”、matches()整串匹配）；不符时修正，或登记交给closer，不能因为函数已实现就直接import，也不能把AC标为已满足。",
+    "规格提取阶段，对依赖库语义的工具函数，在AC判据中写入边界样例（无scheme、带端口或userinfo、句中含URL、畸形转义），并引用源仓库单测文件作为unit判据来源。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/components/common/Utils.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/Utils.kt",
+          "at": "2026-10-01T11:24:19.188Z",
+          "reason": "正常输入：Base-6全文Read的回执包含toHttps（L1332-1337，replaceFirst(\"http\",\"https\",true)）、hostName=URL(url).host（L462-467）、hostNameCleaned全替换、openLinkRaw的private extras与CustomTabs/ACTION_VIEW双通道（L330-356）、startActivitySafe失败toast（L1291-1297），足以逐行移植这些函数（agent-ae528ff69625ec6ac.jsonl:L90-L91）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/spec/baseline/feature-base.md",
+          "at": "2026-10-01T11:22:19.220Z",
+          "reason": "正常输入：跨栈映射基线一行“CustomTabs（浏览器）→ want（浏览器/系统），openLinkRaw等价”，只给通道映射，没有要求丢弃useCustomTab或usePrivateTab（同转录L29-L30）。"
+        },
+        {
+          "key": "agent-ae528ff69625ec6ac.jsonl",
+          "at": "2026-10-01T11:35:51.348Z",
+          "reason": "已读到上述源码，Write（L228）却写成：toHttps返回'h'+url.substring(1)，与原串相同；hostName用^scheme://([^/?#]+)正则返回authority，任意协议都接受；hostNameCleaned只替换首个www.；openLinkRaw只发单一viewData want，注释称useCustomTab/usePrivateTab“仅保留签名兼容”，失败只记日志。偏差从这次写入开始，并保留到生成检查点。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/services/PostLinkType.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/feat/PostLinkType.kt",
+          "at": "2026-10-01T13:53:02.502Z",
+          "reason": "正常输入：Read回执可见import io.ktor.http.Url、parseUrlSafe=runCatching{Url(url)}、segments.lastOrNull、encodedPath与parameters[\"url\"]，即解析语义由ktor Url决定（agent-a67860e4032034d23.jsonl:L85-L86）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/spec/baseline/features/F013-app-settings.md",
+          "at": "2026-10-01T13:48:37.067Z",
+          "reason": "正常输入：F013 AC73-76给出分类、代理提取、parseUrlSafe不抛错、扩展名工具的要求，并用“真:src”指回PostLinkType.kt对应行；spec没有列无scheme和畸形转义的边界样例（同转录L23、L26）。"
+        },
+        {
+          "key": "agent-a67860e4032034d23.jsonl",
+          "at": "2026-10-01T14:20:57.314Z",
+          "reason": "思考（L223）中已认识到ktor Url宽松、无scheme也能解析，仍以“Edge-case parity is acceptable”为由改用@ohos.url URL，配合pathname、searchParams和decodeURIComponent容错写出PostLinkType.ets（L319）。相对路径与畸形转义的行为因此偏离ktor。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/pages/CreatePostPage.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/ui/components/post/create/CreatePostScreen.kt",
+          "at": "2026-10-01T09:10:40.390Z",
+          "reason": "正常输入：Read回执中L117、L212两处都是Patterns.WEB_URL.matcher(...).matches()，即整串匹配（agent-a5156feee2628e3a6.jsonl:L21-L22）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/spec/baseline/features/F005-post-compose.md",
+          "at": "2026-10-01T09:13:17.988Z",
+          "reason": "正常输入：实现映射行“Patterns.WEB_URL.matcher(...) → 移植等价正则isWebUrl，行为等价”，AC06/AC07给出URL与普通文本的正反样例（同转录L87-L88）。"
+        },
+        {
+          "key": "agent-a5156feee2628e3a6.jsonl",
+          "at": "2026-10-01T09:30:20.706Z",
+          "reason": "思考（L136）认为Patterns.WEB_URL太复杂，改用通用的“classic Web URL regex”，Write（L199）中webUrlRe只锚^不锚$，协议集也不同。matches()整串语义丢失，含URL的句子也会判为URL。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/services/DeepLinkRouter.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/spec/baseline/features/F015-deep-links.md",
+          "at": "2026-10-01T17:13:48.347Z",
+          "reason": "正常输入：实现映射行写明Patterns.WEB_URL.matcher(text).matches()，契约为“判定域须与WEB_URL等价（www.xxx / https://xxx均真，普通句子假）”（agent-a6946767c2a0231e4.jsonl:L21-L22）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/MainActivity.kt",
+          "at": "2026-10-01T17:14:05.126Z",
+          "reason": "正常输入：Read回执L459为Patterns.WEB_URL.matcher(text).matches()，匹配时url=padUrlWithHttps，否则body=text（同转录L37-L38）。"
+        },
+        {
+          "key": "agent-a5156feee2628e3a6.jsonl",
+          "at": "2026-10-01T09:30:20.706Z",
+          "reason": "上游偏差起点：Stage 1页面转换在CreatePostPage.ets写入只锚^的isWebUrl前缀正则（7b318df2 agent-a5156feee2628e3a6.jsonl:L199），之后被当作“已实现的WEB_URL判定”复用。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/pages/CreatePostPage.ets",
+          "at": "2026-10-01T17:15:38.533Z",
+          "reason": "交付桥梁：Slice 18读取CreatePostPage.ets时，回执中isWebUrl的正则仍无$锚，注释为“Patterns.WEB_URL等价正则”（agent-a6946767c2a0231e4.jsonl:L93-L94）。"
+        },
+        {
+          "key": "agent-a6946767c2a0231e4.jsonl",
+          "at": "2026-10-01T17:22:33.186Z",
+          "reason": "已读到自身契约“普通句子假”和源码matches()，又看到CreatePostPage.isWebUrl，便判定“WEB_URL判定已实现”（L91、L186），没用反例核对就在Write（L198）中import复用。分享文本分类于是继承了前缀匹配。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 1,
+          "to": 5
+        },
+        {
+          "from": 2,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "openLink的baseUrl问题：Base-6的openLink注释要求传入“Android API.getInstance().baseUrl”，但没有写明须含scheme。调用方PostPage（e919f2a1 agent-aad91d3c0d95b4028 L258）和MainPage（Slice 18 L209）都传了LemmyApiClient.getInstanceDomain()返回的裸域名。返修在Utils.openLink内用instanceBaseUrl归一。实际偏差的写者没有写Utils.ets，本卡未单独画链，只作说明。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-4b8ebe5007982e666e18",
+  "metadata": {
+    "migration": {
+      "id": "jerboa-e7cc4044-4f78-441c-8b49-3a097937f665",
+      "project": "jerboa"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.247",
+        "2.1.309",
+        "2.1.310"
+      ]
+    },
+    "source_set_id": "sources-32ddfd727cfccbbce98f",
+    "environment": [
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T06:59:57.329Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L10",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L9",
+        "phase": "generation"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T06:59:57.329Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L10",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L9",
+        "phase": "generation"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "26",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T06:59:57.329Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L10",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L9",
+        "phase": "generation"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T06:59:57.329Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L10",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L9",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T08:27:52.558Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1138",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1136",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T08:27:52.558Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1138",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1136",
+        "phase": "generation"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L2/jerboa",
+        "at": "2026-10-23T16:50:12.154Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L209",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L208",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L2/jerboa",
+        "at": "2026-10-23T16:50:12.154Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L209",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L208",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "26",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L2/jerboa",
+        "at": "2026-10-23T16:50:12.154Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L209",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L208",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L2/jerboa",
+        "at": "2026-10-23T16:50:12.154Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L209",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L208",
+        "phase": "repair"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:12.967Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L155",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L154",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:12.967Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L155",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L154",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "26",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:12.967Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L155",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L154",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:12.967Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L155",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L154",
+        "phase": "repair"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:39.052Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L120",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L119",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:39.052Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L120",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L119",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "26",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:39.052Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L120",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L119",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:28:16.441Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a4d3a35dbb3029087.jsonl:L251",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a4d3a35dbb3029087.jsonl:L250",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:28:16.441Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a4d3a35dbb3029087.jsonl:L251",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a4d3a35dbb3029087.jsonl:L250",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:35:12.588Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-ae9a25fc6a2669bb5.jsonl:L522",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-ae9a25fc6a2669bb5.jsonl:L521",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:36:59.707Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a557f4f80a218650e.jsonl:L430",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a557f4f80a218650e.jsonl:L429",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-23T19:59:02.243Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a7154d5ed3ee900cc.jsonl:L1776",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a7154d5ed3ee900cc.jsonl:L1775",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.10",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "3488bf55-f8ef-4dfe-ae5e-17b59ecfb2cd"
+      ]
+    }
+  },
+  "revision": "9ca849e7c68b415daca25b92377056b59b5595d109d328fcac0fac38ad921b92"
+}

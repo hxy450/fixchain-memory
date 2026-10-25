@@ -1,0 +1,502 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-bcc79fa7d3d15ef4a8b2",
+  "created_at": "2026-10-24T14:20:32.662294+00:00",
+  "migration_key": "jerboa-e7cc4044-4f78-441c-8b49-3a097937f665",
+  "title": "帖子卡布局迁移：缩略图槽丢掉固定尺寸、嵌套 Flex 代替 FlowRow、渐隐被删、%1$s 传数值与宽度对齐占位被跳过",
+  "when": "界面实现与槽位接线阶段，把 Compose 帖子卡/列表行的尺寸修饰符、FlowRow、fadingEdge、不可见对齐子项及带参字符串资源转成 ArkUI 时；以及编译修复/收尾阶段处理不受支持的写法和遗留 TODO 时",
+  "description": "源端尺寸由调用方 Modifier（如 Modifier.size(POST_LINK_PIC_SIZE)）传给图片子组件；FlowRow(SpaceBetween) 内嵌 FlowRow 再跟一个尾随元素；Modifier.fadingEdge 底部渐隐；高度为 0 的不可见 Text 用来撑齐列宽；stringResource 的 %1$s 接收 Long。目标端使用 Row+layoutWeight、Flex、@Builder 占位槽、$r 格式化参数和 SDK 不支持的遮罩写法。",
+  "summary": "缩略图（PostListingCard）：首页转换者写前读过 PostListing.kt 的 ThumbnailBox（postLinkPicMod = Modifier.size(POST_LINK_PIC_SIZE)，\n同时作用于 PictrsThumbnailImage 与无图 Card）和 Sizes.kt 的 POST_LINK_PIC_SIZE=70.dp，页面 spec 与 F002 AC 都没有写缩略图尺寸（AC42 只规定角标，L133-L134），尺寸只在源码里有。\n它首稿（agent-adfffd684834adb4c.jsonl:L182）给有图分支写的是 70vp 定尺寸占位 Stack；随后为满足“槽必须是 @Builder”的规则重写（L184 思考、L188 Write），\n有图分支改成空的 pictrsImageSlot()，70vp 只留在无图 placeholderBox 上，ThumbnailTile 外层 Stack 也无尺寸，FWD-REF 注释只写了模糊与圆角、没写尺寸。\n标题列 Column 的 layoutWeight(1) 写对了。Stage 3 组收尾者接线 P-S9-016 时读到了 placeholderBox 的 70vp（agent-ae45f3830e38998e0.jsonl:L264-L265）\n和 PictrsThumbnailImage 只有 thumbnail/blur/roundBottomEndCorner/contentDescription 参数（L89-L90），仍只写 PictrsThumbnailImage({...})、不加 width/height（L300-L301），\n注释却称“PostListing.kt L446-460 形态”。该组件的 Image 也没有尺寸，于是按图片固有尺寸测量，在 Row 中抢走全部宽度，标题列被挤成 0 宽。\n这一片段保留到生成结束与返修冒烟（返修主线程 L1224 “post title missing”），返修按 Android 重写为缩略图固定 70vp、标题列 layoutWeight(1)（报告 B-24/B-26）。\n\n头部归属行（PostListingCard）：转换者读到 PostListingCard.kt 的 FlowRow(SpaceBetween){ FlowRow(左组) ; TimeAgo }，注释也写明“左组与 TimeAgo 两端对齐”，\n却写成外层 wrap Flex(SpaceBetween) 套内层 wrap Flex 且内层 .flexGrow(1)（L188）。返修实测这种写法让 TimeAgo 总是独占一行（B-4），改为新建 PostFlowRow 贪心换行布局。\n该嵌套 Flex 结构未经其他生成期写者改动，保留到生成结束。\n\n正文预览渐隐（PostListingCard）：页面 spec 写明 fadingEdge 对应“linearGradient 遮罩（overlay/背景渐变）”，转换者却写了 SDK 不支持的 .mask({ gradient: [...] })（L188）。\nStage 3 编译门修复者把它整段删掉、换成 TODO(fading-edge)，注明候选补法是 Stack+linearGradient 覆盖层（agent-afb0b5362c4dd506e.jsonl:L778-L779）；\nFV-1 收尾者收到 naked-TODO FAIL，建议动作是补 marker 或登记 registry（agent-a4a33bd280d26d858.jsonl:L630），却把 TODO 改写为普通“视觉差异注记”（L750-L753），\n渐隐缺口于是通过债务门禁，生成结束时没有渐隐（B-37 “无渐隐”）。返修补上 DST_IN 渐变遮罩；返修首版遮罩用 height('100%')，\n在 List 内取到视口高度、把首卡撑满整屏，这是返修期新生的问题，由主线程改为按预览实测高度（返修主线程 L3883，R6），不归因生成。\n\n列表视图（PostListingList）：转换者读到 PostListingList.kt 的 PostVotingTile，里面有注释“invisible Text below aligns width of PostVotingTiles”和 Text(\"00000\", height 0)，\n却在思考中写“'00000' height(0) 对齐技巧……height 0 不渲染，跳过”（L193），Write 中省略（L195-L196），投票列宽随分数变化、偏窄。\n返修起初照 Android 加了高 0 的 Text，又碰到 ArkUI 高 0 的 Text 不参与宽度测量，最后由主线程按 bodyMedium 实测 \"00000\" 宽设最小宽（返修主线程 L15971，M57）；\n生成期的偏差是跳过对齐子项，“高 0 不测宽”这一平台行为是返修时才碰到的。\n同一转换者通过 Bash 查到 post_listing_comments_count = \"%1$s comments\"（L145-L146），思考时也意识到“%1$s 期望 string，传 number 可能输出异常”，\n却假定 $r 会隐式转换，Edit 写成 $r('app.string.post_listing_comments_count', this.postView.counts.comments)（L197-L199）。\n它读过的 references 中没有 $r 占位符类型规则（平台知识缺口），但它自己已经发现了风险，只是没有核实。同一阶段另一页面的转换产物对 %1$s 传的是 toString()（agent-acc4662345429f991.jsonl:L45），可见这一规则在本工程里是可以查到的。\n该行保留到返修 R57（界面显示“ comments”），主线程改为传 toString()（返修主线程 L15877，M56）。返修新增的 post_listing_new 同样传了数值，属返修自引入，一并修正。\n",
+  "recommendations": [
+    "界面实现时，把源端经 Modifier 传给子组件的尺寸当作调用方契约：拆成 @Builder 占位槽时，把 width/height（本例 70vp）写在槽外层容器或槽调用处，并在 FWD-REF 注释写明尺寸；接线者填槽前核对源端调用处的 Modifier.size，被嵌组件没有尺寸参数时在调用处补 .width/.height。",
+    "写 Row{ Column.layoutWeight(1) ; 图片 } 这类权重布局后，逐个检查非权重同级子项是否有确定尺寸；网络 Image 不设尺寸会按图片固有尺寸测量，可能挤掉权重列。",
+    "Compose FlowRow(SpaceBetween) 内嵌 FlowRow 再跟尾随元素时，不要用嵌套 wrap Flex + flexGrow(1) 代替；改用按子项内容宽度贪心换行的自定义布局，并用短标题样例确认尾随元素与左组在同一行。",
+    "用带参 $r 前先查资源串的占位符：%s/%1$s 只传 string（数值先 toString()），对已经怀疑的类型问题，先搜索工程已有用法或查知识核验 skill 再写，不假定隐式转换。",
+    "源码中注释说明用于对齐宽度的不可见/零高子项是布局约束，不能因为“不渲染”而跳过；ArkUI 中零高 Text 不参与宽度测量，应按测得的文本宽度给列设 minWidth/constraintSize。",
+    "编译修复遇到 SDK 不支持的写法（如 .mask({gradient})）时，换等价实现（Stack 上加 linearGradient 覆盖层并 blendMode DST_IN，覆盖层高度取内容实测高度，不用 height('100%')），不要删除功能；收尾者处理 naked-TODO 时按 suggested_action 补 marker 或登记 registry，不改写成普通注释绕过门禁。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/components/post/PostListingCard.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/ui/components/post/PostListing.kt",
+          "at": "2026-10-01T09:14:46.384Z",
+          "reason": "正常输入：转换者完整 Read 返回 ThumbnailBox 中的 postLinkPicMod = Modifier.size(POST_LINK_PIC_SIZE)，同时用于 PictrsThumbnailImage 与无图 Card，足以说明有图分支也必须固定 70dp（agent-adfffd684834adb4c.jsonl:L40-L41；Sizes.kt 的 70.dp 见 L52-L53，L141 思考已列出 POST_LINK_PIC_SIZE=70）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/ui/components/post/PostListingCard.kt",
+          "at": "2026-10-01T09:14:43.400Z",
+          "reason": "正常输入：Read 返回 PostCommunityAndCreatorBlock 的 FlowRow(SpaceBetween){ FlowRow(spacedBy) 左组 ; TimeAgo }（放得下时同行）、PostTitleAndThumbnail 的 Column(weight 1)+ThumbnailTile、PostBody 的 fadingEdge(verticalGradient .7→1)（agent-adfffd684834adb4c.jsonl:L37-L38）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/spec/baseline/ui/page_0004_HomeScreen.md",
+          "at": "2026-10-01T09:13:45.182Z",
+          "reason": "正常输入：页面 spec 描述 FlowRow 归属行与缩略图分支，并把 fadingEdge（正文渐隐）映射为“linearGradient 遮罩（overlay/背景渐变）”；没有给缩略图尺寸，尺寸只能取自源码（agent-adfffd684834adb4c.jsonl:L18-L19）。"
+        },
+        {
+          "key": "7b318df2-6d4a-47e0-9799-52c4ecc9a4be:adfffd684834adb4c",
+          "at": "2026-10-01T09:29:35.660Z",
+          "reason": "首页转换者。首稿 L182 给有图分支写过 70vp Stack；L184 决定把槽改为 @Builder 后，L188 Write 把有图分支换成空 pictrsImageSlot()，70vp 只留在 placeholderBox 上，外层 Stack 无尺寸，FWD-REF 注释也没写尺寸。同一 Write 中，FlowRow 被写成嵌套 wrap Flex + 内层 flexGrow(1)，fadingEdge 被写成 SDK 不支持的 .mask({gradient})。三处都与上面的输入不符（同转录 L182-L189）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/components/common/PictrsImage.ets",
+          "at": "2026-10-01T15:11:56.553Z",
+          "reason": "接线前输入：组收尾者 grep 签名，看到 PictrsThumbnailImage 只有 thumbnail/blur/roundBottomEndCorner/contentDescription 参数、没有尺寸参数（CircularIcon 则有 size），说明尺寸只能在调用处给出（agent-ae45f3830e38998e0.jsonl:L89-L90）。"
+        },
+        {
+          "key": "e919f2a1-5f90-46e2-baca-332c443637de:ae45f3830e38998e0",
+          "at": "2026-10-01T15:21:10.319Z",
+          "reason": "Stage 3 group-1 收尾者。Read 目标文件时看到 placeholderBox 的 .width/.height(IconSize.POST_LINK_PIC) 和空 pictrsImageSlot（L264-L265），接线 P-S9-016 时仍只写 PictrsThumbnailImage({thumbnail, blur, roundBottomEndCorner})、不加尺寸，注释自称“PostListing.kt L446-460 形态”（L300-L301）。无尺寸缩略图由此落盘并保留到返修。",
+          "problem": true
+        },
+        {
+          "key": "e7cc4044-4f78-441c-8b49-3a097937f665:afb0b5362c4dd506e",
+          "at": "2026-10-01T19:19:47.753Z",
+          "reason": "Stage 3 编译门修复者：编译报 mask 不支持 gradient，它没有改成等价的 linearGradient 覆盖层，而是删掉整段 .mask，换成 TODO(fading-edge)“待 visual-verify 轮以 Stack+linearGradient 覆盖层补齐”，渐隐功能从此缺失（同转录 L776-L779）。",
+          "problem": true
+        },
+        {
+          "key": "e7cc4044-4f78-441c-8b49-3a097937f665:a4a33bd280d26d858",
+          "at": "2026-10-01T20:13:57.168Z",
+          "reason": "FV-1 收尾者：结构闸报 naked-TODO FAIL，suggested_action 要求补 marker 或登记 registry（L630），它却判定“非接线债务”，把 TODO 改写成普通“视觉差异注记”，渐隐缺口通过门禁保留到生成结束（L750-L753）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        },
+        {
+          "from": 5,
+          "to": 6,
+          "force": true,
+          "reason": "收尾者在接线前用 Bash grep PictrsImage.ets 的 export/@Param 行，回执列出 PictrsThumbnailImage 的全部参数（无尺寸参数），支持它写前已知该组件不自带尺寸。",
+          "evidence": [
+            {
+              "source": "generation/e919f2a1-5f90-46e2-baca-332c443637de/subagents/agent-ae45f3830e38998e0.jsonl",
+              "line": 89
+            },
+            {
+              "source": "generation/e919f2a1-5f90-46e2-baca-332c443637de/subagents/agent-ae45f3830e38998e0.jsonl",
+              "line": 90
+            }
+          ]
+        },
+        {
+          "from": 6,
+          "to": "target",
+          "force": true,
+          "reason": "收尾者 Bash 内的 python 脚本 open('components/post/PostListingCard.ets') 读改写回，把空 pictrsImageSlot 替换为无尺寸的 PictrsThumbnailImage({...})，回执 OK。",
+          "evidence": [
+            {
+              "source": "generation/e919f2a1-5f90-46e2-baca-332c443637de/subagents/agent-ae45f3830e38998e0.jsonl",
+              "line": 300
+            },
+            {
+              "source": "generation/e919f2a1-5f90-46e2-baca-332c443637de/subagents/agent-ae45f3830e38998e0.jsonl",
+              "line": 301
+            }
+          ]
+        },
+        {
+          "from": 7,
+          "to": "target",
+          "force": true,
+          "reason": "编译门修复者 Bash 内的 python 脚本对 entry/src/main/ets/components/post/PostListingCard.ets 断言旧 .mask({gradient}) 存在后替换为 TODO(fading-edge) 注释并写回，回执 OK mask->todo。",
+          "evidence": [
+            {
+              "source": "generation/e7cc4044-4f78-441c-8b49-3a097937f665/subagents/agent-afb0b5362c4dd506e.jsonl",
+              "line": 778
+            },
+            {
+              "source": "generation/e7cc4044-4f78-441c-8b49-3a097937f665/subagents/agent-afb0b5362c4dd506e.jsonl",
+              "line": 779
+            }
+          ]
+        },
+        {
+          "from": 8,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/components/post/PostListingList.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/ui/components/post/PostListingList.kt",
+          "at": "2026-10-01T09:14:32.242Z",
+          "reason": "正常输入：转换者完整 Read 返回 PostVotingTile，其中 enableDownVotes 分支有注释“invisible Text below aligns width of PostVotingTiles”和 Text(\"00000\", Modifier.height(0.dp), bodyMedium)；计数行为 stringResource(R.string.post_listing_comments_count, postView.counts.comments)（agent-adfffd684834adb4c.jsonl:L29-L30）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/resources/base/element/string.json",
+          "at": "2026-10-01T09:22:56.919Z",
+          "reason": "正常输入：Bash 用 python 读取本文件，返回 post_listing_comments_count = %1$s comments、post_listing_new = ( %1$s new )，资源占位符类型为字符串（agent-adfffd684834adb4c.jsonl:L145-L146）。"
+        },
+        {
+          "key": "7b318df2-6d4a-47e0-9799-52c4ecc9a4be:adfffd684834adb4c",
+          "at": "2026-10-01T09:30:09.564Z",
+          "reason": "转换者在思考中把对齐子项判为“'00000' height(0) 对齐技巧……height 0 不渲染，跳过”（L193），Write PostListingList 时省略了该宽度对齐子项（L195-L196）。这一缺失保留到生成结束（返修报告 B-76“无 '00000' 对齐”），返修后才按实测宽度设最小列宽。",
+          "problem": true
+        },
+        {
+          "key": "7b318df2-6d4a-47e0-9799-52c4ecc9a4be:adfffd684834adb4c",
+          "at": "2026-10-01T09:30:15.671Z",
+          "reason": "转换者思考时写下“%1$s 期望 string。传 number 可能输出异常”，随后假定 $r 会按 String.format 隐式转换，Edit 写成 $r('app.string.post_listing_comments_count', this.postView.counts.comments)（L197-L199）。这一行保留到返修 R57，界面显示“ comments”。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4,
+          "force": true,
+          "reason": "转换者 Bash 进入 resources/base/element 并用 python json.load('string.json') 打印所需键值，回执给出 post_listing_comments_count = %1$s comments，支持它写 Edit 前已知占位符为 %1$s。",
+          "evidence": [
+            {
+              "source": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-adfffd684834adb4c.jsonl",
+              "line": 145
+            },
+            {
+              "source": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-adfffd684834adb4c.jsonl",
+              "line": 146
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target"
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "未单独复现嵌套 wrap Flex 在 ArkUI 中的具体测量原因（容器默认撑满主轴还是 flexGrow），以返修运行时结论“Flex 让 TimeAgo 永远独占一行”为准。",
+    "未确认转换者写前的 references 是否说明 .mask 不支持 gradient；已核的偏差是没有按页面 spec 的 linearGradient 覆盖层实现。"
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/components/post/PostFlowRow.ets",
+      "reason": "返修期新建文件（首次写入 repair agent-a4d3a35dbb3029087.jsonl:L852），没有生成期写者。建它的原因是生成期嵌套 Flex 让 TimeAgo 独占一行，已在 PostListingCard 图中归因；“紧随 @Builder 调用的自定义组件不挂载”是返修自建 PostFlowRow 时新出现的问题（返修主线程 L3580-L3644 实测后包 Row），不属生成偏差。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/components/common/MarkdownText.ets",
+      "reason": "本项改动只是 MarkdownPreview 的 Ellipsis 改为 Clip。生成期 maxLines(5)+Ellipsis 与 Android createTextViewPreview 的 ellipsize=END（MarkdownHelper.kt:325）及 F017 spec AC04“尾部省略”一致；Android 设备上 Markwon Spanned 文本实际不显示“…”，是返修运行时对照才发现的（返修主线程 L3883，R7），写前材料中没有可核的生成偏差。"
+    }
+  ],
+  "job": "issue-bcc79fa7d3d15ef4a8b2",
+  "metadata": {
+    "migration": {
+      "id": "jerboa-e7cc4044-4f78-441c-8b49-3a097937f665",
+      "project": "jerboa"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.247",
+        "2.1.309",
+        "2.1.310"
+      ]
+    },
+    "source_set_id": "sources-32ddfd727cfccbbce98f",
+    "environment": [
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T06:59:57.329Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L10",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L9",
+        "phase": "generation"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T06:59:57.329Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L10",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L9",
+        "phase": "generation"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "26",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T06:59:57.329Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L10",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L9",
+        "phase": "generation"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T06:59:57.329Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L10",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L9",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T08:27:52.558Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1138",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1136",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T08:27:52.558Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1138",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1136",
+        "phase": "generation"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L2/jerboa",
+        "at": "2026-10-23T16:50:12.154Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L209",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L208",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L2/jerboa",
+        "at": "2026-10-23T16:50:12.154Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L209",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L208",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "26",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L2/jerboa",
+        "at": "2026-10-23T16:50:12.154Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L209",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L208",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L2/jerboa",
+        "at": "2026-10-23T16:50:12.154Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L209",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L208",
+        "phase": "repair"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:12.967Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L155",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L154",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:12.967Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L155",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L154",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "26",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:12.967Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L155",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L154",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:12.967Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L155",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L154",
+        "phase": "repair"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:39.052Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L120",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L119",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:39.052Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L120",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L119",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "26",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:39.052Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L120",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L119",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:28:16.441Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a4d3a35dbb3029087.jsonl:L251",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a4d3a35dbb3029087.jsonl:L250",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:28:16.441Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a4d3a35dbb3029087.jsonl:L251",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a4d3a35dbb3029087.jsonl:L250",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:35:12.588Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-ae9a25fc6a2669bb5.jsonl:L522",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-ae9a25fc6a2669bb5.jsonl:L521",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:36:59.707Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a557f4f80a218650e.jsonl:L430",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a557f4f80a218650e.jsonl:L429",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-23T19:59:02.243Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a7154d5ed3ee900cc.jsonl:L1776",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a7154d5ed3ee900cc.jsonl:L1775",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.10",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "3488bf55-f8ef-4dfe-ae5e-17b59ecfb2cd"
+      ]
+    }
+  },
+  "revision": "e30fc67a72656c26df78d1cef5d67b912bde2f8ee301b7b3fc3f9cff5843baba"
+}

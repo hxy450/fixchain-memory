@@ -1,6 +1,6 @@
 # 列表条目以新对象替换或整表重建时，ForEach/Repeat 键要包含会变且需要显示的字段；要稳定键就改为可观察实例原位更新
 
-ID：`lesson-2e636699fa65aefd63f0` · 版本：7
+ID：`lesson-2e636699fa65aefd63f0` · 版本：8
 
 [本主题](index.md)
 
@@ -33,7 +33,7 @@ ForEach 键值不变时复用已有子组件、不再执行条目构建，子组
 
 - 行内状态（如下载完成后的按钮）在设备上不刷新时，检索写入新对象而键不含实例分量的列表
 
-来源支持：8 张卡 · 7 次迁移 · 7 个应用
+来源支持：9 张卡 · 8 次迁移 · 8 个应用
 
 ## 来源（按需复核）
 
@@ -53,3 +53,5 @@ ForEach 键值不变时复用已有子组件、不再执行条目构建，子组
   卡片版本：`e08fcecfcb0ba66ded65b06bfca4e2fae61130f9835525a62f6e684c11cec824`
 - [case-db3da49c14f06085f3b8](../../../store/cases/case-db3da49c14f06085f3b8/c679bb6c86541e5f34f87ce8cdf2a5916c70d1427e62bba1d5228300a4ad8967.json) · 结论：recommendation:4
   卡片版本：`c679bb6c86541e5f34f87ce8cdf2a5916c70d1427e62bba1d5228300a4ad8967`
+- [case-ef3f002672e7158de02c](../../../store/cases/case-ef3f002672e7158de02c/fe8d555431fa5932bbbfd1d854c43b4e78ac0454237c0c0486b8e3bfb317c2c2.json) · 结论：recommendation:3
+  卡片版本：`fe8d555431fa5932bbbfd1d854c43b4e78ac0454237c0c0486b8e3bfb317c2c2`

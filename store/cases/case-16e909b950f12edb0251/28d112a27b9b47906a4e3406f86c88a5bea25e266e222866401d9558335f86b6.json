@@ -1,0 +1,539 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-16e909b950f12edb0251",
+  "created_at": "2026-10-24T15:04:48.221686+00:00",
+  "migration_key": "jerboa-e7cc4044-4f78-441c-8b49-3a097937f665",
+  "title": "把带动作/关闭钮的 Compose Snackbar 按通用映射表降级成系统 Toast，并沿共享组件传到各调用方",
+  "when": "共享组件与页面实现阶段，为 Android 的 Snackbar/Toast 提示出口选择 ArkUI 等价实现及时长时；规格提取阶段写页面映射表时",
+  "description": "源端用 SnackbarHost/SnackbarHostState.showSnackbar(message, actionLabel, withDismissAction, duration) 并依赖 SnackbarResult.ActionPerformed，或用 Toast.makeText(LENGTH_SHORT/LENGTH_LONG)；目标端通用映射表把 Snackbar 写成 promptAction.showToast，共享提示组件由多个页面/服务复用。",
+  "summary": "共享组件阶段（Base-6）的写者写前已读到 JerboaSnackBar.kt：SnackbarHost + M3 Snackbar（background 底、\nonBackground 文字与 dismissActionContentColor），以及 Utils.kt:688 showSnackbar(message, actionLabel,\nwithDismissAction, snackbarDuration) 和 Utils.kt:72/:80 的 Toast.LENGTH_SHORT；这些足以说明提示出口要支持\n动作按钮、关闭钮、Snackbar 时长与结果回传。同时预载的 arkts-ui-alignment 映射表有一行\n“Snackbar → getUIContext().getPromptAction().showToast() 轻提示”，未区分有无动作。写者照此把\nJerboaSnackBar.ets 写成只有 showToast 的 show/showException/showLoginFirst，时长写成 1500/3000\n（注释“短≈1.5s/长≈3s”，没有输入给出该值；Android Toast LENGTH_SHORT/LONG 为 2000/3500），\n并在注释中自认“Toast 无动作位，动作交互由调用方就地弹窗承接”；同一写者的 Utils.ets 也把\nshowSnackbar/toast 族划为“Toast → JerboaSnackBar 由消费 Slice 就地实现”而不导出。\nplan/spec 并未把这一降级登记为决策：feature-base 公共组件段只写“JerboaSnackBar 全局提示（含 ApiState.Failure 出口）”，\nbase-plan 的 Base-6 条目也没有 Snackbar→Toast 约定；降级只存在于该组件文件头。\n该契约随后被消费方沿用：Slice 3 写者读到正确的 F001 规格与 AccountVerificationState.kt:512\ndoSnackbarAction（showSnackbar(msg, btnText, true, Long) == ActionPerformed 才执行），却按\n“Base-6 既定”写成 JerboaSnackBar.show(LONG) + showAlertDialog 确认弹窗；CrashLogsPage 写者读到\nCrashLogsScreen.kt 的 showSnackbar(deleteMessage, null, true, Short)，但页面规格同样把它映射成\nshowToast（规格作者也预载同一映射表，并漏掉 withDismissAction=true），于是写成 JerboaSnackBar.show（≈1.5s，无关闭 X）。\n这些片段保留到生成结束。返修把 JerboaSnackBar 改为叠加层自绘 M3 Snackbar（动作/关闭钮、Promise 排队、\nSnackbarResult、Short 4s/Long 10s、FadeInFadeOutWithScale），Toast 时长改为 2000/3500；Utils.ets 补\ntoastException/loginFirstToast/showSnackbar；AccountVerifier 改用真实 doSnackbarAction；CrashLogsPage 改为\n页内 Snackbar（4s + 关闭 X）。底栏/FAB 偏移是返修引入叠加层后才出现的位置问题，见未决说明。\n",
+  "recommendations": [
+    "共享组件实现阶段：把源端 Snackbar 映射到 ArkUI 前，先列出所有 showSnackbar 调用的 actionLabel、withDismissAction、duration 与是否读取 SnackbarResult；只要有动作、关闭钮或结果回传，就不能用 showToast，应自绘 Snackbar（叠加层或页内），实现动作/关闭钮、同一时刻一条的排队、ActionPerformed/Dismissed 结果和 M3 时长 Short 4000ms / Long 10000ms / Indefinite。",
+    "Toast 时长按 Android 常量换算：Toast.LENGTH_SHORT = 2000ms、LENGTH_LONG = 3500ms，写成命名常量；不要沿用 showToast 默认值或估算值。",
+    "用叠加层实现 Snackbar 时，同时提供底部偏移参数：按源页面 Scaffold 规则把 bottomBar 高度、FAB(56)+间距(16) 传入，避免盖住底栏或 FAB。",
+    "规格提取阶段：页面映射表记录 showSnackbar 的实际参数（动作文案、withDismissAction、时长），不要只写“Snackbar → showToast 轻提示”；通用映射表的 Snackbar 行只适用于无动作、无关闭钮的纯提示。",
+    "消费共享组件的实现者：规格要求“动作按钮 + ActionPerformed 才执行”而共享组件不支持时，把能力缺口登记给组件所有者或决策缺口，而不是用 Toast + 确认弹窗替代。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/components/common/JerboaSnackBar.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/ui/components/common/JerboaSnackBar.kt",
+          "at": "2026-10-01T11:24:43.375Z",
+          "reason": "正常输入：Read 回执给出 JerboaSnackbarHost = SnackbarHost + M3 Snackbar(containerColor=background, contentColor/dismissActionContentColor=onBackground)，说明出口是带关闭钮配色的 Snackbar 宿主（agent-ae528ff69625ec6ac.jsonl:L94-L95）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/Utils.kt",
+          "at": "2026-10-01T11:24:19.188Z",
+          "reason": "正常输入：全文 Read 回执含 :688 showSnackbar(message, actionLabel, withDismissAction, snackbarDuration) 与 :72/:80 Toast.makeText(..., LENGTH_SHORT)；足以确定需要动作、关闭钮、时长语义（agent-ae528ff69625ec6ac.jsonl:L90-L91）。"
+        },
+        {
+          "key": "agent-ae528ff69625ec6ac.jsonl",
+          "at": "2026-10-01T11:37:51.611Z",
+          "reason": "Base-6 写者已读到上述源码，仍 Write 出只含 showToast 的 JerboaSnackBar，时长 1500/3000，并注明动作交给调用方就地弹窗；没有实现 actionLabel/withDismissAction/SnackbarResult（同转录 L271-L272）。外部 skill 边界：该 agent 类型启动时预载的 arkts-ui-alignment SKILL.md 映射表写“Snackbar → getUIContext().getPromptAction().showToast() 轻提示（全局 promptAction.* 已废弃）”，未限定为无动作纯提示（同转录 L10，预载消息而非工具读取，故不单独入图）；组件注释原样复用了这句话。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/components/common/Utils.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/Utils.kt",
+          "at": "2026-10-01T11:24:19.188Z",
+          "reason": "正常输入：Read 回执含 Utils.kt:72 toastException、:80 loginFirstToast、:688 showSnackbar 的完整签名（agent-ae528ff69625ec6ac.jsonl:L90-L91）。"
+        },
+        {
+          "key": "agent-ae528ff69625ec6ac.jsonl",
+          "at": "2026-10-01T11:35:51.348Z",
+          "reason": "同一 Base-6 写者 Write Utils.ets 时把 toast 族与 showSnackbar 归为“平台函数……由消费 Slice 就地实现（Toast → JerboaSnackBar）”，不导出 showSnackbar 包装；与随后 Toast-only 的 JerboaSnackBar 是同一降级决定（同转录 L228-L229）。返修补入 toastException/loginFirstToast/showSnackbar 并统一 Toast 时长常量。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/services/AccountVerifier.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/ui/components/common/JerboaSnackBar.kt",
+          "at": "2026-10-01T11:24:43.375Z",
+          "reason": "正常输入：Base-6 写者读到的 Snackbar 宿主源码（agent-ae528ff69625ec6ac.jsonl:L94-L95）。"
+        },
+        {
+          "key": "agent-ae528ff69625ec6ac.jsonl",
+          "at": "2026-10-01T11:37:51.611Z",
+          "reason": "偏差起点：把共享提示出口写成 Toast-only 契约并声明动作由调用方弹窗承接（同转录 L271-L272）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/components/common/JerboaSnackBar.ets",
+          "at": "2026-10-01T14:06:47.407Z",
+          "reason": "交付桥梁：Slice 3 写者 Bash 读取该文件，回执含“Material Snackbar 宿主 → showToast”和“Toast 无动作位，动作交互由调用方就地弹窗承接”（agent-ac4b1fd5b47b07f1d.jsonl:L124-L125）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/feat/AccountVerificationState.kt",
+          "at": "2026-10-01T14:04:28.650Z",
+          "reason": "正常输入：Read 回执含 :512 doSnackbarAction —— showSnackbar(msg, btnText, true, duration=Long) == SnackbarResult.ActionPerformed 才执行动作（agent-ac4b1fd5b47b07f1d.jsonl:L70-L71）；F001 规格同样要求 Snackbar + 动作按钮（L23-L24）。"
+        },
+        {
+          "key": "agent-ac4b1fd5b47b07f1d.jsonl",
+          "at": "2026-10-01T14:15:38.789Z",
+          "reason": "传递：读到正确源码与规格，但按 Base-6 契约 Write doSnackbarAction = JerboaSnackBar.show(LONG) + showAlertDialog(confirm=动作)，文件头写“Snackbar 动作按钮 → Toast + 确认弹窗（Base-6 既定）”（同转录 L126、L150-L151）；未把共享组件能力缺口登记给组件所有者。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 5,
+          "force": true,
+          "reason": "Slice 3 写者用 Bash grep + sed -n '1,80p' 读取 JerboaSnackBar.ets，回执返回 Toast-only 契约与“动作交互由调用方就地弹窗承接”；这支持它写 AccountVerifier 前已收到该契约。",
+          "evidence": [
+            {
+              "source": "generation/e919f2a1-5f90-46e2-baca-332c443637de/subagents/agent-ac4b1fd5b47b07f1d.jsonl",
+              "line": 124
+            },
+            {
+              "source": "generation/e919f2a1-5f90-46e2-baca-332c443637de/subagents/agent-ac4b1fd5b47b07f1d.jsonl",
+              "line": 125
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/pages/CrashLogsPage.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/ui/components/settings/crashlogs/CrashLogsScreen.kt",
+          "at": "2026-10-01T07:13:29.751Z",
+          "reason": "正常输入：规格作者 Read 回执含删除全部后 showSnackbar(scope, snackbarHostState, deleteMessage, null, true, SnackbarDuration.Short)，即带关闭钮的 Short Snackbar（agent-a498f3347f92858cf.jsonl:L78-L79）。"
+        },
+        {
+          "key": "agent-a498f3347f92858cf.jsonl",
+          "at": "2026-10-01T07:18:19.398Z",
+          "reason": "规格提取偏差：预载同一 arkts-ui-alignment 映射表后，Write page_0034 规格时把该提示写成“Snackbar（删除完成提示）→ getPromptAction().showToast 轻提示映射”，只保留 Short 时长、漏掉 withDismissAction=true（同转录 L142-L143）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/spec/baseline/ui/page_0034_CrashLogsScreen.md",
+          "at": "2026-10-01T12:44:24.682Z",
+          "reason": "交付桥梁：页面实现者 Read 回执仍含 showToast 映射行（agent-a4d17ffa1dd259e3a.jsonl:L13-L14）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/ui/components/common/JerboaSnackBar.kt",
+          "at": "2026-10-01T11:24:43.375Z",
+          "reason": "正常输入：Base-6 写者读到的 Snackbar 宿主源码（agent-ae528ff69625ec6ac.jsonl:L94-L95）。"
+        },
+        {
+          "key": "agent-ae528ff69625ec6ac.jsonl",
+          "at": "2026-10-01T11:37:51.611Z",
+          "reason": "偏差起点：Toast-only 的共享 JerboaSnackBar，短时长 1500（同转录 L271-L272）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/components/common/JerboaSnackBar.ets",
+          "at": "2026-10-01T12:44:41.653Z",
+          "reason": "交付桥梁：页面实现者 Read 回执为 Toast-only 契约（agent-a4d17ffa1dd259e3a.jsonl:L31-L32）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/ui/components/settings/crashlogs/CrashLogsScreen.kt",
+          "at": "2026-10-01T12:44:24.883Z",
+          "reason": "正常输入：页面实现者自己也 Read 到 showSnackbar(..., null, true, Short)（agent-a4d17ffa1dd259e3a.jsonl:L15-L16）。"
+        },
+        {
+          "key": "agent-a4d17ffa1dd259e3a.jsonl",
+          "at": "2026-10-01T12:50:10.568Z",
+          "reason": "传递：按规格与共享契约 Write onPurgeAll 为 JerboaSnackBar.show(crash_logs_all_deleted)，注释“showSnackbar(Short) → JerboaSnackBar.show（短≈1.5s）”，复制提示也注成“Toast.LENGTH_SHORT ≈ 1.5s”，无关闭 X（同转录 L102-L103）；该片段保留到生成结束，返修改为页内 Snackbar（4s + 关闭 X）与 2000ms Toast。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 8
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": 6
+        },
+        {
+          "from": 6,
+          "to": 8
+        },
+        {
+          "from": 7,
+          "to": 8
+        },
+        {
+          "from": 8,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "未核实 1500/3000 的具体来源；写前输入中没有该数值，只能确认它与源端 LENGTH_SHORT/LONG 不符。"
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/pages/BottomNavPage.ets",
+      "reason": "修复中新生问题：本文件的改动只是给登录守卫 Snackbar 传 bottomOffsetVp（底栏高度）。生成期守卫走 AccountVerifier 的 Toast+弹窗，没有可归因的 Snackbar 定位代码；“盖住底栏”是返修主线程在返修 agent 新建叠加层 Snackbar 后运行时对照才发现（repair 主转录 L4555-L4556、L5090），生成侧原因已由 AccountVerifier/JerboaSnackBar 两图覆盖。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/pages/HomePage.ets",
+      "reason": "修复中新生问题：改动为守卫 opts.bottomOffsetVp = 底栏 + FAB(56) + 16，用于返修新建的叠加层 Snackbar 避让 FAB（repair 主转录 L5096）；生成期无对应 Snackbar 定位片段。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/pages/CommunityPage.ets",
+      "reason": "修复中新生问题：改动为有 FAB 时 bottomOffsetVp = 56 + 16，用于返修新建的叠加层 Snackbar（repair 主转录 L5096）；生成期该页把 JerboaSnackbarHost 映射为 showToast，降级来源与 JerboaSnackBar 图相同，位置偏移本身无生成期写入可归因。"
+    }
+  ],
+  "job": "issue-16e909b950f12edb0251",
+  "metadata": {
+    "migration": {
+      "id": "jerboa-e7cc4044-4f78-441c-8b49-3a097937f665",
+      "project": "jerboa"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.247",
+        "2.1.309",
+        "2.1.310"
+      ]
+    },
+    "source_set_id": "sources-32ddfd727cfccbbce98f",
+    "environment": [
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T06:59:57.329Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L10",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L9",
+        "phase": "generation"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T06:59:57.329Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L10",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L9",
+        "phase": "generation"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "26",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T06:59:57.329Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L10",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L9",
+        "phase": "generation"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T06:59:57.329Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L10",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L9",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T08:27:52.558Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1138",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1136",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T08:27:52.558Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1138",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1136",
+        "phase": "generation"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L2/jerboa",
+        "at": "2026-10-23T16:50:12.154Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L209",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L208",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L2/jerboa",
+        "at": "2026-10-23T16:50:12.154Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L209",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L208",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "26",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L2/jerboa",
+        "at": "2026-10-23T16:50:12.154Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L209",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L208",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L2/jerboa",
+        "at": "2026-10-23T16:50:12.154Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L209",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L208",
+        "phase": "repair"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:12.967Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L155",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L154",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:12.967Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L155",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L154",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "26",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:12.967Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L155",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L154",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:12.967Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L155",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L154",
+        "phase": "repair"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:39.052Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L120",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L119",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:39.052Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L120",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L119",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "26",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:39.052Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L120",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L119",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:28:16.441Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a4d3a35dbb3029087.jsonl:L251",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a4d3a35dbb3029087.jsonl:L250",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:28:16.441Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a4d3a35dbb3029087.jsonl:L251",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a4d3a35dbb3029087.jsonl:L250",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:35:12.588Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-ae9a25fc6a2669bb5.jsonl:L522",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-ae9a25fc6a2669bb5.jsonl:L521",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:36:59.707Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a557f4f80a218650e.jsonl:L430",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a557f4f80a218650e.jsonl:L429",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-23T19:59:02.243Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a7154d5ed3ee900cc.jsonl:L1776",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a7154d5ed3ee900cc.jsonl:L1775",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.10",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "3488bf55-f8ef-4dfe-ae5e-17b59ecfb2cd"
+      ]
+    }
+  },
+  "revision": "28d112a27b9b47906a4e3406f86c88a5bea25e266e222866401d9558335f86b6"
+}

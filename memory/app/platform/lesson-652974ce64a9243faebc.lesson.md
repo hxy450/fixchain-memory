@@ -1,6 +1,6 @@
 # 写目标权限清单时按每个已映射系统 API 在 SDK d.ts 中的 @permission 汇总，不因 Android 端无需运行时权限就断言 requestPermissions 为空
 
-ID：`lesson-652974ce64a9243faebc` · 版本：1
+ID：`lesson-652974ce64a9243faebc` · 版本：2
 
 [本主题](index.md)
 
@@ -20,9 +20,11 @@ ID：`lesson-652974ce64a9243faebc` · 版本：1
 
 1. 每映射一个系统 API，就查它在 SDK d.ts 中的 @permission，把汇总结果写进权限契约与 module.json5，并为需要用户授权的权限安排运行期申请（如读剪贴板前申请 READ_PASTEBOARD）。
 
-来源支持：1 张卡 · 1 次迁移 · 1 个应用
+来源支持：2 张卡 · 2 次迁移 · 2 个应用
 
 ## 来源（按需复核）
 
+- [case-149fd657e7134bf86261](../../../store/cases/case-149fd657e7134bf86261/76fbb9c3cf5c8c90f368c676283ddd9f80585443f0d66eee63ccee0b2aaaf3b2.json) · 结论：recommendation:2
+  卡片版本：`76fbb9c3cf5c8c90f368c676283ddd9f80585443f0d66eee63ccee0b2aaaf3b2`
 - [case-cc22f6cc1041c8cc1129](../../../store/cases/case-cc22f6cc1041c8cc1129/ec6e60182fe19865967b7c173312ac2be6c4dbf45c87407c6da85b673b5778f3.json) · 结论：recommendation:5
   卡片版本：`ec6e60182fe19865967b7c173312ac2be6c4dbf45c87407c6da85b673b5778f3`

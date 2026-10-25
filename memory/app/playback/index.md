@@ -1,6 +1,6 @@
 # app/playback
 
-音视频播放：AVPlayer 封装的异步装载并发与停止复位、错误通道与 Promise 拒绝，应用包 rawfile 资源经 fdSrc 设源，封装类释放方法按重载与宿主销毁分开，控制门面同步路径的回退来源，跨实现组合切换步骤时的入口守卫，视频页 surface 绑定与画面比例；短提示音的音频并发（混播/焦点）与播放中重入；源端 SoundPool 短音效改用 media.SoundPool；退后台继续播放所需的 AVSession 与音频长时任务
+音视频播放：AVPlayer 封装的异步装载并发与停止复位、错误通道与 Promise 拒绝，应用包 rawfile 资源经 fdSrc 设源，封装类释放方法按重载与宿主销毁分开，控制门面同步路径的回退来源，跨实现组合切换步骤时的入口守卫，视频页 surface 绑定与画面比例；短提示音的音频并发（混播/焦点）与播放中重入；源端 SoundPool 短音效改用 media.SoundPool；退后台继续播放所需的 AVSession 与音频长时任务；需要缓冲态、缓冲位或共享播放器时 AVPlayer + XComponent 与 Video 组件的取舍
 
 [上一级](../index.md)
 
@@ -25,6 +25,9 @@
 - [控制门面的同步访问路径也要具备源端懒加载 getter 的回退来源](lesson-cd4a69e85ec59eabf5b9.lesson.md)
   - 时机：播放功能实现阶段，把源端控制器懒加载的当前媒体 getter 翻译为 seekTo、getPosition、getDuration 等同步路径时
   - 情境：源 getter 在服务未运行时从偏好中保存的当前媒体 id 读库；目标服务实例只在起播后持有当前媒体，门面把 getter 做成异步方法、同步路径只读服务实例。
+- [源端依赖缓冲态、缓冲位或多卡共享播放器时用 AVPlayer + XComponent，不选 ArkUI Video 组件](lesson-cf077549fd5c1fa1a49a.lesson.md)
+  - 时机：规格提取与界面、功能实现阶段，为视频查看器与列表内嵌视频选定播放器路线，并映射缓冲状态、缓冲位置、共享播放器与前后台暂停时
+  - 情境：源端用 ExoPlayer/media3：Player.Listener 区分 BUFFERING/READY、轮询 bufferedPosition、Lifecycle ON_PAUSE/ON_RESUME 暂停恢复，列表内多张卡共享一个播放器；目标决策基线写 AVPlayer，但页面规格或先生成的页面把 Video 组件列为可选或先例。
 - [源端同一 release() 用在不同作用域时，目标封装拆成两个方法：重载前只释放实例并作废令牌，宿主销毁时才清空宿主 context 与事件](lesson-1a3150939a5e45c02b0e.lesson.md)
   - 时机：服务层实现阶段，把源端播放器等资源的释放调用（重载开头丢弃旧实例、宿主销毁时全清）映射到目标封装类的释放方法时
   - 情境：源端在 loadMusic 一类重载方法开头用 player.release(); player = null 只丢弃旧实例，宿主引用只在整体 release() 中置空；目标把播放器实例、宿主 context、代数令牌封装进一个通道类，由同一类提供释放方法。

@@ -1,0 +1,359 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-1f6d95134bba8edf5ba6",
+  "created_at": "2026-10-24T15:11:11.477480+00:00",
+  "migration_key": "jerboa-e7cc4044-4f78-441c-8b49-3a097937f665",
+  "title": "资源前置阶段未调用 App 身份 skill，自写要点漏掉启动图标与 EntryAbility_label",
+  "when": "执行阶段资源前置（Stage 0）落地 App 身份（dev-identity）时：决定由谁按哪份输出清单替换脚手架的名称、版本与图标资源",
+  "description": "流水线参考要求资源迁移后由主线程调用 App 身份 skill（scope=dev-identity）；HarmonyOS 脚手架仍保留模板 startIcon.png（module.json5 的 startWindowIcon 引用）、EntryAbility_label=\"label\" 等默认值，Android 端有 mipmap ic_launcher/ic_launcher_round 与 app_name。",
+  "summary": "写前实际收到：第 1 次生成运行的主线程 Read 了 a2h-execute 的 stage-0-resources.md，\n§3.0b-bis 写明资源迁移后、进 Stage 1 前由主线程「自动调用 arkts-app-identity（scope=dev-identity）」，\n只写 dev 安全字段 app_name / versionName / versionCode / 图标资源，不碰 bundleName / vendor\n（7b318df2…jsonl:L1388-L1390）。该 skill 的 SKILL.md（工程内文件日期 2026-09-23，返修时 L2146 加载的同一内容）\n输出表明确包含 entry/src/main/resources/base/media/startIcon.png（启动图标，复制 foreground 或 ic_launcher）\n与 entry base string.json 的 EntryAbility_label（更新为 app_name）。同一主线程 L1376 加载的 a2h-execute SKILL.md\n也写明 Stage 0 资源转换后「自动派 arkts-app-identity（scope=dev-identity）落地 app_name / versionName / 图标」。\nplan 的 base-plan Base-0 只列 android2hmos_resources_convert，没有单独的身份任务（agent-ab2131f8ba590bbd4.jsonl:L27）；\n按上述 execute 规范，身份由 execute 主线程在 Stage 0 自动执行，未执行的原因在 execute 而非 plan。输入足以指导本项决策。\n本次输出却偏离：主线程在 L1393 把「app-identity（dev-identity）」列为待办，随后没有调用该 skill，\n而是把身份落地压成 Stage 0 资源 worker 派工的第 6 条（L1411）：只要求写 app.json5 的 versionName/versionCode\n与 module.json5 的 label，并称「图标 layered_image 已在 2 中处理」，startIcon.png 与 EntryAbility_label 都不在清单里。\n资源 worker 按此写出 stage0_convert.py 并运行（agent-a29494674afba8a68.jsonl:L60、L68-L69）：\n改了版本号、AppScope app_name=Jerboa、module.json5 ability label→$string:app_name、两处 layered_image，\nbase string.json 保留模板 key（EntryAbility_label 仍为 \"label\"），startIcon.png 未触碰\n（它在 L43-L44 的资源列表里出现过，只作为既有文件）。该 worker 在 L86 被限流中断，\n主线程断点续跑时只 grep 了 versionCode/versionName 与 module.json5 label 就判定「身份字段已落」\n（7b318df2…jsonl:L1485-L1491），写入 stage0_brief 的身份行也只列这三项（L1500）；\n第 2 次运行仅凭 stage0_brief 存在推断「app-identity 已经跑过，不用重跑」（e919f2a1…jsonl:L72），\n第 3 次运行同样视 Stage 0 为完成。生成期没有任何调用写过 startIcon.png，模板图保留到返修。\n返修主线程调用 arkts-app-identity 后对比发现启动窗图标仍是 DevEco 模板图，用 Android\nmipmap-xxxhdpi/ic_launcher_round.webp 缩放成 144×144 写入 startIcon.png，并把 EntryAbility_label 改为 Jerboa\n（repair 3dfc5302…jsonl:L2172-L2197）。EntryAbility_label 在生成结束时已不被 module.json5 引用\n（ability label 已改指 $string:app_name=Jerboa），这一改动是按 skill 输出表做的一致性修正，显示名本身没有偏差；\n有实际影响的是启动窗图标。\n另一分支（app.json5 的 bundleName/vendor）不是生成 agent 的偏差：stage-0-resources.md 与 a2h-execute SKILL.md\n都明确要求 dev 阶段保留脚手架 bundleName/vendor、部署期再以 scope=full 落地，主线程与 worker 照做；\n本次流水线没有执行部署期身份步骤，而 a2h-verify CHECK-2 把 com.example.* / vendor=example 判为 FAIL，\n返修据此改为 jerboa，并因 hvigor 要求 bundleName 至少三段把 applicationId com.jerboa 最小扩展为 com.jerboa.app\n（repair L2460-L2501）。versionCode/versionName 生成期已正确（87 / 0.0.87）。\n",
+  "recommendations": [
+    "执行阶段主线程：stage 参考写明「调用某 skill」时，实际调用该 skill，或在派工里要求 worker 先读该 SKILL.md 并按其输出表逐项执行；不要用自写要点替代。App 身份 dev-identity 的输出至少包括 AppScope app_name、versionName/versionCode、AppScope layered_image 及前景/背景、entry/src/main/resources/base/media/startIcon.png、entry base string.json 的 EntryAbility_label。",
+    "Stage 0 收尾或断点续跑核对身份时，按 skill 输出表逐个文件核对，不只 grep 版本号和 label：确认 module.json5 的 startWindowIcon 指向的 startIcon.png 已换成 Android 启动图标（如 ic_launcher_round 或前景缩放，与脚手架模板的尺寸/哈希不同），EntryAbility_label 与 app_name 一致。",
+    "续跑判断阶段完成时，不要仅凭 brief 文件存在推断某个 skill 已执行；brief 需记录该 skill 的实际调用与输出文件，缺项就补跑。",
+    "交付/验收阶段：dev-identity 有意跳过 bundleName/vendor，若流水线没有单独的部署期步骤而验收要求非 com.example.*，交付前需以 scope=full 从 applicationId 落地；applicationId 只有两段（如 com.jerboa）时 hvigor 校验要求至少三段，需最小扩展（如 com.jerboa.app），vendor 取组织段。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/resources/base/element/string.json",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/.claude/skills/a2h-execute/references/stage-0-resources.md",
+          "at": "2026-10-01T08:47:11.631Z",
+          "reason": "正常输入：同上，§3.0b-bis 要求调用 arkts-app-identity（dev-identity）落地 app_name label 文本等 dev 安全字段；该 skill 输出表要求把 entry base string.json 的 EntryAbility_label 更新为 app_name（7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1388-L1390）。"
+        },
+        {
+          "key": "7b318df2-6d4a-47e0-9799-52c4ecc9a4be:main",
+          "at": "2026-10-01T08:47:55.579Z",
+          "reason": "未调用该 skill，派工第 6 条只要求改 module.json5 label，未提 EntryAbility_label（同转录 L1411）。",
+          "problem": true
+        },
+        {
+          "key": "7b318df2-6d4a-47e0-9799-52c4ecc9a4be:a29494674afba8a68",
+          "at": "2026-10-01T08:54:06.773Z",
+          "reason": "运行 stage0_convert.py 生成 base string.json，保留 3 个模板 key（template_keys_kept=3，EntryAbility_label 仍为 \"label\"），并把 ability label 改指 $string:app_name（agent-a29494674afba8a68.jsonl:L60、L68-L69、L73-L75）。显示名因此正确，EntryAbility_label 成为未引用的模板值，返修按 skill 输出表改为 Jerboa。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target",
+          "force": true,
+          "reason": "资源 worker 用 Bash 运行它此前写好的 stage0_convert.py（L60 的脚本正文里 base_str_path=ENTRY_RES/base/element/string.json，合并时保留模板 key 后 write_json 写回），L69 返回转换结果。这次脚本写入使 EntryAbility_label 以模板值 \"label\" 进入目标文件。",
+          "evidence": [
+            {
+              "source": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a29494674afba8a68.jsonl",
+              "line": 68
+            },
+            {
+              "source": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a29494674afba8a68.jsonl",
+              "line": 69
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/resources/base/media/startIcon.png",
+      "reason": "已确认是同一成因的生成遗漏（主线程未调用 arkts-app-identity，派工第 6 条只写 layered_image，漏掉该 skill 输出表中的 startIcon.png；续跑核对也未查它），脚手架模板图保留到返修。但生成期没有任何调用读写该文件，索引没有该路径的记录，无法绑定到目标的历史写边；归因依据见 summary 与 string.json 图（7b318df2…jsonl:L1390、L1411、L1485-L1491；agent-a29494674afba8a68.jsonl:L43-L44、L60；repair L2172-L2197）。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/AppScope/app.json5",
+      "reason": "返修只改 bundleName/vendor（versionCode 87/versionName 0.0.87 生成期已正确）。生成期严格按 stage-0-resources.md §3.0b-bis 与 a2h-execute SKILL.md 的 dev-identity 范围保留脚手架 bundleName/vendor（部署期 scope=full 再落地），主线程派工与 worker 脚本均照做（7b318df2…jsonl:L1390、L1411；agent-a29494674afba8a68.jsonl:L60）。这是 skill 设计层的延期与 a2h-verify CHECK-2 判 FAIL 之间的缺口，本流水线没有部署期步骤，不归因为生成 agent 偏差。"
+    }
+  ],
+  "job": "issue-1f6d95134bba8edf5ba6",
+  "metadata": {
+    "migration": {
+      "id": "jerboa-e7cc4044-4f78-441c-8b49-3a097937f665",
+      "project": "jerboa"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.247",
+        "2.1.309",
+        "2.1.310"
+      ]
+    },
+    "source_set_id": "sources-32ddfd727cfccbbce98f",
+    "environment": [
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T06:59:57.329Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L10",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L9",
+        "phase": "generation"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T06:59:57.329Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L10",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L9",
+        "phase": "generation"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "26",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T06:59:57.329Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L10",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L9",
+        "phase": "generation"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T06:59:57.329Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L10",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L9",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T08:27:52.558Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1138",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1136",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T08:27:52.558Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1138",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1136",
+        "phase": "generation"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L2/jerboa",
+        "at": "2026-10-23T16:50:12.154Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L209",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L208",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L2/jerboa",
+        "at": "2026-10-23T16:50:12.154Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L209",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L208",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "26",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L2/jerboa",
+        "at": "2026-10-23T16:50:12.154Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L209",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L208",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L2/jerboa",
+        "at": "2026-10-23T16:50:12.154Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L209",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L208",
+        "phase": "repair"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:12.967Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L155",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L154",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:12.967Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L155",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L154",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "26",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:12.967Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L155",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L154",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:12.967Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L155",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L154",
+        "phase": "repair"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:39.052Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L120",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L119",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:39.052Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L120",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L119",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "26",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:39.052Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L120",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L119",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:28:16.441Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a4d3a35dbb3029087.jsonl:L251",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a4d3a35dbb3029087.jsonl:L250",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:28:16.441Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a4d3a35dbb3029087.jsonl:L251",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a4d3a35dbb3029087.jsonl:L250",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:35:12.588Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-ae9a25fc6a2669bb5.jsonl:L522",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-ae9a25fc6a2669bb5.jsonl:L521",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:36:59.707Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a557f4f80a218650e.jsonl:L430",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a557f4f80a218650e.jsonl:L429",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-23T19:59:02.243Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a7154d5ed3ee900cc.jsonl:L1776",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a7154d5ed3ee900cc.jsonl:L1775",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.10",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "3488bf55-f8ef-4dfe-ae5e-17b59ecfb2cd"
+      ]
+    }
+  },
+  "revision": "c6780fd37b81cfbc77e6ab078bb18a5d246af4823f23ded05fce48b8997d84fa"
+}

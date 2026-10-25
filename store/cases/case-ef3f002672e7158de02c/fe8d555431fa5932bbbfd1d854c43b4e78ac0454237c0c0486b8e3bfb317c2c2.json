@@ -1,0 +1,468 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-ef3f002672e7158de02c",
+  "created_at": "2026-10-24T14:46:53.831432+00:00",
+  "migration_key": "jerboa-e7cc4044-4f78-441c-8b49-3a097937f665",
+  "title": "源端 copy 更新被写成原地改字段，列表 key 只拼部分可变字段，V2 列表不刷新",
+  "when": "功能实现与界面实现阶段，把源端不可变 copy 更新和 Compose 列表重组翻成 ArkTS V2 的状态更新函数与 ForEach key 时",
+  "description": "源端 Kotlin 用 toMutableList/replaceAll/data class copy 生成新元素再替换列表，Compose 列表任一字段变化即重组；目标 DTO 是未加 @ObservedV2/@Trace 的普通 class，列表经 V2 ForEach/@Param 渲染，行内展示隐藏、锁定、置顶、删除/移除、社区封禁、已读、计数等会被后续操作改写的字段。",
+  "summary": "本问题有两类生成偏差，分属两个职责阶段；另有一处编译修复引入的字段错写。\n（1）状态更新函数/VM 实现：Base-6 公共工具写者在写前完整读到 Utils.kt 的 findAndUpdate* 族\n（toMutableList 后替换、replaceAll { it.copy(creator / hidden / creator_banned_from_community) }、\nmentions[foundIndex].copy(my_vote, counts, saved, comment)），同一会话注入的 arkts-state-manager\nSKILL.md 也写明数组“下标改对象属性”不可观察（除非对象为 @ObservedV2 且属性带 @Trace），而 LemmyDtos\n是纯数据类。输出却把这些函数写成 messages[idx] = updated 改入参、posts.forEach(p => p.creator = person /\np.hidden = hide / p.creator_banned_from_community = …)、mentions[idx].my_vote = … 原地改元素后只\nslice() 返回。该片段一直保留到生成检查点，InboxVm 的投票/收藏局部替换也经这些函数沿用了原地语义。\n收件箱 slice worker 同样完整读到 InboxViewModel.kt 的 markAllAsRead/markReplyAsRead\n（it.copy(comment_reply = it.comment_reply.copy(read = true))、mutable[i] = mutable[i].copy(...)），\n却写成 map(v => { v.comment_reply.read = true; return v }) 与 existing.data.replies[idx].comment_reply.read = form.read，\n并在注释中把它称为“Kotlin replaceAll + .copy 同义”。两处都是输入已正确、足够而实现未照做。\n（2）列表界面实现：首页帖子流与搜索页的转换者都读到 ui-migration-pitfalls.md 的 P-05\n“key 必须含所有影响显示的可变字段”，首页转换者还读到 PostListingCard.kt 中按 featured_local /\nfeatured_community / locked / deleted / removed / creator_banned_from_community 渲染的分支，\n搜索页转换者读到 SearchScreen.kt 的 hide/lock/feature 回调以 pv.copy(hidden) 等更新列表。\n输出的 PostListings postKey 只拼 id、my_vote、saved、read、score、comments、unread_comments，\nSearchPage 帖子 key 只拼 id、my_vote、saved、read；隐藏、锁定、置顶、移除、封禁变化时同 key 不重建行。\n搜索页评论 key 在生成结束时也只有 item.key（G2a closer 接 CommentNodeItem 时写入），本卡未单列。\n（3）Stage 3 编译门修复者遇到 “Property 'creator_banned_from_community' does not exist on type\n'CommentView'. Did you mean 'banned_from_community'?”，按提示把 findAndUpdateCommentCreatorBannedFromCommunity\n的赋值改成 c.banned_from_community（当前用户字段），没有补 DTO 字段，造成 S-42 语义错写。\n返修把 Utils 列表更新族改为 copyInto(new X(), src) 同类新实例 + replaceAt 新数组、并写回\ncreator_banned_from_community；InboxVm 改为写时复制；PostListings/SearchPage key 拼入身份序号与\nhidden/deleted/removed/locked/featured/creator_banned 等全部展示字段。\n",
+  "recommendations": [
+    "实现状态更新函数或 VM 局部替换时，逐个对照源端 copy/replaceAll：生成同类新实例（保留全部运行期字段，可整体克隆后覆写目标字段），放入新数组再赋回 @Trace 状态；目标 DTO 未加 @ObservedV2/@Trace 时，不在下标元素或 forEach/map 回调里直接改字段后只 slice() 或重包 Success。",
+    "写完 VM/工具文件后 grep `[idx].x =`、`forEach(... p.x = ...)`、`map(v => { v.x = ...; return v })` 这类原地赋值，逐条核对源端是否为 copy；注释里不要把原地修改写成与 copy 等价。",
+    "写列表 ForEach/LazyForEach key 前，先列出该行组件实际渲染且会被后续操作改写的全部字段（含 hidden、locked、featured_local/featured_community、deleted、removed、creator_banned_from_community 与计数），key 全部拼入；或改用 @ObservedV2+@Trace 行模型。后续接线新增隐藏/锁定/置顶等动作时同步复核 key。",
+    "编译修复遇到“属性不存在，是否指 X”时，先核源码该字段语义；字段确实属于源模型时补 DTO 声明，不改用名字相近但语义不同的字段。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/components/common/Utils.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/Utils.kt",
+          "at": "2026-10-01T11:24:19.188Z",
+          "reason": "正常输入：Base-6 写者整读 Utils.kt，回执 L817-1082 给出 findAndUpdate* 全族均以 toMutableList 替换或 replaceAll { it.copy(...) } 生成新元素，PersonMention/CommentReply 用 mentions[i].copy(my_vote, counts, saved, comment)；足以确定不可变 copy 语义（agent-ae528ff69625ec6ac.jsonl:L90-L91）。同会话 L11 注入的 arkts-state-manager SKILL.md 另写明数组下标改对象属性不可观察。"
+        },
+        {
+          "key": "agent-ae528ff69625ec6ac.jsonl",
+          "at": "2026-10-01T11:35:51.348Z",
+          "reason": "Write Utils.ets 时把上述 copy 族写成 messages[idx] = updated 改入参列表、posts.forEach(p => p.creator = person / p.hidden = hide / p.creator_banned_from_community = …)、mentions[idx].my_vote/counts/saved/comment 原地赋值后 slice() 返回；源码要求已给出，实现未照做（同转录 L228-L229）。该片段保留到生成检查点（retained-application.patch 中的 '-' 行）。",
+          "problem": true
+        },
+        {
+          "key": "agent-afb0b5362c4dd506e.jsonl",
+          "at": "2026-10-01T19:05:49.031Z",
+          "reason": "Stage 3 编译门修复者：L375-L376 grep LemmyDtos 回执显示 PostView 声明 creator_banned_from_community（注释“作者在本社区是否被封”）而 CommentView 未声明；L453 编译错误报 Utils.ets:623 CommentView 无 creator_banned_from_community 并提示 banned_from_community。L494 思考“error suggests banned_from_community → use that”，L495-L496 用 Bash 内联脚本把赋值替换成 c.banned_from_community（当前用户字段）并写回。为过编译改变字段语义而非补 DTO 声明，即 S-42 错写来源。图中写边由检查器绑定到该 agent 对目标的写入记录；本项语义改动在 L495 的脚本正文。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/viewmodels/InboxVm.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/model/InboxViewModel.kt",
+          "at": "2026-10-01T17:06:10.767Z",
+          "reason": "正常输入：收件箱 slice worker 整读 InboxViewModel.kt，回执 L343-367 markReplyAsRead 用 cr.copy(read = !cr.read) 与 mutable[i].copy(comment_reply = newCr)，L453-489 markAllAsRead 三列表均 replaceAll { it.copy(x = it.x.copy(read = true)) }（agent-a2434912684c9c29a.jsonl:L98-L99）。同会话 L11 注入 arkts-state-manager SKILL.md 的数组可观察性表。"
+        },
+        {
+          "key": "agent-a2434912684c9c29a.jsonl",
+          "at": "2026-10-01T17:14:32.750Z",
+          "reason": "Write InboxVm.ets：flipAllReadLocally 写成 map(v => { v.comment_reply.read = true; return v })（三列表同构），markReplyAsRead 写 existing.data.replies[idx].comment_reply.read = form.read 后 slice()，注释称“Kotlin replaceAll + .copy 同义”；投票/收藏走 Utils 的原地 findAndUpdate*。源码 copy 要求已给出，实现偏离（同转录 L214-L215）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/components/post/PostListings.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/ui/components/post/PostListingCard.kt",
+          "at": "2026-10-01T09:14:43.400Z",
+          "reason": "正常输入：首页帖子流转换者读到 PostListingCard.kt，回执 L731-772 按 creator_banned_from_community、featured_local、featured_community、locked、deleted、removed 渲染标记，说明这些字段影响行显示（agent-adfffd684834adb4c.jsonl:L37-L38）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/.claude/skills/android-ui-graph-query/references/ui-migration-pitfalls.md",
+          "at": "2026-10-01T09:16:36.349Z",
+          "reason": "正常输入：P-05 写明 ForEach/LazyForEach keyGenerator 只含 id 或部分字段时属性变更不刷新，修复“key 必须含所有影响显示的可变字段”，或改 @ObservedV2+@Trace（agent-adfffd684834adb4c.jsonl:L83-L84）。"
+        },
+        {
+          "key": "agent-adfffd684834adb4c.jsonl",
+          "at": "2026-10-01T09:31:10.164Z",
+          "reason": "同一转换者在 L182/L188 已按上述字段写出 PostListingCard 的 locked/featured/deleted/removed 渲染，L204 Write PostListings 时却把 postKey 标为“P-05 防御”只拼 id、my_vote、saved、read、score、comments、unread_comments，漏掉 hidden/locked/featured/deleted/removed/creator_banned。该 key 原样保留到生成检查点（同转录 L204-L205）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/pages/SearchPage.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/.claude/skills/android-ui-graph-query/references/ui-migration-pitfalls.md",
+          "at": "2026-10-01T09:34:45.643Z",
+          "reason": "正常输入：搜索页转换者读到 P-05“key 必须含所有影响显示的可变字段”（agent-aac14e1345efbea83.jsonl:L29-L30）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/ui/components/search/SearchScreen.kt",
+          "at": "2026-10-01T09:35:05.922Z",
+          "reason": "正常输入：SearchScreen.kt 回执 L561-631 显示 onHidePostClick → updatePost(pv.copy(hidden = hide))、onLockPostClick 以 !pv.post.locked、onFeaturePostClick 以 !featured 更新列表项，说明 hidden/locked/featured 会在列表内变化（agent-aac14e1345efbea83.jsonl:L35、L38）。"
+        },
+        {
+          "key": "agent-aac14e1345efbea83.jsonl",
+          "at": "2026-10-01T09:43:41.844Z",
+          "reason": "L133 规划“ForEach key（P-05）：posts key = post_${id}_${my_vote}_${saved}_${read}”，L145 Write SearchPage 帖子 ForEach 按此只拼四个字段，漏掉计数与 hidden/locked/featured/deleted/removed/creator_banned；同文件注释已列出 onHidePost/onLockPost/onFeaturePost 回调面。该 key 保留到生成检查点（同转录 L145-L146）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/viewmodels/PostViewModel.ets",
+      "reason": "已确认修改（D-78/D-79）。copyPostViewWithCreator 逐字段 new 由 e919f2a1 的 agent-aad91d3c0d95b4028.jsonl:L191 写出，复制了 PostView 已声明的全部字段，丢 creator_is_moderator 等是因 DTO 未声明这些 wire 字段，与本卡 copy 语义偏差机制不同；hidePost 原地置 hidden + 重包 ApiStateSuccess 由 FV-1 收尾者 agent-a4a33bd280d26d858.jsonl:L378-L385 写入，其写前未读 Android hidePost，且该写法会触发详情页重渲。两处未单独建链。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/viewmodels/PersonProfileViewModel.ets",
+      "reason": "已确认修改（F-P53）。postViewWithRead 逐字段 new 由 agent-a7c66dd716b4a9b6a.jsonl:L216 写出，复制了全部已声明字段，丢字段源于 DTO 未声明 wire 字段；返修另改为调用时快照。未单独归因。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/pages/RegistrationApplicationsPage.ets",
+      "reason": "已核无对应生成偏差：生成检查点的 ForEach key 已是 ${item.id}_${item.accepted}_${item.adminId}_${item.denyReason}（页面转换者 agent-a52973d4f6428350c.jsonl:L115 写入并注明 P-05，slice-17 worker 接线时保留；见 patch '-' 行）；返修整页重写为直接遍历 RegistrationApplicationView 后按同样语义重写 key（返修 agent-af5d93fedeb3b08de.jsonl:L1050）。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/viewmodels/ReportsVM.ets",
+      "reason": "已核无对应生成偏差：生成版 ReportsPage 以页面 @Local unresolvedOnly 为 UI 真值源，selectUnreadOrAll 先改本地态再 vm.updateUnresolvedOnly（agent-a88e4b39d61570ba6.jsonl:L256、L443-L446），菜单高亮读页面 @Local 可刷新。返修为去掉页面重复状态改由页面直读 VM，才给 VM 字段加 @Trace（返修 agent-af5d93fedeb3b08de.jsonl:L886-L887、L965）。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/viewmodels/RegistrationApplicationsVM.ets",
+      "reason": "已核无对应生成偏差：与 ReportsVM 同构，生成版页面以 @Local unreadOnly 为真值源（agent-a88e4b39d61570ba6.jsonl:L461-L463）；@Trace 是返修改为页面直读 VM 后的配套修改（返修 agent-af5d93fedeb3b08de.jsonl:L887、L1050）。"
+    }
+  ],
+  "job": "issue-ef3f002672e7158de02c",
+  "metadata": {
+    "migration": {
+      "id": "jerboa-e7cc4044-4f78-441c-8b49-3a097937f665",
+      "project": "jerboa"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.247",
+        "2.1.309",
+        "2.1.310"
+      ]
+    },
+    "source_set_id": "sources-32ddfd727cfccbbce98f",
+    "environment": [
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T06:59:57.329Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L10",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L9",
+        "phase": "generation"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T06:59:57.329Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L10",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L9",
+        "phase": "generation"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "26",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T06:59:57.329Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L10",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L9",
+        "phase": "generation"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T06:59:57.329Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L10",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L9",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T08:27:52.558Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1138",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1136",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T08:27:52.558Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1138",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1136",
+        "phase": "generation"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L2/jerboa",
+        "at": "2026-10-23T16:50:12.154Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L209",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L208",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L2/jerboa",
+        "at": "2026-10-23T16:50:12.154Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L209",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L208",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "26",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L2/jerboa",
+        "at": "2026-10-23T16:50:12.154Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L209",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L208",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L2/jerboa",
+        "at": "2026-10-23T16:50:12.154Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L209",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L208",
+        "phase": "repair"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:12.967Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L155",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L154",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:12.967Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L155",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L154",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "26",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:12.967Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L155",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L154",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:12.967Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L155",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L154",
+        "phase": "repair"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:39.052Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L120",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L119",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:39.052Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L120",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L119",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "26",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:39.052Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L120",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L119",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:28:16.441Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a4d3a35dbb3029087.jsonl:L251",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a4d3a35dbb3029087.jsonl:L250",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:28:16.441Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a4d3a35dbb3029087.jsonl:L251",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a4d3a35dbb3029087.jsonl:L250",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:35:12.588Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-ae9a25fc6a2669bb5.jsonl:L522",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-ae9a25fc6a2669bb5.jsonl:L521",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:36:59.707Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a557f4f80a218650e.jsonl:L430",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a557f4f80a218650e.jsonl:L429",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-23T19:59:02.243Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a7154d5ed3ee900cc.jsonl:L1776",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a7154d5ed3ee900cc.jsonl:L1775",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.10",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "3488bf55-f8ef-4dfe-ae5e-17b59ecfb2cd"
+      ]
+    }
+  },
+  "revision": "fe8d555431fa5932bbbfd1d854c43b4e78ac0454237c0c0486b8e3bfb317c2c2"
+}

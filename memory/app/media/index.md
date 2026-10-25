@@ -1,6 +1,6 @@
 # app/media
 
-媒体与文件的用户可见性：SaveButton 安全控件的样式与授权时序、picker 导入导出、沙箱产物的导出、本地文件的播放 URI，以及按序浏览媒体时后续项的图片预取，以及长内容保存为图片时的快照尺寸限制与分段渲染
+媒体与文件的用户可见性：SaveButton 安全控件的样式与授权时序、picker 导入导出、沙箱产物的导出、本地文件的播放 URI，以及按序浏览媒体时后续项的图片预取，以及长内容保存为图片时的快照尺寸限制与分段渲染；保存到相册或文件的权限、URI 取 fd 与下载任务生命周期
 
 [上一级](../index.md)
 
@@ -16,6 +16,9 @@
   - 时机：平台能力映射与实现阶段，为“从相册选择图片导入”选择 HarmonyOS 读取方式与权限声明时，包括在 Flutter 本地兼容插件中实现选图时；为背景等持久配置接入“从相册选一张图”并保存结果时
   - 情境：源端经媒体库查询（MediaStore，或 photo_manager 一类插件）列出并读取相册图片，依赖媒体库读写权限；目标应用为普通应用，功能只需用户主动选择的图片。 也包括选出的图片要作为背景等持久配置反复读取，而工程里另有依赖 getAlbums 全量查询、带未完成权限或相册绑定 TODO 的自建选择页。
   - 例外：应用已确认具备申请 READ_IMAGEVIDEO 所需的签名等级与权限审批，且功能确需浏览整个媒体库
+- [保存媒体到相册或文件：缺写入权限时用 showAssetsCreationDialog，picker 返回的 URI 先 openSync 取 fd](lesson-0ce9fe04eb82e77d219f.lesson.md)
+  - 时机：系统能力与媒体功能实现阶段，编写下载到缓存、保存到相册或文件、复制到剪贴板的调用代码时
+  - 情境：源端用 OkHttp 下载、MediaStore 入库、SAF CreateDocument 存 Downloads、FileProvider URI 复制；目标改用 request.agent、photoAccessHelper、DocumentViewPicker 与 pasteboard，实现者依据参考模板片段或规格映射落码。
 - [把任意长度内容保存为图片时不靠单次离屏快照：先查快照尺寸限制，内容可能超过一屏就按视口分段渲染再拼接，并校验输出高度](lesson-e0f3b5b744e6b0518814.lesson.md)
   - 时机：界面实现阶段，为“保存完整长内容为图片”或分享长图选择截图、离屏渲染方案时
   - 情境：源端按内容总高度创建 Bitmap 后整体绘制（如 getBitmapFromView、Canvas.draw），高度随文本无上限增长；目标拟用 componentSnapshot.createFromBuilder 等单次快照，Builder 根组件只定宽、高度随内容撑开。

@@ -11,7 +11,7 @@
   - 情境：源含带透明度的 8 位颜色；转换由自写脚本完成而不是直接按资源转换 skill 的规则执行，深色值可能从浅色转换结果派生，接手者可能被告知已完成部分“勿重做”。
 - [Compose Material 图标（Icons.Rounded、AutoMirrored.Rounded 等变体）从可核来源提取同变体 pathData 并登记来源，不凭记忆写路径标称官方](lesson-74d535afb21b2270119e.lesson.md)
   - 时机：资源迁移或页面转换阶段，为源码引用的 Material 库图标生成目标 SVG 资源时
-  - 情境：源码通过 Compose Icons.Rounded.*、Icons.AutoMirrored.Rounded.*（或 Outlined、Sharp 等变体）引用 material-icons 库矢量，工程 res 下没有对应 drawable；派工要求使用官方 path 数据、缺失写 MISSING 占位；本机可能有 Android Studio 自带的 android.jar 或 Gradle 缓存中的 material-icons 包，生成环境能否读取需当场确认。
+  - 情境：源码通过 Compose Icons.Rounded.*、Icons.AutoMirrored.Rounded.*（或 Outlined、Sharp 等变体）引用 material-icons 库矢量，工程 res 下没有对应 drawable；派工要求使用官方 path 数据、缺失写 MISSING 占位；本机可能有 Android Studio 自带的 android.jar 或 Gradle 缓存中的 material-icons 包，生成环境能否读取需当场确认。 也包括 Icons.Outlined、Icons.Filled 等常规变体，而资源 skill 的参考把下载源指向 Material Symbols。
 - [VectorDrawable 转 SVG 时 viewBox 取 viewport、width/height 取显示尺寸，vector 根的 android:tint 按解析色烘焙到每个可见 path](lesson-4e306a66aba5f1d76fdf.lesson.md)
   - 时机：资源迁移阶段，编写 VectorDrawable 到 SVG 的批量转换脚本时
   - 情境：源 vector 的 android:width/height（dp 显示尺寸）与 viewportWidth/Height（路径坐标系）常不相等，部分 fillColor 引用主题属性；也有 vector 根写 android:tint（含框架 color state list，如 control_checkable_material），path 的 fillColor 却是字面色（如不透明黑），并带 fillAlpha=0 的动画用 path。

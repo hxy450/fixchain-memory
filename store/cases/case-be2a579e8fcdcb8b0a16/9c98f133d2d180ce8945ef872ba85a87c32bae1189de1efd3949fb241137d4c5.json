@@ -1,0 +1,521 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-be2a579e8fcdcb8b0a16",
+  "created_at": "2026-10-24T15:30:26.835618+00:00",
+  "migration_key": "jerboa-e7cc4044-4f78-441c-8b49-3a097937f665",
+  "title": "Material3底栏与模态抽屉按近似值自绘，抽屉返回键与数据条件在交接中丢失",
+  "when": "界面转换与接线阶段，把Compose Material3底栏、模态抽屉及其中的VM条件换成ArkUI自定义实现或接线代码时",
+  "description": "源端使用NavigationBar/NavigationBarItem、ModalNavigationDrawer(gesturesEnabled=true)/ModalDrawerSheet、BadgedBox/Badge等M3容器且多数取库默认值；目标侧改为自定义Row底栏、Stack滑出面板与ArkUI Badge，返回键只能由@Entry页onBackPress处理，抽屉的账号/订阅逻辑先以FWD-REF标记再由后续接线实现。",
+  "summary": "本问题按三个职责环节归因，目标文件各有一张图。\n\n一、底栏与抽屉面板（BottomNavPage.ets）。规格作者读过BottomNavScreen.kt，源码只写\nModalNavigationDrawer(gesturesEnabled = true)+ModalDrawerSheet；page_0003规格却写成\n“抽屉手势从屏幕边缘滑出”，转换决策只给“SideBarContainer(Overlay)或自定义滑出面板”，\n没有列M3抽屉的面板色、形状、宽度、开合动画、scrim比例和关闭时常驻等默认行为；底栏只写\n“对齐Material3底导航视觉”。转换者沿用“边缘右滑”，做了20vp左缘热区、越过阈值即切换（不跟手），\n再自行近似：250ms线性转场、固定#52000000遮罩、if(drawerOpen)条件渲染（关闭即销毁）、面板md_surface直角固定360。\n转换者实际读到AppBars.kt：window.navigationBarColor = colorScheme.surfaceContainer、\nBadge(containerColor = tertiary){ Text(iconBadgeCount.toString()) }；同次color.json检查显示\nmd_surface_container不存在。输出仍把底栏背景写成md_surface，并注释为“spec已登记差异降级”\n（规格降级的是窗口导航条染色，不是NavigationBar容器色）；Badge只设badgeColor，按ArkUI默认值显示99+和默认字色；\n指示器64宽、选中标签onSurface、项间无8dp间距。工程实际用compose-bom 2026.08.00，\n转换者未按该material3版本核默认值。这些值从首次Write起保留到返修前；修复改为surfaceContainer、\nspacedBy 8、56×32指示器与secondary选中标签、Badge全量计数+onTertiary/11fp/16vp，\n抽屉改为常驻面板+根Stack PanGesture跟手、400vp/s或半宽吸附、256ms FastOutSlowIn、\nscrim 0.32×展开比例、surfaceContainerLow+右侧16圆角+min(360,屏宽)（repair agent-add2feb65b4442f27 L995-L1034、主线程L4515）。\n同文件内的A-15（Home再点回顶改为带动画scrollToIndex）和A-19（抽屉面板避开系统栏）也一并修复了，但本卡没有单独追溯它们的生成写入者，不作归因。\n\n二、抽屉内容（DrawerComponent.ets）有三个起点。\n(1) 抽屉转换者读过DrawerItems.kt（内层Row无间距，文字靠LocalContentColor），却写成Row({space: LARGE_PADDING})、\n文字不设onSurface；同次写入的角标是自绘10fp文本偏移、Divider默认1px、账号第二行maxLines(2)。\n(2) group-closer替换FWD-REF前读到的标记写明“siteRes Success且非匿名已就绪但my_user==null、或Failure且账号已就绪才\ninvalidateAccount”以及follows“按community.title小写排序”；实现却只判my_user==null，并让else分支（含Loading）\n一律invalidateAccount，follows直接返回SiteVM.getFollowList()，注释称“已规约”，但该函数并不排序。\n(3) F001功能规格作者读过AccountViewModel.kt中deleteAccountAndSwapCurrent(account, swapToAnon = false)，\n也读到AccountVerificationState中JWT失效分支用swapToAnon = true，却未读MainDrawer.kt:90的调用，就在对接点写下\nDrawerComponent onLogout → deleteAccountAndSwapCurrent(account, true)。closer按该对接点接线，与抽屉标记里不带参数的写法冲突时取了规格；\n结果每次退出登录都回到匿名。修复按MainDrawer.kt恢复三分支、稳定排序、去掉true（agent-add2feb65b4442f27 L1456）。\n\n三、返回键先关抽屉（MainPage.ets）。规格作者写page_0001前已读到MainDrawer.kt的BackHandler(drawerState.isOpen)，\n而且在page_0039/page_0003中写了“宿主页onBackPress需优先判定侧栏开合”；但ArkTS合并为单Navigation后，\n只有@Entry MainPage能处理onBackPress，page_0001的onBackPress转换决策却只列了BackConfirmation的Toast/Dialog/None三种模式。\nMainPage转换者按page_0001写出出栈→退出确认，没有关抽屉分支。后续收到该要求的BottomNavPage、DrawerComponent转换者\n只在注释里写“归宿主onBackPress”，没有登记FWD-REF；slice-18重写MainPage时也沿用了原逻辑。修复在出栈后、退出确认前加\ndrawerOpen判断（agent-add2feb65b4442f27 L1133）。\n",
+  "recommendations": [
+    "界面转换阶段，自绘替代M3容器（NavigationBar/NavigationBarItem、ModalNavigationDrawer/ModalDrawerSheet、Badge）前，先查Android构建中的compose-bom/material3版本，再按该版本列出实现清单：容器色角色、项间距、指示器尺寸、选中图标/标签色、面板色/形状/最大宽度、开合动画时长与曲线、scrim透明度×展开比例、拖拽区域与速度阈值、关闭时内容是否常驻。逐项实现或登记差异，不用“近似”值代替。",
+    "目标color资源缺少源端用到的主题角色（如surfaceContainer、surfaceContainerLow）时，补齐该角色或登记资源缺口，不换成相邻的surface；规格里写的“差异降级”只适用于它点名的对象（如窗口导航条染色），不能扩大到组件容器色。",
+    "源端用Text(count.toString())显示角标时，ArkUI Badge要显式设置maxCount（避免默认99+截断），以及字色onTertiary、字号与badgeSize；Compose靠LocalContentColor继承的文字/图标色，在ArkUI中逐个显式设置fontColor/fillColor。转换行组件时照源码保留Row的间距（源码没写spacedBy就不加space）。",
+    "规格提取阶段，描述ModalNavigationDrawer(gesturesEnabled=true)时写明它是整个内容区横向拖拽跟手开合（子组件横向手势优先），不要写成边缘滑出；如果目标架构让子组件拿不到返回键（只有@Entry页有onBackPress），就把子组件BackHandler的分支和顺序（出栈→关抽屉→退出确认）写进@Entry页的规格。",
+    "转换者确认某行为归宿主或其他文件实现时，登记FWD-REF/handoff到宿主文件，不能只写头注释。",
+    "接线阶段把FWD-REF换成实现时，标记和规格里的每个守卫条件都要写进代码（如!isAnon && isReady、只对Failure作废、Loading不动）；如果用“已在被调函数中处理（如已排序）”来省略逻辑，先读被调函数确认；标记与规格对同一调用的参数不一致时，回源码调用处核实。",
+    "功能规格写对接点参数时，从该UI的实际调用处取值（抽屉退出登录在MainDrawer.kt:90用默认swapToAnon=false），不要沿用另一流程（JWT失效恢复的swapToAnon=true）的参数。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/pages/BottomNavPage.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/ui/components/home/BottomNavScreen.kt",
+          "at": "2026-10-01T07:07:48.383Z",
+          "reason": "正常输入：页面规格作者Read全文，L208-L212为ModalNavigationDrawer(gesturesEnabled = true, drawerState, drawerContent = ModalDrawerSheet{MainDrawer})。源码没有限定边缘热区，开合手势、动画和面板外观都用M3默认值（agent-ab97e8f585908156c.jsonl:L87-L88）。"
+        },
+        {
+          "key": "agent-ab97e8f585908156c.jsonl",
+          "at": "2026-10-01T07:16:08.025Z",
+          "reason": "规格偏差：Write page_0003时把根描述成“抽屉手势从屏幕边缘滑出”，导航关系也写“边缘右滑”；转换决策只给SideBarContainer(Overlay)或自定义滑出面板，没有M3抽屉的面板色/形状/宽度、256ms开合、scrim比例、常驻组合等行为；底栏只写“对齐Material3底导航视觉”（同转录L155-L156）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/spec/baseline/ui/page_0003_BottomNavScreen.md",
+          "at": "2026-10-01T09:28:24.212Z",
+          "reason": "交付桥梁：底栏转换者Read page_0003，回执中有“从屏幕边缘滑出”和“SideBarContainer（或自定义滑出面板）”的决策（agent-a6cc928e998709036.jsonl:L9-L10）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/ui/components/common/AppBars.kt",
+          "at": "2026-10-01T09:29:50.831Z",
+          "reason": "正常输入：转换者用sed读AppBars.kt的110-200行和470-530行，回执中有window.navigationBarColor = colorScheme.surfaceContainer、NavigationBar()用默认参数、Badge(containerColor = tertiary){ Text(iconBadgeCount.toString()) }，足以确定底栏容器色角色和角标全量计数（agent-a6cc928e998709036.jsonl:L35-L36）。"
+        },
+        {
+          "key": "agent-a6cc928e998709036.jsonl",
+          "at": "2026-10-01T09:39:34.537Z",
+          "reason": "实现偏差：沿用规格的边缘手势，写出20vp左缘热区、过阈值即切换；又自行近似为250ms线性转场、固定#52000000遮罩、if(drawerOpen)条件渲染、面板md_surface直角固定360。此前在L104-L105看到md_surface_container缺失，仍把底栏背景写成md_surface并注释为spec已登记降级；Badge只设badgeColor，指示器64宽，选中标签onSurface，Row无间距（同转录L156-L157）。这些值保留到返修前。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 5
+        },
+        {
+          "from": 4,
+          "to": 5,
+          "force": true,
+          "reason": "转换者用Bash执行sed -n '110,200p'与'470,530p'读取AppBars.kt，回执返回BottomAppBarAll（navigationBarColor = surfaceContainer、NavigationBar默认参数）和NavbarIconAndBadge（Badge containerColor = tertiary、Text(iconBadgeCount.toString())），支持转换者写前已收到这些源码。",
+          "evidence": [
+            {
+              "source": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a6cc928e998709036.jsonl",
+              "line": 35
+            },
+            {
+              "source": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a6cc928e998709036.jsonl",
+              "line": 36
+            }
+          ]
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/components/DrawerComponent.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/ui/components/common/DrawerItems.kt",
+          "at": "2026-10-01T12:07:13.962Z",
+          "reason": "正常输入：抽屉转换者Read全文，IconAndTextDrawerItem的内层Row没有arrangement，图标框padding(LARGE)+size(DRAWER_ITEM_SPACING)后紧接padding(LARGE)的Text，文字色继承LocalContentColor（agent-af6fa579e06386c75.jsonl:L25-L26）。"
+        },
+        {
+          "key": "agent-af6fa579e06386c75.jsonl",
+          "at": "2026-10-01T12:16:06.573Z",
+          "reason": "实现偏差：Write DrawerComponent时，内层写成Row({ space: Sizes.LARGE_PADDING })，多出12vp；行文字只设字号、不设onSurface（深色主题下不可读）；同次写入的角标是自绘10fp文本+offset、Divider用默认粗细、账号第二行maxLines(2)（同转录L118-L119）。账号区和订阅装配只留下FWD-REF标记，标记里写了正确条件。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/components/DrawerComponent.ets",
+          "at": "2026-10-01T15:34:50.191Z",
+          "reason": "正常输入：group-closer在接线前Read 505-630行，回执中的FWD-REF写明follows“按community.title小写排序”，并写明JWT联动条件：siteRes Success且非匿名已就绪但my_user==null，或Failure且账号已就绪，才invalidateAccount（agent-ae45f3830e38998e0.jsonl:L570-L571）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/model/AccountViewModel.kt",
+          "at": "2026-10-01T07:40:26.923Z",
+          "reason": "正常输入：F001规格作者Read到deleteAccountAndSwapCurrent(account, swapToAnon: Boolean = false)（agent-a4a9408358ac76850.jsonl:L55-L56）。同时读到AccountVerificationState.kt:450-456只在ACCOUNT_DELETED/JWT失效恢复时传swapToAnon = true（L51-L52）。"
+        },
+        {
+          "key": "agent-a4a9408358ac76850.jsonl",
+          "at": "2026-10-01T07:53:21.577Z",
+          "reason": "规格偏差：未读MainDrawer.kt:90（抽屉onSignOutClick用默认参数），Write F001时就在对接点写下DrawerComponent onLogout(account) → AccountStore.deleteAccountAndSwapCurrent(account, true)，把JWT恢复流程的参数套到了抽屉退出登录上（同转录L167-L168）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/spec/baseline/features/F001-account-auth.md",
+          "at": "2026-10-01T15:11:23.588Z",
+          "reason": "交付桥梁：closer用awk提取F001“对接点”节，回执中有onLogout(account) → deleteAccountAndSwapCurrent(account, true)（agent-ae45f3830e38998e0.jsonl:L71-L72）；它在L41-L42读到的S3 brief也给出同样的写法。"
+        },
+        {
+          "key": "agent-ae45f3830e38998e0.jsonl",
+          "at": "2026-10-01T15:38:48.762Z",
+          "reason": "接线偏差：python脚本替换FWD-REF时，onSiteResChanged只判my_user==null，并在else分支（含Loading/Empty）一律invalidateAccount，丢了!isAnon && isReady和只对Failure作废这两个条件，尽管注释还照抄了这些条件；follows直接返回siteVm.getFollowList()，注释称“已规约”，但SiteVM.getFollowList只是原样返回my_user.follows；onSignOutClick照F001写成deleteAccountAndSwapCurrent(this.account, true)（同转录L588-L589）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        },
+        {
+          "from": 3,
+          "to": 7
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": 6
+        },
+        {
+          "from": 6,
+          "to": 7,
+          "force": true,
+          "reason": "closer先cd到spec/baseline/features，再用awk提取F001-account-auth.md的“对接点”节，回执返回DrawerComponent onLogout(account) → AccountStore.deleteAccountAndSwapCurrent(account, true)，支持closer接线前已收到该规格。",
+          "evidence": [
+            {
+              "source": "generation/e919f2a1-5f90-46e2-baca-332c443637de/subagents/agent-ae45f3830e38998e0.jsonl",
+              "line": 71
+            },
+            {
+              "source": "generation/e919f2a1-5f90-46e2-baca-332c443637de/subagents/agent-ae45f3830e38998e0.jsonl",
+              "line": 72
+            }
+          ]
+        },
+        {
+          "from": 7,
+          "to": "target",
+          "force": true,
+          "reason": "closer在entry/src/main/ets下运行python脚本，open('components/DrawerComponent.ets')做替换后写回：写入onSiteResChanged、follows getter和onSignOutClick(…, true)。回执为braces: 0，证明这次写入已完成。",
+          "evidence": [
+            {
+              "source": "generation/e919f2a1-5f90-46e2-baca-332c443637de/subagents/agent-ae45f3830e38998e0.jsonl",
+              "line": 588
+            },
+            {
+              "source": "generation/e919f2a1-5f90-46e2-baca-332c443637de/subagents/agent-ae45f3830e38998e0.jsonl",
+              "line": 589
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/pages/MainPage.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/ui/components/drawer/MainDrawer.kt",
+          "at": "2026-10-01T07:07:37.558Z",
+          "reason": "正常输入：页面规格作者Read全文，L37为BackHandler(drawerState.isOpen){ closeDrawer }，即抽屉打开时返回键先关抽屉（agent-ab97e8f585908156c.jsonl:L81-L82）。"
+        },
+        {
+          "key": "agent-ab97e8f585908156c.jsonl",
+          "at": "2026-10-01T07:10:55.294Z",
+          "reason": "规格偏差：page_0001写明drawerState提升到壳层、返回键由页面onBackPress处理，但转换决策只列BackConfirmation的Toast/Dialog/None三种模式，没有“抽屉开先关抽屉”这一分支（同转录L131-L132）。同一作者随后在page_0039/page_0003（L146、L155）只把要求写给“宿主页onBackPress”；而在单Navigation架构下，能处理onBackPress的只有MainPage。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/spec/baseline/ui/page_0001_MainActivity.md",
+          "at": "2026-10-01T09:09:45.892Z",
+          "reason": "交付桥梁：MainPage转换者Read page_0001，返回键相关内容只有BackConfirmationMode三种模式；派工和该转换者的其他读取都不含page_0039/page_0003（agent-a8a363f410a72803c.jsonl:L11-L12）。"
+        },
+        {
+          "key": "agent-a8a363f410a72803c.jsonl",
+          "at": "2026-10-01T09:19:13.965Z",
+          "reason": "按规格实现：Write MainPage时，onBackPress只有出栈→Dialog/Toast确认→默认退出，没有drawerOpen分支（同转录L112-L113）。slice-18重写（e7cc4044 agent-a6946767c2a0231e4 L209）沿用了该逻辑，一直保留到返修。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-be2a579e8fcdcb8b0a16",
+  "metadata": {
+    "migration": {
+      "id": "jerboa-e7cc4044-4f78-441c-8b49-3a097937f665",
+      "project": "jerboa"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.247",
+        "2.1.309",
+        "2.1.310"
+      ]
+    },
+    "source_set_id": "sources-32ddfd727cfccbbce98f",
+    "environment": [
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T06:59:57.329Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L10",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L9",
+        "phase": "generation"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T06:59:57.329Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L10",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L9",
+        "phase": "generation"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "26",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T06:59:57.329Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L10",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L9",
+        "phase": "generation"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T06:59:57.329Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L10",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L9",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T08:27:52.558Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1138",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1136",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T08:27:52.558Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1138",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1136",
+        "phase": "generation"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L2/jerboa",
+        "at": "2026-10-23T16:50:12.154Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L209",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L208",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L2/jerboa",
+        "at": "2026-10-23T16:50:12.154Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L209",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L208",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "26",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L2/jerboa",
+        "at": "2026-10-23T16:50:12.154Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L209",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L208",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L2/jerboa",
+        "at": "2026-10-23T16:50:12.154Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L209",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L208",
+        "phase": "repair"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:12.967Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L155",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L154",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:12.967Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L155",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L154",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "26",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:12.967Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L155",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L154",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:12.967Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L155",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L154",
+        "phase": "repair"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:39.052Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L120",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L119",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:39.052Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L120",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L119",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "26",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:39.052Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L120",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L119",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:28:16.441Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a4d3a35dbb3029087.jsonl:L251",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a4d3a35dbb3029087.jsonl:L250",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:28:16.441Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a4d3a35dbb3029087.jsonl:L251",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a4d3a35dbb3029087.jsonl:L250",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:35:12.588Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-ae9a25fc6a2669bb5.jsonl:L522",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-ae9a25fc6a2669bb5.jsonl:L521",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:36:59.707Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a557f4f80a218650e.jsonl:L430",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a557f4f80a218650e.jsonl:L429",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-23T19:59:02.243Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a7154d5ed3ee900cc.jsonl:L1776",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a7154d5ed3ee900cc.jsonl:L1775",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.10",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "3488bf55-f8ef-4dfe-ae5e-17b59ecfb2cd"
+      ]
+    }
+  },
+  "revision": "9c98f133d2d180ce8945ef872ba85a87c32bae1189de1efd3949fb241137d4c5"
+}

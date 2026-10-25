@@ -1,0 +1,807 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-6aada7248be5df4c858e",
+  "created_at": "2026-10-24T15:25:41.499247+00:00",
+  "migration_key": "jerboa-e7cc4044-4f78-441c-8b49-3a097937f665",
+  "title": "把 TopAppBar enterAlways 折叠顶栏写成「可选/允许降级」并实现为固定顶栏，顶栏默认度量凭猜测",
+  "when": "规格提取与页面转换阶段，决定 Compose TopAppBar 的 scrollBehavior（enterAlways 折叠/吸附/容器色）与顶栏高度、内边距如何迁移到自绘 ArkUI 顶栏时",
+  "description": "源 Compose 页面用 Scaffold + TopAppBar，并挂 TopAppBarDefaults.enterAlwaysScrollBehavior(rememberTopAppBarState()) 与 Modifier.nestedScroll(scrollBehavior.nestedScrollConnection)；目标 ArkUI 没有现成的顶栏-列表联动组件，需要自绘顶栏并与 List 滚动联动；M3 small TopAppBar 的 64dp 容器高、4dp 水平内边距、标题起点等默认度量不写在 Kotlin 源码里。",
+  "summary": "七个列表页的 Kotlin 源码（HomeActivity.kt、CommunityScreen.kt、InboxScreen.kt、PersonProfileScreen.kt、\nRegistrationApplicationsScreen.kt、ReportsScreen.kt、PostScreen.kt）都明确写了\nTopAppBarDefaults.enterAlwaysScrollBehavior 并挂 nestedScroll，规格作者与转换者都实际读到了。\n偏差先出现在页面规格：三个 b2 页面规格作者在「页面结构」里照录 nestedScroll(enterAlways)，\n在「转换决策」表里却把它写成 Home「顶栏滚动收起（或降级固定，差异登记）」、Community「简化决策允许降级为固定顶栏（差异登记）」、\nInbox/PersonProfile「滚动收起可选」、RegApps「滚动隐藏可选」；所读 page-spec 模板与派工都没有允许降级的规则。\nReports 规格只在结构里写 nestedScroll(enterAlwaysScrollBehavior)，转换表未单列；Post 规格写明「enterAlways 滚动收起」且无降级条款。\n转换阶段再次偏离：HomePage 转换者除页面规格外，还读到 F002 实现映射把 enterAlwaysScrollBehavior 定为 HARD、\n验收「行为等价：上滑折叠/下滑展开」，以及 pitfall P-03 的修法「用 onScroll 回调手动计算 AppBar 高度」，\n仍按「页面 spec 容忍项」写固定顶栏，并注明「联动实现留待接线轮可选增强，未登记占位」。\n其余转换者把 P-03 读成「无等价→降级」，并互相沿用先例：Inbox 报告 → RegApps（同 InboxPage 决策）→ Reports（同 Inbox/RegApps 既定决策）；\nCommunityPage → PersonProfile；HomePage → PostPage（按 HomePage 同族先例降级为固定 56vp 顶栏，代码注释还把它归到页面 spec，\n而 page_0013 并无降级条款）。Community 转换者把规格改成「已实施降级…Slice 16 接 WindowModel 时可补」，同样未登记占位；\n之后 Slice 16、Slice 12 等重写这些页面时都保留固定顶栏，问题一直留到生成结束（各页均有「降级为固定顶栏」注释，\n对照报告 A-75/C-22~C-25/D-7~D-9/E-4~E-7/F-P7/F-P8/H-A18/H-B3 记为缺失）。\n顶栏度量是另一处缺口：规格从未写出 M3 small TopAppBar 的 64dp 容器高（状态栏 inset 在外）、4dp 水平内边距与标题起点 4+48+4=56dp。\n转换者各自填值：Home 写 56 高、左右 8/4；Post 参考 CommentReplyPage 写 56 且把 windowTopPadding 放进高度；\nCommunity/PersonProfile 把状态栏 padding 放进 64；Inbox/RegApps/Reports 用 64 高但左右 16；标题都缺 4vp 内边距（x=52）。\n返修最终改为：顶栏与内容同构为 Column，List.onScrollFrameBegin 先改 heightOffset（0…-64），本帧有变化时吞掉滚动量（onPreScroll 等价）；\n停止时按 collapsedFraction 0.5 吸附；按累计用户滚动量判定 overlappedFraction>0.01 切 surface→surfaceContainer，\n吸附与色变用 springMotion(dampingRatio 1, stiffness 1600)；顶栏行固定 64vp、状态栏 padding 在外层、标题水平 4vp；\n并抽出 ModTopBarScrollState（ModListHelpers）、ModAppBars、共享 SimpleTopAppBar/ActionTopBar/DualHeaderTitle（AppBars）与 CommentActionTopBar。\n",
+  "recommendations": [
+    "规格提取阶段：源 TopAppBar 带 scrollBehavior 时，把它写成必须还原的行为契约（enterAlways：上推先收顶栏、下拉先展开、停止按半高吸附、内容离顶 surface→surfaceContainer），不要在转换决策里写「可选」「或降级固定」；确需降级应走决策账本并登记占位，而不是在页面规格里预先授权。",
+    "规格提取阶段：把源码看不到的 M3 组件默认度量写进页面规格：small TopAppBar 容器 64dp（不含状态栏，状态栏 inset 加在外层）、水平内边距 4dp、导航图标 48dp、标题起点 4+48+4=56dp。",
+    "页面转换阶段：页面规格、功能规格（HARD 行为等价）与 pitfall 不一致时，按更严格的行为要求实现；「ArkUI 无直接等价」不等于可降级，P-03 的修法是手动联动，可用 List.onScrollFrameBegin 先改顶栏 heightOffset、返回剩余偏移来复刻 onPreScroll。",
+    "页面转换阶段：参考同族已生成页面只复用写法，不继承它的降级决策；每页回到本页规格和源码核对 scrollBehavior 与顶栏度量。遗留的降级必须登记占位并指定负责的 slice，「可补」「可选增强」不算登记。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/pages/HomePage.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/ui/components/home/HomeActivity.kt",
+          "at": "2026-10-01T07:08:21.821Z",
+          "reason": "正常输入：规格作者 Read 回执含 L107 val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(rememberTopAppBarState())，Scaffold 挂 nestedScroll；源端顶栏随滚动折叠是确定行为（agent-ab97e8f585908156c.jsonl:L96-L97）。"
+        },
+        {
+          "key": "agent-ab97e8f585908156c.jsonl",
+          "at": "2026-10-01T07:16:48.393Z",
+          "reason": "读到上述源码后 Write page_0004：结构写 nestedScroll(enterAlways)、HomeHeader（TopAppBar, enterAlways），转换决策却写「顶栏滚动收起（或降级固定，差异登记）」；模板与派工无此授权，也未写 TopAppBar 64dp 等默认度量。规格在此把必需行为改成可选（同转录 L157-L158）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/spec/baseline/ui/page_0004_HomeScreen.md",
+          "at": "2026-10-01T09:13:45.182Z",
+          "reason": "交付桥梁：转换者 Read 回执第 44 行仍是「或降级固定，差异登记」（agent-adfffd684834adb4c.jsonl:L18-L19）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/ui/components/home/HomeActivity.kt",
+          "at": "2026-10-01T09:14:29.532Z",
+          "reason": "正常输入：转换者自己 Read 到 L107 enterAlwaysScrollBehavior（agent-adfffd684834adb4c.jsonl:L22-L23）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/.claude/skills/android-ui-graph-query/references/ui-migration-pitfalls.md",
+          "at": "2026-10-01T09:16:36.349Z",
+          "reason": "正常输入：P-03 写明 ArkUI 不会自动联动，修复是用 onScroll 回调手动计算 AppBar 高度和透明度（agent-adfffd684834adb4c.jsonl:L83-L84）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/spec/baseline/features/F002-feed-browsing.md",
+          "at": "2026-10-01T09:19:37.853Z",
+          "reason": "正常输入：Bash grep 回执返回实现映射行 TopAppBarDefaults.enterAlwaysScrollBehavior → List nestedScroll + 顶栏高度 offset 联动（自实现），HARD，验收「行为等价：上滑折叠/下滑展开」（agent-adfffd684834adb4c.jsonl:L117-L118）。"
+        },
+        {
+          "key": "agent-adfffd684834adb4c.jsonl",
+          "at": "2026-10-01T09:34:30.534Z",
+          "reason": "已收到 HARD 映射和 P-03 修法，仍按页面规格容忍项 Write 固定顶栏：注释「enterAlways 折叠顶栏降级为固定顶栏」，HomeHeader Row .height(56) .padding(left 8, right 4)，双行标题无 4vp 内边距；报告称联动实现「留待接线轮可选增强，未登记占位」（L217-L222、L253）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 7
+        },
+        {
+          "from": 4,
+          "to": 7
+        },
+        {
+          "from": 5,
+          "to": 7
+        },
+        {
+          "from": 6,
+          "to": 7,
+          "force": true,
+          "reason": "转换者在写 HomePage 前用 Bash 执行 awk '/^## 实现映射/,/^## 状态管理/' 读取 F002-feed-browsing.md 的实现映射段，回执返回 enterAlwaysScrollBehavior → List nestedScroll + 顶栏高度 offset 联动（自实现）、HARD、行为等价：上滑折叠/下滑展开；这支持转换者写前已收到该要求。",
+          "evidence": [
+            {
+              "source": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-adfffd684834adb4c.jsonl",
+              "line": 117
+            },
+            {
+              "source": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-adfffd684834adb4c.jsonl",
+              "line": 118
+            }
+          ]
+        },
+        {
+          "from": 7,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/pages/PostPage.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/spec/baseline/ui/page_0013_PostScreen.md",
+          "at": "2026-10-01T10:57:03.113Z",
+          "reason": "正常输入：结构写 Scaffold modifier = nestedScroll(enterAlways)、顶栏「enterAlways 滚动收起」，沉浸式节再写「顶栏滚动收起（enterAlways）」；转换决策无降级条款（agent-aacfdc958959e3886.jsonl:L13-L14）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/ui/components/post/PostScreen.kt",
+          "at": "2026-10-01T11:03:28.501Z",
+          "reason": "正常输入：Read 回执 L169 val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(rememberTopAppBarState())（L72-L73）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/.claude/skills/android-ui-graph-query/references/ui-migration-pitfalls.md",
+          "at": "2026-10-01T11:04:11.665Z",
+          "reason": "正常输入：P-03 修复为 onScroll 手动计算 AppBar 高度（L95-L96）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/pages/CommentReplyPage.ets",
+          "at": "2026-10-01T11:05:47.928Z",
+          "reason": "同工程先例：ActionTopBar 等价 .height(56) 且 padding.top = windowTopPadding 含在 56 内（L146-L147）；是另一页的生成产物，不是规格。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/pages/HomePage.ets",
+          "at": "2026-10-01T11:20:23.203Z",
+          "reason": "同族先例：Read 到 HomeHeader .height(56)（L285-L286）与注释「enterAlways 折叠顶栏降级为固定顶栏（页面 spec 容忍项）」（L292-L293），这是 HomePage 规格降级条款的产物。"
+        },
+        {
+          "key": "agent-aacfdc958959e3886.jsonl",
+          "at": "2026-10-01T11:21:44.507Z",
+          "reason": "本页规格与源码都要求滚动收起，仍 Write 固定顶栏：头注释称「转换决策（页面 spec）: Scaffold+enterAlways → 固定自定义顶栏（折叠动画降级，P-03 差异登记）」，TOP_BAR_HEIGHT = 56 且 windowTopPadding 含在高度内，标题只有 margin left 4；报告写「按 HomePage 同族先例降级为固定 56vp 顶栏」（L296-L297、L371）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 6
+        },
+        {
+          "from": 2,
+          "to": 6
+        },
+        {
+          "from": 3,
+          "to": 6
+        },
+        {
+          "from": 4,
+          "to": 6
+        },
+        {
+          "from": 5,
+          "to": 6
+        },
+        {
+          "from": 6,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/pages/CommunityPage.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/ui/components/community/CommunityScreen.kt",
+          "at": "2026-10-01T07:06:53.010Z",
+          "reason": "正常输入：规格作者 Read 回执 L101 val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(rememberTopAppBarState())（agent-ab97e8f585908156c.jsonl:L65-L66）。"
+        },
+        {
+          "key": "agent-ab97e8f585908156c.jsonl",
+          "at": "2026-10-01T07:14:27.035Z",
+          "reason": "Write page_0005：结构写「顶栏随滚动收起」，转换决策写「顶栏滚动收起（onScroll/ScrollListener 驱动高度动画）」，理由列却加「简化决策允许降级为固定顶栏（差异登记）」；这条授权没有任何输入依据（同转录 L142-L143）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/spec/baseline/ui/page_0005_CommunityScreen.md",
+          "at": "2026-10-01T09:10:22.279Z",
+          "reason": "交付桥梁：转换者 Read 回执仍含「简化决策允许降级为固定顶栏（差异登记）」（agent-a745df6b7977c0905.jsonl:L21-L22）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/.claude/skills/android-ui-graph-query/references/ui-migration-pitfalls.md",
+          "at": "2026-10-01T09:10:28.333Z",
+          "reason": "正常输入：P-03 修复为 onScroll 手动计算 AppBar 高度（L29-L30）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/ui/components/community/CommunityScreen.kt",
+          "at": "2026-10-01T09:10:40.109Z",
+          "reason": "正常输入：转换者自己 Read 到 enterAlwaysScrollBehavior（L39-L40）。"
+        },
+        {
+          "key": "agent-a745df6b7977c0905.jsonl",
+          "at": "2026-10-01T09:23:50.855Z",
+          "reason": "选择降级分支 Write 固定顶栏：头注释「Scaffold(nestedScroll enterAlways) → NavDestination + 固定顶栏（收起动画降级，差异已登记页面 spec）」，顶栏 Row .height(64) .padding({ top: windowTopPadding }) 把状态栏算进 64；随后把规格改成「已实施降级…Slice 16 接 WindowModel 时可补」，未登记占位（L169-L170、L209、L213）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 6
+        },
+        {
+          "from": 4,
+          "to": 6
+        },
+        {
+          "from": 5,
+          "to": 6
+        },
+        {
+          "from": 6,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/pages/InboxPage.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/ui/components/inbox/InboxScreen.kt",
+          "at": "2026-10-01T07:12:30.331Z",
+          "reason": "正常输入：规格作者 Read 回执含 enterAlwaysScrollBehavior 与 nestedScroll（agent-a60631614d409a68d.jsonl:L62-L63）。"
+        },
+        {
+          "key": "agent-a60631614d409a68d.jsonl",
+          "at": "2026-10-01T07:19:13.670Z",
+          "reason": "Write page_0010：结构写 nestedScroll(enterAlwaysScrollBehavior)、InboxHeader（TopAppBar + scrollBehavior），转换决策写「自定义 titleBar（滚动收起可选）」，把源端确定行为改成可选（同转录 L177-L178）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/spec/baseline/ui/page_0010_InboxScreen.md",
+          "at": "2026-10-01T09:10:33.743Z",
+          "reason": "交付桥梁：转换者 Read 回执仍为「滚动收起可选」（agent-aca1eb4211f5475c5.jsonl:L13-L14）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/.claude/skills/android-ui-graph-query/references/ui-migration-pitfalls.md",
+          "at": "2026-10-01T09:10:47.207Z",
+          "reason": "正常输入：P-03 修复为 onScroll 手动计算 AppBar 高度（L29-L30）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/ui/components/inbox/InboxScreen.kt",
+          "at": "2026-10-01T09:10:47.907Z",
+          "reason": "正常输入：转换者自己 Read 到 enterAlwaysScrollBehavior（L31-L32）。"
+        },
+        {
+          "key": "agent-aca1eb4211f5475c5.jsonl",
+          "at": "2026-10-01T09:21:15.938Z",
+          "reason": "Write InboxHeaderBar 固定 Row .height(64)、.padding({ left: 16, right: 16 })，无滚动联动；转换报告写「滚动收起行为降级为固定头（enterAlways 无直接等价，P-03）」，把 P-03 的手动修法读成可降级（L114-L115、L201）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 6
+        },
+        {
+          "from": 4,
+          "to": 6
+        },
+        {
+          "from": 5,
+          "to": 6
+        },
+        {
+          "from": 6,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/pages/RegistrationApplicationsPage.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/ui/components/registrationapplications/RegistrationApplicationsScreen.kt",
+          "at": "2026-10-01T07:07:03.286Z",
+          "reason": "正常输入：规格作者 Read 回执含 enterAlwaysScrollBehavior（agent-a5726b4ab4e972671.jsonl:L35-L36）。"
+        },
+        {
+          "key": "agent-a5726b4ab4e972671.jsonl",
+          "at": "2026-10-01T07:13:19.931Z",
+          "reason": "Write page_0011：结构写 nestedScroll(enterAlwaysScrollBehavior)，转换决策写「NavDestination 自定义标题栏（滚动隐藏可选）」（同转录 L118-L119）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/spec/baseline/ui/page_0011_RegistrationApplicationsScreen.md",
+          "at": "2026-10-01T09:38:32.923Z",
+          "reason": "交付桥梁：转换者 Read 回执仍为「滚动隐藏可选」（agent-a52973d4f6428350c.jsonl:L17-L18）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/ui/components/registrationapplications/RegistrationApplicationsScreen.kt",
+          "at": "2026-10-01T09:38:33.428Z",
+          "reason": "正常输入：转换者自己 Read 到 enterAlwaysScrollBehavior（L19-L20）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/.claude/skills/android-ui-graph-query/references/ui-migration-pitfalls.md",
+          "at": "2026-10-01T09:40:20.355Z",
+          "reason": "正常输入：P-03 修复为 onScroll 手动计算 AppBar 高度（L81-L82）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/spec/execution/conversion-reports/page_0010_InboxScreen.md",
+          "at": "2026-10-01T09:41:21.479Z",
+          "reason": "同族先例：Inbox 转换报告写「滚动收起行为降级为固定头（enterAlways 无直接等价，P-03）」（L93-L94）。"
+        },
+        {
+          "key": "agent-a52973d4f6428350c.jsonl",
+          "at": "2026-10-01T09:43:45.106Z",
+          "reason": "沿用先例 Write 固定顶栏：注释「enterAlwaysScrollBehavior 降级为固定顶栏（ArkUI 无折叠联动等价，pitfall P-03；同 InboxPage 决策）」，Row .height(64) .padding({ left: 16, right: 16 })（L115-L116）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 7
+        },
+        {
+          "from": 4,
+          "to": 7
+        },
+        {
+          "from": 5,
+          "to": 7
+        },
+        {
+          "from": 6,
+          "to": 7
+        },
+        {
+          "from": 7,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/pages/ReportsPage.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/spec/baseline/ui/page_0012_ReportsScreen.md",
+          "at": "2026-10-01T11:09:20.480Z",
+          "reason": "输入：结构写 Scaffold + nestedScroll(enterAlwaysScrollBehavior)，转换表只写「NavDestination 自定义标题栏」，没有降级授权（agent-aa2bd17428dbe77d5.jsonl:L13-L14）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/ui/components/reports/ReportsScreen.kt",
+          "at": "2026-10-01T11:09:27.620Z",
+          "reason": "正常输入：Read 回执含 enterAlwaysScrollBehavior（L19-L20）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/pages/RegistrationApplicationsPage.ets",
+          "at": "2026-10-01T11:11:00.662Z",
+          "reason": "同族先例：Read 回执第 406 行「enterAlwaysScrollBehavior 降级为固定顶栏（ArkUI 无折叠联动等价，pitfall P-03；同 InboxPage 决策）」（L81-L82）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/.claude/skills/android-ui-graph-query/references/ui-migration-pitfalls.md",
+          "at": "2026-10-01T11:14:37.021Z",
+          "reason": "正常输入：P-03 修复为 onScroll 手动计算 AppBar 高度（L131-L132）。"
+        },
+        {
+          "key": "agent-aa2bd17428dbe77d5.jsonl",
+          "at": "2026-10-01T11:18:12.482Z",
+          "reason": "本页规格和源码都没有降级授权，仍 Write「enterAlwaysScrollBehavior 降级为固定顶栏（…同 Inbox/RegApps 决策）」，Row .height(64) .padding({ left: 16, right: 16 })；报告称同 InboxPage/RegistrationApplicationsPage 既定决策（L151-L152、L193）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 5
+        },
+        {
+          "from": 2,
+          "to": 5
+        },
+        {
+          "from": 3,
+          "to": 5
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/pages/PersonProfilePage.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/ui/components/person/PersonProfileScreen.kt",
+          "at": "2026-10-01T07:12:51.150Z",
+          "reason": "正常输入：规格作者 Read 回执含 enterAlwaysScrollBehavior 与 nestedScroll（agent-a60631614d409a68d.jsonl:L81-L82）。"
+        },
+        {
+          "key": "agent-a60631614d409a68d.jsonl",
+          "at": "2026-10-01T07:20:29.918Z",
+          "reason": "Write page_0007：结构写 Scaffold(modifier = nestedScroll(enterAlwaysScrollBehavior))，转换决策写「NavDestination + 自定义 titleBar（滚动收起可选）」（同转录 L189-L190）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/spec/baseline/ui/page_0007_PersonProfileScreen.md",
+          "at": "2026-10-01T09:34:16.233Z",
+          "reason": "交付桥梁：转换者 Read 回执仍为「滚动收起可选」（agent-a2009d790ae750e07.jsonl:L9-L10）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/ui/components/person/PersonProfileScreen.kt",
+          "at": "2026-10-01T09:34:25.464Z",
+          "reason": "正常输入：转换者自己 Read 到 enterAlwaysScrollBehavior（L19、L22）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/pages/CommunityPage.ets",
+          "at": "2026-10-01T09:34:50.295Z",
+          "reason": "同族先例：Read 回执头注释「Scaffold(nestedScroll enterAlways) → NavDestination + 固定顶栏（收起动画降级，差异已登记页面 spec）」（L38-L39）。"
+        },
+        {
+          "key": "agent-a2009d790ae750e07.jsonl",
+          "at": "2026-10-01T09:44:20.141Z",
+          "reason": "Write 固定顶栏：头注释「Scaffold(enterAlways scrollBehavior) → NavDestination + 固定顶栏（收起动画降级…」，顶栏 .height(64) .padding({ top: windowTopPadding }) 把状态栏算进 64（L98-L99）；后续 15:39 重写及 Slice 12 修改都保留了这一形态。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 6
+        },
+        {
+          "from": 4,
+          "to": 6
+        },
+        {
+          "from": 5,
+          "to": 6
+        },
+        {
+          "from": 6,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "未核实 Base-6 SimpleTopAppBar（56 高）被 FV-1 作为零消费方孤儿删除、各页改为内联顶栏这一机制对本问题的影响；它属于共享组件消费问题，本卡未把它画入图。"
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/components/common/AppBars.ets",
+      "reason": "生成期 Base-6（agent-ae528ff69625ec6ac.jsonl:L360）写过 56 高、无标题内边距的 SimpleTopAppBar，但 FV-1 收口（agent-a4a33bd280d26d858）因零消费方把它连同 ActionTopBar/DualHeaderTitle 删除，生成结束时文件不含任何顶栏组件；返修新增 64+状态栏的共享 SimpleTopAppBar/ActionTopBar/DualHeaderTitle，M9 的 4vp 标题修正针对的是返修期新组件。生成侧偏差属共享组件未被消费、各页内联这一另一机制，未在本卡归因。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/components/moderation/ModListHelpers.ets",
+      "reason": "返修新建文件（retained-application.patch 为 new file），承载从 Reports/RegApps/Inbox/PersonProfile 抽出的 ModTopBarScrollState 与 spring 曲线；生成期没有写入，对应的生成偏差已在 ReportsPage、RegistrationApplicationsPage、InboxPage、PersonProfilePage 图中归因。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/components/moderation/ModAppBars.ets",
+      "reason": "返修新建文件（new file），把 Reports/RegApps 各自内联的顶栏抽成 ModUnreadOrAllTopBar；生成期没有写入，对应的生成偏差见 ReportsPage、RegistrationApplicationsPage 图。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/components/comment/CommentActionTopBar.ets",
+      "reason": "返修新建文件（new file），由帖子页顶栏抽出；M9 的标题 4vp 修正针对返修期组件。生成期没有写入，对应的生成偏差见 PostPage 图。"
+    }
+  ],
+  "job": "issue-6aada7248be5df4c858e",
+  "metadata": {
+    "migration": {
+      "id": "jerboa-e7cc4044-4f78-441c-8b49-3a097937f665",
+      "project": "jerboa"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.247",
+        "2.1.309",
+        "2.1.310"
+      ]
+    },
+    "source_set_id": "sources-32ddfd727cfccbbce98f",
+    "environment": [
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T06:59:57.329Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L10",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L9",
+        "phase": "generation"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T06:59:57.329Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L10",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L9",
+        "phase": "generation"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "26",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T06:59:57.329Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L10",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L9",
+        "phase": "generation"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T06:59:57.329Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L10",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L9",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T08:27:52.558Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1138",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1136",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T08:27:52.558Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1138",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1136",
+        "phase": "generation"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L2/jerboa",
+        "at": "2026-10-23T16:50:12.154Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L209",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L208",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L2/jerboa",
+        "at": "2026-10-23T16:50:12.154Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L209",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L208",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "26",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L2/jerboa",
+        "at": "2026-10-23T16:50:12.154Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L209",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L208",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L2/jerboa",
+        "at": "2026-10-23T16:50:12.154Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L209",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L208",
+        "phase": "repair"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:12.967Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L155",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L154",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:12.967Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L155",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L154",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "26",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:12.967Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L155",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L154",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:12.967Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L155",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L154",
+        "phase": "repair"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:39.052Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L120",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L119",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:39.052Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L120",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L119",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "26",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:39.052Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L120",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L119",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:28:16.441Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a4d3a35dbb3029087.jsonl:L251",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a4d3a35dbb3029087.jsonl:L250",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:28:16.441Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a4d3a35dbb3029087.jsonl:L251",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a4d3a35dbb3029087.jsonl:L250",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:35:12.588Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-ae9a25fc6a2669bb5.jsonl:L522",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-ae9a25fc6a2669bb5.jsonl:L521",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:36:59.707Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a557f4f80a218650e.jsonl:L430",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a557f4f80a218650e.jsonl:L429",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-23T19:59:02.243Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a7154d5ed3ee900cc.jsonl:L1776",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a7154d5ed3ee900cc.jsonl:L1775",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.10",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "3488bf55-f8ef-4dfe-ae5e-17b59ecfb2cd"
+      ]
+    }
+  },
+  "revision": "eb4c6a08bda5e6a21daab9f96317d86d17a31b0e13dd75290cc3d6e6aa6e15f5"
+}

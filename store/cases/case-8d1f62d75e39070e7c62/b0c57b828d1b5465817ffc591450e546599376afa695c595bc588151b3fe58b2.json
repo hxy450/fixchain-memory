@@ -1,0 +1,441 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-8d1f62d75e39070e7c62",
+  "created_at": "2026-10-24T15:01:47.858780+00:00",
+  "migration_key": "jerboa-e7cc4044-4f78-441c-8b49-3a097937f665",
+  "title": "把委托 PrettyTime/DecimalFormat 的时间与计数格式化写成英文凭记忆近似",
+  "when": "共享工具迁移阶段（含规格映射与页面早期内联），为源端委托第三方格式化库的相对时间、计数缩写函数确定目标实现时",
+  "description": "源码通过 PrettyTime(Locale.getDefault()).formatDuration、仅英文生效的缩写器、DecimalFormat(\"#,###.#\") 和 stringResource 格式模板生成用户可见的时间/计数文本；目标平台没有同名库，需要自实现或移植，且多个页面/组件会复用这些函数。",
+  "summary": "规格层：规格作者写 feature-base 跨栈映射基线时，只看到依赖清单里的 org.ocpsoft.prettytime:prettytime:5.0.9.Final\n和 grep 出的函数签名（7b318df2…jsonl:L367、L639），没有读 formatDuration 函数体，就写下\n“prettytime | 自实现（Utils.formatDuration 已有算法可直译）”（同转录 L656）。实际上 Utils.formatDuration\n只是调用 PrettyTime(Locale.getDefault())，算法、单位表、舍入和各语言文案都在库里；这条映射没有给出\nlocale、单位/舍入、语言回退等行为契约，也没有指明移植来源。\n实现层（Base-6 公共组件）：派工要求“Utils.kt 工具函数精确值迁移”；该 agent 读完 Utils.kt 全文（agent-ae528ff69625ec6ac.jsonl:L90-L91），\n其中有 PrettyTime(Locale.getDefault())、pl/ru/uk/kk 只出数字时改用英文、prettyTimeShortener 仅 en 缩写且 \"\" → \"Now\"、\nDecimalFormat(\"#,###.#\")；也读了 TimeAgo.kt（L102-L103）的 stringResource(R.string.time_ago_ago, it, publishedPretty)\n与 Instant.parse，并确认 time_ago_ago 资源已存在（L134-L135）。它在思考中注意到映射说法和源码不符、PrettyTime 是本地化的，\n却选择“实现英文 PrettyTime 等价”，单位边界和取整凭记忆猜测（L139、L212）。写出的 Utils.ets（L228）\n英文固定、不足 1 分钟返回 \"moments\"、缩写器不看 locale；siFormat 用 toLocaleString('en-US') 四舍五入，小数点固定为 '.'\n（1250 → 1.3K，Android 为 1.2K）。TimeAgo.ets（L250）用宽松的 Date.parse，并把 ResourceStr 类型的\nprecedingString 直接 “+ ' ' +” 拼接，没有走 \"%1$s %2$s ago\" 模板，结果出现对象字符串且缺少 ago。\n这些片段保留到生成结束，之后只有编译修复改过图标名、SmallErrorLabel 参数类型等无关部分。\n页面早期内联：更早的 HomeScreen 页面转换者已读到 siFormat 与 formatDuration 源码（agent-adfffd684834adb4c.jsonl:L136-L137、L169-L170），\n仍在 PostListingTypes.ets（L175）自写 siFormat：value.toFixed(power % 3 === 0 ? 0 : 1)，1200 会输出 1K；\n又写了 timeAgoText，输出 now/m/h/d/w/mo/y，向下取整，30 天算一个月、365 天算一年。它明确决定“不占位”（L168），\n只在转换报告里写“收敛归 Slice 9 Step 3d”（L253）。Base-6 也只在注释中写“归 F002/S9 收口切换 import”；\nslice-09 计划里没有这一项（agent-ac8ba065acf877ad7.jsonl:L20-L21），这两份副本一直留到返修。\n修复：直译 PrettyTime 5.0.9，新增 PrettyTime.ets/PrettyTimeData.ets（12 个单位、舍入容差、多语言数据和 locale 候选链）。\nformatDuration 改为按应用 locale 计算，加上纯数字时回退英文、仅 en 缩写、严格的 ISO 解析。siFormat 改为 ICU 最短十进制 + HALF_EVEN，\n使用当前 locale 的符号。TimeAgo 改用 time_ago_ago 资源模板；PostListingTypes 改为从 common/Utils 转出，删除 timeAgoText\n（repair agent-a557f4f80a218650e.jsonl:L733、L799、L1096、L1102；agent-a4d3a35dbb3029087.jsonl:L833）。\n",
+  "recommendations": [
+    "规格提取阶段把第三方库（如 prettytime）映射为自实现时，先读调用点函数体，写清库的行为契约：locale 来源（Locale.getDefault/应用内语言）、单位与舍入、语言回退、仅 en 生效的缩写分支，并指明移植来源（依赖坐标对应的库源码或资源包）；不要写“应用内已有算法可直译”。",
+    "实现共享工具时，源函数如果只是委托第三方库，就按库的实际行为移植单位表、舍入和各语言文案，并用源端样例对拍；暂时做不到等价时登记占位或决策缺口，不要用凭记忆写的英文近似当作完成交付。",
+    "迁移 DecimalFormat(\"#,###.#\") 时保留默认 HALF_EVEN 舍入和默认 locale 的小数点/分组符号，不用 toFixed 或 toLocaleString('en-US') 代替；输出前用 1200→1.2K、1250→1.2K、22→\"22 \" 这类边界值核对。",
+    "stringResource(R.string.x, a, b) 映射为 $r('app.string.x', a, b)（Resource 参数先解析成字符串），不要手工拼接；Instant.parse 的严格 ISO 语义不能用宽松的 Date.parse 代替。",
+    "页面转换早于共享工具落盘时，如果内联共享函数副本，要么登记占位（FWD-REF，resolve_by 指向具体切片），要么直接引用共享实现；只在报告或注释里写“随后收敛”，不会有任何切片去执行。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/components/common/Utils.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "7b318df2-6d4a-47e0-9799-52c4ecc9a4be:main",
+          "at": "2026-10-01T07:38:24.971Z",
+          "reason": "规格作者此前只拿到依赖清单中的 prettytime 5.0.9（7b318df2…jsonl:L367）和 Utils.kt 函数签名 grep（L639），没有读 formatDuration 函数体，就在 feature-base 跨栈映射基线写下“prettytime | 自实现（Utils.formatDuration 已有算法可直译）”（L656）。把库行为误说成应用内已有算法，也没给 locale/单位/舍入契约。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/spec/baseline/feature-base.md",
+          "at": "2026-10-01T11:22:19.220Z",
+          "reason": "交付桥梁：Base-6 读取 feature-base（offset 73）时，回执中包含上述 prettytime 映射行和“TimeAgo / siFormat / prettyTimeShortener | TimeAgo.kt, Utils.kt:362-401”公共组件行（agent-ae528ff69625ec6ac.jsonl:L29-L30）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/Utils.kt",
+          "at": "2026-10-01T11:24:19.188Z",
+          "reason": "正常输入：Base-6 完整 Read 的回执给出 PrettyTime(Locale.getDefault())、invalidPrettyDateRegex 英文回退、prettyTimeShortener 仅 en 且 \"\"→\"Now\"、siFormat 的 DecimalFormat(\"#,###.#\")（agent-ae528ff69625ec6ac.jsonl:L90-L91）。这些足以说明输出要随 locale 变化，并且采用 DecimalFormat 的舍入语义。"
+        },
+        {
+          "key": "e919f2a1-5f90-46e2-baca-332c443637de:ae528ff69625ec6ac",
+          "at": "2026-10-01T11:35:51.348Z",
+          "reason": "已收到上述源码和“精确值迁移”的派工；思考中承认 PrettyTime 是本地化的，仍选“英文 PrettyTime 等价”，单位和取整凭记忆写（L139、L212）。Write Utils.ets 时写成 prettyTimeEnFormatDuration（英文固定，<1 分钟 'moments'，Math.round 分档），缩写器不看 locale，siFormat 用 toLocaleString('en-US', max 1 位)（L228）。源码到实现在这里偏离。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/components/common/TimeAgo.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/ui/components/common/TimeAgo.kt",
+          "at": "2026-10-01T11:24:44.453Z",
+          "reason": "正常输入：Read 回执给出 precedingString?.let { stringResource(R.string.time_ago_ago, it, publishedPretty) }，以及 dateStringToPretty 用 Instant.parse、捕获 DateTimeParseException（agent-ae528ff69625ec6ac.jsonl:L102-L103）；之后 Bash 确认 HMOS string.json 已有 time_ago_ago（L134-L135）。"
+        },
+        {
+          "key": "e919f2a1-5f90-46e2-baca-332c443637de:ae528ff69625ec6ac",
+          "at": "2026-10-01T11:36:52.760Z",
+          "reason": "Write TimeAgo.ets 时把 ResourceStr 类型的 precedingString 写成 this.precedingString + ' ' + pretty，注释自称“time_ago_ago：%1$s %2$s 拼接”，没有使用资源模板，导致对象字符串且缺少 ago；dateStringToPretty 改用宽松的 Date.parse；相对时间改由上面那份英文 formatDuration 计算（L250）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/components/post/PostListingTypes.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/Utils.kt",
+          "at": "2026-10-01T09:25:33.991Z",
+          "reason": "正常输入：页面转换者先用 Bash 读到 siFormat 的 DecimalFormat(\"#,###.#\") 与 power/3 算法（agent-adfffd684834adb4c.jsonl:L136-L137），再读到 formatDuration 使用 PrettyTime(Locale.getDefault())、仅 en 缩写、空串→\"Now\"（L169-L170）。"
+        },
+        {
+          "key": "7b318df2-6d4a-47e0-9799-52c4ecc9a4be:adfffd684834adb4c",
+          "at": "2026-10-01T09:26:35.518Z",
+          "reason": "思考中决定 timeAgo“简化实现…与源不完全一致…不占位”（L168、L171）。Write PostListingTypes.ets 时写出 siFormat 的 toFixed(power % 3 === 0 ? 0 : 1)（1200→1K），以及 timeAgoText 的 now/m/h/d/w/mo/y、floor、30/365 天分档（L175）；只在转换报告里写“收敛归 Slice 9 Step 3d”，没有登记（L253），这两份副本一直保留到返修。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "页面转换者在写 PostListingTypes.ets 之前两次用 Bash 读取 Utils.kt：sed/grep 回执返回 siFormat 的 DecimalFormat(\"#,###.#\") 实现，以及 formatDuration/prettyTimeShortener 的 PrettyTime(Locale.getDefault()) 与仅 en 缩写段；这支持它写前已收到这两段源码。",
+          "evidence": [
+            {
+              "source": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-adfffd684834adb4c.jsonl",
+              "line": 136
+            },
+            {
+              "source": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-adfffd684834adb4c.jsonl",
+              "line": 137
+            },
+            {
+              "source": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-adfffd684834adb4c.jsonl",
+              "line": 169
+            },
+            {
+              "source": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-adfffd684834adb4c.jsonl",
+              "line": 170
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "未确认生成期本机是否已有 prettytime 5.0.9 源码包或 jar 可读；生成转录里没有访问过它，修复期才从 Gradle 缓存取得。"
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/components/common/PrettyTime.ets",
+      "reason": "返修新建文件（repair agent-a557f4f80a218650e.jsonl:L733 从 /tmp 生成稿复制入库），生成期对该路径没有任何写入，无法绑定生成写者；它的缺失就是 Utils.ets 图中的同一偏差：规格把 prettytime 写成“已有算法可直译”，Base-6 没有移植库。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/components/common/PrettyTimeData.ets",
+      "reason": "返修新建的 PrettyTime 多语言数据文件（同 L733），生成期对该路径没有任何写入；归因同 Utils.ets 图：库的语言资源从未被纳入迁移契约或实现。"
+    }
+  ],
+  "job": "issue-8d1f62d75e39070e7c62",
+  "metadata": {
+    "migration": {
+      "id": "jerboa-e7cc4044-4f78-441c-8b49-3a097937f665",
+      "project": "jerboa"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.247",
+        "2.1.309",
+        "2.1.310"
+      ]
+    },
+    "source_set_id": "sources-32ddfd727cfccbbce98f",
+    "environment": [
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T06:59:57.329Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L10",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L9",
+        "phase": "generation"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T06:59:57.329Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L10",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L9",
+        "phase": "generation"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "26",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T06:59:57.329Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L10",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L9",
+        "phase": "generation"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T06:59:57.329Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L10",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L9",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T08:27:52.558Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1138",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1136",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T08:27:52.558Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1138",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1136",
+        "phase": "generation"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L2/jerboa",
+        "at": "2026-10-23T16:50:12.154Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L209",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L208",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L2/jerboa",
+        "at": "2026-10-23T16:50:12.154Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L209",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L208",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "26",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L2/jerboa",
+        "at": "2026-10-23T16:50:12.154Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L209",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L208",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L2/jerboa",
+        "at": "2026-10-23T16:50:12.154Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L209",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L208",
+        "phase": "repair"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:12.967Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L155",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L154",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:12.967Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L155",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L154",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "26",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:12.967Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L155",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L154",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:12.967Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L155",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L154",
+        "phase": "repair"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:39.052Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L120",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L119",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:39.052Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L120",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L119",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "26",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:39.052Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L120",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L119",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:28:16.441Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a4d3a35dbb3029087.jsonl:L251",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a4d3a35dbb3029087.jsonl:L250",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:28:16.441Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a4d3a35dbb3029087.jsonl:L251",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a4d3a35dbb3029087.jsonl:L250",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:35:12.588Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-ae9a25fc6a2669bb5.jsonl:L522",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-ae9a25fc6a2669bb5.jsonl:L521",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:36:59.707Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a557f4f80a218650e.jsonl:L430",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a557f4f80a218650e.jsonl:L429",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-23T19:59:02.243Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a7154d5ed3ee900cc.jsonl:L1776",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a7154d5ed3ee900cc.jsonl:L1775",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.10",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "3488bf55-f8ef-4dfe-ae5e-17b59ecfb2cd"
+      ]
+    }
+  },
+  "revision": "b0c57b828d1b5465817ffc591450e546599376afa695c595bc588151b3fe58b2"
+}

@@ -1,0 +1,472 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-6582e6c5e66cee6e4cc9",
+  "created_at": "2026-10-24T15:12:14.985161+00:00",
+  "migration_key": "jerboa-e7cc4044-4f78-441c-8b49-3a097937f665",
+  "title": "Android SEND 分享接收按 MIME type + want.parameters 映射，缺 Share Kit 的 utd 声明与 getSharedData 取数",
+  "when": "规格提取阶段，为 Android ACTION_SEND 分享接收写 HarmonyOS 平台映射契约时；实现阶段据此声明 module.json5 分享 skills、解析分享 want 并决定何时打开目标页时",
+  "description": "源 App 在 manifest 声明 ACTION_SEND（text/plain、image/* 等 mimeType）intent-filter，收到分享即打开某页并从 EXTRA_TEXT/EXTRA_STREAM 预填（可能用 Patterns.WEB_URL.matcher().matches() 分流）；目标端需作为系统分享面板的接收方。",
+  "summary": "规格作者（c4-08 批次 feature worker）写 F015 前实际读到 MainActivity.kt 的 CREATE_POST 分享入口\n（navDeepLink mimeType text/plain、image/*；EXTRA_TEXT ?: \"\" 后无条件进入 CreatePostScreen；\nPatterns.WEB_URL.matcher(text).matches()）与 AndroidManifest 的两个 SEND intent-filter；\n同时读到 feature-spec-template 的契约列规则：引用平台 API 的映射行必须引用 SDK d.ts、\narkts-knowledge-verifier 结论或 hmos-references 条目，禁止凭模型记忆。feature-base 的跨栈映射基线没有分享接收条目。\n该作者没有做任何 HarmonyOS 侧查证，却把 ACTION_SEND 映射写成“want ohos.want.action.sendData + type 注册；\nEntryAbility 读 want.parameters”，契约写“文本域=want.parameters 字符串；图片域=want 携带的 uri/_fd”，\n依据栏标“HarmonyOS 分享接收模式，grill 确认”；AC03 判据写成“skills 含两类 type 声明”。\n回执与总结只把 App Linking 列为待 grill 的 PD，这一行未作为缺口上报，后续也没有 grill 改写它。\n偏差起点在源码到平台契约这一环：Share Kit 接收方需在 sendData skills 的 uris 中以 utd 声明可接收类型，\n并用 systemShare.getSharedData(want).getRecords() 取数。\n\nSlice 18 实现者读到这份 F015（以及 slice 账本中“sendData 两类 type〔AC02/AC03〕”），思考中明确“spec 是唯一权威……grill 确认过，按 spec 走”。\n它查的 arkts-system-capabilities/share-panel.md 只讲发起分享，配置节写的是 ohos.want.action.send；\narkts-project-scaffolder/config-reference.md 只给出带 \"type\": \"text/plain\" 的通用 uris 示例和 sendData 的组合表，\n都没有接收端 utd 声明或 getSharedData。于是它在 module.json5 追加两组 sendData skill，uris 只写\n{\"type\":\"text/plain\"} 与 {\"type\":\"image/*\"}；在 DeepLinkRouter.consumeShareWant 中按 want.parameters 的\nohos.extra.param.key.shareContent/content/text 和 want.uri、ohos.want.params.stream 猜取数。这两处是规格偏差的传递。\n同一次 Write 里还有实现者自身的偏差：它读到的 MainActivity 收到 SEND 即打开发帖页（EXTRA 为空也打开），\nF015 数据流也写的是 SEND → CreatePostPage，代码却写了 url/body/image 全空就 return，consumeShare 也以三槽全空判断“无分享”；\n它读到 Android 用 matches() 整串匹配、F015 要求“判定域须与 WEB_URL 等价、普通句子假”，\n而它复用的 CreatePostPage.isWebUrl 正则只有 ^ 没有 $（读取回执中可见），它没有核对就直接复用，\n导致“example.com is great”这类文本会被当成 URL。\n\n这些片段原样保留到生成检查点（retained-application.patch 的删除行可见）。返修时，主线程查 SDK 的\n@hms.collaboration.systemShare.d.ts 和 uniformTypeDescriptor 后，把 module.json5 改为单个 sendData skill，\nuris 列出 general.text/plain-text/hyperlink/image/jpeg/png/gif（scheme file，maxFileSupported 1）；\n分区修复 agent 把 consumeShareWant 改成 systemShare.getSharedData(want).getRecords() 按 utd 分类取首个文本/图片，\n失败才回落旧解析，并新增 sharePending 让空分享也打开发帖页，另加带 $ 锚定的 WEB_URL_FULL_MATCH。\n",
+  "recommendations": [
+    "规格提取阶段：分享接收这类引用平台 API 的映射行，先按模板查 SDK d.ts（systemShare.getSharedData、uniformTypeDescriptor）或 verifier 结论，并在依据栏写明出处；跨栈基线和 references 都没有时，把它记为待查证缺口写进 summary 上报，不写“grill 确认”。",
+    "规格契约写到可直接实现：分享接收方在 module.json5 的 ohos.want.action.sendData skill 里用 uris 的 utd（如 general.text、general.plain-text、general.hyperlink、general.image 及其子类型）加 maxFileSupported 声明，取数用 systemShare.getSharedData(want).getRecords() 按 utd 区分 content 与 uri；不要把 Android 的 mimeType 和 EXTRA_* 直译成 uris.type 与 want.parameters 键。",
+    "实现阶段：规格中的平台契约行如果没有可核出处，写 module.json5 和取数代码前先查 SDK d.ts 的接收端 API；通用 skills 示例里的 uris.type 和发起分享的 share-panel 模板，不能代替接收端的注册与取数方式。",
+    "实现阶段：对照源码的分支语义——Android 收到 SEND 就打开目标页，即使 EXTRA 为空，所以不要加“全空则丢弃”；Patterns.WEB_URL.matcher().matches() 是整串匹配，复用已有正则前确认它以 ^…$ 锚定，并用“example.com is great”这类样本验证它会落入 body。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/module.json5",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "summary": "规格作者读到 manifest 的两个 SEND intent-filter，也读到模板中“平台 API 契约须引用 d.ts/verifier/references”的要求，\n但仍凭记忆把分享目标写成“sendData + type 注册”，AC03 判据为“skills 含两类 type 声明”。实现者读到该 F015，\n又看到 config-reference 里带 uris.type 的通用示例，于是在 module.json5 追加两组 sendData skill，\nuris 只有 {\"type\":\"text/plain\"} 与 {\"type\":\"image/*\"}。该片段一直保留到返修前；\n返修改为单个 sendData skill，uris 用 utd 列表（scheme file，maxFileSupported 1）。\n",
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/AndroidManifest.xml",
+          "at": "2026-10-01T08:02:43.944Z",
+          "reason": "正常输入：规格作者用 sed 读到 MainActivity 的两个 intent-filter（action.SEND + category.DEFAULT，mimeType 分别为 text/plain 与 image/*），足以确定需要注册文本和图片两类分享接收（7b318df2/subagents/agent-a6769191276852ff1.jsonl:L138-L139）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/.claude/skills/a2h-spec/templates/feature-spec-template.md",
+          "at": "2026-10-01T07:59:51.625Z",
+          "reason": "正常输入：规格作者整文件读取模板，第 65 行规定 ArkTS 目标引用平台 API 并跨端传值时契约列必填，证据须引用 SDK d.ts、arkts-knowledge-verifier 结论或 hmos-references 条目之一，禁止凭模型记忆（同转录 L23-L24）。"
+        },
+        {
+          "key": "agent-a6769191276852ff1.jsonl",
+          "at": "2026-10-01T08:11:44.606Z",
+          "reason": "规格作者在没有任何 HarmonyOS 侧查证的情况下（读过的 feature-base 跨栈基线 L43-L44 也无分享条目），Write F015：实现映射行写“want ohos.want.action.sendData + type 注册；EntryAbility 读 want.parameters”，依据栏写“HarmonyOS 分享接收模式，grill 确认”；AC03 判据写“skills 含两类 type 声明”。回执 L229 与总结 L232 只把 App Linking 列为待 grill 的 PD，这一行未上报为缺口。源码到平台契约在此偏离（同转录 L205-L206）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/spec/baseline/features/F015-deep-links.md",
+          "at": "2026-10-01T17:13:48.347Z",
+          "reason": "交付桥梁：Slice 18 实现者的 Read 回执中，第 90 行映射与第 157 行 AC03 仍是上述 type 注册契约（e7cc4044/subagents/agent-a6946767c2a0231e4.jsonl:L21-L22）；在此之前写入这两行的只有规格作者那次 Write。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/.claude/skills/arkts-project-scaffolder/references/config-reference.md",
+          "at": "2026-10-01T17:20:02.000Z",
+          "reason": "skill 材料边界：实现者 sed 读到 skills 小节的通用示例 uris {scheme, host, path, type: text/plain}，以及“Share target | entity.system.default | ohos.want.action.sendData”组合表，没有接收端 utd 声明（同转录 L180-L181）。它与规格一致，没能纠正规格；此前查的 share-panel.md 只讲发起分享（L138-L139）。"
+        },
+        {
+          "key": "agent-a6946767c2a0231e4.jsonl",
+          "at": "2026-10-01T17:25:02.762Z",
+          "reason": "实现者思考中写明“spec 是唯一权威——AC03……grill 确认过，按 spec 走”（L140）。随后 Edit module.json5，追加两组 entity.system.default + ohos.want.action.sendData skill，uris 分别只有 {\"type\": \"text/plain\"} 与 {\"type\": \"image/*\"}（同转录 L239-L240）。本链确认规格偏差传到了目标文件。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "规格作者用 Bash sed -n '45,68p' 读 AndroidManifest.xml，回执返回两个 action.SEND intent-filter（mimeType text/plain、image/*）；这是写 F015 前对该 manifest 的真实读取。",
+          "evidence": [
+            {
+              "source": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a6769191276852ff1.jsonl",
+              "line": 138
+            },
+            {
+              "source": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a6769191276852ff1.jsonl",
+              "line": 139
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 6
+        },
+        {
+          "from": 5,
+          "to": 6,
+          "force": true,
+          "reason": "实现者用 Bash sed -n '130,165p' 读 config-reference.md，回执返回 skills 通用示例（uris 含 type: text/plain）和 Share target 的 sendData 组合表；这次读取发生在它 Edit module.json5 之前。",
+          "evidence": [
+            {
+              "source": "generation/e7cc4044-4f78-441c-8b49-3a097937f665/subagents/agent-a6946767c2a0231e4.jsonl",
+              "line": 180
+            },
+            {
+              "source": "generation/e7cc4044-4f78-441c-8b49-3a097937f665/subagents/agent-a6946767c2a0231e4.jsonl",
+              "line": 181
+            }
+          ]
+        },
+        {
+          "from": 6,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/services/DeepLinkRouter.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "summary": "这里有两个起点。其一：规格作者把分享取数契约写成“文本域=want.parameters 字符串；图片域=want 携带的 uri/_fd”，\n实现者照此写出 extractShareText/extractShareImageUri，按 parameters 键名猜取数。\n其二：实现者自身的偏差。它读到的 MainActivity 收到 SEND 即打开发帖页且用 matches() 整串匹配，\nF015 也写了 SEND → CreatePostPage 和“判定域须与 WEB_URL 等价、普通句子假”，\n但同一次 Write 里加了 url/body/image 全空就 return，并直接复用读取回执中只有 ^ 没有 $ 的 CreatePostPage.isWebUrl。\n这些片段保留到返修前，返修改为 getSharedData 按 utd 取数、新增 sharePending、新增整串锚定的 WEB_URL_FULL_MATCH。\n",
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/MainActivity.kt",
+          "at": "2026-10-01T08:01:57.121Z",
+          "reason": "正常输入：规格作者 Read 整个 MainActivity，CREATE_POST composable 中 EXTRA_TEXT ?: \"\"、EXTRA_STREAM 取 Uri，Patterns.WEB_URL.matcher(text).matches() 分流 url/body 后无条件调用 CreatePostScreen，再 replaceExtras（7b318df2/subagents/agent-a6769191276852ff1.jsonl:L124-L125，源码 L436-L472）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/.claude/skills/a2h-spec/templates/feature-spec-template.md",
+          "at": "2026-10-01T07:59:51.625Z",
+          "reason": "正常输入：模板第 65 行要求，平台 API 映射行的契约须引用 d.ts、verifier 或 hmos-references，禁止凭模型记忆（同转录 L23-L24）。"
+        },
+        {
+          "key": "agent-a6769191276852ff1.jsonl",
+          "at": "2026-10-01T08:11:44.606Z",
+          "reason": "规格作者未做 HarmonyOS 查证就 Write F015，契约写“EntryAbility 读 want.parameters；文本域=want.parameters 字符串；图片域=want 携带的 uri/_fd”，并标“grill 确认”。它没有给出 Share Kit 接收端的 getSharedData 取数方式（同转录 L205-L206）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/spec/baseline/features/F015-deep-links.md",
+          "at": "2026-10-01T17:13:48.347Z",
+          "reason": "交付桥梁：实现者 Read 回执中包含上述 want.parameters 取数契约；数据流第 33-37 行写的是 SEND → CreatePostPage，第 91 行写“判定域须与 WEB_URL 等价（www.xxx / https://xxx 均真，普通句子假）”（e7cc4044/subagents/agent-a6946767c2a0231e4.jsonl:L21-L22）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/MainActivity.kt",
+          "at": "2026-10-01T17:14:05.126Z",
+          "reason": "正常输入：实现者自己 Read 了 MainActivity，回执含源码 L445 EXTRA_TEXT ?: \"\"、L459 matches() 与无条件 CreatePostScreen，源码注释写明 url/body 只有在有 EXTRA_TEXT 时才非空。这足以确定空分享也要打开发帖页、URL 判定必须是整串匹配（同转录 L37-L38）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/pages/CreatePostPage.ets",
+          "at": "2026-10-01T17:15:38.533Z",
+          "reason": "被复用的既有代码：Read 回执第 151-155 行的 isWebUrl 正则只有 ^ 前缀锚、没有 $，是前缀匹配。实现者看到了这段正则，可据此发现它与 matches() 的整串语义不同（同转录 L93-L94）。"
+        },
+        {
+          "key": "agent-a6946767c2a0231e4.jsonl",
+          "at": "2026-10-01T17:22:33.186Z",
+          "reason": "Write DeepLinkRouter.ets。传递部分：consumeShareWant 按 spec 从 want.parameters 的 ohos.extra.param.key.shareContent/content/text 和 want.uri、ohos.want.params.stream 猜取数。自身偏差部分：加了 `if (url === '' && body === '' && image === '') return;`，consumeShare 以三槽全空作为“无分享”，与已读源码的无条件打开不符；直接调用 isWebUrl(text)，没有补整串锚定（同转录 L198-L199）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 7
+        },
+        {
+          "from": 5,
+          "to": 7
+        },
+        {
+          "from": 6,
+          "to": 7
+        },
+        {
+          "from": 7,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/entryability/EntryAbility.ets",
+      "reason": "retained-application.patch 中 EntryAbility.ets 的差异只有 onConfigurationUpdate、主窗口 attach 和 setKeyboardAvoidMode(RESIZE)，属主题和键盘避让等其他问题；返修中写该文件的调用（主线程 L1607、agent-add2feb65b4442f27 L846）也与分享无关。本问题的取数、sharePending 和 WEB_URL 修改全部落在 DeepLinkRouter.ets。生成期 Slice 18 写入的 onCreate/onNewWant → DeepLinkRouter.consumeWant 原样保留，返修把热启动分享判为平台差异、未改代码。因此该文件没有可归因于本问题的修改片段。"
+    }
+  ],
+  "job": "issue-6582e6c5e66cee6e4cc9",
+  "metadata": {
+    "migration": {
+      "id": "jerboa-e7cc4044-4f78-441c-8b49-3a097937f665",
+      "project": "jerboa"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.247",
+        "2.1.309",
+        "2.1.310"
+      ]
+    },
+    "source_set_id": "sources-32ddfd727cfccbbce98f",
+    "environment": [
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T06:59:57.329Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L10",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L9",
+        "phase": "generation"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T06:59:57.329Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L10",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L9",
+        "phase": "generation"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "26",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T06:59:57.329Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L10",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L9",
+        "phase": "generation"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T06:59:57.329Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L10",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L9",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T08:27:52.558Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1138",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1136",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T08:27:52.558Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1138",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1136",
+        "phase": "generation"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L2/jerboa",
+        "at": "2026-10-23T16:50:12.154Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L209",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L208",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L2/jerboa",
+        "at": "2026-10-23T16:50:12.154Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L209",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L208",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "26",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L2/jerboa",
+        "at": "2026-10-23T16:50:12.154Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L209",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L208",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L2/jerboa",
+        "at": "2026-10-23T16:50:12.154Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L209",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L208",
+        "phase": "repair"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:12.967Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L155",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L154",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:12.967Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L155",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L154",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "26",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:12.967Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L155",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L154",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:12.967Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L155",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L154",
+        "phase": "repair"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:39.052Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L120",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L119",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:39.052Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L120",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L119",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "26",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:39.052Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L120",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L119",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:28:16.441Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a4d3a35dbb3029087.jsonl:L251",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a4d3a35dbb3029087.jsonl:L250",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:28:16.441Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a4d3a35dbb3029087.jsonl:L251",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a4d3a35dbb3029087.jsonl:L250",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:35:12.588Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-ae9a25fc6a2669bb5.jsonl:L522",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-ae9a25fc6a2669bb5.jsonl:L521",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:36:59.707Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a557f4f80a218650e.jsonl:L430",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a557f4f80a218650e.jsonl:L429",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-23T19:59:02.243Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a7154d5ed3ee900cc.jsonl:L1776",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a7154d5ed3ee900cc.jsonl:L1775",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.10",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "3488bf55-f8ef-4dfe-ae5e-17b59ecfb2cd"
+      ]
+    }
+  },
+  "revision": "9d68365c03023692c19a9bc475b1fd5ea85471ed54a31739edad54aa327b141d"
+}

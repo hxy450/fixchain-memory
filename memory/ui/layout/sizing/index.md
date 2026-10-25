@@ -1,6 +1,6 @@
 # ui/layout/sizing
 
-宽高、比例、百分比与边距的组合（父尺寸减边距、占剩余空间，由内容定尺寸的父级里的百分比），Compose 修饰符链顺序与 Row 的测量顺序、固有高度，Material 按钮的布局占位与实绘尺寸，px 域整数布局公式与随进度收放的间距，以及随内容定尺寸的图片、背景和描边，以及非 Row/Column/Flex 父级中 layoutWeight 不生效时的显式尺寸；嵌入满高子组件时的剩余高度分配，居中的 wrap_content 子项组不被拉伸。；换容器（Tabs、Grid 槽位改自绘 Row）后子项的主轴尺寸，TableLayout 按内容测量的列宽
+宽高、比例、百分比与边距的组合（父尺寸减边距、占剩余空间，由内容定尺寸的父级里的百分比），Compose 修饰符链顺序与 Row 的测量顺序、固有高度，Material 按钮的布局占位与实绘尺寸，px 域整数布局公式与随进度收放的间距，以及随内容定尺寸的图片、背景和描边，以及非 Row/Column/Flex 父级中 layoutWeight 不生效时的显式尺寸；嵌入满高子组件时的剩余高度分配，居中的 wrap_content 子项组不被拉伸。；换容器（Tabs、Grid 槽位改自绘 Row）后子项的主轴尺寸，TableLayout 按内容测量的列宽；ContentScale.FillWidth 的等价实现，权重行中非权重子项与 @Builder 槽的尺寸契约
 
 [上一级](../index.md)
 
@@ -13,6 +13,9 @@
   - 时机：规格提取或页面转换阶段，解释 Compose Row 的可见元素和横向空间分配时
   - 情境：有限宽度的 Row 中，无 weight 子项使用 fillMaxWidth()，后面还有兄弟（按钮、文字）；规格或派工可能用“近乎不可见、按源码保留”描述该兄弟，实现者准备把该子项换成 layoutWeight(1)。
   - 例外：fillMaxWidth 带比例、主轴约束无上限或子项使用 weight 时，按当前分配规则处理，不套“占满剩余宽度”。；后续子项含 requiredWidth/requiredSize、无界 wrapContent 或自定义测量/绘制时，零宽约束仍不足以判断实际是否绘制。
+- [ContentScale.FillWidth 无 ImageFit 对应值：宽度铺满、高按图片比例、容器 clip，不用 Fill/Cover](lesson-7a9f767c8c96bed97cfc.lesson.md)
+  - 时机：界面实现阶段，把 Compose Image/AsyncImage 的 contentScale 映射为 ArkUI Image 属性时
+  - 情境：源端图片用 ContentScale.FillWidth（如模糊缩略图、横幅），或由调用方传入 contentScale；目标 ArkUI Image 只有 objectFit 的 Fill、Cover、Contain 等取值。
 - [LinearLayout 以 gravity=center 摆放的 wrap_content 子项组转成 Row 时保留居中与按内容定宽，不给中间输入框 layoutWeight(1) 拉满](lesson-02b2fcd7d157d97f95c8.lesson.md)
   - 时机：界面实现阶段，把数量步进器（减号、数量框、加号）一类居中的 wrap_content 子项组翻译成 ArkUI Row 时
   - 情境：源端 LinearLayout 设 gravity=center 与固定外边距，子项是 wrap_content 的按钮与 EditText；控件可能叠在带装饰的背景图（票券存根、竖虚线）上。
@@ -51,6 +54,9 @@
 - [把靠 layoutWeight 填满并居中的内容移进 Refresh、Stack 等非 Row/Column/Flex 父级时，改用 height('100%') 等显式尺寸](lesson-1c3d6367be48f70bb001.lesson.md)
   - 时机：界面实现阶段，把已有空态、未登录引导等内容 builder 放进下拉刷新组件或其他封装容器的 content 时，确定内容根节点的高度约束
   - 情境：内容根节点原本在 Column 中用 layoutWeight(1) + justifyContent(Center) 占满剩余空间并居中；新父级是封装了原生 Refresh（或 Stack、Scroll 等）的组件，经 @BuilderParam 注入内容；工程里可能已有同样写法可以照搬。
+- [权重行里非权重兄弟要有确定尺寸：未设宽高的网络图片会挤掉 layoutWeight 列，拆槽时保留源端尺寸](lesson-38c0b5ba6a929a7cb67c.lesson.md)
+  - 时机：界面实现与槽位接线阶段，把调用方经 Modifier 传给子组件的尺寸、以及 Row{ Column.weight(1); 图片 } 一类权重布局转成 ArkUI 时
+  - 情境：源端图片尺寸由调用方 Modifier（如 Modifier.size(常量)）传给图片子组件；目标把该子组件拆成 @Builder 占位槽由后续接线者填入，被嵌组件本身没有尺寸参数；行内另一列用 layoutWeight(1)。
 - [源端在整数 px 上取整的布局公式：规格写明运算域，实现在 px 域取整、写入布局属性前再换回 vp](lesson-0ef2cd00e1a91491b350.lesson.md)
   - 时机：规格提取阶段，把自定义 Layout、MeasureScope 里的测量与整数几何公式翻成目标契约时；界面实现阶段，用 onAreaChange、measureText 等返回值驱动这类公式时；移植自绘 View 的绘制坐标、setBounds 边界、位移与文字基线修正中的 (int) 强转时
   - 情境：源算法在约束或测量结果（Compose constraints、placeable 宽高等整数 px）上做整数除法、.toInt() 截断或取整；目标布局属性和尺寸回调（onAreaChange）使用 vp 等逻辑单位，回调值通常不是整数，measureText 返回 px。 也包括 Canvas 绘制代码中的 (int) 强转（setBounds 边界、int 位移、文字基线修正），其中的量可能为负。

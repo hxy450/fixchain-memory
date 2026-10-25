@@ -1,6 +1,6 @@
 # 只靠平台默认外观的 AlertDialog（含 DialogPreference 弹出的偏好对话框）迁移前写出完整可见契约：标题字号色与标题线、消息、按钮条与按钮集合、框体、宽度规则与进出场从源主题的平台资源取值；按钮按角色核对槽位，要求一比一时用共享自定义弹窗复刻；按钮排位与面板读对话框样式的 layout 资源，返回键与点外部两条取消路径分别核对
 
-ID：`lesson-9c4de55af3c1ecd8eaa4` · 版本：5
+ID：`lesson-9c4de55af3c1ecd8eaa4` · 版本：6
 
 [本主题](index.md)
 
@@ -30,7 +30,7 @@ ID：`lesson-9c4de55af3c1ecd8eaa4` · 版本：5
 6. 源端会同时显示多个对话框时，页内复刻由宿主根统一画一层遮罩（浓度取主题 backgroundDimAmount，不复用应用里碰巧存在的半透明颜色资源），面板组件只画面板，叠放与关闭顺序由宿主的对话框栈管理。遮罩点击按点外部取消契约处理：可取消就关闭最上层，并与返回键共用同一取消处理；源端不可取消时才只拦截点击。用 openCustomDialog 的 autoCancel 或 onWillDismiss(DismissReason.TOUCH_OUTSIDE) 承载点外取消时，系统按抬起点判定、不看按下点：给会消费触摸的区域挂 onTouch，按下时登记、抬起或取消后在本次事件处理完再清除，TOUCH_OUTSIDE 分支先排除已登记的触摸，返回键路径不受影响。自己对平台默认的判断与规格冲突时写进 handback 的 decision_gaps，不按较窄的规格实现，也不在注释里把规格的限制写成源端语义。
 7. 规格整合阶段在几条来源之间裁定按钮排位、大小写或取消方式时，只有带资源文件或行号回执的结论算查证：没有锚点的参考文档句子、只读主题文件或凭平台版本记忆得出的结论，都回到第 1 步的布局与主题资源核对；被判为误记的来源，其余片段也核对后再留在契约里，账本依据栏只写确实打开过的文件。
 
-来源支持：9 张卡 · 4 次迁移 · 4 个应用
+来源支持：10 张卡 · 5 次迁移 · 5 个应用
 
 ## 来源（按需复核）
 
@@ -42,6 +42,8 @@ ID：`lesson-9c4de55af3c1ecd8eaa4` · 版本：5
   卡片版本：`9f7f4eea6d10982480411eb8944ad17142de59175bbc8279e080883f95919c6b`
 - [case-5b8257f101e304280326](../../../../store/cases/case-5b8257f101e304280326/164d1cbeb11290a96f31f9f35177938c28226a4ec54c8365397e5da180b2ec6a.json) · 结论：diagnosis, recommendation:1, recommendation:4, recommendation:5
   卡片版本：`164d1cbeb11290a96f31f9f35177938c28226a4ec54c8365397e5da180b2ec6a`
+- [case-79781a308d7df8726820](../../../../store/cases/case-79781a308d7df8726820/cf8786bca211a0983627aa281de7a4041cfda700edff88d74ee4b83012eb6e96.json) · 结论：recommendation:3
+  卡片版本：`cf8786bca211a0983627aa281de7a4041cfda700edff88d74ee4b83012eb6e96`
 - [case-8539606efd3a93a5fcb0](../../../../store/cases/case-8539606efd3a93a5fcb0/af76f1f76eaf0311c2a30b87184083e11cab66893b16fe505d8c8563aee2185a.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:4, recommendation:5
   卡片版本：`af76f1f76eaf0311c2a30b87184083e11cab66893b16fe505d8c8563aee2185a`
 - [case-96bad1fc979bd25d24d3](../../../../store/cases/case-96bad1fc979bd25d24d3/e9aae85b3c4653261a6cb758cbd6089a333eeb7fde4380278a15e24aa285615e.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3

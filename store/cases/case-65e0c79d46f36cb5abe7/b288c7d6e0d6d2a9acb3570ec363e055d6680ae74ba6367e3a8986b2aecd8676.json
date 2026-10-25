@@ -1,0 +1,652 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-65e0c79d46f36cb5abe7",
+  "created_at": "2026-10-24T14:34:03.173198+00:00",
+  "migration_key": "jerboa-e7cc4044-4f78-441c-8b49-3a097937f665",
+  "title": "自研网络客户端的契约没有从三方 SDK 源码转录：路由凭记忆、版本带被截断、分页互斥与客户端策略丢失，实现层又把统一鉴权改成按端点注入",
+  "when": "规格提取阶段，从 Android 应用依赖的三方 HTTP SDK 还原端点路由、版本路由、请求表单和客户端策略时；以及网络层实现阶段，落实鉴权头注入与异常契约时",
+  "description": "Android 应用的线上 HTTP 行为封装在三方 SDK 内：应用源码只调用 banFromCommunity、getPosts 等方法，路由常量、超时与重试、异常映射、表单校验、旧服务端版本适配都在 SDK 里；目标平台没有等价库，需要手写客户端，而 SDK 的源码包或字节码可以取得。",
+  "summary": "规格阶段（API 清单作者 7b318df2:ae3e113046526fefc）下载并解包了 lemmy-api 0.4.1 sources jar，实际读到：\nx19/x0 LemmyApiRouter.kt 中 banFromCommunity 标注为 @POST(\"community/ban_user\")（L68-L69）；\nLemmyApi.kt 的 MIN_SUPPORTED_VERSION=\"0.18\"、toVersion(false) 宽松 semver、minor 18→x18.x5、其它 minor 抛 NotSupportedException（L70-L71）；\nx18.x5 路由清单含同名基础端点（L74-L75）；AuthBaseClient 对 auth!=null 的所有请求注入 Bearer（L76-L77）；\nGetPosts.kt 的 toValidatedForm()/toPostsForm()：显式给出 page_cursor 时丢弃 page，0.18 只发 page（L120-L121）。\n07:17 上下文压缩后（L144-L145），摘要里的 59 条路由清单漏了 community/ban_user。作者凭记忆认定\n「banFromCommunity maps to POST /community/ban」（L156-L158），没有回查仍在磁盘上的路由文件，就写进\napi-inventory.json 和 moderation.md（L163、L189）。同时，SDK 端点（含 pictrs）中凡无 FF 门控的，min_lemmy_version 一律写成 0.19.0；\ncommon.md §4 把路由写成「0.18.5 / 0.19.0-1 …；未知版本落最新分支」（L171）；\npost.md 与 common.md §5 只把 page、page_cursor 列为两个可选参数，没写互斥规则（L171、L179）。\nSDK 的 HttpClient.platform.kt 和 exception/LemmyBadRequestException.kt 已在解包清单里（L64-L65），但没有读。\ncommon.md §1/§3 只按应用 Http.kt 写了「预配 OkHttp：30s 超时」和「4xx→LemmyBadRequestException（带 body 文本）」，\n缺了 SDK 自身的 HttpTimeout（20s 请求/20s socket/10s 连接）、HttpRequestRetry（5 次，5xx 与非超时异常）、expectSuccess，\n以及「仅 4xx + JSON 信封才转 LemmyBadRequestException，message 即错误码原文」这条语义。\n\n网络层实现者（Base-3，e919f2a1:a56a700673e5e142f）按上述规格写出 EndpointRegistry（/community/ban、全部 0.19.0 下限）、\nApiVersion（MIN_SUPPORTED 0.18.5、split 解析、未知版本按最新支持）和 LemmyApiClient（单一 30s connect/read、无重试），这些属于规格传递。\n另有两处是实现者自身的偏离：\n(a) 读到 auth_model.token_injection「SDK 层统一注入」与 common.md §2「AuthBaseClient defaultRequest 统一注入」（L36、L53），\n却在 L96 规划时改成按端点 auth 列注入；applyAuthHeader 对未登记路径（def===null）和 none 端点都不带 Bearer（L116）。\n(b) 它在 L96 自己的 golden 对账里写的是 message='not_logged_in'，也读到 U-002「Jerboa 用 matchLoginErrorMsgToStringRes\n按异常 message 字符串匹配」（L89），但 LemmyApiError 实际把 message 写成 `HTTP ${code}: ${errorText}`（L109），\n导致登录错误文案匹配永远不命中。\n\n下游方面：F012 治理切片（e7cc4044:a88e4b39d61570ba6）读到 EndpointRegistry 和 moderation.md 中的 /community/ban（L52-L53、L167-L168），\nModerationService.banFromCommunity 照写（L236）。F002 信息流切片（e919f2a1:ac8ba065acf877ad7）读到 post.md、common.md §5，\n以及同时赋值 page 与 page_cursor 的 PostsViewModel.getForm（L40-L41、L50-L51、L82-L83），buildGetPostsQuery 便把两个参数一起上送（L207）。\n0.19.0 下限让 0.18.x 实例的全部端点都抛 NotSupported，这与 D-010「照搬 Android 全范围、不裁剪版本带」冲突，\n属于原有范围内的生成偏差，不是新增要求。但 x18 线还需要 SDK Transformer 的表单 auth、字段白名单和响应转换，规格没有转录，\n所以修复只能新建 LemmyX18Adapter。\n\n修复者（3dfc5302 下的 agent-afd644545af3dc90b 等）用 javap 核对了 SDK：重写截止时间模型和分类超时、5xx 重试，\n新增 LemmyResponseException/LemmyTimeoutException，message 恢复为错误码原文，Bearer 改为统一注入；\n版本路由改为 loose semver 并做 major/minor 校验，FeatureFlags 去后缀比较，端点下限降到 0.18.0，\n新增 /community/ban_user（旧路径经 wirePath 改写）。ModerationService 改调 /community/ban_user；\nbuildGetPostsQuery 按版本只发 page_cursor 或 page，请求前先 await ready()\n（afd644545af3dc90b L709、L739、L745、L1240、L1929、L2059；af5d93fedeb3b08de L880；a7154d5ed3ee900cc L1125）。\n",
+  "recommendations": [
+    "规格提取阶段：网络行为在三方 SDK 内、且能取得源码包或字节码时，端点方法、路径和版本门控从 SDK 路由注解或常量机械导出（例如 grep @GET/@POST 生成端点表），不凭方法名或记忆推断；上下文压缩或分批续写之后，逐条把手写端点与路由文件重新核对。",
+    "同一阶段，把 SDK 的客户端层列为必读材料，并逐项写进契约：HttpClient 插件配置（超时、重试、expectSuccess）、异常映射（哪类响应转哪种异常、message 取什么值）、请求表单校验函数（如 page 与 page_cursor 互斥），以及版本路由（解析规则、各 minor 分支、旧版本适配器的鉴权方式与字段差异）。不要拿应用包装层的配置（如 OkHttp 30s）代替 SDK 自身的策略。",
+    "写端点版本下限时，取该端点在 SDK 各版本路由表中最早出现的版本，再与决策账本的版本范围核对。路由分支覆盖整个 minor 时写成 0.18.x，不写成单个补丁号；并写清不支持的 minor 如何处理，不写「未知版本落最新分支」。",
+    "网络层实现阶段：规格写明「统一注入」的鉴权头，按客户端级规则实现（有 token 就对所有请求注入），端点表的鉴权列只当记录；未登记的路径不得静默降为匿名请求。",
+    "实现异常类时，保持 SDK 异常 message 的原值（如服务端错误码原文），状态码等附加信息放在独立字段；写完后 grep 下游按 message 匹配的消费点（如登录错误文案映射）逐一核对。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/network/EndpointRegistry.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/tmp/lemmyapi-sdk/src/commonMain/it/vercruysse/lemmyapi/v0/x19/x0/LemmyApiRouter.kt",
+          "at": "2026-10-01T07:05:07.724Z",
+          "reason": "正常输入：规格作者 Read 回执中 banFromCommunity 的 KDoc 为 @POST(\"community/ban_user\")，足以确定社区封禁路由（agent-ae3e113046526fefc.jsonl:L68-L69）。"
+        },
+        {
+          "key": "/tmp/lemmyapi-sdk/src/commonMain/it/vercruysse/lemmyapi/LemmyApi.kt",
+          "at": "2026-10-01T07:05:08.150Z",
+          "reason": "正常输入：MIN_SUPPORTED_VERSION=\"0.18\"，minor 18 路由到 x18.x5；随后 Bash 列出的 x18.x5 路由同样包含 site、post/list、comment、community/ban_user 等基础端点（同转录 L70-L71、L74-L75），足以说明这些端点的下限不是 0.19.0。"
+        },
+        {
+          "key": "7b318df2-6d4a-47e0-9799-52c4ecc9a4be:ae3e113046526fefc",
+          "at": "2026-10-01T07:25:47.822Z",
+          "reason": "偏差起点：上下文压缩（L144-L145）后，作者凭记忆把 banFromCommunity 补成 POST /community/ban（L156-L158 的 Edit），SDK 端点中无 FF 门控的 min_lemmy_version 一律写成 0.19.0，再运行生成脚本写出 api-inventory.json（L163-L164）。路由文件当时仍在 /tmp，但没有回查。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/spec/baseline/api-inventory/api-inventory.json",
+          "at": "2026-10-01T11:21:28.063Z",
+          "reason": "交付桥梁：端点契约真源。Base-3 读取时仍列出 POST /community/ban auth=required ver=0.19.0，其余基础端点也均为 ver=0.19.0（agent-a56a700673e5e142f.jsonl:L49-L50）。"
+        },
+        {
+          "key": "e919f2a1-5f90-46e2-baca-332c443637de:a56a700673e5e142f",
+          "at": "2026-10-01T11:30:17.205Z",
+          "reason": "传递：按 api-inventory 逐条投影 EndpointRegistry，写入 '/community/ban' 和 0.19.0 下限（L113-L114）。它同时读到了 D-010「不裁剪版本带」和 common.md「无 FF 门控的端点按版本路由表天然可用」（L36、L92），但没有指出规格内部的冲突，直接采用了逐端点字段。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "规格作者在 L158 Edit 生成脚本、补入 POST /community/ban 后，于 L163 用 Bash 运行 python3 /tmp/gen_api_inventory.py；脚本 OUT 常量即 api-inventory.json，L164 回执打印 OK -> .../api-inventory.json 及 64 端点计数，这就是该文件的实际写入。",
+          "evidence": [
+            {
+              "source": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-ae3e113046526fefc.jsonl",
+              "line": 163
+            },
+            {
+              "source": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-ae3e113046526fefc.jsonl",
+              "line": 164
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/services/ModerationService.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/tmp/lemmyapi-sdk/src/commonMain/it/vercruysse/lemmyapi/v0/x19/x0/LemmyApiRouter.kt",
+          "at": "2026-10-01T07:05:07.724Z",
+          "reason": "正常输入：banFromCommunity 对应 @POST(\"community/ban_user\")（agent-ae3e113046526fefc.jsonl:L68-L69）。"
+        },
+        {
+          "key": "7b318df2-6d4a-47e0-9799-52c4ecc9a4be:ae3e113046526fefc",
+          "at": "2026-10-01T07:30:34.519Z",
+          "reason": "偏差起点：压缩后凭记忆写出 moderation.md，速览表和正文都是 POST /community/ban（L189-L190；推断过程见 L156-L157）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/spec/baseline/api-inventory/apis/moderation.md",
+          "at": "2026-10-01T16:44:06.775Z",
+          "reason": "交付桥梁：F012 切片 cat 回执仍为 POST /community/ban（agent-a88e4b39d61570ba6.jsonl:L167-L168）。"
+        },
+        {
+          "key": "e7cc4044-4f78-441c-8b49-3a097937f665:a88e4b39d61570ba6",
+          "at": "2026-10-01T16:48:12.106Z",
+          "reason": "传递：Android BanFromCommunityViewModel 只调用 SDK 方法、看不到路由；切片按 moderation.md 与 EndpointRegistry（L52-L53）写出 LemmyApiClient.post('/community/ban')（L236-L237）。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "F012 切片 L167 用 Bash cat 读取 spec/baseline/api-inventory/apis/moderation.md（head -80），L168 回执返回速览表与正文中的 POST /community/ban；这是写 ModerationService 前对该规格文件的实际读取。",
+          "evidence": [
+            {
+              "source": "generation/e7cc4044-4f78-441c-8b49-3a097937f665/subagents/agent-a88e4b39d61570ba6.jsonl",
+              "line": 167
+            },
+            {
+              "source": "generation/e7cc4044-4f78-441c-8b49-3a097937f665/subagents/agent-a88e4b39d61570ba6.jsonl",
+              "line": 168
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/network/ApiVersion.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/tmp/lemmyapi-sdk/src/commonMain/it/vercruysse/lemmyapi/LemmyApi.kt",
+          "at": "2026-10-01T07:05:08.150Z",
+          "reason": "正常输入：getLemmyApi 用 version.toVersion(false) 宽松 semver 解析；major≠0 或 minor 不在 18/19 时抛 NotSupportedException；minor 18 的任意补丁都进 x18.x5；MIN_SUPPORTED_VERSION=\"0.18\"（agent-ae3e113046526fefc.jsonl:L70-L71）。"
+        },
+        {
+          "key": "7b318df2-6d4a-47e0-9799-52c4ecc9a4be:ae3e113046526fefc",
+          "at": "2026-10-01T07:28:14.553Z",
+          "reason": "偏差起点：common.md §4 把路由写成「0.18.5 / 0.19.0-1 / … / 0.19.11+；未知版本落最新分支」（L171-L172）。整个 0.18 minor 被写成单个补丁号，不支持的 minor 被写成落最新分支，宽松 semver 解析规则也被省略。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/spec/baseline/api-inventory/common.md",
+          "at": "2026-10-01T11:21:12.093Z",
+          "reason": "交付桥梁：Base-3 的 Read 回执包含上述 §4 原文（agent-a56a700673e5e142f.jsonl:L35-L36）。"
+        },
+        {
+          "key": "e919f2a1-5f90-46e2-baca-332c443637de:a56a700673e5e142f",
+          "at": "2026-10-01T11:29:53.705Z",
+          "reason": "传递：L96 规划按 §4 推定「低于 0.18.5 → NotSupported，未知版本 → 最新」；写出的 ApiVersion 中 MIN_SUPPORTED_VERSION='0.18.5'、split('.') 数字解析、解析失败按支持处理（L111-L112）。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/network/LemmyApiClient.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/api/Http.kt",
+          "at": "2026-10-01T07:02:42.189Z",
+          "reason": "规格作者读到的应用包装层：OkHttp connect/write/read 30s，并通过 LemmyApi.setDefaultClientConfig 在 SDK 客户端上追加 Logging、UserAgent 和 preconfigured 引擎（agent-ae3e113046526fefc.jsonl:L37-L38）。这说明 SDK 客户端另有自身配置，但不含其超时/重试数值。"
+        },
+        {
+          "key": "7b318df2-6d4a-47e0-9799-52c4ecc9a4be:ae3e113046526fefc",
+          "at": "2026-10-01T07:28:14.553Z",
+          "reason": "偏差起点（客户端策略）：解包清单里已有 HttpClient.platform.kt（L64-L65），却没有读，common.md §1 只写「SDK…预配 OkHttp：30s 超时」，没有 SDK 的 HttpTimeout、HttpRequestRetry 和 expectSuccess（L171-L172）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/spec/baseline/api-inventory/common.md",
+          "at": "2026-10-01T11:21:12.093Z",
+          "reason": "交付桥梁：Base-3 读到 §1 的 30s 和 §2「AuthBaseClient defaultRequest 统一注入；auth 为 null 即匿名发裸请求」（agent-a56a700673e5e142f.jsonl:L35-L36）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/spec/baseline/api-inventory/api-inventory.json",
+          "at": "2026-10-01T11:21:28.063Z",
+          "reason": "正常输入：Base-3 导出的 auth_model.token_injection 为「SDK 层统一注入：AuthBaseClient defaultRequest 拦截，auth != null 时 headers[Authorization]=Bearer」（agent-a56a700673e5e142f.jsonl:L52-L53），足以要求按客户端级规则注入。"
+        },
+        {
+          "key": "e919f2a1-5f90-46e2-baca-332c443637de:a56a700673e5e142f",
+          "at": "2026-10-01T11:31:43.079Z",
+          "reason": "偏差起点（鉴权）：L96 规划把统一注入改成「per-endpoint auth semantics」，未登记路径直接放行；写出的 applyAuthHeader 在 def===null 或 auth=none 时都不注入 Bearer（L116-L117 的 Write；L120-L123 的两处 Edit 只改了版本常量引用）。超时则照 §1 写成 TIMEOUT_MS=30000、没有重试，属于规格传递。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 5
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/network/LemmyApiError.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "7b318df2-6d4a-47e0-9799-52c4ecc9a4be:ae3e113046526fefc",
+          "at": "2026-10-01T07:28:14.553Z",
+          "reason": "偏差起点（异常分类）：exception/LemmyBadRequestException.kt 在解包清单中却没有读（L64-L65）；common.md §3 写成「4xx/5xx + body {error}」「LemmyBadRequestException(code)（4xx，带 body 文本）」，缺少「仅 4xx + JSON 信封才转、其余为 Ktor 响应异常」的条件（L171-L172）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/spec/baseline/api-inventory/common.md",
+          "at": "2026-10-01T11:21:12.093Z",
+          "reason": "交付桥梁：Base-3 Read 回执含 §3 原文（agent-a56a700673e5e142f.jsonl:L35-L36）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/spec/baseline/api-inventory/api-inventory.json",
+          "at": "2026-10-01T11:22:29.606Z",
+          "reason": "正常输入：Base-3 导出的 U-002 写明「Jerboa 用 matchLoginErrorMsgToStringRes 按异常 message 字符串匹配文案」（agent-a56a700673e5e142f.jsonl:L88-L89），足以要求 message 保持错误码原文。"
+        },
+        {
+          "key": "e919f2a1-5f90-46e2-baca-332c443637de:a56a700673e5e142f",
+          "at": "2026-10-01T11:29:37.982Z",
+          "reason": "偏差起点（message）：L96 的对账写的是 message='not_logged_in' / 'incorrect_login'，写出的 LemmyBadRequestException 却是 super(code, `HTTP ${code}: ${errorText}`)；同时按 §3 把任意 4xx 都归为 BadRequest、5xx 归为 Connection（L109-L110）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/services/PostFeedRepository.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/tmp/lemmyapi-sdk/src/commonMain/it/vercruysse/lemmyapi/datatypes/GetPosts.kt",
+          "at": "2026-10-01T07:09:50.876Z",
+          "reason": "正常输入：规格作者在 Bash 中逐个 cat datatypes，回执含 GetPosts 的 toValidatedForm()（page_cursor 被显式设置时丢弃 page）、toPostsForm()（丢弃 page_cursor），以及「page deprecated 0.19+, set to support 0.18」注释（agent-ae3e113046526fefc.jsonl:L120-L121）。"
+        },
+        {
+          "key": "7b318df2-6d4a-47e0-9799-52c4ecc9a4be:ae3e113046526fefc",
+          "at": "2026-10-01T07:29:24.516Z",
+          "reason": "偏差起点：post.md 的 GET /post/list 把 page/limit 和 page_cursor 都列为可选参数，没写按版本二选一，也没写 next_page（L179-L180）；common.md §5 只写「双轨」（L171）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/spec/baseline/api-inventory/apis/post.md",
+          "at": "2026-10-01T15:09:39.221Z",
+          "reason": "交付桥梁：F002 切片的 Read 回执即为上述参数表（agent-ac8ba065acf877ad7.jsonl:L40-L41）。"
+        },
+        {
+          "key": "e919f2a1-5f90-46e2-baca-332c443637de:ac8ba065acf877ad7",
+          "at": "2026-10-01T15:22:42.983Z",
+          "reason": "传递：结合 PostsViewModel.getForm 同时赋值 page 与 page_cursor（L82-L83）和规格的双轨描述，buildGetPostsQuery 在两者有值时同时上送（L207-L208）。它没有拿到 SDK 的互斥校验，本链不另推定其独立失职。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "规格作者 L120 用 Bash 进入 SDK datatypes 目录逐个 cat GetPosts 等 .kt，L121 回执逐字返回 GetPosts.kt，含 toValidatedForm()/toPostsForm()。这支持作者写 post.md 之前已收到分页互斥规则。",
+          "evidence": [
+            {
+              "source": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-ae3e113046526fefc.jsonl",
+              "line": 120
+            },
+            {
+              "source": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-ae3e113046526fefc.jsonl",
+              "line": 121
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "生成期没有任何 agent 读过 SDK 的 HttpClient.platform.kt 和 LemmyBadRequestException.kt。卡中引用的超时/重试数值与异常分类条件来自修复期 javap（agent-afd644545af3dc90b L178、L709），生成材料无法独立复核这些文件当时的原文。"
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/network/LemmyX18Adapter.ets",
+      "reason": "修复期新建的文件（afd644545af3dc90b L2059），生成期没有任何写者，无法绑定历史写入。缺少 0.18 适配层的成因已在 ApiVersion/EndpointRegistry 两图归因（规格把 0.18 截成 0.18.5、端点下限写成 0.19.0）。另外，x18 的表单 auth、字段白名单和 toUni 响应转换，规格从未转录。"
+    }
+  ],
+  "job": "issue-65e0c79d46f36cb5abe7",
+  "metadata": {
+    "migration": {
+      "id": "jerboa-e7cc4044-4f78-441c-8b49-3a097937f665",
+      "project": "jerboa"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.247",
+        "2.1.309",
+        "2.1.310"
+      ]
+    },
+    "source_set_id": "sources-32ddfd727cfccbbce98f",
+    "environment": [
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T06:59:57.329Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L10",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L9",
+        "phase": "generation"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T06:59:57.329Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L10",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L9",
+        "phase": "generation"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "26",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T06:59:57.329Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L10",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L9",
+        "phase": "generation"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T06:59:57.329Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L10",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L9",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T08:27:52.558Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1138",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1136",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T08:27:52.558Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1138",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1136",
+        "phase": "generation"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L2/jerboa",
+        "at": "2026-10-23T16:50:12.154Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L209",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L208",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L2/jerboa",
+        "at": "2026-10-23T16:50:12.154Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L209",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L208",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "26",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L2/jerboa",
+        "at": "2026-10-23T16:50:12.154Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L209",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L208",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L2/jerboa",
+        "at": "2026-10-23T16:50:12.154Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L209",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L208",
+        "phase": "repair"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:12.967Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L155",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L154",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:12.967Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L155",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L154",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "26",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:12.967Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L155",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L154",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:12.967Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L155",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L154",
+        "phase": "repair"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:39.052Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L120",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L119",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:39.052Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L120",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L119",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "26",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:39.052Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L120",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L119",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:28:16.441Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a4d3a35dbb3029087.jsonl:L251",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a4d3a35dbb3029087.jsonl:L250",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:28:16.441Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a4d3a35dbb3029087.jsonl:L251",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a4d3a35dbb3029087.jsonl:L250",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:35:12.588Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-ae9a25fc6a2669bb5.jsonl:L522",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-ae9a25fc6a2669bb5.jsonl:L521",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:36:59.707Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a557f4f80a218650e.jsonl:L430",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a557f4f80a218650e.jsonl:L429",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-23T19:59:02.243Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a7154d5ed3ee900cc.jsonl:L1776",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a7154d5ed3ee900cc.jsonl:L1775",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.10",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "3488bf55-f8ef-4dfe-ae5e-17b59ecfb2cd"
+      ]
+    }
+  },
+  "revision": "b288c7d6e0d6d2a9acb3570ec363e055d6680ae74ba6367e3a8986b2aecd8676"
+}

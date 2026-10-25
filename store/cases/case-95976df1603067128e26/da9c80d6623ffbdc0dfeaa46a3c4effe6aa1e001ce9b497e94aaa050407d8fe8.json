@@ -1,0 +1,1247 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-95976df1603067128e26",
+  "created_at": "2026-10-24T14:17:52.131460+00:00",
+  "migration_key": "jerboa-e7cc4044-4f78-441c-8b49-3a097937f665",
+  "title": "把枚举的数据库序号存储误写成接口上送契约，请求以数字发送枚举",
+  "when": "API 规格提取阶段，为 SDK 封装的 REST 接口确定枚举参数与字段的线上序列化形态时；以及基础层/数据层据此建枚举类型和组装请求时",
+  "description": "Android 端经第三方 SDK（kotlinx.serialization 数据类）调用 REST 接口，SortType/ListingType 等枚举既作为 GET query 与 JSON 请求字段，又以 ordinal 整数存入本地 Room 列；目标端需要手写 DTO、枚举和请求组装。",
+  "summary": "API 清单作者（android-api-inventory）写规格前已下载 lemmy-api 0.4.1 源码，批量读取的 SDK datatypes 中\nGetPosts.type_/sort、GetComments/GetReplies.sort、SaveUserSettings.default_sort_type 等字段注释都给出字符串字面量联合\n（「\"All\" | \"Local\" | \"Subscribed\" | \"ModeratorView\"」「\"Active\" | \"Hot\" | …」，agent-ae3e113046526fefc.jsonl:L120-L127）；\n同一时段读到的 LoginViewModel/Account 只说明账号 Room 列以 `.ordinal` 存 default_listing_type/default_sort_type（L109、L113、L133）。\n输入足以区分「线上按枚举名序列化」与「本地 DB 存序号」，但规格输出把两者混为一谈：common.md §7 写成\n「枚举一律以 ordinal/int 上送（如 default_listing_type、sort）」（L171），apis/post.md 的 GET /post/list 把 type_ 标为「枚举 ordinal」（L179），\napi-inventory.json 生成脚本把 PUT /user/save_user_settings 的 default_listing_type/default_sort_type 标为 Int ordinal（L152）。偏差起点在源码到规格的 wire 形态映射。\nBase-1 Models（agent-a6c929f299b4dd116）读取 common.md（L37-L39）后，在 L123 思考中已意识到「现实中 Lemmy HTTP API 以字符串发送枚举」、\n现有 UI 层 PostListingTypes 也是字符串枚举，但仍以 spec 为唯一真源，写出数字枚举 LemmyEnums（文件头「wire 契约：ordinal/int 上送」，L170），\n并把 LemmyDtos 的 LocalUser.default_sort_type/default_listing_type、LocalSite.registration_mode 定为 number（L174）；\n其成员顺序取自 Others.kt 的 when 表（Controversial=4、CommentSortType New=1/Top=3），也不是 SDK 声明序。\n后续切片 worker 沿用：Slice 9 读 apis/post.md 与 LemmyEnums 后，在 PostFeedRepository 写 GetPostsForm.sort/type_ 为 number 并原样进 query，\n在 FeedVM 建「UI 字符串枚举 ↔ Base ordinal」的枚举桥（source-notes Gap-5）；Slice 15 读 common.md §7 后 InboxVm 写 sort: number = CommentSortType.New；\nSearchRepository/PersonProfileViewModel 直接引用 common.md「枚举一律以 ordinal/int 上送」，SearchListVM 沿用 FeedVM 枚举桥；\nAccountSettingsService 以「Lemmy 0.19 wire Int」发送 default_sort_type/default_listing_type；SiteVM/AuthService 把 number 类型的\nLocalUser 枚举字段直接写入账号序号列。数字到 query 的转换因此在各 Repository/VM 的表单字段中形成，LemmyApiClient 只是逐字段拼接。\n生成期唯一的活性探针（7b318df2 L482 派发）只打 GET /site、nodeinfo、validate_auth，不含枚举参数；编译门对类型自洽的数字不报错，\n因此 type_=1&sort=0 → HTTP 400 直到返修冒烟才暴露（返修 L365、L412）。\n返修把 LemmyEnums 整体改为字符串枚举（值=SDK 枚举名=wire 值），另按 SDK 声明序提供 *_ENTRIES/ToInt/FromInt 仅用于 DB 列，\nDTO 枚举字段改为对应字符串枚举类型，各 Repository/VM 直接发送枚举名并删除 ordinal 桥（返修 L617、L851、L908、L928、L936、L987、L1023）。\n页面排序数组改为按实例版本过滤、UI 层重复枚举改为 re-export，这些连带改动未逐项归因，列入 unresolved_targets。\n",
+  "recommendations": [
+    "规格提取阶段：对每个枚举字段分开写「线上形态」和「本地持久化形态」。线上形态以 SDK 数据类与序列化器为准（kotlinx.serialization 默认按枚举名，@SerialName 覆盖），不要从 Room 列的 .ordinal 或 toEnum() 推断；在请求通用约定里给出示例，如 GET /post/list?type_=Local&sort=Active。",
+    "规格提取阶段：SDK 源码字段注释已列出字符串字面量联合时，按字面量写进请求契约；确需 ordinal 的 DB 列，另列 SDK 声明序（如 SortType 中 Controversial 位于 TopNineMonths 之后），不要用 App 内 when 表顺序代替。",
+    "基础层建枚举时：用字符串枚举承载 wire 名，序号只在 DB 读写边界换算；spec 与现有代码（UI 层已是字符串枚举）、实测响应（golden 中 registration_mode 为 RequireApplication）或自身判断冲突时，记录为决策缺口并用一次带枚举参数的真实请求核实，不要静默照 spec。",
+    "验证阶段：活性探针或冒烟至少覆盖一个带枚举 query 参数的 GET（例如 /post/list），对比枚举名与数字两种请求的状态码，再放行数据层。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/models/LemmyEnums.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/tmp/lemmyapi-sdk/src/commonMain/it/vercruysse/lemmyapi/datatypes/GetPosts.kt",
+          "at": "2026-10-01T07:09:50.876Z",
+          "reason": "正常输入：API 清单作者 Bash 批量 cat SDK datatypes，回执中 GetPosts.type_ 注释为 \"All\" | \"Local\" | \"Subscribed\" | \"ModeratorView\"，sort 为 \"Active\" | \"Hot\" | … 的字符串联合；足以确定线上按枚举名发送（agent-ae3e113046526fefc.jsonl:L120-L121，同批 L123-L124 的 GetComments/GetReplies/SaveUserSettings 亦同）。"
+        },
+        {
+          "key": "agent-ae3e113046526fefc.jsonl",
+          "at": "2026-10-01T07:28:14.553Z",
+          "reason": "规格偏差起点：读到字符串联合与 Room 列 .ordinal 存储后，Write common.md §7 写「枚举一律以 ordinal/int 上送（如 default_listing_type、sort）」，把 DB 序号存储当成 wire 契约（同转录 L171-L172）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/spec/baseline/api-inventory/common.md",
+          "at": "2026-10-01T10:07:25.486Z",
+          "reason": "交付桥梁：Base-1 Models 按派工必读 Read common.md，回执含 §7 的 ordinal/int 上送约定（agent-a6c929f299b4dd116.jsonl:L37、L39）。"
+        },
+        {
+          "key": "agent-a6c929f299b4dd116.jsonl",
+          "at": "2026-10-01T10:18:44.639Z",
+          "reason": "传递：L123 已怀疑 Lemmy API 实际用字符串、并看到 UI 层字符串枚举，仍按 spec 写出 SortType/ListingType/CommentSortType/SearchType/PostFeatureType 等数字枚举，文件头标「wire 契约：ordinal/int 上送」，序号取 Others.kt when 表顺序（同转录 L123、L170-L171）。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "API 清单作者在 SDK datatypes 目录用 Bash for 循环 cat GetPosts.kt 等文件，回执列出 GetPosts.type_/sort 的字符串字面量联合；这是规格写前的真实读取。",
+          "evidence": [
+            {
+              "source": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-ae3e113046526fefc.jsonl",
+              "line": 120
+            },
+            {
+              "source": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-ae3e113046526fefc.jsonl",
+              "line": 121
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/models/LemmyDtos.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/tmp/lemmyapi-sdk/src/commonMain/it/vercruysse/lemmyapi/datatypes/GetPosts.kt",
+          "at": "2026-10-01T07:09:50.876Z",
+          "reason": "正常输入：SDK datatypes 回执给出枚举字段的字符串字面量联合（agent-ae3e113046526fefc.jsonl:L120-L121；LocalUser/SaveUserSettings 同批 L123-L127）。"
+        },
+        {
+          "key": "agent-ae3e113046526fefc.jsonl",
+          "at": "2026-10-01T07:28:14.553Z",
+          "reason": "规格偏差起点：common.md §7 点名 default_listing_type、sort 以 ordinal/int 上送（L171-L172）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/spec/baseline/api-inventory/common.md",
+          "at": "2026-10-01T10:07:25.486Z",
+          "reason": "交付桥梁：Base-1 Read common.md 回执含 §7（agent-a6c929f299b4dd116.jsonl:L37、L39）。"
+        },
+        {
+          "key": "agent-a6c929f299b4dd116.jsonl",
+          "at": "2026-10-01T10:19:34.481Z",
+          "reason": "传递：Write LemmyDtos 时把 LocalUser.default_sort_type/default_listing_type 定为 number = 0、LocalSite.registration_mode 定为 number，尽管同会话读到的 chain-auth.golden.json 记录 registration_mode 为 RequireApplication 字符串（同转录 L104-L105、L174-L175）。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "API 清单作者在 SDK datatypes 目录用 Bash for 循环 cat GetPosts.kt 等文件，回执列出 GetPosts.type_/sort 的字符串字面量联合；这是规格写前的真实读取。",
+          "evidence": [
+            {
+              "source": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-ae3e113046526fefc.jsonl",
+              "line": 120
+            },
+            {
+              "source": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-ae3e113046526fefc.jsonl",
+              "line": 121
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/viewmodels/InboxVm.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/tmp/lemmyapi-sdk/src/commonMain/it/vercruysse/lemmyapi/datatypes/GetPosts.kt",
+          "at": "2026-10-01T07:09:50.876Z",
+          "reason": "正常输入：SDK datatypes 回执给出枚举字符串联合；同批 GetReplies/GetPersonMentions 的 sort 为 \"Hot\" | \"Top\" | \"New\" | \"Old\" | \"Controversial\"（agent-ae3e113046526fefc.jsonl:L120-L124）。"
+        },
+        {
+          "key": "agent-ae3e113046526fefc.jsonl",
+          "at": "2026-10-01T07:28:14.553Z",
+          "reason": "规格偏差起点：common.md §7 写枚举一律 ordinal/int 上送（L171-L172）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/spec/baseline/api-inventory/common.md",
+          "at": "2026-10-01T17:11:20.044Z",
+          "reason": "交付桥梁：Slice 15 收件箱 worker 用 grep/awk 读取 common.md §7，回执原文即「枚举一律以 ordinal/int 上送」（agent-a2434912684c9c29a.jsonl:L188-L189）。"
+        },
+        {
+          "key": "agent-a2434912684c9c29a.jsonl",
+          "at": "2026-10-01T17:14:32.750Z",
+          "reason": "传递：Write InboxVm，GetRepliesForm/GetPersonMentionsForm 的 sort: number = CommentSortType.New，inboxListQuery 以 number 进 query，并在注释引用「common.md §7：sort = CommentSortType.New = 1」（同转录 L214-L215）。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "API 清单作者在 SDK datatypes 目录用 Bash for 循环 cat GetPosts.kt 等文件，回执列出 GetPosts.type_/sort 的字符串字面量联合；这是规格写前的真实读取。",
+          "evidence": [
+            {
+              "source": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-ae3e113046526fefc.jsonl",
+              "line": 120
+            },
+            {
+              "source": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-ae3e113046526fefc.jsonl",
+              "line": 121
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "收件箱 worker 用 grep/awk 读取 spec/baseline/api-inventory/common.md，回执包含 §7「枚举一律以 ordinal/int 上送」；写 InboxVm 前已收到该约定。",
+          "evidence": [
+            {
+              "source": "generation/e7cc4044-4f78-441c-8b49-3a097937f665/subagents/agent-a2434912684c9c29a.jsonl",
+              "line": 188
+            },
+            {
+              "source": "generation/e7cc4044-4f78-441c-8b49-3a097937f665/subagents/agent-a2434912684c9c29a.jsonl",
+              "line": 189
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/services/PostFeedRepository.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/tmp/lemmyapi-sdk/src/commonMain/it/vercruysse/lemmyapi/datatypes/GetPosts.kt",
+          "at": "2026-10-01T07:09:50.876Z",
+          "reason": "正常输入：GetPosts.type_/sort 的字符串联合注释（agent-ae3e113046526fefc.jsonl:L120-L121）。"
+        },
+        {
+          "key": "agent-ae3e113046526fefc.jsonl",
+          "at": "2026-10-01T07:29:24.516Z",
+          "reason": "规格偏差起点：common.md §7（L171）之后又 Write apis/post.md，GET /post/list 的 type_ 说明写成「枚举 ordinal」（L179-L180）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/spec/baseline/api-inventory/apis/post.md",
+          "at": "2026-10-01T15:09:39.221Z",
+          "reason": "交付桥梁：Slice 9 信息流 worker Read apis/post.md，回执含 type_「枚举 ordinal」（agent-ac8ba065acf877ad7.jsonl:L40-L41）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/spec/baseline/api-inventory/common.md",
+          "at": "2026-10-01T10:07:25.486Z",
+          "reason": "交付桥梁：Base-1 Read common.md §7（agent-a6c929f299b4dd116.jsonl:L37、L39）。"
+        },
+        {
+          "key": "agent-a6c929f299b4dd116.jsonl",
+          "at": "2026-10-01T10:18:44.639Z",
+          "reason": "传递：按 §7 写出数字枚举 LemmyEnums（同转录 L170-L171）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/models/LemmyEnums.ets",
+          "at": "2026-10-01T15:11:44.303Z",
+          "reason": "交付桥梁：Slice 9 worker grep LemmyEnums，回执为 SortType Active = 0…、ListingType All = 0 / Local = 1…（agent-ac8ba065acf877ad7.jsonl:L121-L122）。"
+        },
+        {
+          "key": "agent-ac8ba065acf877ad7.jsonl",
+          "at": "2026-10-01T15:22:42.983Z",
+          "reason": "传递并形成 query 转换：Write PostFeedRepository，注释「type_/sort 必填（枚举 ordinal）」，GetPostsForm.sort: number = 0、type_: number = 1 原样写入 query（同转录 L207-L208）。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "API 清单作者在 SDK datatypes 目录用 Bash for 循环 cat GetPosts.kt 等文件，回执列出 GetPosts.type_/sort 的字符串字面量联合；这是规格写前的真实读取。",
+          "evidence": [
+            {
+              "source": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-ae3e113046526fefc.jsonl",
+              "line": 120
+            },
+            {
+              "source": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-ae3e113046526fefc.jsonl",
+              "line": 121
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": 6
+        },
+        {
+          "from": 3,
+          "to": 7
+        },
+        {
+          "from": 6,
+          "to": 7,
+          "force": true,
+          "reason": "信息流 worker 用 grep 读取 models/LemmyEnums.ets，回执为数字枚举 SortType Active = 0…、ListingType All = 0…；写 PostFeedRepository 前已收到。",
+          "evidence": [
+            {
+              "source": "generation/e919f2a1-5f90-46e2-baca-332c443637de/subagents/agent-ac8ba065acf877ad7.jsonl",
+              "line": 121
+            },
+            {
+              "source": "generation/e919f2a1-5f90-46e2-baca-332c443637de/subagents/agent-ac8ba065acf877ad7.jsonl",
+              "line": 122
+            }
+          ]
+        },
+        {
+          "from": 7,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/viewmodels/FeedVM.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/tmp/lemmyapi-sdk/src/commonMain/it/vercruysse/lemmyapi/datatypes/GetPosts.kt",
+          "at": "2026-10-01T07:09:50.876Z",
+          "reason": "正常输入：GetPosts.type_/sort 的字符串联合注释（agent-ae3e113046526fefc.jsonl:L120-L121）。"
+        },
+        {
+          "key": "agent-ae3e113046526fefc.jsonl",
+          "at": "2026-10-01T07:29:24.516Z",
+          "reason": "规格偏差起点：common.md §7 与 apis/post.md 均写枚举 ordinal 上送（L171、L179-L180）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/spec/baseline/api-inventory/apis/post.md",
+          "at": "2026-10-01T15:09:39.221Z",
+          "reason": "交付桥梁：Slice 9 worker Read apis/post.md，回执含 type_「枚举 ordinal」（agent-ac8ba065acf877ad7.jsonl:L40-L41）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/spec/baseline/api-inventory/common.md",
+          "at": "2026-10-01T10:07:25.486Z",
+          "reason": "交付桥梁：Base-1 Read common.md §7（agent-a6c929f299b4dd116.jsonl:L37、L39）。"
+        },
+        {
+          "key": "agent-a6c929f299b4dd116.jsonl",
+          "at": "2026-10-01T10:18:44.639Z",
+          "reason": "传递：按 §7 写出数字枚举 LemmyEnums（同转录 L170-L171）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/models/LemmyEnums.ets",
+          "at": "2026-10-01T15:11:44.303Z",
+          "reason": "交付桥梁：Slice 9 worker grep LemmyEnums 得到数字枚举值（agent-ac8ba065acf877ad7.jsonl:L121-L122）。"
+        },
+        {
+          "key": "agent-ac8ba065acf877ad7.jsonl",
+          "at": "2026-10-01T15:23:55.683Z",
+          "reason": "传递：发现 UI 层字符串枚举与 Base 数字枚举并存后，没有质疑 wire 形态，而是写 FeedVM「枚举桥（source-notes Gap-5）：UI string 枚举 ↔ Base ordinal（请求参数 = ordinal）」，getForm 出口 ordinalFromUiSort/ordinalFromUiListing（同转录 L178、L217-L218）。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "API 清单作者在 SDK datatypes 目录用 Bash for 循环 cat GetPosts.kt 等文件，回执列出 GetPosts.type_/sort 的字符串字面量联合；这是规格写前的真实读取。",
+          "evidence": [
+            {
+              "source": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-ae3e113046526fefc.jsonl",
+              "line": 120
+            },
+            {
+              "source": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-ae3e113046526fefc.jsonl",
+              "line": 121
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": 6
+        },
+        {
+          "from": 3,
+          "to": 7
+        },
+        {
+          "from": 6,
+          "to": 7,
+          "force": true,
+          "reason": "信息流 worker 用 grep 读取 models/LemmyEnums.ets，回执为数字枚举；写 FeedVM 枚举桥前已收到。",
+          "evidence": [
+            {
+              "source": "generation/e919f2a1-5f90-46e2-baca-332c443637de/subagents/agent-ac8ba065acf877ad7.jsonl",
+              "line": 121
+            },
+            {
+              "source": "generation/e919f2a1-5f90-46e2-baca-332c443637de/subagents/agent-ac8ba065acf877ad7.jsonl",
+              "line": 122
+            }
+          ]
+        },
+        {
+          "from": 7,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/services/SearchRepository.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/tmp/lemmyapi-sdk/src/commonMain/it/vercruysse/lemmyapi/datatypes/GetPosts.kt",
+          "at": "2026-10-01T07:09:50.876Z",
+          "reason": "正常输入：SDK datatypes 回执给出枚举字符串联合；同批 Search 的 sort/listing_type 亦为字符串联合（agent-ae3e113046526fefc.jsonl:L120-L121、L126-L127）。"
+        },
+        {
+          "key": "agent-ae3e113046526fefc.jsonl",
+          "at": "2026-10-01T07:28:14.553Z",
+          "reason": "规格偏差起点：common.md §7 写枚举一律 ordinal/int 上送（L171-L172）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/spec/baseline/api-inventory/common.md",
+          "at": "2026-10-01T15:34:56.098Z",
+          "reason": "交付桥梁：Slice 13 搜索 worker grep common.md 的「ordinal|枚举」，回执即 §7 约定（agent-adbac7ab5dce9faae.jsonl:L68-L69）。"
+        },
+        {
+          "key": "agent-adbac7ab5dce9faae.jsonl",
+          "at": "2026-10-01T15:40:52.239Z",
+          "reason": "传递：Write SearchRepository，注释「枚举 ordinal 上送（api-inventory/common.md「枚举一律以 ordinal/int 上送」）」，SearchForm.sort/type_/listing_type 为 number（同转录 L135-L136）。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "API 清单作者在 SDK datatypes 目录用 Bash for 循环 cat GetPosts.kt 等文件，回执列出 GetPosts.type_/sort 的字符串字面量联合；这是规格写前的真实读取。",
+          "evidence": [
+            {
+              "source": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-ae3e113046526fefc.jsonl",
+              "line": 120
+            },
+            {
+              "source": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-ae3e113046526fefc.jsonl",
+              "line": 121
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "搜索数据层 worker grep common.md 的 ordinal/枚举，回执即 §7 ordinal/int 上送约定；写 SearchRepository 前已收到。",
+          "evidence": [
+            {
+              "source": "generation/e919f2a1-5f90-46e2-baca-332c443637de/subagents/agent-adbac7ab5dce9faae.jsonl",
+              "line": 68
+            },
+            {
+              "source": "generation/e919f2a1-5f90-46e2-baca-332c443637de/subagents/agent-adbac7ab5dce9faae.jsonl",
+              "line": 69
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/viewmodels/SearchListVM.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/tmp/lemmyapi-sdk/src/commonMain/it/vercruysse/lemmyapi/datatypes/GetPosts.kt",
+          "at": "2026-10-01T07:09:50.876Z",
+          "reason": "正常输入：SDK datatypes 字符串联合（agent-ae3e113046526fefc.jsonl:L120-L121、L126-L127）。"
+        },
+        {
+          "key": "agent-ae3e113046526fefc.jsonl",
+          "at": "2026-10-01T07:28:14.553Z",
+          "reason": "规格偏差起点：common.md §7（L171-L172）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/spec/baseline/api-inventory/common.md",
+          "at": "2026-10-01T15:34:56.098Z",
+          "reason": "交付桥梁：搜索数据层 worker grep 到 §7（agent-adbac7ab5dce9faae.jsonl:L68-L69）。"
+        },
+        {
+          "key": "agent-adbac7ab5dce9faae.jsonl",
+          "at": "2026-10-01T15:40:52.239Z",
+          "reason": "传递：SearchRepository 的 SearchForm 以 ordinal number 定义（同转录 L135-L136）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/services/SearchRepository.ets",
+          "at": "2026-10-01T16:40:57.759Z",
+          "reason": "交付桥梁：第 3 次运行的 Slice 13 worker Read SearchRepository，回执含 ordinal 表单（agent-a52012246d51c567f.jsonl:L47-L48）；随后也读了 FeedVM 枚举桥与 LemmyEnums（L100-L101、L127-L128）。"
+        },
+        {
+          "key": "agent-a52012246d51c567f.jsonl",
+          "at": "2026-10-01T16:48:41.274Z",
+          "reason": "传递：Write SearchListVM，建「枚举桥（FeedVM 同约定：请求参数 = Base ordinal）」，getForm 以 ordinalFromUiSort/searchTypeOrdinal/searchListingOrdinal 赋值（同转录 L159-L160）。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "API 清单作者在 SDK datatypes 目录用 Bash for 循环 cat GetPosts.kt 等文件，回执列出 GetPosts.type_/sort 的字符串字面量联合；这是规格写前的真实读取。",
+          "evidence": [
+            {
+              "source": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-ae3e113046526fefc.jsonl",
+              "line": 120
+            },
+            {
+              "source": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-ae3e113046526fefc.jsonl",
+              "line": 121
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "搜索数据层 worker grep common.md 的 ordinal/枚举，回执即 §7 约定；写 SearchRepository 前已收到。",
+          "evidence": [
+            {
+              "source": "generation/e919f2a1-5f90-46e2-baca-332c443637de/subagents/agent-adbac7ab5dce9faae.jsonl",
+              "line": 68
+            },
+            {
+              "source": "generation/e919f2a1-5f90-46e2-baca-332c443637de/subagents/agent-adbac7ab5dce9faae.jsonl",
+              "line": 69
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": 6
+        },
+        {
+          "from": 6,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/viewmodels/PersonProfileViewModel.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/tmp/lemmyapi-sdk/src/commonMain/it/vercruysse/lemmyapi/datatypes/GetPosts.kt",
+          "at": "2026-10-01T07:09:50.876Z",
+          "reason": "正常输入：SDK datatypes 字符串联合；同批 GetPersonDetails.sort 亦为 SortType 字符串联合（agent-ae3e113046526fefc.jsonl:L120-L124）。"
+        },
+        {
+          "key": "agent-ae3e113046526fefc.jsonl",
+          "at": "2026-10-01T07:28:14.553Z",
+          "reason": "规格偏差起点：common.md §7（L171-L172）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/spec/baseline/api-inventory/common.md",
+          "at": "2026-10-01T15:13:21.999Z",
+          "reason": "交付桥梁：Slice 12 用户页 worker sed 读 common.md 100-160 行，回执含 §7（agent-a7c66dd716b4a9b6a.jsonl:L135-L136）；此前还 grep 了数字枚举 LemmyEnums（L130-L131）。"
+        },
+        {
+          "key": "agent-a7c66dd716b4a9b6a.jsonl",
+          "at": "2026-10-01T15:36:11.552Z",
+          "reason": "传递：Write PersonProfileViewModel，注释「sort（ordinal/int 上送，api-inventory common.md §7）」，建 SORT_TYPE_WIRE 把 UI 字符串枚举映射为数字，FeaturePostForm.feature_type 为 number（同转录 L216-L217）。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "API 清单作者在 SDK datatypes 目录用 Bash for 循环 cat GetPosts.kt 等文件，回执列出 GetPosts.type_/sort 的字符串字面量联合；这是规格写前的真实读取。",
+          "evidence": [
+            {
+              "source": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-ae3e113046526fefc.jsonl",
+              "line": 120
+            },
+            {
+              "source": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-ae3e113046526fefc.jsonl",
+              "line": 121
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "用户页 worker 用 sed 读 common.md 100-160 行，回执包含 §7 枚举 ordinal/int 上送；写 PersonProfileViewModel 前已收到。",
+          "evidence": [
+            {
+              "source": "generation/e919f2a1-5f90-46e2-baca-332c443637de/subagents/agent-a7c66dd716b4a9b6a.jsonl",
+              "line": 135
+            },
+            {
+              "source": "generation/e919f2a1-5f90-46e2-baca-332c443637de/subagents/agent-a7c66dd716b4a9b6a.jsonl",
+              "line": 136
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/services/AccountSettingsService.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/tmp/lemmyapi-sdk/src/commonMain/it/vercruysse/lemmyapi/datatypes/GetPosts.kt",
+          "at": "2026-10-01T07:09:50.876Z",
+          "reason": "正常输入：SDK datatypes 字符串联合；同批 SaveUserSettings.default_sort_type/default_listing_type 亦为字符串联合（agent-ae3e113046526fefc.jsonl:L120-L124）。"
+        },
+        {
+          "key": "agent-ae3e113046526fefc.jsonl",
+          "at": "2026-10-01T07:28:14.553Z",
+          "reason": "规格偏差起点：common.md §7 点名 default_listing_type 以 ordinal/int 上送（L171-L172）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/spec/baseline/api-inventory/common.md",
+          "at": "2026-10-01T10:07:25.486Z",
+          "reason": "交付桥梁：Base-1 Read common.md §7（agent-a6c929f299b4dd116.jsonl:L37、L39）。"
+        },
+        {
+          "key": "agent-a6c929f299b4dd116.jsonl",
+          "at": "2026-10-01T10:19:34.481Z",
+          "reason": "传递：先后写出数字枚举 LemmyEnums 与 LocalUser 枚举字段为 number 的 LemmyDtos（同转录 L170-L175）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/models/LemmyDtos.ets",
+          "at": "2026-10-01T13:55:55.980Z",
+          "reason": "交付桥梁：Slice 4 设置 worker Read LemmyDtos，回执 LocalUser.default_sort_type: number = 0（agent-a67860e4032034d23.jsonl:L170-L171）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/models/LemmyEnums.ets",
+          "at": "2026-10-01T13:57:47.728Z",
+          "reason": "交付桥梁：同一 worker grep LemmyEnums，回执 SortType Active = 0…、ListingType All = 0…（agent-a67860e4032034d23.jsonl:L178-L179）。"
+        },
+        {
+          "key": "agent-a67860e4032034d23.jsonl",
+          "at": "2026-10-01T14:23:42.704Z",
+          "reason": "传递：Write AccountSettingsService，注释「default_sort_type/default_listing_type 以枚举数值发送（Lemmy 0.19 wire Int，与 models/LemmyEnums 数值一致）」，toBody 以 as number 写入 PUT 体（同转录 L338-L339）。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "API 清单作者在 SDK datatypes 目录用 Bash for 循环 cat GetPosts.kt 等文件，回执列出 GetPosts.type_/sort 的字符串字面量联合；这是规格写前的真实读取。",
+          "evidence": [
+            {
+              "source": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-ae3e113046526fefc.jsonl",
+              "line": 120
+            },
+            {
+              "source": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-ae3e113046526fefc.jsonl",
+              "line": 121
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 4,
+          "to": 6
+        },
+        {
+          "from": 5,
+          "to": 7
+        },
+        {
+          "from": 6,
+          "to": 7,
+          "force": true,
+          "reason": "设置 worker 用 grep 读取 models/LemmyEnums.ets，回执为数字枚举 SortType/ListingType；写 AccountSettingsService 前已收到。",
+          "evidence": [
+            {
+              "source": "generation/e919f2a1-5f90-46e2-baca-332c443637de/subagents/agent-a67860e4032034d23.jsonl",
+              "line": 178
+            },
+            {
+              "source": "generation/e919f2a1-5f90-46e2-baca-332c443637de/subagents/agent-a67860e4032034d23.jsonl",
+              "line": 179
+            }
+          ]
+        },
+        {
+          "from": 7,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/services/SiteVM.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/tmp/lemmyapi-sdk/src/commonMain/it/vercruysse/lemmyapi/datatypes/GetPosts.kt",
+          "at": "2026-10-01T07:09:50.876Z",
+          "reason": "正常输入：SDK datatypes 字符串联合；同批 LocalUser 的 default_sort_type/default_listing_type 为 SortType/ListingType 字符串联合（agent-ae3e113046526fefc.jsonl:L120-L127）。"
+        },
+        {
+          "key": "agent-ae3e113046526fefc.jsonl",
+          "at": "2026-10-01T07:28:14.553Z",
+          "reason": "规格偏差起点：common.md §7（L171-L172）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/spec/baseline/api-inventory/common.md",
+          "at": "2026-10-01T10:07:25.486Z",
+          "reason": "交付桥梁：Base-1 Read common.md §7（agent-a6c929f299b4dd116.jsonl:L37、L39）。"
+        },
+        {
+          "key": "agent-a6c929f299b4dd116.jsonl",
+          "at": "2026-10-01T10:19:34.481Z",
+          "reason": "传递：LemmyDtos 的 LocalUser 枚举字段写成 number（同转录 L174-L175）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/models/LemmyDtos.ets",
+          "at": "2026-10-01T13:50:41.135Z",
+          "reason": "交付桥梁：站点 worker sed 读 LemmyDtos 217-400 行，回执含 LocalUser.default_sort_type/default_listing_type: number（agent-a26699b9b84840dc2.jsonl:L86-L87）。"
+        },
+        {
+          "key": "agent-a26699b9b84840dc2.jsonl",
+          "at": "2026-10-01T13:59:15.199Z",
+          "reason": "传递：Write SiteVM，把 localUser.default_listing_type/default_sort_type 直接与账号序号列比较并写回 Account；服务端实际下发字符串名，账号列因此拿到非序号值（同转录 L156-L157）。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "API 清单作者在 SDK datatypes 目录用 Bash for 循环 cat GetPosts.kt 等文件，回执列出 GetPosts.type_/sort 的字符串字面量联合；这是规格写前的真实读取。",
+          "evidence": [
+            {
+              "source": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-ae3e113046526fefc.jsonl",
+              "line": 120
+            },
+            {
+              "source": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-ae3e113046526fefc.jsonl",
+              "line": 121
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": 6,
+          "force": true,
+          "reason": "站点 worker 用 sed 读 LemmyDtos.ets 217-400 行，回执含 LocalUser.default_sort_type/default_listing_type: number；写 SiteVM 前已收到。",
+          "evidence": [
+            {
+              "source": "generation/e919f2a1-5f90-46e2-baca-332c443637de/subagents/agent-a26699b9b84840dc2.jsonl",
+              "line": 86
+            },
+            {
+              "source": "generation/e919f2a1-5f90-46e2-baca-332c443637de/subagents/agent-a26699b9b84840dc2.jsonl",
+              "line": 87
+            }
+          ]
+        },
+        {
+          "from": 6,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/services/AuthService.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/tmp/lemmyapi-sdk/src/commonMain/it/vercruysse/lemmyapi/datatypes/GetPosts.kt",
+          "at": "2026-10-01T07:09:50.876Z",
+          "reason": "正常输入：SDK datatypes 字符串联合，LocalUser 枚举字段同批可见（agent-ae3e113046526fefc.jsonl:L120-L127）。"
+        },
+        {
+          "key": "agent-ae3e113046526fefc.jsonl",
+          "at": "2026-10-01T07:28:14.553Z",
+          "reason": "规格偏差起点：common.md §7（L171-L172）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/spec/baseline/api-inventory/common.md",
+          "at": "2026-10-01T10:07:25.486Z",
+          "reason": "交付桥梁：Base-1 Read common.md §7（agent-a6c929f299b4dd116.jsonl:L37、L39）。"
+        },
+        {
+          "key": "agent-a6c929f299b4dd116.jsonl",
+          "at": "2026-10-01T10:19:34.481Z",
+          "reason": "传递：LemmyDtos 的 LocalUser 枚举字段写成 number（同转录 L174-L175）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/models/LemmyDtos.ets",
+          "at": "2026-10-01T14:05:27.909Z",
+          "reason": "交付桥梁：登录 worker sed 读 LemmyDtos 的 Person/LocalUser 段，回执含枚举字段 number（agent-ac4b1fd5b47b07f1d.jsonl:L118-L119）。"
+        },
+        {
+          "key": "agent-ac4b1fd5b47b07f1d.jsonl",
+          "at": "2026-10-01T14:16:48.802Z",
+          "reason": "传递：Write AuthService，登录成功建 Account 时直接传 luv.local_user.default_listing_type/default_sort_type 作为序号列（同转录 L168-L169）。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "API 清单作者在 SDK datatypes 目录用 Bash for 循环 cat GetPosts.kt 等文件，回执列出 GetPosts.type_/sort 的字符串字面量联合；这是规格写前的真实读取。",
+          "evidence": [
+            {
+              "source": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-ae3e113046526fefc.jsonl",
+              "line": 120
+            },
+            {
+              "source": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-ae3e113046526fefc.jsonl",
+              "line": 121
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": 6,
+          "force": true,
+          "reason": "登录 worker 用 sed 读 LemmyDtos.ets 的 Person/LocalUser 段，回执含枚举字段 number；写 AuthService 前已收到。",
+          "evidence": [
+            {
+              "source": "generation/e919f2a1-5f90-46e2-baca-332c443637de/subagents/agent-ac4b1fd5b47b07f1d.jsonl",
+              "line": 118
+            },
+            {
+              "source": "generation/e919f2a1-5f90-46e2-baca-332c443637de/subagents/agent-ac4b1fd5b47b07f1d.jsonl",
+              "line": 119
+            }
+          ]
+        },
+        {
+          "from": 6,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/components/post/PostListingTypes.ets",
+      "reason": "已确认返修把 UI 层自建的 ListingType/SortType 字符串枚举改为 re-export LemmyEnums，并给 listingTypeLabel 补 ModeratorView（返修 L637、L656、L801）。生成期这些字符串值与 wire 一致，不是数字上送的来源；UI 阶段（7b318df2 agent-adfffd684834adb4c）为何自建而非复用 Base 枚举、排序数组为何未按版本过滤，未追查。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/components/comment/CommentNodes.ets",
+      "reason": "已确认返修把本地 CommentSortType 字符串枚举改为 re-export（返修 L656）；生成期值本身与 wire 一致，属于统一枚举的连带去重，未单独追生成来源。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/viewmodels/PostViewModel.ets",
+      "reason": "已确认返修只把 featurePost 的 featureType 参数从 number 改为 PostFeatureType（返修 L876）；未核对 e919f2a1 agent-aad91d3c0d95b4028 写入时读取的是哪份 ordinal 约定。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/pages/HomePage.ets",
+      "reason": "已确认返修把 SORT_TYPE_LEVEL_ONE/SORT_TYPE_TOP_ITEMS 改为按实例版本过滤的 sortTypeLevelOne/sortTypeTopItems，并调整 featureType 类型（返修 L815、L876）；这是版本门控与类型连带改动，页面写者众多，未逐一追溯生成来源。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/pages/CommunityPage.ets",
+      "reason": "已确认返修替换排序数组为版本过滤函数（返修 L815）；属连带改动，未追溯页面生成写入。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/pages/PersonProfilePage.ets",
+      "reason": "已确认返修替换排序数组并改 featureType 类型（返修 L815、L876）；属连带改动，未追溯页面生成写入。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/pages/SearchPage.ets",
+      "reason": "已确认返修改 featureType 类型并随 SearchListVM 枚举名转换调整 re-export（返修 L876、L928）；未追溯页面生成写入。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/pages/AccountSettingsPage.ets",
+      "reason": "已确认返修删除页面内「Others.kt 枚举声明序全表（ordinal 绑定）」的版本门控表，改用 LemmyEnums.supported*（返修 L1006）；该页由 e919f2a1 agent-addcbdbac09d984fe 首写，其读取的 ordinal 依据未核。"
+    }
+  ],
+  "job": "issue-95976df1603067128e26",
+  "metadata": {
+    "migration": {
+      "id": "jerboa-e7cc4044-4f78-441c-8b49-3a097937f665",
+      "project": "jerboa"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.247",
+        "2.1.309",
+        "2.1.310"
+      ]
+    },
+    "source_set_id": "sources-32ddfd727cfccbbce98f",
+    "environment": [
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T06:59:57.329Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L10",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L9",
+        "phase": "generation"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T06:59:57.329Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L10",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L9",
+        "phase": "generation"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "26",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T06:59:57.329Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L10",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L9",
+        "phase": "generation"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T06:59:57.329Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L10",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L9",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T08:27:52.558Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1138",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1136",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T08:27:52.558Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1138",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1136",
+        "phase": "generation"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L2/jerboa",
+        "at": "2026-10-23T16:50:12.154Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L209",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L208",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L2/jerboa",
+        "at": "2026-10-23T16:50:12.154Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L209",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L208",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "26",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L2/jerboa",
+        "at": "2026-10-23T16:50:12.154Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L209",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L208",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L2/jerboa",
+        "at": "2026-10-23T16:50:12.154Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L209",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L208",
+        "phase": "repair"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:12.967Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L155",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L154",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:12.967Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L155",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L154",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "26",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:12.967Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L155",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L154",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:12.967Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L155",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L154",
+        "phase": "repair"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:39.052Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L120",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L119",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:39.052Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L120",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L119",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "26",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:39.052Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L120",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L119",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:28:16.441Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a4d3a35dbb3029087.jsonl:L251",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a4d3a35dbb3029087.jsonl:L250",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:28:16.441Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a4d3a35dbb3029087.jsonl:L251",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a4d3a35dbb3029087.jsonl:L250",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:35:12.588Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-ae9a25fc6a2669bb5.jsonl:L522",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-ae9a25fc6a2669bb5.jsonl:L521",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:36:59.707Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a557f4f80a218650e.jsonl:L430",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a557f4f80a218650e.jsonl:L429",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-23T19:59:02.243Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a7154d5ed3ee900cc.jsonl:L1776",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a7154d5ed3ee900cc.jsonl:L1775",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.10",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "3488bf55-f8ef-4dfe-ae5e-17b59ecfb2cd"
+      ]
+    }
+  },
+  "revision": "da9c80d6623ffbdc0dfeaa46a3c4effe6aa1e001ce9b497e94aaa050407d8fe8"
+}

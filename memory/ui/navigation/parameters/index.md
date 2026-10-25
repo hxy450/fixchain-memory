@@ -1,6 +1,6 @@
 # ui/navigation/parameters
 
-跳转契约：点击接导航、路由名与参数、默认值/有效性、多个来源入口，以及跳转前共享状态的交接。
+跳转契约：点击接导航、路由名与参数、默认值/有效性、多个来源入口，以及跳转前共享状态的交接。；pushPathByName 参数与目标页 instanceof 判型的名义匹配，子页 pop(result) 与来源页 onPop 的回传配套
 
 [上一级](../index.md)
 
@@ -9,12 +9,18 @@
 - [Compose 带参路由迁到 NavPathStack 时，目的地名用固定名、参数只走 param，pageMap 按固定名精确匹配](lesson-300200dd52892e9dadd2.lesson.md)
   - 时机：界面转换与导航壳实现阶段，写 pushPathByName 与 navDestination 分发时
   - 情境：源端 Compose Navigation 以带占位符的路由模式（如 detail/{id}）注册目的地，并用拼串函数生成实际路由；目标用 Navigation + NavPathStack，由 pageMap 按目的地名分发。
+- [pushPathByName 传参用目标页 instanceof 的类：ArkTS 名义匹配，同形局部类与 JSON 对象不命中](lesson-b714378f18d168bce81c.lesson.md)
+  - 时机：页面转换与功能切片接线阶段，为 pushPathByName 选择参数类型、在 NavDestination onReady 解析路由参数时；计划阶段为分批或并行生成的页面确定路由参数契约时
+  - 情境：目标页在 onReady 用 instanceof 收窄 pathInfo.param；源端路由是 profile/{id} 一类字符串模板；多个页面由不同写者分批或并行生成，canonical 参数类可能在路由宿主或独立路由模块里，也可能尚未建立；部分参数来自 API 响应 DTO（JSON.parse 得到的普通对象）。
 - [同一目标页有多个启动入口时，按全部源端入口的 Intent extras 定义一个共享路由载荷，并实现每个来源分支](lesson-953309e05bc1cd36c0d1.lesson.md)
   - 时机：功能切片、页面转换与编译修复阶段，为有多个入口的目标页（如搜索页）定义路由参数、编写各入口的 push 与接收端解析、实现选中结果的去向时
   - 情境：Android 目标 Activity 被多个入口以不同 Intent extras 启动（如 searchText、locationType、searchFromMap），并按这些 extra 决定结果去向（setResult 回传或跳转下一页）；目标用 NavPathStack 传单一 param，各入口由不同切片、编译修复或巡检修复分别写入。也包括结果页一类接收页按启动方传入的来源类型（fromType）只对特定来源显示“下一步”等跨功能动作，目标契约却规定路由参数只传稳定的媒体或实体 ID、对象留在共享 Store。
 - [同一路由参数被调用方与接收页当作不同语义（完整 JSON、实体 ID、预览地址）时，按源端契约拆成字段或在入口解析，不用格式判断把冲突屏蔽成占位](lesson-e202ff0d01ace7dee225.lesson.md)
   - 时机：组件详情、编辑页等页面的实现或按截图补齐阶段，确定页面启动参数与编辑会话模型的契约时；构建修复为悬空引用补建该页依赖的模型与 ViewModel 时
   - 情境：目标页只有一个字符串入参（如 resource），各调用方实际写入完整业务 JSON，页面内部却把它当实体 ID 请求详情、又当图片地址显示；源端页面按已安装实例、用户数据、缓存的完整 JSON 等顺序恢复会话。
+- [子页回传结果：来源页用 pushPathByName 的 onPop 接收时，子页成功出栈必须 pop(result)，裸 pop() 不触发 onPop](lesson-bd019a59d3ac23b2594e.lesson.md)
+  - 时机：跨页回传接线阶段，确定子页成功出栈的调用与来源页读取回传结果的触发点时；规格或基础设施阶段定义回传通道时
+  - 情境：源端用 savedStateHandle 的 addReturn/ConsumeReturn 在子页返回后把结果交给来源页；目标来源页用 NavPathStack.pushPathByName(name, param, onPop) 或共享返回值通道接收，生产页与消费页由不同任务分别实现。
 - [源端带结果回调的选择器（show(..., 当前值) { result -&gt; 写回 }）改为路由页或弹窗打开时，同一改动接通结果回传并写回当前编辑状态](lesson-14509c64bd43100ce443.lesson.md)
   - 时机：界面实现阶段，把源端带回调的选择弹层（文案库、素材库等）改成 ArkUI Navigation 跳转或弹窗，并接到编辑项时
   - 情境：Android 以 DialogFragment.show(..., 当前值) { result -&gt; 写回控件 } 打开选择器；迁移后调用页 pushPathByName 打开同名目的地，目标页参数类只带初始值，或其加载、选中仍是前向引用。

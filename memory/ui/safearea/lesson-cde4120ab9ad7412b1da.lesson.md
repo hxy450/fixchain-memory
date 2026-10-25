@@ -1,6 +1,6 @@
 # 自绘标题栏接入顶部安全区前先判定源端由谁避让：根 fitsSystemWindows 时 inset 放包住工具栏的主内容列（DrawerLayout 下不包抽屉，NavigationView 头部画到状态栏下并叠 insetForeground）、工具栏保持源高；工具栏自带固定顶距时顶距与 inset 只取一份并同步高度
 
-ID：`lesson-cde4120ab9ad7412b1da` · 版本：4
+ID：`lesson-cde4120ab9ad7412b1da` · 版本：5
 
 [本主题](index.md)
 
@@ -27,7 +27,7 @@ ArkUI 固定 height 包含 padding：把 topInset 作为固定高度标题栏的
 3. 工具栏自带固定 paddingTop 为透明状态栏留位：顶距与 topInset 只取一份，常用 max(源 paddingTop, topInset) 替换该内距，高度写成 源高度 − 源 paddingTop + 该值，不再另加外层 inset。
 4. 给固定高度的标题栏加顶部内距前算可见内容高度 = height − paddingTop，小于源工具栏高度就改为外层 inset 或同步增高；从页面根到标题栏的纵向链路只保留一处状态栏避让。
 
-来源支持：4 张卡 · 已知 3 次迁移（部分未记录） · 已知 3 个应用（部分未记录）
+来源支持：5 张卡 · 已知 4 次迁移（部分未记录） · 已知 4 个应用（部分未记录）
 
 ## 来源（按需复核）
 
@@ -35,6 +35,8 @@ ArkUI 固定 height 包含 padding：把 topInset 作为固定高度标题栏的
   卡片版本：`f1b0f704ea098891e19e7e62141a77777b9fac05a89eb4bc2d242d1b6b17917f`
 - [case-7b7a48249f269a40a194](../../../store/cases/case-7b7a48249f269a40a194/57c870c2120fd77003685d94f6ed28de21a47a178a298a4d708b33203690ebc5.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3, recommendation:4
   卡片版本：`57c870c2120fd77003685d94f6ed28de21a47a178a298a4d708b33203690ebc5`
+- [case-b3c176b95cabcc03a434](../../../store/cases/case-b3c176b95cabcc03a434/acbf9ff15291867da7f28e180e80f8cb9c7277b41e553e0de94f4f92a056e637.json) · 结论：recommendation:2
+  卡片版本：`acbf9ff15291867da7f28e180e80f8cb9c7277b41e553e0de94f4f92a056e637`
 - [case-ee2085c48fe78dbd3a2f](../../../store/cases/case-ee2085c48fe78dbd3a2f/0d5ffa24bf798f0358ab64f71da008ad0e9a55d64c0c62be2089ad430e3160d1.json) · 结论：recommendation:6
   卡片版本：`0d5ffa24bf798f0358ab64f71da008ad0e9a55d64c0c62be2089ad430e3160d1`
 - [case-eebe8e71adf555fca84f](../../../store/cases/case-eebe8e71adf555fca84f/b184689b889e0899496674801311e4fead883962b5e3789e02538c5e89259f87.json) · 结论：diagnosis, recommendation:5

@@ -1,6 +1,6 @@
 # DecimalFormat、BigDecimal 舍入与 Float 转字符串按源 API 语义复刻：HALF_EVEN，小数点与数字符号取应用偏好语言（Locale.getDefault 跟随应用语言，不是系统区域），Float.toString 的十进制串与“.0”；不用 Math.round、toFixed、无参 intl.NumberFormat 或模板串顶替
 
-ID：`lesson-ae093dedda604fddf17e` · 版本：2
+ID：`lesson-ae093dedda604fddf17e` · 版本：3
 
 [本主题](index.md)
 
@@ -27,12 +27,14 @@ ID：`lesson-ae093dedda604fddf17e` · 版本：2
 
 - 最小样例："0.#" 下 15.25 → "15.2"；系统语言英语、应用语言德语时 "0.#" 下 12.5 → "12,5"；30f 直接转字符串 → "30.0"
 
-来源支持：3 张卡 · 2 次迁移 · 2 个应用
+来源支持：4 张卡 · 3 次迁移 · 3 个应用
 
 ## 来源（按需复核）
 
 - [case-6aa988142168e8fded35](../../../store/cases/case-6aa988142168e8fded35/3159baf2c12175612f43a3aca1bbed44e2a10d68446474eb6fbebab749c94f97.json) · 结论：diagnosis, recommendation:3
   卡片版本：`3159baf2c12175612f43a3aca1bbed44e2a10d68446474eb6fbebab749c94f97`
+- [case-8d1f62d75e39070e7c62](../../../store/cases/case-8d1f62d75e39070e7c62/b0c57b828d1b5465817ffc591450e546599376afa695c595bc588151b3fe58b2.json) · 结论：recommendation:3
+  卡片版本：`b0c57b828d1b5465817ffc591450e546599376afa695c595bc588151b3fe58b2`
 - [case-90117ca805576dda1534](../../../store/cases/case-90117ca805576dda1534/d69f7835e048a354e4c7c612b2f7e0328d97fd7ba75e120259ab9422d1065342.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
   卡片版本：`d69f7835e048a354e4c7c612b2f7e0328d97fd7ba75e120259ab9422d1065342`
 - [case-f6665a411a857ad38299](../../../store/cases/case-f6665a411a857ad38299/826eb1a43664d156478dc36e30b48aa6653b387802ab134799e435a288bb3754.json) · 结论：recommendation:4

@@ -1,6 +1,6 @@
 # 图标按源端原始资源落实：缺失时从 Android 密度目录、SDK 平台或依赖库 AAR 复制原图，不用字形、近名图标、系统符号或二次着色替代
 
-ID：`lesson-943544ce27bf04f9faf8` · 版本：8
+ID：`lesson-943544ce27bf04f9faf8` · 版本：9
 
 [本主题](index.md)
 
@@ -29,7 +29,7 @@ ID：`lesson-943544ce27bf04f9faf8` · 版本：8
 
 - 怀疑资源被替换时，用文件大小或哈希比对工程资源与 Android 原图是否一致。
 
-来源支持：8 张卡 · 已知 5 次迁移（部分未记录） · 已知 5 个应用（部分未记录）
+来源支持：9 张卡 · 已知 6 次迁移（部分未记录） · 已知 6 个应用（部分未记录）
 
 ## 来源（按需复核）
 
@@ -37,6 +37,8 @@ ID：`lesson-943544ce27bf04f9faf8` · 版本：8
   卡片版本：`1b8dbd30951aec40912fda717800da9383cdc52429f479cbae2d27c1fd708e37`
 - [case-2dbd641ac7d3e926cda7](../../../store/cases/case-2dbd641ac7d3e926cda7/9f617e179563730555fd922a4b1eccc176fed019e9f14bd83673232fa8e40888.json) · 结论：recommendation:3
   卡片版本：`9f617e179563730555fd922a4b1eccc176fed019e9f14bd83673232fa8e40888`
+- [case-4f4db97a21303734c63e](../../../store/cases/case-4f4db97a21303734c63e/f4733ca13f22a662b77b58e0cad1cf3f074cd4fd2a1438f0f639a5ab7d03e48c.json) · 结论：recommendation:1, recommendation:2
+  卡片版本：`f4733ca13f22a662b77b58e0cad1cf3f074cd4fd2a1438f0f639a5ab7d03e48c`
 - [case-5f607109511beae4aec1](../../../store/cases/case-5f607109511beae4aec1/8828a5ece38c458b890f0fcf43602c5b43fc2c7f01e073d04da1621028806772.json) · 结论：diagnosis, recommendation:7
   卡片版本：`8828a5ece38c458b890f0fcf43602c5b43fc2c7f01e073d04da1621028806772`
 - [case-6ba16d2344b52f8fca51](../../../store/cases/case-6ba16d2344b52f8fca51/3b128ce1f45adbd905d0ce25b9396eeee973d527b0b9ccad5c9a72d571e4534f.json) · 结论：diagnosis, recommendation:1

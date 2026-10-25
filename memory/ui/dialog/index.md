@@ -1,6 +1,6 @@
 # ui/dialog
 
-弹窗：V2 页面可用的弹窗载体、源端真弹窗不以页面叠层充当、按源 Dialog 类型选择呈现形态（路由约束不改变弹窗形态）、弹窗内二级选择器的层级、按源布局还原弹窗内容、源 Dialog 用 setView 注入自定义内容时的承载方式，ComponentContent 弹窗回调的取值时机，源端每次调用新建的对话框按调用独立实例，页内对话框的打开触发点；源端委托共享详情弹窗与分享弹层时复用目标共享组件，依附式弹窗的宿主页归属，展开后才加载数据的弹层；页内覆层承载 Activity 级 Dialog 时的挂载层级与按钮行定高；锚定下拉（PopupWindow showAsDropDown、框架 ActionBar 溢出面板，含子菜单箭头与标题头）的弹出容器，同页多个工具面板逐个选择形态；源端应用内分享面板的形态与逐渠道映射，第三方 Helper 按配置对象渲染的弹窗；页内遮罩承载对话框时的无障碍模态（显示期间隐藏背景）；弹窗外观与窗口几何、半模态 bindSheet 见子主题
+弹窗：V2 页面可用的弹窗载体、源端真弹窗不以页面叠层充当、按源 Dialog 类型选择呈现形态（路由约束不改变弹窗形态）、弹窗内二级选择器的层级、按源布局还原弹窗内容、源 Dialog 用 setView 注入自定义内容时的承载方式，ComponentContent 弹窗回调的取值时机，源端每次调用新建的对话框按调用独立实例，页内对话框的打开触发点；源端委托共享详情弹窗与分享弹层时复用目标共享组件，依附式弹窗的宿主页归属，展开后才加载数据的弹层；页内覆层承载 Activity 级 Dialog 时的挂载层级与按钮行定高；锚定下拉（PopupWindow showAsDropDown、框架 ActionBar 溢出面板，含子菜单箭头与标题头）的弹出容器，同页多个工具面板逐个选择形态；源端应用内分享面板的形态与逐渠道映射，第三方 Helper 按配置对象渲染的弹窗；页内遮罩承载对话框时的无障碍模态（显示期间隐藏背景）；弹窗外观与窗口几何、半模态 bindSheet 见子主题；Compose DropdownMenu、cascade 级联与居中 Popup 菜单的锚点、遮罩与原地切层
 
 [上一级](../index.md)
 
@@ -17,6 +17,9 @@
 - [ComponentContent 构造即执行 builder：构造后才赋值的回调以延迟调用传入](lesson-1c27b6c7cf05c05733d9.lesson.md)
   - 时机：界面实现阶段，用 ComponentContent 加 wrapBuilder 加 openCustomDialog 封装弹窗并接线关闭、确认回调时
   - 情境：关闭回调需要构造后才得到的 content 句柄，只能在 new ComponentContent(...) 之后赋给 args；内容组件以 @Param 接收回调。
+- [Compose DropdownMenu、cascade 级联菜单与居中 Popup 菜单按源形态还原：锚定或居中、无变暗遮罩、子菜单在同一菜单内原地切层](lesson-b1006cf9981e5ff9bb2d.lesson.md)
+  - 时机：规格映射与界面实现阶段，为 Compose 下拉菜单、级联子菜单、居中操作菜单与偏好行的下拉菜单确定弹出形态时
+  - 情境：源端用 Material3 DropdownMenu、me.saket.cascade CascadeDropdownMenu、基于 Popup 的居中级联菜单或 compose-preference 的 DROPDOWN_MENU：菜单放在触发按钮所在 Box 内锚定弹出或屏幕居中弹出，不带变暗遮罩，点外与返回关闭，带 children 的项在同一菜单内切换到子层并有返回 Header；目标用 bindMenu 或自绘层。
 - [从组件外的共享函数打开自定义弹窗时，用 wrapBuilder + ComponentContent 交给 openCustomDialog(content)：不在 options.builder 闭包里直接调用全局 @Builder](lesson-a3ac761b0d52a6bccb9f.lesson.md)
   - 时机：界面实现阶段，把路由页改成多个入口复用的自定义弹窗，确定弹窗内容的构建与挂载方式时
   - 情境：ArkTS V2（@ComponentV2）工程中，把 BottomSheetDialog/DialogFragment 一类弹窗迁成 UIContext.getPromptAction().openCustomDialog，并打算从组件外的导出函数（只持有 UIContext）为多个页面统一打开同一个自定义组件。

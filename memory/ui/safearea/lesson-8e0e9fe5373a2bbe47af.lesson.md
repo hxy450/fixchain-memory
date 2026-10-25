@@ -1,6 +1,6 @@
 # 页面级安全区订阅从承载页面的主窗口取窗口对象：复用工程主窗口入口或入口 Ability 已维护的避让状态，不用 window.getLastWindow
 
-ID：`lesson-8e0e9fe5373a2bbe47af` · 版本：1
+ID：`lesson-8e0e9fe5373a2bbe47af` · 版本：2
 
 [本主题](index.md)
 
@@ -25,9 +25,11 @@ getLastWindow 返回应用最近的窗口，不保证是承载页面的主窗口
 
 - 对避让值有疑问时，先打开分享面板或调试浮窗等额外窗口再进入页面，确认顶部按钮仍在状态栏下方且可点
 
-来源支持：1 张卡 · 1 次迁移 · 1 个应用
+来源支持：2 张卡 · 2 次迁移 · 2 个应用
 
 ## 来源（按需复核）
 
+- [case-b3c176b95cabcc03a434](../../../store/cases/case-b3c176b95cabcc03a434/acbf9ff15291867da7f28e180e80f8cb9c7277b41e553e0de94f4f92a056e637.json) · 结论：recommendation:6
+  卡片版本：`acbf9ff15291867da7f28e180e80f8cb9c7277b41e553e0de94f4f92a056e637`
 - [case-dfc66c797f37eb94114f](../../../store/cases/case-dfc66c797f37eb94114f/9f98a79dac0d272fe6955fc32778afcddd33077fd3a0dd30a10ac3e6e45f4fd2.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3, recommendation:4
   卡片版本：`9f98a79dac0d272fe6955fc32778afcddd33077fd3a0dd30a10ac3e6e45f4fd2`
