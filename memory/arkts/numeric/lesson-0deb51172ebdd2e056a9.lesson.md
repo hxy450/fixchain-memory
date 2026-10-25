@@ -1,6 +1,6 @@
 # Kotlin/Java Float 的运算与比较迁到 ArkTS 时对齐 float32：算术每步 Math.fround 后再按 Java (int) 截断，==/!= 两侧 fround 后用 ===，不自加容差；选中、存在判断与删除共用同一比较
 
-ID：`lesson-0deb51172ebdd2e056a9` · 版本：3
+ID：`lesson-0deb51172ebdd2e056a9` · 版本：4
 
 [本主题](index.md)
 
@@ -26,10 +26,12 @@ ID：`lesson-0deb51172ebdd2e056a9` · 版本：3
 2. 同一组值的选中判断、存在判断与删除过滤调用同一个比较函数。
 3. 源式含 (float) 或 f 字面量的算术：每个操作数与每步结果用 Math.fround 舍入到 float32（double 中间值对单精度加减乘除再舍入不产生二次舍入误差），最后按 Java (int) 截断；规格把“float 运算”和“float→int 收窄”分两行写，不写“正常值 Math.trunc 等价”；同一公式只实现一处，其余方法复用。
 
-来源支持：3 张卡 · 已知 2 次迁移（部分未记录） · 已知 2 个应用（部分未记录）
+来源支持：4 张卡 · 已知 3 次迁移（部分未记录） · 已知 3 个应用（部分未记录）
 
 ## 来源（按需复核）
 
+- [case-69c1c089176794fbe5db](../../../store/cases/case-69c1c089176794fbe5db/b6131de55c36c64007547c63dde577de0ce2d2dc6c6b56d93289e389777e5a27.json) · 结论：recommendation:4
+  卡片版本：`b6131de55c36c64007547c63dde577de0ce2d2dc6c6b56d93289e389777e5a27`
 - [case-e332c2cc4929f36c08c7](../../../store/cases/case-e332c2cc4929f36c08c7/99990fa89f7be35793b896d170fd65a4dbe46e7c285f99e1fd707e9d8d36f301.json) · 结论：diagnosis, recommendation:3
   卡片版本：`99990fa89f7be35793b896d170fd65a4dbe46e7c285f99e1fd707e9d8d36f301`
 - [case-e9189514e875ef00f96f](../../../store/cases/case-e9189514e875ef00f96f/70962a835201462f5cdf9dc9d03b341d51dc0e830922cf32d7761f935762ea1b.json) · 结论：recommendation:1

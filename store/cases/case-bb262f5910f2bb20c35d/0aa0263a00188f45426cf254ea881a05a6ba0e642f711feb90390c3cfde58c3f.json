@@ -1,0 +1,605 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-bb262f5910f2bb20c35d",
+  "created_at": "2026-10-24T14:19:22.452600+00:00",
+  "migration_key": "jerboa-e7cc4044-4f78-441c-8b49-3a097937f665",
+  "title": "API 规格把已读到的 SDK 线格式概括失真，DTO 照抄、页面再误映射（举报视图包装、作者社区封禁字段）",
+  "when": "API 清单/规格提取阶段整理共享响应 Bean 字段表（决定字段集合、嵌套还是平铺）时；以及数据模型与页面实现阶段，把源端字段访问映射到目标 DTO 字段时",
+  "description": "源端通过第三方 SDK 的 kotlinx.serialization data class 直接反序列化服务端 JSON（字段名即 wire key），SDK 源码不在工程内但可下载读到；目标端手写 DTO 并 JSON.parse 直转，声明错的字段运行期恒 undefined 而不报错；视图类型里有平铺 post/comment/community/counts 而非嵌套 *View 的举报视图，以及名称相近、语义不同的 creator_banned_from_community（作者被本社区封禁）与 banned_from_community（当前用户被封禁）。",
+  "summary": "规格提取：api-inventory 作者已从 Maven 下载 lemmy-api 0.4.1 sources jar，并用 Bash 批量读出 datatypes\n（agent-ae3e113046526fefc.jsonl:L120-L127）：PostReportView/CommentReportView 是平铺的\npost_report+post(或 comment+post)+community+creator+post_creator/comment_creator+creator_banned_from_community+…+counts+resolver?，\nPrivateMessageReportView 是 private_message_report+private_message+private_message_creator+creator+resolver?；\nCommentView 同时有 creator_banned_from_community 与 banned_from_community；GetSiteResponse 无 online，含\ndiscussion_languages、custom_emojis: List<CustomEmojiView>、blocked_urls。随后写 common.md（同转录 L171）时却把\n§6.2 CommentView 只列 banned_from_community「—」、漏掉 creator_banned_from_community；§6.4 GetSiteResponse 列出\n不存在的 online 并漏掉上述三项；§6.6 把三类举报视图概括为「*_report + 当前 PostView/CommentView + 报告人与被报人 Person」。\nsite.md（L175）的 nodeinfo 只写 software{name,repository,homepage}、usage 为 Object（生成期无人读过 NodeInfoSoftware/Usage 定义）。\n字段表与 SDK 源码位置都没有落进规格，api-inventory.json 只保留 model_class。偏差首先出现在「源码字段表→规格」这一环。\n\nDTO 实现：Base-1 Models（agent-a6c929f299b4dd116.jsonl）读到 common.md（L37-L39）与 site.md（L79-L80），在工程和\ngradle 缓存里没找到 SDK 源码后写明「字段定义来自规范」（L73-L78），于是按 §6.6 在 LemmyDtos（L174）写出\npost_view/comment_view/private_message_view 包装字段，CommentView 只有 banned_from_community；LemmyResponses（L177）写出\nGetSiteResponse.online、custom_emojis?: CustomEmoji[]、无 version 的 NodeInfoSoftware。规格只写 usage: Object、顶层又是\ncamelCase 的 openRegistrations 时，它仍自行按 snake_case 拟出 active_half_year/local_posts 等子字段，这一处属于独立偏差。\n第二次运行的 Base-1 只按同一规格对账并判 PASS；G2b closer 给举报视图回填 counts/my_vote 等字段时也保留了 post_view 包装\n（e7cc4044 agent-a1bec8cf2a447a65e.jsonl:L483）。这些片段都保留到生成结束。\n\n页面层不只是跟随 DTO，还有独立误读。Slice 17 worker 读到 DTO 的 post_view 包装（agent-a88e4b39d61570ba6.jsonl:L120-L121），\n也读到 PostReportItem.kt 中 postReportView.post.copy(...)、.community、.counts 的平铺访问（L420-L421），并因此给缺失的\n4 个字段写了 PostReportViewEx 窄化；可 post/community 仍读 v.post_view.post、pv.community，评论举报读 v.comment_view\n（L436），举报列表因此运行期为空或抛错。Slice 10 worker 读到 CommentNode.kt:117 的 isCommunityBanned =\ncommentView.creator_banned_from_community（agent-aad91d3c0d95b4028.jsonl:L38-L39）、Utils.kt:1026 的\ncopy(creator_banned_from_community = banData.banned)（L60-L61），以及只含 banned_from_community 的 DTO CommentView\n（L104-L105）。它没有按源端字段名做窄化读取，而是把作者封禁映射到语义不同的当前用户封禁字段：PostPage 写成\ncreator_banned_from_community: cv.banned_from_community（L262），CommentTree 写成 copy.banned_from_community = banData.banned（L182/L188）。\n\n修复按 SDK javap 字段表改写：LemmyDtos 补齐 creator_banned_from_community/creator_is_*、举报视图平铺字段，包装字段标为 LEGACY；\nLemmyResponses 删除 online，补 discussion_languages/blocked_urls/CustomEmojiView，NodeInfo 改为 camelCase 并补 software.version；\n新建 ModReportViews 供 ReportsPage 读平铺字段；CommentTree 新增 CommentViewWire/creatorBannedFromCommunity，\nPostPage 等改由它读取（repair agent-afd644545af3dc90b.jsonl:L762/L768、agent-af5d93fedeb3b08de.jsonl:L754、\nagent-a43d1dfcc219ccf4d.jsonl:L917）。\n",
+  "recommendations": [
+    "规格提取时，共享响应 Bean 按 SDK data class 逐字段写出完整字段表，包括平铺还是嵌套、可空性和默认值，不用「+ 当前 PostView」这类概括；只列源码里真实存在的字段（如 GetSiteResponse 没有 online），名称相近的字段分别写明语义。",
+    "SDK 源码是从工程外临时下载的（如 /tmp 下解包的 sources jar）时，把下载坐标或完整字段表写进 api-inventory 交给 DTO 实现者，不只留 model_class；规格引用的子类型（如 NodeInfoSoftware、NodeInfoUsage）先读到定义再写字段。",
+    "实现 DTO 时，若规格对嵌套结构只是文字概括，先 grep 源端消费点（如 postReportView.post / .community、commentView.creator_banned_from_community）核对访问路径；与规格冲突时以源码/SDK 为准声明，并把冲突报回规格。",
+    "页面映射源端字段时，目标 DTO 缺字段就按源端字段名窄化读取并登记 DTO 缺口，不改用名称相近、语义不同的字段；DTO 声明的嵌套路径与源端访问路径不一致时，同样按源端路径读取并上报。",
+    "非 Lemmy REST 的协议响应（如 nodeinfo）按协议自身命名（camelCase），不套用「字段名 snake_case 保持」规则；规格只写 Object 时先查 SDK 定义，不要凭推测补子字段。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/models/LemmyDtos.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/tmp/lemmyapi-sdk/src/commonMain/it/vercruysse/lemmyapi/datatypes/PostReportView.kt",
+          "at": "2026-10-01T07:09:50.876Z",
+          "reason": "正常输入：api-inventory 作者在 datatypes 目录用 Bash 循环 cat 读出 PostReportView 平铺定义（post、community、creator、post_creator、creator_banned_from_community…counts、resolver?），足以确定举报视图没有 post_view 包装（agent-ae3e113046526fefc.jsonl:L120-L121）。"
+        },
+        {
+          "key": "/tmp/lemmyapi-sdk/src/commonMain/it/vercruysse/lemmyapi/datatypes/CommentView.kt",
+          "at": "2026-10-01T07:09:57.187Z",
+          "reason": "正常输入：第二批读取返回 CommentView 同时含 creator_banned_from_community 与 banned_from_community，以及平铺的 CommentReportView 定义（同转录 L123-L124）。"
+        },
+        {
+          "key": "agent-ae3e113046526fefc.jsonl",
+          "at": "2026-10-01T07:28:14.553Z",
+          "reason": "读到上述字段表后，Write common.md 时 §6.2 CommentView 漏写 creator_banned_from_community、banned_from_community 只标「—」，§6.6 把三类举报视图写成「*_report + 当前 PostView/CommentView + 报告人与被报人 Person」；字段表与 SDK 位置都没有交给下游（同转录 L171）。源码到规格在此偏离。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/spec/baseline/api-inventory/common.md",
+          "at": "2026-10-01T10:07:25.486Z",
+          "reason": "交付桥梁：Base-1 的 Read 回执里仍是上述 §6.2 与 §6.6 文本（agent-a6c929f299b4dd116.jsonl:L37-L39）。"
+        },
+        {
+          "key": "agent-a6c929f299b4dd116.jsonl",
+          "at": "2026-10-01T10:19:34.481Z",
+          "reason": "本地没找到 SDK 源码后明言字段以规范为准（L73-L78），按 §6.6 写出 PostReportView.post_view、CommentReportView.comment_view、PrivateMessageReportView.private_message_view，CommentView 只有 banned_from_community（L174）。本链确认的是规格传递到 DTO；这些片段保留到生成结束。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "api-inventory 作者 cd 进解包后的 SDK datatypes 目录，用 for 循环 cat 包括 PostReportView 在内的 datatype 文件；回执原样返回 PostReportView 的平铺字段，支持它写规格前已收到该定义。",
+          "evidence": [
+            {
+              "source": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-ae3e113046526fefc.jsonl",
+              "line": 120
+            },
+            {
+              "source": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-ae3e113046526fefc.jsonl",
+              "line": 121
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "第二批循环 cat 的列表里含 CommentView 与 CommentReportView，回执返回 CommentView 的 creator_banned_from_community/banned_from_community 两个字段，以及平铺的 CommentReportView。",
+          "evidence": [
+            {
+              "source": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-ae3e113046526fefc.jsonl",
+              "line": 123
+            },
+            {
+              "source": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-ae3e113046526fefc.jsonl",
+              "line": 124
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/models/LemmyResponses.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/tmp/lemmyapi-sdk/src/commonMain/it/vercruysse/lemmyapi/datatypes/GetSiteResponse.kt",
+          "at": "2026-10-01T07:09:50.876Z",
+          "reason": "正常输入：同一批读取返回 GetSiteResponse{site_view, admins, version, my_user?, all_languages, discussion_languages, taglines, custom_emojis: List<CustomEmojiView>, blocked_urls}，其中没有 online（agent-ae3e113046526fefc.jsonl:L120-L121）。"
+        },
+        {
+          "key": "agent-ae3e113046526fefc.jsonl",
+          "at": "2026-10-01T07:28:37.826Z",
+          "reason": "common.md §6.4 写入 `online | Int | 在线人数`，漏掉 discussion_languages/blocked_urls，custom_emojis 没写类型（L171）；site.md 的 nodeinfo 写 software{name,repository,homepage}、漏 version，usage 只写 Object（L175）。规格在此偏离。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/spec/baseline/api-inventory/common.md",
+          "at": "2026-10-01T10:07:25.486Z",
+          "reason": "交付桥梁：Base-1 读到的 §6.4 包含 online 行（agent-a6c929f299b4dd116.jsonl:L37-L39）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/spec/baseline/api-inventory/apis/site.md",
+          "at": "2026-10-01T10:09:16.136Z",
+          "reason": "交付桥梁：Base-1 读到的 nodeinfo 响应为 NodeInfo{ version, software{name,repository,homepage}, protocols, openRegistrations, usage }（同转录 L79-L80）。"
+        },
+        {
+          "key": "agent-a6c929f299b4dd116.jsonl",
+          "at": "2026-10-01T10:20:09.041Z",
+          "reason": "Write LemmyResponses（L177）：GetSiteResponse 照规格写 online、custom_emojis?: CustomEmoji[]，NodeInfoSoftware 没有 version，这些是传递；规格只写 usage: Object 且顶层为 camelCase，它仍自行写出 active_half_year/active_month/local_posts/local_comments 等 snake_case 子字段，这一处是独立的无依据补名。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "第一批循环 cat 的列表里含 GetSiteResponse，回执返回它的完整字段（含 discussion_languages、custom_emojis: List<CustomEmojiView>、blocked_urls，没有 online）。",
+          "evidence": [
+            {
+              "source": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-ae3e113046526fefc.jsonl",
+              "line": 120
+            },
+            {
+              "source": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-ae3e113046526fefc.jsonl",
+              "line": 121
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 5
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/pages/ReportsPage.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/models/LemmyDtos.ets",
+          "at": "2026-10-01T16:43:23.249Z",
+          "reason": "有误输入：Read 回执中 PostReportView 是 post_report + post_view + creator + post_creator + community?，CommentReportView 带 comment_view（agent-a88e4b39d61570ba6.jsonl:L120-L121）。其形成见 LemmyDtos 图。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/ui/components/reports/PostReportItem.kt",
+          "at": "2026-10-01T16:56:07.608Z",
+          "reason": "正常输入：sed 读出 postReportView.post.copy(...)、community = postReportView.community、counts = postReportView.counts 等平铺访问，足以确定帖子与社区不在 post_view 里（同转录 L420-L421）。"
+        },
+        {
+          "key": "agent-a88e4b39d61570ba6.jsonl",
+          "at": "2026-10-01T16:56:52.183Z",
+          "reason": "Edit 加入 toPostEntries/toCommentEntries（L436）：注释承认 DTO 缺 creator_banned_from_community/my_vote/counts/resolver 并写了 PostReportViewEx 窄化，但 postId、community 等仍从 v.post_view.post / pv.community 读取，评论举报读 v.comment_view。源端访问路径已经给出，输出仍沿用 DTO 包装，属于实现层的独立偏离。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "Slice 17 worker 用 Bash sed -n '25,80p' 读取 PostReportItem.kt，回执返回 postReportView.post.copy(...)、community = postReportView.community、counts = postReportView.counts 等平铺访问，读取发生在 L436 写入投影之前。",
+          "evidence": [
+            {
+              "source": "generation/e7cc4044-4f78-441c-8b49-3a097937f665/subagents/agent-a88e4b39d61570ba6.jsonl",
+              "line": 420
+            },
+            {
+              "source": "generation/e7cc4044-4f78-441c-8b49-3a097937f665/subagents/agent-a88e4b39d61570ba6.jsonl",
+              "line": 421
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/pages/PostPage.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/ui/components/comment/CommentNode.kt",
+          "at": "2026-10-01T15:09:42.125Z",
+          "reason": "正常输入：Read 回执 L117 为 isCommunityBanned = commentView.creator_banned_from_community，封禁标签的数据源是作者在社区被封（agent-aad91d3c0d95b4028.jsonl:L38-L39）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/models/LemmyDtos.ets",
+          "at": "2026-10-01T15:11:15.330Z",
+          "reason": "有误输入：DTO CommentView 只有 banned_from_community，PostView 的 creator_banned_from_community 注释为「作者在本社区是否被封」（同转录 L104-L105）。"
+        },
+        {
+          "key": "agent-aad91d3c0d95b4028.jsonl",
+          "at": "2026-10-01T15:25:41.790Z",
+          "reason": "Edit PostPage 的 toFeedCommentView，写成 creator_banned_from_community: cv.banned_from_community（L262），把当前用户封禁当作作者封禁；没有按源端字段名窄化读取，也没有上报 DTO 缺口。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/utils/CommentTree.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/Utils.kt",
+          "at": "2026-10-01T15:10:04.640Z",
+          "reason": "正常输入：grep 回执里 findAndUpdateCommentCreatorBannedFromCommunity 为 it.copy(creator_banned_from_community = banData.banned)（agent-aad91d3c0d95b4028.jsonl:L60-L61）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/models/LemmyDtos.ets",
+          "at": "2026-10-01T15:11:15.330Z",
+          "reason": "有误输入：DTO CommentView 缺 creator_banned_from_community，只有 banned_from_community（同转录 L104-L105）。"
+        },
+        {
+          "key": "agent-aad91d3c0d95b4028.jsonl",
+          "at": "2026-10-01T15:19:39.041Z",
+          "reason": "Write/Edit CommentTree（L182、L188），把封禁回传写成 copy.banned_from_community = banData.banned，copyCommentView 也只复制 banned_from_community（L186），把源端的作者封禁写到了当前用户封禁字段。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "转录里没有说明 api-inventory 作者为何把读到的平铺举报视图写成「+ 当前 PostView/CommentView」的推理文字，本卡只确认读到的内容与写出的内容不一致。",
+    "NodeInfoSoftware/NodeInfoUsage 的 SDK 定义生成期无人读取，nodeinfo 子字段缺少正确输入，只能归因为规格漏写 software.version 以及 DTO 无依据补名。"
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/models/ModReportViews.ets",
+      "reason": "修复期新建的文件，生成期没有写入；它承载的举报视图平铺字段偏差已在 LemmyDtos 与 ReportsPage 图中归因。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/network/ApiVersion.ets",
+      "reason": "保留的差异是 semver 宽松解析、版本路由和 FeatureFlags 档位（与网络层版本路由问题同一机制），不含 nodeinfo 字段读取；nodeinfo 字段名的修改实际落在 LemmyResponses（已入图）和 LemmyApiClient（不是本 job 目标），本卡不在该文件上归因。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/components/comment/CommentNodeItem.ets",
+      "reason": "生成期读取的是组件层 FeedCommentView.creator_banned_from_community，字段名与语义都正确；错误值来自 PostPage 的 toFeedCommentView 映射（已入图）。本文件保留的差异以菜单/级联重构为主，没有在本问题下另行归因。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/pages/CommentReplyPage.ets",
+      "reason": "写者 e919f2a1 agent-a6904b62787958743.jsonl:L168 同样写了 t.creatorBannedFromCommunity = cv.banned_from_community（同函数 post 分支用 pv.creator_banned_from_community），写前读到的 DTO CommentView 也缺作者封禁字段（L125-L126）；但它读的 CommentReply.kt 评论分支经 CommentNodeHeader 间接取值，没有核到写者直接收到评论分支源端字段的输入，所以未单独入图（机制同 PostPage/CommentTree）。"
+    }
+  ],
+  "job": "issue-bb262f5910f2bb20c35d",
+  "metadata": {
+    "migration": {
+      "id": "jerboa-e7cc4044-4f78-441c-8b49-3a097937f665",
+      "project": "jerboa"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.247",
+        "2.1.309",
+        "2.1.310"
+      ]
+    },
+    "source_set_id": "sources-32ddfd727cfccbbce98f",
+    "environment": [
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T06:59:57.329Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L10",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L9",
+        "phase": "generation"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T06:59:57.329Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L10",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L9",
+        "phase": "generation"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "26",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T06:59:57.329Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L10",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L9",
+        "phase": "generation"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T06:59:57.329Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L10",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L9",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T08:27:52.558Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1138",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1136",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T08:27:52.558Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1138",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1136",
+        "phase": "generation"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L2/jerboa",
+        "at": "2026-10-23T16:50:12.154Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L209",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L208",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L2/jerboa",
+        "at": "2026-10-23T16:50:12.154Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L209",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L208",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "26",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L2/jerboa",
+        "at": "2026-10-23T16:50:12.154Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L209",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L208",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L2/jerboa",
+        "at": "2026-10-23T16:50:12.154Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L209",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L208",
+        "phase": "repair"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:12.967Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L155",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L154",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:12.967Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L155",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L154",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "26",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:12.967Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L155",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L154",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:12.967Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L155",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L154",
+        "phase": "repair"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:39.052Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L120",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L119",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:39.052Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L120",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L119",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "26",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:39.052Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L120",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L119",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:28:16.441Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a4d3a35dbb3029087.jsonl:L251",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a4d3a35dbb3029087.jsonl:L250",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:28:16.441Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a4d3a35dbb3029087.jsonl:L251",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a4d3a35dbb3029087.jsonl:L250",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:35:12.588Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-ae9a25fc6a2669bb5.jsonl:L522",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-ae9a25fc6a2669bb5.jsonl:L521",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:36:59.707Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a557f4f80a218650e.jsonl:L430",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a557f4f80a218650e.jsonl:L429",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-23T19:59:02.243Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a7154d5ed3ee900cc.jsonl:L1776",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a7154d5ed3ee900cc.jsonl:L1775",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.10",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "3488bf55-f8ef-4dfe-ae5e-17b59ecfb2cd"
+      ]
+    }
+  },
+  "revision": "0aa0263a00188f45426cf254ea881a05a6ba0e642f711feb90390c3cfde58c3f"
+}

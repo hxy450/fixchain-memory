@@ -26,6 +26,9 @@
   - 时机：规格提取与界面实现阶段，为源端 EditText.setError（含 AppCompatEditText）写转换决策并落实校验失败提示时
   - 情境：源端校验失败时对输入框调用 setError(文案)，没有自定义错误视图；目标为 ArkUI TextInput，候选是 TextInput.errorMessage、输入框下方的行内红字或自绘气泡；规格可能写成“实时校验”或“HarmonyOS 自带错误提示”。
   - 例外：源端用 Material TextInputLayout.setError（框下常显错误文字）而不是 EditText.setError：按该控件的呈现实现
+- [受控值含文本与选区（TextFieldValue）时，选区经 TextAreaController.setTextSelection 落到输入框](lesson-bc79621b279ff82517ab.lesson.md)
+  - 时机：公共组件实现阶段，把 Compose 受控输入组件（格式工具栏、插入链接、插图回填）转成 ArkUI 共享组件时
+  - 情境：源组件以 TextFieldValue 同时回写文本与选区（工具栏加粗、插入链接后光标落到末尾）；目标 ArkUI TextArea/TextInput 的选区只能经 controller 设置，组件内另有 @Local 记录选区。
 - [把同页多组表单收集为执行请求时，按源执行方法实际读取的控件为每个模式设独立字段，不因同名复用其他表单的槽位](lesson-dee3401b34b8fab1a0fb.lesson.md)
   - 时机：功能实现阶段，把 Android Activity 上多组输入表单的字段收集为服务层执行请求、接到写入或计算方法时
   - 情境：源 Activity 在同一页面持有多组语义相近的输入控件（写块的扇区/块与值块的扇区/块、值块数值与另一模式的数值），各执行方法分别读取自己表单的控件；目标由页面收集参数构造一个请求对象交给共享服务，页面已为各表单建了独立状态。

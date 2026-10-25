@@ -1,0 +1,702 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-b3c176b95cabcc03a434",
+  "created_at": "2026-10-24T15:15:25.189267+00:00",
+  "migration_key": "jerboa-e7cc4044-4f78-441c-8b49-3a097937f665",
+  "title": "全屏沉浸窗口下顶部避让职责落空、顶栏盒模型算错与状态栏极性写死",
+  "when": "界面实现与壳层接线阶段，为Tab宿主、NavDestination路由页、自绘顶栏和窗口级主题设置确定状态栏/导航条避让职责与状态栏图标极性时",
+  "description": "目标工程用setWindowLayoutFullScreen加根Navigation expandSafeArea铺满全屏，前景需各页用WindowModel.windowTopPadding/windowBottomPadding手动避让；Android源屏由Scaffold systemBarsPadding或TopAppBar statusBars insets避让，主题按isLight切换状态栏图标明暗；ArkTS侧含Tab宿主内嵌的组件页、抽屉面板、NavDestination原生标题栏页、固定高度自绘顶栏，以及在EntryAbility启动链中执行的窗口属性设置。",
+  "summary": "本卡涵盖同一问题的六条生成期成因，各自绑定到被修文件：\n1) Tab宿主职责互推（BottomNavPage）：转换者写前读到页面spec的needs_immersive_safearea=true与arkts-immersive-safearea的责任分层表\n   （子组件/overlay什么都不做、安全区由宿主全屏页统一负责；子组件豁免Layer 3），却在BottomNavPage头注释写\n   “Tab内容区顶部避让由各Tab页（HomePage等）自行处理（子组件豁免Layer 3）”，Tab内容区与抽屉面板都没有windowTopPadding；\n   推理里只假设HomePage会自理（agent-a6cc928e998709036.jsonl:L66、L205），未核子页。Tab子页（如ReportsPage、HomePage）则写“由宿主统一处理”，\n   两边互相推给对方。返修在宿主内容区加padding.top=windowTopPadding（Saved/Profile除外）、底栏隐藏时padding.bottom、抽屉面板上下避让。\n2) NavDestination原生标题栏页（LoginPage）：转换者读到spec的needs_immersive_safearea=true与skill“NavDestination全屏页同样要扛Layer 3”，\n   但因当时L1/L2尚未落地，判定“原生标题栏自动避让，无需手写padding”。FV-1收尾时沉浸检查器报LoginPage/HomePage缺L3，\n   收尾者没核宿主或真机，直接在页头加needs_immersive_safearea=false豁免注释，使闸门失效。返修改为hideTitleBar+自绘顶栏windowTopPadding与底部windowBottomPadding。\n3) 派工把缺失字段当false（ReportsPage）：第二次运行的a2h-execute主线程按1-converter.md“仅当meta.json needs_immersive_safearea:true时实施”\n   自行补成“缺失→按false处理/缺失时跳过”，而页面spec已按page_type=full_screen_page判定true；转换者照派工写“meta.json无该字段，按false跳过”，\n   顶栏height(64)无inset。返修在ReportsPage补顶部windowTopPadding。\n4) 顶栏盒模型（PersonProfilePage）：skill默认模板把.height(56)与.padding({top: windowTopPadding + 6})写在同一Row；CommunityPage转换者照此写\n   .height(64).padding({top: windowTopPadding})，同时把菜单定位在windowTopPadding + 64（意图是顶栏=inset+64）；PersonProfilePage转换者读CommunityPage后沿用，\n   Saved/Profile Tab顶栏内容区被压扁。返修改为外层padding(top=inset)、内层固定64。\n5) 状态栏极性写死（MainPage）：壳层转换者读到spec锚定JerboaTheme(Theme.kt)和skill自检“statusBarContentColor与主题对比足够”，\n   却按skill示意图/症状表的默认“浅色文字#FFFFFF”写死statusBarContentColor/navigationBarContentColor为白色，未读Theme.kt；第三次运行重写MainPage时保留了该写死值，\n   与ThemeController的极性设置冲突。返修删去写死值，交ThemeController统一下发。\n6) 窗口操作时序（ThemeController→EntryAbility）：主题服务作者读到Theme.kt在组合期取Activity window设isAppearanceLightStatusBars=isLight，\n   也读到EntryAbility模板的onWindowStageCreate，却把状态栏极性/隐私窗放进ensureAttached，用window.getLastWindow获取窗口，\n   并以HANDOFF指定owner=EntryAbility.onCreate；group closer照HANDOFF在onCreate调用，此时主窗口尚不存在，极性从未生效。\n   返修新增attachWindow，在onWindowStageCreate注入getMainWindowSync()后重放，并加onConfigurationUpdate重组与重入保护。\nAppBars与CommentActionTopBar的返修是重建/新建共享顶栏组件，生成结束时没有对应顶栏片段，列入未决。\n",
+  "recommendations": [
+    "宿主实现阶段：子组件按skill豁免Layer 3时，Tab宿主须给内容区与抽屉面板补windowTopPadding/windowBottomPadding；若按源码结构交给子页，先grep子页确有windowTopPadding消费再写注释，不得宿主与子页互相推给对方。",
+    "自绘顶栏：把状态栏inset与顶栏内容高度分层（外层padding(top: inset)+内层Row固定64，或height=64+inset）；不要在同一容器上同时写height(N)与padding(top: inset)，套用skill模板或既有页面写法前先核ArkUI padding计入height。",
+    "派工阶段：沉浸需求以页面spec按page_type判定的值为准；meta.json缺字段不能翻译成false跳过；转换者遇到派工与页面spec冲突时按spec/page_type实施并在报告标出冲突。",
+    "NavDestination路由页：按全屏窗口+根Navigation expandSafeArea的目标架构判断避让，不以“L1/L2尚未落地”推断原生标题栏会避让；收尾闸报L3缺失时，只有grep到宿主实际padding或真机确认无遮挡才可标needs_immersive_safearea=false。",
+    "状态栏极性：按源主题isAppearanceLightStatusBars=isLight随主题设置statusBarContentColor，不沿用模板默认#FFFFFF；壳层不再写死覆盖主题服务的极性。",
+    "窗口级属性（setWindowSystemBarProperties/setWindowPrivacyMode）在onWindowStageCreate拿到主窗口后执行或补执行；HANDOFF到onCreate的服务不得依赖getLastWindow取窗口。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/pages/BottomNavPage.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/spec/baseline/ui/page_0003_BottomNavScreen.md",
+          "at": "2026-10-01T09:28:24.212Z",
+          "reason": "正常输入：Read回执给出本页needs_immersive_safearea=true，按arkts-immersive-safearea四层架构实施，并列出Home/Search/Inbox/RegApps/Reports等Tab由内层NavHost承载（agent-a6cc928e998709036.jsonl:L9-L10，spec L75-L78、L31）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/.claude/skills/arkts-immersive-safearea/SKILL.md",
+          "at": "2026-10-01T09:33:16.351Z",
+          "reason": "正常输入：Read回执的责任分层表写明子组件/overlay不订阅WindowModel、安全区由宿主全屏页统一负责，子组件显式豁免Layer 3；足以说明宿主需给内嵌Tab内容区与抽屉补顶部inset（同转录L119-L120，skill L72-L87）。"
+        },
+        {
+          "key": "7b318df2-6d4a-47e0-9799-52c4ecc9a4be:a6cc928e998709036",
+          "at": "2026-10-01T09:39:34.537Z",
+          "reason": "收到上述输入后，Write只给底栏padding bottom=windowBottomPadding，头注释写“Tab内容区顶部避让由各Tab页自行处理（子组件豁免Layer 3）”，内容区Stack与抽屉面板Column均无windowTopPadding；推理仅假设HomePage自理顶部（同转录L66、L123、L205，Write L156-L157）。宿主/子页职责在此落空。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/pages/LoginPage.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/spec/baseline/ui/page_0002_LoginScreen.md",
+          "at": "2026-10-01T09:09:55.147Z",
+          "reason": "正常输入：Read回执给出needs_immersive_safearea=true（按full_screen_page判定）并要求按四层架构实施；同一spec的转换决策把SimpleTopAppBar映射为NavDestination原生标题栏（agent-a545d81e0febe9362.jsonl:L11-L12，spec L39、L68-L71）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/.claude/skills/arkts-immersive-safearea/SKILL.md",
+          "at": "2026-10-01T09:14:03.826Z",
+          "reason": "正常输入：Bash读取skill前120行，回执含“NavDestination全屏页同样要扛Layer 3”“ArkUI不会自动给前景内容加避让”及全屏页需前景手动inset（同转录L58-L59）。"
+        },
+        {
+          "key": "7b318df2-6d4a-47e0-9799-52c4ecc9a4be:a545d81e0febe9362",
+          "at": "2026-10-01T09:18:43.164Z",
+          "reason": "grep到EntryAbility尚无setWindowLayoutFullScreen后，以当前未全屏的状态推论“NavDestination原生标题栏自动避让，无需手写padding”，Write用.title()原生标题栏且无windowTopPadding，并报L3 implemented（同转录L64-L66、L68-L69、L117）。在L1/L2落地后标题栏被状态栏盖住。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/spec/execution/autofix-log/round-6/immersive-pipeline-iter0.json",
+          "at": "2026-10-01T20:13:57.816Z",
+          "reason": "正常输入：FV-1收尾者用python读取沉浸检查结果，回执写明LoginPage与HomePage为全屏页但未发现任何安全区响应，修复方式为windowTopPadding/ImmersiveScaffold，仅“确无前景避让需求”才可标false豁免（agent-a4a33bd280d26d858.jsonl:L754-L755）。"
+        },
+        {
+          "key": "e7cc4044-4f78-441c-8b49-3a097937f665:a4a33bd280d26d858",
+          "at": "2026-10-01T20:14:50.419Z",
+          "reason": "收到L3缺失报告后，未核宿主padding或截图，按“原生标题栏自动避让”直接Edit页头加needs_immersive_safearea=false豁免注释（HomePage同样按“壳层统一处理”改false），闸门由此放行（同转录L758-L761、L773、L778-L779）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "转换者Bash执行cat该SKILL.md并head -120，回执返回Layer 3责任分层与NavDestination全屏页需前景手动inset的段落，支持其写LoginPage前已收到该要求。",
+          "evidence": [
+            {
+              "source": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a545d81e0febe9362.jsonl",
+              "line": 58
+            },
+            {
+              "source": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a545d81e0febe9362.jsonl",
+              "line": 59
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target"
+        },
+        {
+          "from": 4,
+          "to": 5,
+          "force": true,
+          "reason": "FV-1收尾者Bash用python json.load读取该检查结果文件（相对工程根路径），回执列出LoginPage/HomePage的L3缺失与豁免条件，随后据此改页头注释。",
+          "evidence": [
+            {
+              "source": "generation/e7cc4044-4f78-441c-8b49-3a097937f665/subagents/agent-a4a33bd280d26d858.jsonl",
+              "line": 754
+            },
+            {
+              "source": "generation/e7cc4044-4f78-441c-8b49-3a097937f665/subagents/agent-a4a33bd280d26d858.jsonl",
+              "line": 755
+            }
+          ]
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/pages/ReportsPage.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/.claude/skills/a2h-execute/references/agent-prompts/1-converter.md",
+          "at": "2026-10-01T10:55:43.249Z",
+          "reason": "上游输入：派发模板写“仅当meta.json needs_immersive_safearea: true时调用arkts-immersive-safearea；false时跳过”，只认meta.json字段，未说明字段缺失时如何处理，也未引用页面spec的判定（e919f2a1-5f90-46e2-baca-332c443637de.jsonl:L113-L115）。模板缺口记于此。"
+        },
+        {
+          "key": "e919f2a1-5f90-46e2-baca-332c443637de:main",
+          "at": "2026-10-01T11:09:11.199Z",
+          "reason": "主线程推理“字段缺失=false→immersive_safearea_skipped”，派工写入“meta.json关键字段: needs_immersive_safearea缺失→按false处理”“false/缺失时跳过本契约”，未读页面spec沉浸节（同转录L165、L167、L288）。第一次运行派工原为“沉浸式契约按页面spec”。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/spec/baseline/ui/page_0012_ReportsScreen.md",
+          "at": "2026-10-01T11:09:20.480Z",
+          "reason": "正常输入：转换者Read回执给出needs_immersive_safearea=true（按full_screen_page判定），要求按四层架构实施（agent-aa2bd17428dbe77d5.jsonl:L13-L14，spec L94-L97）。"
+        },
+        {
+          "key": "e919f2a1-5f90-46e2-baca-332c443637de:aa2bd17428dbe77d5",
+          "at": "2026-10-01T11:18:12.482Z",
+          "reason": "收到派工与spec冲突的两条输入，Write按派工在页头写“meta.json无needs_immersive_safearea，按false跳过”“沉浸式padding由宿主统一处理”，顶栏height(64)无windowTopPadding（同转录L1、L151-L152）。本链确认派工规则传到目标。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/pages/PersonProfilePage.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/.claude/skills/arkts-immersive-safearea/SKILL.md",
+          "at": "2026-10-01T09:12:21.674Z",
+          "reason": "有缺陷的上游输入：Bash读取skill第150-280行，默认V2模板把自绘TitleBar写成同一Row上的.height(56)与.padding({top: windowTopPadding + 6})；ArkUI padding计入固定height，模板本身会压缩顶栏内容区（agent-a745df6b7977c0905.jsonl:L106-L107）。"
+        },
+        {
+          "key": "7b318df2-6d4a-47e0-9799-52c4ecc9a4be:a745df6b7977c0905",
+          "at": "2026-10-01T09:23:50.855Z",
+          "reason": "CommunityPage转换者照模板写顶栏.height(64).padding({top: windowTopPadding})，同时把菜单定位在windowTopPadding + 64，说明其意图是顶栏=inset+64，却把inset放进固定64内；偏差在此首次进入代码（同转录L167、L171、L169-L170）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/pages/CommunityPage.ets",
+          "at": "2026-10-01T09:34:50.295Z",
+          "reason": "交付桥梁：PersonProfilePage转换者Read回执中CommunityPage顶栏仍为.height(64).padding({top: this.windowTopPadding})，菜单margin top=windowTopPadding + 64（agent-a2009d790ae750e07.jsonl:L38-L39）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/spec/baseline/ui/page_0007_PersonProfileScreen.md",
+          "at": "2026-10-01T09:34:16.233Z",
+          "reason": "正常输入：Read回执给出needs_immersive_safearea=true，顶栏为TopAppBar（PersonProfileHeader）（同转录L9-L10，spec L30、L81-L84）。"
+        },
+        {
+          "key": "7b318df2-6d4a-47e0-9799-52c4ecc9a4be:a2009d790ae750e07",
+          "at": "2026-10-01T09:44:20.141Z",
+          "reason": "读到CommunityPage写法后，Write的PersonProfileHeader同样为.height(64).padding({top: this.windowModel.windowTopPadding})，菜单margin windowTopPadding + 64（同转录L98-L99）；后续重写保留此写法到生成结束。本链确认沿用，不另推定独立失职。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "CommunityPage转换者Bash执行sed -n 150,280p读取该SKILL.md，回执含默认V2模板的TitleBar .height(56)与.padding({top: windowTopPadding + 6})同一Row写法，随后照此写顶栏。",
+          "evidence": [
+            {
+              "source": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a745df6b7977c0905.jsonl",
+              "line": 106
+            },
+            {
+              "source": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a745df6b7977c0905.jsonl",
+              "line": 107
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 5
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/pages/MainPage.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/spec/baseline/ui/page_0001_MainActivity.md",
+          "at": "2026-10-01T09:09:45.892Z",
+          "reason": "正常输入：Read回执锚定JerboaTheme→ui/theme/Theme.kt，说明enableEdgeToEdge按四层架构实施、窗口级配置在MainPage落地，JerboaTheme有深浅色（agent-a8a363f410a72803c.jsonl:L11-L12，spec L15、L28、L41-L42、L85-L88）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/.claude/skills/arkts-immersive-safearea/SKILL.md",
+          "at": "2026-10-01T09:13:49.170Z",
+          "reason": "输入含冲突：Read回执的Layer 1示意图写“透明背景+浅色文字”、症状表建议#FFFFFF，但自检表要求“statusBarContentColor与主题对比足够”（同转录L79-L80，skill L29、L213、L240）。默认值不适用于浅色主题。"
+        },
+        {
+          "key": "7b318df2-6d4a-47e0-9799-52c4ecc9a4be:a8a363f410a72803c",
+          "at": "2026-10-01T09:19:13.965Z",
+          "reason": "未读spec锚定的Theme.kt，Write的initImmersiveWindow把statusBarContentColor/navigationBarContentColor写死'#FFFFFF'，浅色主题下状态栏图标不可见（同转录L106、L112-L113）；第三次运行重写MainPage时已见EntryAbility挂接ThemeController极性，仍保留该写死值（agent-a6946767c2a0231e4.jsonl:L64、L209）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/services/ThemeController.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/spec/baseline/features/F013-app-settings.md",
+          "at": "2026-10-01T13:48:37.067Z",
+          "reason": "正常输入：Read回执AC06要求主题模式驱动状态栏图标明暗（浅色主题深色图标），AC28要求安全窗口，均以Theme.kt为真值（agent-a67860e4032034d23.jsonl:L26，spec L209、L237）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/ui/theme/Theme.kt",
+          "at": "2026-10-01T13:53:27.066Z",
+          "reason": "正常输入：Read回执显示源码在组合期由LocalView取Activity window，再设FLAG_SECURE与isAppearanceLightStatusBars=isLight，即窗口已存在时执行（同转录L110-L111，Theme.kt L110-L130）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/entryability/EntryAbility.ets",
+          "at": "2026-10-01T13:55:20.719Z",
+          "reason": "正常输入：Read回执显示EntryAbility模板在onWindowStageCreate中拿到windowStage并loadContent，onCreate时尚无窗口（同转录L157-L158）。"
+        },
+        {
+          "key": "e919f2a1-5f90-46e2-baca-332c443637de:a67860e4032034d23",
+          "at": "2026-10-01T14:22:02.376Z",
+          "reason": "Write把状态栏极性与隐私窗放进ensureAttached→reapply，用window.getLastWindow(context)取窗口，并写HANDOFF owner=EntryAbility.onCreate“首帧主题应用：colorMode/状态栏极性/隐私窗”；未处理窗口创建后的补应用（同转录L177、L274、L326-L327）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/entryability/EntryAbility.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "e919f2a1-5f90-46e2-baca-332c443637de:a67860e4032034d23",
+          "at": "2026-10-01T14:22:02.376Z",
+          "reason": "偏差起点同ThemeController分支：Write在ThemeController中写HANDOFF owner=EntryAbility.onCreate，要求在onCreate调用ensureAttached完成状态栏极性/隐私窗首帧应用（agent-a67860e4032034d23.jsonl:L326-L327）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/services/ThemeController.ets",
+          "at": "2026-10-01T15:33:58.407Z",
+          "reason": "交付桥梁：group closer用grep读到ThemeController.ets的HANDOFF行owner=EntryAbility.onCreate及ensureAttached签名（agent-ae45f3830e38998e0.jsonl:L554-L555）。"
+        },
+        {
+          "key": "e919f2a1-5f90-46e2-baca-332c443637de:ae45f3830e38998e0",
+          "at": "2026-10-01T15:34:15.470Z",
+          "reason": "按HANDOFF用python脚本改写EntryAbility.onCreate，加入ThemeController.getInstance().ensureAttached(this.context)，注释“首帧主题应用（colorMode/状态栏极性/隐私窗分发）”；onWindowStageCreate未补窗口注入（同转录L550、L557-L558）。本链确认传递。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "group closer用Bash grep ensureAttached读取ThemeController.ets，回执返回HANDOFF行owner=EntryAbility.onCreate与ensureAttached(context)签名，随后按此接线。",
+          "evidence": [
+            {
+              "source": "generation/e919f2a1-5f90-46e2-baca-332c443637de/subagents/agent-ae45f3830e38998e0.jsonl",
+              "line": 554
+            },
+            {
+              "source": "generation/e919f2a1-5f90-46e2-baca-332c443637de/subagents/agent-ae45f3830e38998e0.jsonl",
+              "line": 555
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target",
+          "force": true,
+          "reason": "group closer用Bash运行python脚本打开entryability/EntryAbility.ets做字符串替换并写回，在onCreate加入ThemeController.getInstance().ensureAttached(this.context)，回执OK。",
+          "evidence": [
+            {
+              "source": "generation/e919f2a1-5f90-46e2-baca-332c443637de/subagents/agent-ae45f3830e38998e0.jsonl",
+              "line": 557
+            },
+            {
+              "source": "generation/e919f2a1-5f90-46e2-baca-332c443637de/subagents/agent-ae45f3830e38998e0.jsonl",
+              "line": 558
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "未在设备上单独复核NavDestination原生标题栏在根Navigation expandSafeArea下的避让表现，LoginPage分支以返修报告I2-62/A-12的观察为准。",
+    "返修后ReportsPage自身与BottomNavPage宿主都给Reports加了顶部padding，最终是否双重避让未核；ReportsPage分支只归因生成期按false跳过沉浸契约。"
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/components/common/AppBars.ets",
+      "reason": "已确认返修重写为920行全量组件并新增SimpleTopAppBar/ActionTopBar的statusBarHeight参数；但生成结束时这些顶栏组件已被FV-1收尾者按零消费方孤儿删除（agent-a4a33bd280d26d858.jsonl:L713、L919-L922），文件内没有可对应的顶栏inset片段，本问题的生成偏差落在各消费页的内联顶栏。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/components/comment/CommentActionTopBar.ets",
+      "reason": "返修新建文件（retained-application.patch为new file），生成期无写入；对应的生成期内联顶栏位于评论回复/编辑页，不在本job目标内，未逐页追溯。"
+    }
+  ],
+  "job": "issue-b3c176b95cabcc03a434",
+  "metadata": {
+    "migration": {
+      "id": "jerboa-e7cc4044-4f78-441c-8b49-3a097937f665",
+      "project": "jerboa"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.247",
+        "2.1.309",
+        "2.1.310"
+      ]
+    },
+    "source_set_id": "sources-32ddfd727cfccbbce98f",
+    "environment": [
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T06:59:57.329Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L10",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L9",
+        "phase": "generation"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T06:59:57.329Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L10",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L9",
+        "phase": "generation"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "26",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T06:59:57.329Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L10",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L9",
+        "phase": "generation"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T06:59:57.329Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L10",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L9",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T08:27:52.558Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1138",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1136",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T08:27:52.558Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1138",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1136",
+        "phase": "generation"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L2/jerboa",
+        "at": "2026-10-23T16:50:12.154Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L209",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L208",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L2/jerboa",
+        "at": "2026-10-23T16:50:12.154Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L209",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L208",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "26",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L2/jerboa",
+        "at": "2026-10-23T16:50:12.154Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L209",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L208",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L2/jerboa",
+        "at": "2026-10-23T16:50:12.154Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L209",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L208",
+        "phase": "repair"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:12.967Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L155",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L154",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:12.967Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L155",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L154",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "26",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:12.967Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L155",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L154",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:12.967Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L155",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L154",
+        "phase": "repair"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:39.052Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L120",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L119",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:39.052Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L120",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L119",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "26",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:39.052Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L120",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L119",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:28:16.441Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a4d3a35dbb3029087.jsonl:L251",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a4d3a35dbb3029087.jsonl:L250",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:28:16.441Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a4d3a35dbb3029087.jsonl:L251",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a4d3a35dbb3029087.jsonl:L250",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:35:12.588Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-ae9a25fc6a2669bb5.jsonl:L522",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-ae9a25fc6a2669bb5.jsonl:L521",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:36:59.707Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a557f4f80a218650e.jsonl:L430",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a557f4f80a218650e.jsonl:L429",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-23T19:59:02.243Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a7154d5ed3ee900cc.jsonl:L1776",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a7154d5ed3ee900cc.jsonl:L1775",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.10",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "3488bf55-f8ef-4dfe-ae5e-17b59ecfb2cd"
+      ]
+    }
+  },
+  "revision": "acbf9ff15291867da7f28e180e80f8cb9c7277b41e553e0de94f4f92a056e637"
+}

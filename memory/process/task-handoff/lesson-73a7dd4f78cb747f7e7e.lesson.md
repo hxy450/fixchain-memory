@@ -1,6 +1,6 @@
 # 派工转述规则或把某任务的局部做法推广为派工规则时，连同原文的替代写法、适用范围与配套要求一起下发；禁止并发构建的 worker 改动汇总后立即全量构建
 
-ID：`lesson-73a7dd4f78cb747f7e7e` · 版本：4
+ID：`lesson-73a7dd4f78cb747f7e7e` · 版本：5
 
 [本主题](index.md)
 
@@ -21,7 +21,7 @@ ID：`lesson-73a7dd4f78cb747f7e7e` · 版本：4
 1. 转述规则时保留原文的替代写法或示例，不只写禁令；把某任务的做法推广给后续派工前，回读它所依据的参考条目，把适用范围、负向守卫和配套要求一并写进派工。派工里的技术参数（刷新周期、补偿方式等）以该 feature 规格的映射行为准；引用决策台账条目前核对它替代的是哪个源模块，不把其他模块的参数带进本派工；概括源码锚点的内容前打开文件核对。
 2. 禁止 worker 并发构建时，限制清单写入与 TS 直觉相反的规则（如 implements 只接受 interface），worker 仍做导入名与导出名的静态对照；收齐改动后立即全量构建，并逐一核对 worker 新引入的类型声明；收尾构建因会话中断未执行时，下一轮先编译再派工。
 
-来源支持：5 张卡 · 4 次迁移 · 3 个应用
+来源支持：7 张卡 · 5 次迁移 · 4 个应用
 
 ## 来源（按需复核）
 
@@ -29,9 +29,13 @@ ID：`lesson-73a7dd4f78cb747f7e7e` · 版本：4
   卡片版本：`93efce843b538354c85222f088e9667e495135f3cea4d482a1a80ce9849ccbdd`
 - [case-104a365629bd48069967](../../../store/cases/case-104a365629bd48069967/a1627b0c872858a162cd2b9e32351195aee56ffb8e1323502a880ad30919b798.json) · 结论：recommendation:3
   卡片版本：`a1627b0c872858a162cd2b9e32351195aee56ffb8e1323502a880ad30919b798`
+- [case-1f6d95134bba8edf5ba6](../../../store/cases/case-1f6d95134bba8edf5ba6/c6780fd37b81cfbc77e6ab078bb18a5d246af4823f23ded05fce48b8997d84fa.json) · 结论：recommendation:1
+  卡片版本：`c6780fd37b81cfbc77e6ab078bb18a5d246af4823f23ded05fce48b8997d84fa`
 - [case-28990049b25bf1086836](../../../store/cases/case-28990049b25bf1086836/4c3037100e303a3b9a9c78b8d172f92cb23342e0be0d2c8c467948a720e3723f.json) · 结论：recommendation:3
   卡片版本：`4c3037100e303a3b9a9c78b8d172f92cb23342e0be0d2c8c467948a720e3723f`
 - [case-34903093a988aad52061](../../../store/cases/case-34903093a988aad52061/e127c825ec9e70a3c6237159da0b285cf7d81483112e4a883a38d41762f5a5aa.json) · 结论：diagnosis, recommendation:1
   卡片版本：`e127c825ec9e70a3c6237159da0b285cf7d81483112e4a883a38d41762f5a5aa`
 - [case-98e7bd27bb334db83f51](../../../store/cases/case-98e7bd27bb334db83f51/2bd8a63105c2a86e012e477614f9ed3d54d26dbfc05250b99a797f194a3e1b79.json) · 结论：diagnosis, recommendation:4
   卡片版本：`2bd8a63105c2a86e012e477614f9ed3d54d26dbfc05250b99a797f194a3e1b79`
+- [case-b3c176b95cabcc03a434](../../../store/cases/case-b3c176b95cabcc03a434/acbf9ff15291867da7f28e180e80f8cb9c7277b41e553e0de94f4f92a056e637.json) · 结论：recommendation:3
+  卡片版本：`acbf9ff15291867da7f28e180e80f8cb9c7277b41e553e0de94f4f92a056e637`

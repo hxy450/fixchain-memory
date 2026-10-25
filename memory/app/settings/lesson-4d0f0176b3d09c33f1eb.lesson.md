@@ -1,6 +1,6 @@
 # 迁移设置开关、设置保存与持久化的界面状态时为每项落实运行期消费方：只调持久化 setter、只写远端设置不算完成
 
-ID：`lesson-4d0f0176b3d09c33f1eb` · 版本：3
+ID：`lesson-4d0f0176b3d09c33f1eb` · 版本：4
 
 [本主题](index.md)
 
@@ -26,7 +26,7 @@ ID：`lesson-4d0f0176b3d09c33f1eb` · 版本：3
 6. 切换即持久化、启动恢复的界面状态，写入与恢复两端都落地：切换时先持久化再更新状态，恢复放在偏好异步加载完成之后，非法值按源端规则回退。
 7. 应用内语言切换核对所选 API 的生效时机：偏好语言接口（setAppPreferredLanguage）按偏好在应用启动时加载资源；要求保存后立即切换时另行让当前进程即时生效（来源采用 ApplicationContext.setLanguage），并刷新已显示的代码内取值文案，以 SDK 声明或真机确认。
 
-来源支持：5 张卡 · 3 次迁移 · 3 个应用
+来源支持：6 张卡 · 4 次迁移 · 4 个应用
 
 ## 来源（按需复核）
 
@@ -38,5 +38,7 @@ ID：`lesson-4d0f0176b3d09c33f1eb` · 版本：3
   卡片版本：`b0032836632c952424844dd36317b057e3978e311730fb0f18415b55dc9cec96`
 - [case-8a522021d6d10fded125](../../../store/cases/case-8a522021d6d10fded125/695193a757e708a77ef3560a9f73b4caf829f00fdfad9ee70368e51f842a04f9.json) · 结论：recommendation:4
   卡片版本：`695193a757e708a77ef3560a9f73b4caf829f00fdfad9ee70368e51f842a04f9`
+- [case-aa417e7659460a46d12a](../../../store/cases/case-aa417e7659460a46d12a/44f6fd162a14df38acc193597b7dac40201f088682cce5dff48cc7432bf75f68.json) · 结论：recommendation:2, recommendation:6
+  卡片版本：`44f6fd162a14df38acc193597b7dac40201f088682cce5dff48cc7432bf75f68`
 - [case-ea1fc6a0711a8176b79c](../../../store/cases/case-ea1fc6a0711a8176b79c/7eacf7d6fe6f97cf98c91ebecec4431cc188b0bc40b4866c5d4f39bc62b18a23.json) · 结论：diagnosis, recommendation:2, recommendation:3
   卡片版本：`7eacf7d6fe6f97cf98c91ebecec4431cc188b0bc40b4866c5d4f39bc62b18a23`

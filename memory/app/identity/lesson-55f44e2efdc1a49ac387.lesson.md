@@ -1,6 +1,6 @@
 # 落地应用显示名时同时改 AppScope 的 app_name 与入口 Ability 的 label 字符串，值取 Android 的应用名（有语言译名时 AppScope 与 entry 同建语言目录）；资源迁移合并而不覆盖模板 string.json
 
-ID：`lesson-55f44e2efdc1a49ac387` · 版本：5
+ID：`lesson-55f44e2efdc1a49ac387` · 版本：6
 
 [本主题](index.md)
 
@@ -28,10 +28,12 @@ ID：`lesson-55f44e2efdc1a49ac387` · 版本：5
 4. 身份落地时 grep 全部 resources/*/element/string.json（含 en_US 等语言目录）里的 EntryAbility_label、app_name 等同名键并同步；i18n 审计报语言目录缺少脚手架身份键时，不以 'label'、'description' 等模板值补齐让审计通过，从 base 或源端真值派生，并在身份落地后复核。
 5. 改完读回各 string.json（包括 AppScope 各语言目录），确认 AppScope、entry base 与各语言目录中的值都等于 Android 应用名或其译名，没有残留脚手架工程名或 'label' 一类模板值。
 
-来源支持：5 张卡 · 5 次迁移 · 5 个应用
+来源支持：6 张卡 · 6 次迁移 · 6 个应用
 
 ## 来源（按需复核）
 
+- [case-1f6d95134bba8edf5ba6](../../../store/cases/case-1f6d95134bba8edf5ba6/c6780fd37b81cfbc77e6ab078bb18a5d246af4823f23ded05fce48b8997d84fa.json) · 结论：diagnosis, recommendation:1
+  卡片版本：`c6780fd37b81cfbc77e6ab078bb18a5d246af4823f23ded05fce48b8997d84fa`
 - [case-224eb9de83aa652829f4](../../../store/cases/case-224eb9de83aa652829f4/1c6accbb95b548e17b357f44673488687037364da1317e7c01d09e4b507d3953.json) · 结论：diagnosis, recommendation:2, recommendation:3, recommendation:4
   卡片版本：`1c6accbb95b548e17b357f44673488687037364da1317e7c01d09e4b507d3953`
 - [case-4f7163b95249e9ede2ca](../../../store/cases/case-4f7163b95249e9ede2ca/8d4d0d18e9bd68c6ddc5554130ad97c38ea483d147b5bdff45d24a790e1ea78f.json) · 结论：diagnosis, recommendation:3

@@ -1,0 +1,439 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-8b307e33adf3d2817a04",
+  "created_at": "2026-10-24T14:16:43.542267+00:00",
+  "migration_key": "jerboa-e7cc4044-4f78-441c-8b49-3a097937f665",
+  "title": "Markdown 渲染：Lemmy 链接 run 被提前、WEB_URLS 与 CommonMark 核心被简化、长按整段取首个链接",
+  "when": "Markdown 渲染功能的规格提取与解析/渲染实现阶段，确定解析器语法覆盖、文本切分后行内 run 的拼装顺序、自动链接规则和链接触摸命中方式时",
+  "description": "源端用 Markwon（commonmark-java 核心解析 + Linkify(WEB_URLS)、Lemmy 简写等文本监听插件 + BetterLinkMovementMethod 按触点命中 span）渲染 Markdown；目标端自研解析器，把文本切成有序 run 序列后交给 StyledString/Span 渲染，链接手势需在 ArkUI 侧重新实现。",
+  "summary": "本问题由两个偏差起点构成，分属实现与规格两个环节。\n【实现：行内顺序与自动链接】Slice 1 worker 写前已读到 MarkwonLemmyLinkPlugin.kt：Lemmy 简写由\nLinkify.addLinks 在同一文本节点上按 start+getSpanStart 原位挂 span，文本顺序不变\n（agent-a9428efc2f0a18e8a.jsonl:L35-L36）；spec AC13 只要求识别成可点链接，worker 自己的设计稿也写\n“社区命中后再对间隔文本跑用户 pattern”（同转录 L208、L222 推理）。但 L224 写出的 appendLemmyPattern 在循环中把每个\n命中直接 push 成 LINK run，间隔文本先收进 segments，循环结束后再递归/输出，于是“前文 @user 后文”\n变成 [@user, 前文, 后文]；启动 changelog 的 “… by @KiaraGrouwstra in #2123” 被渲染成链接提到段首\n（返修主线程 L1274、派工 L1794）。worker 的冒烟只测正则命中与捕获组（L304-L307），自查只核了\n“无命中/整段命中”两种边界（L288），未断言 run 拼接顺序。\n同次写入的 autoLink：spec AC12 要求“裸 URL（WEB_URLS 语义，不含 email）”，源码 MarkdownHelper.kt:127 为\nLinkifyPlugin.create(Linkify.WEB_URLS)；worker 推理中已承认 WEB_URLS 也匹配无协议域名，却为避开与\n@user@instance 冲突只写 https?:// 或 www. 前缀正则并注明“语义近似”（L191 推理、L224 正文第56-60行）。\n【规格：CommonMark 核心被收窄为插件效果】spec 作者读到 MarkdownHelper.kt 的 Markwon 4.6.2 builder\n（以 commonmark 解析为底座，见同批 ClickableCoilImagesPlugin 的 org.commonmark 导入）与 feature-base\n“Markwon（core/tables/html/...）→ @ohos/markdown 或自研轻渲染”，F017 实现映射却写\n“行为目标=各插件可观察效果逐一等价”，28 条 AC 只覆盖 7 个自研插件与表格/删除线/HTML，\n没有 CommonMark 块/行内核心（嵌套列表、惰性续行、松紧列表、行内元素保持原文顺序）的任何契约，\n且沿用 complexity=simple，派工因此“免 source-notes”。worker 按“自研轻渲染”写出逐行正则块解析：\n列表项单行且先 trim（丢失缩进嵌套）、引用只做行内、无惰性续行与松紧判定（L224 正文 parseBlocks 段，\nL191 推理亦写明 “single-line items; continuation ignored — lightweight”）。\n【规格：长按命中模型】spec 作者读了 BetterLinkMovementMethod.kt（按触点找 span 再派发点击/长按），\n模板要求平台能力结论以 SDK d.ts、knowledge-verifier 查证或参考条目为据、禁凭记忆；其推理自认\n“Not verifiable offline with certainty”，成稿仍以“arkts-knowledge-verifier 无 span 级手势条目”为依据把\nBetterLinkMovementMethod 判为 HARD-DIV（PD-C8-F017-01：命中域=整个文本组件 → URL 提取）。worker 读到该\nspec 与 ledger 后，在 SDK styled_string.d.ts 查到 GestureStyle 自 API 12 即有 onClick/onLongPress，并在推理中\n承认逐 span 长按更忠实，但仍按 ledger 写组件级 LongPressGesture + firstLinkUrl（整段任意位置长按都取\n第一个链接），返回 decision_gaps 为空（L103、L116、L241）。\n上述片段经后续接线/编译修复（e7cc4044 的 closer、build-fix 只改注释与 GestureStyle 字段名）保留到生成结束。\n返修 agent-a46873447b2ab3ddd 重写 MarkdownPipeline（移植 commonmark.js 0.29 块/行内算法得有序 run、\nAndroid Patterns.AUTOLINK_WEB_URL、按文本节点 Linkify→Lemmy 位置交错与重叠丢弃，L813/L850/L983/L1721），\n重写 MarkdownText（TextController LayoutManager 按触点命中点按与长按、链接色 #80CBC4、未传 style 时读\n全局 bodyLarge，L1278/L1291/L1326），MarkdownRendererService 仅随之把 render(md, opts) 改为 parse(md)（L1270）。\n同次修复的链接色与固定 16/24 字号见 unknown，未单独成链。\n",
+  "recommendations": [
+    "规格提取阶段：迁移整套第三方 Markdown 渲染库时，契约同时覆盖库的 CommonMark 核心语法（嵌套/惰性续行/松紧列表、引用内块、行内元素按原文顺序）和自研插件，并为核心语法给出可断言样例 AC；不要只按插件清单出 AC，复杂度也不应仅按插件代码行数判为 simple。",
+    "规格提取阶段：判定 HARD-DIV（平台无对等能力）前，按模板在项目 SDK d.ts 中查证相关能力（本例应查 styled_string.d.ts 的 GestureStyle onClick/onLongPress、TextController 布局查询）；查不到证据时写“待验证”而不是以“知识库无条目”批准退化替代。",
+    "实现阶段：把一段文本按多个正则切成 run 时，命中和间隔文本都要按原位置顺序输出（单次扫描合并命中区间或逐段即时输出）；单测用“前文+链接+后文”断言 run 文本拼接等于原文、链接位置不变，不能只测正则命中。",
+    "实现阶段：AC 写明 WEB_URLS 等平台匹配语义时，移植源平台正则（Patterns.AUTOLINK_WEB_URL，含无协议域名与 @ 前不链接过滤），与 Lemmy 等规则重叠按源端监听注册顺序处理，而不是缩窄匹配范围。",
+    "实现阶段：发现 SDK 能力与已批决策的前提矛盾（如逐 span 手势可用）时，在返回信封报 decision_gap 并附 d.ts 证据，不默默沿用退化方案。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/utils/MarkdownPipeline.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/util/markwon/MarkwonLemmyLinkPlugin.kt",
+          "at": "2026-10-01T13:47:38.189Z",
+          "reason": "正常输入：worker Read 回执显示 LemmyTextAddedListener 在文本节点自身的 SpannableStringBuilder 上 Linkify.addLinks 社区/用户两个 pattern，再按 start+getSpanStart/getSpanEnd 原位挂 Link span——链接位置与原文一致，足以说明切分后不得改变行内顺序（agent-a9428efc2f0a18e8a.jsonl:L35-L36）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/ui/components/common/MarkdownHelper.kt",
+          "at": "2026-10-01T13:47:35.515Z",
+          "reason": "正常输入：worker Read 回执含 .usePlugin(LinkifyPlugin.create(Linkify.WEB_URLS)) 及注释 “email urls interfere with lemmy links”，说明源端只排除 email、并未排除无协议域名（同转录 L29-L30）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/ui/components/common/MarkdownHelper.kt",
+          "at": "2026-10-01T07:46:45.461Z",
+          "reason": "spec 作者的正常输入：Read 回执给出 Markwon.builder(context) 插件链与 parser.toMarkdown 解析，渲染以 Markwon/commonmark 核心为底座、插件只是其上的增量（agent-a5d0177eca64955bc.jsonl:L130-L131；同批 L134-L135 ClickableCoilImagesPlugin 导入 org.commonmark.node.Image）。"
+        },
+        {
+          "key": "7b318df2-6d4a-47e0-9799-52c4ecc9a4be:a5d0177eca64955bc",
+          "at": "2026-10-01T07:57:53.077Z",
+          "reason": "规格偏差起点（块语法分支）：写 F017 时把 Markwon 映射为“自研 MarkdownPipeline……行为目标=各插件可观察效果逐一等价”，28 条 AC 只覆盖 7 个自研插件与表格/删除线/HTML，无任何 CommonMark 块/行内核心语法（嵌套列表、惰性续行、松紧、行内保持原文顺序）契约，并保留 complexity=simple（同转录 L207-L208 正文“实现映射”首行与 §验收标准；L179 推理“complexity=simple…compact 实现映射”）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/spec/baseline/features/F017-markdown-rendering.md",
+          "at": "2026-10-01T13:47:22.319Z",
+          "reason": "交付桥梁：worker 的 Read 回执与 spec 作者 L207 写入逐行一致，含“自研轻渲染”映射、只列插件的 AC、AC12“WEB_URLS 语义”与 AC13 Lemmy 简写要求（agent-a9428efc2f0a18e8a.jsonl:L23-L24）。"
+        },
+        {
+          "key": "e919f2a1-5f90-46e2-baca-332c443637de:a9428efc2f0a18e8a",
+          "at": "2026-10-01T14:12:08.785Z",
+          "reason": "实现偏差起点：Write 写出 appendLemmyPattern，循环内把命中直接 push 成 LINK run、间隔文本收进 segments 待循环后再处理，导致链接 run 排到前文之前；autoLink 只认 https?:// 与 www. 并注“WEB_URLS 语义近似、不识别 scheme-less 域名”；块解析按 spec 的轻渲染取逐行正则（列表项单行且先 trim、引用仅行内）。前两项与已收到的源码/AC 不符，第三项沿用 spec 的收窄（同转录 L224-L225；推理 L191、L208、L222；冒烟 L304-L307 未测 run 顺序）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 6
+        },
+        {
+          "from": 2,
+          "to": 6
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": 6
+        },
+        {
+          "from": 6,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/components/common/MarkdownText.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "summary": "长按命中分支：spec 作者未查 SDK 就把 BetterLinkMovementMethod 判为平台无对等能力，定下“组件级长按 +\n从渲染结构提取 URL”；worker 查到 GestureStyle.onLongPress 自 API 12 可用却仍按 ledger 实现，\n于是 MarkdownText 在整段任意位置长按都取 firstLinkUrl（第一个链接）。返修改为 TextController\nLayoutManager 按触点命中链接后再派发点按/长按。链接色与默认字号的改动见卡级 unknown。\n",
+      "recommendations": [
+        "规格提取阶段：判定 HARD-DIV 前在项目 SDK d.ts 查证（styled_string.d.ts GestureStyle、TextController 布局查询），无证据时标待验证，不以“知识库无条目”批准退化替代。",
+        "实现阶段：SDK 能力与已批决策前提矛盾时报 decision_gap 并附 d.ts 行号；至少按触点位置提取链接，而不是固定取第一个链接。"
+      ],
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/util/markwon/BetterLinkMovementMethod.kt",
+          "at": "2026-10-01T07:46:47.231Z",
+          "reason": "spec 作者的正常输入：Read 回执给出按触点查找 ClickableSpan、在同一 span 上派发点击或长按（长按定时器+高亮+触觉）的触摸状态机，说明源端行为是“按下的那个链接”（agent-a5d0177eca64955bc.jsonl:L132-L133）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/.claude/skills/a2h-spec/templates/feature-spec-template.md",
+          "at": "2026-10-01T07:39:32.332Z",
+          "reason": "正常输入：模板规定平台 API 结论的证据来源三选一（SDK d.ts doc 注释 / knowledge-verifier 查证结论 / 参考条目）、禁止凭模型记忆；HARD-DIV 仅用于平台确无对等能力（同转录 L18-L19 回执第65-67行）。"
+        },
+        {
+          "key": "7b318df2-6d4a-47e0-9799-52c4ecc9a4be:a5d0177eca64955bc",
+          "at": "2026-10-01T07:57:53.077Z",
+          "reason": "规格偏差起点：推理中自认 span 级手势能力 “Not verifiable offline with certainty”（L179），成稿仍以“arkts-knowledge-verifier 无 span 级手势条目”为据，把 BetterLinkMovementMethod 判为 HARD-DIV PD-C8-F017-01，替代路径写“命中域=整个文本组件，无 span 级命中检测 API → URL 提取”，并作废 AC19/AC20 的 span 级触摸 AC（同转录 L207-L208）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/spec/baseline/features/F017-markdown-rendering.md",
+          "at": "2026-10-01T13:47:22.319Z",
+          "reason": "交付桥梁：worker Read 回执含 PD-C8-F017-01 实现映射行、§数据流替代路径与 AC25/AC26（agent-a9428efc2f0a18e8a.jsonl:L23-L24）；worker 随后 L66-L67 又读到 ledger 中该决策 status=approved。"
+        },
+        {
+          "key": "e919f2a1-5f90-46e2-baca-332c443637de:a9428efc2f0a18e8a",
+          "at": "2026-10-01T14:14:52.123Z",
+          "reason": "传递者：L101-L103 查到 styled_string.d.ts 的 GestureStyleInterface 自 @since 12 有 onClick/onLongPress，L116 推理承认逐链接长按更忠实，但以 ledger 为准；L241 写出组件级 LongPressGesture + MarkdownPipeline.firstLinkUrl（整段取第一个链接），返回 decision_gaps 为空。本链确认错误前提被传入目标，未把沿用决策另判为独立偏差。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "链接色：生成期 spec 与 MarkdownHelper.kt 均未给出链接色（Android 实际为 TextView textColorLink=主题 colorAccent #80CBC4），未见生成期 agent 读取主题资源；worker 以“Material 链接色≈primary”猜用 md_primary，本卡不将其归为对已收到输入的偏离。",
+    "固定 16/24：worker 将 MarkdownText 默认 style 写成 TextStyleToken(16, 24)，而 AC08 与 MarkdownHelper.kt:192 要求默认取随字号设置缩放的 bodyLarge；生成期 Base 只有 generateTypography(baseFontSize)，全局可响应的排版单例 JerboaThemeState 为返修新增，各调用方是否传入缩放后的 style 未逐一核对。",
+    "点按命中：生成期代码点按走逐范围 GestureStyle.onClick，修复方 J-31 所述“整段任意点按命中首个链接/穿透”未在生成期代码中复核；本卡的命中归因只覆盖长按取首个链接。"
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/services/MarkdownRendererService.ets",
+      "reason": "保留差异只有两处 MarkdownPipeline.render(markdown, buildRenderOptions(...)) → MarkdownPipeline.parse(markdown) 及注释，是配合管线重写的调用适配（返修 agent-a46873447b2ab3ddd.jsonl:L1270）；修复方 J-40 判定缓存/cacheKey 行为与 Android 一致。未发现该文件独立的生成偏差，故不单独成链。"
+    }
+  ],
+  "job": "issue-8b307e33adf3d2817a04",
+  "metadata": {
+    "migration": {
+      "id": "jerboa-e7cc4044-4f78-441c-8b49-3a097937f665",
+      "project": "jerboa"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.247",
+        "2.1.309",
+        "2.1.310"
+      ]
+    },
+    "source_set_id": "sources-32ddfd727cfccbbce98f",
+    "environment": [
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T06:59:57.329Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L10",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L9",
+        "phase": "generation"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T06:59:57.329Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L10",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L9",
+        "phase": "generation"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "26",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T06:59:57.329Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L10",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L9",
+        "phase": "generation"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T06:59:57.329Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L10",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L9",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T08:27:52.558Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1138",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1136",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T08:27:52.558Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1138",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1136",
+        "phase": "generation"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L2/jerboa",
+        "at": "2026-10-23T16:50:12.154Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L209",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L208",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L2/jerboa",
+        "at": "2026-10-23T16:50:12.154Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L209",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L208",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "26",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L2/jerboa",
+        "at": "2026-10-23T16:50:12.154Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L209",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L208",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L2/jerboa",
+        "at": "2026-10-23T16:50:12.154Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L209",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L208",
+        "phase": "repair"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:12.967Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L155",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L154",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:12.967Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L155",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L154",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "26",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:12.967Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L155",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L154",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:12.967Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L155",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L154",
+        "phase": "repair"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:39.052Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L120",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L119",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:39.052Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L120",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L119",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "26",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:39.052Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L120",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L119",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:28:16.441Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a4d3a35dbb3029087.jsonl:L251",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a4d3a35dbb3029087.jsonl:L250",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:28:16.441Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a4d3a35dbb3029087.jsonl:L251",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a4d3a35dbb3029087.jsonl:L250",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:35:12.588Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-ae9a25fc6a2669bb5.jsonl:L522",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-ae9a25fc6a2669bb5.jsonl:L521",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:36:59.707Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a557f4f80a218650e.jsonl:L430",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a557f4f80a218650e.jsonl:L429",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-23T19:59:02.243Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a7154d5ed3ee900cc.jsonl:L1776",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a7154d5ed3ee900cc.jsonl:L1775",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.10",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "3488bf55-f8ef-4dfe-ae5e-17b59ecfb2cd"
+      ]
+    }
+  },
+  "revision": "2585469b6f2560d0a8b4e6ced070f91257eea43766cb634ab5779774aabdcc80"
+}

@@ -1,6 +1,6 @@
 # ui/text
 
-文本展示与排版：源端对展示文本的加工（富文本、链接识别与点击）到 ArkUI Text/StyledString 的转换，Compose 行高到单行文本盒与多行行距的映射，单行与多行省略的截断粒度（含三方 TextView 子类的截断规则），静态说明页的逐字文案与图文结构，Tab、页面标题、设置行等可见文案的逐字取值，以及字符串资源生成哪些语言限定目录，单行中间/开头省略的测量截断，setSpan 区间拆成 Span 时的着色范围，以及数值显示精度（复用基类格式化 getter 与品类精度不一致时的子类覆写），以及源端代码格式化文案的参数化字符串资源，代码内取资源（字符串、数组、复数、颜色）的重载与应用偏好语言，按 locale 的全大写变换（textAllCaps）；文案资源缺键时的专属新键、带原值移交与补值来源，带标记字符串资源（Html.fromHtml）的富文本与链接，语言目录与键集按源端（含依赖库合并资源）镜像；Compose 字重到数值 fontWeight，可折叠正文的溢出测量与 overflow 默认值，框架系统文案（含偏好对话框默认按钮）的多语言落地；可能为空的 wrap_content 文本仍占一行高（空串兜底与 INVISIBLE 占位）
+文本展示与排版：源端对展示文本的加工（富文本、链接识别与点击）到 ArkUI Text/StyledString 的转换，Compose 行高到单行文本盒与多行行距的映射，单行与多行省略的截断粒度（含三方 TextView 子类的截断规则），静态说明页的逐字文案与图文结构，Tab、页面标题、设置行等可见文案的逐字取值，以及字符串资源生成哪些语言限定目录，单行中间/开头省略的测量截断，setSpan 区间拆成 Span 时的着色范围，以及数值显示精度（复用基类格式化 getter 与品类精度不一致时的子类覆写），以及源端代码格式化文案的参数化字符串资源，代码内取资源（字符串、数组、复数、颜色）的重载与应用偏好语言，按 locale 的全大写变换（textAllCaps）；文案资源缺键时的专属新键、带原值移交与补值来源，带标记字符串资源（Html.fromHtml）的富文本与链接，语言目录与键集按源端（含依赖库合并资源）镜像；Compose 字重到数值 fontWeight，可折叠正文的溢出测量与 overflow 默认值，框架系统文案（含偏好对话框默认按钮）的多语言落地；可能为空的 wrap_content 文本仍占一行高（空串兜底与 INVISIBLE 占位）；自研 Markdown 切 run 的原文顺序与核心语法覆盖，带参 $r 的 %s 只传字符串
 
 [上一级](../index.md)
 
@@ -51,6 +51,9 @@
   - 时机：规格提取与资源迁移阶段，确定要迁移哪些 values-* 语言目录及其目标限定词、目标生成哪些语言限定字符串目录及各键取值、源 locale 缺键如何处理时
   - 情境：Android 源只有默认 res/values/strings.xml（常为英文），没有 values-zh 等语言限定目录；规格要求与源应用逐屏对齐或写明“不擅自翻译”；资源转换 skill 带有“至少生成两套语言、默认英文则补 zh_CN”一类通用规则；设备可能使用中文系统语言。也包括源端有多个 values-xx（如 es/fr/it/pt/ru/zh/zh-rTW）并提供应用内语言切换，规格或主会话却自定“默认只迁 values + values-zh”，并以“项目决策优先”覆盖资源 skill 的“全部转换”硬规则；部分语言目录键集不全，skill 要求键集一致并自动补译。也包括源端只有仅语言限定的 values-zh，skill 正文写“values-zh-rCN 或 values-zh → zh_CN 或 zh”并要求最少生成 zh_CN，而详细映射表写 values-zh→zh、values-zh-rCN→zh_CN。
   - 例外：规格或决策明确要求本轮新增本地化语言；此时按批准的译文来源生成，并在报告中注明源端没有该语言；源端引用 android.R.string.* 等框架字符串：译文由系统按设备语言提供，按系统字符串的经验为已有语言补框架译文（必要时补地区目录）
+- [带参 $r 的 %s/%1$s 占位只传字符串：数值先 toString()，%s 收到数值时格式化结果为空串](lesson-cf670f808b1a42227083.lesson.md)
+  - 时机：界面实现阶段，把 stringResource(R.string.x, n) 一类带参字符串资源写成 $r(app.string.x, …) 时
+  - 情境：Android 字符串资源用 %1$s 接收 Long/Int（如 “%1$s comments”），Kotlin 调用时自动转字符串；目标 $r 的格式化参数按占位符类型匹配。
 - [源端 textAllCaps（含 Button 与 AlertDialog 按钮样式默认的全大写）必须显示为全大写，按资源原样不是可接受的降级：取资源字符串后按当前 locale toLocaleUpperCase（Resource 参数先 getStringSync），封装成共享 allCaps 复用；textCase(UpperCase) 只转拉丁字母，不用它代替](lesson-cce58a1538fedfda3695.lesson.md)
   - 时机：界面实现或返修阶段，把安卓 textAllCaps（含按钮样式默认的全大写）移植为 ArkUI 文本，确定取字符串方式与 locale 标签，或给多个页面的按钮统一做大小写变换时
   - 情境：安卓按钮或文本靠 textAllCaps（AllCapsTransformationMethod 按当前 locale 大写）显示全大写，资源串多为首字母大写（Yes/No、New Game）；应用带含非 ASCII 或非拉丁字母的多语言资源（de 的 ü、tr 的 i/İ、ru 的西里尔字母），也可能以只有语言码的应用偏好语言运行；目标按钮参数常是 Resource/ResourceStr，要自己取字符串做大写，并把 resourceManager 配置的 locale（下划线分隔、子标签可能为空，如 fa_Arab_）转成 BCP 47 标签。也包括工程里已有按 locale 大写的私有实现，其他页面又用 textCase 另写一套。
@@ -64,6 +67,9 @@
 - [移植文本组件时先确认显示的是原始字符串还是加工后的富文本（Compose AnnotatedString、Html.fromHtml、带标记的字符串资源），样式、链接识别与点击要落到目标端；Html.fromHtml 只产出单个符号实体、按大字号逐个生成作页码点等图形时不算富文本，按源字体下的可见几何绘制图形](lesson-57a52be767730880cbba.lesson.md)
   - 时机：界面实现阶段，把源端 Compose Text、TextView 或对话框正文译成 ArkUI Text 时
   - 情境：源组件先调用工具函数（如按正则识别 URL、附加 LinkAnnotation 的 buildAnnotatedStringWithUrls）生成 AnnotatedString 再交给 Text；目标页面规格和验收条目只写了空值隐藏、折叠展开等布局行为。也包括 View 体系以 Html.fromHtml、setMessage(resId) 或 android:text 引用带 `&lt;b&gt;`/`&lt;i&gt;`/`&lt;a&gt;` 标记或 CDATA 的字符串资源，并用 LinkMovementMethod 让链接可点；目标准备用 Text($r(...)) 直接显示，或在正文外另起链接行。也包括循环中逐个 new TextView、setText(Html.fromHtml("&amp;#8226;")) 并 setTextSize(35) 作翻页圆点：内容只有一个符号，可见尺寸、步进与垂直位置取决于源字体（Roboto）的字形度量。
+- [自研 Markdown 或富文本把文本按多条规则切成 run 时，命中与间隔文本按原位置顺序输出；契约同时覆盖解析库的核心语法](lesson-25f9eea8c9ed9b361d4f.lesson.md)
+  - 时机：Markdown 渲染的规格提取与解析实现阶段，确定语法覆盖、文本切分后 run 的拼装顺序与自动链接规则时
+  - 情境：源端用 Markwon 一类库（CommonMark 核心解析，加 Linkify、提及简写等文本插件，按触点命中 span）渲染 Markdown；目标自研解析器，把文本切成有序 run 序列交给 StyledString/Span 渲染。
 - [说明类静态页按源布局逐卡迁移：文案逐字取自源 XML，标题条背景与插图一并迁入](lesson-0197307e63e8d848ba02.lesson.md)
   - 时机：界面实现阶段，依据源布局 XML 生成规则、说明、注意事项一类静态图文页时
   - 情境：源静态页由多张卡片组成，标题条使用 drawable 背景，正文是写在布局 XML 里的长文案，卡内或页首尾有插图；规格只要求“展示说明并可返回”，不复述内容。

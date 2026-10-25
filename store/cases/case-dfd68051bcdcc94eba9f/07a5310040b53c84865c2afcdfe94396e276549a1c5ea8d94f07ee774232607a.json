@@ -1,0 +1,604 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-dfd68051bcdcc94eba9f",
+  "created_at": "2026-10-24T14:57:51.579112+00:00",
+  "migration_key": "jerboa-e7cc4044-4f78-441c-8b49-3a097937f665",
+  "title": "视频播放选 ArkUI Video 组件而非 AVPlayer：缓冲态/缓冲位与共享内嵌播放器缺失，滚动可见性误用 onAreaChange",
+  "when": "规格提取与界面/功能实现阶段，为视频查看器和 feed 内嵌视频确定播放器实现路线（Video 组件或 AVPlayer+XComponent），并映射缓冲状态、缓冲位置、共享播放器、生命周期暂停与滚动可见性监听时",
+  "description": "源端用 ExoPlayer/media3 播放：Player.Listener 区分 BUFFERING/READY，500ms 轮询 bufferedPosition，Lifecycle ON_PAUSE/ON_RESUME 暂停恢复，feed 内多张卡共享一个 ExoPlayer，并用 onGloballyPositioned+boundsInWindow 在滚动中计算可见比例、自动播放离顶最近的卡；目标决策基线写的是 AVPlayer，但页面规格或已生成的同类页面把 ArkUI Video 组件列为可选或先例。",
+  "summary": "规格环节：page_0036 规格作者（7b318df2 agent-a498f3347f92858cf）读到 VideoViewerScreen.kt 中的\nSTATE_BUFFERING→LOADING、bufferedPosition.coerceAtLeast(current) 和 Lifecycle ON_PAUSE/ON_RESUME（L56-L57），\n写转换决策时（L146）却把 ExoPlayer+PlayerView 映射为“Video 组件（或 AVPlayer + XComponent）”，理由写成\n“Video 组件自带播放/缓冲状态回调”，三态由“onPrepared/onError/onLoading 事件驱动”，生命周期只映射 NavDestination\nonPageHide/onPageShow。Video 组件实际没有缓冲事件，这条错误的能力描述让 Video 看起来已经够用。\n查看器实现：Stage 1 转换者（e919f2a1 agent-a62cc077ce54440ce）的派工写明“视频播放用 AVPlayer（ledger D-005 架构基线）”（L1），\n它 grep 到的 D-005 是 AVPlayer+ImageKnife（L87-L88），F016 规格 AC35 要求轮询 bufferedPosition（L90-L91）。\n它在思考中（L84、L92）引用规格“首选 Video 组件”，又自己确认 Video 组件没有 buffering 回调、拿不到 bufferedPosition，\n还误以为 AVPlayer 也不公开缓冲信息。结果 Write（L152）仍用 Video({src, controller})：\n初始 LOADING、onPrepared 后 SUCCESS，没有 BUFFERING；bufferedMs = currentMs，作为 P-S5-UNC-001 登记；生命周期接 onHidden/onShown。\n内嵌播放与共享状态：Slice 5 worker（e919f2a1 agent-ad300cef73dbc385f）的派工写明“媒体播放走 AVPlayer（D-005 基线，用 arkts-media-playback skill）”，\nUNC-001 的处置规则是“AVPlayer 缓冲回调可用则升级真实实现”（L1）。它读到的 F016 规格写了“EmbeddedVideoPlayer（feed 内嵌，共享 AVPlayer 单例）”、\ngetOrCreatePlayer(): AVPlayer、AC40 共享单例、AC41 滚动中 activeEmbedId 迁移（L23-L26）。\n加载的 arkts-media-playback 把视频场景转给 arkts-video-playback，后者给出 XComponent(SURFACE)+surfaceId 时序（L145、L150）。\n它在 L151 自己写明“bufferingUpdate 裸 AVPlayer 有”，却以“与 VideoViewerPage Stage 1 决策一致、推翻其架构属越权”为由选了 Video。\nsource-notes（L165）因此写下 D1（不建共享播放器句柄，靠“仅活跃卡挂 Video 节点”等价单例）、\nD4（onGloballyPositioned/boundsInWindow → onAreaChange 的 globalPosition.y + 屏幕高）、D5（暂停靠卸载承担）和 D7（UNC-001 retained）。\n按这些决策，它写出的 VideoAppState（L169）没有播放器、无可见项时只置 activeEmbedId=null；\nEmbeddedVideoPlayer（L200）每张活跃卡挂一个 Video，不区分缓冲态，可见性挂在 onAreaChange 上。\nonAreaChange 这个选择不来自任何输入：规格只给了 0.5 阈值和 onGloballyPositioned 锚点，AC41 还写了滚动场景。\n按返修报告，onAreaChange 在列表滚动时不触发，滚动中最近可见自动播放不会切换（J-83）。\n续作 worker（agent-a122d0b5947a187d6）读了 source-notes（L44-L45），按 D7 把查看器的 UNC 注释改为 retained（L214），缓冲位仍跟随播放位。\n宿主解析小项：PostVideoSource 把 post.url?.toHttps() 译成只判 !== undefined，JSON null 会进 toHttps 崩溃（ad300cef L74-L75 → L174）；\nOpenGraphParser 把 toIntOrNull 写成 /^-?\\d+$/，漏了 + 号和 Int 范围（a62cc077 L30-L31 → L131）；\nRedgifs 把 kotlinx decodeFromString 的非空字段契约写成 JSON.parse 后直接 as 转型，不校验字段（L34-L35 → L137）。\n返修（repair agent-a46873447b2ab3ddd）新建 VideoPlayerSession（AVPlayer+XComponent，L1574）：\nVideoAppState 持有共享会话并按 owner 绑定；bufferingUpdate 映射 LOADING/SUCCESS，缓冲位取 currentTime+CACHED_DURATION；\n可见性改为 onVisibleAreaChange 加实时窗口位置；生命周期补 applicationStateChange 与 navDestinationSwitch（L1668、L1702）；\n宿主层补 null 守卫、toIntOrNull、oEmbed 校验（L1634）。对应修复报告 J-66~J-93。\n",
+  "recommendations": [
+    "规格提取时，写播放器转换决策前列出源端实际用到的播放器能力（BUFFERING/READY 状态、bufferedPosition、多卡共享实例、前后台暂停恢复），逐项核对候选组件的公开 API。ArkUI Video 组件没有缓冲事件和缓冲位，需要这些能力时把 AVPlayer+XComponent 写成唯一路线，不写成“Video 组件（或 AVPlayer）”，也不写未经核实的“Video 组件自带缓冲回调”。",
+    "实现视频页或内嵌播放前，派工或决策基线写明 AVPlayer 且源端依赖缓冲态/缓冲位/共享实例时，用 AVPlayer（media.createAVPlayer）+ XComponent(SURFACE)：on('bufferingUpdate') 的 BUFFERING_START/END 映射 LOADING/SUCCESS，CACHED_DURATION 加 currentTime 得缓冲位。自己确认了 Video 组件缺能力时，就不要再以“与先前页面一致”为由沿用 Video。",
+    "uncertain 占位附带明确升级条件（如“AVPlayer 缓冲回调可用则升级”）时，确认条件成立就升级实现，并同时改造先前页面；不要因为“不推翻 Stage 1 架构”把可实现的 AC 保留为 retained。",
+    "源端多张 feed 卡共享一个 ExoPlayer 时，在全局状态里保留一个 AVPlayer 会话，按 owner 绑定或解绑当前卡的 surface，暴露 getOrCreate/release；不要用“仅活跃卡挂一个 Video 节点”替代共享实例，否则每次切卡都会新建解码器、丢失播放状态。",
+    "把 onGloballyPositioned+boundsInWindow 这类滚动驱动的可见性计算，映射为 onVisibleAreaChange([0, 0.5, 1]) 的可见比例回调，并在选最近项前实时查询各卡窗口位置（如 componentUtils.getRectangleById）。onAreaChange 只在尺寸或相对父容器位置变化时触发，列表滚动时不触发。实现后按 AC 的滚动场景（A/B 可见 → A 出视口 → B 出视口）自查。",
+    "Lifecycle ON_PAUSE/ON_RESUME 同时覆盖应用切后台和页面被覆盖两种情形：同时接 ApplicationContext 的 applicationStateChange，以及 NavDestination onHidden/onShown 或 uiObserver navDestinationSwitch。",
+    "直译 Kotlin 可空调用时，JSON 来源字段按 undefined 与 null 都可能出现处理（x !== undefined && x !== null）；toIntOrNull 用 /^[+-]?\\d+$/ 加 Int 范围检查；kotlinx decodeFromString 的非空字段在 JSON.parse 后逐项校验必填字段与类型，不通过就按解析失败处理。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/pages/VideoViewerPage.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/ui/components/videoviewer/VideoViewerScreen.kt",
+          "at": "2026-10-01T07:10:16.005Z",
+          "reason": "正常输入：规格作者的 Read 回执给出 Player.STATE_BUFFERING -> LOADING（:147）、Lifecycle ON_PAUSE/ON_RESUME（:172-176），以及 bufferedPosition = exoPlayer.bufferedPosition.coerceAtLeast(currentPosition)（:381），足以说明目标播放器需要缓冲事件和缓冲位（agent-a498f3347f92858cf.jsonl:L56-L57）。"
+        },
+        {
+          "key": "7b318df2-6d4a-47e0-9799-52c4ecc9a4be:a498f3347f92858cf",
+          "at": "2026-10-01T07:19:17.064Z",
+          "reason": "Write page_0036 规格时，转换决策写成“ExoPlayer + PlayerView → Video 组件（或 AVPlayer + XComponent）”，理由“Video 组件自带播放/缓冲状态回调”，三态由“onPrepared/onError/onLoading 事件驱动”，生命周期只映射 NavDestination onPageHide/onPageShow。Video 组件实际没有缓冲事件，规格把不足以满足源码的组件列为首选（同转录 L146-L147）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/spec/baseline/ui/page_0036_VideoViewerScreen.md",
+          "at": "2026-10-01T12:08:38.250Z",
+          "reason": "交付桥梁：转换者 Read 回执含上述“Video 组件（或 AVPlayer + XComponent）……Video 组件自带播放/缓冲状态回调”和 onPageHide/onPageShow 映射，其思考随即引用“spec 决策……首选 Video 组件”（agent-a62cc077ce54440ce.jsonl:L10-L11、L84）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/spec/decision-ledger.md",
+          "at": "2026-10-01T12:13:34.834Z",
+          "reason": "正常输入：转换者 grep 回执给出 D-005 架构基线“AVPlayer+ImageKnife 媒体”和依赖替定 ExoPlayer→AVPlayer；派工 wiring_ownership_map 也写明“视频播放用 AVPlayer（ledger D-005）”（agent-a62cc077ce54440ce.jsonl:L1、L87-L88）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/spec/baseline/features/F016-media-viewers.md",
+          "at": "2026-10-01T12:16:04.416Z",
+          "reason": "正常输入：Read 回执给出视频查看器“ExoPlayer→AVPlayer 播放、自绘控制条（进度/缓冲轨道）”，AC35 要求 500ms 刷新 bufferedPosition(coerceAtLeast(current))，AC32 要求 ON_PAUSE/ON_RESUME 暂停恢复（agent-a62cc077ce54440ce.jsonl:L90-L91）。"
+        },
+        {
+          "key": "e919f2a1-5f90-46e2-baca-332c443637de:a62cc077ce54440ce",
+          "at": "2026-10-01T12:28:04.326Z",
+          "reason": "思考中已确认 Video 组件没有 buffering 回调、拿不到 bufferedPosition（L84、L92），却没有改选 D-005 的 AVPlayer+XComponent，反而误判 AVPlayer 也不公开缓冲信息。Write 写出 Video({src, controller})：初始 LOADING、onPrepared→SUCCESS，无 BUFFERING 态；bufferedMs = currentMs 登记为 UNC；生命周期接 NavDestination onHidden/onShown（同转录 L152-L153，UNC 登记 L175）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/spec/baseline/features/F016-media-viewers.md",
+          "at": "2026-10-01T13:49:21.598Z",
+          "reason": "正常输入：Slice 5 worker 的 Read 回执给出 AC35 缓冲轨要求和 VideoAppState getOrCreatePlayer(): AVPlayer；派工写明“媒体播放走 AVPlayer”，并规定 UNC-001“AVPlayer 缓冲回调可用则升级真实实现”（agent-ad300cef73dbc385f.jsonl:L1、L23-L26）。"
+        },
+        {
+          "key": "e919f2a1-5f90-46e2-baca-332c443637de:ad300cef73dbc385f",
+          "at": "2026-10-01T14:20:42.467Z",
+          "reason": "加载 arkts-video-playback 后，自述“bufferingUpdate 裸 AVPlayer 有、Video 组件不暴露”，可见升级条件已成立（L150-L151）；Write source-notes 时仍定 D7“P-S5-UNC-001 retained：VideoViewerPage 为 Stage 1 既定 Video 组件封装层，本 slice 不推翻其架构”（同转录 L165-L166）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/spec/execution/source-understanding/slice-05-F016-source-notes.md",
+          "at": "2026-10-01T14:54:42.197Z",
+          "reason": "交付桥梁：续作 worker 的 Read 回执含 D7 retained 决议（agent-a122d0b5947a187d6.jsonl:L44-L45）。"
+        },
+        {
+          "key": "e919f2a1-5f90-46e2-baca-332c443637de:a122d0b5947a187d6",
+          "at": "2026-10-01T15:03:48.968Z",
+          "reason": "按 D7 Edit VideoViewerPage：把 UNC 注释改为“retained，Slice 5 Step 3d 决议……本 slice 不推翻架构”，buffered = current 保持不变（同转录 L214-L215）。本链确认 retained 决议写回目标，不另推定其独立失职。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 6
+        },
+        {
+          "from": 4,
+          "to": 6,
+          "force": true,
+          "reason": "转换者 Bash grep spec/decision-ledger.md（D-005|AVPlayer|视频），回执返回 D-005 架构基线 AVPlayer+ImageKnife 与 ExoPlayer→AVPlayer 替定；这是写 VideoViewerPage 前对该文件的真实读取。",
+          "evidence": [
+            {
+              "source": "generation/e919f2a1-5f90-46e2-baca-332c443637de/subagents/agent-a62cc077ce54440ce.jsonl",
+              "line": 87
+            },
+            {
+              "source": "generation/e919f2a1-5f90-46e2-baca-332c443637de/subagents/agent-a62cc077ce54440ce.jsonl",
+              "line": 88
+            }
+          ]
+        },
+        {
+          "from": 5,
+          "to": 6
+        },
+        {
+          "from": 6,
+          "to": "target"
+        },
+        {
+          "from": 7,
+          "to": 8
+        },
+        {
+          "from": 8,
+          "to": 9
+        },
+        {
+          "from": 9,
+          "to": 10
+        },
+        {
+          "from": 10,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/components/common/EmbeddedVideoPlayer.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/spec/baseline/features/F016-media-viewers.md",
+          "at": "2026-10-01T13:49:21.598Z",
+          "reason": "正常输入：Read 回执给出“EmbeddedVideoPlayer（feed 内嵌，共享 AVPlayer 单例）：最近可见项自动播放”；AC41 写明三项滚动场景（A/B 可见→A 出视口→B 出视口）下 activeEmbedId 迁移，AC42 给出可见高度 > 卡片高×0.5（锚点 onGloballyPositioned）。派工另写“媒体播放走 AVPlayer（用 arkts-media-playback skill）”（agent-ad300cef73dbc385f.jsonl:L1、L23-L26）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/ui/components/common/EmbeddedVideoPlayer.kt",
+          "at": "2026-10-01T14:15:39.046Z",
+          "reason": "正常输入：Read 回执给出共享 videoAppState.getOrCreateExoPlayer、STATE_BUFFERING→LOADING、Lifecycle 观察，以及 onGloballyPositioned { boundsInWindow() … visibleHeight > height * 0.5f → updateVideoDistance }（:276-284）。这是随布局与滚动持续上报的位置回调（agent-ad300cef73dbc385f.jsonl:L86-L87）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/pages/VideoViewerPage.ets",
+          "at": "2026-10-01T14:16:03.515Z",
+          "reason": "工程先例：Read 回执是 Stage 1 转换者写的 Video 组件版查看器，注释 BUFFERING 无缓冲事件、缓冲位为 UNC（成因见本卡 VideoViewerPage 分支）；worker 随后把它当作路线依据（agent-ad300cef73dbc385f.jsonl:L100-L101、L151）。"
+        },
+        {
+          "key": "e919f2a1-5f90-46e2-baca-332c443637de:ad300cef73dbc385f",
+          "at": "2026-10-01T14:24:14.386Z",
+          "reason": "已收到 AVPlayer 派工、共享 AVPlayer 规格和 arkts-video-playback 的 XComponent+Surface 路线（L145、L150），并自述 bufferingUpdate 仅裸 AVPlayer 可得（L151）；仍以“与 VideoViewerPage 先例一致”定为 Video 组件。Write 只给 activeEmbed 卡挂 Video 节点代替共享播放器，状态只有 onPrepared/onError，无 BUFFERING；生命周期以卸载代替；可见性写成 onAreaChange 的 globalPosition.y 加 display 高度计算相交高。onAreaChange 来自其 source-notes D4 的自行映射，没有输入给出该 API（同转录 L159、L165、L200-L201）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/services/VideoAppState.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/spec/baseline/features/F016-media-viewers.md",
+          "at": "2026-10-01T13:49:21.598Z",
+          "reason": "正常输入：Read 回执给出 class VideoAppState 契约 getOrCreatePlayer(): AVPlayer; releasePlayer()，AC40 要求共享播放器单例懒创建/release 后重建，AC41 要求无可见项时 exoPlayer.stop（agent-ad300cef73dbc385f.jsonl:L23-L26）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/state/VideoAppState.kt",
+          "at": "2026-10-01T14:15:36.014Z",
+          "reason": "正常输入：Read 回执给出 @Synchronized getOrCreateExoPlayer（REPEAT_MODE_ONE、音量随 isEmbedVideoMuted）、releaseExoPlayer，以及 updateVideoDistance 无可见项时 exoPlayer?.stop()（agent-ad300cef73dbc385f.jsonl:L84-L85）。"
+        },
+        {
+          "key": "e919f2a1-5f90-46e2-baca-332c443637de:ad300cef73dbc385f",
+          "at": "2026-10-01T14:21:05.323Z",
+          "reason": "按自定的 D1，Write VideoAppState 只保留 @Trace 观察态和距离记账，注释“getOrCreatePlayer/releasePlayer 契约形状不设裸句柄”；共享播放器由“仅活跃卡渲染 Video 节点”代替，无可见项时只置 activeEmbedId=null，靠卸载代替 stop（同转录 L151、L165、L169-L170）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/services/hosts/PostVideoSource.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/ui/components/videoviewer/PostVideoSource.kt",
+          "at": "2026-10-01T14:15:32.532Z",
+          "reason": "正常输入：Read 回执给出 val url = post.url?.toHttps()、embedVideoUrl = post.embed_video_url?.toHttps()，即字段为 null 时不调用 toHttps（agent-ad300cef73dbc385f.jsonl:L74-L75）。"
+        },
+        {
+          "key": "e919f2a1-5f90-46e2-baca-332c443637de:ad300cef73dbc385f",
+          "at": "2026-10-01T14:21:35.593Z",
+          "reason": "参照 LemmyDtos 的 url?: string 声明（L133-L134），Write 把 ?. 译成 post.url !== undefined ? toHttps(post.url) : null，没处理 JSON 中显式为 null 的字段；embed_video_url 同样处理（同转录 L174-L175）。返修判为 JSON null 进 toHttps 崩溃（J-91）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/services/hosts/OpenGraphParser.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/ui/components/videoviewer/OpenGraphParser.kt",
+          "at": "2026-10-01T12:08:55.268Z",
+          "reason": "正常输入：Read 回执给出 findContentAsInt(...) = findContent(tags, key)?.toIntOrNull()（:60-63）。Kotlin toIntOrNull 接受可选 +/- 号，超出 Int 范围返回 null（agent-a62cc077ce54440ce.jsonl:L30-L31）。"
+        },
+        {
+          "key": "e919f2a1-5f90-46e2-baca-332c443637de:a62cc077ce54440ce",
+          "at": "2026-10-01T12:24:30.940Z",
+          "reason": "Write 注释写“toIntOrNull 等价”，实现却是 /^-?\\d+$/ 匹配后 parseInt：不接受 + 号，也不检查 Int 范围（同转录 L131-L132）。返修改为 [+-]? 加 Int 范围检查（J-92）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/services/hosts/RedgifsVideoHost.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/ui/components/videoviewer/hosts/RedgifsVideoHost.kt",
+          "at": "2026-10-01T12:08:59.221Z",
+          "reason": "正常输入：Read 回执给出 @Serializable RedGifsOEmbedResponse，其中 version/provider_url/…/width/height/thumbnail_url 为非空字段，并用 JSON.decodeFromString<RedGifsOEmbedResponse> 解码。字段缺失或类型不符时抛异常，经 runCatching 收敛为失败（agent-a62cc077ce54440ce.jsonl:L34-L35）。"
+        },
+        {
+          "key": "e919f2a1-5f90-46e2-baca-332c443637de:a62cc077ce54440ce",
+          "at": "2026-10-01T12:24:59.412Z",
+          "reason": "Write 写成 JSON.parse(response.body) as RedGifsOEmbedResponse，直接读 thumbnail_url/width/height，不校验必填字段和类型，把强类型解码失败的语义丢了（同转录 L137-L138）。返修新增 isValidOEmbedResponse（J-93）。后续 18:51 的正则转义编译修复不涉及本项。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "onAreaChange 滚动时不触发、NavDestination onHidden 不覆盖应用切后台，两点依据返修报告的判定（J-83、J-76/J-87），本卡没有看到生成期或返修期的真机对照记录。",
+    "VideoViewerPage 的转换者误以为 AVPlayer 不公开缓冲信息，只在其思考中可见（L92）；当时项目内是否有可查的 AVPlayer bufferingUpdate 参考，本卡未核。"
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/services/VideoPlayerSession.ets",
+      "reason": "返修新建文件（repair agent-a46873447b2ab3ddd.jsonl:L1574），生成期没有写入记录，无法画到它的生成链。它要补的缺口（无共享 AVPlayer 会话、无缓冲事件）已在本卡 VideoAppState、EmbeddedVideoPlayer、VideoViewerPage 三个分支归因。"
+    }
+  ],
+  "job": "issue-dfd68051bcdcc94eba9f",
+  "metadata": {
+    "migration": {
+      "id": "jerboa-e7cc4044-4f78-441c-8b49-3a097937f665",
+      "project": "jerboa"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.247",
+        "2.1.309",
+        "2.1.310"
+      ]
+    },
+    "source_set_id": "sources-32ddfd727cfccbbce98f",
+    "environment": [
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T06:59:57.329Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L10",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L9",
+        "phase": "generation"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T06:59:57.329Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L10",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L9",
+        "phase": "generation"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "26",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T06:59:57.329Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L10",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L9",
+        "phase": "generation"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T06:59:57.329Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L10",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L9",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T08:27:52.558Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1138",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1136",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T08:27:52.558Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1138",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1136",
+        "phase": "generation"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L2/jerboa",
+        "at": "2026-10-23T16:50:12.154Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L209",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L208",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L2/jerboa",
+        "at": "2026-10-23T16:50:12.154Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L209",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L208",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "26",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L2/jerboa",
+        "at": "2026-10-23T16:50:12.154Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L209",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L208",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L2/jerboa",
+        "at": "2026-10-23T16:50:12.154Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L209",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L208",
+        "phase": "repair"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:12.967Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L155",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L154",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:12.967Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L155",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L154",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "26",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:12.967Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L155",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L154",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:12.967Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L155",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L154",
+        "phase": "repair"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:39.052Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L120",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L119",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:39.052Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L120",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L119",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "26",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:39.052Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L120",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L119",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:28:16.441Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a4d3a35dbb3029087.jsonl:L251",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a4d3a35dbb3029087.jsonl:L250",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:28:16.441Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a4d3a35dbb3029087.jsonl:L251",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a4d3a35dbb3029087.jsonl:L250",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:35:12.588Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-ae9a25fc6a2669bb5.jsonl:L522",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-ae9a25fc6a2669bb5.jsonl:L521",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:36:59.707Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a557f4f80a218650e.jsonl:L430",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a557f4f80a218650e.jsonl:L429",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-23T19:59:02.243Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a7154d5ed3ee900cc.jsonl:L1776",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a7154d5ed3ee900cc.jsonl:L1775",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.10",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "3488bf55-f8ef-4dfe-ae5e-17b59ecfb2cd"
+      ]
+    }
+  },
+  "revision": "07a5310040b53c84865c2afcdfe94396e276549a1c5ea8d94f07ee774232607a"
+}

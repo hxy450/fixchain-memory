@@ -1,0 +1,1071 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-32e10a93f9a585a4ef50",
+  "created_at": "2026-10-24T14:45:35.570373+00:00",
+  "migration_key": "jerboa-e7cc4044-4f78-441c-8b49-3a097937f665",
+  "title": "当前账号改成异步一次性读库快照，写操作账号守卫被简化或漏接",
+  "when": "公共组件与功能切片实现阶段，决定页面从哪里读取当前账号、以及在投票/收藏/删除/屏蔽/发送等写操作前接入账号就绪守卫时",
+  "description": "源端以 LiveData/observeAsState 读取当前账号（未装载即 AnonAccount），GuardAccount 是单个哨兵实例，写操作由 doIfReadyElseDisplayInfo 或 ActionBarButton(requiresAccount) 先过账号校验；目标端已有或随后会有带 @Trace currentAccount 的全局账号存储和账号校验服务，账号表任一写入都应刷新内存当前账号。",
+  "summary": "分支一（读取当前账号）：Base-6 写 AccountHelpers 前读到 AccountHelpers.kt：getCurrentAccount 是\nobserveAsState + derivedStateOf{currentAccount ?: AnonAccount} 的响应式读取，GuardAccount 是\n`val GuardAccount = AnonAccount.copy()` 单例（agent-ae528ff69625ec6ac.jsonl:L96-L97）。输出却把\ngetCurrentAccount 写成 async 一次性 repository.getCurrentAsync()，注释要求“调用方 aboutToAppear 拉取后持本地副本”，\nguardAccount() 每次 new 一个实例（L262、L269）。之后各页沿用这个契约：Slice 7 在 AccountStore 落盘前接线\n私信两页，aboutToAppear 异步取账号，保留 Stage 1 留下的“接线前默认非匿名” isAnonAccount=false；\nSlice 11（派工已写明“S3 AccountStore（isAnon 守卫）”）、Slice 14、Slice 17 写入时 AccountStore 已有\n@Trace currentAccount，Slice 14/17 也读到了，Slice 17 还在思考中承认 AccountStore 响应式更干净（L220），\n最后照抄 PrivateMessageReplyPage 的异步快照写法（L223）。结果：读库返回前 isAnon 恒 false（表单页、私信页）\n或恒匿名（评论编辑守卫、发帖页冷启分享图片跳过上传），切号后也不刷新。\n分支二（写操作守卫）：Slice 10 读过 PostScreen.kt 中各操作的 account.doIfReadyElseDisplayInfo 包裹，\nPostPage 却自写 guardReadyOrToast，只在匿名/未就绪时弹 utils_login_first Toast，不走校验链、不跳登录\n（brief 自述“统一 utils_login_first Toast（近似）”）。FV-1 收尾者读过 PostScreen.kt L393-520 的\ndelete/hide/lock/feature 守卫，接线这些回调时却直接调 VM、不加守卫。Stage 1 帖子页转换者读过 CommentNode.kt\n（各 ActionBarButton 都传 account），写 CommentActionBarButton 时去掉了 account/requiresAccount 守卫，\n投票先改本地 InstantScores 再上抛，所以匿名点赞也会先改分数。Slice 12 读过 PersonProfileScreen.kt 中 15 处\ndoIfReadyElseDisplayInfo，PersonProfilePage 的屏蔽、帖子和评论操作却都没有守卫。\n分支三（账号存储刷新）：Slice 3 读过 AccountViewModel.setVerificationState 写库后由 Room LiveData 重新发射\n当前账号的语义，自己的 D7 也写了“变更后刷新”，AccountStore.setVerificationState 却注明“写库但不广播”，内存\ncurrentAccount 的 verificationState 不更新，isReady() 一直不成立，每次操作都重跑验证。\n修复时：AccountHelpers 增加 currentAccountReactive() 和 GUARD_ACCOUNT 单例；AccountStore 的\nsetVerificationState/update 也调 notifyChanged；各页改为直接读 AccountStore.connect().currentAccount；\nPostPage/PersonProfilePage 改走 AccountVerifier.doIfReadyElseDisplayInfo；CommentNodeItem 的按钮先过\nisReadyAndIfNotShowSimplifiedInfoToast，再更新分数并回调；CreatePostPage 等 hydrated 后再上传分享图片。\n",
+  "recommendations": [
+    "公共组件阶段：迁移 observeAsState/LiveData/StateFlow 类读取函数时，给出同步可读的响应式出口（全局 @Trace 存储）；存储尚未建好就登记前向引用，等存储落地后切换。不要把“页面挂载时异步拉取、持本地副本”定为账号这类守卫依赖状态的契约；装载前的值按源端兜底（AnonAccount）。",
+    "公共组件阶段：源端 `val X = Y.copy()` 这类引用比较用的哨兵，导出为模块级常量单例，不要写成每次调用都新建实例的函数。",
+    "功能切片阶段：派工或上游已提供带 @Trace currentAccount 的账号存储时，在事件处理和 build 中同步读 AccountStore.connect().currentAccount；兄弟页的旧先例要先和现有存储核对再照抄。最小检查：存储落地后 grep `getCurrentAccount(DatabaseContainer` 与 `isAnonAccount: boolean = false`，结果应为零。",
+    "功能切片/收尾阶段：源端每个被 doIfReadyElseDisplayInfo 或 ActionBarButton(requiresAccount=true) 包裹的回调，目标端调用同名的 AccountVerifier 守卫（doIfReadyElseDisplayInfo / isReadyAndIfNotShowSimplifiedInfoToast），不要用本地 Toast 判定代替。后补接线时按源码逐个回调带上守卫，乐观分数在守卫通过后再更新。最小检查：逐屏数源端守卫包裹数，与目标页守卫调用数对齐。",
+    "账号存储阶段：Room/LiveData 的语义是账号表任一写入（含 verificationState）都会重发射当前账号；对应的写方法都要刷新内存 currentAccount 并广播，不按“非身份变更”自行豁免。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/components/common/AccountHelpers.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/ui/components/common/AccountHelpers.kt",
+          "at": "2026-10-01T11:24:43.713Z",
+          "reason": "正常输入：Base-6 的 Read 回执给出 getCurrentAccount = observeAsState() + derivedStateOf { currentAccount ?: AnonAccount }（响应式，未装载即匿名），以及 `val GuardAccount = AnonAccount.copy()` 单例（agent-ae528ff69625ec6ac.jsonl:L96-L97）。"
+        },
+        {
+          "key": "agent-ae528ff69625ec6ac.jsonl",
+          "at": "2026-10-01T11:37:42.993Z",
+          "reason": "Base-6 公共组件写者读到上述源码后，Write 把 getCurrentAccount 写成 async repository.getCurrentAsync() 一次性查询，并注明“调用方 aboutToAppear 拉取后持本地副本”；guardAccount() 每次 new Account(...)，=== 哨兵比较不可能成立（同转录 L262、L269）。修复后改为 currentAccountReactive() 与 GUARD_ACCOUNT 单例。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/pages/PrivateMessageReplyPage.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/ui/components/common/AccountHelpers.kt",
+          "at": "2026-10-01T11:24:43.713Z",
+          "reason": "正常输入：响应式 getCurrentAccount（?: AnonAccount）（agent-ae528ff69625ec6ac.jsonl:L96-L97）。"
+        },
+        {
+          "key": "agent-ae528ff69625ec6ac.jsonl",
+          "at": "2026-10-01T11:37:42.993Z",
+          "reason": "偏差起点：把响应式读取写成 async 一次性查询，并规定调用方在 aboutToAppear 拉取后持本地副本（同转录 L262、L269）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/components/common/AccountHelpers.ets",
+          "at": "2026-10-01T14:04:58.155Z",
+          "reason": "交付桥梁：Slice 7 的 Bash grep 回执返回该文件头“ViewModel 未建前…一次性查询”和 `export async function getCurrentAccount(repository)`（agent-a9b7910e3f3260e9a.jsonl:L71-L72）；此时 AccountStore 还未落盘（14:13 才写入）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/ui/components/privatemessage/PrivateMessageReplyScreen.kt",
+          "at": "2026-10-01T14:04:34.167Z",
+          "reason": "源码输入：Read 回执给出 `val account = getCurrentAccount(accountViewModel)`，onActionClick 中 `if (!account.isAnon())` 才发送（agent-a9b7910e3f3260e9a.jsonl:L53-L54）。"
+        },
+        {
+          "key": "agent-a9b7910e3f3260e9a.jsonl",
+          "at": "2026-10-01T14:11:52.875Z",
+          "reason": "接收者按 helper 契约（并参照 SettingsPage 先例，L97-L98）在 aboutToAppear 里 getCurrentAccount(...).then(isAnonAccount = acc.isAnon())，保留 Stage 1 写下的“接线前默认非匿名” `@Local isAnonAccount = false`，读库返回前匿名用户也能发送（同转录 L145）。本链确认偏差的传递，没有单独认定这一步失职。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 5,
+          "force": true,
+          "reason": "Slice 7 写前用 Bash grep 读取 AccountHelpers.ets 的导出与文件头，回执返回 async getCurrentAccount(repository) 及“ViewModel 未建前…一次性查询”说明；这支持它写前已收到该契约。",
+          "evidence": [
+            {
+              "source": "generation/e919f2a1-5f90-46e2-baca-332c443637de/subagents/agent-a9b7910e3f3260e9a.jsonl",
+              "line": 71
+            },
+            {
+              "source": "generation/e919f2a1-5f90-46e2-baca-332c443637de/subagents/agent-a9b7910e3f3260e9a.jsonl",
+              "line": 72
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/pages/CreatePrivateMessagePage.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/ui/components/common/AccountHelpers.kt",
+          "at": "2026-10-01T11:24:43.713Z",
+          "reason": "正常输入：响应式 getCurrentAccount（?: AnonAccount）（agent-ae528ff69625ec6ac.jsonl:L96-L97）。"
+        },
+        {
+          "key": "agent-ae528ff69625ec6ac.jsonl",
+          "at": "2026-10-01T11:37:42.993Z",
+          "reason": "偏差起点：把账号读取改成异步一次性查询加调用方本地副本（同转录 L262、L269）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/components/common/AccountHelpers.ets",
+          "at": "2026-10-01T14:04:58.155Z",
+          "reason": "交付桥梁：Slice 7 grep 回执返回 async getCurrentAccount 契约（agent-a9b7910e3f3260e9a.jsonl:L71-L72）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/ui/components/privatemessage/CreatePrivateMessageScreen.kt",
+          "at": "2026-10-01T14:04:33.833Z",
+          "reason": "源码输入：Read 回执给出 getCurrentAccount(accountViewModel)，非匿名才提交（agent-a9b7910e3f3260e9a.jsonl:L51-L52）。"
+        },
+        {
+          "key": "agent-a9b7910e3f3260e9a.jsonl",
+          "at": "2026-10-01T14:15:13.093Z",
+          "reason": "接收者同样在 aboutToAppear 异步取账号，写入 isAnonAccount 快照（初值 false）；该 Edit 时 AccountStore 已落盘，但它没有读取（同转录 L171）。本链只确认传递。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 5,
+          "force": true,
+          "reason": "Slice 7 写前用 Bash grep 读取 AccountHelpers.ets，回执返回 async getCurrentAccount 契约；这支持它写前已收到该契约。",
+          "evidence": [
+            {
+              "source": "generation/e919f2a1-5f90-46e2-baca-332c443637de/subagents/agent-a9b7910e3f3260e9a.jsonl",
+              "line": 71
+            },
+            {
+              "source": "generation/e919f2a1-5f90-46e2-baca-332c443637de/subagents/agent-a9b7910e3f3260e9a.jsonl",
+              "line": 72
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/pages/CommentReplyPage.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "e919f2a1-5f90-46e2-baca-332c443637de.jsonl",
+          "at": "2026-10-01T15:09:13.604Z",
+          "reason": "派工输入：Slice 11 派工写明“已就绪上游：…S3 AccountStore（isAnon 守卫）；S7 PrivateMessageReplyVm 形态参考”（主会话 L2868）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/ui/components/comment/reply/CommentReplyScreen.kt",
+          "at": "2026-10-01T15:09:25.735Z",
+          "reason": "源码输入：Read 回执给出 getCurrentAccount(accountViewModel) 和发送前 `!account.isAnon()`（agent-a6904b62787958743.jsonl:L28-L29）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/pages/PrivateMessageReplyPage.ets",
+          "at": "2026-10-01T15:11:47.674Z",
+          "reason": "先例输入：Bash sed 回执返回 S7 页面的 `@Local isAnonAccount: boolean = false` 和 aboutToAppear 异步 getCurrentAccount 写法（agent-a6904b62787958743.jsonl:L80-L81）。"
+        },
+        {
+          "key": "agent-a6904b62787958743.jsonl",
+          "at": "2026-10-01T15:21:25.912Z",
+          "reason": "派工指向 AccountStore，它却从没读过 AccountStore.ets，计划写“getCurrentAccount → isAnonAccount. Follow S7 exactly”（L147）。Write 产出 isAnonAccount=false 加异步读库快照，读库返回前匿名用户也能发送，切号也不刷新（同转录 L168）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "Slice 11 写前用 Bash sed 读取 PrivateMessageReplyPage.ets 490-620 行，回执含 isAnonAccount=false 与 aboutToAppear 异步 getCurrentAccount 先例；这支持它照搬了该写法。",
+          "evidence": [
+            {
+              "source": "generation/e919f2a1-5f90-46e2-baca-332c443637de/subagents/agent-a6904b62787958743.jsonl",
+              "line": 80
+            },
+            {
+              "source": "generation/e919f2a1-5f90-46e2-baca-332c443637de/subagents/agent-a6904b62787958743.jsonl",
+              "line": 81
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/pages/CommentEditPage.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "e919f2a1-5f90-46e2-baca-332c443637de.jsonl",
+          "at": "2026-10-01T15:09:13.604Z",
+          "reason": "派工输入：写明 S3 AccountStore（isAnon 守卫）已就绪（主会话 L2868）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/ui/components/comment/edit/CommentEditScreen.kt",
+          "at": "2026-10-01T15:09:26.388Z",
+          "reason": "源码输入：Read 回执给出保存前以 getCurrentAccount(accountViewModel) 的当前账号调用 account.doIfReadyElseDisplayInfo（agent-a6904b62787958743.jsonl:L32-L33）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/pages/PrivateMessageReplyPage.ets",
+          "at": "2026-10-01T15:11:47.674Z",
+          "reason": "先例输入：S7 的异步读库快照写法（agent-a6904b62787958743.jsonl:L80-L81）。"
+        },
+        {
+          "key": "agent-a6904b62787958743.jsonl",
+          "at": "2026-10-01T15:21:58.454Z",
+          "reason": "Write 写成 `@Local account = ANON_ACCOUNT`，aboutToAppear 异步 getCurrentAccount 后赋值，再把这个本地副本交给 AccountVerifier.doIfReadyElseDisplayInfo。读库返回前已登录用户也被判为匿名（同转录 L171）；派工给的 AccountStore 没有被采用。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "Slice 11 写前用 Bash sed 读取 PrivateMessageReplyPage.ets 490-620 行，回执含异步 getCurrentAccount 先例。",
+          "evidence": [
+            {
+              "source": "generation/e919f2a1-5f90-46e2-baca-332c443637de/subagents/agent-a6904b62787958743.jsonl",
+              "line": 80
+            },
+            {
+              "source": "generation/e919f2a1-5f90-46e2-baca-332c443637de/subagents/agent-a6904b62787958743.jsonl",
+              "line": 81
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/pages/CreatePostPage.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/services/AccountStore.ets",
+          "at": "2026-10-01T16:42:09.871Z",
+          "reason": "正常输入：Slice 14 的 Bash grep 回执返回 `@Trace currentAccount: Account = ANON_ACCOUNT` 等导出（agent-abe3abd54e1092ad4.jsonl:L62-L63），足以同步读取当前账号。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/ui/components/post/create/CreatePostScreen.kt",
+          "at": "2026-10-01T16:43:41.943Z",
+          "reason": "源码输入：Read 回执给出 getCurrentAccount(accountViewModel)，选图/上传前 `!account.isAnon()`（agent-abe3abd54e1092ad4.jsonl:L108-L109）。"
+        },
+        {
+          "key": "agent-abe3abd54e1092ad4.jsonl",
+          "at": "2026-10-01T16:51:48.241Z",
+          "reason": "Edit 写入 `@Local account = ANON_ACCOUNT` + aboutToAppear 异步 getCurrentAccount 赋值（同转录 L262），没有用读到的 AccountStore。上传前的 isAnon 判定读这个快照，冷启进入分享图片流程时快照仍是匿名，图片上传被跳过（修复报告 G-14/G-15）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "Slice 14 写前用 Bash grep 读取 AccountStore.ets 导出，回执返回 @Trace currentAccount；这支持它写前已知响应式账号源。",
+          "evidence": [
+            {
+              "source": "generation/e7cc4044-4f78-441c-8b49-3a097937f665/subagents/agent-abe3abd54e1092ad4.jsonl",
+              "line": 62
+            },
+            {
+              "source": "generation/e7cc4044-4f78-441c-8b49-3a097937f665/subagents/agent-abe3abd54e1092ad4.jsonl",
+              "line": 63
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/pages/PostRemovePage.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/services/AccountStore.ets",
+          "at": "2026-10-01T16:44:10.686Z",
+          "reason": "正常输入：Slice 17 的 Bash sed 回执返回 AccountStore 的 `@Trace currentAccount`、hydrated 与 connect()（agent-a88e4b39d61570ba6.jsonl:L170-L171）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/pages/PrivateMessageReplyPage.ets",
+          "at": "2026-10-01T16:46:53.899Z",
+          "reason": "先例输入：grep 回执返回 S7 页的 `@Local isAnonAccount: boolean = false` 和 aboutToAppear 异步赋值（agent-a88e4b39d61570ba6.jsonl:L221-L222）。"
+        },
+        {
+          "key": "agent-a88e4b39d61570ba6.jsonl",
+          "at": "2026-10-01T16:51:46.138Z",
+          "reason": "思考中写明“AccountHelpers 是异步一次性查询（AccountStore 是 @Trace 响应式）。表单页 isAnonAccount 用 AccountStore…更干净”（L220），随后“我抄同款模式”（L223）。Edit 写入 isAnonAccount=false 加异步读库快照（同转录 L318），读库返回前匿名用户也会发起移除请求（修复报告 H-D3）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "Slice 17 写前用 Bash sed 读取 AccountStore.ets 30-110 行，回执返回 @Trace currentAccount/hydrated/connect()；这支持它写前已知响应式账号源。",
+          "evidence": [
+            {
+              "source": "generation/e7cc4044-4f78-441c-8b49-3a097937f665/subagents/agent-a88e4b39d61570ba6.jsonl",
+              "line": 170
+            },
+            {
+              "source": "generation/e7cc4044-4f78-441c-8b49-3a097937f665/subagents/agent-a88e4b39d61570ba6.jsonl",
+              "line": 171
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/pages/CommentRemovePage.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/services/AccountStore.ets",
+          "at": "2026-10-01T16:44:10.686Z",
+          "reason": "正常输入：AccountStore 的 @Trace currentAccount（agent-a88e4b39d61570ba6.jsonl:L170-L171）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/pages/PrivateMessageReplyPage.ets",
+          "at": "2026-10-01T16:46:53.899Z",
+          "reason": "先例输入：S7 的异步读库快照（agent-a88e4b39d61570ba6.jsonl:L221-L222）。"
+        },
+        {
+          "key": "agent-a88e4b39d61570ba6.jsonl",
+          "at": "2026-10-01T16:52:04.160Z",
+          "reason": "已认可 AccountStore 更合适（L220），仍照抄先例，Edit 写入 isAnonAccount=false 加异步快照（同转录 L326）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "Slice 17 写前用 Bash sed 读取 AccountStore.ets，回执返回 @Trace currentAccount。",
+          "evidence": [
+            {
+              "source": "generation/e7cc4044-4f78-441c-8b49-3a097937f665/subagents/agent-a88e4b39d61570ba6.jsonl",
+              "line": 170
+            },
+            {
+              "source": "generation/e7cc4044-4f78-441c-8b49-3a097937f665/subagents/agent-a88e4b39d61570ba6.jsonl",
+              "line": 171
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/pages/BanPersonPage.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/services/AccountStore.ets",
+          "at": "2026-10-01T16:44:10.686Z",
+          "reason": "正常输入：AccountStore 的 @Trace currentAccount（agent-a88e4b39d61570ba6.jsonl:L170-L171）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/pages/PrivateMessageReplyPage.ets",
+          "at": "2026-10-01T16:46:53.899Z",
+          "reason": "先例输入：S7 的异步读库快照（agent-a88e4b39d61570ba6.jsonl:L221-L222）。"
+        },
+        {
+          "key": "agent-a88e4b39d61570ba6.jsonl",
+          "at": "2026-10-01T16:52:33.025Z",
+          "reason": "同一照抄决定（L220、L223），Edit 写入 isAnonAccount=false 加 DB 一次性查询（同转录 L338）；切号不同步，读库前判为非匿名（修复报告 H-C5）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "Slice 17 写前用 Bash sed 读取 AccountStore.ets，回执返回 @Trace currentAccount。",
+          "evidence": [
+            {
+              "source": "generation/e7cc4044-4f78-441c-8b49-3a097937f665/subagents/agent-a88e4b39d61570ba6.jsonl",
+              "line": 170
+            },
+            {
+              "source": "generation/e7cc4044-4f78-441c-8b49-3a097937f665/subagents/agent-a88e4b39d61570ba6.jsonl",
+              "line": 171
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/pages/CreatePostReportPage.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/services/AccountStore.ets",
+          "at": "2026-10-01T16:44:10.686Z",
+          "reason": "正常输入：AccountStore 的 @Trace currentAccount（agent-a88e4b39d61570ba6.jsonl:L170-L171）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/pages/PrivateMessageReplyPage.ets",
+          "at": "2026-10-01T16:46:53.899Z",
+          "reason": "先例输入：S7 的异步读库快照（agent-a88e4b39d61570ba6.jsonl:L221-L222）。"
+        },
+        {
+          "key": "agent-a88e4b39d61570ba6.jsonl",
+          "at": "2026-10-01T16:53:55.876Z",
+          "reason": "同一照抄决定，Edit 写入“async 一次性查询 + 本地快照，PostRemovePage 同款模式”（同转录 L368；修复报告 H-E2）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "Slice 17 写前用 Bash sed 读取 AccountStore.ets，回执返回 @Trace currentAccount。",
+          "evidence": [
+            {
+              "source": "generation/e7cc4044-4f78-441c-8b49-3a097937f665/subagents/agent-a88e4b39d61570ba6.jsonl",
+              "line": 170
+            },
+            {
+              "source": "generation/e7cc4044-4f78-441c-8b49-3a097937f665/subagents/agent-a88e4b39d61570ba6.jsonl",
+              "line": 171
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/pages/CreateCommentReportPage.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/services/AccountStore.ets",
+          "at": "2026-10-01T16:44:10.686Z",
+          "reason": "正常输入：AccountStore 的 @Trace currentAccount（agent-a88e4b39d61570ba6.jsonl:L170-L171）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/pages/PrivateMessageReplyPage.ets",
+          "at": "2026-10-01T16:46:53.899Z",
+          "reason": "先例输入：S7 的异步读库快照（agent-a88e4b39d61570ba6.jsonl:L221-L222）。"
+        },
+        {
+          "key": "agent-a88e4b39d61570ba6.jsonl",
+          "at": "2026-10-01T16:54:33.152Z",
+          "reason": "同一照抄决定，Edit 写入 isAnonAccount=false 加异步读库快照（同转录 L384）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "Slice 17 写前用 Bash sed 读取 AccountStore.ets，回执返回 @Trace currentAccount。",
+          "evidence": [
+            {
+              "source": "generation/e7cc4044-4f78-441c-8b49-3a097937f665/subagents/agent-a88e4b39d61570ba6.jsonl",
+              "line": 170
+            },
+            {
+              "source": "generation/e7cc4044-4f78-441c-8b49-3a097937f665/subagents/agent-a88e4b39d61570ba6.jsonl",
+              "line": 171
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/pages/PostPage.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/ui/components/post/PostScreen.kt",
+          "at": "2026-10-01T15:09:38.693Z",
+          "reason": "正常输入：Slice 10 的 Read 回执中，投票、收藏、删除、隐藏、锁定、置顶及评论投票/收藏/删除/加精/屏蔽都包在 account.doIfReadyElseDisplayInfo(appState, ctx, …) 里（agent-aad91d3c0d95b4028.jsonl:L34、L37）。"
+        },
+        {
+          "key": "agent-aad91d3c0d95b4028.jsonl",
+          "at": "2026-10-01T15:25:07.030Z",
+          "reason": "Edit 新增 guardReadyOrToast：匿名或未就绪只弹 utils_login_first Toast，不走 AccountVerifier 校验链、不提示验证状态、不跳登录（同转录 L250）。工程中已有 AccountVerifier.ets（L89 目录回执），它只在 AccountHelpers 里找过 doIfReady（L126）；source-notes 自述“统一 utils_login_first Toast（近似）”（L325-L327）。对应修复报告 D-29/D-30、D-52、D-54~D-57。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/ui/components/post/PostScreen.kt",
+          "at": "2026-10-01T19:35:17.105Z",
+          "reason": "正常输入：FV-1 收尾者的 Bash sed 回执（L393-470、L470-520）返回 onDeletePostClick/onHidePostClick/onLockPostClick/onFeaturePostClick 各自的 doIfReadyElseDisplayInfo 包裹（agent-a4a33bd280d26d858.jsonl:L141-L144）。"
+        },
+        {
+          "key": "agent-a4a33bd280d26d858.jsonl",
+          "at": "2026-10-01T20:01:34.412Z",
+          "reason": "Edit 接线帖子九路回调时，把 delete/hide/lock/feature 直接写成 this.vm.deletePost/hidePost/lockPost/featurePost，没有任何账号守卫（同转录 L429；修复报告 D-31~D-34 缺失守卫）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "FV-1 收尾者写前用 Bash sed 读取 PostScreen.kt 393-470、470-520 行，回执含 delete/hide/lock/feature 回调的 doIfReadyElseDisplayInfo 包裹；这支持它写前已收到守卫要求。",
+          "evidence": [
+            {
+              "source": "generation/e7cc4044-4f78-441c-8b49-3a097937f665/subagents/agent-a4a33bd280d26d858.jsonl",
+              "line": 141
+            },
+            {
+              "source": "generation/e7cc4044-4f78-441c-8b49-3a097937f665/subagents/agent-a4a33bd280d26d858.jsonl",
+              "line": 142
+            },
+            {
+              "source": "generation/e7cc4044-4f78-441c-8b49-3a097937f665/subagents/agent-a4a33bd280d26d858.jsonl",
+              "line": 143
+            },
+            {
+              "source": "generation/e7cc4044-4f78-441c-8b49-3a097937f665/subagents/agent-a4a33bd280d26d858.jsonl",
+              "line": 144
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/components/comment/CommentNodeItem.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/ui/components/comment/CommentNode.kt",
+          "at": "2026-10-01T11:03:31.255Z",
+          "reason": "正常输入：Read 回执中评论页脚的每个 ActionBarButton/VoteGeneric 都传 `account = account`（10 处），onUpvoteClick lambda 由按钮点击触发，按钮点击默认 requiresAccount 守卫（agent-aacfdc958959e3886.jsonl:L75-L76）。"
+        },
+        {
+          "key": "agent-aacfdc958959e3886.jsonl",
+          "at": "2026-10-01T11:18:07.972Z",
+          "reason": "Stage 1 帖子页转换者 Write 的 CommentActionBarButton 只有 icon/text/noClick/onAction，去掉了 account 和 requiresAccount 守卫（注释称复制 InboxPage 同构实现）；投票回调先 `this.instant = this.instant.update(±1)`，再上抛给宿主，匿名点赞也会先改本地分数（同转录 L255；修复报告 D-101/D-102）。也没有为守卫登记前向引用。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/pages/PersonProfilePage.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/ui/components/person/PersonProfileScreen.kt",
+          "at": "2026-10-01T15:10:30.576Z",
+          "reason": "正常输入：Slice 12 的 Read 回执含 15 处 account.doIfReadyElseDisplayInfo，覆盖屏蔽（L249）和帖子/评论的投票、收藏、删除、隐藏、锁定、置顶、加精、屏蔽（agent-a7c66dd716b4a9b6a.jsonl:L54-L55）。"
+        },
+        {
+          "key": "agent-a7c66dd716b4a9b6a.jsonl",
+          "at": "2026-10-01T15:39:14.736Z",
+          "reason": "思考中曾计划查看“其他 slice 如何处理 doIfReadyElseDisplayInfo”（L101），Write 却把屏蔽写成 this.vm?.blockPerson(personId)，帖子/评论投票写成 this.vm?.likePost/likeComment，均无账号守卫（同转录 L237；修复报告 F-P24/F-P45/F-P63）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/services/AccountStore.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/model/AccountViewModel.kt",
+          "at": "2026-10-01T14:04:24.925Z",
+          "reason": "正常输入：Read 回执给出 currentAccount = repository.currentAccount（LiveData），setVerificationState 写库，注释说明验证态写入会触发 siteRes 更新等后续（agent-ac4b1fd5b47b07f1d.jsonl:L63-L64）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/db/repository/AccountRepository.kt",
+          "at": "2026-10-01T14:04:32.594Z",
+          "reason": "正常输入：Read 回执给出 currentAccount = accountDao.getCurrent()（Room LiveData，表写入后重新发射）（agent-ac4b1fd5b47b07f1d.jsonl:L79-L80）。"
+        },
+        {
+          "key": "agent-ac4b1fd5b47b07f1d.jsonl",
+          "at": "2026-10-01T14:13:18.148Z",
+          "reason": "Slice 3 自己的 D7 写着“LiveData 自动发射 → AccountStore @Trace 缓存 + 变更后 emit”，Write 的 setVerificationState 却注明“写库但不广播（验证态非账号身份变更）”，只写 repository，不 refreshCache（同转录 L146）。内存 currentAccount 的 verificationState 不更新，isReady() 不成立，每次操作都重复验证（修复报告 I2-89）。修复补上 notifyChanged。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/services/AccountVerifier.ets",
+      "reason": "保留差异（retained-application.patch）只有 checkInternet 无默认网络按有网处理（修复报告 I2-93）、ban_expires 改读正式字段（I2-96）、doSnackbarAction 改真实动作 Snackbar（I2-101），以及删号失败分支也跳登录。修复报告把 isReadyAndIfNotDisplayInfo 与 isReadyAndIfNotShowSimplifiedInfoToast（I2-102/I2-103）标为一致。本问题列出的 D/E/F/G/H/S 编号没有一条落在这个文件，job 的变更证据 agent-afd644545af3dc90b.jsonl:L970 与 Snackbar 问题共用。因此本卡不对它作守卫链归因。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/pages/SearchPage.ets",
+      "reason": "F-S38（评论屏蔽无守卫）：G2a 收尾者接线 commentNodeSlot 时（e7cc4044 agent-ae24a34c25efd9fa9.jsonl:L331），投票/收藏/删除/加精都包了页内 doIfReadyThen，只有 onBlockCreatorClick 直连页内 blockPerson 助手；该助手本身不带守卫。它写前只读了 SearchScreen.kt L400-470（L65），没有读到 L372-386 屏蔽回调的 doIfReadyElseDisplayInfo。Slice 13（agent-a52012246d51c567f.jsonl）在 L75 读过完整 SearchScreen.kt，在 L209 留下的前向引用注释只写“投票/保存/删除/屏蔽经本页 VM 委托”，没写守卫。blockPerson 助手又经过 7b318df2 Stage 1 转换（agent-aac14e1345efbea83.jsonl:L145）和 agent-aa055ac8ebf7e3d74.jsonl:L392 多次改写。最初偏差落在助手、注释还是收尾接线，尚未逐段核完，暂不归因。"
+    }
+  ],
+  "job": "issue-32e10a93f9a585a4ef50",
+  "metadata": {
+    "migration": {
+      "id": "jerboa-e7cc4044-4f78-441c-8b49-3a097937f665",
+      "project": "jerboa"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.247",
+        "2.1.309",
+        "2.1.310"
+      ]
+    },
+    "source_set_id": "sources-32ddfd727cfccbbce98f",
+    "environment": [
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T06:59:57.329Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L10",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L9",
+        "phase": "generation"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T06:59:57.329Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L10",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L9",
+        "phase": "generation"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "26",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T06:59:57.329Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L10",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L9",
+        "phase": "generation"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T06:59:57.329Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L10",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L9",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T08:27:52.558Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1138",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1136",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T08:27:52.558Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1138",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1136",
+        "phase": "generation"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L2/jerboa",
+        "at": "2026-10-23T16:50:12.154Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L209",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L208",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L2/jerboa",
+        "at": "2026-10-23T16:50:12.154Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L209",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L208",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "26",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L2/jerboa",
+        "at": "2026-10-23T16:50:12.154Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L209",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L208",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L2/jerboa",
+        "at": "2026-10-23T16:50:12.154Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L209",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L208",
+        "phase": "repair"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:12.967Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L155",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L154",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:12.967Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L155",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L154",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "26",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:12.967Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L155",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L154",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:12.967Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L155",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L154",
+        "phase": "repair"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:39.052Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L120",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L119",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:39.052Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L120",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L119",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "26",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:39.052Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L120",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L119",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:28:16.441Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a4d3a35dbb3029087.jsonl:L251",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a4d3a35dbb3029087.jsonl:L250",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:28:16.441Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a4d3a35dbb3029087.jsonl:L251",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a4d3a35dbb3029087.jsonl:L250",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:35:12.588Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-ae9a25fc6a2669bb5.jsonl:L522",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-ae9a25fc6a2669bb5.jsonl:L521",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:36:59.707Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a557f4f80a218650e.jsonl:L430",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a557f4f80a218650e.jsonl:L429",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-23T19:59:02.243Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a7154d5ed3ee900cc.jsonl:L1776",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a7154d5ed3ee900cc.jsonl:L1775",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.10",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "3488bf55-f8ef-4dfe-ae5e-17b59ecfb2cd"
+      ]
+    }
+  },
+  "revision": "ccdfde99fd558305566912a490e2cc50f5476a6a701989450bf1721e846fbf01"
+}

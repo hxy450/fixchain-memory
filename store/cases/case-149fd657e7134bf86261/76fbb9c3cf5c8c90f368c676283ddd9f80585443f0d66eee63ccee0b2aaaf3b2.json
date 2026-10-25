@@ -1,0 +1,475 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-149fd657e7134bf86261",
+  "created_at": "2026-10-24T14:56:10.609723+00:00",
+  "migration_key": "jerboa-e7cc4044-4f78-441c-8b49-3a097937f665",
+  "title": "媒体下载/保存/复制与查看器进度只写出API外形：任务未start、入库依赖未声明权限、进度只订阅不生产",
+  "when": "系统能力与媒体功能实现阶段，编写下载到缓存、保存到相册/文件、图片复制到剪贴板以及查看器下载进度接线的调用代码时",
+  "description": "源端用OkHttp/getInputStream下载、MediaStore入库、FileProvider URI复制、全局下载进度拦截器；目标端改用request.agent、photoAccessHelper、DocumentViewPicker、pasteboard与自建按请求的进度总线，实现者依据参考模板片段、规格映射或跨切片交接摘要落码。",
+  "summary": "一、MediaActions（F018 切片 worker agent-a697e48fc8bdf0a7f）。写前已收到：F018 规格 AC29 与实现映射要求鸿蒙侧走免权限的媒体库/picker 通道；\nphoto-access-helper.md 的 grep 回执给出 createAssetRequest + addResource + applyChanges 三步，并写明需要 ohos.permission.WRITE_IMAGEVIDEO\n（module.json5 声明 + 运行时请求，缺一不可）；随后 grep module.json5 得到 requestPermissions 计数 0。arkts-system-capabilities SKILL.md\n把 request.agent 下载路由到 arkts-download-manager（其模板以 await task.start() 启动），worker 未加载该 skill，只用 grep -A18|head -40 和\nsed 55-99 截取 request-agent-patterns.md，回执停在 on('completed')，第 128 行 task.start() 不在实际返回内。\n本次 Write 输出：downloadToCache 只 create 并注册 completed/failed，从不 start，保存/分享/复制全链等不到完成；saveToMediaLibrary 用\ncreateAssetRequest 入库，却既未声明也未申请 WRITE_IMAGEVIDEO，源码笔记仍写“媒体库通道免权限”；Link 分支 copyFileSync(cachePath, pickedUris[0])\n把 picker 返回的 URI 当路径（同 skill 路由的 document-picker.md 写明要 openSync 取 fd，未读）；copyImageToClipboard 以 MIMETYPE_TEXT_URI\n写应用沙箱 file URI 且成功无反馈（与规格 AC33“图片 URI 写入、13+ 不补 Toast”一致，规格未写 FileProvider 的跨应用授权语义）。\n这些片段保留到生成结束；Stage 3 编译门对该文件只改了 failed 回调参数类型和 shareLink 的 SharedData 字段名，未触及上述片段。返修改为 create 后 task.start()、监听 response 校验 2xx、remove 清理；\n保存改走 showAssetsCreationDialog 取得媒体库 URI 后 openSync 取 fd 写入，拒绝时 permission_denied；Link 分支 openSync(uri) 取 fd 复制；\n复制图片解码为 PixelMap 以 MIMETYPE_PIXELMAP 写入并 Toast media_copied（agent-a46873447b2ab3ddd.jsonl:L1384、agent-af33aba9c988e1fd9.jsonl:L460）。\n二、ImageViewerPage（G2b group-closer agent-a1bec8cf2a447a65e）。写前读到 Slice 14 brief 移交第 3 项：P-S5-004 订阅补线，且\n“图片加载经 fetchWithProgress 的接线（ImageKnife DataFetch / 手动喂 bytes）由消费端定”。closer 的思考把该项缩写成“订阅补线（DownloadProgressBus）”，\n只在 aboutToAppear 写 DownloadProgressBus.subscribe(this.url, …)，图片仍由 Image(url) 直载、页面没有任何 fetchWithProgress 生产者，并把 P-S5-004 记为已解除。\n页面路由参数 imageUrl 在 onReady 才赋值；随后编译门把不存在的 this.url 批量替换为 this.imageUrl，订阅时机不变，订阅键恒为空串。\n因此进度永远停在 progressAvailable=false 分支，而该分支是 Stage 1 页面转换沿用工程既有译法写的静态 Progress(value 30)。\n返修让页面自行 fetchWithProgress 下载到 cacheDir 磁盘缓存再显示 file://，订阅 DOWNLOAD_PROGRESS 全局最新事件，确定进度用新建 MediaViewerProgressBar、\n不确定用 LoadingBar，并按“网络失败=Failed、下载成功而解码失败=FailedDecode”重写状态机（agent-a46873447b2ab3ddd.jsonl:L1522、L1534）。\n三、DownloadProgressBus（Stage 3 编译门 agent-afb0b5362c4dd506e）。Slice 14 原稿只在 resp.responseCode 为 2xx 时返回字节；编译报 responseCode\n不存在于 number。修复者读回该段后未查 SDK 说明，断言“requestInStream 返回请求 id（number）；成功完成才 resolve”，删除状态码判定，\n非 2xx 的错误页也被当作成功字节返回。返修把 requestInStream 的 resolve 值作为 HTTP 码，非 2xx 返回 null（agent-a46873447b2ab3ddd.jsonl:L1516）。\n",
+  "recommendations": [
+    "实现阶段用 request.agent 下载时，按 create → on('response'/'completed'/'failed') → task.start() 的完整生命周期落码；参考模板只截到一半时先读全或加载专项下载 skill，写完核对代码里确有 start()。",
+    "调用媒体库写入前，把参考列出的权限与 module.json5 和运行时申请逐项对照；未声明 WRITE_IMAGEVIDEO 时改用免权限的 photoAccessHelper.showAssetsCreationDialog，对返回的媒体库 URI openSync 取 fd 写入，用户拒绝给 permission_denied 提示。",
+    "DocumentViewPicker 或媒体库返回的是 URI：先 fileIo.openSync(uri) 取 fd，再 copyFileSync(源路径, fd)；不把 URI 当路径传入 copyFileSync。",
+    "图片复制到剪贴板时不写应用沙箱 file URI（其他应用不可读），改写 PixelMap（MIMETYPE_PIXELMAP）等接收方可读的数据，并因鸿蒙无系统“已复制”提示而补成功 Toast；规格提取时把 Android FileProvider 的跨应用授权语义写进契约。",
+    "收口跨切片交接时，交接项里的每个子要求都要落地（本例是“订阅”和“图片加载经 fetchWithProgress”两件），缺一项不翻 resolved；订阅键依赖路由参数时，在参数赋值之后（NavDestination onReady）再订阅，并确认有生产者会发该键的事件。",
+    "编译修复遇到返回类型不符时，先查 SDK 声明确认返回值语义再改写原判定，保留原有业务校验（如 HTTP 2xx 判定），不以删除校验换编译通过。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/services/MediaActions.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/spec/baseline/features/F018-voting-content-actions.md",
+          "at": "2026-10-01T14:42:49.807Z",
+          "reason": "正常输入：Read 回执含 AC29“HarmonyOS 侧媒体库/沙箱写入免该权限（photoAccessHelper picker 通道）”、AC32/AC33 下载后分享与剪贴板契约及实现映射表 MediaStore→photoAccessHelper 行，要求保存不依赖额外权限（agent-a697e48fc8bdf0a7f.jsonl:L24-L25）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/.claude/skills/arkts-system-capabilities/references/photo-access-helper.md",
+          "at": "2026-10-01T14:46:39.521Z",
+          "reason": "正常输入：grep 回执给出 MediaAssetChangeRequest 三步，并在要点表写明权限 ohos.permission.WRITE_IMAGEVIDEO（module.json5 声明 + 运行时 abilityAccessCtrl 请求，缺一不可）；足以说明 createAssetRequest 不是免权限通道（同转录 L126-L127）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/.claude/skills/arkts-download-manager/references/request-agent-patterns.md",
+          "at": "2026-10-01T14:49:45.390Z",
+          "reason": "实际输入：grep -A18|head -40 只返回 create 与 on('progress'/'completed') 片段，sed 55-99 返回 Config 模板；文件第 128 行 await task.start() 未出现在两次回执中。该文件可读且完整，是 worker 自己截断了模板（同转录 L143-L147）。"
+        },
+        {
+          "key": "agent-a697e48fc8bdf0a7f.jsonl",
+          "at": "2026-10-01T14:55:54.762Z",
+          "reason": "收到上述输入后 Write MediaActions：downloadToCache 只 create+on 不 start；saveToMediaLibrary 用 createAssetRequest 而不声明/申请 WRITE_IMAGEVIDEO，源码笔记称媒体库通道免权限；Link 分支 copyFileSync 目标传 picker URI；复制图片写沙箱 MIMETYPE_TEXT_URI（同转录 L209-L210、L234）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4,
+          "force": true,
+          "reason": "worker 在工程根执行 Bash grep -n -A 25 读取 .claude/skills/arkts-system-capabilities/references/photo-access-helper.md，回执返回 MediaAssetChangeRequest 三步与 WRITE_IMAGEVIDEO 权限要求；这是写 MediaActions 前对该文件的真实读取。",
+          "evidence": [
+            {
+              "source": "generation/e919f2a1-5f90-46e2-baca-332c443637de/subagents/agent-a697e48fc8bdf0a7f.jsonl",
+              "line": 126
+            },
+            {
+              "source": "generation/e919f2a1-5f90-46e2-baca-332c443637de/subagents/agent-a697e48fc8bdf0a7f.jsonl",
+              "line": 127
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "worker 在工程根两次 Bash 读取 .claude/skills/arkts-download-manager/references/request-agent-patterns.md：grep -A18|head -40 返回 create 与 on('progress'/'completed')，sed -n '55,99p' 返回 Config 模板；两次回执均不含第 128 行 task.start()，支持“模板被截断读取”这一归因。",
+          "evidence": [
+            {
+              "source": "generation/e919f2a1-5f90-46e2-baca-332c443637de/subagents/agent-a697e48fc8bdf0a7f.jsonl",
+              "line": 143
+            },
+            {
+              "source": "generation/e919f2a1-5f90-46e2-baca-332c443637de/subagents/agent-a697e48fc8bdf0a7f.jsonl",
+              "line": 144
+            },
+            {
+              "source": "generation/e919f2a1-5f90-46e2-baca-332c443637de/subagents/agent-a697e48fc8bdf0a7f.jsonl",
+              "line": 146
+            },
+            {
+              "source": "generation/e919f2a1-5f90-46e2-baca-332c443637de/subagents/agent-a697e48fc8bdf0a7f.jsonl",
+              "line": 147
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/pages/ImageViewerPage.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/spec/execution/briefs/slice-14-F005_brief.md",
+          "at": "2026-10-01T17:58:39.711Z",
+          "reason": "正常输入：Read 回执第 43 行移交“ImageViewerPage P-S5-004 订阅补线（AppEventHub DOWNLOAD_PROGRESS 或 DownloadProgressBus.subscribe(url)）；图片加载经 fetchWithProgress 的接线由消费端定”，同时给出订阅与生产两项要求（agent-a1bec8cf2a447a65e.jsonl:L16-L17）。"
+        },
+        {
+          "key": "agent-a1bec8cf2a447a65e.jsonl",
+          "at": "2026-10-01T18:04:47.251Z",
+          "reason": "思考中把移交缩写为“订阅补线（DownloadProgressBus）”（L26、L186），Edit 只在 aboutToAppear 写 subscribe(this.url)，未把 Image(url) 加载改经 fetchWithProgress，并注明 P-S5-004 已解除；路由 URL 此时尚未赋值（同转录 L189-L190）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/services/DownloadProgressBus.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/services/DownloadProgressBus.ets",
+          "at": "2026-10-01T19:08:39.991Z",
+          "reason": "正常输入：编译门 sed 读回 150-172 行，返回 Slice 14 原稿“resp.responseCode >= 200 && < 300 才 onDataEnd 并返回字节，否则 null”的业务判定；构建错误只说 responseCode 不存在于 number（agent-afb0b5362c4dd506e.jsonl:L194、L559-L560）。"
+        },
+        {
+          "key": "agent-afb0b5362c4dd506e.jsonl",
+          "at": "2026-10-01T19:09:10.824Z",
+          "reason": "Bash python 改写时断言 requestInStream 返回请求 id、成功才 resolve，删除 2xx 判定，改成无条件返回拼合字节；未查 SDK 对返回值的说明（同转录 L568-L569）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "编译门在工程根 Bash sed -n '150,172p' entry/src/main/ets/services/DownloadProgressBus.ets，回执返回 resp.responseCode 2xx 判定段；这是改写前对目标文件该片段的真实读取。",
+          "evidence": [
+            {
+              "source": "generation/e7cc4044-4f78-441c-8b49-3a097937f665/subagents/agent-afb0b5362c4dd506e.jsonl",
+              "line": 559
+            },
+            {
+              "source": "generation/e7cc4044-4f78-441c-8b49-3a097937f665/subagents/agent-afb0b5362c4dd506e.jsonl",
+              "line": 560
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": "target",
+          "force": true,
+          "reason": "同一编译门 Bash python 打开 entry/src/main/ets/services/DownloadProgressBus.ets，以 replace 删除 responseCode 判定并写回，回执打印 OK DownloadProgressBus；这是对目标文件的真实写入。",
+          "evidence": [
+            {
+              "source": "generation/e7cc4044-4f78-441c-8b49-3a097937f665/subagents/agent-afb0b5362c4dd506e.jsonl",
+              "line": 568
+            },
+            {
+              "source": "generation/e7cc4044-4f78-441c-8b49-3a097937f665/subagents/agent-afb0b5362c4dd506e.jsonl",
+              "line": 569
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "未核实本应用能否经 ACL 获得 WRITE_IMAGEVIDEO；本卡已核偏差是代码依赖既未声明也未申请的权限、与已读参考相反，不声称该权限对三方应用必不可得。",
+    "copyImageToClipboard 写沙箱 URI 与规格 AC33 文字一致，规格作者如何形成该契约未追溯。",
+    "ImageViewerPage 的静态 Progress(value 30) 沿用工程 HomePage/SiteLegalPage 先例，最初写者未在本卡追溯；无磁盘缓存、按 onError message 猜解码失败属 Stage 1 页面转换以 Image(url) 直载的设计，未单独成链。"
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/components/common/MediaViewerProgressBar.ets",
+      "reason": "返修新建文件，生成期没有写入；它取代 ImageViewerPage 内联的静态/确定 Progress，相关偏差已在 ImageViewerPage 图与 unknown 中说明，静态进度条的最初写者未单独追溯。"
+    }
+  ],
+  "job": "issue-149fd657e7134bf86261",
+  "metadata": {
+    "migration": {
+      "id": "jerboa-e7cc4044-4f78-441c-8b49-3a097937f665",
+      "project": "jerboa"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.247",
+        "2.1.309",
+        "2.1.310"
+      ]
+    },
+    "source_set_id": "sources-32ddfd727cfccbbce98f",
+    "environment": [
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T06:59:57.329Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L10",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L9",
+        "phase": "generation"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T06:59:57.329Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L10",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L9",
+        "phase": "generation"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "26",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T06:59:57.329Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L10",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L9",
+        "phase": "generation"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T06:59:57.329Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L10",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L9",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T08:27:52.558Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1138",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1136",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T08:27:52.558Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1138",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1136",
+        "phase": "generation"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L2/jerboa",
+        "at": "2026-10-23T16:50:12.154Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L209",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L208",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L2/jerboa",
+        "at": "2026-10-23T16:50:12.154Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L209",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L208",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "26",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L2/jerboa",
+        "at": "2026-10-23T16:50:12.154Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L209",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L208",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L2/jerboa",
+        "at": "2026-10-23T16:50:12.154Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L209",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L208",
+        "phase": "repair"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:12.967Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L155",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L154",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:12.967Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L155",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L154",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "26",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:12.967Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L155",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L154",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:12.967Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L155",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L154",
+        "phase": "repair"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:39.052Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L120",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L119",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:39.052Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L120",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L119",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "26",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:39.052Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L120",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L119",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:28:16.441Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a4d3a35dbb3029087.jsonl:L251",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a4d3a35dbb3029087.jsonl:L250",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:28:16.441Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a4d3a35dbb3029087.jsonl:L251",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a4d3a35dbb3029087.jsonl:L250",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:35:12.588Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-ae9a25fc6a2669bb5.jsonl:L522",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-ae9a25fc6a2669bb5.jsonl:L521",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:36:59.707Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a557f4f80a218650e.jsonl:L430",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a557f4f80a218650e.jsonl:L429",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-23T19:59:02.243Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a7154d5ed3ee900cc.jsonl:L1776",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a7154d5ed3ee900cc.jsonl:L1775",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.10",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "3488bf55-f8ef-4dfe-ae5e-17b59ecfb2cd"
+      ]
+    }
+  },
+  "revision": "76fbb9c3cf5c8c90f368c676283ddd9f80585443f0d66eee63ccee0b2aaaf3b2"
+}

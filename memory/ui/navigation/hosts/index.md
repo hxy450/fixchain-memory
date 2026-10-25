@@ -51,3 +51,6 @@ Navigation/@Entry宿主与页面注册（含根 Navigation 默认标题栏与工
   - 时机：规格提取阶段翻译 LifecycleEventObserver 的 ON_STOP/ON_RESUME 触发契约时；页面实现阶段把引擎或服务暴露的 onStop/onResume 一类入口、或源 Activity 的存档时机接到 NavDestination 生命周期时
   - 情境：源 Composable 用 DisposableEffect(LocalLifecycleOwner.current) 注册 LifecycleEventObserver，ON_STOP 时移交后台服务、暂停或保存，ON_RESUME 时取回；该 Composable 位于 navigation-compose 的目的地内。目标页面是 NavDestination，引擎是普通类，需由页面在 onShown/onHidden/aboutToDisappear 中显式调用入口；规格可能把触发写成“退后台/前后台切换”。也包括源 Activity 只在 onPause、onBackPressed、onSaveInstanceState、Up 存档，onDestroy 不存档，存档按 now − startingTime 累计时长或写统计；目标页可能在隐藏很久后才被清栈销毁（桌面图标重进、popToIndex、replace）。
   - 例外：观察者挂在 Activity 或 ProcessLifecycleOwner 上：只对应应用前后台，按 Ability 或应用前后台回调接线
+- [路由表只注册以 NavDestination 为根的组件：Tab 内容组件兼作路由目标时由路由侧包一层帧](lesson-6c474c15ac28fca733a1.lesson.md)
+  - 时机：导航壳与路由表收口阶段，往 navDestination 映射的槽位填目标组件时
+  - 情境：同一个页面组件既嵌在底栏 Tab 里作内容组件（build 根是 Column 等普通容器），又是深链或按钮跳转的路由目标；路由表按 struct 名把它直接挂进 pageMap。

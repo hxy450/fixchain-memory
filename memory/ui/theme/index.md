@@ -42,7 +42,7 @@
   - 情境：源端颜色以 shapeSolidColor、background、textColor 等硬编码色值或色值资源给出；目标工程已有多组语义名相近但色值不同的颜色资源（如脚手架留下的 color_accent 与迁移出的 brand_accent）。也包括 Compose 源端以主题语义色（如 colors.textPrimary）或排版样式（如 MaterialTheme.typography.titleMedium）取值，而目标 color.json/float.json 只有部分令牌：有名称相近或其他页面前缀的键（text_secondary、feed_font_title），缺同值键，流程要求缺令牌时报告 design_tokens_missing。也包括用 text_size_large、text_size_small 一类名称暗示大小的命名资源承载源端数值（如 16sp 标题、12sp 信息条），或同一组件中语义不同的颜色（进度轨道与选中行底色）准备共用一个已有 token。也包括 Java 以 Color.GREEN、Color.RED 等框架颜色常量着色，规格映射成名称相近、色值不同的应用色（如 light_green #FF66FF66）。
 - [深浅主题状态放在可观察对象里并由入口同步，组件在渲染期读取主题色](lesson-7b19b801e0f21481d1d6.lesson.md)
   - 时机：主题层实现深浅色切换，以及组件、页面读取主题色（含对主题色做插值等数值运算）时
-  - 情境：源端 Theme(darkTheme = isSystemInDarkTheme()) 经 CompositionLocal 下发两套颜色，组件在组合期读取；目标用模块级主题函数与 $r 颜色资源实现，由入口读取系统 colorMode。也包括源端对 MaterialTheme.colorScheme 的颜色做数值插值（如按折叠比例 lerp 顶栏容器色），而 $r 资源不能直接参与运算。
+  - 情境：源端 Theme(darkTheme = isSystemInDarkTheme()) 经 CompositionLocal 下发两套颜色，组件在组合期读取；目标用模块级主题函数与 $r 颜色资源实现，由入口读取系统 colorMode。也包括源端对 MaterialTheme.colorScheme 的颜色做数值插值（如按折叠比例 lerp 顶栏容器色），而 $r 资源不能直接参与运算。 也包括源端 MaterialTheme.colorScheme/typography 随多套色板、明暗与字号缩放在运行时取值，而页面转换时目标还没有全局响应式主题状态，或主题运行时归另一切片负责。
 - [源端一个背景选择对象同时表达图片、单色与渐变时，逐分支迁移到目标渲染绑定：url 非空用图片，否则按颜色数与方向生成纯色或渐变](lesson-2dc88a09f6cfbbe3393c.lesson.md)
   - 时机：渲染实现阶段，把编辑器的背景选择对象绑定到预览或组件的背景渲染节点时
   - 情境：源端一个选择对象同时承载 url、colors、orientation，渲染方法按 url 非空→图片、colors 长度 1→纯色、长度 2→按方向渐变分支；目标在模型层把选择对象映射到运行时渲染属性，外观配置模块已能保存与恢复 colors 和 orientation。

@@ -35,6 +35,10 @@ ArkUI V2 状态刷新与订阅：@Builder 参数（含异步重赋值的数组�
   - 时机：规格提取与服务实现阶段，为页面编排服务确定作用域（单例还是页面实例），并迁移源 Activity 的实例字段（待写数据、密钥映射、挂起状态）时
   - 情境：源 Activity 把本次会话的数据放在实例字段里，Activity 重建或另开一个实例就是全新状态；目标规格把页面编排服务写成单例，实现者用 getInstance() 持有这些字段，并以 attach 时复位来近似实例重建。
   - 例外：源端该状态本就是静态全局的（如公共类的静态字段），此时可以映射为单例
+- [源端 data class copy/replaceAll 更新译为生成新实例替换并赋回 @Trace 状态；普通 DTO 不在下标元素或回调里原地改字段](lesson-3117bc9457610b1c2671.lesson.md)
+  - 时机：功能实现阶段，把源端不可变更新函数（findAndUpdateXxx、copy、replaceAll）与 ViewModel 的局部替换写成 ArkTS 时
+  - 情境：源端 Kotlin 用 toMutableList、replaceAll 与 data class copy 生成新元素再替换列表，Compose 任一字段变化即重组；目标 DTO 是未加 @ObservedV2/@Trace 的普通 class，列表经 V2 ForEach/@Param 渲染。
+  - 例外：条目是 @ObservedV2 类且被改字段标了 @Trace，子组件绑定的仍是同一实例
 - [源端 onCreate 里 findViewById 后立即调用的 View setter，在子组件登记时回调宿主完成首次接线，不在 NavDestination.onReady 中读子组件句柄](lesson-f9be21096154da5890b5.lesson.md)
   - 时机：界面实现与跨组件接线阶段，决定宿主页何时、经什么机制拿到子组件实例并完成首次接线时
   - 情境：源 Activity.onCreate 中 findViewById 取到自定义 View 后立即调用 setter（设置状态对象、注册触摸或回调监听）；目标父页不能直接取得子 struct 实例，改由子组件在 aboutToAppear 把自身写入宿主传入的句柄，宿主的初始化链放在 NavDestination.onReady 等生命周期回调里。

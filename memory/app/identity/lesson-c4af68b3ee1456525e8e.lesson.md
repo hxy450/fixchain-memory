@@ -1,6 +1,6 @@
 # 启动窗按源端实际启动画面映射：未自定义 SplashScreen 时图标取自适应图标前景层、底色取源主题背景，深色目录不留模板黑底
 
-ID：`lesson-c4af68b3ee1456525e8e` · 版本：2
+ID：`lesson-c4af68b3ee1456525e8e` · 版本：3
 
 [本主题](index.md)
 
@@ -26,11 +26,13 @@ ID：`lesson-c4af68b3ee1456525e8e` · 版本：2
 2. 主题底色来自 AppCompat 等库的默认值时，到库资源或构建产物（如 aapt2 dump）取确切色值；暂时取不到就在资源映射中登记待核项，不记为“模板保留”。
 3. 目标启动窗按图片像素居中显示（来源观察），按源端启动画面中图标的显示尺寸（Android 12 规范中无图标底板为 288dp 见方）乘目标屏密度准备像素，不直接拷贝低分辨率栅格图。
 
-来源支持：2 张卡 · 2 次迁移 · 2 个应用
+来源支持：3 张卡 · 3 次迁移 · 3 个应用
 
 ## 来源（按需复核）
 
 - [case-0405ee7ad27947343068](../../../store/cases/case-0405ee7ad27947343068/bf5f2b704057881d8a4286c94e68e8f3cd0fed3b7d69925e72bac0ae69947102.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3, recommendation:4
   卡片版本：`bf5f2b704057881d8a4286c94e68e8f3cd0fed3b7d69925e72bac0ae69947102`
+- [case-1f6d95134bba8edf5ba6](../../../store/cases/case-1f6d95134bba8edf5ba6/c6780fd37b81cfbc77e6ab078bb18a5d246af4823f23ded05fce48b8997d84fa.json) · 结论：recommendation:2
+  卡片版本：`c6780fd37b81cfbc77e6ab078bb18a5d246af4823f23ded05fce48b8997d84fa`
 - [case-4f7163b95249e9ede2ca](../../../store/cases/case-4f7163b95249e9ede2ca/8d4d0d18e9bd68c6ddc5554130ad97c38ea483d147b5bdff45d24a790e1ea78f.json) · 结论：diagnosis, recommendation:3
   卡片版本：`8d4d0d18e9bd68c6ddc5554130ad97c38ea483d147b5bdff45d24a790e1ea78f`

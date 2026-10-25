@@ -1,6 +1,6 @@
 # 开启全屏布局前逐边核对源端系统栏：只沉浸状态栏（透明状态栏、未设 navigationBarColor、targetSdk≤34）时底部保留不透明导航栏底色；全屏后前景按测得的避让区逐边补 padding（顶部加在包住标题栏的层，底部加在伸到窗口底边的层）；expandSafeArea 只让背景越过安全区，预设系统标题栏也不会自动避让
 
-ID：`lesson-a8452bfea5d42d3dcae3` · 版本：5
+ID：`lesson-a8452bfea5d42d3dcae3` · 版本：6
 
 [本主题](index.md)
 
@@ -29,7 +29,7 @@ setWindowLayoutFullScreen(true) 让窗口内容铺到系统栏下，expandSafeAr
 - 工程开启了全屏布局，却找不到任何 getWindowAvoidArea 读取或基于避让高度的 padding 时，视为安全区未落实；有设备时截图核对标题与状态栏的纵向区间不重叠。
 - 开启全屏的一方逐页 grep 顶部与底部避让的消费点：只处理了顶部或只处理了底部的页面不算完成，并在横屏下核对贴底内容不落进导航条区。
 
-来源支持：6 张卡 · 已知 4 次迁移（部分未记录） · 已知 4 个应用（部分未记录）
+来源支持：7 张卡 · 已知 5 次迁移（部分未记录） · 已知 5 个应用（部分未记录）
 
 ## 来源（按需复核）
 
@@ -43,5 +43,7 @@ setWindowLayoutFullScreen(true) 让窗口内容铺到系统栏下，expandSafeAr
   卡片版本：`11acfe1b93418070b8355be20ceaebf8f80fc0b5792b14112a64b2e6c30bb6d9`
 - [case-57a2aab5dd7835648d69](../../../store/cases/case-57a2aab5dd7835648d69/ed5970e0c92c3f4c6519a62ea560cfbab2e6927727a69c6e7430ebc372453828.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
   卡片版本：`ed5970e0c92c3f4c6519a62ea560cfbab2e6927727a69c6e7430ebc372453828`
+- [case-b3c176b95cabcc03a434](../../../store/cases/case-b3c176b95cabcc03a434/acbf9ff15291867da7f28e180e80f8cb9c7277b41e553e0de94f4f92a056e637.json) · 结论：recommendation:4
+  卡片版本：`acbf9ff15291867da7f28e180e80f8cb9c7277b41e553e0de94f4f92a056e637`
 - [case-b4a2f2d65e01a68393e3](../../../store/cases/case-b4a2f2d65e01a68393e3/b45e9443ba0c8d589aa6a362a2f7e447bb656b4d5cf61a7e8f28c3af39dd8bb1.json) · 结论：recommendation:1, recommendation:2, recommendation:3, recommendation:4
   卡片版本：`b45e9443ba0c8d589aa6a362a2f7e447bb656b4d5cf61a7e8f28c3af39dd8bb1`

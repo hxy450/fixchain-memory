@@ -1,6 +1,6 @@
 # Android 平台公开正则常量按定义逐段移植并保持全串匹配语义
 
-ID：`lesson-90e0f1db3e1e13a6fd6a` · 版本：1
+ID：`lesson-90e0f1db3e1e13a6fd6a` · 版本：2
 
 [本主题](index.md)
 
@@ -24,9 +24,13 @@ ID：`lesson-90e0f1db3e1e13a6fd6a` · 版本：1
 
 - 无法逐段移植、或确认与转交校验类不确定项前，用覆盖各分支的代表输入（带顶级域名的域名、IPv4 加端口、无 scheme、裸 localhost、IDN、前导空格）与源端预期离线对照
 
-来源支持：1 张卡 · 1 次迁移 · 1 个应用
+来源支持：3 张卡 · 2 次迁移 · 2 个应用
 
 ## 来源（按需复核）
 
+- [case-4b8ebe5007982e666e18](../../../store/cases/case-4b8ebe5007982e666e18/9ca849e7c68b415daca25b92377056b59b5595d109d328fcac0fac38ad921b92.json) · 结论：recommendation:4
+  卡片版本：`9ca849e7c68b415daca25b92377056b59b5595d109d328fcac0fac38ad921b92`
 - [case-53fd6cc643582558ba6d](../../../store/cases/case-53fd6cc643582558ba6d/e085382b416f5dc8b20dcecc0bede224bb1df5873e210db40f105433387edcd8.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:4
   卡片版本：`e085382b416f5dc8b20dcecc0bede224bb1df5873e210db40f105433387edcd8`
+- [case-6582e6c5e66cee6e4cc9](../../../store/cases/case-6582e6c5e66cee6e4cc9/9d68365c03023692c19a9bc475b1fd5ea85471ed54a31739edad54aa327b141d.json) · 结论：recommendation:4
+  卡片版本：`9d68365c03023692c19a9bc475b1fd5ea85471ed54a31739edad54aa327b141d`

@@ -1,0 +1,707 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-f0512caa793e1ad8016c",
+  "created_at": "2026-10-24T15:28:03.854771+00:00",
+  "migration_key": "jerboa-e7cc4044-4f78-441c-8b49-3a097937f665",
+  "title": "把 M3 不定进度、下拉刷新指示器和列表滚动条换成了 ArkUI 内置默认组件",
+  "when": "界面实现阶段（包括共享组件和页面转换），以及规格提取阶段写转换决策时：要把 Compose Material3 带默认动态视觉的组件映射成 ArkUI 组件",
+  "description": "源端 Compose 用的是 Material3 默认动态组件：不传 progress 的 LinearProgressIndicator / CircularProgressIndicator（不定进度，LoadingBar 带 zIndex(99) 叠放）、PullToRefreshBox 默认指示器、LazyColumn（默认没有滚动条），或者自定义的 simpleVerticalScrollbar 修饰符。目标端 ArkUI 的 Progress 只能显示定值，LoadingProgress 是环绕点动画，Refresh 默认用系统指示器而且会把内容往下推，List 默认显示系统滚动条。",
+  "summary": "共享组件阶段（Base-6，e919f2a1 agent-ae528ff69625ec6ac）：写前已读到 AppBars.kt。其中 :753 LoadingBar = LinearProgressIndicator()，没传 progress，是不定进度，带 zIndex(99F) 叠在内容上；\n:714 simpleVerticalScrollbar 宽 4dp、颜色 onBackground、滚动时 α 0.5/150ms、停下 0/500ms、按项数算 thumb；ActionTopBar 的 CircularProgressIndicator() 用默认尺寸。\n预载 skill 里只有一句“ProgressBar (linear) → Progress({ type: ProgressType.Linear })”，没有区分定值和不定进度，spec 公共组件段也没写这项要求。\n源码本身已经足够说明这是持续动画的叠放条。输出却把 LoadingBar 写成 Progress value: 0 的静止空条，在文件头注明“simpleVerticalScrollbar → 无 ArkUI 等价（scrollBar 系统样式）”后不迁移，\nSidebar 用 scrollBar(Off)，ActionTopBar 用 24vp 的 LoadingProgress。这句“无等价”注释后来被 ViewVotesBody 写者当成“AppBars.ets 既有决策”照搬，结果留下系统默认滚动条。\n页面转换阶段：各页面写者没有复用共享件，而是自己内联 LoadingBar，每个人都换成了 ArkUI 内置件。\nHomePage 写者在思考中已经判断 LoadingBar 是 indeterminate、Progress 不直接支持，仍用 value 30 + enableLoadingEffect 近似，并把它放在 Column 里推挤列表；\nSearchPage 写者“对齐 HomePage 写法”，也写成 30；PostPage 写者读到 AppBars.kt:753 后，仍照 CommentReplyPage 先例写成 value 50；\nInboxPage 写者确认 Progress Linear 没有不定模式、静态半条不好，但认为动画实现“过度”，改成 24vp 圆形 LoadingProgress；BlocksPage 写者照 ReportsPage 先例做了同样的替换。\nCircularProgressIndicator 一律换成 LoadingProgress，环绕点动画和源端不同，尺寸、颜色也跟着偏离。比如登录按钮源端是字号大小、描边 2、默认 primary，输出成了 16vp 白色。\n下拉刷新：页面规格（b2-01 写的 page_0004 等）把 PullToRefreshBox 只写成“Refresh { List } / 官方·标准下拉刷新”，没写 M3 指示器（40dp surfaceContainerHigh 圆、primary 弧/箭头）浮在静止内容上方。\n页面写者照这个映射直接用 Refresh 默认指示器，内容随下拉下移；BlocksPage 还按规格拆成每个 Tab 各一个 Refresh。\n滚动条：Compose LazyColumn 默认没有滚动条，PostListings、PostPage 写者却显式写了 .scrollBar(BarState.Auto)，SearchPage 没设置；\n用了 simpleVerticalScrollbar 的列表（Inbox、Sidebar、ViewVotes）要么丢掉，要么交给系统滚动条。\n首轮返修把其中多项记成“平台差异”，后来证明都能等价实现。最终修改如下：\n共享 LoadingBar 改为 Canvas + displaySync 逐帧复刻 M3 1.4 线性不定进度（双线关键帧，primary/secondaryContainer，4dp 间隙），并叠放在内容上；页面统一改用共享件。\n新增 M3CircularProgress，替换 13 处 LoadingProgress。新增 ModPullRefreshIndicator（箭头弧 + 张力），配合 Refresh 空 builder、pullDownRatio(0.5)，15 处子组件加 translate(-offset) 反向抵消位移。\nCompose 里没有滚动条的 List 改为 BarState.Off；simpleVerticalScrollbar 复刻为 SimpleVerticalScrollbar，由 onScrollIndex / onScrollStart / onScrollStop 驱动。\n",
+  "recommendations": [
+    "界面实现阶段：转换 Compose M3 进度组件前，先确认是定值还是不定进度。不传 progress 的 LinearProgressIndicator / CircularProgressIndicator 是持续动画；ArkUI Progress 只能显示定值，不要用 value 0/30/50 冒充，也不要换成形状不同的 LoadingProgress。应在共享组件里用 Canvas + 逐帧回调（如 displaySync）复刻，保留源端的叠放层级（zIndex），不要推挤内容。",
+    "页面实现阶段：页面源码里出现共享组件名（LoadingBar、JerboaLoadingBar、simpleVerticalScrollbar 等）时，先读该组件在源端的定义，再复用目标端共享件，不要在页面里内联一个近似版本。兄弟页或注释里的“既有决策”只能作参考；如果先例是静止条、换了形状的替代件，或写着“无等价”，就按源端定义纠正，不要照搬。",
+    "规格提取阶段：给 PullToRefreshBox 这类自带默认视觉的库组件写映射时，要写明指示器外观（M3：40dp surfaceContainerHigh 圆、primary 弧/箭头、阈值 80dp）和“内容不随下拉移动”，要求目标 Refresh 隐藏系统指示器、自绘指示器并抵消内容位移；同时保留源端 PullToRefreshBox 的包裹范围，不要拆成每个 Tab 一个。",
+    "列表实现阶段：Compose LazyColumn/verticalScroll 默认没有滚动条，ArkUI List/Scroll 默认显示系统滚动条。源端没有滚动条修饰符时显式写 .scrollBar(BarState.Off)；有 simpleVerticalScrollbar 这类自定义修饰符时，按它的宽度、颜色、α、动画时长和按项数计算的 thumb 复刻，不要标成“无等价”交给系统滚动条。",
+    "自检：生成后 grep 'Progress({ value:' 常量、LoadingProgress、无自定义 builder 的 Refresh(、没设 scrollBar 的 List，逐处对照源端组件，确认是否是不定进度、默认指示器或默认无滚动条。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/components/common/AppBars.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/ui/components/common/AppBars.kt",
+          "at": "2026-10-01T11:24:48.320Z",
+          "reason": "正常输入：Base-6 整文件 Read 的回执（agent-ae528ff69625ec6ac.jsonl:L112-L113）给出 :753 LoadingBar = LinearProgressIndicator()，没传 progress，即不定进度，带 zIndex(99F)；:714-750 simpleVerticalScrollbar 宽 4dp、onBackground、滚动中 α0.5/150ms、停止 0/500ms，按项数算 thumb 位置和高度；:545 Sidebar LazyColumn 使用该修饰符；:799 ActionTopBar 用默认 CircularProgressIndicator()。足以确定这是持续动画的叠放条和自绘滚动条。"
+        },
+        {
+          "key": "e919f2a1-5f90-46e2-baca-332c443637de:ae528ff69625ec6ac",
+          "at": "2026-10-01T11:47:16.604Z",
+          "reason": "Base-6 公共组件写者。预载 skill 只有“ProgressBar (linear) → Progress({ type: Linear })”，没讲不定进度（同转录 L8、L10）；spec 公共组件段也没提这项。读到上述源码后，Write（L360）却把 LoadingBar 写成 Progress({ type: Linear, value: 0, total: 100 })，成了静止空条、没有叠放；文件头注明“Modifier.simpleVerticalScrollbar → 无 ArkUI 等价（scrollBar 系统样式）”后不迁移；ActionTopBar 用 LoadingProgress().width(24)。Edit（L368）里 Sidebar 写成 .scrollBar(BarState.Off)。源码已经足够，偏差出在这次实现输出，到这里停止上溯。value 0 静止条一直保留到生成结束（retained patch 删除行）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/pages/HomePage.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/ui/components/home/HomeActivity.kt",
+          "at": "2026-10-01T07:08:21.821Z",
+          "reason": "规格作者 Read 的回执（agent-ab97e8f585908156c.jsonl:L96-L97）：MainPostListingsContent 用 PullToRefreshBox(isRefreshing, onRefresh) 的默认 M3 指示器包住 JerboaLoadingBar 和 PostListings，siteRes Loading 时显示 LoadingBar()。"
+        },
+        {
+          "key": "7b318df2-6d4a-47e0-9799-52c4ecc9a4be:ab97e8f585908156c",
+          "at": "2026-10-01T07:16:48.393Z",
+          "reason": "b2-01 页面规格作者。Write page_0004_HomeScreen.md（L157）时，转换决策表只写“PullToRefreshBox | Refresh { List } | 官方下拉刷新”，没写 M3 指示器外观，也没写内容不随下拉移动，等于默认接受了 ArkUI Refresh 的系统指示器和内容下移。下拉刷新这一支从这里开始偏离。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/spec/baseline/ui/page_0004_HomeScreen.md",
+          "at": "2026-10-01T09:13:45.182Z",
+          "reason": "交付桥梁：页面转换者 Read 的回执（agent-adfffd684834adb4c.jsonl:L18-L19）仍是“PullToRefreshBox | Refresh { List } | 官方下拉刷新”，内容段写“Loading→LoadingBar”和“JerboaLoadingBar(postsRes)”，LoadingBar 只给了组件名。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/ui/components/home/HomeActivity.kt",
+          "at": "2026-10-01T09:14:29.532Z",
+          "reason": "正常输入：转换者 Read 的回执（同转录 L22-L23）给出 L246 LoadingBar()、L262-266 PullToRefreshBox{ JerboaLoadingBar(postsRes) ... }。L45-L46 grep 列出 753:fun LoadingBar，但没读函数体。"
+        },
+        {
+          "key": "7b318df2-6d4a-47e0-9799-52c4ecc9a4be:adfffd684834adb4c",
+          "at": "2026-10-01T09:34:30.534Z",
+          "reason": "HomeScreen 页面转换者。思考中（L219）已判断“LoadingBar 是不确定进度（LinearProgressIndicator indeterminate）……Progress 不直接支持 indeterminate”，Write（L221）仍在 siteRes 和 postsRes 两处内联 Progress({ value: 30, ... Linear }).style({ enableLoadingEffect: true })，并放在 Column 流里推挤列表；还按规格直接用 Refresh({ refreshing }) 的默认指示器。LoadingBar 这一支的偏差出在这次实现输出；下拉刷新沿用了规格。两处一直保留到生成结束（retained patch 删除行）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 5
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/components/post/PostListings.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/ui/components/post/PostListings.kt",
+          "at": "2026-10-01T09:14:31.939Z",
+          "reason": "正常输入：Read 的回执（agent-adfffd684834adb4c.jsonl:L27-L28）给出 L88-93 LazyColumn(state, modifier = fillMaxSize().testTag(\"jerboa:posts\"))，没有任何滚动条修饰符，Compose 默认也不显示滚动条。"
+        },
+        {
+          "key": "7b318df2-6d4a-47e0-9799-52c4ecc9a4be:adfffd684834adb4c",
+          "at": "2026-10-01T09:31:10.164Z",
+          "reason": "同一转换者 Write PostListings.ets（L204）时显式加了 .scrollBar(BarState.Auto)，导致源端没有的系统滚动条显示出来。源码已经足够，偏差出在实现输出；BarState.Auto 一直保留到生成结束（retained patch 删除行）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/pages/PostPage.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/pages/CommentReplyPage.ets",
+          "at": "2026-10-01T11:03:23.628Z",
+          "reason": "先例输入：Read 的回执（agent-aacfdc958959e3886.jsonl:L68-L69）显示兄弟页把“LoadingBar（AppBars.kt:753）”写成 Progress({ value: 50, total: 100, type: Linear })。这个先例本身就是静止条。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/ui/components/post/PostScreen.kt",
+          "at": "2026-10-01T11:03:28.501Z",
+          "reason": "正常输入：Read 的回执（同转录 L72-L73）给出 L259-267 PullToRefreshBox、L326/L532 LoadingBar()、L343-346 LazyColumn(state, modifier = testTag(\"jerboa:comments\"))，没有滚动条修饰符。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/ui/components/common/AppBars.kt",
+          "at": "2026-10-01T11:05:02.933Z",
+          "reason": "正常输入：Bash sed 745-900 行的回执（同转录 L121、L123）给出 LoadingBar = LinearProgressIndicator()，不定进度，带 zIndex(99F)。"
+        },
+        {
+          "key": "e919f2a1-5f90-46e2-baca-332c443637de:aacfdc958959e3886",
+          "at": "2026-10-01T11:21:44.507Z",
+          "reason": "PostScreen 页面转换者。思考中（L244、L278）写明“LoadingBar: Progress linear like CommentReplyPage (value 50 …)”。Write（L296）把 LoadingBarBuilder 写成 Progress({ value: 50 })，注释却写“AppBars.kt:753 LinearProgressIndicator 细条”；评论 List 显式加 .scrollBar(BarState.Auto)；PullToRefreshBox 直接用默认 Refresh。已经读到不定进度的源码，却沿用了兄弟页的静止条，偏差出在实现输出。三处一直保留到生成结束（retained patch 删除行）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "PostPage 写者写前用 Bash 执行 sed -n '745,900p'，读取 Android AppBars.kt（L121）；回执（L123）返回 LoadingBar = LinearProgressIndicator(...zIndex(99F)...)，说明写前已拿到不定进度定义。",
+          "evidence": [
+            {
+              "source": "generation/e919f2a1-5f90-46e2-baca-332c443637de/subagents/agent-aacfdc958959e3886.jsonl",
+              "line": 121
+            },
+            {
+              "source": "generation/e919f2a1-5f90-46e2-baca-332c443637de/subagents/agent-aacfdc958959e3886.jsonl",
+              "line": 123
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/pages/InboxPage.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/ui/components/inbox/InboxScreen.kt",
+          "at": "2026-10-01T09:10:47.907Z",
+          "reason": "正常输入：Read 的回执（agent-aca1eb4211f5475c5.jsonl:L31-L32）给出三个 Tab 各有一个 PullToRefreshBox（L279/446/636），里面放 JerboaLoadingBar(res)，各列表用 .simpleVerticalScrollbar(listState)（L317/484/674）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/ui/components/common/AppBars.kt",
+          "at": "2026-10-01T09:11:32.934Z",
+          "reason": "正常输入：整文件 Read 的回执（同转录 L60、L63）给出 :714 simpleVerticalScrollbar 的完整参数，以及 :753 LoadingBar = LinearProgressIndicator()（不定进度）。"
+        },
+        {
+          "key": "7b318df2-6d4a-47e0-9799-52c4ecc9a4be:aca1eb4211f5475c5",
+          "at": "2026-10-01T09:28:13.523Z",
+          "reason": "InboxScreen 页面转换者。思考中（L112）确认“ProgressType.Linear 有固定 value；无内置 indeterminate……静态半条不好”，但认为线性动画“过度”，“决定：用 LoadingProgress 圆形（直径 24）”。Write（L114）和 Edit（L157-L169）把三处 JerboaLoadingBar 写成 24vp 圆形 LoadingProgress；三个 Tab 直接用默认 Refresh；三处 simpleVerticalScrollbar 都没有迁移。输入已经足够，偏差出在实现时的取舍。这些写法一直保留到生成结束（retained patch 删除行）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/pages/BlocksPage.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/spec/baseline/ui/page_0033_BlocksScreen.md",
+          "at": "2026-10-01T12:44:14.198Z",
+          "reason": "规格输入：Read 的回执（agent-a58160e8adae016c0.jsonl:L16-L17）。内容段如实写出 PullToRefreshBox 包裹 JerboaLoadingBar 和整个三态分支，但转换决策表写的是“PullToRefreshBox | Refresh 组件包裹 List | 下拉刷新标准映射”“CircularProgressIndicator | Progress({type: ProgressType.Ring})”，没有写 M3 指示器和不定进度。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/ui/components/settings/block/BlocksScreen.kt",
+          "at": "2026-10-01T12:44:14.530Z",
+          "reason": "正常输入：Read 的回执（同转录 L18-L19）给出 L91-96 一个 PullToRefreshBox(isRefreshing = siteRes is Loading) 包住 JerboaLoadingBar 和 TabRow + Pager 整体；L252 CircularProgressIndicator(color = secondary)，默认尺寸。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/pages/ReportsPage.ets",
+          "at": "2026-10-01T12:44:23.306Z",
+          "reason": "先例输入：Read 的回执（同转录 L32-L33）显示已生成的 ReportsPage 每个 Tab 各放一个 Refresh，加载态用 24vp LoadingProgress。"
+        },
+        {
+          "key": "e919f2a1-5f90-46e2-baca-332c443637de:a58160e8adae016c0",
+          "at": "2026-10-01T12:48:50.614Z",
+          "reason": "BlocksScreen 页面转换者。思考中（L71、L78）注意到源端 PullToRefreshBox 包住整个 Tabs，但仍按规格“包裹 List”和 ReportsPage 先例，拆成三个 Tab 各一个 Refresh；JerboaLoadingBar 写成顶部 24vp 圆形 LoadingProgress。Write（L86）里 CircularProgressIndicator(secondary) 也换成 LoadingProgress 24vp，同时注明 Progress(Ring) 需要动画驱动 value。不定进度的源码已经足够，实现时换成了内置替代件；下拉刷新还受规格映射影响。这些写法一直保留到生成结束（retained patch 删除行）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/pages/SearchPage.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/ui/components/search/SearchScreen.kt",
+          "at": "2026-10-01T09:35:05.922Z",
+          "reason": "正常输入：Read 的回执（agent-aac14e1345efbea83.jsonl:L35、L38）给出 L177 JerboaLoadingBar(searchRes)、L219-221 LazyColumn(state = listState)，没有滚动条修饰符。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/pages/HomePage.ets",
+          "at": "2026-10-01T09:35:29.935Z",
+          "reason": "先例输入：Read 的回执（同转录 L66-L67）显示 HomePage 已把 LoadingBar 写成 Progress({ value: 30 }).style({ enableLoadingEffect: true })。"
+        },
+        {
+          "key": "7b318df2-6d4a-47e0-9799-52c4ecc9a4be:aac14e1345efbea83",
+          "at": "2026-10-01T09:43:41.844Z",
+          "reason": "SearchScreen 页面转换者。思考中（L93）写“JerboaLoadingBar：searchRes loading 时顶部 4 高 Linear Progress（对齐 HomePage 写法）”。Write（L145）的注释写“isLoading → LinearProgressIndicator”，实现却是 Progress({ value: 30 }) 静止条；结果 List 没设 scrollBar，按 ArkUI 默认显示系统滚动条。已经知道源端是不定进度，仍沿用了先例，偏差出在实现输出。静止条一直保留到生成结束（retained patch 删除行）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/pages/LoginPage.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/ui/components/login/Login.kt",
+          "at": "2026-10-01T09:10:08.971Z",
+          "reason": "正常输入：Read 的回执（agent-a545d81e0febe9362.jsonl:L24-L25）给出 L231-235：loading 时显示 CircularProgressIndicator(modifier = size(LocalTextStyle.current.fontSize.value.dp), strokeWidth = 2.dp)，默认 primary，是 M3 不定进度弧。"
+        },
+        {
+          "key": "7b318df2-6d4a-47e0-9799-52c4ecc9a4be:a545d81e0febe9362",
+          "at": "2026-10-01T09:18:43.164Z",
+          "reason": "LoginScreen 页面转换者。思考中（L66）记下了“size = fontSize.dp ≈ 16，strokeWidth 2dp”，Write（L68）却写成 LoadingProgress().width(16).height(16).color(white)：用了 ArkUI 环绕点动画，描边 2 和 primary 颜色都丢了。一直保留到生成结束（retained patch 删除行）；最终改为 M3CircularProgress({ strokeWidth: 2 })。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/components/viewvotes/ViewVotesBody.ets",
+        "since": "2026-10-01T20:31:47.916Z",
+        "at": "2026-10-24T06:09:27Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/ui/components/common/AppBars.kt",
+          "at": "2026-10-01T11:24:48.320Z",
+          "reason": "Base-6 写前已读到 simpleVerticalScrollbar 的完整实现（e919f2a1 agent-ae528ff69625ec6ac.jsonl:L112-L113）。"
+        },
+        {
+          "key": "e919f2a1-5f90-46e2-baca-332c443637de:ae528ff69625ec6ac",
+          "at": "2026-10-01T11:47:16.604Z",
+          "reason": "偏差起点：Base-6 在 AppBars.ets 头注释写“Modifier.simpleVerticalScrollbar（绘制扩展）→ 无 ArkUI 等价（scrollBar 系统样式）”，没有提供共享滚动条（同转录 L360）。",
+          "problem": true
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/components/common/AppBars.ets",
+          "at": "2026-10-01T12:06:24.150Z",
+          "reason": "交付桥梁：ViewVotesBody 写者 Read 的回执（agent-a5fc7b912e33d8169.jsonl:L44-L45）第 17 行仍是上面那句“无 ArkUI 等价”注释。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L2/jerboa/app/src/main/java/com/jerboa/ui/components/viewvotes/ViewVotes.kt",
+          "at": "2026-10-01T12:06:04.431Z",
+          "reason": "正常输入：Read 的回执（同转录 L22-L23）给出 L33-40 LazyColumn 的 modifier 带 .simpleVerticalScrollbar(listState)。"
+        },
+        {
+          "key": "e919f2a1-5f90-46e2-baca-332c443637de:a5fc7b912e33d8169",
+          "at": "2026-10-01T12:19:08.159Z",
+          "reason": "PostLikes/ViewVotes 写者。思考中（L158）说“AppBars.ets decision note says system default scrollbar is the equivalent → leave default”。Write（L174）在注释里写“simpleVerticalScrollbar → 系统默认滚动条（AppBars.ets 既有决策：绘制扩展无 ArkUI 等价）”，List 没设任何滚动条。这一链说明 Base-6 的结论被原样传到了这里，不另推定这个写者独立失职。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 5
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "没有逐个核实每个页面写者是否看到了 atomic 映射参考里“android:indeterminate → Progress({ value: 0, total: 100, type: ProgressType.Ring })”这一行（Inbox、Blocks、Search、Login 写者读过该参考）；Base-6 没读这份参考，所以不把它的 value 0 归因到这一行。"
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/components/AppShellLoadingBar.ets",
+      "reason": "返修期新建的文件：retained-application.patch 标为 new file，生成期三个根会话里没有任何对它的写入，返修中首次 Write 在 agent-add2feb65b4442f27.jsonl:L840。对应的生成偏差（首页静止 30% 条、推挤列表）已在 HomePage.ets 和 AppBars.ets 图中归因；这个文件本身没有生成期来源可连。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/components/common/M3CircularProgress.ets",
+      "reason": "返修主线程 M12 新建（3dfc5302…jsonl:L6921，patch 标为 new file），没有生成期写入。被它替换的 13 处 LoadingProgress 中，代表性的生成来源已在 AppBars.ets（ActionTopBar）、BlocksPage.ets、LoginPage.ets、InboxPage.ets 图中归因；其余几处（如 PictrsImage、InputFields 等）不在本 job 目标内，没有逐一核实。"
+    },
+    {
+      "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets/components/moderation/ModAppBars.ets",
+      "reason": "返修期新建（首次 Write 在 agent-af5d93fedeb3b08de.jsonl:L793，patch 标为 new file；H 区首轮指示器后来由 M37 改写），没有生成期写入。系统 Refresh 默认指示器这一生成偏差已在 HomePage.ets（规格映射到转换者）、InboxPage.ets、BlocksPage.ets 图中归因。"
+    }
+  ],
+  "job": "issue-f0512caa793e1ad8016c",
+  "metadata": {
+    "migration": {
+      "id": "jerboa-e7cc4044-4f78-441c-8b49-3a097937f665",
+      "project": "jerboa"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "claude-sonnet-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.247",
+        "2.1.309",
+        "2.1.310"
+      ]
+    },
+    "source_set_id": "sources-32ddfd727cfccbbce98f",
+    "environment": [
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T06:59:57.329Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L10",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L9",
+        "phase": "generation"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T06:59:57.329Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L10",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L9",
+        "phase": "generation"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "26",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T06:59:57.329Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L10",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L9",
+        "phase": "generation"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T06:59:57.329Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L10",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be/subagents/agent-a5e834e8d8d049786.jsonl:L9",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T08:27:52.558Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1138",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1136",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-01T08:27:52.558Z",
+        "ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1138",
+        "request_ref": "generation/7b318df2-6d4a-47e0-9799-52c4ecc9a4be.jsonl:L1136",
+        "phase": "generation"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L2/jerboa",
+        "at": "2026-10-23T16:50:12.154Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L209",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L208",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L2/jerboa",
+        "at": "2026-10-23T16:50:12.154Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L209",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L208",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "26",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L2/jerboa",
+        "at": "2026-10-23T16:50:12.154Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L209",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L208",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L2/jerboa",
+        "at": "2026-10-23T16:50:12.154Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L209",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa.jsonl:L208",
+        "phase": "repair"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:12.967Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L155",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L154",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:12.967Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L155",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L154",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "26",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:12.967Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L155",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L154",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:12.967Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L155",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-add2feb65b4442f27.jsonl:L154",
+        "phase": "repair"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:39.052Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L120",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L119",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:39.052Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L120",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L119",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "26",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:27:39.052Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L120",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-aa16127e666fee292.jsonl:L119",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:28:16.441Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a4d3a35dbb3029087.jsonl:L251",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a4d3a35dbb3029087.jsonl:L250",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:28:16.441Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a4d3a35dbb3029087.jsonl:L251",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a4d3a35dbb3029087.jsonl:L250",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:35:12.588Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-ae9a25fc6a2669bb5.jsonl:L522",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-ae9a25fc6a2669bb5.jsonl:L521",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos/entry/src/main/ets",
+        "at": "2026-10-23T17:36:59.707Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a557f4f80a218650e.jsonl:L430",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a557f4f80a218650e.jsonl:L429",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/jerboa-hmos",
+        "at": "2026-10-23T19:59:02.243Z",
+        "ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a7154d5ed3ee900cc.jsonl:L1776",
+        "request_ref": "repair/3dfc5302-5f3f-4da5-bbde-5d7d04eae5fa/subagents/agent-a7154d5ed3ee900cc.jsonl:L1775",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.10",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "3488bf55-f8ef-4dfe-ae5e-17b59ecfb2cd"
+      ]
+    }
+  },
+  "revision": "79d02279686f94bcea5a9985313b86d9688fe54b12a0ac5d08a82d3464ddb832"
+}

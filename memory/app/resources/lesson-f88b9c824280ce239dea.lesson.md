@@ -1,6 +1,6 @@
 # strings.xml 转 string.json 按 aapt2 编译语义计算值：引号外空白折叠、值中任何位置的未转义双引号都剥离（不只首尾成对，\" 保留为引号）、\n \t \uXXXX \' 还原；带内联标记的键取完整内容（样式入口存 HTML、纯字符串入口取全部文字），不用 el.text
 
-ID：`lesson-f88b9c824280ce239dea` · 版本：4
+ID：`lesson-f88b9c824280ce239dea` · 版本：5
 
 [本主题](index.md)
 
@@ -28,12 +28,14 @@ Android 显示的是 aapt2 编译后的值：引号外连续空白折叠为一�
 - 写后检查 string.json 不残留字面反斜杠加 n、换行后跟多个空格；逐语言列出源值非空而目标为空、或含连续 \n\n 的键复核；有原版 APK 时可用 aapt2 dump resources 逐条比对
 - 源中含未转义 " 的键，目标值不残留引号；\" 转义的键保留引号。
 
-来源支持：4 张卡 · 3 次迁移 · 3 个应用
+来源支持：5 张卡 · 4 次迁移 · 4 个应用
 
 ## 来源（按需复核）
 
 - [case-45fda29feaf48460ba4d](../../../store/cases/case-45fda29feaf48460ba4d/fb1be96f369eba6be849548c4c257b6ebb8cc49ab4733da977f1738ba089ce9c.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3, recommendation:5
   卡片版本：`fb1be96f369eba6be849548c4c257b6ebb8cc49ab4733da977f1738ba089ce9c`
+- [case-59da3f8259cbad8d67c1](../../../store/cases/case-59da3f8259cbad8d67c1/12a452f6b381692553b162d5d04160f345147b09206b18a84d1600dbf9f49a5d.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
+  卡片版本：`12a452f6b381692553b162d5d04160f345147b09206b18a84d1600dbf9f49a5d`
 - [case-7456fcf259be55a8834b](../../../store/cases/case-7456fcf259be55a8834b/0fcbb858330dc0692a5ef76947e2ee1aae9990c5195f78148938c87b3ce94fe8.json) · 结论：recommendation:1
   卡片版本：`0fcbb858330dc0692a5ef76947e2ee1aae9990c5195f78148938c87b3ce94fe8`
 - [case-bf53fdebb87671d9eba3](../../../store/cases/case-bf53fdebb87671d9eba3/cb56b1662aea796547436b8d3cee96766e78d87283d49a367635d37b39107c2f.json) · 结论：diagnosis, recommendation:1, recommendation:2

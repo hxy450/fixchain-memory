@@ -1,6 +1,6 @@
 # 源端访问解包后对象的字段时，先确定目标 res.data 对应哪一层类型，再逐层写取值键
 
-ID：`lesson-dc5c370e370c2be803c1` · 版本：2
+ID：`lesson-dc5c370e370c2be803c1` · 版本：3
 
 [本主题](index.md)
 
@@ -26,7 +26,7 @@ ID：`lesson-dc5c370e370c2be803c1` · 版本：2
 
 - 决定后续页面是否创建的解析结果（如分类 Tab）用一次真实响应或样例确认非空，并区分“服务端返回空”与“取值路径未命中”。
 
-来源支持：2 张卡 · 2 次迁移 · 2 个应用
+来源支持：3 张卡 · 3 次迁移 · 3 个应用
 
 ## 来源（按需复核）
 
@@ -34,3 +34,5 @@ ID：`lesson-dc5c370e370c2be803c1` · 版本：2
   卡片版本：`373986a1238f539d399390372bcd09d27fa876d8acb70d6604e9722c9b467222`
 - [case-5b91aeeca2e493368af0](../../../store/cases/case-5b91aeeca2e493368af0/aa54f204a016acd3439a94d5a9cb4dfb52ccbcb0c6243e2813b4e1604e6dfe92.json) · 结论：diagnosis, recommendation:3
   卡片版本：`aa54f204a016acd3439a94d5a9cb4dfb52ccbcb0c6243e2813b4e1604e6dfe92`
+- [case-bb262f5910f2bb20c35d](../../../store/cases/case-bb262f5910f2bb20c35d/0aa0263a00188f45426cf254ea881a05a6ba0e642f711feb90390c3cfde58c3f.json) · 结论：recommendation:3
+  卡片版本：`0aa0263a00188f45426cf254ea881a05a6ba0e642f711feb90390c3cfde58c3f`

@@ -1,6 +1,6 @@
 # 源端在代码里格式化的含固定措辞文案（SimpleDateFormat、String.format、拼接）也建参数化字符串资源并用 $r 传参，不写模板字符串
 
-ID：`lesson-d442eb6e9aab4d77db18` · 版本：1
+ID：`lesson-d442eb6e9aab4d77db18` · 版本：2
 
 [本主题](index.md)
 
@@ -29,9 +29,11 @@ Android 源在 Kotlin/Java 里用 SimpleDateFormat、String.format 或拼接生�
 
 - 有疑问时检索本页 Text()、accessibilityText() 实参中的反引号模板或 + 拼接，夹带非数字字面量的改为格式资源。
 
-来源支持：1 张卡 · 1 次迁移 · 1 个应用
+来源支持：2 张卡 · 2 次迁移 · 2 个应用
 
 ## 来源（按需复核）
 
+- [case-8d1f62d75e39070e7c62](../../../store/cases/case-8d1f62d75e39070e7c62/b0c57b828d1b5465817ffc591450e546599376afa695c595bc588151b3fe58b2.json) · 结论：recommendation:4
+  卡片版本：`b0c57b828d1b5465817ffc591450e546599376afa695c595bc588151b3fe58b2`
 - [case-c8f1e6989f066bb2f51a](../../../store/cases/case-c8f1e6989f066bb2f51a/379e0f87386f11ebb46f6831f460e384c959a9411825b37cb85d5be90a6e69ac.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
   卡片版本：`379e0f87386f11ebb46f6831f460e384c959a9411825b37cb85d5be90a6e69ac`

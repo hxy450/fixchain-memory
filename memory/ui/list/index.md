@@ -1,6 +1,6 @@
 # ui/list
 
-列表与宫格：多类型 Adapter 页面的 item 布局与绑定分支（默认态、文案模板、附属子卡），分页加载的并发门闩与刷新互斥，下拉刷新 onRefreshing 在程序置 refreshing 时的触发，多列 Grid 中占位与跨列项的排布，列表项主副行与空值回退，多组列表的数据源绑定与级联选择，列表项滑动操作（swipeAction）的挂载位置，长按上下文菜单的契约，宿主改写共享行组件时的覆盖入参，LazyForEach 改 Repeat.virtualScroll 时的项高度与数据切换核对，按列表区分的排序器，侧栏分类与右侧分组列表的联动，条目点击回调与数据源本地变换（shuffled 等）随列表迁移，ExpandableListView 组头的默认交互与展开状态，异步分页列表新增批量修补时的代次保护与行内远端提交的在途锁；可换位列表的位置相关值（首尾、序号、移动可用态）按当前位置求值；LazyForEach 整批换数据或延迟填充时的稳定数据源、reload 通知与跨数据集唯一键
+列表与宫格：多类型 Adapter 页面的 item 布局与绑定分支（默认态、文案模板、附属子卡），分页加载的并发门闩与刷新互斥，下拉刷新 onRefreshing 在程序置 refreshing 时的触发，多列 Grid 中占位与跨列项的排布，列表项主副行与空值回退，多组列表的数据源绑定与级联选择，列表项滑动操作（swipeAction）的挂载位置，长按上下文菜单的契约，宿主改写共享行组件时的覆盖入参，LazyForEach 改 Repeat.virtualScroll 时的项高度与数据切换核对，按列表区分的排序器，侧栏分类与右侧分组列表的联动，条目点击回调与数据源本地变换（shuffled 等）随列表迁移，ExpandableListView 组头的默认交互与展开状态，异步分页列表新增批量修补时的代次保护与行内远端提交的在途锁；可换位列表的位置相关值（首尾、序号、移动可用态）按当前位置求值；LazyForEach 整批换数据或延迟填充时的稳定数据源、reload 通知与跨数据集唯一键；按末项可见状态触发的追加加载（不以 onReachEnd 代替），滚动中计算条目可见比例（onVisibleAreaChange）
 
 [上一级](../index.md)
 
@@ -60,6 +60,12 @@
 - [按源端适配器绑定核对每个列表的数据源：不同分组不复用同一数组，级联选择实现逐级推进与回退](lesson-b6146f290e871c82e61d.lesson.md)
   - 时机：界面与数据实现阶段，把源端多个 RecyclerView/Adapter（热门、全量、当前层级）迁移为 ArkUI 列表或网格时
   - 情境：源端页面有多组列表分别绑定不同数据（热门城市、省份、当前层级子列表），点击推进到下一层级并支持返回上一级。
+- [源端按末项可见状态触发追加加载时，用 onScrollIndex 上升沿复刻，不用 onReachEnd](lesson-4cae87de686327ba6283.lesson.md)
+  - 时机：规格提取与列表实现阶段，为分页列表确定触底自动追加加载的触发机制时
+  - 情境：源列表用状态派生条件触发追加加载（如 derivedStateOf{最后可见项下标 == 总项数−1} 且不在重试态时 LaunchedEffect 执行一次），条件在首屏未铺满、数据变化或重试态变化后也会重新成立；目标平台另有 List.onReachEnd 这类滚动到底事件。
+- [滚动中计算条目可见比例或离顶最近的可见项时，用 onVisibleAreaChange 加即时位置查询，不用 onAreaChange](lesson-0c2a39eb29e0ea76fb22.lesson.md)
+  - 时机：列表界面实现阶段，把 onGloballyPositioned/boundsInWindow 一类随滚动变化的可见性计算（自动播放、曝光）迁到 ArkUI 时
+  - 情境：源端在 LazyColumn 条目上用 onGloballyPositioned + boundsInWindow 在滚动中计算可见比例并选最近项自动播放；目标准备在条目上挂 onAreaChange。
 - [迁移列表时连同条目点击回调与数据源的本地变换（shuffled、filter、sort）一起实现，不只迁渲染](lesson-46307bc26d725b4634ca.lesson.md)
   - 时机：页面 UI 转换阶段，迁移 RecyclerView/Adapter 列表的条目点击与数据源初始化时
   - 情境：源 Fragment 经 adapter 的点击回调或 addOnItemTouchListener 把条目内容回填到输入框等；列表数据来自 ViewModel 对本地静态种子做 shuffled() 等纯本地变换；目标的对应 ViewModel 尚未建立。
