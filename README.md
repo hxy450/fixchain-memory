@@ -54,7 +54,15 @@ a2h 迁移记忆系统由四个仓库组成，三个代码仓在 fuxi-ailabs，�
 
 旧版阅读包由 Git 历史保留，不按迁移复制多份。此前的 `runs/` 已退出当前 Git 树，本地的材料、稿件、报告与断点仍保留；原有提交没有改写。此次目录调整不改变卡片内容、经验语义或知识 revision。
 
-当前发布分支：`memory/multi-app-20261012`。留出 app ColorLines 的独立评测库在 `memory/colorlines-holdout`，不并入本分支。工作目录、转录、SQLite、模型日志、提案及本机调度信息不进入正式发布树。
+当前生产线是 `main`（v1 目录结构，知识版本见 `store/HEAD.json`）。留出 app ColorLines 的独立评测库在 `memory/colorlines-holdout`，不并入 main。工作目录、转录、SQLite、模型日志、提案及本机调度信息不进入正式发布树。
+
+### 迭代原则（2026-10-24 定）
+
+- **main 是唯一的经验来源，按 v1 目录结构维护**：`memory/<领域>/<主题>/<id>.lesson.md`、各级 `index.md`、`manifest.json`，加 `store/` 里的卡和快照。
+- **新经验先进 main。** 每次迁移归并出的卡和经验，在 `memory/<app>-<日期>` 工作分支上做完归并和机械检查后，合进 main 并推送；a2h-memory 的 `library/refs.json` 只钉 main 上的 commit 和 revision。工作分支合入后不再单独演进。
+- **结构版本是 main 的派生分支，只变结构，不动经验。** structure-v2 这类按检索轴重组的阅读包（`memory/structure-v2*`）由发布器从 main 的某个 commit 重建，经验集合、正文、来源绑定与 main 那个 commit 完全一致，分支名和 README 注明派生自哪个 commit。结构分支上不新增、不改写经验；要改，先改 main，再从 main 重建同步。
+- **评测换库前先对齐经验集合。** 比较两种检索或结构时，两边必须派生自 main 的同一个 commit。10-24 的 lean-c3 评测用了 10-07 派生的 structure-v2（367 条），比基线用的 e613047f（521 条）少 6 条 gold 经验，结果无法与基线对照，就是这条的由来。
+- **留出库单列。** `memory/colorlines-holdout` 等留出 app 的卡和经验不进 main，也不进任何结构分支。
 
 机械检查保证格式、引用及所画历史关系符合契约，不等于归因语义认证或泛化效果证明。评测应冻结一个 Git commit / memory revision，在未入库应用上对照。
 
