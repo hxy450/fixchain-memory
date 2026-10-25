@@ -59,10 +59,11 @@ a2h 迁移记忆系统由四个仓库组成，三个代码仓在 fuxi-ailabs，�
 ### 迭代原则（2026-10-24 定）
 
 - **main 是唯一的经验来源，按 v1 目录结构维护**：`memory/<领域>/<主题>/<id>.lesson.md`、各级 `index.md`、`manifest.json`，加 `store/` 里的卡和快照。
-- **新经验先进 main。** 每次迁移归并出的卡和经验，在 `memory/<app>-<日期>` 工作分支上做完归并和机械检查后，合进 main 并推送；a2h-memory 的 `library/refs.json` 只钉 main 上的 commit 和 revision。工作分支合入后不再单独演进。
-- **结构版本是 main 的派生分支，只变结构，不动经验。** structure-v2 这类按检索轴重组的阅读包（`memory/structure-v2*`）由发布器从 main 的某个 commit 重建，经验集合、正文、来源绑定与 main 那个 commit 完全一致，分支名和 README 注明派生自哪个 commit。结构分支上不新增、不改写经验；要改，先改 main，再从 main 重建同步。
-- **评测换库前先对齐经验集合。** 比较两种检索或结构时，两边必须派生自 main 的同一个 commit。10-24 的 lean-c3 评测用了 10-07 派生的 structure-v2（367 条），比基线用的 e613047f（521 条）少 6 条 gold 经验，结果无法与基线对照，就是这条的由来。
-- **留出库单列。** `memory/colorlines-holdout` 等留出 app 的卡和经验不进 main，也不进任何结构分支。
+- **新经验在 main 上演进。** 每次迁移归并出的卡和经验直接合进 main 并推送（工作分支 `memory/<app>-<日期>` 只是归并的临时分支，合入后不再单独演进）。
+- **评测拉分支。** 要评测某一版库时，从 main 的一个 commit 拉评测分支（`eval/<名字>-<日期>`），评测期间冻结；评测只能在这个分支上做，a2h-memory 的 `library/refs.json` 钉的是分支上的 commit 和 revision。结构变换（structure-v2 这类按检索轴重组的阅读包）也在评测分支上做，只变结构不动经验，注明派生自 main 的哪个 commit。
+- **评测通过后用该分支发版，并回归合入 main。** 发版用评测分支上的 commit 打 `release/<名字>` 标签；分支上为评测或发版做的改动（结构、索引、修正）回归合入 main，让 main 始终包含已发版的全部内容。评测不通过的分支留作记录，不合入。
+- **两边要比，必须同源。** 比较两种检索或两种结构时，两边必须派生自 main 的同一个 commit。10-24 的 lean-c3 评测用了 10-07 派生的 structure-v2（367 条），比基线用的 e613047f（521 条）少 6 条 gold 经验，结果无法与基线对照，就是这条的由来。
+- **留出库单列。** `memory/colorlines-holdout` 等留出 app 的卡和经验不进 main，也不进任何评测或发版分支。
 
 机械检查保证格式、引用及所画历史关系符合契约，不等于归因语义认证或泛化效果证明。评测应冻结一个 Git commit / memory revision，在未入库应用上对照。
 
