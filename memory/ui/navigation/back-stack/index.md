@@ -1,11 +1,15 @@
 # ui/navigation/back-stack
 
-系统/页面返回（含 OnBackPressedDispatcher 后登记先问的回调分发到嵌入子页）、覆盖层关闭顺序、清栈重建与重复导航的净效果，底部 tab 的 popUpTo 返回语义与外部深链的清栈，唯一页面压在空 Navigation 首页上时根页的返回（按源端默认退到后台）；handleDeepLink 外部拉起时清栈并合成“起始页 + 目标页”
+系统/页面返回（含 OnBackPressedDispatcher 后登记先问的回调分发到嵌入子页）、覆盖层关闭顺序、清栈重建与重复导航的净效果，底部 tab 的 popUpTo 返回语义与外部深链的清栈，唯一页面压在空 Navigation 首页上时根页的返回（按源端默认退到后台）；handleDeepLink 外部拉起时清栈并合成“起始页 + 目标页”；NavHost 起点在会重组的壳层里重算时的换图清栈
 
 [上一级](../index.md)
 
 ## 本级经验
 
+- [NavHost 起点是会重组作用域里每次求值、会话内会变的表达式时，起点一变就换图清栈并以新起点重进：目标在等价时机重算起点，不冻结首压](lesson-43459cb01320674b2864.lesson.md)
+  - 时机：规格提取与导航壳实现阶段，把 Compose NavHost 的 startDestination 映射成目标的首屏压栈和顶级切换回退基准，或推演会话内返回栈时
+  - 情境：源端 NavHost(startDestination = 读偏好或状态的函数) 写在会重组的壳层内容 lambda 里（抽屉、Rail、常驻抽屉），没有 remember，读到的标记在同一会话内会变（完成引导、登录）；目标用单个 Navigation + NavPathStack，首屏在空栈时压入，顶级切换以起点为 popTo 基准。
+  - 例外：起点表达式被 remember 固定，或读到的状态在会话内不会变化时，一次压栈即可
 - [唯一页面被压在空的 Navigation 首页之上时，由栈底 NavDestination 自身的 onBackPressed 接管返回（不写在 @Entry 页，@Entry.onBackPress 收不到）：size()&lt;=1 时 moveAbilityToBackground 退后台、不出栈露出空白宿主；源端未覆写返回时按 Activity finish() 同时执行 onDestroy 的释放并复位页面实例态，参照设备实测为 HOT 恢复时才保留实例](lesson-efff93743d668b55b55a.lesson.md)
   - 时机：规格提取与入口装配阶段，为单 Activity 应用确定根页面的返回语义、搭建 Navigation 入口壳并决定首页放在 Navigation 内容区还是首次 push 时；页面转换阶段为首启引导页、主菜单等可能成为栈底的页面接返回时；把注入经验转成派工要求、确定栈底返回的生命周期效果时
   - 情境：安卓启动 Activity 未覆写 onBackPressed，也没有 OnBackPressedDispatcher、BackHandler 或 KEYCODE_BACK 处理（含 Compose NavHost 的起始目的地），返回键走 Activity 默认行为：默认 finish()，onDestroy 执行（如释放音乐、关闭数据源），实例态（输入框文字、所选值、播放位置）丢失，进程与静态单例保留；部分 Android 12+ 设备与启动方式下任务根 Activity 改为移到后台、onPause 存档、onResume 读档，以参照设备实测为准。目标按 Navigation + NavDestination 模板，用内容为空的 Navigation 首页在启动时 pushPathByName 压入唯一页面，或启动页已生成为 NavDestination、入口只能首次 push。也包括源端根 Activity 自己注册按状态启用的 OnBackPressedCallback（如锁屏时只提示、暂停预览时恢复、先关弹出面板），未消费时才走 Activity 默认行为，目标根页同样由入口 Navigation 首次 push。

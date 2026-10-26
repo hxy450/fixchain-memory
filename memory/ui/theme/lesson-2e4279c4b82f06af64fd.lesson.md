@@ -1,6 +1,6 @@
 # “页面零硬编码色值”只禁止字面色值，不禁止用 $r 引用语义色
 
-ID：`lesson-2e4279c4b82f06af64fd` · 版本：1
+ID：`lesson-2e4279c4b82f06af64fd` · 版本：2
 
 [本主题](index.md)
 
@@ -10,7 +10,11 @@ ID：`lesson-2e4279c4b82f06af64fd` · 版本：1
 
 ## 适用情境
 
-规格或功能说明写有“页面代码零硬编码色值”“深浅色由资源限定词目录负责”等全局约束，而具体控件仍需要与源端一致的颜色。
+规格或功能说明写有“页面代码零硬编码色值”“深浅色由资源限定词目录负责”等全局约束，而具体控件仍需要与源端一致的颜色。 也包括源端由应用内设置选择深浅档或多套调色板（经 MaterialTheme(colorScheme = …) 下发给所有页面），目标的色板令牌放在稍后建立的可观察主题对象里，而 color.json 只有一套 base/dark 资源色。
+
+## 例外与边界
+
+- 源端在多套调色板间切换，或应用内深浅档只保存在主题对象里、不经 ApplicationContext.setColorMode 应用时，页面主题色不以 $r 满足本条，改按第 1 步后半句读主题对象的色板令牌
 
 ## 原因
 
@@ -18,12 +22,14 @@ ID：`lesson-2e4279c4b82f06af64fd` · 版本：1
 
 ## 做法
 
-1. 规格写这类约束时同时写明“颜色一律用 $r('app.color.<语义名>') 引用已迁移资源”，并在需要颜色的控件行给出具体资源名。
-2. 实现时遇到该约束，只避免 '#RRGGBB' 等字面色值，按源端语义把 backgroundColor、fontColor 等属性设为资源引用。
+1. 主题只随系统深浅（或由 ApplicationContext.setColorMode 统一应用）且只有一套色板时，规格写这类约束时同时写明“颜色一律用 $r('app.color.<语义名>') 引用已迁移资源”，并在需要颜色的控件行给出具体资源名。源端在多套色板间切换，或应用内深浅档只保存在主题对象里时，$r 色键只有一套 base/dark 值、跟不上应用内切换：“零硬编码”改由可观察主题对象的色板令牌满足，页面主题色在渲染期读主题对象（见 lesson-7b19b801e0f21481d1d6），$r 只留给与色板无关的颜色（遮罩、启动窗等）。
+2. 实现时遇到该约束，只避免 '#RRGGBB' 等字面色值，按源端语义把 backgroundColor、fontColor 等属性设为资源引用。应用内切换色板或深浅档时，这些属性设为主题对象的色板令牌。
 
-来源支持：1 张卡 · 1 次迁移 · 1 个应用
+来源支持：2 张卡 · 2 次迁移 · 2 个应用
 
 ## 来源（按需复核）
 
 - [case-97a40a9d2dce65dc9f9c](../../../store/cases/case-97a40a9d2dce65dc9f9c/6f204ffd524b55f7ea8cef5e4a2e75cc8330004f202fd635570857c43cef5a2a.json) · 结论：diagnosis, recommendation:2, recommendation:3
   卡片版本：`6f204ffd524b55f7ea8cef5e4a2e75cc8330004f202fd635570857c43cef5a2a`
+- [case-e3c66b268d55aba1f3f6](../../../store/cases/case-e3c66b268d55aba1f3f6/41610101198ead0095cd963e02d83948c925b7512aa78004b6a36855eec2e4aa.json) · 结论：diagnosis, recommendation:6
+  卡片版本：`41610101198ead0095cd963e02d83948c925b7512aa78004b6a36855eec2e4aa`

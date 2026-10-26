@@ -1,0 +1,194 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-cdc263993782c99990b7",
+  "created_at": "2026-10-23T10:15:52.684775+00:00",
+  "migration_key": "gameoflife-k20c3-68203082-5513-4f64-b94d-5441fe323d90",
+  "title": "bindSheet 半模态内容 Scroll 未设 edgeEffect：Compose verticalScroll 的越界效果没迁，FIT_CONTENT 弹层里拖不动",
+  "when": "界面实现阶段，把 bindSheet 半模态内容里的 Compose verticalScroll Column 转成 ArkUI Scroll{Column}，确定 Scroll 的边缘效果并核对内容超过弹层上限时能否滚动时",
+  "description": "源端 ModalBottomSheet（skipPartiallyExpanded=true）的内容是 Column(Modifier.verticalScroll(...))，源工程没有覆盖 LocalOverscrollFactory/LocalOverscrollConfiguration；目标宿主用 bindSheet(height: SheetSize.FIT_CONTENT)，内容区写成 Scroll{Column}，长列表或横屏时内容会超过弹层上限；ArkUI Scroll 的 edgeEffect 默认 EdgeEffect.None。",
+  "summary": "两个弹层都由 Stage 1 页面转换 agent 首次写出：LocalizationSelectorSheet 由 page_0009 转换者 a5cac732a528eeed8 写入（17:24 生效；19:32 Slice 2 工人 a02c248e2d3251bb5 整体重写时 Scroll 修饰链原样沿用），RateDialogSheet 由 page_0010 转换者 a8ff7ef707e65b493 写入（17:21）。作对照的规则集弹层 SelectRuleSetSheet 由 page_0007 转换者 a4e7ffaa116a2c616 写入，它的 .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false }) 来自写前召回注入：召回 worker 把 lesson-80dd（ScrollView 未写 overScrollMode 按 IF_CONTENT_SCROLLS 映射）按“做法 1 的等价支”套到 Compose verticalScroll（agent-a4e7ffaa116a2c616.jsonl:L296 提醒，L419 写入）。另两处没有，是因为它们的召回没有返回这条经验，转换者也没有自行按源端越界效果迁移。\n\n写前输入：源 LocalizationSelector.kt:80-89、RateDialog.kt:74-82 都是 Column(Modifier.fillMaxWidth().verticalScroll(scroll)...)，源工程没有任何 overscroll 覆盖（grep 为空）；Compose foundation 的 verticalScroll(state) 默认重载走 LocalOverscrollFactory 的平台越界效果（Android 12+ 拉伸；本机 gradle 缓存 foundation-android 1.12.1 的 ScrollKt/ScrollableAreaNode 字节码）。页面规格 page_0009/page_0010 只写“Column(fillMaxWidth, verticalScroll, ...)”，没有提边缘效果。\n\nLocalizationSelectorSheet 分支：a5cac 在 L187 起草时自问要不要写 edgeEffect，结论是“Compose default = no overscroll effect on Android 12+... keep default (None). Don't add.”，前提与源端默认相反。它的召回 worker 读了 scrolling 索引里的 lesson-80dd，也承认 Compose 默认有拉伸越界，但因这条经验的时机和情境只写 View 体系 ScrollView 而不返回（a5cac732a528eeed8-call_10bf9c38f09845289fd42c6d.jsonl:L128-L129、L138）；L231 的注入里也没有其他边缘效果提示，于是 L235 写入的 Scroll 只有 width 与 scrollBar(BarState.Off)。\n\nRateDialogSheet 分支：a8ff 在 L164 收到 lesson-df1f（FIT_CONTENT、内容根不写 100%）和 lesson-a58e 的提醒“Scroll 与 Column 都不写 height('100%')（由弹层上限约束后滚动）”，lesson-80dd 没有被召回（召回 worker 读过 scrolling 索引但没有讨论它）。L210 照此写 Scroll{Column}，注释写成“the FIT_CONTENT sheet sizes to content and clamps at the safe-area maximum, then scrolls”，Scroll 修饰链只有 width 与 backgroundColor。\n\n返修在 HarmonyOS 6.1.0 设备上看到：语言弹层停在 Русский 拖不动，控件树相同、设了 Spring 的规则集弹层可滚；只给语言弹层 Scroll 补 edgeEffect 后就能滚到简体中文（repair 80e50793...jsonl:L5240、L5251、L5264-L5266）；横屏评分弹层补上后按钮行从屏底手势区升到 y≈1030 可点（L6397-L6409）。可见 FIT_CONTENT 半模态里，默认 None 的内容 Scroll 超过上限后也不响应拖动。这一点不在任何写前输入里；按源端越界效果迁移成 Spring + alwaysEnabled:false 的做法恰好避开了它。\n\n三层判断：lesson-a58e 第 7 步把“半模态内容根不写 100%”写成内容超高后就会“由弹层上限约束后滚动”，缺 edgeEffect 这一前提，a8ff 把这句照搬进了注释；lesson-df1f 给出 FIT_CONTENT 档和内容根写法，两名转换者都照做了，但它没有提内容 Scroll 的拖动前提。lesson-80dd 的标题、时机、情境只列 View 体系，看不到 Compose verticalScroll 这一支，是否套用全靠召回 worker 类推：本次迁移有 5 次召回把它类推到 Compose LazyColumn/verticalScroll（含 a4e7），说明这一支有用，但原文没写；a5cac 那次按原文范围排除，这是照原文判断，不算提醒失真；a8ff 那次没有提到它。a5cac 另有自身判断错误（以为 Compose 默认没有越界效果）。最终两处都只加了 .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false })（检查点 X12 6872e0c、X12-2 bdc2475）。\n",
+  "recommendations": [
+    "修订 lesson-df1f691759f84ba9e688（版本 2，增量）：做法 3 在“内容根不写 height('100%')”旁补一个前提：内容可能超过 FIT_CONTENT 弹层上限（长列表、横屏、大字号）时，内容区 Scroll 要写 .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false })。Scroll 默认 EdgeEffect.None（SDK component/scroll.d.ts:1738），在 FIT_CONTENT 半模态里不响应拖动（HarmonyOS 6.1.0 设备实测，只补 edgeEffect 就能滚动）。可选检查加一条：在设备上把弹层内容滑到最后一项，竖屏、横屏各一次。依据：两名转换者都收到并照做了本条（agent-a5cac732a528eeed8.jsonl:L231、agent-a8ff7ef707e65b493.jsonl:L164），两个弹层仍拖不动（repair 80e50793-e51a-435f-bd07-f5badd469938.jsonl:L5264-L5266、L6397-L6409）。",
+    "修订 lesson-a58ebfe7a4c55b041b14（版本 7，增量）：第 7 步“半模态内容根的 Scroll/Column 不写 height('100%')，由弹层上限约束后滚动”只说了高度这一半，要补上“Scroll 还要设非 None 的 edgeEffect，才能在 FIT_CONTENT 弹层里拖动（见 lesson-df1f 做法 3）”，免得把不写 100% 当成能滚动的充分条件。当前库版本 8 的第 7 步文字没变，没有覆盖这一点。依据：agent-a8ff7ef707e65b493.jsonl:L164 的提醒，L210 的注释照搬了“then scrolls”。",
+    "修订 lesson-80dd4e626e1c207028e6（版本 3，增量）：适用范围补上 Compose Modifier.verticalScroll/horizontalScroll → Scroll：默认重载带平台越界效果（Android 12+ 拉伸），源工程没有用 LocalOverscrollFactory/LocalOverscrollConfiguration 置空时，按“内容可滚才有越界效果”写 EdgeEffect.Spring + alwaysEnabled:false。把 Compose verticalScroll 写进标题前半句和“何时使用”，让只看摘要的召回能判断适用，不再靠类推。依据：a5cac 的召回 worker 承认 Compose 默认有拉伸越界，仍按原文范围排除本条（a5cac732a528eeed8-call_10bf9c38f09845289fd42c6d.jsonl:L138）；a4e7 的召回把它类推套用后，规则集弹层可以滚动（agent-a4e7ffaa116a2c616.jsonl:L296、L419；repair L5240、L5251）。",
+    "界面实现阶段转 Compose 滚动容器前，先确认源端越界效果：verticalScroll、horizontalScroll、LazyColumn/LazyRow 默认都有平台越界效果（本机 foundation-android 1.12.1 字节码已核）；在源工程搜 LocalOverscrollFactory、LocalOverscrollConfiguration 和 overscrollEffect 参数，没有覆盖就不按“无越界”处理，也不以规格没写为由保留 Scroll 默认的 None。",
+    "本应用：LocalizationSelectorSheet（14 种语言，竖屏就超出）和 RateDialogSheet（横屏超出）的 Scroll，与 SelectRuleSetSheet 一样写 .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false })。收尾阶段 grep 所有 bindSheet 内容组件里的 Scroll()，核对同类弹层的边缘效果一致，再在设备上竖屏、横屏各滑到最后一项。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-gameoflife-k20c3/entry/src/main/ets/components/settings/LocalizationSelectorSheet.ets",
+        "since": "2026-10-21T06:46:35.836Z",
+        "at": "2026-10-21T16:29:04.600Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/gameoflife-efimj-b9f42ed/app/src/main/java/com/jobik/gameoflife/screens/settings/LocalizationSelector.kt",
+          "at": "2026-10-20T16:52:32.911Z",
+          "reason": "正常输入：a5cac 的 Read 回执给出弹层内容 Column(Modifier.fillMaxWidth().verticalScroll(scroll)...)，列 14 种语言，没有任何 overscroll 覆盖；Compose 默认重载带平台越界效果，所以源端是“可滚动、有越界效果”（agent-a5cac732a528eeed8.jsonl:L41-L42）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-gameoflife-k20c3/spec/baseline/ui/page_0009_LocalizationSelector.md",
+          "at": "2026-10-20T16:52:24.648Z",
+          "reason": "正常输入：页面规格照源写“列表：Column(fillMaxWidth, verticalScroll, horizontalWindowInsetsPadding, padding horizontal 20dp, spacedBy 8dp)”，没有提边缘效果，也没有写错（agent-a5cac732a528eeed8.jsonl:L23-L24）。"
+        },
+        {
+          "key": "agent-a5cac732a528eeed8.jsonl",
+          "at": "2026-10-20T17:24:17.522Z",
+          "reason": "起草时自问要不要写 edgeEffect，判断“Compose default = no overscroll effect on Android 12+... keep default (None)”，与源端默认相反（L187）。L231 的召回注入里有 lesson-df1f（FIT_CONTENT、根 Column 不写 100%），没有任何边缘效果条目：lesson-80dd 已被召回 worker 按原文的 View 体系范围排除。重写后 L235 写入的 Scroll 只有 width('100%') 和 scrollBar(BarState.Off)，没有 edgeEffect，FIT_CONTENT 弹层里拖不动。该片段一直留到返修：19:32 a02c248e2d3251bb5 整体重写时原样保留，repair L5265 替换断言的旧串里没有 edgeEffect。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-gameoflife-k20c3/entry/src/main/ets/components/rate/RateDialogSheet.ets",
+        "since": "2026-10-21T06:46:35.836Z",
+        "at": "2026-10-21T16:29:04.600Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/gameoflife-efimj-b9f42ed/app/src/main/java/com/jobik/gameoflife/services/rate/RateDialog.kt",
+          "at": "2026-10-20T16:52:37.226Z",
+          "reason": "正常输入：a8ff 的 Read 回执给出弹层内容 Column(Modifier.fillMaxWidth().verticalScroll(scroll).padding(...))，没有 overscroll 覆盖；源端内容超高时可以滚动，并带平台越界效果（agent-a8ff7ef707e65b493.jsonl:L34-L35）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-gameoflife-k20c3/spec/baseline/ui/page_0010_RateDialog.md",
+          "at": "2026-10-20T16:52:28.009Z",
+          "reason": "正常输入：页面规格照源写“内容 Column（fillMaxWidth, verticalScroll, horizontalWindowInsetsPadding, padding horizontal 40dp vertical 20dp, spacedBy 15dp）”，没有提边缘效果（agent-a8ff7ef707e65b493.jsonl:L22-L23）。"
+        },
+        {
+          "key": "agent-a8ff7ef707e65b493.jsonl",
+          "at": "2026-10-20T17:21:33.593Z",
+          "reason": "L164 的召回注入交来 lesson-df1f（FIT_CONTENT，内容根 Scroll/Column 不写 100%）和 lesson-a58e 第 7 步的提醒“Scroll 与 Column 都不写 height('100%')（由弹层上限约束后滚动）”，没有 lesson-80dd。a8ff 照此在 L210 写 Scroll{Column}，注释写成“the FIT_CONTENT sheet sizes to content and clamps at the safe-area maximum, then scrolls”，Scroll 修饰链只有 width('100%') 和 backgroundColor，没有 edgeEffect；它也没有自行把源端越界效果迁过来（L210-L211）。后续 a8406f9827cea0b92、a32945117dde3d940 的 Edit 只改注释和参数，没有动这条修饰链；repair L6397 替换断言的旧串里仍没有 edgeEffect。这条链的偏差起点主要在经验原文：a58e 第 7 步把“不写 100%”写成足以滚动，df1f 没有提拖动前提。本节点标的是这一缺口落进目标的位置。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "“FIT_CONTENT 半模态里 None 的 Scroll 拖不动”只来自本次两处 FIT_CONTENT 弹层的设备实测，SDK 文档没有写这一点；其他高度档、非半模态里的 Scroll 是否同样拖不动没有核实。",
+    "经验只经写前召回 hook 的 tool_result 交到 agent（lesson-df1f、lesson-a58e 见 agent-a8ff7ef707e65b493.jsonl:L164，lesson-df1f 见 agent-a5cac732a528eeed8.jsonl:L231），lesson-80dd 是在召回 worker 会话里被排除的（a5cac732a528eeed8-call_10bf9c38f09845289fd42c6d.jsonl:L128-L138）。检查器把这些回执归到被拦的 Write/Edit 本身，不认作经验文件的读取或派发，所以三条经验都没有作为图节点，依据和问题定位写在 summary、节点 reason 和修订建议里；图里只留写者实际读过的源码、规格和目标写入。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-cdc263993782c99990b7",
+  "metadata": {
+    "migration": {
+      "id": "gameoflife-k20c3-68203082-5513-4f64-b94d-5441fe323d90",
+      "project": "GameOfLife"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.304",
+        "2.1.305",
+        "2.1.306"
+      ]
+    },
+    "source_set_id": "sources-1bba2f392f35420f049b",
+    "environment": [
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-gameoflife-k20c3",
+        "at": "2026-10-20T10:46:51.396Z",
+        "ref": "generation/68203082-5513-4f64-b94d-5441fe323d90/subagents/agent-a67bd634faae14552.jsonl:L36",
+        "request_ref": "generation/68203082-5513-4f64-b94d-5441fe323d90/subagents/agent-a67bd634faae14552.jsonl:L35",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-gameoflife-k20c3",
+        "at": "2026-10-20T14:57:28.580Z",
+        "ref": "generation/68203082-5513-4f64-b94d-5441fe323d90.jsonl:L1279",
+        "request_ref": "generation/68203082-5513-4f64-b94d-5441fe323d90.jsonl:L1273",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-gameoflife-k20c3",
+        "at": "2026-10-20T14:57:28.580Z",
+        "ref": "generation/68203082-5513-4f64-b94d-5441fe323d90.jsonl:L1279",
+        "request_ref": "generation/68203082-5513-4f64-b94d-5441fe323d90.jsonl:L1273",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-gameoflife-k20c3\\entry\\src\\main\\ets",
+        "at": "2026-10-21T11:51:33.057Z",
+        "ref": "repair/80e50793-e51a-435f-bd07-f5badd469938.jsonl:L1125",
+        "request_ref": "repair/80e50793-e51a-435f-bd07-f5badd469938.jsonl:L1124",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-gameoflife-k20c3\\entry\\src\\main\\ets",
+        "at": "2026-10-21T11:51:33.057Z",
+        "ref": "repair/80e50793-e51a-435f-bd07-f5badd469938.jsonl:L1125",
+        "request_ref": "repair/80e50793-e51a-435f-bd07-f5badd469938.jsonl:L1124",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "765d4bf2-ff04-47fe-b3b6-d5088a9aafeb"
+      ]
+    }
+  },
+  "revision": "65fe34b35c12ba1fb3fa8932c505408e3d127754cf0883d637a7da9585330199"
+}

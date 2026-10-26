@@ -1,0 +1,183 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-9190f97a15e03668b874",
+  "created_at": "2026-10-23T10:00:04.718468+00:00",
+  "migration_key": "gameoflife-k20c3-68203082-5513-4f64-b94d-5441fe323d90",
+  "title": "滚动边缘渐隐遮罩条：linearGradient 角度按 0=向右写成竖向渐变，终点用透明黑 transparent 插出灰带",
+  "when": "界面实现与共享组件实现阶段，用 ArkUI linearGradient 写滚动边缘渐隐遮罩条，确定渐变方向（angle/direction）与终点色时",
+  "description": "源端用 fadingEdges（ComposeFadingEdges 默认 FadeClip）让横滑行或纵向滚动区的内容在边缘淡出、不着色；目标改用叠在内容上、从容器底色渐变到透明的 linearGradient 遮罩条，按左右或上下边分别放置，底色常是运行期解析出的 '#AARRGGBB' 主题色；生成批次禁编译、不能上机看效果。",
+  "summary": "两个目标各有一个生成写者，偏差分两层：方向角（只在 GamePage）与终点色（两处都有）。\n\nGamePage.ets SegmentedChipsRow（Stage 1 page_0002 转换者 aac36）：写前读到的页面规格写明四条\nSegmentedButton 行“横向滚动 + fadingEdges（linearGradient 遮罩自研）”（agent-aac36eaf3f526bfce.jsonl:L28-L29），\n源 GameActions.kt 四行都是 .fadingEdges(scrollX).horizontalScroll(scrollX)、默认参数即横向\n（L72-L73，源 :276-281/:317-320/:426-429/:460-463），feature-base 写“linearGradient 遮罩层叠加”（L113-L114）。\n横向渐隐这一要求清楚，它也在思考里写明要“左条左端实色、向右透明”。但它对 ArkUI angle 的语义没有把握，\n自问“angle: 90 = left-to-right? … The convention: angle 0 = →, 90 = ↓”后按记忆取定，并确认\n“'transparent' valid color string ✓”（L350）；L375 Write 写出左条 angle 0、右条 angle 180，终点 'transparent'\n（文件 :331、:344）。ArkUI 与 CSS 同义，0 指向上方、90 左→右，于是两条成了竖向渐变压在半露 chip 上；\n'transparent' 是 #00000000，与底色插值时中段发灰。同一次写入的 Expanded 纵向遮罩用了 90/270（文件 :1677、:1690），\n横纵整体互换，可见是约定记反而非笔误。L277 注入的 lesson-6e5588（写 SDK 调用前核 .d.ts）提醒它逐个核 API，\n它没有查 linearGradient；本机 common.d.ts 对 angle 只写“Angle of Linear Gradient. The default value is 180”\n（recall/ab518d6b15a127ad7-call_3c49d131e75e401bb8c2b0f8.jsonl:L374），并不直接给出方向，该经验也只管成员名与类型，\n不作偏差原因。同次注入的 lesson-caa043 提醒只说“fadingEdges 用 linearGradient 边缘遮罩随滚动显隐”，不涉及方向和终点色。\n该片段到返修前未变：返修 L2325 的替换脚本断言旧行 angle 0/180 + 'transparent' 各出现一次。\n\nFadingEdgesContainer.ets（Base-6 共享组件写者 a3b5b1）：读到源 FadingEdges.kt，color 缺省 Unspecified →\nFadeClip（内容自身在边缘淡出，不着色，L107-L108）；L146 思考已决定用“容器底色 → 透明”叠层近似 FadeClip，\n终点写“Color.Transparent or '#00000000'”，当时也把 angle 0 当作左→右。L188 首写被拦，召回 worker 以\nlesson-4ce3（Compose Brush 渐变端点几何）为名给出“行首条 .linearGradient({angle:90, stops:[[fadeColor,0],\n[Color.Transparent,1]]})，行尾条 angle 270”。写者据此改用 CSS 语义（L190：“Lesson says … I'll follow the lesson exactly”），\nL279 Write 的方向正确（横 90/270、纵 180/0），四处终点仍是 Color.Transparent。原文 lesson-4ce3 v1 只讲默认对角按宽高算角度、\nstop 周期与 Mirror，全文没有终点色；这组 stops 是召回 worker 自拟（recall/a3b5b1ae17bddd1d4-call_f8ecb46280144bf0a47975a2.jsonl:L164 读原文、\nL277 输出），与写者此前自己的打算一致，不是原文错误。设置页调色板行（ChangePaletteComponent.ets）传入\nthemeStore().tokens.surfaceContainerHigh 作底色，两端因此出现发灰渐变带；返修 L2374 断言 [[this.resolvedColor(), 0], [Color.Transparent, 1]] 恰有 4 处，说明保留到返修前。\n\n返修（X9，repair/80e50793-e51a-435f-bd07-f5badd469938.jsonl）：L2324-L2326 先把 GamePage 两条改为 90/270；\n截图后 L2361 判定灰带来自透明黑终点；L2374-L2375 新增 fadeColorClear()（`#00${fadeColor.substring(3)}`）与\nresolvedClearColor()（'#AARRGGBB' 取同色 alpha 0，其他类型退回透明），替换全部 6 处终点；L2439-L2455 分段行与安卓截图对照、\nL2456-L2472 看调色板行鸿蒙截图，两端均无灰带；L2473 报告写明“ArkUI 0° 指向上方”“渐变按非预乘色插值，透明黑使中段变灰”；\nL2474-L2476 检查点 6877add。返修有意跳过 GamePage Expanded 纵向遮罩（L2373，本机不可达），同类问题仍在，不在本 job 改动内。\n\n经验层核对（注入版 1bb6facd）：库里没有讲 ArkUI 渐变角度约定或渐隐终点色的经验；aac36 的召回 worker 看到 lesson-4ce3\n条目，认为它讲 Brush 端点到角度的换算、对 fadingEdges 只算 marginal，最终未下发（recall/aac36eaf3f526bfce-call_cebf2ea24b0f46c6ba9bee76.jsonl:L139），\n与原文适用范围一致。a3b5b1 一支是提醒把原文没有的数值写进“这次怎么写”，属传递层，见召回失败建议，不改原文。本卡按新经验沉淀。\n",
+  "recommendations": [
+    "界面实现时，ArkUI linearGradient 的 angle 按 CSS 语义写：0 指向上方（colors[0] 在底边）、90 左→右、180 上→下（缺省值）、270 右→左；轴向渐变优先用 direction: GradientDirection.Right/Left/Bottom/Top。不按 Android GradientDrawable 或数学坐标（0 = 向右）换算；对角度没把握时改用 direction 枚举，不凭记忆定数值（本机 .d.ts 对 angle 只写缺省值 180，不足以单独判断方向）。",
+    "用“容器底色 → 透明”叠层模拟内容淡出（FadeClip）时，终点色取起点色同 RGB、alpha 0（'#AARRGGBB' → '#00RRGGBB'），不写 'transparent' 或 Color.Transparent：它们是透明黑 #00000000，ArkUI 渐变不按预乘插值，中段会变成半透明灰。起点色是 Resource 或主题令牌时，先解析成具体色值再派生透明版，主题切换时一起重算。",
+    "生成期不能上机时，写后逐条列出每个渐变：遮罩条在哪条边、angle/direction、colors[0] 落在哪条边、终点是否同色透明；同一文件里横向与纵向遮罩分别核对，避免整组互换。能上机时在内容滚离两端的状态下截图，与源端对照两端是否淡入卡片底色、无灰带。",
+    "召回失败 lesson-4ce3a1c186651285f362：召回 worker 把这条 Compose Brush 渐变端点几何经验套到 fadingEdges 遮罩条（源 FadingEdges.kt:36-42 缺省为 FadeClip，不是 Brush 端点渐变），并在“这次怎么写”自拟 stops [[fadeColor,0],[Color.Transparent,1]] 与 angle 90/270（recall/a3b5b1ae17bddd1d4-call_f8ecb46280144bf0a47975a2.jsonl:L277）。原文标题与做法第 1 步只讲默认对角按宽高换算角度，全文没有终点色要求，不能作为 Color.Transparent 的依据；写者以“Lesson says … follow the lesson exactly”照抄（agent-a3b5b1ae17bddd1d4.jsonl:L190）。角度同属自拟，恰好正确。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-gameoflife-k20c3/entry/src/main/ets/pages/GamePage.ets",
+        "since": "2026-10-21T06:46:35.836Z",
+        "at": "2026-10-21T16:29:04.600Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-gameoflife-k20c3/spec/baseline/ui/page_0002_GameScreen.md",
+          "at": "2026-10-20T16:18:59.710Z",
+          "reason": "正常输入：页面规格写明 Neighbors 两行与 skip/时长行是“横向滚动 + fadingEdges”，转换决策表为“横向滚动 + fadingEdges（linearGradient 遮罩自研）”，足以确定遮罩是左右两端的横向渐隐（agent-aac36eaf3f526bfce.jsonl:L28-L29）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/gameoflife-efimj-b9f42ed/app/src/main/java/com/jobik/gameoflife/screens/game/actions/GameActions.kt",
+          "at": "2026-10-20T16:21:16.117Z",
+          "reason": "正常输入：四行均为 .fadingEdges(scrollX).horizontalScroll(scrollX)（:276-281、:317-320、:426-429、:460-463），默认参数即横向、FadeClip，内容向两侧淡出到卡片底色（agent-aac36eaf3f526bfce.jsonl:L72-L73）。"
+        },
+        {
+          "key": "agent-aac36eaf3f526bfce.jsonl",
+          "at": "2026-10-20T17:25:28.130Z",
+          "reason": "思考里自问 angle 语义后按“0 = →, 90 = ↓”取定，并只核 'transparent' 是合法色串（L350）；L375 Write 左条 angle 0、右条 angle 180、终点 'transparent'，成了竖向渐变且中段发灰；同次写入的 Expanded 纵向遮罩用 90/270，横纵整体互换。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-gameoflife-k20c3/entry/src/main/ets/components/common/FadingEdgesContainer.ets",
+        "since": "2026-10-21T06:46:35.836Z",
+        "at": "2026-10-21T16:29:04.600Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/gameoflife-efimj-b9f42ed/app/src/main/java/com/jobik/gameoflife/ui/composables/modifier/FadingEdges.kt",
+          "at": "2026-10-20T18:07:19.649Z",
+          "reason": "正常输入：fadingEdges 缺省 color = Color.Unspecified → FadingEdgesFillType.FadeClip（:26、:36-42），内容自身在边缘淡出、不叠任何颜色，length 16.dp、默认横向；足以说明目标视觉是两端淡入底下的卡片底色、没有色带（agent-a3b5b1ae17bddd1d4.jsonl:L107-L108）。"
+        },
+        {
+          "key": "agent-a3b5b1ae17bddd1d4.jsonl",
+          "at": "2026-10-20T18:37:57.919Z",
+          "reason": "L146 已决定用“底色 → Color.Transparent”叠层近似 FadeClip；L188 召回提示（经钩子回执送达，非文件读取，不单列节点）给出 angle 90/270 与同样的 Color.Transparent 终点，写者照抄（L190）。L279 Write 方向正确，四处终点均为 Color.Transparent，与消费方传入的卡片底色插出灰带。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "本机 SDK 声明对 angle 方向没有明文（只给缺省值 180）；方向与非预乘插值的结论依据返修实机截图对照（X9-fades-hm 对 X9-fades-android、X9-palette-hm），未另查官方文档。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-9190f97a15e03668b874",
+  "metadata": {
+    "migration": {
+      "id": "gameoflife-k20c3-68203082-5513-4f64-b94d-5441fe323d90",
+      "project": "GameOfLife"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.304",
+        "2.1.305",
+        "2.1.306"
+      ]
+    },
+    "source_set_id": "sources-1bba2f392f35420f049b",
+    "environment": [
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-gameoflife-k20c3",
+        "at": "2026-10-20T10:46:51.396Z",
+        "ref": "generation/68203082-5513-4f64-b94d-5441fe323d90/subagents/agent-a67bd634faae14552.jsonl:L36",
+        "request_ref": "generation/68203082-5513-4f64-b94d-5441fe323d90/subagents/agent-a67bd634faae14552.jsonl:L35",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-gameoflife-k20c3",
+        "at": "2026-10-20T14:57:28.580Z",
+        "ref": "generation/68203082-5513-4f64-b94d-5441fe323d90.jsonl:L1279",
+        "request_ref": "generation/68203082-5513-4f64-b94d-5441fe323d90.jsonl:L1273",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-gameoflife-k20c3",
+        "at": "2026-10-20T14:57:28.580Z",
+        "ref": "generation/68203082-5513-4f64-b94d-5441fe323d90.jsonl:L1279",
+        "request_ref": "generation/68203082-5513-4f64-b94d-5441fe323d90.jsonl:L1273",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-gameoflife-k20c3\\entry\\src\\main\\ets",
+        "at": "2026-10-21T11:51:33.057Z",
+        "ref": "repair/80e50793-e51a-435f-bd07-f5badd469938.jsonl:L1125",
+        "request_ref": "repair/80e50793-e51a-435f-bd07-f5badd469938.jsonl:L1124",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-gameoflife-k20c3\\entry\\src\\main\\ets",
+        "at": "2026-10-21T11:51:33.057Z",
+        "ref": "repair/80e50793-e51a-435f-bd07-f5badd469938.jsonl:L1125",
+        "request_ref": "repair/80e50793-e51a-435f-bd07-f5badd469938.jsonl:L1124",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "765d4bf2-ff04-47fe-b3b6-d5088a9aafeb"
+      ]
+    }
+  },
+  "revision": "db9056c5bb23244d6f71a8746bb23d341f491960adbf442d2838297fad076b1e"
+}

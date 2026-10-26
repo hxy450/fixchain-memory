@@ -1,0 +1,203 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-4375971401936857efcf",
+  "created_at": "2026-10-23T10:24:03.755168+00:00",
+  "migration_key": "gameoflife-k20c3-68203082-5513-4f64-b94d-5441fe323d90",
+  "title": "把会在壳层重组时重算的 NavHost 起点写成只取一次的首屏压栈",
+  "when": "规格提取与导航壳实现阶段，把 Compose NavHost 的 startDestination 映射成目标的首屏压栈和顶级切换回退基准时",
+  "description": "源端 NavHost(startDestination = 读偏好或状态的函数) 写在会重组的壳层内容 lambda 里（抽屉、Rail、常驻抽屉），没有 remember，读到的标记在同一会话内会变（如完成引导、登录）；目标用单个 Navigation + NavPathStack，首屏在空栈时压入，顶级切换以起点为 popTo 基准。",
+  "summary": "源端 LayoutWithModalDrawerSheet.kt:110-113 在 ModalNavigationDrawer 的内容 lambda 里写\nAppNavHost(startDestination = NavigationHelper.findStartDestination(context))，起点每次重组都重新求值，\nfindStartDestination 读 AppSettings/CurrentOnboardingFinishedData（NavigationHelper.kt:41-57）。\n首跑点 Start game 写入标记后，壳层下一次重组（打开抽屉就会触发）起点变成 Game，NavHost 换图并清空整个返回栈，\n以新的 Game 重新进入；之后 navigateToTopLevel 的 popUpTo(graph.findStartDestination()) 以 Game 为基准。\n返修在安卓设备上实测确认：打开抽屉时盘面重新随机，返回直接退桌面（80e50793-e51a-435f-bd07-f5badd469938.jsonl:L7041-L7058）。\n\n规格作者 a582 写 page_0001 前整份读过 LayoutWithModalDrawerSheet.kt 和 NavigationHelper.kt\n（agent-a582f95d72d8853fb.jsonl:L69-L70、L161-L162），注入前的草稿（L156）就把起点当成「初始路由」；L172 写出 page_0001:30「aboutToAppear 中栈空时 pushPathByName 首屏」、\n:83-84「初始路由压栈」，没有写起点在壳层重组时重算、标记变化后换图清栈。\n同期注入的经验 lesson-8953e390（版本 3）做法第 1 步写「栈为空时……推入首屏（只推一次）」。worker 照原文转述：\n给 a582 的提醒成了 page_0001:30 的契约；给 acdb、a70c 的提醒分别写「只推一次」「栈空且仅一次（startPushed 标志）」，\n最后落成 startPushed 守卫。F004 作者照 page_0001 定稿写成「栈空时且仅一次压栈」（F004:68、AC16，\nagent-ac3ced6fe21563a1d.jsonl:L221）；这位作者在 L199 问过「startDestination 会不会重新计算」，但只想到旋转重建就放下了。\n分析器写的参考文档 gameoflife_design.md:680 也只写首启流程「Onboarding 留栈下，返回可回」（agent-a67bd634faae14552.jsonl:L341）。\n\n页面转换者 acdb 照 page_0001 和提醒写出带 startPushed 守卫的 pushStartDestination（L326），只是照规格传递。\nSlice 8 的 a70c 读了 F004、page_0001，也直接读了源端 :110-113（agent-a70c5e626561b643b.jsonl:L123-L124）。它在 L214 推演首跑会话的返回栈：\n虽然写下了起点「computed ONCE per composition」，却把首跑会话里图的起点当作一直是 Onboarding，\n得出「从顶级页返回落到 Onboarding」的结论；随后写出构造时就固定 startRoute 的 TopLevelNavigator（L319），\nL336 整文件重写 Index.ets，保留一次压栈，用首压时的 startScreenName 构造导航器；随后 L512 写的 source-notes\n还记录了「popUpTo 目标恒为栈底 start」。这一片段一直保留到返修：首跑后从抽屉进关于页，栈是 [Onboarding, About]，返回回到引导页。\n\n返修新增 refreshStartDestination()：重算 findStartDestination，起点变了就更新导航器、navPathStack.clear(false)，\n再以新起点重新压栈；在 @Monitor('drawer.isOpen') 和 navigateToTopLevel 入口调用（repair L7065-L7071，检查点 X16 157afc8，L7124-L7125）。\n偏差出在把源端起点表达式翻成目标契约这一步，先发生在规格，Slice 8 又对同一段源码独立推演出同样的错误。\n\n三层判断：经验原文 lesson-8953e390 第 1 步「只推一次」本身没有错，但缺少起点在会话内重算这一边界（增量）；\n召回 worker 的提醒忠实转述原文（a582 L157、acdb L198、a70c L285），没有丢条件，也没有套到范围之外；\nagent 层面，a582 与 a70c 都读了源码，却没有把重组重算和换图清栈写进契约或推演。\n经验经 PreToolUse hook 回执交给 agent，并不是对经验文件的读取，检查器不认这条读边，\n所以经验不画成图节点，只在这里和修订建议里按行号引用。\n",
+  "recommendations": [
+    "修订 lesson-8953e390416a80d7dd8c（版本 3，增量）：做法第 1 步的「只推一次」只指初始压栈。在例外与边界或第 1 步补一句：源端起点如果是在会重组的作用域里每次求值的表达式（如 NavHost(startDestination = 读偏好或状态的函数)、没有 remember），读到的值又会在会话内变化，那么值变化后宿主下一次重组时 NavHost 会换图、清空整个返回栈，并以新起点重新进入，这不是一次压栈能表达的；规格要写出起点的重算时机和清栈后果，目标在等价时机重算起点，变化时清栈后以新起点重新压栈，以起点为基准的顶级切换也随之更新。依据：agent-a582f95d72d8853fb.jsonl:L157（注入）→ L172（page_0001:30）；agent-acdb6502652d3eb2b.jsonl:L198 → L326（startPushed）；agent-a70c5e626561b643b.jsonl:L285 → L336；源端 LayoutWithModalDrawerSheet.kt:110-113；返修实测见 80e50793-e51a-435f-bd07-f5badd469938.jsonl:L7041-L7058。",
+    "规格提取时，看到 NavHost(startDestination = 表达式) 写在壳层内容 lambda 里，先判断表达式读的状态在会话内会不会变；会变就把三件事写成验收：哪些重组会触发重算（打开抽屉、配置变化、订阅的状态变化），起点变化后清空返回栈、以新起点和新实例重进，popUpTo(graph.findStartDestination()) 的基准随之改变。不能只写首屏一次压栈；推演返回栈时也不要假设图的起点在整个会话里不变。",
+    "实现导航壳时，不要把首压时的起点名冻结进顶级导航器：把起点做成可以重算的值，在源端重组的等价时机重算，变化时 clear 后以新起点 push，并重建以新起点为基准的导航器；非首跑会话起点不变时什么都不做。",
+    "本应用的具体值：起点来自 AppSettings/CurrentOnboardingFinishedData；鸿蒙在 @Monitor('drawer.isOpen') 和 navigateToTopLevel 入口调用 refreshStartDestination()。验收路径：清数据 → Start game → 从抽屉进关于页 → 返回，应回到游戏页，再返回退桌面；首跑打开抽屉时盘面重新随机；不开抽屉时 Start game → 返回仍回引导页（F005-AC18 路径保留）；非首跑会话打开抽屉不重置盘面。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-gameoflife-k20c3/entry/src/main/ets/pages/Index.ets",
+        "since": "2026-10-21T06:46:35.836Z",
+        "at": "2026-10-21T16:29:04.600Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/gameoflife-efimj-b9f42ed/app/src/main/java/com/jobik/gameoflife/screens/layout/LayoutWithModalDrawerSheet.kt",
+          "at": "2026-10-20T11:00:08.424Z",
+          "reason": "正常输入：规格作者 Read 全文的回执给出 :110-113，ModalNavigationDrawer 内容 lambda 里写 AppNavHost(startDestination = NavigationHelper.findStartDestination(context = context))，起点是重组时求值的表达式、没有 remember。结合同一作者 L161-L162 读到的 findStartDestination（读 CurrentOnboardingFinishedData），已经能看出完成引导后起点会在同一会话内从 Onboarding 变成 Game。起点变化后 NavHost 换图清栈属于框架行为，源码文本里没有直接写出（agent-a582f95d72d8853fb.jsonl:L69-L70）。"
+        },
+        {
+          "key": "agent-a582f95d72d8853fb.jsonl",
+          "at": "2026-10-20T11:19:46.531Z",
+          "reason": "收到上面的源码，又在 L157 的 hook 回执里收到 lesson-8953e390 的提醒（「入口 aboutToAppear 栈空时 pushPathByName 首屏」）之后，L172 Write page_0001：:30 写「aboutToAppear 中栈空时 pushPathByName 首屏——首启 Onboarding、否则 Game」，:83-84 写两行「初始路由压栈」。没有写起点会在壳层重组时重算，也没有写完成引导后会换图清栈、顶级切换基准改为 Game。注入前的草稿（L156 第 73-74 行「初始路由」）已经是一次性理解，经验的「只推一次」又加强了这一点。源码到规格的映射在这里偏离（同转录 L172-L173）。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-gameoflife-k20c3/spec/baseline/ui/page_0001_MainActivity.md",
+          "at": "2026-10-20T16:18:54.084Z",
+          "reason": "交付桥梁：页面转换者的 Read 回执里仍有 :30「aboutToAppear 中栈空时 pushPathByName 首屏」和「初始路由压栈」两行（agent-acdb6502652d3eb2b.jsonl:L21-L22）。"
+        },
+        {
+          "key": "agent-acdb6502652d3eb2b.jsonl",
+          "at": "2026-10-20T17:32:38.017Z",
+          "reason": "读到 page_0001 契约，又收到提醒「aboutToAppear 中 if (size()===0 && !pushed) 只推一次 pushPathByName(findStartDestination 结果)」（L197-L198），L326 Write 出 startPushed 守卫的 pushStartDestination（注释「首屏压栈（栈空且仅一次）」），以及以 startScreenName 为基准的 navigateToTopLevel。这里只是照规格传递，不另判它独立失职。startPushed 一次压栈后来被 Slice 8 重写时保留（同转录 L326-L327）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-gameoflife-k20c3/spec/baseline/features/F004-app-shell-navigation.md",
+          "at": "2026-10-21T03:11:50.152Z",
+          "reason": "规格输入：Slice 8 的 Read 回执给出 :68「根 Navigation 栈空时且仅一次压栈」和 AC16「aboutToAppear 中栈空时且仅一次 pushPathByName(startDestination)……static 分量：仅压一次」。AC16 自注引自 page_0001 定稿契约，是同一偏差的延续（agent-a70c5e626561b643b.jsonl:L41-L42）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/gameoflife-efimj-b9f42ed/app/src/main/java/com/jobik/gameoflife/screens/layout/LayoutWithModalDrawerSheet.kt",
+          "at": "2026-10-21T03:14:39.975Z",
+          "reason": "正常输入：Slice 8 自己 Read 全文，回执里有 :110-113 的 AppNavHost(startDestination = findStartDestination(context))。它的 source-notes 第 10 行也照录了这一行（agent-a70c5e626561b643b.jsonl:L123-L124）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-gameoflife-k20c3/spec/baseline/ui/page_0001_MainActivity.md",
+          "at": "2026-10-21T03:27:17.788Z",
+          "reason": "交付桥梁：Slice 8 的 Read 回执里仍有 :30 的一次性首屏压栈契约和「初始路由压栈」（agent-a70c5e626561b643b.jsonl:L258-L259）。"
+        },
+        {
+          "key": "agent-a70c5e626561b643b.jsonl",
+          "at": "2026-10-21T03:55:41.020Z",
+          "reason": "收到上面的规格和源码。L214 推演首跑会话的返回栈时写下起点「computed ONCE per composition」，却把首跑会话里图的起点当作一直是 Onboarding（Case A：从顶级页返回落到 Onboarding），没有考虑引导完成后壳层重组会重算起点并换图。随后 L319 写出构造时就固定 startRoute 的 TopLevelNavigator；L336 整文件 Write Index.ets，保留 startPushed 一次压栈，用首压时的 startScreenName 构造导航器，navigateToTopLevel 只用这个固定基准。随后 L512 写的 source-notes 也记录「popUpTo 目标恒为栈底 start」。这是对同一段源码独立推演出的错误，一直保留到返修前（返修 L7065 在这里加 refreshStartDestination）（同转录 L214、L336-L337）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        },
+        {
+          "from": 2,
+          "to": 7
+        },
+        {
+          "from": 5,
+          "to": 8
+        },
+        {
+          "from": 6,
+          "to": 8
+        },
+        {
+          "from": 7,
+          "to": 8
+        },
+        {
+          "from": 8,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "没有在 navigation-compose 源码里核对「起点变化即 setGraph 清栈」的具体实现；本卡依据的是返修在安卓设备上实测到的可观察行为（盘面重新随机、返回退桌面），以及源端表达式写在重组作用域里这一事实。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-4375971401936857efcf",
+  "metadata": {
+    "migration": {
+      "id": "gameoflife-k20c3-68203082-5513-4f64-b94d-5441fe323d90",
+      "project": "GameOfLife"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.304",
+        "2.1.305",
+        "2.1.306"
+      ]
+    },
+    "source_set_id": "sources-1bba2f392f35420f049b",
+    "environment": [
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-gameoflife-k20c3",
+        "at": "2026-10-20T10:46:51.396Z",
+        "ref": "generation/68203082-5513-4f64-b94d-5441fe323d90/subagents/agent-a67bd634faae14552.jsonl:L36",
+        "request_ref": "generation/68203082-5513-4f64-b94d-5441fe323d90/subagents/agent-a67bd634faae14552.jsonl:L35",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-gameoflife-k20c3",
+        "at": "2026-10-20T14:57:28.580Z",
+        "ref": "generation/68203082-5513-4f64-b94d-5441fe323d90.jsonl:L1279",
+        "request_ref": "generation/68203082-5513-4f64-b94d-5441fe323d90.jsonl:L1273",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-gameoflife-k20c3",
+        "at": "2026-10-20T14:57:28.580Z",
+        "ref": "generation/68203082-5513-4f64-b94d-5441fe323d90.jsonl:L1279",
+        "request_ref": "generation/68203082-5513-4f64-b94d-5441fe323d90.jsonl:L1273",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-gameoflife-k20c3\\entry\\src\\main\\ets",
+        "at": "2026-10-21T11:51:33.057Z",
+        "ref": "repair/80e50793-e51a-435f-bd07-f5badd469938.jsonl:L1125",
+        "request_ref": "repair/80e50793-e51a-435f-bd07-f5badd469938.jsonl:L1124",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-gameoflife-k20c3\\entry\\src\\main\\ets",
+        "at": "2026-10-21T11:51:33.057Z",
+        "ref": "repair/80e50793-e51a-435f-bd07-f5badd469938.jsonl:L1125",
+        "request_ref": "repair/80e50793-e51a-435f-bd07-f5badd469938.jsonl:L1124",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "765d4bf2-ff04-47fe-b3b6-d5088a9aafeb"
+      ]
+    }
+  },
+  "revision": "20375da2e9d8eacff306b9d009747dce5faee58b1c66a283d1ba635dd7b703e1"
+}

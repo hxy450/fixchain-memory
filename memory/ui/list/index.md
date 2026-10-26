@@ -1,6 +1,6 @@
 # ui/list
 
-列表与宫格：多类型 Adapter 页面的 item 布局与绑定分支（默认态、文案模板、附属子卡），分页加载的并发门闩与刷新互斥，下拉刷新 onRefreshing 在程序置 refreshing 时的触发，多列 Grid 中占位与跨列项的排布，列表项主副行与空值回退，多组列表的数据源绑定与级联选择，列表项滑动操作（swipeAction）的挂载位置，长按上下文菜单的契约，宿主改写共享行组件时的覆盖入参，LazyForEach 改 Repeat.virtualScroll 时的项高度与数据切换核对，按列表区分的排序器，侧栏分类与右侧分组列表的联动，条目点击回调与数据源本地变换（shuffled 等）随列表迁移，ExpandableListView 组头的默认交互与展开状态，异步分页列表新增批量修补时的代次保护与行内远端提交的在途锁；可换位列表的位置相关值（首尾、序号、移动可用态）按当前位置求值；LazyForEach 整批换数据或延迟填充时的稳定数据源、reload 通知与跨数据集唯一键；按末项可见状态触发的追加加载（不以 onReachEnd 代替），滚动中计算条目可见比例（onVisibleAreaChange）
+列表与宫格：多类型 Adapter 页面的 item 布局与绑定分支（默认态、文案模板、附属子卡），分页加载的并发门闩与刷新互斥，下拉刷新 onRefreshing 在程序置 refreshing 时的触发，多列 Grid 中占位与跨列项的排布，列表项主副行与空值回退，多组列表的数据源绑定与级联选择，列表项滑动操作（swipeAction）的挂载位置，长按上下文菜单的契约，宿主改写共享行组件时的覆盖入参，LazyForEach 改 Repeat.virtualScroll 时的项高度与数据切换核对，按列表区分的排序器，侧栏分类与右侧分组列表的联动，条目点击回调与数据源本地变换（shuffled 等）随列表迁移，ExpandableListView 组头的默认交互与展开状态，异步分页列表新增批量修补时的代次保护与行内远端提交的在途锁；可换位列表的位置相关值（首尾、序号、移动可用态）按当前位置求值；LazyForEach 整批换数据或延迟填充时的稳定数据源、reload 通知与跨数据集唯一键；按末项可见状态触发的追加加载（不以 onReachEnd 代替），滚动中计算条目可见比例（onVisibleAreaChange）；LazyColumn stickyHeader 的吸顶分组结构（吸顶内容留在 List 内）
 
 [上一级](../index.md)
 
@@ -20,6 +20,9 @@
 - [SmartRefreshLayout 的加载更多转成 onReachEnd 时，显式建立“加载中不重入、刷新中不派发”的门闩](lesson-0a398b212a8a80bd0c7f.lesson.md)
   - 时机：数据接线阶段，把 SmartRefreshLayout 的 onRefresh/onLoadMore 实现为 Refresh.onRefreshing 与 List/Grid.onReachEnd 分页处理时；规格提取阶段写分页竞态约束时
   - 情境：源页面由 SmartRefreshLayout 驱动分页（setOnLoadMoreListener、观察者里 finishRefresh/finishLoadMore），页面本身没有 isLoading 变量；ViewModel 的页码在响应成功后才自增；目标用 Refresh + onReachEnd 并以 concat 追加。
+- [stickyHeader 用 ListItemGroup 头部加 List.sticky(StickyStyle.Header)，吸顶内容不移出 List](lesson-2674172eb470a443213d.lesson.md)
+  - 时机：界面实现与规格映射阶段，把 Compose LazyColumn 的 stickyHeader（含按开关在吸顶与普通项之间切换）落成 ArkUI 列表结构，或对吸顶写法没把握、准备改用别的结构时
+  - 情境：源端 LazyColumn 内用 stickyHeader 放吸顶内容，其余项随列表滚动，可能由 pinned 一类开关在 stickyHeader 与 item 之间切换；规格映射为 List + ListItemGroup(StickyStyle.Header)，或并列给出“Stack + offset”一类备选；转换批次禁止编译，写者记不清吸顶 API。
 - [为新列表数据路径选排序时找到源端该列表自己的排序器，不复用同文件其他列表的比较函数](lesson-eb59181d6dfaeb014aef.lesson.md)
   - 时机：功能实现阶段，为待办、日程等不同列表的数据查询选择排序比较器时
   - 情境：源端按列表区分排序器（如待办用专门的排序器：未完成在前、同状态按创建时间降序），目标多个列表共用同一仓库查询与比较函数，写者正在为新列表加查询方法。

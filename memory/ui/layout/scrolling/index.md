@@ -19,9 +19,9 @@ ScrollView/NestedScrollView 与 weight 剩余区列表的滚动范围（固定�
 - [LazyRow/LazyColumn 的 contentPadding 译为 contentStartOffset/contentEndOffset，不用 List.padding](lesson-4030f978a230df37de2b.lesson.md)
   - 时机：界面实现阶段为滚动列表确定首尾留白时；规格提取阶段描述 Lazy 列表留白时
   - 情境：源 LazyRow/LazyColumn 用 contentPadding（PaddingValues start/end）给首尾项留白；目标 ArkUI List 可写 .padding，也可写 contentStartOffset/contentEndOffset；映射参考只有通用的 padding → .padding()。
-- [ScrollView 未写 overScrollMode 也按 Android 默认 IF_CONTENT_SCROLLS 映射：Scroll 写 edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false })；GridView/ListView 同此，滚动条按源端默认显式设置](lesson-80dd4e626e1c207028e6.lesson.md)
-  - 时机：界面转换阶段，把 ScrollView/NestedScrollView（含对话框内的滚动区）转换为 ArkUI Scroll 并设置边缘效果时；把会滚动的 GridView/ListView 转成 Grid/List 并决定滚动条与越界效果时
-  - 情境：源 ScrollView 没有声明 overScrollMode（Android 默认 IF_CONTENT_SCROLLS：内容可滚时越界回弹）；映射参考只列显式 overScrollMode，且把 ifContentScrolls 与 always 都映射为不带选项的 EdgeEffect.Spring；目标 Scroll 默认没有边缘效果。 也包括 GridView/ListView 没有改写 scrollbars、overScrollMode（AbsListView 同样默认 IF_CONTENT_SCROLLS），目标 Grid/List 没有显式设置 scrollBar 与 edgeEffect。
+- [ScrollView 未写 overScrollMode、Compose verticalScroll/Lazy 列表未置空 overscroll 时，都按 Android 默认 IF_CONTENT_SCROLLS 映射：Scroll 写 edgeEffect(EdgeEffect.Spring, { alwaysEnabled: false })；GridView/ListView 同此，滚动条按源端默认显式设置](lesson-80dd4e626e1c207028e6.lesson.md)
+  - 时机：界面转换阶段，把 ScrollView/NestedScrollView（含对话框内的滚动区）转换为 ArkUI Scroll 并设置边缘效果时；把会滚动的 GridView/ListView 转成 Grid/List 并决定滚动条与越界效果时；把 Compose Modifier.verticalScroll/horizontalScroll 或 LazyColumn/LazyRow 转成 Scroll/List（含 bindSheet 半模态里的内容区）并设置边缘效果时
+  - 情境：源 ScrollView 没有声明 overScrollMode（Android 默认 IF_CONTENT_SCROLLS：内容可滚时越界回弹）；映射参考只列显式 overScrollMode，且把 ifContentScrolls 与 always 都映射为不带选项的 EdgeEffect.Spring；目标 Scroll 默认没有边缘效果。 也包括 GridView/ListView 没有改写 scrollbars、overScrollMode（AbsListView 同样默认 IF_CONTENT_SCROLLS），目标 Grid/List 没有显式设置 scrollBar 与 edgeEffect。 也包括 Compose Modifier.verticalScroll/horizontalScroll、LazyColumn/LazyRow 的默认重载带平台越界效果（Android 12+ 拉伸；foundation-android 1.12.1 的默认重载经 LocalOverscrollFactory 取平台效果，字节码已核），源工程没有经 LocalOverscrollFactory/LocalOverscrollConfiguration 或 overscrollEffect 参数置空，页面规格只写 verticalScroll、不提边缘效果。
 - [heightIn(max) 紧接 verticalScroll 的卡片拆成多节点时，把高度上限挂在 Scroll 上](lesson-420023d472f48bed8ef9.lesson.md)
   - 时机：界面实现阶段，把 heightIn(max) 紧接 verticalScroll 的卡片拆成“外层容器 + Scroll + 内容”结构时
   - 情境：源 Modifier 链里 heightIn(max = H) 紧接 verticalScroll，同一节点还带圆角、背景；目标需要拆成外层卡片包 Scroll 的多节点结构；迁移陷阱表有“滚动容器须显式给交叉轴尺寸”一类条目。

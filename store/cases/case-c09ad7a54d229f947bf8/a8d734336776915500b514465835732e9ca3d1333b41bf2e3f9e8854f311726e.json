@@ -1,0 +1,166 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-c09ad7a54d229f947bf8",
+  "created_at": "2026-10-23T10:01:55.273979+00:00",
+  "migration_key": "gameoflife-k20c3-68203082-5513-4f64-b94d-5441fe323d90",
+  "title": "从 AAR 字节码重建 Material 图标路径时转换表漏掉 arcTo，弧段被静默丢弃",
+  "when": "资源迁移阶段，自写转换器从 Gradle 缓存的 material-icons AAR 字节码重建 Compose 图标的 SVG path，并宣告图标转换校验通过时",
+  "description": "源码通过 Icons.Outlined.* 等引用 Compose material-icons 库矢量，工程 res 下没有对应 drawable；可核来源是 Gradle 缓存里的 material-icons-core/extended AAR，图标路径以 PathBuilder 方法调用（moveTo、curveToRelative、reflectiveCurveTo、arcToRelative、close 等）编译进 class，没有现成的 pathData 字符串；转换由自写的字节码解析脚本批量完成，校验靠锚点、包围盒启发式和少数图标与官方 SVG 的抽样比对。",
+  "summary": "资源前置 worker（agent-af855a942b2e1b2c0）写前收到的要求已经正确、足够：派工要求导出 material-icons SVG（L1）；\nbase-plan.md Base-0 note 要求“按源引用的变体与名称从可核来源（android.jar 或 Gradle 缓存包）提取同变体 pathData”（L30-L31 读回执第 15 行）；\nfeature-base.md:127 要求“外形保真，非 SymbolGlyph 近似”（L80-L81）；召回提示转达 lesson-74d535：逐变体从 AAR classes 模拟 PathBuilder 调用重建 pathData，\n抽 ≥2 个图标与官方 SVG 交叉比对，字节码栈模拟未经比对不能只凭 bbox 宣告通过（L191）。\nworker 自己在 L132 列出 PathBuilder 有 arcTo，在 L135 的映射计划里写了 arcTo → A。\n但 convert_resources.py（L200 Write，最终版仍在 .tmp_stage0/scripts）的 PB_CMDS 只有 moveTo/lineTo/H/V/curveTo/quadTo/reflective*/close，\n没有 arcTo/arcToRelative；`if cls == PATHBUILDER and mth in PB_CMDS` 对未映射的 PathBuilder 调用不报错，直接跳过。\nIcons.Outlined.Casino 的五个圆点是 moveToRelative(-1.5,0) 加两段 arcToRelative，弧段被丢，只剩 `M7.5,16.5 m-1.5,0` 这类五个只移动、不绘制的子路径，\n图标只画出外框。脚本在 L304-L305 首次写出该 SVG，L333-L334、L372-L373（16:10:53，文件 mtime 12:10 EDT 与此一致）原样重写；\n返修开始时 cat 的内容与此相同（repair L1890-L1891）。\n校验没有覆盖这类缺口：Check 锚点和与 fonts.gstatic.com 的比对只用了 outlined check、settings 这类不含弧段的图标；settings 的差异被直接归为版本漂移（L411-L416），\n而比对脚本自己把 S 当 6 个参数切分（L408），这个差异没有先排除比对器误差；包围盒检查把每组首个相对指令当绝对坐标（summary.json 中 casino 记为 [-2,-2,21,19] 仍通过）。\nresource-mapping.md 最终写“icons bbox + Check 锚 + Google Fonts 交叉 PASS”（L459），没有逐个检查产物里有没有只移动的子路径。\n三层分开看：经验原文 lesson-74d535 v1 的做法第 1 步认可“Gradle 缓存中的 material-icons 包”为来源，但没写这个包里是编译后的 PathBuilder 调用、\n“取 pathData”实际是重建，重建要覆盖全部路径指令；可选检查只要求抽检一两个图标的变体特征，抽样恰好没碰到弧段。召回提示忠实，补的 bbox 区间自己标了“自拟启发式、未核实”。\nagent 执行层的偏差是：自己列过 arcTo 却没实现、未映射调用静默跳过、抽样没覆盖弧段就宣告通过。\n返修全量扫描 media/*.svg 中只移动不绘制的子路径，只有 casino 命中（repair L1897-L1903），在五处 `m-1.5,0` 后补回\n`a1.5,1.5 0 1,1 3,0 a1.5,1.5 0 1,1 -3,0`（repair L1915-L1916），真机截图对照后记 X7 检查点 b3ee2f4（repair L1944-L1947）。\n",
+  "recommendations": [
+    "资源迁移阶段自写转换器从 AAR 字节码重建 ImageVector 路径时，按 PathBuilder 的全部路径方法建映射，包括 arcTo/arcToRelative → A/a（参数依次为两个半径、旋转角、isMoreThanHalf、isPositiveArc 两个布尔按 0/1 写出、终点）；遇到没有映射的 PathBuilder 调用直接报错停止，不跳过。",
+    "宣告图标转换通过前，逐个产物做结构检查：每个子路径至少有一条绘制指令（没有只含 M/m 的子路径），每个图标解析到的 PathBuilder 调用数等于输出指令数；与官方 SVG 抽样比对时，样本要覆盖实际出现过的每类指令（含弧段），比对出的差异先排除比对器和转换器自身的问题，再记为版本漂移。",
+    "修订 lesson-74d535afb21b2270119e（版本 1，增量）：做法第 1 步在“Gradle 缓存中的 material-icons 包”处补充前提——这个包里图标是编译进 class 的 PathBuilder 调用（含 arcTo/arcToRelative），没有 pathData 字符串，从中取路径就是重建；重建要覆盖全部路径指令，遇到未映射的调用报错，写完逐个检查产物没有只移动不绘制的子路径。可选检查补一句：抽检一两个图标只能核变体特征，证明不了重建完整，抽样要选到含弧段的图标。",
+    "本应用 Icons.Outlined.Casino 的五个圆点圆心为 (7.5,16.5)(7.5,7.5)(12,12)(16.5,16.5)(16.5,7.5)，每个都是 moveToRelative(-1.5,0) 后接 arcToRelative(1.5,1.5,0,true,true,3,0) 与 arcToRelative(1.5,1.5,0,true,true,-3,0)，对应 SVG `m-1.5,0 a1.5,1.5 0 1,1 3,0 a1.5,1.5 0 1,1 -3,0`。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-gameoflife-k20c3/entry/src/main/resources/base/media/ic_outlined_casino.svg",
+        "since": "2026-10-21T06:46:35.836Z",
+        "at": "2026-10-21T16:29:04.600Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-gameoflife-k20c3/spec/baseline/plans/base-plan.md",
+          "at": "2026-10-20T15:31:34.102Z",
+          "reason": "正常输入：worker 按派工整文件读取，Base-0 note 第 15 行要求 icons-extended 矢量按源引用的变体与名称从可核来源（android.jar 或 Gradle 缓存包）提取同变体 pathData、登记来源，取不到写 MISSING；这要求产物几何与源一致（agent-af855a942b2e1b2c0.jsonl:L30-L31）。该 note 是规划 agent-a2a30ba96b2234451 在召回钩子转达 lesson-74d535 后写入的（该转录 L71、L73-L75）；同一条经验又经 af855 自己的召回钩子送达（L191）。注入经验无可索引的文件读取，故不单列节点，原文分析见 summary。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-gameoflife-k20c3/spec/baseline/feature-base.md",
+          "at": "2026-10-20T15:32:40.050Z",
+          "reason": "正常输入：跨栈映射基线第 127 行写 material-icons-extended 矢量“从库导出 SVG → $r('app.media.*')（外形保真，非 SymbolGlyph 近似）”（agent-af855a942b2e1b2c0.jsonl:L77-L78 grep、L80-L81 读取）。"
+        },
+        {
+          "key": "agent-af855a942b2e1b2c0.jsonl",
+          "at": "2026-10-20T16:10:53.292Z",
+          "reason": "收到上述要求，并在 L132/L135 自己列出 PathBuilder 的 arcTo 与 A 映射；L200 写出的 convert_resources.py 的 PB_CMDS 却不含 arcTo/arcToRelative，未映射的 PathBuilder 调用被静默跳过；L304-L305 首次、L372-L373 最后一次运行写出 ic_outlined_casino.svg，五个圆点只剩 m-1.5,0。校验只比对了 check/settings 等无弧图标，L459 在映射表宣告交叉比对 PASS。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target",
+          "force": true,
+          "reason": "L372 以 python -I 运行 L200 写出的 convert_resources.py，脚本图标循环按清单把 CasinoKt 的重建结果写到 entry/src/main/resources/base/media/ic_outlined_casino.svg；L373 回执 icons=29，即本次运行写出目标（文件 mtime 12:10 EDT 与 16:10:53Z 一致）。索引未解析脚本内部的写入，故补证。",
+          "evidence": [
+            {
+              "source": "generation/68203082-5513-4f64-b94d-5441fe323d90/subagents/agent-af855a942b2e1b2c0.jsonl",
+              "line": 372
+            },
+            {
+              "source": "generation/68203082-5513-4f64-b94d-5441fe323d90/subagents/agent-af855a942b2e1b2c0.jsonl",
+              "line": 373
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "Gradle 缓存不在本次可读范围，没有直接核对 CasinoKt.class 的原始调用序列；圆点的 arcToRelative 参数取自返修者按 Material 源补写的值，返修截图对照确认五点完整。",
+    "其余 28 个图标如果在子路径中间用过 arcTo，丢弧后不会留下只移动的子路径，返修的扫描查不出；本次没有逐个核对。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-c09ad7a54d229f947bf8",
+  "metadata": {
+    "migration": {
+      "id": "gameoflife-k20c3-68203082-5513-4f64-b94d-5441fe323d90",
+      "project": "GameOfLife"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.304",
+        "2.1.305",
+        "2.1.306"
+      ]
+    },
+    "source_set_id": "sources-1bba2f392f35420f049b",
+    "environment": [
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-gameoflife-k20c3",
+        "at": "2026-10-20T10:46:51.396Z",
+        "ref": "generation/68203082-5513-4f64-b94d-5441fe323d90/subagents/agent-a67bd634faae14552.jsonl:L36",
+        "request_ref": "generation/68203082-5513-4f64-b94d-5441fe323d90/subagents/agent-a67bd634faae14552.jsonl:L35",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-gameoflife-k20c3",
+        "at": "2026-10-20T14:57:28.580Z",
+        "ref": "generation/68203082-5513-4f64-b94d-5441fe323d90.jsonl:L1279",
+        "request_ref": "generation/68203082-5513-4f64-b94d-5441fe323d90.jsonl:L1273",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-gameoflife-k20c3",
+        "at": "2026-10-20T14:57:28.580Z",
+        "ref": "generation/68203082-5513-4f64-b94d-5441fe323d90.jsonl:L1279",
+        "request_ref": "generation/68203082-5513-4f64-b94d-5441fe323d90.jsonl:L1273",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-gameoflife-k20c3\\entry\\src\\main\\ets",
+        "at": "2026-10-21T11:51:33.057Z",
+        "ref": "repair/80e50793-e51a-435f-bd07-f5badd469938.jsonl:L1125",
+        "request_ref": "repair/80e50793-e51a-435f-bd07-f5badd469938.jsonl:L1124",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-gameoflife-k20c3\\entry\\src\\main\\ets",
+        "at": "2026-10-21T11:51:33.057Z",
+        "ref": "repair/80e50793-e51a-435f-bd07-f5badd469938.jsonl:L1125",
+        "request_ref": "repair/80e50793-e51a-435f-bd07-f5badd469938.jsonl:L1124",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "765d4bf2-ff04-47fe-b3b6-d5088a9aafeb"
+      ]
+    }
+  },
+  "revision": "a8d734336776915500b514465835732e9ca3d1333b41bf2e3f9e8854f311726e"
+}

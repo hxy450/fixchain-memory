@@ -6,7 +6,7 @@
 
 ## 子主题
 
-- [back-stack](back-stack/index.md) — 系统/页面返回（含 OnBackPressedDispatcher 后登记先问的回调分发到嵌入子页）、覆盖层关闭顺序、清栈重建与重复导航的净效果，底部 tab 的 popUpTo 返回语义与外部深链的清栈，唯一页面压在空 Navigation 首页上时根页的返回（按源端默认退到后台）；handleDeepLink 外部拉起时清栈并合成“起始页 + 目标页”
+- [back-stack](back-stack/index.md) — 系统/页面返回（含 OnBackPressedDispatcher 后登记先问的回调分发到嵌入子页）、覆盖层关闭顺序、清栈重建与重复导航的净效果，底部 tab 的 popUpTo 返回语义与外部深链的清栈，唯一页面压在空 Navigation 首页上时根页的返回（按源端默认退到后台）；handleDeepLink 外部拉起时清栈并合成“起始页 + 目标页”；NavHost 起点在会重组的壳层里重算时的换图清栈
 - [hosts](hosts/index.md) — Navigation/@Entry宿主与页面注册（含根 Navigation 默认标题栏与工具栏）、嵌入页取栈、单 Activity 壳内 loadChildFragment 子页的壳内回退栈与嵌入承载、半透明卡片式 Activity 的透明 DIALOG 路由、路由跳板和跨页面共享生命周期，外部入口（推送、快捷方式）宿主导航执行器的可用性守卫；NavHost 四向自定义转场到 customNavContentTransition 与页面绑定，导航目的地内 LocalLifecycleOwner 的 ON_STOP/ON_RESUME 接到 onHidden/onShown；Activity 切换转场（overridePendingTransition(0,0) 与未调用时的主题默认窗口动画）；单容器 Fragment 事务（replace+addToBackStack、popBackStack、finish）与 Activity/Fragment 生命周期回调到 NavPathStack、NavDestination 的映射
 - [parameters](parameters/index.md) — 跳转契约：点击接导航、路由名与参数、默认值/有效性、多个来源入口，以及跳转前共享状态的交接。；pushPathByName 参数与目标页 instanceof 判型的名义匹配，子页 pop(result) 与来源页 onPop 的回传配套
 
