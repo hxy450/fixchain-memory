@@ -1,6 +1,6 @@
 # ui/list
 
-列表与宫格：多类型 Adapter 页面的 item 布局与绑定分支（默认态、文案模板、附属子卡），分页加载的并发门闩与刷新互斥，下拉刷新 onRefreshing 在程序置 refreshing 时的触发，多列 Grid 中占位与跨列项的排布，列表项主副行与空值回退，多组列表的数据源绑定与级联选择，列表项滑动操作（swipeAction）的挂载位置，长按上下文菜单的契约，宿主改写共享行组件时的覆盖入参，LazyForEach 改 Repeat.virtualScroll 时的项高度与数据切换核对，按列表区分的排序器，侧栏分类与右侧分组列表的联动，条目点击回调与数据源本地变换（shuffled 等）随列表迁移，ExpandableListView 组头的默认交互与展开状态，异步分页列表新增批量修补时的代次保护与行内远端提交的在途锁；可换位列表的位置相关值（首尾、序号、移动可用态）按当前位置求值；LazyForEach 整批换数据或延迟填充时的稳定数据源、reload 通知与跨数据集唯一键
+列表与宫格：多类型 Adapter 页面的 item 布局与绑定分支（默认态、文案模板、附属子卡），分页加载的并发门闩与刷新互斥，下拉刷新 onRefreshing 在程序置 refreshing 时的触发，多列 Grid 中占位与跨列项的排布，列表项主副行与空值回退，多组列表的数据源绑定与级联选择，列表项滑动操作（swipeAction）的挂载位置，长按上下文菜单的契约，宿主改写共享行组件时的覆盖入参，LazyForEach 改 Repeat.virtualScroll 时的项高度与数据切换核对，按列表区分的排序器，侧栏分类与右侧分组列表的联动，条目点击回调与数据源本地变换（shuffled 等）随列表迁移，ExpandableListView 组头的默认交互与展开状态，异步分页列表新增批量修补时的代次保护与行内远端提交的在途锁；可换位列表的位置相关值（首尾、序号、移动可用态）按当前位置求值；LazyForEach 整批换数据或延迟填充时的稳定数据源、reload 通知与跨数据集唯一键；LazyColumn stickyHeader 到 ListItemGroup 吸顶头（吸顶内容留在 List 内）
 
 [上一级](../index.md)
 
@@ -10,6 +10,9 @@
   - 时机：界面实现及对齐修复阶段，把 ExpandableListView + BaseExpandableListAdapter 翻译为 ArkUI 列表，确定组头交互与展开状态时
   - 情境：源 Activity 只调用 expandGroup(n) 设定初始展开，没有 setOnGroupClickListener（或监听返回 false）；getGroupView 按 isExpanded 切换上下箭头等资源；目标用 List/ForEach 渲染分组。
   - 例外：源端注册了 OnGroupClickListener 并返回 true 拦截默认行为，此时按监听体实现
+- [LazyColumn stickyHeader 落成 List 内 ListItemGroup 头 + sticky(StickyStyle.Header)，不移到 List 外固定](lesson-43668515b938fc1c06f7.lesson.md)
+  - 时机：界面实现阶段，把 Compose LazyColumn 的 stickyHeader（含按开关在吸顶与普通项之间切换）落成 ArkUI 列表结构时；规格提取阶段为吸顶列写备选实现时
+  - 情境：源端 LazyColumn 内用 stickyHeader 放吸顶内容（可由开关在 stickyHeader 与 item 间切换），其余项随列表滚动；吸顶内容可能可点击，页面还可能按“内容是否超出视口”决定折叠顶栏。
 - [LazyForEach 整批替换或延迟填充数据时保持同一数据源实例并发 onDataReloaded 等通知，不重新赋值数据源对象](lesson-92ced15126309dd90a1a.lesson.md)
   - 时机：界面实现、返修或重写阶段，为 LazyForEach 列表实现源端 setAdapter、notifyDataSetChanged 一类整批换数据、排序或延迟填充时
   - 情境：目标列表用 LazyForEach 绑定实现 IDataSource 的数据源对象，并把该对象存在组件状态里；源端在排序、筛选、切换适配器或延迟加载后整批替换数据，写者准备用“this.数据源 = 新数据源”换数据。

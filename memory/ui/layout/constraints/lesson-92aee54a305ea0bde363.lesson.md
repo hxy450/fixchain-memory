@@ -1,6 +1,6 @@
 # Stack 中内容尺寸的子项按 alignContent 定位：子项自身的 .align() 不改变它在父容器中的位置，需要的对齐用满尺寸容器或显式 position
 
-ID：`lesson-92aee54a305ea0bde363` · 版本：7
+ID：`lesson-92aee54a305ea0bde363` · 版本：8
 
 [本主题](index.md)
 
@@ -31,10 +31,12 @@ Stack 按 alignContent 放置未撑满的子节点；Text 的 .align() 只对齐
 - 沿用了映射参考或先例中的定位写法时，检索 .align(Alignment.，逐个确认它要的是内容对齐还是在父容器中的位置
 - 标题栏同时打开返回与右侧入口并用较长标题预览，确认三者不重叠、标题在两侧槽位之间居中
 
-来源支持：9 张卡 · 6 次迁移 · 5 个应用
+来源支持：10 张卡 · 7 次迁移 · 6 个应用
 
 ## 来源（按需复核）
 
+- [case-17a1b7a8f9035398523a](../../../../store/cases/case-17a1b7a8f9035398523a/38ce90e0b87cb087dc752ad6a5c0231c518e191ade8839d2e06e1fe31af45d7f.json) · 结论：recommendation:2, recommendation:6
+  卡片版本：`38ce90e0b87cb087dc752ad6a5c0231c518e191ade8839d2e06e1fe31af45d7f`
 - [case-4f627840679361f165a3](../../../../store/cases/case-4f627840679361f165a3/8b0f7cc40d821777a77dc3bf68c6739f335039023414e9bcb04404d5b4ac02e8.json) · 结论：recommendation:2
   卡片版本：`8b0f7cc40d821777a77dc3bf68c6739f335039023414e9bcb04404d5b4ac02e8`
 - [case-5e35bb283520acf3bd35](../../../../store/cases/case-5e35bb283520acf3bd35/954c420a6eb53234d9a40e9851863e13e6a2b9e3e2195abc6f71fcfe048dcf4f.json) · 结论：recommendation:3

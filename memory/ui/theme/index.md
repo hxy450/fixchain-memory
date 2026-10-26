@@ -1,6 +1,6 @@
 # ui/theme
 
-主题、语义色、排版样式、控件默认样式与 style 继承属性（圆角、高度、渐变、字号）的迁移：宿主、foundation 组件、依赖库与 Android 框架主题（Theme.Holo 等，值取本机 SDK 平台资源）隐式提供的外观，ArkUI 组件自带默认外观的显式覆盖，Material 库组件与框架主题组件（如 PreferenceActivity 偏好列表）的默认几何与内部留白，深浅主题状态的可观察与渲染期取色、应用内切换时命令式取色与系统栏的重解析，?attr 主题属性色按各主题导出颜色键、深色资源键的同步追加，字体文件的注册与按控件应用（多字重、三方 typeface 属性），被引用 drawable 的取值，同时设圆角与描边时 border() 对圆角的覆盖，Compose Brush 渐变背景，视觉属性逐项取自源布局与适配器，颜色约束的写法，以及按色值与字号选择资源键，DayNight 框架默认色按深浅两态成对建 token
+主题、语义色、排版样式、控件默认样式与 style 继承属性（圆角、高度、渐变、字号）的迁移：宿主、foundation 组件、依赖库与 Android 框架主题（Theme.Holo 等，值取本机 SDK 平台资源）隐式提供的外观，ArkUI 组件自带默认外观的显式覆盖，Material 库组件与框架主题组件（如 PreferenceActivity 偏好列表）的默认几何与内部留白，深浅主题状态的可观察与渲染期取色、应用内切换时命令式取色与系统栏的重解析，?attr 主题属性色按各主题导出颜色键、深色资源键的同步追加，字体文件的注册与按控件应用（多字重、三方 typeface 属性），被引用 drawable 的取值，同时设圆角与描边时 border() 对圆角的覆盖，Compose Brush 渐变背景，视觉属性逐项取自源布局与适配器，颜色约束的写法，以及按色值与字号选择资源键，DayNight 框架默认色按深浅两态成对建 token；#AARRGGBB/ARGB 颜色按四通道插值与混合
 
 [上一级](../index.md)
 
@@ -11,7 +11,8 @@
   - 情境：源组件用主题中的渐变列表（如 JetsnackTheme.colors.interactivePrimary、gradient2_2）经 Brush 着色，常配 Surface(color = Transparent)；目标要求颜色走 color.json 资源引用，而 color.json 只收录了调色板的部分色阶。
 - [“页面零硬编码色值”只禁止字面色值，不禁止用 $r 引用语义色](lesson-2e4279c4b82f06af64fd.lesson.md)
   - 时机：规格提取阶段书写颜色约束，或页面实现阶段解读规格里的颜色约束时
-  - 情境：规格或功能说明写有“页面代码零硬编码色值”“深浅色由资源限定词目录负责”等全局约束，而具体控件仍需要与源端一致的颜色。
+  - 情境：规格或功能说明写有“页面代码零硬编码色值”“深浅色由资源限定词目录负责”等全局约束，而具体控件仍需要与源端一致的颜色。 也包括源端由应用内设置选择深浅档与多套调色板（如 MaterialTheme(colorScheme = palette.light/dark)），而迁移出的 color.json 只有一套 base/dark 资源色。
+  - 例外：源端在应用内切换深浅档（覆盖系统）或在多套调色板间切换：主题色由可观察主题对象的色板令牌提供，$r 只留给与调色板无关的颜色（遮罩、启动窗等）
 - [主题提供的颜色按各主题与深浅两态取值导出成对 base/dark 键：先把引用分成 ?attr 主题属性与 @color 写死两类，values-night 同名 style 未写的主题属性回落框架深色默认；取 Android 框架实际值，不以目标平台 sys token 代替](lesson-1856958fc6d369f0e2bb.lesson.md)
   - 时机：资源前置、规格提取或界面实现阶段，为引用 ?attr 的图标 fillColor、工具栏主题色、自绘组件前景色或文字色新建或选择颜色 token 时；把 AppCompat DayNight 应用（含日间覆写主题色、values-night 重新定义同名 AppTheme 的情况）映射为 base/dark 颜色资源与页面配色时
   - 情境：源图标与控件颜色来自主题属性（应用自定义的图标色属性、colorControlNormal=colorOnSurface、colorOnSecondary 等），各主题取值不同；目标 SVG 只保留浅色值，color.json 可能缺对应键。也包括 AppTheme 只继承 Theme.AppCompat.DayNight、没有 values-night、没有 colorPrimary/colorAccent 覆写：窗口、对话框、ActionBar、状态栏、按钮、主次文字、提示、禁用、强调色与分隔线都来自框架默认并随深浅色变化。也包括日间 AppTheme 覆写了 colorPrimary/colorPrimaryDark/colorAccent，values-night 重新定义同名 AppTheme 却没写这些项：夜间回落 AppCompat 深色默认（#212121/#000000/#80CBC4），布局中 ?attr/colorPrimary 处随之变色，@color/colorPrimary 写死处保持不变。规格可能把业务调色板镜像到 dark 当作深色适配，各页转换器各自补键、按某一模式写死 white，或改用目标平台 sys.color 语义色。
@@ -24,6 +25,9 @@
 - [字体文件逐个 registerFont（多字重按“族-字重”命名），排版样式与对应 Text 引用注册名；不以 fontWeight 合成粗体代替字体文件](lesson-046baeb5ffbb10a6abc5.lesson.md)
   - 时机：主题令牌与界面实现阶段，把 Compose FontFamily(Font(R.font.x, weight), ...) 或 View 布局里按控件指定的字体文件（三方 TextView 的 typeface 属性、android:fontFamily）迁到 ArkUI，或确定全局字体注册由谁调用时
   - 情境：源字族为同一族声明多个字重文件，资源阶段已把字体文件放进 rawfile；目标要先 registerFont 才能用 fontFamily 引用；主题令牌、公共组件、页面与入口由不同任务分批生成。 也包括 View 布局用三方库属性（如 pixlui:typeface）或 android:fontFamily 给不同 TextView 指定不同字体文件，映射基线只写“→ fontFamily，字体入 rawfile/fonts”。
+- [对 #AARRGGBB 颜色串或 32 位 ARGB 数值做插值、混合时按 A/R/G/B 四通道拆分，不按 #RRGGBB 偏移取子串](lesson-ef7fcc34271eba6de4dc.lesson.md)
+  - 时机：界面实现阶段，对主题色等颜色值做插值、混合或其他按通道运算（折叠顶栏背景、状态色过渡、按压态混色）时
+  - 情境：目标代码先把颜色取成 '#AARRGGBB' 字符串（如 resourceManager.getColorSync 结果转成的 8 位串、8 位 color.json 值）或 32 位 ARGB 数值，再按比例在两个颜色之间插值或混合。
 - [布局引用的 @drawable（progressDrawable、背景 shape、标签背景、光标 shape）先打开取数值：高度、圆角、轨道色、渐变、描边与光标宽色写进规格与实现](lesson-771d1ba1a032b769097a.lesson.md)
   - 时机：规格提取与界面实现阶段，为进度条、搜索框、分组标签等引用 drawable 的控件确定高度、圆角、颜色与描边时
   - 情境：源布局以 progressDrawable=@drawable/xxx、background=@drawable/bg_xxx 引用 layer-list/shape 资源，尺寸、圆角、轨道色、渐变和描边写在被引用文件里；目标工程可能已有名称相近、含义不同的颜色资源。也包括 EditText 用 textCursorDrawable 引用 shape 定义光标宽度与颜色，且只设在部分字段上。
@@ -42,7 +46,7 @@
   - 情境：源端颜色以 shapeSolidColor、background、textColor 等硬编码色值或色值资源给出；目标工程已有多组语义名相近但色值不同的颜色资源（如脚手架留下的 color_accent 与迁移出的 brand_accent）。也包括 Compose 源端以主题语义色（如 colors.textPrimary）或排版样式（如 MaterialTheme.typography.titleMedium）取值，而目标 color.json/float.json 只有部分令牌：有名称相近或其他页面前缀的键（text_secondary、feed_font_title），缺同值键，流程要求缺令牌时报告 design_tokens_missing。也包括用 text_size_large、text_size_small 一类名称暗示大小的命名资源承载源端数值（如 16sp 标题、12sp 信息条），或同一组件中语义不同的颜色（进度轨道与选中行底色）准备共用一个已有 token。也包括 Java 以 Color.GREEN、Color.RED 等框架颜色常量着色，规格映射成名称相近、色值不同的应用色（如 light_green #FF66FF66）。
 - [深浅主题状态放在可观察对象里并由入口同步，组件在渲染期读取主题色](lesson-7b19b801e0f21481d1d6.lesson.md)
   - 时机：主题层实现深浅色切换，以及组件、页面读取主题色（含对主题色做插值等数值运算）时
-  - 情境：源端 Theme(darkTheme = isSystemInDarkTheme()) 经 CompositionLocal 下发两套颜色，组件在组合期读取；目标用模块级主题函数与 $r 颜色资源实现，由入口读取系统 colorMode。也包括源端对 MaterialTheme.colorScheme 的颜色做数值插值（如按折叠比例 lerp 顶栏容器色），而 $r 资源不能直接参与运算。
+  - 情境：源端 Theme(darkTheme = isSystemInDarkTheme()) 经 CompositionLocal 下发两套颜色，组件在组合期读取；目标用模块级主题函数与 $r 颜色资源实现，由入口读取系统 colorMode。也包括源端对 MaterialTheme.colorScheme 的颜色做数值插值（如按折叠比例 lerp 顶栏容器色），而 $r 资源不能直接参与运算。 也包括深浅档或调色板由应用内设置决定（覆盖系统、多套调色板），页面准备在 build() 里直接写 $r 资源色。
 - [源端一个背景选择对象同时表达图片、单色与渐变时，逐分支迁移到目标渲染绑定：url 非空用图片，否则按颜色数与方向生成纯色或渐变](lesson-2dc88a09f6cfbbe3393c.lesson.md)
   - 时机：渲染实现阶段，把编辑器的背景选择对象绑定到预览或组件的背景渲染节点时
   - 情境：源端一个选择对象同时承载 url、colors、orientation，渲染方法按 url 非空→图片、colors 长度 1→纯色、长度 2→按方向渐变分支；目标在模型层把选择对象映射到运行时渲染属性，外观配置模块已能保存与恢复 colors 和 orientation。

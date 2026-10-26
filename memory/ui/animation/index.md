@@ -1,6 +1,6 @@
 # ui/animation
 
-动画：Compose 显隐、内容切换、容器尺寸与列表条目动画到 ArkUI animateTo、TransitionEffect 的落实，帧时钟动画改自驱帧循环时的进度计算、刷新节奏与前后台追平；View 体系 fade、startAnimation、动画辅助类与 Fragment setCustomAnimations 的显隐与切换过渡（含动画结束才切显隐的顺序）；动画矢量形变见 graphics，Activity 与 NavHost 页面转场见 navigation/hosts
+动画：Compose 显隐、内容切换、容器尺寸与列表条目动画到 ArkUI animateTo、TransitionEffect 的落实，帧时钟动画改自驱帧循环时的进度计算、刷新节奏与前后台追平；View 体系 fade、startAnimation、动画辅助类与 Fragment setCustomAnimations 的显隐与切换过渡（含动画结束才切显隐的顺序）；动画矢量形变见 graphics，Activity 与 NavHost 页面转场见 navigation/hosts；Compose 两层共享元素转场（sharedBounds 包 sharedElement）到 geometryTransition 的配对与挂载节点，条件显隐块转常驻折叠容器时的节点归属
 
 [上一级](../index.md)
 
@@ -14,6 +14,12 @@
   - 时机：实现与接线阶段，为源端用 View 动画完成的行显隐、列表项进入详情、Fragment 切换等状态变化选择 ArkUI 过渡时；规格提取阶段为导航与显隐验收项登记转场契约时
   - 情境：源端在置 VISIBLE/GONE 或 replace Fragment 前后调用自有动画辅助类（淡入淡出、缩放进入详情）、View.startAnimation 或 FragmentTransaction.setCustomAnimations，动画取 res/anim 资源、config_mediumAnimTime 等平台时长或代码常量，常在动画结束回调里才切 visibility；目标用 if 条件渲染与 Navigation/NavDestination，未写 transition、animateTo 或 customTransition。
   - 例外：决策记录以编号批准省略该动画并写明差异验收
+- [两层共享转场（sharedBounds 包 sharedElement）每端只在外层挂一个 geometryTransition，不嵌套两对](lesson-3cd65cd70fb4a5ccc3d5.lesson.md)
+  - 时机：界面实现阶段，把 Compose 共享元素转场落为 ArkUI geometryTransition、确定每端挂几个配对键和挂在哪个节点时；规格提取阶段写共享转场契约时
+  - 情境：源端在 SharedTransitionLayout 内用 sharedBounds(键 A) 包住带 sharedElement(键 B) 的内容，两层键不同，列表卡与同页详情浮层两端各有这两层；目标用同页条件浮层加 geometryTransition 做展开与收起。
 - [帧时钟动画（Animatable、ValueAnimator）改自驱 ticker 时，时间分数取“当前帧时间 − 起始时间”再套源端插值：后台停帧、回前台按真实流逝追平，不钳制单次增量](lesson-6d6ba721c81206d45fbe.lesson.md)
   - 时机：计时或动画引擎的规格与实现阶段，把 Animatable.animateTo(tween)、ValueAnimator/ObjectAnimator 等由帧时钟驱动的进度改写为 setInterval、displaySync、postFrameCallback 等自驱 ticker，确定进度曲线、刷新周期与退后台、回前台的时间推进时
   - 情境：源端进度由 Compose Animatable.animateTo(tween(duration, easing)) 一类帧时钟动画驱动，或由 Android ValueAnimator/ObjectAnimator 逐帧写入绘制用的进度字段；插值曲线可能显式设置，也可能取框架默认。帧时钟随宿主 ON_STOP 暂停；目标没有可直接复用的同语义帧时钟，自写 ticker 复刻进度推进与前后台切换。同一应用可能另有后台 Worker 以固定周期（如 tickerFlow + elapsedRealtime）推进，其周期与补偿方式不属于前台动画。
+- [源端条件显隐块（AnimatedVisibility、if）只包住部分兄弟时，常驻折叠容器只放块内节点，块外兄弟写在容器外常驻](lesson-cc28dab2f204c115cfe7.lesson.md)
+  - 时机：界面实现阶段，把源端 AnimatedVisibility 或条件块转写为常驻折叠容器（显式宽/高在 0 与内容尺寸间切换并 clip，或 if 分支），决定哪些兄弟节点放进容器时
+  - 情境：源端同一行或同一列里既有常驻节点，又有只包住其中一部分兄弟的 AnimatedVisibility(visible) 或 if 块；目标用常驻容器配显式宽/高与 clip(true) 实现显隐，展开尺寸按容器内节点手算成常量。

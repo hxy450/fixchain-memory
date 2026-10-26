@@ -22,7 +22,7 @@ Navigation/@Entry宿主与页面注册（含根 Navigation 默认标题栏与工
   - 情境：Android Activity 在 onCreate/initView 开头按条件 startActivity 到另一页并立即 finish()（如登录入口按配置转到短信登录或一键登录），它的布局文件仍含可渲染的按钮；多个调用方以 Intent 指向这个跳板 Activity。
 - [入口页 Navigation 宿主：NavDestination 首屏只在 navDestination 映射中注册并在空栈时压入同一栈，不作根内容；隐藏 navBar 时初始栈必须非空；.navDestination 直接传 @Builder](lesson-8953e390416a80d7dd8c.lesson.md)
   - 时机：入口页实现或收尾接线阶段，创建 Navigation 宿主、决定首屏放在根内容还是压栈、编写 navDestination 分发时；为根 Navigation 决定是否设 hideNavBar 时
-  - 情境：目标入口页用 Navigation + @Provider NavPathStack 承载路由；首屏（启动页等）写成返回 NavDestination 的组件，在 onReady 取栈并按启动决策 pushPathByName 下一页；目的地由 @Builder 映射分发。也包括启动页以 NavDestination 为根、已在 pageMap 注册，入口却把它放进 Navigation 内容槽并加 hideNavBar(true)，初始栈为空；或首屏页依赖 onShown、onResult、onBackPressed（如接收文件选择结果），却作为 Navigation 首页内容承载。
+  - 情境：目标入口页用 Navigation + @Provider NavPathStack 承载路由；首屏（启动页等）写成返回 NavDestination 的组件，在 onReady 取栈并按启动决策 pushPathByName 下一页；目的地由 @Builder 映射分发。也包括启动页以 NavDestination 为根、已在 pageMap 注册，入口却把它放进 Navigation 内容槽并加 hideNavBar(true)，初始栈为空；或首屏页依赖 onShown、onResult、onBackPressed（如接收文件选择结果），却作为 Navigation 首页内容承载。 也包括源端 NavHost 的 startDestination 是壳层重组时重新求值的表达式，读到的标记（完成引导、登录）在同一会话内会变。
   - 例外：首屏是普通组件（不返回 NavDestination）、作为 Navigation 根内容常驻，且不依赖 NavDestinationContext 取栈
 - [半透明卡片式 Activity 迁移为透明 DIALOG 路由，遮罩只作页内一层](lesson-22c2a8f0e6b782b95448.lesson.md)
   - 时机：界面实现与规格提取阶段，迁移 windowIsTranslucent 主题的卡片式 Activity 及其内嵌子页时

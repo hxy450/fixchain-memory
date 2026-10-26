@@ -1,6 +1,6 @@
 # 源端 clickable 吞触摸或组件实例带通用属性时显式写 hitTestBehavior：空 onClick 不阻断，实例外有缺省命中的包装节点
 
-ID：`lesson-6aeb4924b6d6ee3d15f6` · 版本：1
+ID：`lesson-6aeb4924b6d6ee3d15f6` · 版本：2
 
 [本主题](index.md)
 
@@ -26,9 +26,11 @@ ArkUI 是否拦截由命中测试决定，与有没有 onClick 无关：空 onCl
 
 - 对每个叠放层实际点按：点目标节点时其下层的按下与点击回调不触发，点空白区时下层仍可达。
 
-来源支持：1 张卡 · 迁移数未记录 · 应用数未记录
+来源支持：2 张卡 · 已知 1 次迁移（部分未记录） · 已知 1 个应用（部分未记录）
 
 ## 来源（按需复核）
 
+- [case-2f1588d16e333f764904](../../../store/cases/case-2f1588d16e333f764904/41137c9c24a737ad0b84d76a9778aff790e746f40c6871c34300524f64e73aa1.json) · 结论：recommendation:3, recommendation:4
+  卡片版本：`41137c9c24a737ad0b84d76a9778aff790e746f40c6871c34300524f64e73aa1`
 - [case-d38fbc2e9b64b7c3338b](../../../store/cases/case-d38fbc2e9b64b7c3338b/0c81ee0d0f88b740ca143860bd386d61a44268d1703fbe3e4e239c5375013a71.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3, recommendation:5
   卡片版本：`0c81ee0d0f88b740ca143860bd386d61a44268d1703fbe3e4e239c5375013a71`

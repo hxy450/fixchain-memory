@@ -1,6 +1,6 @@
 # 由内容定尺寸的父级（列表行、wrap_content 头部、FIT_CONTENT 半模态）里不写 width/height('100%')：描边背景画在节点自身，行内撑满用 Stretch；源端描边不改尺寸时注意 .border() 计入测量（定尺寸遮罩中的居中弹卡不在此列，宽度按源窗口规则）
 
-ID：`lesson-a58ebfe7a4c55b041b14` · 版本：8
+ID：`lesson-a58ebfe7a4c55b041b14` · 版本：9
 
 [本主题](index.md)
 
@@ -29,7 +29,7 @@ ArkUI 的百分比尺寸在由内容定尺寸的父级里会向上取到最近�
 4. 行或卡片的铺满背景改用 .background(builder) 画在容器自身，或用列表项自带的滑动操作（ListItem.swipeAction）。
 5. 源端描边只绘制、不改尺寸时，先写明目标盒尺寸由谁决定：能拿到调用方尺寸就把宽高提升到带描边的节点上；尺寸只能由内容决定时，改用按 onSizeChange 回读的数值宽高叠一层 position({ x: 0, y: 0 }) + hitTestBehavior(HitTestMode.None) 的描边层（首帧会缺描边），规格验收写明“描边不改变盒尺寸”。
 6. 行内交叉轴撑满（如行首竖条、拖拽柄随行高）用 alignSelf(ItemAlign.Stretch) 或明确尺寸；头部背景或遮罩层按源可见区域给显式高度（如工具栏高加头部块），或把背景画在容器自身。源 LinearLayout（含 wrap_content 的 PopupWindow 内容）在某轴为 wrap_content 时，该轴尺寸只由非 match_parent 子项决定（竖向 LinearLayout 取这些子项的最大宽加各自 margin，再加父 padding），match_parent 子项随后按该尺寸以 EXACTLY 重测；需要算出数值（弹层宽、自绘子项的测量宽）时按这个顺序，不让 match_parent 子项的偏好尺寸参与父级定宽，自定义 View 的偏好长度只在 AT_MOST/UNSPECIFIED 下生效。
-7. 半模态内容根的 Scroll/Column 不写 height('100%')，由弹层上限约束后滚动。
+7. 半模态内容根的 Scroll/Column 不写 height('100%')，由弹层上限约束后滚动；不写 100% 只解决高度，Scroll 还要设非 None 的 edgeEffect 才能在 FIT_CONTENT 弹层里拖动（见 lesson-df1f691759f84ba9e688 做法 3）。
 8. 被嵌子组件按源布局根节点与各状态容器的 layout_height 映射：wrap_content 不写 height('100%')，空态居中用内容高度或 constraintSize 最小高度；宿主向无高度槽位嵌入组件前，读被嵌组件 build() 根与各状态分支的高度修饰，有百分比高度就先改组件或在槽位按源端尺寸给显式高度，再核对首屏后续区块仍可见。
 
 ## 可选检查
@@ -37,10 +37,12 @@ ArkUI 的百分比尺寸在由内容定尺寸的父级里会向上取到最近�
 - 源端描边不改尺寸而有疑问时，用 dumpLayout 核对带描边容器的 bounds 与内容子项一致。
 - 行或头部出现整屏高、或弹层被撑到上限时，检索该子树中的 '100%' 高度并确认其父级是否定高
 
-来源支持：11 张卡 · 已知 7 次迁移（部分未记录） · 已知 6 个应用（部分未记录）
+来源支持：13 张卡 · 已知 8 次迁移（部分未记录） · 已知 7 个应用（部分未记录）
 
 ## 来源（按需复核）
 
+- [case-17a1b7a8f9035398523a](../../../../store/cases/case-17a1b7a8f9035398523a/38ce90e0b87cb087dc752ad6a5c0231c518e191ade8839d2e06e1fe31af45d7f.json) · 结论：diagnosis, recommendation:1, recommendation:4, recommendation:5
+  卡片版本：`38ce90e0b87cb087dc752ad6a5c0231c518e191ade8839d2e06e1fe31af45d7f`
 - [case-1ff61bb8eea97c7cac7f](../../../../store/cases/case-1ff61bb8eea97c7cac7f/cc69235df441f52f2023b37f688670cb3c8ffddec1751b9653b3aefd35c321f7.json) · 结论：recommendation:2
   卡片版本：`cc69235df441f52f2023b37f688670cb3c8ffddec1751b9653b3aefd35c321f7`
 - [case-2018daf21990f553ec22](../../../../store/cases/case-2018daf21990f553ec22/28ef980edd82e29589d8923bf1fff263161ff6975ab9fe8a33e7149e781419c0.json) · 结论：diagnosis, recommendation:2
@@ -59,6 +61,8 @@ ArkUI 的百分比尺寸在由内容定尺寸的父级里会向上取到最近�
   卡片版本：`d6a6fd477dc2843095f41c2605944d99e05dcc8babde979368d788f5c16dad20`
 - [case-9058ac868b6feb3a04e0](../../../../store/cases/case-9058ac868b6feb3a04e0/d8e013afe2706da7f1b19c1a0d603c05f971b4ebc0c4542f6fb5e8a956b3ebc4.json) · 结论：recommendation:2
   卡片版本：`d8e013afe2706da7f1b19c1a0d603c05f971b4ebc0c4542f6fb5e8a956b3ebc4`
+- [case-cdc263993782c99990b7](../../../../store/cases/case-cdc263993782c99990b7/65fe34b35c12ba1fb3fa8932c505408e3d127754cf0883d637a7da9585330199.json) · 结论：recommendation:2
+  卡片版本：`65fe34b35c12ba1fb3fa8932c505408e3d127754cf0883d637a7da9585330199`
 - [case-dadda7b6820516f5f415](../../../../store/cases/case-dadda7b6820516f5f415/550a74cac527a7a37d9d1cb7aae1e487f44b8b49eb75ea53d1918d9a05d3ca0b.json) · 结论：recommendation:6
   卡片版本：`550a74cac527a7a37d9d1cb7aae1e487f44b8b49eb75ea53d1918d9a05d3ca0b`
 - [case-fc6df865cb042aec7af1](../../../../store/cases/case-fc6df865cb042aec7af1/725333df04b7bf7ef507cb28acc9e956d4e070ff49905447493a6f27eec530f2.json) · 结论：diagnosis, recommendation:2

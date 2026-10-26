@@ -1,0 +1,191 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-31dcdb74eb848ff217c8",
+  "created_at": "2026-10-23T10:01:48.465542+00:00",
+  "migration_key": "gameoflife-k20c3-68203082-5513-4f64-b94d-5441fe323d90",
+  "title": "逐代模拟直接在 @Trace 代理数组上计算，并把只在状态变化时触发的 @Monitor 换成每代都调的页面回调",
+  "when": "功能实现与编译修复阶段：为 ArkUI V2 ViewModel 编写定时器驱动、在 UI 线程同步运行的逐代计算并读取 @Trace 网格数组时；以及因 @Monitor 未绑定而改由生产方显式回调驱动页面视觉态时",
+  "description": "源端在 delay 循环里对普通 List 网格逐格计算（同步约 1ms，周期≈设定间隔），界面色、标题与彩带由 animateColorAsState / AnimatedContent / LaunchedEffect(key) 按目标值变化触发；目标把网格放在 @ObservedV2 模型的 @Trace 二维数组上，在 setTimeout 回调中同步计算并提交，页面视觉态原由 @Monitor 监听运行态与结果两个字段。",
+  "summary": "本问题有两处成因相同的累加：每代 setTimeout 回调里的同步耗时直接加到世代间隔上（源端周期 = delay + 约 1ms 计算），\n返修打点测得每代同步 30–85ms，其中逐格计算 15–24ms、页面回调 10–19ms，100ms 间隔实测 6.6 代/秒（安卓 9.9）\n（repair/80e50793…jsonl:L3129-L3130、L3142-L3143、L3178-L3179）。\n\n一、ViewModel 逐格计算读代理数组。Slice 1 worker（aabc1e5）写前读到 F001 规格：@Trace 八字段含 currentStep、\ntick 用 UI 线程 setTimeout 按源端固定周期迁移（F001-game-simulation.md:96、:113，agent-aabc1e5bb04a2ab2a.jsonl:L45-L46），\n以及源 GameScreenViewModel.kt:67-120 在 delay 后对 states.value.currentStep 这一普通 List 计算再整体 copy（同转录 L94-L95）。\n这些输入正确，但都没提 V2 对 @Trace 数组（含嵌套行）的代理读取开销；worker 也只按 @Monitor 关键词读了\narkts-state-manager 的 v2-decorators.md:348-407（L252-L253），该 skill 只把 ArrayProxy 讲成刷新机制，工程 skill 中没有 UIUtils.getTarget。\n01:16:39 的 Write（L296-L297）在 runOneTick 里把 this.currentStep 直接传给 makeOneStepGameOfLife、countRevives、countDeaths、freeSouls，\ncheckIsGameFinishedResult 也逐格读 this.currentStep，17×17×9 次邻居读取全部经过代理。偏差位于实现者对目标框架运行时开销的知识缺口，\n输入只是没有覆盖，并无错误。该片段保留到返修；修复在 tick 开头用 UIUtils.getTarget(this.currentStep) 取原始数组，\n计算、结束判定、计数与 freeSouls 都改用它，checkIsGameFinishedResult 增加 previousStep 参数，提交仍赋值 @Trace 字段，\n计算段降到 2–5ms（repair L3205-L3206、L3268-L3269）。\n\n二、页面视觉态回调失去变化门控。UI 转换者原把 onSimulationStateChange（animateTo 重设容器色并两次 getColorSync 取色、\ngetStringSync 取标题、计算彩带）挂在 @Monitor('isSimulationRunning','gameResult') 上，只在两字段变化时执行，\n与源 GameScreen.kt:102 LaunchedEffect(gameResult)、:164/:175 animateColorAsState(targetValue)、:217 AnimatedContent(targetState) 一致；\naabc1e5 读过 GameScreen.kt（L106-L107），并在 L383 把它改成嵌套路径 @Monitor('viewModel.isSimulationRunning','viewModel.gameResult')。\nG1 编译门（hmos-builder a9a25996，agent-a9a25996b022fbf3f.jsonl:L88、L193）报 GamePage.ets:1217 两条\n「needs to monitor the state variables that exist」WARN，说明监听未绑定。替代方案来自 aabc1e5 自己在 L560 的 handback：\n在 runOneTick 提交/判出、turnOn/turnOff、regenerateGame、onElementClick、setFull×3、setRules 尾部都调回调，删 @Monitor 行，方法体原样复用；\n主会话在 L4539 认为它“语义等价”，并于 L4541 原样转成指令。aabc1e5 在 L564 的思考里已经写明：提交路径不改变运行态与结果，\n加通知会改变原 @Monitor 设计的触发语义，每代都会重放 animateTo；但它判断“协调者是有意列出的”，仍照单执行：\nVM 在提交尾部加 notifyVisualState（L573），页面注册回调（L600）并删除 @Monitor（L602），onSimulationStateChange 未加任何变化判断。\n所以这次替换不是 FV-2，而是 G1 编译门之后的补丁；偏差出在补丁作者把变化触发改成了无条件触发。片段保留到返修，\n修复新增 lastVisualState，回调开头比较“运行中×结果”，未变化就直接返回（repair L3238-L3253），回调耗时降到 0。\n两处合改后每代同步 5–12ms，100ms 间隔复测 8.9 代/秒（repair L3259、L3294），F11 检查点 29b9537（L3371-L3373）。\n\n写前召回提示（agent-aabc1e5bb04a2ab2a.jsonl:L271，19 条）没有一条涉及 @Trace 代理读取开销，也没有涉及用回调替换 @Monitor 时的变化门控；它们与本偏差无关。\n",
+  "recommendations": [
+    "实现阶段：在定时器或帧回调里同步执行的逐格、逐元素计算，不直接遍历 @Trace、@Local 等 V2 可观察数组（嵌套数组的每一行也是代理）。循环开头用 UIUtils.getTarget(this.字段) 取原始数组，计算、比较、计数都用它，提交时仍整体赋值给可观察字段来触发刷新。",
+    "实现或自检阶段：源端周期是“等待 + 同步计算”时，迁移后用 Date.now 或 hilog 打点实测单次 tick 的同步耗时，确认它相对最短间隔档可以忽略；本例要在 100ms 档对比代/秒，同步工作应远小于 20ms。",
+    "编译修复阶段：把 @Monitor 改成生产方显式回调时，保留“被监听字段变化才执行”的语义：回调入口记录并比较这些字段的上次值，未变化就直接返回；或只在真正改写这些字段的路径调用。含 animateTo、资源查询的处理函数不挂在每次状态提交（每代 tick）上。",
+    "派工或执行替代方案时：逐个核对新触发点是否会改变原监听的字段，多出来的触发点（如 runOneTick 提交）要加变化判断，或在 handback 里明确提出，不以“清单是协调者有意给的”照做。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-gameoflife-k20c3/entry/src/main/ets/viewmodels/GameScreenViewModel.ets",
+        "since": "2026-10-21T06:46:35.836Z",
+        "at": "2026-10-21T16:29:04.600Z"
+      },
+      "summary": "本图只归因逐格计算读 @Trace 代理数组这一片段：Slice 1 worker 读到正确的规格与源码，但输入没有覆盖 V2 代理读取开销；\nworker 的 Write 让每代计算全部读 this.currentStep。返修以 UIUtils.getTarget 取原始数组修复。\n",
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-gameoflife-k20c3/spec/baseline/features/F001-game-simulation.md",
+          "at": "2026-10-20T19:13:20.391Z",
+          "reason": "正常输入：Read 回执（agent-aabc1e5bb04a2ab2a.jsonl:L45-L46，第 1-125 行）给出 @Trace 渲染驱动八字段含 currentStep（:113），并要求 tick 用 UI 线程 setTimeout、按源端固定周期迁移（:96）。它正确规定了可观察字段和节拍，但没有提到代理读取开销，这一点属于输入未覆盖。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/gameoflife-efimj-b9f42ed/app/src/main/java/com/jobik/gameoflife/screens/game/GameScreenViewModel.kt",
+          "at": "2026-10-20T19:14:17.674Z",
+          "reason": "正常输入：Read 回执（同转录 L94-L95）给出 startSimulation（:67-120）：delay 后对 states.value.currentStep 这一普通 List 做 makeOneStep、判定、计数、freeSouls，再整体 copy 提交。源端读取网格没有额外开销，周期约等于间隔。"
+        },
+        {
+          "key": "68203082-5513-4f64-b94d-5441fe323d90:aabc1e5bb04a2ab2a",
+          "at": "2026-10-21T01:16:39.762Z",
+          "reason": "Write 新建 GameScreenViewModel（同转录 L296-L297）：runOneTick 把 @Trace currentStep 直接传给 makeOneStepGameOfLife、countRevives、countDeaths、freeSouls，checkIsGameFinishedResult 也逐格比较 this.currentStep，没有取原始数组。这是实现者的框架知识缺口；该片段原样保留到返修，F11 修复正是改这几处（repair L3205、L3268-L3269）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-gameoflife-k20c3/entry/src/main/ets/pages/GamePage.ets",
+        "since": "2026-10-21T06:46:35.836Z",
+        "at": "2026-10-21T16:29:04.600Z"
+      },
+      "summary": "本图归因页面回调失去变化门控：源端效果都按目标值变化触发，原 @Monitor 也只监听运行态与结果；\nSlice 1 worker 自拟、主会话转发的回调补丁把它挂到每代提交上，worker 意识到语义变化仍照做。返修以 lastVisualState 变化判断修复。\n",
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/gameoflife-efimj-b9f42ed/app/src/main/java/com/jobik/gameoflife/screens/game/GameScreen.kt",
+          "at": "2026-10-20T19:14:22.755Z",
+          "reason": "正常输入：Read 回执（agent-aabc1e5bb04a2ab2a.jsonl:L106-L107）给出 LaunchedEffect(state.gameResult)（:102）、animateColorAsState(targetValue)（:164/:175）、AnimatedContent(targetState=getTitleText)（:217）。彩带、容器色和标题都只在目标值变化时启动，足以说明替代机制也应只在运行态或结果变化时执行。"
+        },
+        {
+          "key": "68203082-5513-4f64-b94d-5441fe323d90:main",
+          "at": "2026-10-21T02:57:03.027Z",
+          "reason": "派工桥梁：主会话收到 G1 编译门报告的 GamePage.ets:1217 两条 @Monitor WARN（主转录 L4532），在 L4539 判断补丁“语义等价”，L4541 用 SendMessage 把 aabc1e5 先前在 handback 里自拟的方案（agent-aabc1e5bb04a2ab2a.jsonl:L560，主转录 L4518 收到）原样转成指令，其中包括 runOneTick 提交尾部。主会话没有新增或删减触发点，只转发了方案。"
+        },
+        {
+          "key": "68203082-5513-4f64-b94d-5441fe323d90:aabc1e5bb04a2ab2a",
+          "at": "2026-10-21T02:59:25.984Z",
+          "reason": "偏差起点与执行：方案出自它自己的 L560 handback，原 @Monitor 只监听 isSimulationRunning/gameResult，方案却把不改这两个字段的提交路径列为触发点。L564 思考已写明加通知会改变原 @Monitor 的触发语义、每代都会重放 animateTo，但它认为这是协调者有意列出的，仍照单执行。VM 在提交尾部加 notifyVisualState（L573-L574），GamePage 注册回调（L600-L601），并删除 @Monitor、保留方法体但不加变化判断（L602-L603）。该片段保留到返修，修复在回调开头加 lastVisualState 判断（repair L3238-L3253）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-31dcdb74eb848ff217c8",
+  "metadata": {
+    "migration": {
+      "id": "gameoflife-k20c3-68203082-5513-4f64-b94d-5441fe323d90",
+      "project": "GameOfLife"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.304",
+        "2.1.305",
+        "2.1.306"
+      ]
+    },
+    "source_set_id": "sources-1bba2f392f35420f049b",
+    "environment": [
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-gameoflife-k20c3",
+        "at": "2026-10-20T10:46:51.396Z",
+        "ref": "generation/68203082-5513-4f64-b94d-5441fe323d90/subagents/agent-a67bd634faae14552.jsonl:L36",
+        "request_ref": "generation/68203082-5513-4f64-b94d-5441fe323d90/subagents/agent-a67bd634faae14552.jsonl:L35",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-gameoflife-k20c3",
+        "at": "2026-10-20T14:57:28.580Z",
+        "ref": "generation/68203082-5513-4f64-b94d-5441fe323d90.jsonl:L1279",
+        "request_ref": "generation/68203082-5513-4f64-b94d-5441fe323d90.jsonl:L1273",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-gameoflife-k20c3",
+        "at": "2026-10-20T14:57:28.580Z",
+        "ref": "generation/68203082-5513-4f64-b94d-5441fe323d90.jsonl:L1279",
+        "request_ref": "generation/68203082-5513-4f64-b94d-5441fe323d90.jsonl:L1273",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-gameoflife-k20c3\\entry\\src\\main\\ets",
+        "at": "2026-10-21T11:51:33.057Z",
+        "ref": "repair/80e50793-e51a-435f-bd07-f5badd469938.jsonl:L1125",
+        "request_ref": "repair/80e50793-e51a-435f-bd07-f5badd469938.jsonl:L1124",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-gameoflife-k20c3\\entry\\src\\main\\ets",
+        "at": "2026-10-21T11:51:33.057Z",
+        "ref": "repair/80e50793-e51a-435f-bd07-f5badd469938.jsonl:L1125",
+        "request_ref": "repair/80e50793-e51a-435f-bd07-f5badd469938.jsonl:L1124",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "765d4bf2-ff04-47fe-b3b6-d5088a9aafeb"
+      ]
+    }
+  },
+  "revision": "360cfb87f8b2a47e9243a59d3a2beccef0b260bcbaed55d1f909b2a241f8fe46"
+}

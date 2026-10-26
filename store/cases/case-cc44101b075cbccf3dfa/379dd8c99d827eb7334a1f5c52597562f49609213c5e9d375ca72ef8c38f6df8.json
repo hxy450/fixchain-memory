@@ -1,0 +1,190 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-cc44101b075cbccf3dfa",
+  "created_at": "2026-10-23T09:43:45.851686+00:00",
+  "migration_key": "gameoflife-k20c3-68203082-5513-4f64-b94d-5441fe323d90",
+  "title": "用只对 SVG 生效的 fillColor 给 PNG 位图做 ColorFilter.tint 染色",
+  "when": "界面实现阶段为源端着色的图片写 ArkUI Image 修饰链、选择染色 API 时；规格提取阶段为 ColorFilter.tint 一类着色写转换决策时",
+  "description": "源端 Compose Image 的 colorFilter = ColorFilter.tint(color)（默认 SrcIn），或 ImageView 的 tint、setColorFilter，作用在 drawable 位图（png/jpg/webp）上，常见是白色加透明通道、靠着色才能在浅色背景上看见的示意图；目标资源仍是同一位图，没有转成 SVG。ArkUI 侧可选的有 Image.fillColor 和 Image.colorFilter。",
+  "summary": "源端 OnboardingScreenContainer.kt:239 给多图页轮播图设\ncolorFilter = if (images.size == 1) null else ColorFilter.tint(primary)。步骤图\ngenerative_combination_step_*/end_combination_step_* 是白色加透明通道的 PNG（返修时实测 RGBA 1095×1095，\nrepair/80e50793-e51a-435f-bd07-f5badd469938.jsonl:L689-L690、L712-L713），只有染色后才能在浅色 surface 上看见。\n\n起点一（页面转换，最早写进目标文件）：Stage 1 页面转换者 agent-a8e9f87b8b0559b8b 写之前已经拿到三项信息。\n一是页 spec 第 41 行转换决策「ColorFilter.tint(primary) → Image .fillColor / .colorFilter（染色矩阵或同色 SVG 资源）」（L30-L31）；\n二是源码 :239 的 ColorFilter.tint（L36、L39）；\n三是源端 drawable 和目标 base/media 里步骤图都是 .png（L52-L53、L84-L85、L120-L121）。\n它在思考中把这个取舍判错了：「For PNG source, fillColor recolors respecting alpha — yes, Image.fillColor overrides pixel color keeping alpha (works like tint)」（L118）。\n它对箭头 SVG 记过「SVG tint works with fillColor」（L123），同一轮也对 roundRect、LengthMetrics、changeIndex 等十余个 API 查过 SDK d.ts（L148-L218），只有 fillColor 对位图是否生效这一项没查。\nL236 写出的 OnboardingPage.ets 给 tinted 分支用了 .fillColor($r('app.color.primary'))。\n写后 L255-L256 读到的占位登记表里已经有 P-S5-009「three_stars 位图 + fillColor 染色，fillColor 仅 SVG 生效」，它随后在 L281-L292 又改了本文件，但没有回头处理轮播图。\n\n起点二（规格）：feature spec 写者 agent-ac3ced6fe21563a1d 读到的是同一页 spec 第 41 行（L64-L65）和源码 :239（L151-L152）。\n这一行本来给了两个选项，并用「染色矩阵或同色 SVG 资源」提示了各自的前提。写者在 L245 写出的 F005-onboarding.md 第 69 行却只剩\n「ColorFilter.tint(primary) → Image .fillColor(primary token)」，第 29 行和 AC03 也写作 fillColor 染色，去掉了 colorFilter 和 SVG 前提。\n写者在被拦截的分叉盘点里已经计划用「fillColor(primary)」（recall/ac3ced6fe21563a1d-call_818b8b1fd0714137b9f22424.jsonl:L22）。\n召回提醒在 lesson-bdc493f5950835f9bfcc（图片固有尺寸）一条下附了「染色分支 AC 保留（单图页无 fillColor、多图页 fillColor(primary)）」（L217），这只是复述写者已有的计划；该经验原文不涉及染色，也不是这里的起因。\nSlice 3 写者 agent-a4c5a430f92d572d5 读到 F005（L30-L31，第 69 行仍写 fillColor）和现有页面（L64-L65），按 F005「色值渲染期读 ThemeStore」的要求，在 L267 整文件重写。\n它只把颜色来源换成 themeStore().tokens.primary，保留了 .fillColor（L156 只核了 fillColor 接受 string 类型）。这就是返修前留在文件里的那一行。\n两个起点在目标里落到同一处 tinted 分支。\n\n库内经验：注入库 1bb6facd 和当前库 bcdc3ed0 里都没有「位图染色不能用 fillColor」的经验。\na8e9f87 在 L118 选定 fillColor，注入发生在之后的 L127，注入的提醒都不涉及位图染色。属于新偏差。\n返修对照安卓截图，确认轮播图只剩极淡的白块（repair L695）。\n返修引入 @kit.ArkGraphics2D，新增 tintFilter()：\ndrawing.ColorFilter.createBlendModeColorFilter(primary ARGB, drawing.BlendMode.SRC_IN)，\n并把轮播 Image 的 .fillColor(themeStore().tokens.primary) 改为 .colorFilter(this.tintFilter())\n（repair L742-L747，F27 检查点 181a329 见 L812-L818）。\n",
+  "recommendations": [
+    "界面实现阶段：源端 ColorFilter.tint、tint 或 setColorFilter 作用的是位图（png/jpg/webp）时，先确认目标资源仍是位图。ArkUI Image.fillColor 只对 SVG 图源生效，位图要用 Image.colorFilter：SrcIn 着色用 drawing.ColorFilter.createBlendModeColorFilter(color, drawing.BlendMode.SRC_IN)，或用等价的 4x5 矩阵（RGB 取着色色、alpha 取着色 alpha × 原 alpha）。颜色在渲染期按当前主题取值；只有部分条目着色时，不着色的分支不挂滤镜（或挂单位矩阵）。",
+    "某个修饰符对当前资源类型是否生效拿不准时（如 fillColor 能否作用于位图），先查 SDK component/image.d.ts 中该属性的注释再写，不凭印象推断。写后在浅色和深色背景下各截图一次，核对白色透明位图是否显出着色。",
+    "规格提取阶段：写着色转换决策时注明源资源格式，只给对该格式生效的 API，并在同一行写出前提（例如「PNG 位图 → colorFilter SRC_IN；fillColor 仅 SVG」）。不要把 fillColor / colorFilter 列成并列任选项，下游汇总规格时也不能丢掉这一前提。",
+    "本应用：OnboardingPage 多图页（Rule1/Rule2）轮播 Image 的 tinted 分支改为 .colorFilter(tintFilter())，tintFilter 把 themeStore().tokens.primary（'#AARRGGBB'）拆成 common2D.Color，再用 createBlendModeColorFilter(…, SRC_IN) 生成；单图页（john_horton_conway）不挂滤镜。F005 第 69 行和 AC03 中的 fillColor 应同步改成 colorFilter。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-gameoflife-k20c3/entry/src/main/ets/pages/OnboardingPage.ets",
+        "since": "2026-10-21T06:46:35.836Z",
+        "at": "2026-10-21T16:29:04.600Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-gameoflife-k20c3/spec/baseline/ui/page_0005_OnboardingScreen.md",
+          "at": "2026-10-20T16:19:12.212Z",
+          "reason": "正常输入：页面转换者 Read 回执第 25-27 行写明 Rule1/Rule2 多图页 primary 染色（ColorFilter.tint(primary)），第 41 行转换决策写「Image .fillColor / .colorFilter（染色矩阵或同色 SVG 资源）」，给出了 colorFilter 选项和 fillColor 的 SVG 前提（agent-a8e9f87b8b0559b8b.jsonl:L30-L31）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/gameoflife-efimj-b9f42ed/app/src/main/java/com/jobik/gameoflife/screens/onboarding/OnboardingScreenContainer.kt",
+          "at": "2026-10-20T16:24:20.898Z",
+          "reason": "正常输入：Read 回执第 239 行 colorFilter = if (content.images.size == 1) null else ColorFilter.tint(MaterialTheme.colorScheme.primary)（agent-a8e9f87b8b0559b8b.jsonl:L36、L39）。结合 L52-L53、L84-L85 回执里源端 drawable 和目标 media 的 *_combination_step_*.png 清单，足以确定这是给 PNG 位图做 SrcIn 着色。"
+        },
+        {
+          "key": "68203082-5513-4f64-b94d-5441fe323d90:a8e9f87b8b0559b8b",
+          "at": "2026-10-20T17:24:25.059Z",
+          "reason": "Stage 1 页面转换者已知资源是 PNG、源端用 ColorFilter.tint，在 L118 思考中断言 fillColor 对 PNG 也能保留 alpha 染色，没有查 image.d.ts（同轮其他 API 都查过 d.ts，L148-L218）。L236 写出的 tinted 分支只有 .fillColor($r('app.color.primary'))；L255-L256 读到登记表 P-S5-009『fillColor 仅 SVG 生效』后，L281-L292 再改本文件也没有修正轮播图（agent-a8e9f87b8b0559b8b.jsonl）。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-gameoflife-k20c3/spec/baseline/ui/page_0005_OnboardingScreen.md",
+          "at": "2026-10-20T11:45:46.449Z",
+          "reason": "正常输入：feature spec 写者 Read 回执里同一页 spec 第 41 行为「.fillColor / .colorFilter（染色矩阵或同色 SVG 资源）」（agent-ac3ced6fe21563a1d.jsonl:L64-L65）；源码 :239 的 ColorFilter.tint 也已在 L151-L152 读到。"
+        },
+        {
+          "key": "68203082-5513-4f64-b94d-5441fe323d90:ac3ced6fe21563a1d",
+          "at": "2026-10-20T12:27:36.020Z",
+          "reason": "规格写者把页 spec 中带前提的两个选项收窄成 F005 第 69 行「ColorFilter.tint(primary) → Image .fillColor(primary token)」，第 29 行和 AC03 也写 fillColor，去掉了 colorFilter 和 SVG 前提（agent-ac3ced6fe21563a1d.jsonl:L245-L246）。fillColor 的计划在写者分叉盘点中已经存在（recall/…call_818b8b1fd0714137b9f22424.jsonl:L22）；L217 的召回提醒只是复述该计划，不是起因。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-gameoflife-k20c3/spec/baseline/features/F005-onboarding.md",
+          "at": "2026-10-20T19:13:12.803Z",
+          "reason": "交付桥梁：Slice 3 写者的 Read 回执里第 69 行仍是「Image .fillColor(primary token)」、色值渲染期读 ThemeStore，AC03 写「primary 染色（fillColor）」（agent-a4c5a430f92d572d5.jsonl:L30-L31）。"
+        },
+        {
+          "key": "68203082-5513-4f64-b94d-5441fe323d90:a4c5a430f92d572d5",
+          "at": "2026-10-21T01:15:52.924Z",
+          "reason": "按 F005 把页面取色改为 themeStore().tokens，L156 只核了 fillColor 接受 string 类型，L267 整文件重写时 tinted 分支写成 .fillColor(themeStore().tokens.primary)。这一行一直保留到返修 L744 的 old_string（agent-a4c5a430f92d572d5.jsonl:L267-L268）。本链只确认规格经它传到目标，不另认定它独立失职。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": 6
+        },
+        {
+          "from": 6,
+          "to": 7
+        },
+        {
+          "from": 7,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "未核到 F005 写者 agent-ac3ced6fe21563a1d 写前看到过步骤图的 .png 扩展名；它的偏差按「丢掉页 spec 中 SVG 前提、收窄为 fillColor」来认定，不认定它明知资源是位图。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-cc44101b075cbccf3dfa",
+  "metadata": {
+    "migration": {
+      "id": "gameoflife-k20c3-68203082-5513-4f64-b94d-5441fe323d90",
+      "project": "GameOfLife"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.304",
+        "2.1.305",
+        "2.1.306"
+      ]
+    },
+    "source_set_id": "sources-1bba2f392f35420f049b",
+    "environment": [
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-gameoflife-k20c3",
+        "at": "2026-10-20T10:46:51.396Z",
+        "ref": "generation/68203082-5513-4f64-b94d-5441fe323d90/subagents/agent-a67bd634faae14552.jsonl:L36",
+        "request_ref": "generation/68203082-5513-4f64-b94d-5441fe323d90/subagents/agent-a67bd634faae14552.jsonl:L35",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-gameoflife-k20c3",
+        "at": "2026-10-20T14:57:28.580Z",
+        "ref": "generation/68203082-5513-4f64-b94d-5441fe323d90.jsonl:L1279",
+        "request_ref": "generation/68203082-5513-4f64-b94d-5441fe323d90.jsonl:L1273",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-gameoflife-k20c3",
+        "at": "2026-10-20T14:57:28.580Z",
+        "ref": "generation/68203082-5513-4f64-b94d-5441fe323d90.jsonl:L1279",
+        "request_ref": "generation/68203082-5513-4f64-b94d-5441fe323d90.jsonl:L1273",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-gameoflife-k20c3\\entry\\src\\main\\ets",
+        "at": "2026-10-21T11:51:33.057Z",
+        "ref": "repair/80e50793-e51a-435f-bd07-f5badd469938.jsonl:L1125",
+        "request_ref": "repair/80e50793-e51a-435f-bd07-f5badd469938.jsonl:L1124",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-gameoflife-k20c3\\entry\\src\\main\\ets",
+        "at": "2026-10-21T11:51:33.057Z",
+        "ref": "repair/80e50793-e51a-435f-bd07-f5badd469938.jsonl:L1125",
+        "request_ref": "repair/80e50793-e51a-435f-bd07-f5badd469938.jsonl:L1124",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "765d4bf2-ff04-47fe-b3b6-d5088a9aafeb"
+      ]
+    }
+  },
+  "revision": "379dd8c99d827eb7334a1f5c52597562f49609213c5e9d375ca72ef8c38f6df8"
+}

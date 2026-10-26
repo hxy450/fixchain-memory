@@ -1,0 +1,161 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-d7e5a2d2f2014ce7f39c",
+  "created_at": "2026-10-23T10:21:05.773897+00:00",
+  "migration_key": "gameoflife-k20c3-68203082-5513-4f64-b94d-5441fe323d90",
+  "title": "把 Compose 的“重组”当成“重建”：源端转屏重建后 LaunchedEffect(cellSize) 会按新宽度重算格数，规格却写成“仅 cellSize 变化触发、画布宽度变化不重算”，网格组件照此实现",
+  "when": "规格提取阶段，把源 Activity 未声明 configChanges 时的转屏重建写成 Compose 首次组合副作用（LaunchedEffect、remember）的目标触发契约时；界面实现阶段，为依赖容器宽度的一次性计算（格数、列数）确定重算时机时",
+  "description": "源端是 Compose 单 Activity，AndroidManifest 里的 Activity 没有声明 configChanges/screenOrientation。组件在 BoxWithConstraints 里读 maxWidth，再用带键的 LaunchedEffect(key)（键不含宽度）算一次格数写回 ViewModel，ViewModel 跨重建存活。目标 UIAbility 与 NavDestination 转屏时不重建，宽度变化只表现为 onAreaChange 回调。",
+  "summary": "规格阶段：F001 规格作者（a2h-spec C4 批次 c4-01）写前读了 GridForGame.kt。回执显示 fieldWidth 取自 BoxWithConstraints 的 maxWidth，\nLaunchedEffect(cellSize) 里算 count = fieldWidth/(cellSizePx+gapWidth)，再 setRows/setColumns(count)\n（agent-abdce1c614bade08f.jsonl:L83-L84）。派工也写了“网格自动按宽度 setRows/setColumns 联动”（同转录 L1）。\n它第一次写的 AC28 是“cellSize 或画布宽变化时 … 棋盘变为 count×count”（L137），和源端可观察行为一致。\n这次 Write 被首次写入 hook 拦下，送来召回提醒（L138）。召回 worker 是规格作者的分叉，召回前自己盘点时就已判定\n“画布宽度变化（转屏/窗口）不重跑 effect、行列不重算”（recall/abdce1c614bade08f-call_f171c44faa4549348a779f2f.jsonl:L21）。\n逐条筛经验时，它对 lesson-94715d0df4c03a8fb5a5 的推理是“on rotation, source re-composes GridForGame with new fieldWidth\nbut LaunchedEffect(cellSize) does NOT re-run (key unchanged)”（同会话 L154），把 Activity 重建当成了一次重组。\n它只读了 app 与 process/spec-handoff 的索引摘要（L114-L115、L136-L137），没有打开这两条经验的正文。\n提醒里写了两处：\nlesson-08854573a81a9fa03746 的“这次怎么写”要求把 AC28 改成“仅 cellSize（=scale）变化触发 setRows/setColumns 联动，\n画布宽度变化不重算（源 effect 单键）”；\nlesson-94715d0df4c03a8fb5a5 的触发写对了“MainActivity 未声明 configChanges → 转屏重建 … remember 态复位”，\n“这次怎么写”却给出“转屏后行列不重算（LaunchedEffect 键仅 cellSize）在两端一致，写为对齐保证而非目标缺陷”。\n规格作者在思考里写“good catch”（L140），重写后 AC28 变成“仅 cellSize（= 20×scale）变化触发 … 画布宽度变化不重算”，\n判据“改宽度不动场”（L142-L143）。races addendum §配置变化一边写源端转屏重建、remember 复位，一边写\n“转屏后两端均不重算行列（LaunchedEffect 单键 cellSize），行为一致”（L150）。\nref 规格本来是对的：gameoflife_spec.md 写着“旋转后网格按新宽度重算行列并重开随机局”（agent-a67bd634faae14552.jsonl:L336）。\nC4.5 交叉验证看到了这处冲突，按同样的误解（“LaunchedEffect(cellSize) with same cellSize won't re-fire”）判定\n“source-anchored AC wins”，没有改 AC28（agent-afbc696c88035ce0a.jsonl:L100、L165）。\n\n实现阶段：Stage 1 GameScreen 转换者读到的 F001 里，AC28 就是上面这句（agent-aac36eaf3f526bfce.jsonl:L190-L191）。\n它的注入提醒里没有 lesson-94715。它写出的 GridForGameComponent（L360-L361）带注释“源 LaunchedEffect(cellSize) 等价：\n仅 cellSize（=20×scale）变化触发 rows/cols 联动”：onAreaChange 只在 lastScaleForSizeEvent < 0（首次测量）时发格数事件，\n之后只有 @Monitor('scale') 会再发；转屏只走 requestRender 重绘。后续写者都没改这段触发逻辑：\nagent-a354912cc210bad31 只把 scale 改名为 cellScale（agent-a354912cc210bad31.jsonl:L263-L269）；\nSlice 1 读过 AC28 和 races addendum（agent-aabc1e5bb04a2ab2a.jsonl:L54、L78），把事件接到 VM，\n并保留“仅 cellSize 变化触发”的注释（同转录 L309）。这段逻辑一直保留到返修前。\n\n修复：返修 X15 发现竖屏 11×11 转横屏后鸿蒙仍是 11×11，只占画布一小块。返修在 onAreaChange 里加了分支：\n非首次且宽度确有变化时也调用 emitCellSizeEvent()（repair/80e50793-e51a-435f-bd07-f5badd469938.jsonl:L6506-L6512）。\n验证结果：横屏 21×21 铺满，转回竖屏恢复 11×11（L6512、L6528、L6543）。检查点 X15 8fa1d8e（L6558-L6560），\n该分支保留在最终文件（GridForGameComponent.ets:288-299）。依据：源端 MainActivity 没有声明 configChanges\n（AndroidManifest.xml:17-27），转屏重建后 GridForGame 首次组合，LaunchedEffect 再跑一次并读到新的 maxWidth；\n格数变化时 setRows 重开随机局（GameScreenViewModel.kt:297-325）。\n\n三层判断：\n（1）经验原文：lesson-94715d0df4c03a8fb5a5（注入 1bb6facd 与当前 bcdc3ed0 都是版本 4）适用条件成立。但标题、适用情境和做法\n只用 View/Activity 的说法（View 构造、onSizeChanged、对话框、onCreate/onResume 语句），没有写明 Compose 源端的情况：\n重建等于整棵组合重新进入，带键 LaunchedEffect 也会再跑，并读到新窗口的约束。召回 worker、规格作者、交叉验证三处\n都正好在这一点上把重组和重建混为一谈，所以需要增量修订。\n（2）召回传递：worker 自拟了 AC28 替换文本，又把它挂在 lesson-08854573 名下。该经验讲的是集合范围和比较符，\n不涉及触发时机，属于套到适用范围之外。\n（3）agent 执行：规格作者的首稿和派工都写了“按宽度联动”，自己写的 races addendum 也写了 remember 复位，\n仍然接受了提醒；交叉验证把 ref 中正确的说法当作异常值舍掉。实现者按规格照写，本链只确认传递。\n",
+  "recommendations": [
+    "规格提取阶段：源 Activity 未声明 configChanges、界面又是 Compose 时，转屏或窗口尺寸变化会让整棵组合重新进入。带键的 LaunchedEffect、remember(key) 不管键变没变都会再跑一次，用的是新的 BoxWithConstraints/窗口约束；“键不变就不重跑”只描述同一组合内的重组。组合副作用读取容器尺寸时，把“重建后按新尺寸重算”单独写成一条验收，判据给出转屏前后两个宽度下的期望值，不写“宽度变化不重算”。",
+    "界面实现阶段：目标页面转屏不重建时，依赖容器宽度的首次计算要挂到 onAreaChange 的宽度变化上：首次测量照常触发，之后旧宽大于 0 且新旧宽不同才再算；宽度不变时不产生副作用，交给 VM 的同值短路。规格写了“宽度变化不重算”，而源 Activity 未声明 configChanges 时，先核对源 Manifest 与重建路径，再决定是否照写。",
+    "规格交叉验证阶段：ref 文档和 feature AC 对同一源端行为说法相反（如 ref 写转屏后重算、AC 写不重算）时，不能以“AC 带源锚就优先”结束，要回到源码与 Manifest 推出重建后的执行路径；推不出就登记待裁决，不把 ref 当异常值舍掉。",
+    "本应用：GridForGame.kt:76-85 在 BoxWithConstraints 里按 fieldWidth/(cellSizePx+gapWidth) 写回 setRows/setColumns，AndroidManifest.xml:17-27 的 MainActivity 没有声明 configChanges。因此 GridForGameComponent.onAreaChange 在非首次且宽度变化时也要调用 emitCellSizeEvent()。格数不变时 setRows/setColumns 直接返回；格数变化时停表并重开随机局（GameScreenViewModel.kt:297-325），与源端转屏行为一致。",
+    "修订 lesson-94715d0df4c03a8fb5a5（版本 4，增量）：在适用情境和做法第 1 步补上 Compose 源端分支。源端界面是 Compose 时，Activity 重建等于整棵组合重新进入，不是一次重组：非 Saveable 的 remember 复位；LaunchedEffect、DisposableEffect 不管键变没变都随首次组合再跑一次，读到的是新窗口的约束（BoxWithConstraints 的 maxWidth、LocalConfiguration）。“键不变就不重跑”只在同一组合内成立。规格要把这些首次组合副作用的可见结果（如按新宽度重算的格数、列数）写进重建验收；做法第 4 步的配置变化路径（onAreaChange 宽高变化或 onConfigurationUpdate）也要重放它们。这句写进适用情境，只看索引摘要的读者也能看到。",
+    "召回失败 lesson-08854573a81a9fa03746：原文适用情境只列了三类——依赖被截断的参考文档写条目、源端多组独立集合按页面拆写、导航条目只做声明级检索。做法第 1 步是“写带出处的条目前打开所引行号段落”，第 5 步的“范围不超出本行源锚点”说的是数据集合。这些都不涉及副作用什么时候触发，本可排除把它用到 AC28 的触发键上。召回 worker 只读了 process/spec-handoff 的索引摘要（recall/abdce1c614bade08f-call_f171c44faa4549348a779f2f.jsonl:L136-L137），没有打开正文，却在“这次怎么写”里自拟了 AC28 替换文本“仅 cellSize（=scale）变化触发…画布宽度变化不重算（源 effect 单键）”（同会话 L155，送达 agent-abdce1c614bade08f.jsonl:L138）。源码 GridForGame.kt:76-85 的 count 读 BoxWithConstraints 的 fieldWidth；AndroidManifest.xml:17-27 的 MainActivity 没有声明 configChanges，转屏重建后首次组合会按新宽度重算。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-gameoflife-k20c3/entry/src/main/ets/components/game/GridForGameComponent.ets",
+        "since": "2026-10-21T06:46:35.836Z",
+        "at": "2026-10-21T16:29:04.600Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/gameoflife-efimj-b9f42ed/app/src/main/java/com/jobik/gameoflife/ui/composables/GridForGame.kt",
+          "at": "2026-10-20T11:46:01.815Z",
+          "reason": "正常输入：F001 规格作者整文件读取。回执第 76-85 行：BoxWithConstraints 里 fieldWidth = maxWidth.toPx()，LaunchedEffect(cellSize) 中 count = fieldWidth/(cellSizePx+gapWidth)，再 setRows/setColumns(count)。格数取决于组合时的容器宽度，派工也要求“网格自动按宽度 setRows/setColumns 联动”（agent-abdce1c614bade08f.jsonl:L1、L83-L84）。"
+        },
+        {
+          "key": "agent-abdce1c614bade08f.jsonl",
+          "at": "2026-10-20T12:18:11.393Z",
+          "reason": "F001 规格作者。首稿 AC28 写“cellSize 或画布宽变化时”联动（L137）。召回提醒（L138）在 lesson-08854573a81a9fa03746 下要求改成“仅 cellSize 变化触发，画布宽度变化不重算”，在 lesson-94715d0df4c03a8fb5a5（版本 4，原文缺 Compose 首次组合副作用随重建重跑的分支；经验经 hook 回执送达，不是文件读取，故不单列节点）下写“转屏后行列不重算在两端一致”。它照收（L140 “good catch”），重写 AC28 为“仅 cellSize（= 20×scale）变化触发 … 画布宽度变化不重算；判：改宽度不动场”（L142-L143），races addendum 写“转屏后两端均不重算行列”（L150），与同段“源端转屏重建、remember 复位”相互矛盾。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-gameoflife-k20c3/spec/baseline/features/F001-game-simulation.md",
+          "at": "2026-10-20T16:23:45.905Z",
+          "reason": "交付桥梁：Stage 1 GameScreen 转换者的 Read 回执第 179 行仍是 AC28“仅 cellSize（= 20×scale）变化触发 … 画布宽度变化不重算 … 改宽度不动场”（agent-aac36eaf3f526bfce.jsonl:L190-L191）。"
+        },
+        {
+          "key": "agent-aac36eaf3f526bfce.jsonl",
+          "at": "2026-10-20T17:11:44.922Z",
+          "reason": "按 AC28 写 GridForGameComponent：注释写“源 LaunchedEffect(cellSize) 等价：仅 cellSize（=20×scale）变化触发 rows/cols 联动”，onAreaChange 只在 lastScaleForSizeEvent < 0 时发一次格数事件，之后只由 @Monitor('scale') 触发；宽度变化只重绘（同转录 L193、L210 思考，L360-L361 Write）。本链确认传递；该片段保留到返修 X15（repair L6502-L6512）。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-d7e5a2d2f2014ce7f39c",
+  "metadata": {
+    "migration": {
+      "id": "gameoflife-k20c3-68203082-5513-4f64-b94d-5441fe323d90",
+      "project": "GameOfLife"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.304",
+        "2.1.305",
+        "2.1.306"
+      ]
+    },
+    "source_set_id": "sources-1bba2f392f35420f049b",
+    "environment": [
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-gameoflife-k20c3",
+        "at": "2026-10-20T10:46:51.396Z",
+        "ref": "generation/68203082-5513-4f64-b94d-5441fe323d90/subagents/agent-a67bd634faae14552.jsonl:L36",
+        "request_ref": "generation/68203082-5513-4f64-b94d-5441fe323d90/subagents/agent-a67bd634faae14552.jsonl:L35",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-gameoflife-k20c3",
+        "at": "2026-10-20T14:57:28.580Z",
+        "ref": "generation/68203082-5513-4f64-b94d-5441fe323d90.jsonl:L1279",
+        "request_ref": "generation/68203082-5513-4f64-b94d-5441fe323d90.jsonl:L1273",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-gameoflife-k20c3",
+        "at": "2026-10-20T14:57:28.580Z",
+        "ref": "generation/68203082-5513-4f64-b94d-5441fe323d90.jsonl:L1279",
+        "request_ref": "generation/68203082-5513-4f64-b94d-5441fe323d90.jsonl:L1273",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-gameoflife-k20c3\\entry\\src\\main\\ets",
+        "at": "2026-10-21T11:51:33.057Z",
+        "ref": "repair/80e50793-e51a-435f-bd07-f5badd469938.jsonl:L1125",
+        "request_ref": "repair/80e50793-e51a-435f-bd07-f5badd469938.jsonl:L1124",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-gameoflife-k20c3\\entry\\src\\main\\ets",
+        "at": "2026-10-21T11:51:33.057Z",
+        "ref": "repair/80e50793-e51a-435f-bd07-f5badd469938.jsonl:L1125",
+        "request_ref": "repair/80e50793-e51a-435f-bd07-f5badd469938.jsonl:L1124",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "765d4bf2-ff04-47fe-b3b6-d5088a9aafeb"
+      ]
+    }
+  },
+  "revision": "050e1d9c3d8b39b8081f47302db26fb62929efdf9cdf67eb98f4f7557f53685a"
+}

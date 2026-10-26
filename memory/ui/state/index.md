@@ -1,6 +1,6 @@
 # ui/state
 
-ArkUI V2 状态刷新与订阅：@Builder 参数（含异步重赋值的数组与对象）、复用开关组件的事件值、页面与共享模型的绑定、共享状态 key 的命名、按状态显隐、只在回调执行后才成立的显示状态与控件自带的前置过滤、负责上抛自身可见性的组件须常建、事件驱动的重新加载、生命周期回调迁入 ViewModel 时的成对状态、单例 ViewModel 的取消语义与页面加载入口单飞、ForEach 键与子组件刷新、变更信号与 @Monitor 数组路径的配套、可观察字段的判定、监听的注册与释放、乐观更新与访问器兜底，多个 ViewModel 实例间的跨页面状态（拆单例、弹窗与宿主），稳定列表键与可观察实例原位更新，Repeat 条目的传参，离开组合即销毁的复位与框架会恢复的界面状态，Activity 实例会话态的作用域，每次可见时的初始化与只在可见时接收的监听；Compose remember 的求值与重建时机（无键、带 key、条件挂载、无 key 惰性项），以引用比较实现的未保存检测
+ArkUI V2 状态刷新与订阅：@Builder 参数（含异步重赋值的数组与对象）、复用开关组件的事件值、页面与共享模型的绑定、共享状态 key 的命名、按状态显隐、只在回调执行后才成立的显示状态与控件自带的前置过滤、负责上抛自身可见性的组件须常建、事件驱动的重新加载、生命周期回调迁入 ViewModel 时的成对状态、单例 ViewModel 的取消语义与页面加载入口单飞、ForEach 键与子组件刷新、变更信号与 @Monitor 数组路径的配套、可观察字段的判定、监听的注册与释放、乐观更新与访问器兜底，多个 ViewModel 实例间的跨页面状态（拆单例、弹窗与宿主），稳定列表键与可观察实例原位更新，Repeat 条目的传参，离开组合即销毁的复位与框架会恢复的界面状态，Activity 实例会话态的作用域，每次可见时的初始化与只在可见时接收的监听；Compose remember 的求值与重建时机（无键、带 key、条件挂载、无 key 惰性项），以引用比较实现的未保存检测；定时或帧回调里遍历 V2 可观察数组的代理开销（UIUtils.getTarget），@Monitor 改显式回调时的变化门控
 
 [上一级](../index.md)
 
@@ -25,6 +25,12 @@ ArkUI V2 状态刷新与订阅：@Builder 参数（含异步重赋值的数组�
 - [复用开关组件的变更事件给出目标值时，把它原样写入该开关的 setter，不改成无参回调再按旧值取反](lesson-40fc63b124b4a44e7a9f.lesson.md)
   - 时机：界面接线阶段，把开关行接入带 @Param isOn 与 @Event onToggleChange(nextState) 的复用组件，并连到 ViewModel 的开关接口时
   - 情境：源端每个开关点击时翻转自身字段、写偏好并刷新自身图标；目标复用组件在事件里给出下一状态，ViewModel 提供 toggleX() 取反接口，页面本地 @Local 与 ViewModel 各持一份开关值。
+- [定时器或帧回调里同步遍历 V2 可观察数组（@Trace、@Local，含嵌套行）做逐元素计算时，先用 UIUtils.getTarget 取原始数组](lesson-fc4930240c0f3b28fa5f.lesson.md)
+  - 时机：功能实现阶段，为 ArkUI V2 ViewModel 编写定时器或帧回调驱动、在 UI 线程同步运行的逐格或逐元素计算（模拟步进、批量统计）并读取可观察数组时
+  - 情境：源端在 delay 循环或协程里对普通 List 计算（同步耗时可忽略，周期约等于设定间隔）；目标把数据放在 @ObservedV2 模型的 @Trace 或组件 @Local 数组上，在 setTimeout 或帧回调里同步计算再整体提交。
+- [把 @Monitor 改成生产方显式回调时保留“被监听字段变化才执行”：回调入口比较上次值，不挂在每次状态提交上](lesson-bea360ddfe1dc4f6e2f1.lesson.md)
+  - 时机：编译修复或接线阶段，因 @Monitor 未绑定（嵌套路径告警等）改由 ViewModel 等生产方显式回调驱动页面视觉态时；派工或 handback 给出替代触发点清单时
+  - 情境：页面原用 @Monitor 监听运行态、结果等少数字段，处理函数含 animateTo、资源查询或动效等视觉动作，对应源端 LaunchedEffect(key)、animateColorAsState(targetValue)、AnimatedContent(targetState) 按目标值变化触发；替代方案在生产方多个路径（含每次定时提交）的尾部调用回调。
 - [把源界面的生命周期回调迁入 ViewModel 刷新方法时逐条迁移全部赋值，成对状态的打开与关闭路径都要落地](lesson-d7c148c4a233c59ff151.lesson.md)
   - 时机：功能实现阶段，把 Compose 界面中的局部状态与 ON_RESUME 等生命周期回调迁入 ViewModel 方法、由页面 onShown/onPageShow 调用时
   - 情境：源界面用 remember 局部状态控制插页、弹窗等显隐，在 ON_RESUME 观察者里重查权限或数据，并按结果同时更新多个状态（如权限新获得时隐藏权限插页）；目标把这些状态集中到 ViewModel。

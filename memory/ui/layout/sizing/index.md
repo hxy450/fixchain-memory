@@ -8,7 +8,7 @@
 
 - [Compose Modifier 链里位于背景之前的内距与 inset 放外层，背景、圆角和裁剪放内层](lesson-5c6217b05bb4c266f254.lesson.md)
   - 时机：规格提取与界面实现阶段，描述或翻译同一条 Compose Modifier 链中的 padding、statusBarsPadding 与 background、clip、Surface 形状时
-  - 情境：源 Modifier 链中 padding 或窗口 inset 位于 background、clip 或 Surface 包装之前；目标 ArkUI 的 padding 计入组件尺寸，backgroundColor 和 borderRadius 覆盖含 padding 的整个组件。
+  - 情境：源 Modifier 链中 padding 或窗口 inset 位于 background、clip 或 Surface 包装之前；目标 ArkUI 的 padding 计入组件尺寸，backgroundColor 和 borderRadius 覆盖含 padding 的整个组件。 也包括元素在同轴占满父级（fillMaxWidth，或 Button 等包装组件 modifier 里的 fillMaxWidth().padding(horizontal)），目标准备把背景外侧的 padding 改成 margin、与 width('100%') 写在同一节点上。
 - [Compose Row 中无 weight 的 fillMaxWidth 子项先占满剩余宽：不换成 layoutWeight(1)，后续兄弟按实得宽度判断是否绘制](lesson-45f77b3088fa69398f9e.lesson.md)
   - 时机：规格提取或页面转换阶段，解释 Compose Row 的可见元素和横向空间分配时
   - 情境：有限宽度的 Row 中，无 weight 子项使用 fillMaxWidth()，后面还有兄弟（按钮、文字）；规格或派工可能用“近乎不可见、按源码保留”描述该兄弟，实现者准备把该子项换成 layoutWeight(1)。

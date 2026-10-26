@@ -1,0 +1,232 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-2f1588d16e333f764904",
+  "created_at": "2026-10-23T09:48:55.495030+00:00",
+  "migration_key": "gameoflife-k20c3-68203082-5513-4f64-b94d-5441fe323d90",
+  "title": "覆盖层按默认命中拦截下层点击：关闭态抽屉浮层、渐隐条外包 Row、彩纸组件挂载点",
+  "when": "界面实现阶段，为 Stack 中叠在可点击内容之上的浮层、遮罩条和一次性动效组件确定 hitTestBehavior 时；编写共享组件的层契约、在页面挂载共享组件时",
+  "description": "源端上层不消费触摸（ModalNavigationDrawer 关闭态、fadingEdges 绘制层、KonfettiView 无指针输入）；目标在 Stack 中用 width/height('100%') 的容器、外包定位 Row 或带 width/height/zIndex 的自定义组件实例承载这些层，生成期不能上机点测。",
+  "summary": "三处覆盖层各有生成来源，共同点是写者知道该层不应拦截，却把命中模式写在了不起作用的节点上或漏写。\n\n抽屉浮层（AppLayout.ets，返修 X2）：page_0001 转换者 acdb 写前读到 ui-migration-pitfalls 的 P-17\n（纯展示、点击交底层的上层显式 Transparent；自检任一 Stack 上层子节点是否按该不该挡触摸显式设置，\nagent-acdb6502652d3eb2b.jsonl:L51-L52）、交互映射参考触摸测试表（Default 自身命中会阻塞兄弟，L49-L50）、\n源 LayoutWithModalDrawerSheet.kt:101 的 ModalNavigationDrawer（关闭时内容可交互，L62-L63），\n并在 L198 收到召回提示 lesson-4a4f（标题即“Stack 上层全尺寸容器…不处理点击的覆盖层显式 Transparent”）。\nL313 写 AppLayout 时它给 Snackbar 宿主层和左缘唤起条写了 Transparent，modalDrawerOverlay() 的全屏 Stack\n（关闭态只剩平移到屏外的 DrawerPanel 和唤起条）却保持缺省命中，DRAWER_NAVIGATION 档全部页面点不动。\nSlice 8 写者 a70c 于 2026-10-21T03:54:22 整文件重写 AppLayout 时原样保留该片段（agent-a70c5e626561b643b.jsonl:L324），\n其召回 worker 看过 lesson-4a4f，以“Snackbar 和唤起条已 Transparent”判定无需下发\n（recall/a70c5e626561b643b-call_eb42faab4459491f9d8c55ee.jsonl:L114）。返修在该 Stack 加\nhitTestBehavior(isOpen ? Default : Transparent)（repair/80e50793-e51a-435f-bd07-f5badd469938.jsonl:L427）。\n\n分段行渐隐条（GamePage.ets SegmentedChipsRow，返修 X8）：page_0002 转换者 aac36 读到同一触摸测试表\n（agent-aac36eaf3f526bfce.jsonl:L53-L54：None“自身不接收事件，不阻塞”，BLOCK_DESCENDANTS“自身不响应，后代也不响应”）。\n起草时 None 写在渐变 Column 上（L350、L375 思考），定稿为用 justifyContent 定位改成外包 Row，只给 Row 写 None，\n理由是“Rows with pointer pass-through: hitTestBehavior(HitTestMode.None) on the Row”（L375 思考），\n子 Column 保持 Default，并注释“纯展示层，不参与命中”（L375 Write）。题面问的依据即此：没有引用任何说明，\n是把自身级的 None 当成了整组透传。该片段保留到生成结束（返修 L2172-L2173 读回一致），\n返修给两条渐变 Column 各加 None（repair L2192）。\n\n彩纸挂载点（GamePage.ets，返修 F09）：aac36 初版挂载点为\nConfettiOverlay().width('100%').height('100%').zIndex(10).hitTestBehavior(HitTestMode.None)，不拦截。\nBase-6 写者 a3b5b1 读到 ThankYouModal 槽注释（agent-a3b5b1ae17bddd1d4.jsonl:L65-L66：共享组件 ROOT 节点全屏+Transparent，\n只给内部 Canvas 设 None 不够，outer component node 不得拦截）与召回提示（L188，lesson-4a4f：\n“KonfettiView 根节点（组件最外层节点，非内部 Canvas）…Transparent”），却把 Canvas 直接作 build 根并认定它就是最外层节点\n（L190 思考），只在 Canvas 上写 Transparent，并在 KonfettiView.ets 头部写“层契约：组件根节点（Canvas 本身）'100%'+\nTransparent——遮不住底层 scrim/卡片点击”（L265 Write，L266 回执）。组件内部触及不到调用处因通用属性生成的外层节点，\n这句契约只在调用处不写通用属性时成立。Slice 1 写者 aabc1 读到该头部（agent-aabc1e5bb04a2ab2a.jsonl:L244-L245），\n据此判断“KonfettiView root Canvas has hitTestBehavior Transparent — no need for extra hitTest”（L259），\nL398 换装 KonfettiView 时删掉挂载点的 None、保留 width/height/zIndex(10)；播放约 3 秒内外层节点按 Default 拦截网格点击。\n返修在挂载点加 Transparent（repair L3039）。本链 aabc1 是按错误契约传递，不另计独立偏差。\n\n经验层核对（以注入版 1bb6facd 原文为准）：lesson-4a4f v5 原因段写了“内部 Canvas 设了 None，外层组件节点仍拦截”，\n做法第 4 步只给“只在播放期间条件渲染”，没说外层组件节点是调用处写通用属性生成的包装节点、组件内部根节点上的设置管不到，\n也没覆盖源端播放期间不拦截时的透传。本例已照第 4 步条件挂载（confettiVisible），播放期间仍点不动；\nThankYouModal 写者与 a3b5b1 的召回 worker 都把“外层组件节点”转成了“组件根节点”。bcdc3ed0 新增的\nlesson-6aeb4924b6d6ee3d15f6 做法第 2 步已写“组件实例写通用属性时在该实例上写 hitTestBehavior”，与本卡 F09 机制一致。\n抽屉分支属于使用失败：lesson-4a4f 标题与做法第 1 步足以覆盖该 Stack。渐隐条分支（父层 None 不传给子节点）库内未见对应经验。\n",
+  "recommendations": [
+    "界面实现时，对 Stack 中位于可点击内容之上的每个全尺寸容器（含只承载条件遮罩和屏外面板的抽屉浮层容器）写明命中模式；可开合的浮层随状态切换，打开 Default、关闭 Transparent，不只给其中的唤起条或旁边的宿主层写。",
+    "HitTestMode.None/Transparent 只作用于写它的节点，子节点仍按自身模式命中并可阻塞兄弟；纯展示遮罩条外包定位 Row/Column 时，把 None 写在实际有尺寸的绘制节点上，不用父层 None 代表整组不参与命中（父层统管后代按本机 SDK 核对 BLOCK_DESCENDANTS 后再用）。",
+    "编写共享组件的层契约时区分组件内部根节点与调用处节点：调用处写 width/height/zIndex 等通用属性会生成缺省命中的外层节点，组件内部无法设置它；契约写明“挂载实例上写 Transparent 或调用处不写通用属性”，不在头注释声称组件自身已不拦截。",
+    "页面接入或替换共享组件时，保留挂载点已有的 hitTestBehavior；实例上带通用属性就在实例上写 Transparent，组件契约里的说法不作为删除它的依据。",
+    "生成期不能上机时，按 Stack 子节点逐个列出“覆盖哪些可点击区域、自身是否处理点击、显式命中模式写在哪个节点”，自定义组件实例单独成行；能上机时在浮层关闭态和动效播放期间各点一次下层控件。",
+    "修订 lesson-4a4f8d845a204ffa244b（版本 5，增量）：做法第 4 步补充“条件渲染只解决空闲期；源端动效播放期间不拦截触摸时，在挂载实例上同样写 Transparent 或 None——调用处的 width/height/zIndex 等通用属性会生成缺省命中的外层节点，组件内部根节点（含 Canvas）上的设置管不到它”；原因段把“外层组件节点”写明为调用处生成的包装节点。",
+    "召回失败 lesson-4a4f8d845a204ffa244b：标题“不处理点击的覆盖层显式 Transparent”与做法第 1 步“位于可点击兄弟之上、覆盖其区域且自身不处理点击的容器显式写 Transparent”足以覆盖关闭态抽屉浮层 Stack（源 LayoutWithModalDrawerSheet.kt:101 关闭时内容可交互）。acdb 在 agent-acdb6502652d3eb2b.jsonl:L198 收到标题与提醒（提醒只点名 Snackbar 宿主与 scrim），写出时只用于 Snackbar 宿主和唤起条；a70c 的召回 worker 在 recall/a70c5e626561b643b-call_eb42faab4459491f9d8c55ee.jsonl:L114 只核对 Snackbar 与唤起条即判定无需下发。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-gameoflife-k20c3/entry/src/main/ets/layout/AppLayout.ets",
+        "since": "2026-10-21T06:46:35.836Z",
+        "at": "2026-10-21T16:29:04.600Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-gameoflife-k20c3/.claude/skills/android-ui-graph-query/references/ui-migration-pitfalls.md",
+          "at": "2026-10-20T16:19:06.899Z",
+          "reason": "正常输入：P-17 要求纯展示、点击交底层的上层显式 Transparent，并自检任一 Stack 上层子节点是否按该不该挡触摸显式设置；写明盒子过大且缺 hitTestBehavior 会使下层点不动（agent-acdb6502652d3eb2b.jsonl:L51-L52）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-gameoflife-k20c3/.claude/skills/android-ui-graph-query/references/android-to-harmonyOS-ui-interaction-mapping-reference.md",
+          "at": "2026-10-20T16:19:06.536Z",
+          "reason": "正常输入：触摸测试表写明 HitTestMode.Default 自身命中会阻塞兄弟组件，Transparent 自身触摸测试不阻塞（agent-acdb6502652d3eb2b.jsonl:L49-L50）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/gameoflife-efimj-b9f42ed/app/src/main/java/com/jobik/gameoflife/screens/layout/LayoutWithModalDrawerSheet.kt",
+          "at": "2026-10-20T16:19:12.513Z",
+          "reason": "正常输入：源用 ModalNavigationDrawer(drawerState)（:101），关闭态内容照常可交互，打开时由遮罩拦截（agent-acdb6502652d3eb2b.jsonl:L62-L63）。"
+        },
+        {
+          "key": "agent-acdb6502652d3eb2b.jsonl",
+          "at": "2026-10-20T17:31:05.391Z",
+          "reason": "收到上述输入和 L198 的 lesson-4a4f 提示后，L313 Write 只给 Snackbar 宿主层与左缘唤起条写 Transparent，modalDrawerOverlay() 的全屏 Stack 缺省命中，关闭态盖住全部内容。后续 a70c 重写保留原样，不另入图。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-gameoflife-k20c3/entry/src/main/ets/pages/GamePage.ets",
+        "since": "2026-10-21T06:46:35.836Z",
+        "at": "2026-10-21T16:29:04.600Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-gameoflife-k20c3/.claude/skills/android-ui-graph-query/references/android-to-harmonyOS-ui-interaction-mapping-reference.md",
+          "at": "2026-10-20T16:21:05.136Z",
+          "reason": "正常输入：触摸测试表区分 None“自身不接收事件，不阻塞”与 BLOCK_DESCENDANTS“自身不响应，后代也不响应”，足以说明父层 None 不管子节点（agent-aac36eaf3f526bfce.jsonl:L53-L54）。"
+        },
+        {
+          "key": "agent-aac36eaf3f526bfce.jsonl",
+          "at": "2026-10-20T17:25:28.130Z",
+          "reason": "起草时把 None 写在渐变 Column 上，定稿改为外包 Row 只给 Row 写 None 并注释“纯展示层，不参与命中”，两条渐变 Column 保持 Default，盖住半露的边缘 chip（同转录 L350、L375）。同次 Write 的彩纸挂载点带 None，未在此分支出错。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-gameoflife-k20c3/entry/src/main/ets/components/donation/ThankYouModal.ets",
+          "at": "2026-10-20T18:05:38.242Z",
+          "reason": "输入：槽注释写明只给内部 Canvas 设 None 不够、outer component node 不得拦截，同时把要求表述为共享组件 ROOT 节点全屏+Transparent（agent-a3b5b1ae17bddd1d4.jsonl:L65-L66）。"
+        },
+        {
+          "key": "agent-a3b5b1ae17bddd1d4.jsonl",
+          "at": "2026-10-20T18:37:19.459Z",
+          "reason": "槽注释与 L188 的 lesson-4a4f 召回提示（v5，“KonfettiView 根节点（组件最外层节点，非内部 Canvas）Transparent，仅播放期间条件挂载”；经验经钩子回执送达，非文件读取，故不单列节点）都指出外层组件节点与内部 Canvas 不同；它把 Canvas 当 build 根并认定即最外层节点（L190），只给 Canvas 写 Transparent，并在 KonfettiView.ets 头部写契约称组件已遮不住底层（L265-L266）。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-gameoflife-k20c3/entry/src/main/ets/components/common/KonfettiView.ets",
+          "at": "2026-10-20T19:17:43.416Z",
+          "reason": "交付桥梁：aabc1 读回的头部包含“组件根节点（Canvas 本身）'100%'+Transparent——遮不住底层”的层契约（agent-aabc1e5bb04a2ab2a.jsonl:L244-L245）。"
+        },
+        {
+          "key": "agent-aabc1e5bb04a2ab2a.jsonl",
+          "at": "2026-10-21T01:21:29.827Z",
+          "reason": "按该契约判断无需额外 hitTest（L259），L398 换装 KonfettiView 时删去挂载点 None，保留 width/height/zIndex(10)，把错误契约传到目标；本链确认传递，不另推定独立偏差。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": 6
+        },
+        {
+          "from": 6,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "aac36 初版挂载点 None 的放行效果生成期未上机，按 ArkUI None 语义推断；BLOCK_DESCENDANTS 未在本机 SDK 声明核对。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-2f1588d16e333f764904",
+  "metadata": {
+    "migration": {
+      "id": "gameoflife-k20c3-68203082-5513-4f64-b94d-5441fe323d90",
+      "project": "GameOfLife"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.304",
+        "2.1.305",
+        "2.1.306"
+      ]
+    },
+    "source_set_id": "sources-1bba2f392f35420f049b",
+    "environment": [
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-gameoflife-k20c3",
+        "at": "2026-10-20T10:46:51.396Z",
+        "ref": "generation/68203082-5513-4f64-b94d-5441fe323d90/subagents/agent-a67bd634faae14552.jsonl:L36",
+        "request_ref": "generation/68203082-5513-4f64-b94d-5441fe323d90/subagents/agent-a67bd634faae14552.jsonl:L35",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-gameoflife-k20c3",
+        "at": "2026-10-20T14:57:28.580Z",
+        "ref": "generation/68203082-5513-4f64-b94d-5441fe323d90.jsonl:L1279",
+        "request_ref": "generation/68203082-5513-4f64-b94d-5441fe323d90.jsonl:L1273",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-gameoflife-k20c3",
+        "at": "2026-10-20T14:57:28.580Z",
+        "ref": "generation/68203082-5513-4f64-b94d-5441fe323d90.jsonl:L1279",
+        "request_ref": "generation/68203082-5513-4f64-b94d-5441fe323d90.jsonl:L1273",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-gameoflife-k20c3\\entry\\src\\main\\ets",
+        "at": "2026-10-21T11:51:33.057Z",
+        "ref": "repair/80e50793-e51a-435f-bd07-f5badd469938.jsonl:L1125",
+        "request_ref": "repair/80e50793-e51a-435f-bd07-f5badd469938.jsonl:L1124",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-gameoflife-k20c3\\entry\\src\\main\\ets",
+        "at": "2026-10-21T11:51:33.057Z",
+        "ref": "repair/80e50793-e51a-435f-bd07-f5badd469938.jsonl:L1125",
+        "request_ref": "repair/80e50793-e51a-435f-bd07-f5badd469938.jsonl:L1124",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "765d4bf2-ff04-47fe-b3b6-d5088a9aafeb"
+      ]
+    }
+  },
+  "revision": "41137c9c24a737ad0b84d76a9778aff790e746f40c6871c34300524f64e73aa1"
+}

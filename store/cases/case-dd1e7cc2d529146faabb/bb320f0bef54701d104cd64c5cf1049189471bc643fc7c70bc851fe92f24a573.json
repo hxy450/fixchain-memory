@@ -1,0 +1,159 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-dd1e7cc2d529146faabb",
+  "created_at": "2026-10-23T09:45:43.359316+00:00",
+  "migration_key": "gameoflife-k20c3-68203082-5513-4f64-b94d-5441fe323d90",
+  "title": "配置变化重放未按真实变化把关，重放里重套应用语言同步回灌 onConfigurationUpdate 导致冷启动栈溢出",
+  "when": "实现阶段，把源端配置变化整窗重建的副作用落成 onConfigurationUpdate 显式重放，并在重放或启动链里调用设置应用语言等会改配置的接口时",
+  "description": "源 Activity 未声明 configChanges（旋转、语言、深浅色、字号、显示大小变化即重建并重跑 attachBaseContext/onCreate）；目标 UIAbility 不重建，由 onConfigurationUpdate 分派重放清单，且启动期 attachPhase 与重放项都会调用 ApplicationContext.setLanguage / i18n.System.setAppPreferredLanguage 重套持久化的应用内语言。",
+  "summary": "写前实际收到：F010 规格把重放写成「onConfigurationUpdate 收到 colorMode/language/fontSizeScale/displayDensity 变化域 → 重放 5 项」，\n服务层签名是 onConfigurationReplay(change: ConfigurationChange)，源端语义是「配置变化 = 整窗销毁重建」\n（agent-a4bfb7cc16865cb1c.jsonl:L40，F010-app-lifecycle.md 数据流 43-55 行、服务层 62 行、AC17-AC22）；\n源码 MainActivity.kt:26-34 的 attachBaseContext 只用 createConfigurationContext 套语言，重建只由配置真实变化触发（L92）；\nLocalizationStore.setPreferred 的头注释写明它调用 setAppPreferredLanguage 与 ApplicationContext.setLanguage，\n后者「当前进程即时生效、全页面 $r 文案刷新」（L125）。派工与切片计划给的 ④ 是「语言重读（S2 LocalizationStore 同链）」（L1、L31）。\n这些输入都没有明说「设置应用语言会同步回调 onConfigurationUpdate」，但规格的变化域与 ConfigurationChange 签名已经把重放限定在配置真实变化上。\n\nslice-10 worker 在注入前就定下设计（L253、L350）：④ 用 LocalizationStore.setPreferred 重套语言，attachPhase 也调用它。\nL378 写出的 StartupTimeline.ets 里，onConfigurationReplay(newConfig: Configuration) 对每次回调都无条件执行 ④②③①⑤，\n没有基线、没有字段比较；attachPhase 在 onCreate 里调用 setPreferred。后续 L383-L408 的 Edit 只调整导入与主题调用，没有碰重放段，\n这段代码原样保留到返修基线。设备上，setPreferred 即使语言未变也同步回调 onConfigurationUpdate，\n形成 setPreferred → onConfigurationUpdate → onConfigurationReplay → setPreferred 无限递归，冷启动 jscrash\n（80e50793-e51a-435f-bd07-f5badd469938.jsonl:L228-L229 崩溃栈；L292-L293 DBGFIX 栈从 attachPhase 的 setPreferred 进入）。\n\n经验注入（L361，首次写入前）：召回 worker 拿到的 lesson-94715d0df4c03a8fb5a5（版本 4）正文做法第 2 步写着\n「实现时在 EntryAbility.onConfigurationUpdate 比较相关字段（language、colorMode、fontSizeScale、fontWeightScale、screenDensity、mcc/mnc）……变化时显式通知页面」\n（recall/a4bfb7cc16865cb1c-call_edc6e186eced418fa4b7fddc.jsonl:L42），但提醒把它改写成「onConfigurationUpdate(newConfig) 调 onConfigurationReplay 分派 5 项」，\n去掉了比较条件，并判「和你现有写法的冲突：无冲突」；agent 读后认为它「Confirms my 5-item replay design」（L363），没有打开正文。\n原文标题与做法第 1 步看不到「只在真实变化时重放」，正文也没有说明目标回调会被应用自己的语言设置同步回灌、\n基线要在套用语言之前记录且在执行重放前更新，以及回调里的 language 写法可能与 context.config 不同（返修设备日志 attach 时 en-Latn-US、回调里 en，L348）。\n\n这次召回经 PreToolUse hook 回执交给 agent（L360 被拦的 Edit → L361 回执），不是对经验文件的读取；检查器既不认它是对经验文件的读，\n也不认召回 worker 到 agent 的派发（不可 force），所以经验只在这里和建议里按上述行号引用，不画成图节点。\n\n偏差位于实现环节：把「配置变化时重放」写成「每次 onConfigurationUpdate 回调都重放」，并在重放内部调用会再次触发该回调的接口。\n返修新增 lastConfigFingerprint 与 configFingerprint()（语言按 Intl.Locale 归一到子标签 + colorMode/direction/screenDensity/fontSizeScale/fontWeightScale），\nattachPhase 在 setPreferred 之前记录启动指纹，onConfigurationReplay 入口指纹未变直接返回、变化时先落新指纹再执行重放\n（L323-L328；L348 验证 3 次回灌回调全部短路；L570-L582 两次冷启动计数为 2，检查点 X1 858a11e）。④ 仍保留 setPreferred，修复点是变化判据而不是删掉语言重套。\n",
+  "recommendations": [
+    "修订 lesson-94715d0df4c03a8fb5a5（版本 4，增量）：做法第 2 步补一条前提与时机——目标 onConfigurationUpdate 不等于配置真实变化：应用自己调用 ApplicationContext.setLanguage、i18n.System.setAppPreferredLanguage（包括 onCreate 首帧前套用偏好语言、重放里重套语言）即使值没变也会同步回调它，而且回调里的 language 写法可能和 context.config 不同（如 en 与 en-Latn-US）。因此要在启动套用语言之前记录配置基线；回调入口先把语言归一到子标签再和基线比较，没变就直接返回，变了就先更新基线再执行重放。不比较时，重放里的语言重套会无限递归（冷启动栈溢出）；比较了但基线更新晚于重放，同样会递归；不归一语言，每次冷启动都会多重放一次。依据：80e50793-e51a-435f-bd07-f5badd469938.jsonl:L293、L348。",
+    "实现阶段写 onConfigurationReplay 时按规格变化域加真实变化判据：attachPhase 首句（在 LocalizationStore.setPreferred 之前）记录 context.config 指纹（语言子标签、colorMode、direction、screenDensity、fontSizeScale、fontWeightScale），重放入口指纹相同就返回，不同就先落新指纹再执行重放各项；规格给了 ConfigurationChange/变化域签名时，不要退化成每次回调都分派。",
+    "实现阶段在系统回调里调用可能改动同一配置的接口（设置语言、深浅色等）之前，先确认该接口会不会同步触发同一回调，再给回调加变化判据或重入守卫；不能编译的批次写后逐条检查重放链和启动链里的这类调用。",
+    "召回失败 lesson-94715d0df4c03a8fb5a5：正文做法第 2 步「在 EntryAbility.onConfigurationUpdate 比较相关字段……变化时显式通知页面」本可指出 agent 现有设计缺少变化判据（源码 MainActivity.kt:26-78 只在配置真实变化时重建），召回 worker 却把提醒写成无比较地分派 5 项，并判无冲突（agent-a4bfb7cc16865cb1c.jsonl:L361；worker 收到正文见 recall/a4bfb7cc16865cb1c-call_edc6e186eced418fa4b7fddc.jsonl:L42）。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-gameoflife-k20c3/entry/src/main/ets/viewmodels/StartupTimeline.ets",
+        "since": "2026-10-21T06:46:35.836Z",
+        "at": "2026-10-21T16:29:04.600Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-gameoflife-k20c3/spec/baseline/features/F010-app-lifecycle.md",
+          "at": "2026-10-21T04:16:53.775Z",
+          "reason": "正常输入：Read 回执给出 PD-C6-F010-01——源端配置变化 = 整窗重建；目标 onConfigurationUpdate 收到 colorMode/language/fontSizeScale/displayDensity 变化域后重放 5 项；服务层签名 onConfigurationReplay(change: ConfigurationChange)。这已经把重放限定在配置真实变化上，没有要求每次回调都重放；但规格没有提到设置应用语言会同步回调（agent-a4bfb7cc16865cb1c.jsonl:L39-L40）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/gameoflife-efimj-b9f42ed/app/src/main/java/com/jobik/gameoflife/activity/MainActivity.kt",
+          "at": "2026-10-21T04:17:29.740Z",
+          "reason": "正常输入：Read 回执给出 attachBaseContext 用 ContextUtils.setLocale（createConfigurationContext）套语言，onCreate 语句只在 Activity 重建时重跑；源端没有「套语言 → 配置回调」的自触发路径，重建只由配置真实变化引起（同转录 L91-L92）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-gameoflife-k20c3/entry/src/main/ets/repositories/LocalizationStore.ets",
+          "at": "2026-10-21T04:17:51.974Z",
+          "reason": "正常输入：Read 回执显示 setPreferred 依次调用 i18n.System.setAppPreferredLanguage 与 ApplicationContext.setLanguage，注释写明后者让当前进程即时生效、全页面 $r 重解析；说明它会改应用配置，但没有明说会同步回调 onConfigurationUpdate（同转录 L124-L125）。"
+        },
+        {
+          "key": "agent-a4bfb7cc16865cb1c.jsonl",
+          "at": "2026-10-21T04:53:02.039Z",
+          "reason": "收到上述规格、源码与 LocalizationStore 后，在注入前就定下 ④=setPreferred 重套、attachPhase 也套语言的设计（L253、L350），注入后把提醒当作确认（L363）。L378 Write 出 onConfigurationReplay(newConfig) 无条件执行 ④②③①⑤，没有变化判据和基线，把规格的「变化域」退化成「每次回调」；重放内部的 setPreferred 又会同步触发同一回调，冷启动由 attachPhase 进入无限递归。L383-L408 的 Edit 没有碰这一段（同转录 L378-L379）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-dd1e7cc2d529146faabb",
+  "metadata": {
+    "migration": {
+      "id": "gameoflife-k20c3-68203082-5513-4f64-b94d-5441fe323d90",
+      "project": "GameOfLife"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.304",
+        "2.1.305",
+        "2.1.306"
+      ]
+    },
+    "source_set_id": "sources-1bba2f392f35420f049b",
+    "environment": [
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-gameoflife-k20c3",
+        "at": "2026-10-20T10:46:51.396Z",
+        "ref": "generation/68203082-5513-4f64-b94d-5441fe323d90/subagents/agent-a67bd634faae14552.jsonl:L36",
+        "request_ref": "generation/68203082-5513-4f64-b94d-5441fe323d90/subagents/agent-a67bd634faae14552.jsonl:L35",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-gameoflife-k20c3",
+        "at": "2026-10-20T14:57:28.580Z",
+        "ref": "generation/68203082-5513-4f64-b94d-5441fe323d90.jsonl:L1279",
+        "request_ref": "generation/68203082-5513-4f64-b94d-5441fe323d90.jsonl:L1273",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-gameoflife-k20c3",
+        "at": "2026-10-20T14:57:28.580Z",
+        "ref": "generation/68203082-5513-4f64-b94d-5441fe323d90.jsonl:L1279",
+        "request_ref": "generation/68203082-5513-4f64-b94d-5441fe323d90.jsonl:L1273",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-gameoflife-k20c3\\entry\\src\\main\\ets",
+        "at": "2026-10-21T11:51:33.057Z",
+        "ref": "repair/80e50793-e51a-435f-bd07-f5badd469938.jsonl:L1125",
+        "request_ref": "repair/80e50793-e51a-435f-bd07-f5badd469938.jsonl:L1124",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-gameoflife-k20c3\\entry\\src\\main\\ets",
+        "at": "2026-10-21T11:51:33.057Z",
+        "ref": "repair/80e50793-e51a-435f-bd07-f5badd469938.jsonl:L1125",
+        "request_ref": "repair/80e50793-e51a-435f-bd07-f5badd469938.jsonl:L1124",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "765d4bf2-ff04-47fe-b3b6-d5088a9aafeb"
+      ]
+    }
+  },
+  "revision": "bb320f0bef54701d104cd64c5cf1049189471bc643fc7c70bc851fe92f24a573"
+}

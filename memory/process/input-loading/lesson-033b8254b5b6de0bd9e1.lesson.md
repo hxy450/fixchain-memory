@@ -1,6 +1,6 @@
 # 页面、控件、算法或实体基类由二进制三方库承载时，按依赖坐标取库制品核对真值，不按调用面推断或以原生组件近似
 
-ID：`lesson-033b8254b5b6de0bd9e1` · 版本：1
+ID：`lesson-033b8254b5b6de0bd9e1` · 版本：2
 
 [本主题](index.md)
 
@@ -28,7 +28,7 @@ ID：`lesson-033b8254b5b6de0bd9e1` · 版本：1
 4. 把真值写进规格映射行或组件头注释，注明库内文件、资源名或类方法与版本；映射行的依据只是仓库内调用行、README、单元测试或分析产物里的“建议”时，不标 Auto、不进跨栈硬映射基线，实现也不凭样式常量类自定时长、角度或间距。
 5. 确实取不到时，在规格逐项列出缺失的库真值（队列时序、几何、手势、序列化格式、文案）及其影响，登记为阻塞或交用户改判；不写「默认样式即可对齐」，也不把这类占位的兑现交给视觉对齐步骤。派工给出 Android 源码路径时，一并给出库制品缓存路径与可解包提示。
 
-来源支持：17 张卡 · 迁移数未记录 · 应用数未记录
+来源支持：18 张卡 · 已知 1 次迁移（部分未记录） · 已知 1 个应用（部分未记录）
 
 ## 来源（按需复核）
 
@@ -38,6 +38,8 @@ ID：`lesson-033b8254b5b6de0bd9e1` · 版本：1
   卡片版本：`341c9452897eb8bf11090c600c5a436b37e1c719e3b0ce1f9227c30a577fb063`
 - [case-44a53125e4f44a862c80](../../../store/cases/case-44a53125e4f44a862c80/5e62d1276d05aa0f89888247b9ed48150a94fca16b46cc40b6c45d8eb14f5f88.json) · 结论：recommendation:1
   卡片版本：`5e62d1276d05aa0f89888247b9ed48150a94fca16b46cc40b6c45d8eb14f5f88`
+- [case-49a2270970314f62c95f](../../../store/cases/case-49a2270970314f62c95f/bc5c1966549a6d8a60581c570ad3dc091490144507f4c2c2b831ecf334aed9b5.json) · 结论：diagnosis, recommendation:1, recommendation:2
+  卡片版本：`bc5c1966549a6d8a60581c570ad3dc091490144507f4c2c2b831ecf334aed9b5`
 - [case-5e7f81b1b1ef0753d249](../../../store/cases/case-5e7f81b1b1ef0753d249/203ae9a24100267c1011c082352849d2f6596b184a230d8213699ec0075fa03b.json) · 结论：recommendation:1
   卡片版本：`203ae9a24100267c1011c082352849d2f6596b184a230d8213699ec0075fa03b`
 - [case-6984b2614fabe391f2e7](../../../store/cases/case-6984b2614fabe391f2e7/4e13e5e45b38251a019a68c084e9d1f1d2301fcf064ee28b4c8386bbcbbeb2b3.json) · 结论：diagnosis, recommendation:2

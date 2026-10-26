@@ -1,0 +1,269 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-b64a7b51e4483f31922d",
+  "created_at": "2026-10-23T09:51:35.689515+00:00",
+  "migration_key": "gameoflife-k20c3-68203082-5513-4f64-b94d-5441fe323d90",
+  "title": "两层 Compose 共享转场（sharedBounds 包 sharedElement）被逐层译成嵌套的两对 geometryTransition，配对节点子树丢失",
+  "when": "界面实现阶段，把 Compose 共享元素转场落为 ArkUI geometryTransition、确定每端挂几个配对键和挂在哪个节点时；规格提取阶段写共享转场契约时同样适用",
+  "description": "源端在 SharedTransitionLayout 内用 sharedBounds(\"${id}-bounds\") 包住带 sharedElement(id) 的卡片，两层 key 不同，列表卡与同页详情浮层两端各有这两层；目标用同页 Stack 条件浮层加 geometryTransition 做展开和收起。",
+  "summary": "源端 InformationContent.kt 的网格卡是 Box.sharedBounds(\"${id}-bounds\") 里套 LargeInformationCard.sharedElement(id)\n（L141-L153），详情浮层同样两层（L230-L243）。页面转换者 ab518 写前读到了源码\n（agent-ab518d6b15a127ad7.jsonl:L46-L47）、page_0003 规格的转换行\n「SharedTransitionLayout + sharedElement/sharedBounds → geometryTransition(id)」（L30-L31），\n以及 page_0013 规格的转换行「sharedBounds(\"${id}-bounds\") + sharedElement(id) → geometryTransition(id) 双端绑定（grid 卡端 + 浮层卡端）」\n（L152-L153）。两份规格的转换决策都是每端一个 geometryTransition，没有要求每个源层各配一对；\n不足之处是没写明用哪个键，也没写明不要嵌套，page_0013 页面结构一节还把源端两层 key 原样列出。\nab518 却把这一节当作契约：L156 推理写下 sharedBounds → `${cardId}-bounds`、sharedElement → `cardId`，\n随后 Write 在 InformationPage.ets 网格外层 Column 挂 `${card.id}-bounds`（L254-L255），\n又在 LargeInformationCardComponent 根节点挂 geometryTransition(this.cardId.toString())，并新增 cardId 参数\n（L260-L261），于是同一子树里嵌套了两对配对。偏差位于\"规格的单对绑定 → 实现\"这一环。\n写前查过的映射参考和 SDK 都没给出可以排除嵌套的信息：交互映射参考与共享元素相关的只有 SharedElementCallback → sharedTransition 一行\n（android-to-harmonyOS-ui-interaction-mapping-reference.md:328）。ab518 只 grep 了该文件的标题（L99-L102），\na727db 的 grep 返回的正是这一行（agent-a727dbf77d089f533.jsonl:L102-L103）；ab518 的 SDK grep 只返回签名\ngeometryTransition(id, options?)（L213-L214）。slice-04 建议的 arkts-animation-migrate 没有加载，\n它的 transitions.md §2 也只示范单对同 id 绑定，不涉及 Compose 两层共享转场。\n浮层转换者 a727db 写前读到 page_0013 规格（agent-a727dbf77d089f533.jsonl:L23-L24），也读到 ab518 已写好的两个网格端文件\n（L56-L59），在 L65 记下网格端是两对，于是在 CardDetailsOverlay 里镜像成外层 `${cardId}-bounds`\n加内层 Surface Column 的 geometryTransition(cardId)（L195-L196）。浮层端要与网格端同键配对，这是沿用网格端契约；\n本链只确认传递，不另判 a727db 独立失职。\n规格层另有一处同向偏差，没有交到上述两位写者手里：F006 规格把 id 值域写成「`${card.id}` 与 `${card.id}-bounds` 两对」\n（agent-ac3ced6fe21563a1d.jsonl:L259）。后来 Slice 4 接线时据此写下「双端两对齐备」（agent-a2f271dc65f1185ed.jsonl:L318），\n起到的是把错误坐实的作用。生成期后续写者都没有改动这两对配对（如 agent-add650f9f4703a285.jsonl:L162 只替换了背景色）。\n返修 F25 在控件树里看到浮层卡和收起后的网格卡都没有子节点。修复删掉内层两处 .geometryTransition(cardId)，\n只保留外层 `${id}-bounds`（repair/80e50793-e51a-435f-bd07-f5badd469938.jsonl:L1405-L1410、L1481-L1484），\n并删掉因此不再使用的 LargeInformationCardComponent.cardId 参数和 InformationPage 调用处的实参（L1503-L1516）；\n三张卡分别用 Close、遮罩、返回键关闭复核，均正常（L1441-L1475），检查点 bd600e7（L1537-L1544）。\n经验注入：ab518（L177）和 a727db（L163）收到的经验都不涉及共享元素配对。库里（1bb6facd 与 bcdc3ed0）没有对应经验，这是新偏差。\na727db 收到的 lesson-a4e6 提醒里有一句「几何过渡由 wrapper `${id}-bounds` 与卡 id 双 geometryTransition 配对承担」，\n原文没有这句。它复述的是 a727db 自己在召回前盘点出的方案（recall/a727dbf77d089f533-call_7c2391f020a54d829b2aaf8f.jsonl:L24、L306），\n起了背书作用，但不是成因。\n",
+  "recommendations": [
+    "界面实现阶段：源端 sharedBounds 包住 sharedElement 时，不把每个共享层逐层各译成一个 geometryTransition。同一配对子树里只挂一个 geometryTransition 承担形变，挂在外层容器上，内层内容随容器一起过渡；规格写的是「geometryTransition(id) 双端绑定」时按每端一对理解。",
+    "界面实现阶段：后写的一端要与已写好的一端配对时，核对对方的键，也核对对方有没有嵌套第二个 geometryTransition；发现嵌套就在 handback 里报告，不照样镜像。",
+    "规格提取阶段：把两层共享转场写成目标契约时，写明每端只挂一对 geometryTransition、用哪个键（本次为外层 `${id}-bounds`）、挂在哪个节点，并注明内层不再挂第二个；不把源端两层 key 写成「两对」。",
+    "验证阶段：两端都写完后，在设备上打开并关闭一次，用控件树确认浮层卡和收起后的列表卡都还有子节点（本次两者都是空节点），不只看截图里有没有动画。",
+    "召回失败 lesson-a4e6bcfb28597691c028：该经验标题和适用情境只写到 AnimatedVisibility expand/shrink、AnimatedContent + SizeTransform、animateContentSize、animateItem，不含共享元素配对，原文也没有 geometryTransition。召回 worker 却在给 a727db 的「这次怎么写」里加了「wrapper `${id}-bounds` 与卡 id 双 geometryTransition 配对」（recall/a727dbf77d089f533-call_7c2391f020a54d829b2aaf8f.jsonl:L306），等于替嵌套方案背书。源端两层共享转场在 InformationContent.kt:141-153、230-243。提醒应只写经验原文覆盖的内容。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-gameoflife-k20c3/entry/src/main/ets/pages/InformationPage.ets",
+        "since": "2026-10-21T06:46:35.836Z",
+        "at": "2026-10-21T16:29:04.600Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/gameoflife-efimj-b9f42ed/app/src/main/java/com/jobik/gameoflife/screens/lnformation/InformationContent.kt",
+          "at": "2026-10-20T16:19:11.885Z",
+          "reason": "正常输入：ab518 用 Read 读到源端网格卡 Box.sharedBounds(\"${id}-bounds\") 里套 LargeInformationCard.sharedElement(id)，详情浮层同样两层（agent-ab518d6b15a127ad7.jsonl:L46-L47）。源端是两层共享转场，本身不规定 ArkUI 侧的配对数。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-gameoflife-k20c3/spec/baseline/ui/page_0003_InformationScreen.md",
+          "at": "2026-10-20T16:19:04.902Z",
+          "reason": "正常输入：本页规格的转换决策行是 SharedTransitionLayout + sharedElement/sharedBounds → geometryTransition(id)，把两层合成一个 geometryTransition（agent-ab518d6b15a127ad7.jsonl:L30-L31）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-gameoflife-k20c3/spec/baseline/ui/page_0013_InformationCardDetails.md",
+          "at": "2026-10-20T16:23:30.065Z",
+          "reason": "正常输入，但不够明确：转换决策行写 sharedBounds(\"${id}-bounds\") + sharedElement(id) → geometryTransition(id) 双端绑定（grid 卡端 + 浮层卡端），即每端一对。没写明用哪个键，也没写明不要嵌套；页面结构一节原样列出源端两层 key（agent-ab518d6b15a127ad7.jsonl:L152-L153）。"
+        },
+        {
+          "key": "agent-ab518d6b15a127ad7.jsonl",
+          "at": "2026-10-20T17:02:35.559Z",
+          "reason": "收到上述输入后，在 L156 把规格解读成 sharedBounds → `${cardId}-bounds`、sharedElement → `cardId` 两对。Write 在网格外层 Column 挂 geometryTransition(`${card.id}-bounds`)，往 LargeInformationCardComponent 传 cardId: card.id（L254-L255），卡根另挂一对。两层源 key 被逐层译成嵌套配对，与规格的每端单对绑定不符。返修保留外层这对，只删掉调用处的 cardId 实参（repair L1505、L1515）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-gameoflife-k20c3/entry/src/main/ets/components/information/LargeInformationCardComponent.ets",
+        "since": "2026-10-21T06:46:35.836Z",
+        "at": "2026-10-21T16:29:04.600Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/gameoflife-efimj-b9f42ed/app/src/main/java/com/jobik/gameoflife/screens/lnformation/InformationContent.kt",
+          "at": "2026-10-20T16:19:11.885Z",
+          "reason": "正常输入：源端 LargeInformationCard 的 sharedElement(id) 位于外层 Box.sharedBounds(\"${id}-bounds\") 之内（agent-ab518d6b15a127ad7.jsonl:L46-L47）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-gameoflife-k20c3/spec/baseline/ui/page_0013_InformationCardDetails.md",
+          "at": "2026-10-20T16:23:30.065Z",
+          "reason": "正常输入，但不够明确：转换决策行把两层合成「geometryTransition(id) 双端绑定」，每端一对；没写键的选择，也没写不要嵌套（agent-ab518d6b15a127ad7.jsonl:L152-L153）。"
+        },
+        {
+          "key": "agent-ab518d6b15a127ad7.jsonl",
+          "at": "2026-10-20T17:02:44.364Z",
+          "reason": "Write 新增 @Param cardId，并在卡根 Column 挂 geometryTransition(this.cardId.toString())（L260-L261）。宿主页外层已挂 `${id}-bounds`，于是这里成了嵌套在外层配对里的第二对。依据是 L156 把 sharedElement(id) 单独映射成一对。返修删掉这一行和不再使用的 cardId 参数（repair L1406、L1482、L1504）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-gameoflife-k20c3/entry/src/main/ets/components/information/CardDetailsOverlay.ets",
+        "since": "2026-10-21T06:46:35.836Z",
+        "at": "2026-10-21T16:29:04.600Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-gameoflife-k20c3/spec/baseline/ui/page_0013_InformationCardDetails.md",
+          "at": "2026-10-20T16:23:30.065Z",
+          "reason": "正常输入，但不够明确：转换决策行写 geometryTransition(id) 双端绑定，每端一对（agent-ab518d6b15a127ad7.jsonl:L152-L153）。"
+        },
+        {
+          "key": "agent-ab518d6b15a127ad7.jsonl",
+          "at": "2026-10-20T17:02:44.364Z",
+          "reason": "偏差起点：把源端两层 key 逐层译成网格端两对嵌套配对，外层 Column 挂 `${card.id}-bounds`（L254-L255），卡根挂 cardId（L260-L261）。网格端两对由此成了浮层端要配合的契约。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-gameoflife-k20c3/entry/src/main/ets/pages/InformationPage.ets",
+          "at": "2026-10-20T17:12:36.101Z",
+          "reason": "交付桥梁：a727db 用 Read 读到宿主页网格外层 Column 的 geometryTransition(`${card.id}-bounds`)，以及传给大卡的 cardId（agent-a727dbf77d089f533.jsonl:L56-L57）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-gameoflife-k20c3/entry/src/main/ets/components/information/LargeInformationCardComponent.ets",
+          "at": "2026-10-20T17:12:36.378Z",
+          "reason": "交付桥梁：a727db 用 Read 读到卡根的 geometryTransition(this.cardId.toString())（agent-a727dbf77d089f533.jsonl:L58-L59），并在 L65 记下这是 sharedElement(id) 那一对。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-gameoflife-k20c3/spec/baseline/ui/page_0013_InformationCardDetails.md",
+          "at": "2026-10-20T17:12:08.804Z",
+          "reason": "a727db 写前也读了同一份规格，内容与上面的版本相同：每端一对 geometryTransition(id)，没写不要嵌套（agent-a727dbf77d089f533.jsonl:L23-L24）。"
+        },
+        {
+          "key": "agent-a727dbf77d089f533.jsonl",
+          "at": "2026-10-20T17:54:49.520Z",
+          "reason": "为与网格端同键配对，镜像成两对：卡容器挂 `${this.cardId}-bounds`，内层 Surface Column 再挂 geometryTransition(this.cardId.toString())（L195-L196，首稿 L190 已是如此）。这是沿用网格端契约的传递，本链不另判独立失职。返修删掉内层这一行，只保留外层（repair L1405、L1481）。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 6
+        },
+        {
+          "from": 4,
+          "to": 6
+        },
+        {
+          "from": 5,
+          "to": 6
+        },
+        {
+          "from": 6,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-b64a7b51e4483f31922d",
+  "metadata": {
+    "migration": {
+      "id": "gameoflife-k20c3-68203082-5513-4f64-b94d-5441fe323d90",
+      "project": "GameOfLife"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.304",
+        "2.1.305",
+        "2.1.306"
+      ]
+    },
+    "source_set_id": "sources-1bba2f392f35420f049b",
+    "environment": [
+      {
+        "name": "libraries.compose_bom",
+        "value": "2026.08.00",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-gameoflife-k20c3",
+        "at": "2026-10-20T10:46:51.396Z",
+        "ref": "generation/68203082-5513-4f64-b94d-5441fe323d90/subagents/agent-a67bd634faae14552.jsonl:L36",
+        "request_ref": "generation/68203082-5513-4f64-b94d-5441fe323d90/subagents/agent-a67bd634faae14552.jsonl:L35",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-gameoflife-k20c3",
+        "at": "2026-10-20T14:57:28.580Z",
+        "ref": "generation/68203082-5513-4f64-b94d-5441fe323d90.jsonl:L1279",
+        "request_ref": "generation/68203082-5513-4f64-b94d-5441fe323d90.jsonl:L1273",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-gameoflife-k20c3",
+        "at": "2026-10-20T14:57:28.580Z",
+        "ref": "generation/68203082-5513-4f64-b94d-5441fe323d90.jsonl:L1279",
+        "request_ref": "generation/68203082-5513-4f64-b94d-5441fe323d90.jsonl:L1273",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-gameoflife-k20c3\\entry\\src\\main\\ets",
+        "at": "2026-10-21T11:51:33.057Z",
+        "ref": "repair/80e50793-e51a-435f-bd07-f5badd469938.jsonl:L1125",
+        "request_ref": "repair/80e50793-e51a-435f-bd07-f5badd469938.jsonl:L1124",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-gameoflife-k20c3\\entry\\src\\main\\ets",
+        "at": "2026-10-21T11:51:33.057Z",
+        "ref": "repair/80e50793-e51a-435f-bd07-f5badd469938.jsonl:L1125",
+        "request_ref": "repair/80e50793-e51a-435f-bd07-f5badd469938.jsonl:L1124",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "765d4bf2-ff04-47fe-b3b6-d5088a9aafeb"
+      ]
+    }
+  },
+  "revision": "2aa260d9288a6eff0bb812ceb75dcd8604eed8c05ed5024abb7e503939128ec1"
+}
