@@ -13,6 +13,9 @@ JSON 与 XML 解析：打包资源的字段必填与空值语义，源解析器�
   - 时机：数据层与网络层实现阶段，把 Retrofit+Gson 的 Bean、响应壳或预置 JSON 资产的读取翻译成 ArkTS 显式解码器时
   - 情境：源端由 Gson 把 JSON 填进 Int/String 字段，或预置资产用字符串存放数值（"id": "43831"）；目标仓库提供只接受单一 typeof 的严格解码函数（string()/number() 类型不符即抛错），真实响应样例尚未采集，规格只写了“Gson → 显式 decoder、显式校验字段”。
   - 例外：源端对该字段确实以类型不符为错误（例如源码显式校验并走失败分支），此时保留严格校验
+- [源端用 URLSearchParams.get 读 query 时，手写取值按表单编码：值先把 '+' 换成空格再 decodeURIComponent](lesson-83ce396a8881f15c44ad.lesson.md)
+  - 时机：功能实现阶段，把源端 URLSearchParams（或其他按表单编码读取 query 的 API）改写为目标端手写取值函数时
+  - 情境：源端用 new URLSearchParams(location.search).get(key) 读取深链或 URL query 参数（如预填标题、日期）；目标端不复用等价 API，而是手写 split('&amp;')/split('=') 加 URI 解码。
 - [源端访问解包后对象的字段时，先确定目标 res.data 对应哪一层类型，再逐层写取值键](lesson-dc5c370e370c2be803c1.lesson.md)
   - 时机：数据层服务实现阶段，把源端 Retrofit/Gson 响应 Bean 的字段访问路径翻译成目标端对原始 JSON 的逐键取值时；页面回调依赖服务层解析产出的 success、errorCode 等字段，准备给出“逐行一致”的复核结论时
   - 情境：源端 success 回调已把 BaseResponse&lt;T&gt; 解包成 T，业务代码写 result.data?.xxx；T 本身是含 data 字段的容器 Bean（如 {total, data:{…}}）；目标网络层把响应 data 原样返回，服务层用 getObject/getArray 按键手动取值。

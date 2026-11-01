@@ -67,9 +67,12 @@
 - [移植文本组件时先确认显示的是原始字符串还是加工后的富文本（Compose AnnotatedString、Html.fromHtml、带标记的字符串资源），样式、链接识别与点击要落到目标端；Html.fromHtml 只产出单个符号实体、按大字号逐个生成作页码点等图形时不算富文本，按源字体下的可见几何绘制图形](lesson-57a52be767730880cbba.lesson.md)
   - 时机：界面实现阶段，把源端 Compose Text、TextView 或对话框正文译成 ArkUI Text 时
   - 情境：源组件先调用工具函数（如按正则识别 URL、附加 LinkAnnotation 的 buildAnnotatedStringWithUrls）生成 AnnotatedString 再交给 Text；目标页面规格和验收条目只写了空值隐藏、折叠展开等布局行为。也包括 View 体系以 Html.fromHtml、setMessage(resId) 或 android:text 引用带 `&lt;b&gt;`/`&lt;i&gt;`/`&lt;a&gt;` 标记或 CDATA 的字符串资源，并用 LinkMovementMethod 让链接可点；目标准备用 Text($r(...)) 直接显示，或在正文外另起链接行。也包括循环中逐个 new TextView、setText(Html.fromHtml("&amp;#8226;")) 并 setTextSize(35) 作翻页圆点：内容只有一个符号，可见尺寸、步进与垂直位置取决于源字体（Roboto）的字形度量。
-- [自研 Markdown 或富文本把文本按多条规则切成 run 时，命中与间隔文本按原位置顺序输出；契约同时覆盖解析库的核心语法](lesson-25f9eea8c9ed9b361d4f.lesson.md)
-  - 时机：Markdown 渲染的规格提取与解析实现阶段，确定语法覆盖、文本切分后 run 的拼装顺序与自动链接规则时
-  - 情境：源端用 Markwon 一类库（CommonMark 核心解析，加 Linkify、提及简写等文本插件，按触点命中 span）渲染 Markdown；目标自研解析器，把文本切成有序 run 序列交给 StyledString/Span 渲染。
+- [系统语言映射按 BCP 47 的 script/region 逐类写到语言包，不把源端对裸 'zh' 等精确值的特判扩成前缀匹配](lesson-b853123dbef8142607fd.lesson.md)
+  - 时机：规格提取与实现阶段，把源端初始语言选择翻译成目标端系统语言解析函数及其验收判据时
+  - 情境：源端按设备返回的语言代码挑选语言包，并对某个精确值做特判（如 === 'zh' 时改用 zh-TW），或由 navigator.language 等检测结果直接匹配语言包名（如 zh-CN）；目标系统语言 API 返回 zh-Hans-CN、zh-Hant-TW 这类带 script/region 的标签。
+- [自研 Markdown 或富文本把文本按多条规则切成 run 时，命中与间隔文本按原位置顺序输出、未闭合的分隔符按字面保留；契约同时覆盖解析库的核心语法](lesson-25f9eea8c9ed9b361d4f.lesson.md)
+  - 时机：Markdown 渲染的规格提取与解析实现阶段，确定语法覆盖、文本切分后 run 的拼装顺序与自动链接规则时；为共用首字符的长短分隔符（** 与 *）编写未闭合回退路径时
+  - 情境：源端用 Markwon 一类库（CommonMark 核心解析，加 Linkify、提及简写等文本插件，按触点命中 span）渲染 Markdown；目标自研解析器，把文本切成有序 run 序列交给 StyledString/Span 渲染。 也包括以单趟扫描替代 react-markdown/remark-gfm 等 CommonMark 渲染器，依次判断 `code`、\[text\](url)、**bold**、*italic*，并承诺不成对标记按字面文本输出。
 - [说明类静态页按源布局逐卡迁移：文案逐字取自源 XML，标题条背景与插图一并迁入](lesson-0197307e63e8d848ba02.lesson.md)
   - 时机：界面实现阶段，依据源布局 XML 生成规则、说明、注意事项一类静态图文页时
   - 情境：源静态页由多张卡片组成，标题条使用 drawable 背景，正文是写在布局 XML 里的长文案，卡内或页首尾有插图；规格只要求“展示说明并可返回”，不复述内容。

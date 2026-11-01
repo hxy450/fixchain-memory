@@ -41,9 +41,9 @@
   - 时机：规格提取或界面实现阶段，确定 Material 按钮及包装容器的尺寸与位置时
   - 情境：源组件含 size/background 与库内部的最小交互尺寸规则（如 IconButton 在调用方 .size(x) 之内再套 minimumInteractiveComponentSize），或只是由内容撑开的 Surface/Box（如图标撑开的圆钮）；ui 快照由源码合成、bounds 为空时，调用处 size 数值最容易被当成实绘尺寸。
   - 例外：当前组件明确关闭或改写了最小交互尺寸，或强约束及修饰符顺序限制了其作用时，不套默认最小尺寸。
-- [将图片内容缩放与组件尺寸约束分别落实：wrap_content + adjustViewBounds 的图片按位图像素比确定高度](lesson-624248be2c5f81082268.lesson.md)
+- [将图片内容缩放与组件尺寸约束分别落实：wrap_content + adjustViewBounds 或 Web 端未设宽高的 img，按位图像素比确定高度](lesson-624248be2c5f81082268.lesson.md)
   - 时机：界面实现阶段，为图片组件确定宽高约束时；校准阶段处理图片比例、宽度类的不确定占位时
-  - 情境：源 ImageView 为 wrap_content + adjustViewBounds（可带 layout_constrainedWidth 与 bias），宽度受同行兄弟和边距约束，高度应随位图固有比例跟随；目标用 Row 内的 Image 承接。
+  - 情境：源 ImageView 为 wrap_content + adjustViewBounds（可带 layout_constrainedWidth 与 bias），宽度受同行兄弟和边距约束，高度应随位图固有比例跟随；目标用 Row 内的 Image 承接。 也包括 Web/Ionic 源端块级内容流里未设宽高的 IonImg/img（满宽、按资源固有比例），后续兄弟（分页点、按钮）紧随其后，源容器没有 flex-grow、height 或 padding；目标在 Column/Swiper 里可能引入 Contain 加 layoutWeight 撑满剩余高度。
   - 例外：当前父布局或明确的尺寸规则已给出图片盒的宽高，此时只需设置盒内缩放
 - [并排 wrap_content 图片列不按固有 dp 写死宽度：按固有宽度比例分列，高度用 aspectRatio](lesson-0618cdf331560d389f0e.lesson.md)
   - 时机：界面实现阶段，把 match_parent 父行中并排的 wrap_content 图片列转换为 ArkUI Row/Column 并确定列宽时；修复“右侧顶满/被遮挡”时

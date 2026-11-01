@@ -46,6 +46,9 @@
   - 时机：规格决策与主题层实现阶段，迁移源端 dynamicLightColorScheme/dynamicDarkColorScheme（Android 12+ 才启用、否则回退固定配色）与“动态配色”设置项时
   - 情境：源主题在 SDK_INT &gt;= S 且设置开启时使用壁纸取色配色，否则用固定的 light/dark scheme；设置页有动态配色开关。目标公开 SDK 的 @ohos.wallpaper（@kit.BasicServicesKit 导出）提供 getColors(WallpaperType) 与 on('colorChange')；getColors 自 API 9 标记弃用，替代接口不在公开 SDK 中。
   - 例外：审批在“降级为固定配色”与“弃用接口 + 回退”之间选了前者，此时设置项按决策呈现并登记差异
+- [源端 await 分享结果再提示时，systemShare 的 show() 只代表面板已拉起：按 shareCompleted/dismiss 结算成功与取消](lesson-9abd54b8acda9f2b1983.lesson.md)
+  - 时机：平台能力实现阶段，把源端会等待用户结果的分享调用映射为目标 API，并安排其后的成功/失败提示时
+  - 情境：源代码先 await 插件的分享调用（如 Capacitor Share.share），之后弹成功提示、catch 中弹失败提示；目标用 HarmonyOS systemShare.ShareController，show() 返回 Promise&lt;void&gt;，另有 on('shareCompleted') 与 on('dismiss') 事件。
 - [源端“先读当前系统值、再按位移增量写回”的手势（如亮度）分别映射读写两侧；异步读取在页面就绪时预读基线](lesson-33791daf74fc4298779e.lesson.md)
   - 时机：界面实现阶段，把源端按下时读取窗口亮度等系统值、移动时按增量写回的手势迁到鸿蒙时
   - 情境：源端手势在 ACTION_DOWN 读取窗口当前亮度，未覆写时回退系统亮度设置，移动时按位移增量写回窗口；规格只给出写入接口（setWindowBrightness），读取侧要实现者确定。

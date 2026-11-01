@@ -1,0 +1,142 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-096c031832b60ef8b78e",
+  "created_at": "2026-11-01T19:09:44.704711+00:00",
+  "migration_key": "94830fba-aa49-47c2-a1bf-3825e1a831ba",
+  "title": "把系统分享面板拉起的Promise当成源分享调用的完成终态",
+  "when": "平台能力实现阶段，把源端会等待用户结果的分享调用映射为目标API，并安排其后的成功/失败提示时",
+  "description": "源代码先 await 平台插件的分享调用（如 Capacitor Share.share），再弹成功 toast，catch 中弹失败 toast；目标端使用 HarmonyOS systemShare ShareController，其 show() 返回 Promise<void>，另有 on('shareCompleted')/on('dismiss') 事件。",
+  "summary": "生成 BackupService 的 slice worker（agent-a86df6619c5e70b39）写前读到了源 Backup.tsx：handleExport 先\nawait Share.share({title,text,url})，之后才 presentToast 导出成功，catch 中弹 danger toast 并附 error.message\n（L66-L67）。由此可知，成功提示必须等分享调用 settle 之后再出；分享调用 reject 时走失败提示。\nF004 规格（L41-L42）只写了“系统分享 → 成功/失败 toast”、AC05 的成功/任一异常失败，以及映射行“面板属系统 UI，\n无附加确认”，没有写明 Share.share 什么时候 settle、取消时怎样处理。worker grep 目标 systemShare.d.ts 时，回执\n显示 show() 返回 Promise<void>，紧接着就是 on('shareCompleted')，注释为“triggered when a user completes sharing”\n（L169-L170）。也就是说，用户完成分享是另一个独立信号。\nworker 在写前思考中已经提出疑问：取消面板时 show() 是 resolve 还是 reject，源 Share.share 取消时又是什么行为。\n它随后凭猜测作答：“most implementations”取消时 resolve，“I believe resolves”，并写明“Can't fully verify; keep await”\n（L206）。它没有读源插件原生实现（node_modules/@capacitor/share/android/.../SharePlugin.java：chooser\nactivityResult 为 RESULT_CANCELED 时 reject(\"Share canceled\")，否则 resolve），也没有核对 show() 与 dismiss\n的语义。Write（L220）的 shareBackupFile 只写了 await controller.show(...)，注释声称“源 Share.share 同语义”。\n之后的 source-notes 第 8 条（L263）又把“await shareBackupFile → toast”写成与源同序；信封中 decision_gaps 为 []，\n不确定项里也没有记录这个疑点（L299）。\n偏差出在实现环节：worker 已经发现源与目标异步终态可能不一致，却把它当作等价映射处理。结果是 show() 一返回\n（面板刚拉起），BackupPage 就弹“导出成功”，被模态面板挡住；用户取消分享时也没有任何失败提示。生成后对\nBackupService 的改动只有 nowProvider 时钟接缝（M:L16737-L16740、agent-a33f9975eda0eee49.jsonl:L181），\n没有改到该函数。修复 worker 编辑时的 old_string 与生成片段逐字一致（agent-a1416bb1b0a44dc1d.jsonl:L177），\n可见偏差一直保留到返修。\nCHECK-5 click-00059 判 FIX_REQUIRED（ASYNC_TERMINAL + FAILURE_STATE，M:L18349、L18358）。修复 worker 读了\nSharePlugin.java 和 d.ts:744/759/790（L62-L63、L78-L79），把 shareBackupFile 改为：show 之前先注册\nshareCompleted→resolve、dismiss（未完成时）→reject Error('Share canceled')，show().catch→reject，用 settled\n标志保证只结算一次，结算后 off 两个监听。同时新增 SHARE_CANCELED_REASON 和 BusinessError 导入（L170-L177）。\nBackupPage 原有的 try/catch 不变，publish 回执为 APPLIED，changed_files 仅含 BackupService.ets（M:L18518-L18519）。\n",
+  "recommendations": [
+    "把源端“await 平台调用 → 成功提示 / catch → 失败提示”映射到目标 API 前，分别核实两端 Promise 何时 settle、取消时 resolve 还是 reject。源端以插件原生实现为准（如 @capacitor/share 的 activityResult：取消即 reject 'Share canceled'），目标端以 d.ts/官方文档为准；两端时机不同，就不能直接用 await 替换。",
+    "目标 API 把用户结果拆成事件时（systemShare：show() 只表示面板已拉起，shareCompleted 表示用户完成，dismiss 表示面板关闭），在 show 前注册监听并包成 Promise：完成→resolve；未完成就关闭→按源取消原因 reject；拉起失败→reject。用标志保证只结算一次，结算后 off 掉监听，让页面现有的成功/失败 toast 落在真正的终态之后。",
+    "写前已经发现“取消时 resolve 还是 reject 无法确认”这类终态疑点，就去读源插件和目标文档消除疑点；做不到时记入 decision_gaps 或保留为不确定项，不要在代码注释或 source-notes 中写“同语义”。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/vsejg/repo/harmonyapps/countdate-hmbot177-glm53-kms-fresh-20261027/entry/src/main/ets/services/BackupService.ets",
+        "since": "2026-10-27T17:25:24.405Z",
+        "at": "2026-10-28T17:46:03.010Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/vsejg/repo/fuxi-ailabs/Ionic-app-migration/countdate/countdateapp/src/pages/Backup.tsx",
+          "at": "2026-10-27T15:08:21.481Z",
+          "reason": "正常输入：worker 的 Read 回执给出 handleExport 先 await Share.share({title,text,url})（:129-133），再 presentToast 导出成功（:145-149），catch 中弹 danger toast 并附 error.message（:150-159）。这足以确定成功提示必须在分享调用 settle 之后，分享调用 reject 时走失败面（agent-a86df6619c5e70b39.jsonl:L66-L67）。"
+        },
+        {
+          "key": "C:/Users/vsejg/repo/harmonyapps/countdate-hmbot177-glm53-kms-fresh-20261027/spec/baseline/features/F004-backup.md",
+          "at": "2026-10-27T15:07:43.473Z",
+          "reason": "正常输入（有缺口）：Read 回执给出导出数据流“系统分享 → toast(成功|失败)”、AC05 的成功/导出链任一异常→failed，以及 Share.share→ShareController 的 HARD 行（备注“面板属系统 UI，无附加确认”）。规格没有写出 settle 时机和取消语义，但也没有说 show() 与 Share.share 终态等价（agent-a86df6619c5e70b39.jsonl:L41-L42）。"
+        },
+        {
+          "key": "D:/softwares/DevEco Studio/sdk/default/hms/ets/api/@hms.collaboration.systemShare.d.ts",
+          "at": "2026-10-27T15:17:43.705Z",
+          "reason": "正常输入：worker 用 Bash grep show( -A 8，回执给出 show(context, options): Promise<void>，紧接着是 on('shareCompleted')，注释为“triggered when a user completes sharing”。这表明用户完成分享是独立于 show() 的事件信号（agent-a86df6619c5e70b39.jsonl:L169-L170）。"
+        },
+        {
+          "key": "agent-a86df6619c5e70b39.jsonl",
+          "at": "2026-10-27T15:25:18.192Z",
+          "reason": "写前思考已提出“取消面板时 show() resolve 还是 reject、源 Share.share 取消时是什么行为”，却凭猜测认定取消会 resolve，并写下“Can't fully verify; keep await”（L206）。没有读 SharePlugin.java，也没有核对 dismiss 事件。随后 Write 的 shareBackupFile 只写 await controller.show(...)，注释称“源 Share.share 同语义”，把面板拉起当成分享终态，取消时也没有失败投影（同转录 L220-L221）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "worker 写前用 Bash 对该 d.ts 执行 grep（class SharedData/enum/show( -A 8），回执返回 show(): Promise<void> 及紧随的 on('shareCompleted') 注释；这是生成者本人在写 shareBackupFile 前对目标文件的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/1f9c03c5-f1ef-4ecf-b67f-a52a3ec61697/epoch-0/sessions/agent-a86df6619c5e70b39.jsonl",
+              "line": 169
+            },
+            {
+              "source": "runs/1f9c03c5-f1ef-4ecf-b67f-a52a3ec61697/epoch-0/sessions/agent-a86df6619c5e70b39.jsonl",
+              "line": 170
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-096c031832b60ef8b78e",
+  "metadata": {
+    "migration": {
+      "project": "Countdate",
+      "server_session_id": "94830fba-aa49-47c2-a1bf-3825e1a831ba",
+      "platforms": [
+        "claude-code"
+      ],
+      "tool_versions": {
+        "orchestrator": "migbot-cc",
+        "runtime_version": "1.5.5",
+        "runtime_commit": "1581baca00180f6be329cc6ca886968d694663d2"
+      }
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "75752eb2-0d84-402f-8fd9-3b77776b40b4"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.306"
+      ]
+    },
+    "source_set_id": "sources-c6930eadc2c3aa32fe47",
+    "environment": [
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "26.0.0",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\vsejg\\repo\\harmonyapps\\countdate-hmbot177-glm53-kms-fresh-20261027",
+        "at": "2026-10-27T14:15:52.472Z",
+        "ref": "runs/1f9c03c5-f1ef-4ecf-b67f-a52a3ec61697/epoch-0/sessions/agent-a45338d2696f13c36.jsonl:L201",
+        "request_ref": "runs/1f9c03c5-f1ef-4ecf-b67f-a52a3ec61697/epoch-0/sessions/agent-a45338d2696f13c36.jsonl:L200",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "26.0.0",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\vsejg\\repo\\harmonyapps\\countdate-hmbot177-glm53-kms-fresh-20261027",
+        "at": "2026-10-27T14:17:20.981Z",
+        "ref": "runs/1f9c03c5-f1ef-4ecf-b67f-a52a3ec61697/epoch-0/sessions/agent-aada131914051f06c.jsonl:L117",
+        "request_ref": "runs/1f9c03c5-f1ef-4ecf-b67f-a52a3ec61697/epoch-0/sessions/agent-aada131914051f06c.jsonl:L116",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.10.10"
+  },
+  "revision": "967cefb2a48ad79bfbe217ca3d6a41739ab2037b412ffb6cc25fb1e06066bf03"
+}

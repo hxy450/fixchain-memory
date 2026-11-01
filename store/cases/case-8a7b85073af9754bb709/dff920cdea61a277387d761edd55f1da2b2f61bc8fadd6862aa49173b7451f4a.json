@@ -1,0 +1,112 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-8a7b85073af9754bb709",
+  "created_at": "2026-11-01T19:04:18.854321+00:00",
+  "migration_key": "94830fba-aa49-47c2-a1bf-3825e1a831ba",
+  "title": "单飞缓存 Promise 的入口方法误加 async，返回新包装 Promise，违背自述的同一实例契约",
+  "when": "ViewModel/服务层实现阶段，为一次性异步入口（如启动偏好恢复）实现单飞防重缓存并确定方法签名时",
+  "description": "规格要求某个返回 Promise 的入口重复调用只执行一次、只写一次（防重守卫）；实现用静态字段缓存首次 Promise 做单飞，并在注释、契约中声称重入共享同一 Promise；同类其他方法多写成 async。",
+  "summary": "写前实际收到 F003 规格：服务层签名 restoreAppPrefs(): Promise<AppPrefs>（启动一次性恢复 5 态），\nAC22 要求“restoreAppPrefs 防重守卫”，判定为“连续两次恢复调用仅一次写键”\n（agent-a1ec728ab0315e5e9.jsonl:L40-L41）。规格只要求工作去重，并未写明返回同一 Promise；\n生成者自选静态 restoreTask 单飞作为守卫，写前推理认定“第二次调用返回同一个（已 resolve）Promise”（同转录 L192），\nWrite 时又在 restoreTask 声明处注释“restoreAppPrefs 重入共享同一 Promise”。\n入口却写成 static async restoreAppPrefs()，函数体 return AppPrefsService.restoreTask（同转录 L210）。\nasync 函数会把返回值再包一层新 Promise，每次调用拿到的实例都不同：doRestore 仍只执行一次，\n首启标记也只写一次（AC22 的可观察行为成立），但生成者自述的“同一 Promise”单飞契约不成立。\n偏差出在实现者把缓存的 Promise 放进 async 方法返回这一步，属于对语言语义的误判，不是规格缺失。\n该片段在 a2h-execute 结束时原样保留，group-closer 15:44 两次 Edit 只改了 HANDOFF 注释\n（agent-adf322f68e39b92ec.jsonl:L235、L242）。verify 阶段的 UT 设计按代码自述契约写入 p2promise === p1 断言，\n基线在 test:136 报 RED，问题单也引用了该注释（agent-a33f9975eda0eee49.jsonl:L865）。\nfixer 只删掉 async，返回表达式不变，直接返回缓存的 restoreTask（agent-a489c991dd0dea192.jsonl:L85、L90-L91）；\nUT executor 在 L1138 临时回退做反证，L1227 再从备份恢复。最终保留的是非 async 签名。\n",
+  "recommendations": [
+    "实现单飞/缓存 Promise 入口时，入口方法不要声明 async，直接返回已缓存的 Promise 实例；真正的异步工作放进被缓存的私有 async 函数（如 doRestore）。",
+    "注释或契约写了“重复调用返回同一 Promise/共享同一任务”，写完就核对签名：async 方法每次都返回新的包装 Promise，只保证结果相同、不保证实例相同；需要实例身份时必须去掉 async。",
+    "规格的可观察行为（只执行一次、只写一次）与实现自述的契约（同一实例）分别检查；自述契约会被后续测试当成 oracle，写不到就不要声称。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/vsejg/repo/harmonyapps/countdate-hmbot177-glm53-kms-fresh-20261027/entry/src/main/ets/viewmodels/PreferencesViewModel.ets",
+        "since": "2026-10-27T17:25:24.405Z",
+        "at": "2026-10-28T17:46:03.010Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/vsejg/repo/harmonyapps/countdate-hmbot177-glm53-kms-fresh-20261027/spec/baseline/features/F003-preferences.md",
+          "at": "2026-10-27T15:07:31.708Z",
+          "reason": "正常输入：生成者 Read 回执给出服务层签名 restoreAppPrefs(): Promise<AppPrefs>（启动一次性恢复 5 态），以及 AC22“restoreAppPrefs 防重守卫｜连续两次恢复调用仅一次写键”，足以指导实现只执行一次的恢复入口。规格没有 Promise 身份要求，身份契约来自生成者自选的单飞设计（agent-a1ec728ab0315e5e9.jsonl:L40-L41）。"
+        },
+        {
+          "key": "agent-a1ec728ab0315e5e9.jsonl",
+          "at": "2026-10-27T15:22:30.816Z",
+          "reason": "读到上述规格后，L192 推理设计 restoreTask 单飞并认定 second call returns the SAME promise；L210 Write 在 restoreTask 声明处注释“重入共享同一 Promise”，入口却写成 static async restoreAppPrefs() { ...; return restoreTask }。async 包装让每次调用返回新 Promise，自述的单飞身份契约不成立，工作去重本身正确（同转录 L192、L210-L211）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-8a7b85073af9754bb709",
+  "metadata": {
+    "migration": {
+      "project": "Countdate",
+      "server_session_id": "94830fba-aa49-47c2-a1bf-3825e1a831ba",
+      "platforms": [
+        "claude-code"
+      ],
+      "tool_versions": {
+        "orchestrator": "migbot-cc",
+        "runtime_version": "1.5.5",
+        "runtime_commit": "1581baca00180f6be329cc6ca886968d694663d2"
+      }
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "75752eb2-0d84-402f-8fd9-3b77776b40b4"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.306"
+      ]
+    },
+    "source_set_id": "sources-c6930eadc2c3aa32fe47",
+    "environment": [
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "26.0.0",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\vsejg\\repo\\harmonyapps\\countdate-hmbot177-glm53-kms-fresh-20261027",
+        "at": "2026-10-27T14:15:52.472Z",
+        "ref": "runs/1f9c03c5-f1ef-4ecf-b67f-a52a3ec61697/epoch-0/sessions/agent-a45338d2696f13c36.jsonl:L201",
+        "request_ref": "runs/1f9c03c5-f1ef-4ecf-b67f-a52a3ec61697/epoch-0/sessions/agent-a45338d2696f13c36.jsonl:L200",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "26.0.0",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\vsejg\\repo\\harmonyapps\\countdate-hmbot177-glm53-kms-fresh-20261027",
+        "at": "2026-10-27T14:17:20.981Z",
+        "ref": "runs/1f9c03c5-f1ef-4ecf-b67f-a52a3ec61697/epoch-0/sessions/agent-aada131914051f06c.jsonl:L117",
+        "request_ref": "runs/1f9c03c5-f1ef-4ecf-b67f-a52a3ec61697/epoch-0/sessions/agent-aada131914051f06c.jsonl:L116",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.10.10"
+  },
+  "revision": "dff920cdea61a277387d761edd55f1da2b2f61bc8fadd6862aa49173b7451f4a"
+}

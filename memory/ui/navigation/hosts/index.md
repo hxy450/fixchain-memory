@@ -43,6 +43,10 @@ Navigation/@Entry宿主与页面注册（含根 Navigation 默认标题栏与工
 - [源 Activity 或其基类 onCreate 调 overridePendingTransition(0,0) 时，“进入无转场”是目的地页的属性：进入该页的每条路由（按钮跳转、引导完成、启动分流、抽屉）都关闭转场；未调用时按主题默认窗口动画写目标转场，不留目标默认横滑](lesson-9886f489045488c8b454.lesson.md)
   - 时机：规格提取阶段写页面规格与路由契约时；实现阶段写 pushPathByName/replacePathByName 时；规格提取阶段把 startActivity/finish 映射为路由契约、决定页面切换动画时
   - 情境：源 Activity 或所继承的基类在 onCreate 调 overridePendingTransition(0,0)；目标用 Navigation 的 push/replace 进入该页，进入路径不止一条，规格可能只把转场禁用挂在抽屉基座等某一条路径上。 也包括源端多个 Activity 用 startActivity 线性跳转、按返回 finish，源码没有 overridePendingTransition，styles 也没覆盖 windowAnimationStyle；目标 router.pushUrl 的 @Entry 页或 Navigation 页未写转场，系统默认横向滑入滑出。
+- [源工具栏无返回键、标题居中或带右侧动作时，用 hideTitleBar 加页内头部，不塞系统标题栏的 title/menus 槽](lesson-d1cf63055d6991eeb2b5.lesson.md)
+  - 时机：界面实现阶段，把源页面工具栏（标题、动作按钮、有无返回键）落成 NavDestination 系统标题栏或页内头部时；验证或返修发现自定义标题槽运行期为空时
+  - 情境：源页面头部是自定义工具栏（如 Ionic iOS 模式的 IonToolbar：居中图标加标题、slot=end 一组图标按钮、没有 IonBackButton），目标页是 Navigation 下 push 的 NavDestination，需要在系统标题栏 title/menus 的 CustomBuilder 槽与 hideTitleBar(true) 后在内容区自绘头部之间选择。
+  - 例外：源头部与系统标题栏语义一致（有返回键、普通文本标题、无自定义动作区）时，直接用 .title() 字符串标题
 - [源端一个 Composable 内多屏共享的清理，拆成多页面后归属外层生命周期，切屏不释放](lesson-2ed8c21943925bf0ae9a.lesson.md)
   - 时机：规格提取与计划阶段，把源端 DisposableEffect/onDispose 等清理映射成目标多页面的生命周期契约时；实现阶段把共享服务的 stop/dispose 挂到页面回调时
   - 情境：源端单 Activity 在同一个 Composable 里用状态变量切换多个屏幕，播放器等资源和 DisposableEffect 清理挂在这个外层 Composable；目标端拆成 Navigation 下的多个页面，共享服务需要重新确定由哪一层、在什么时机停止和释放。
