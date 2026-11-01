@@ -1,6 +1,6 @@
 # Stack 中内容尺寸的子项按 alignContent 定位：子项自身的 .align() 不改变它在父容器中的位置，需要的对齐用满尺寸容器或显式 position
 
-ID：`lesson-92aee54a305ea0bde363` · 版本：8
+ID：`lesson-92aee54a305ea0bde363` · 版本：9
 
 [本主题](index.md)
 
@@ -19,7 +19,7 @@ Stack 按 alignContent 放置未撑满的子节点；Text 的 .align() 只对齐
 ## 做法
 
 1. 同一 Stack 中各子项对齐需求不同时，给文字包一个满高容器：Column().width(源端比例).height('100%').justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Start)，或给子项按源公式单独 position/offset。
-2. 删除 height('100%')、.align() 等手段前，确认替代约束仍实现原来的纵向位置；枚举名以 ArkUI SDK 为准，不照搬 Compose 的 Alignment 名称。
+2. 删除 height('100%')、.align() 等手段前，确认替代约束仍实现原来的纵向位置；枚举名以 ArkUI SDK 为准，不照搬 Compose 的 Alignment 名称。编译修复把 Compose 专有名（CenterEnd、CenterStart 等）换成 ArkUI 现有名（End、Start）时，若它挂在 Stack 子项的 .align() 上，换名后位置仍不变，同时改为 position 或父 Stack 的 alignContent。
 3. 按 layout_gravity 单独对齐某个子项（如 end|bottom 的角标）时，在已知 W×H 的容器里写 position({ x: W - 子宽, y: H - 子高 })，或给该子项单独套一个 alignContent 为对应方向的 Stack。
 4. 逐个核对源 Box 子项的 Modifier.align：非默认位置写成 position({ left: 0, bottom: 0 })、markAnchor 等实际属性；规格或报告里的“底部对齐”要落到代码属性上。
 5. 子项单向贴边时可改父 Stack({ alignContent })；同一 Stack 内混合对齐用 .position({ left/right/top/bottom })、markAnchor 或满幅透明容器配 justifyContent/alignItems，并保留源 margin。
@@ -31,7 +31,7 @@ Stack 按 alignContent 放置未撑满的子节点；Text 的 .align() 只对齐
 - 沿用了映射参考或先例中的定位写法时，检索 .align(Alignment.，逐个确认它要的是内容对齐还是在父容器中的位置
 - 标题栏同时打开返回与右侧入口并用较长标题预览，确认三者不重叠、标题在两侧槽位之间居中
 
-来源支持：10 张卡 · 7 次迁移 · 6 个应用
+来源支持：11 张卡 · 8 次迁移 · 7 个应用
 
 ## 来源（按需复核）
 
@@ -41,6 +41,8 @@ Stack 按 alignContent 放置未撑满的子节点；Text 的 .align() 只对齐
   卡片版本：`8b0f7cc40d821777a77dc3bf68c6739f335039023414e9bcb04404d5b4ac02e8`
 - [case-5e35bb283520acf3bd35](../../../../store/cases/case-5e35bb283520acf3bd35/954c420a6eb53234d9a40e9851863e13e6a2b9e3e2195abc6f71fcfe048dcf4f.json) · 结论：recommendation:3
   卡片版本：`954c420a6eb53234d9a40e9851863e13e6a2b9e3e2195abc6f71fcfe048dcf4f`
+- [case-826442970a9a1e20592e](../../../../store/cases/case-826442970a9a1e20592e/6530eaf5bcf8a75ca95f012e5f705c9df5b84e9ec5909af27a53f89f5f0bd87c.json) · 结论：diagnosis, recommendation:1, recommendation:4
+  卡片版本：`6530eaf5bcf8a75ca95f012e5f705c9df5b84e9ec5909af27a53f89f5f0bd87c`
 - [case-83dafcc0eaba740bd9c0](../../../../store/cases/case-83dafcc0eaba740bd9c0/63799a14d87533825a0449dd85653c66535fbb31296be482c5feada55b5522a6.json) · 结论：diagnosis, recommendation:1
   卡片版本：`63799a14d87533825a0449dd85653c66535fbb31296be482c5feada55b5522a6`
 - [case-9058ac868b6feb3a04e0](../../../../store/cases/case-9058ac868b6feb3a04e0/d8e013afe2706da7f1b19c1a0d603c05f971b4ebc0c4542f6fb5e8a956b3ebc4.json) · 结论：recommendation:4
