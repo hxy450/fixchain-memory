@@ -1,6 +1,6 @@
 # ui/navigation/hosts
 
-Navigation/@Entry宿主与页面注册（含根 Navigation 默认标题栏与工具栏）、嵌入页取栈、单 Activity 壳内 loadChildFragment 子页的壳内回退栈与嵌入承载、半透明卡片式 Activity 的透明 DIALOG 路由、路由跳板和跨页面共享生命周期，外部入口（推送、快捷方式）宿主导航执行器的可用性守卫；NavHost 四向自定义转场到 customNavContentTransition 与页面绑定，导航目的地内 LocalLifecycleOwner 的 ON_STOP/ON_RESUME 接到 onHidden/onShown；Activity 切换转场（overridePendingTransition(0,0) 与未调用时的主题默认窗口动画）；单容器 Fragment 事务（replace+addToBackStack、popBackStack、finish）与 Activity/Fragment 生命周期回调到 NavPathStack、NavDestination 的映射
+Navigation/@Entry宿主与页面注册（含根 Navigation 默认标题栏与工具栏、包住导航宿主的 SideBarContainer 抽屉壳的内置控制按钮）、嵌入页取栈、单 Activity 壳内 loadChildFragment 子页的壳内回退栈与嵌入承载、半透明卡片式 Activity 的透明 DIALOG 路由、路由跳板和跨页面共享生命周期，外部入口（推送、快捷方式）宿主导航执行器的可用性守卫；NavHost 四向自定义转场到 customNavContentTransition 与页面绑定，导航目的地内 LocalLifecycleOwner 的 ON_STOP/ON_RESUME 接到 onHidden/onShown；Activity 切换转场（overridePendingTransition(0,0) 与未调用时的主题默认窗口动画）；单容器 Fragment 事务（replace+addToBackStack、popBackStack、finish）与 Activity/Fragment 生命周期回调到 NavPathStack、NavDestination 的映射
 
 [上一级](../index.md)
 
@@ -14,6 +14,10 @@ Navigation/@Entry宿主与页面注册（含根 Navigation 默认标题栏与工
   - 时机：规格提取、计划派工与界面实现阶段，把 Compose NavHost（或目的地）上的 enterTransition/exitTransition/popEnterTransition/popExitTransition 落到 ArkUI Navigation 时
   - 情境：源端 NavHost 定义四向自定义转场（scaleIn/scaleOut、slideIn/slideOut、tween 时长与延迟等）；目标为 Navigation + NavDestination，在已观察的 API 中 customNavContentTransition 回调拿到的 NavContentInfo 不提供页面的 opacity、translate 属性；规格或派工可能写“customNavContentTransition 或默认转场”二选一，验收只核转场常量是否与源相等。
   - 例外：决策记录以编号批准采用系统默认转场，并写明差异
+- [SideBarContainer 承接源端抽屉、源端无悬浮切换钮时显式写 showControlButton(false)：默认内置按钮会盖住左上角返回键](lesson-018324ca86305ee5c669.lesson.md)
+  - 时机：界面实现阶段，把源端模态抽屉（Compose ModalNavigationDrawer、DrawerLayout）映射为 ArkUI SideBarContainer 并编写其属性链时；规格提取阶段写抽屉转换决策时
+  - 情境：源端抽屉只经页内导航图标回调（openDrawer、汉堡键）或边缘手势打开，内容之上没有常驻的切换按钮；目标用 SideBarContainer（常见 Overlay 类型）包住 Navigation 等内容宿主，被包裹页面在左上角有返回键或菜单键。
+  - 例外：源端确有常驻在内容之上的抽屉切换按钮时，保留内置按钮，并按源端位置与图标设置 controlButton 样式
 - [main_pages.json 只登记经 router 进入的 @Entry 页：被 Tabs/父页导入的子组件与 @CustomDialog 不登记，10905402 与 @Entry+export 警告先判定角色](lesson-c4a6eaaf6a22c0b8823f.lesson.md)
   - 时机：入口装配阶段写 main_pages.json 路由登记时；编译修复遇到“登记页面须有且仅有一个 @Entry”（10905402）或“export struct with @Entry”警告时
   - 情境：源端单 Activity 以底部导航承载多个 Fragment，另有 DialogFragment 与经导航跳转的二级页；目标主页面用 Tabs/TabContent import 并实例化页面 struct，弹窗写成 @CustomDialog，这些文件都放在 pages/ 目录；工程用 main_pages.json 登记路由页。
