@@ -1,6 +1,6 @@
 # data/network
 
-网络层：服务地址与环境、运行配置的构建期注入、URL 拼接、拦截器注入的公共请求头、请求体字段与编码（表单或 JSON）、登录凭证来源与失效踢登，加解密工具的前置返回与异常回退、网关加密传输到 cryptoFramework 的移植，以及多路请求聚合结果的缓存写入与命中，拦截器读取的公共参数（设备标识、当前分组）的生产者，网络权限声明，请求通道内会话密钥前置门（ensureKey）的取舍与握手基址，按承载判定计费网络，链接 getter 追加的渠道等运行期参数
+网络层：服务地址与环境、运行配置的构建期注入、URL 拼接、拦截器注入的公共请求头、请求体字段与编码（表单或 JSON）、登录凭证来源与失效踢登，加解密工具的前置返回与异常回退、网关加密传输到 cryptoFramework 的移植，以及多路请求聚合结果的缓存写入与命中，拦截器读取的公共参数（设备标识、当前分组）的生产者，网络权限声明，请求通道内会话密钥前置门（ensureKey）的取舍与握手基址，按承载判定计费网络，链接 getter 追加的渠道等运行期参数，永不 reject 的信封客户端下源端 catch 失败语义的承接，rcp 拦截器读取请求属性（相对路径 url）
 
 [上一级](../index.md)
 
@@ -9,6 +9,9 @@
 - [Service 只收不透明请求体时，从源端调用链追到 body 的构造处照抄字段与取值来源，不用空对象占位](lesson-0bc494e864b2d8ab1a34.lesson.md)
   - 时机：数据层实现与规格提取阶段，编写 Repository 调用网络 Service、确定 POST 请求体字段时
   - 情境：目标 Service 方法只接收 data: Object（对应源端 @Body RequestBody），规格 API 表没列这个端点或它的请求字段；源端由 ViewModel 调用某个 Repository 方法，在那里组装 body（如 device_id 取自设备 ID 工具）。
+- [rcp Session 以 baseAddress 加相对路径构造 Request 时，拦截器内不无保护地读取 context.request.url](lesson-20bc5640e0b8114e27b3.lesson.md)
+  - 时机：网络层实现阶段，在 rcp Interceptor（含 401 刷新与重试链）中读取请求属性，例如为日志取请求地址时
+  - 情境：rcp SessionConfiguration 设置 baseAddress，HTTP 封装以 'users/me' 一类相对路径构造 rcp.Request；拦截器在发送前拿到该 Request，并把源端仅用于调试的 url 日志迁到刷新主链上。
 - [多路请求聚合写 TTL 缓存前先确认至少一路成功；缓存命中同时校验时效和载荷](lesson-c6379cfcbee86500f91f.lesson.md)
   - 时机：数据层实现阶段，为首页等多路并发请求（如首页数据与趋势）实现按键（城市）的 TTL 缓存写入与命中判定时
   - 情境：源端或规格按城市缓存多路并发结果（refreshTime + 4h 一类），每一路都可能失败；目标 Service 把各路结果聚合成一条缓存记录，命中条件只看保存时间。
@@ -43,6 +46,10 @@
 - [源端构建期注入的服务地址、签名与响应解密材料，按决策从私有构建配置接入并实现同算法解码器；不以空配置装配网络客户端](lesson-30ccd1d65d2c39029256.lesson.md)
   - 时机：网络基础设施实现与装配阶段，实现网络运行配置来源、响应解密，并在装配根构造 HTTP 客户端时
   - 情境：源端通过 BuildConfig/gradle 注入 API 地址、请求签名材料与 release 响应的 AES 等解密密钥，并在解析前解密响应；目标决策要求密钥不进源码、构建期从本地私有配置注入，网络层对空配置拒绝发包；另有决策只记录了“未提供测试环境或测试账号”。也包括目标用 process.getEnvironmentVar 读取可选运行配置（成功码、渠道、客户端身份）并以 `|| 默认值` 兜底的情形。
+- [源端靠 catch 处理 HTTP 失败、目标客户端永不 reject 时，在消费 res.data 前写 status 失败分支还原 catch 语义](lesson-1575e3acad2a2b4689df.lesson.md)
+  - 时机：服务层实现阶段，把源端请求的 try/catch 失败处理翻译到“永不 reject、以信封 status 表示失败”的 HTTP 客户端时
+  - 情境：源端 HTTP 调用在非 2xx 时抛错（如 Angular HttpClient 的 HttpErrorResponse），由 catch 设置错误文案并返回失败；目标网络层契约把非 2xx、传输异常和解析失败都归一为失败信封、不 reject，调用方按 status 判成功；方法还维护 hasMore、游标或已加载标记等分页状态。
+  - 例外：目标客户端契约或实现对失败确实 reject，此时源 catch 可原样承接
 - [用字符串拼接替代 Retrofit 时，在拼接函数里统一处理 baseUrl 与 path 之间的斜杠，不依赖各接口 path 的写法](lesson-d767b84213eb5ef93034.lesson.md)
   - 时机：网络层实现阶段，把 Retrofit 接口迁成自写 HttpClient，确定 baseUrl 常量与各 Service 的 path 如何连成完整 URL 时
   - 情境：源端用 Retrofit 的 baseUrl 加 @GET/@POST 相对路径（多数不带前导 /，少数带），目标端改用 @kit.NetworkKit http 手工拼 URL；参考模板示范 `${baseUrl}${path}` 直接拼接；baseUrl 常量与各 Service 的 path 分散在不同文件里声明。

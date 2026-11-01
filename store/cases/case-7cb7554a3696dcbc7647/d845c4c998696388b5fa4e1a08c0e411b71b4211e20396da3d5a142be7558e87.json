@@ -1,0 +1,134 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-7cb7554a3696dcbc7647",
+  "created_at": "2026-11-01T20:23:16.270772+00:00",
+  "migration_key": "2a31d414-c042-46ed-a0b8-54374f2a7117",
+  "title": "源端 catch 承载的 HTTP 失败语义在永不 reject 的信封客户端下被丢弃",
+  "when": "服务层实现阶段，把源端 try/catch 的请求失败处理翻译到“永不 reject、以信封 status 表示失败”的 HTTP 客户端时",
+  "description": "源端 Promise/Observable 请求在 HTTP 非 2xx 时抛出 HttpErrorResponse，由 catch 设置 error=响应 message 并 return false；目标网络层契约为永不 reject，非 2xx/传输异常归一为失败信封，调用方按 status===200 判成功；分页加载同时维护 hasMore/游标等状态。",
+  "summary": "slice-02-F002 实现者（agent-a30479a90dae5d2fd）写 PropertiesService 前已收到三份足够的输入：\n源 properties.service.ts 的 loadMore 在 catch 里按 HttpErrorResponse 取 error.error?.message 设 error 并 return false，\n成功路径才改 hasMore/last（同转录 L57-L58，源 :318-:326）；F002 规格 AC04 要求“错误文案取信封 message”，\n且 loadMore 定义为“false=无更多/失败”（L37-L38）；HttpClient.ets 文件头写明“永不 reject：HTTP 非 2xx/传输异常/\nbody 解析失败均归一为失败信封，调用方一律按 envelope.status === 200 判业务成功”（L141-L142）。\n该 agent 38 秒前写 PropertiesRepository 时也自述“经 HttpClient，永不 reject，调用方按 status===200 分支”（L451），\n同文件 doLoadOwned 也照源 then 分支写了 res.status !== 200 判定。\n但 L456 Write 的 loadMore 只照搬源端 try/catch 结构：fetchProperties 返回后直接取 res.data 进入成功路径，\ncatch 注释为“HttpClient 契约永不 reject；此分支仅防御 repository 侧意外异常”，却没有把源 catch 的失败语义\n改挂到 status!==200 分支。结果失败信封被当成空页：error 不设、hasMore 被置 false、listLoaded=true 并 return true。\n该 agent 之后自查时仍以为“失败路径 listLoaded 保持 false”（L1013），说明它把失败仍理解为异常路径。\n偏差位于“已知目标传输契约 → 改写源端错误分支”这一实现环节，规格与基座输入均正确。该 agent 后续两次 Edit\n（L461 resetState、L826 fetchProperty）未触及 loadMore，片段保留到 arm-a verify 阶段。\nCHECK-4 单元测试 F002-AC04 暴露后，修复者在 fetchProperties 结果后新增\nif (res.status !== 200) { this.error = res.message 或兜底文案; return false }，hasMore 不动\n（agent-a2b7677b07387f61a.jsonl:L805、L831）。\n",
+  "recommendations": [
+    "翻译源端 catch 前先列出哪些失败会进入它（如 Angular HttpClient 的非 2xx 会以 HttpErrorResponse 进入 catch），再按目标网络层契约把每种失败映射到实际的失败信号；目标客户端永不 reject 时，在消费 res.data 之前写 status!==200 分支：error 取信封 message（空则兜底文案）、return false，不修改 hasMore/游标/首拉完成标记。",
+    "写出“此 catch 在契约下不可达”一类注释时，把它当作检查信号：确认源 catch 的语义已迁到信封分支，而不是只保留一个防御性 catch；同一服务内其他方法（如本例 loadOwnedProperties）已有 status 判定时，逐个核对分页/列表方法是否一致。",
+    "自测时注入一个失败信封（如 status 500 带 message），断言 loadMore 返回 false、error 等于信封 message、hasMore 与游标保持调用前的值。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/rem-cmp-glm53/arm-a/real-estate-hmos/entry/src/main/ets/services/PropertiesService.ets",
+        "since": "2026-10-23T23:48:32.740Z",
+        "at": "2026-10-26T06:03:48.708Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/rem-cmp-glm53/arm-a/src/real-estate-management/frontend/src/app/properties/properties.service.ts",
+          "at": "2026-10-23T19:11:05.605Z",
+          "reason": "正常输入：生成者 Read 回执返回源 loadMore，成功路径才更新 items/hasMore/last，catch 中 error instanceof HttpErrorResponse 时取 error.error?.message 设 error、return false；同文件 loadOwnedProperties 则以 then 中 response.status!==200 分支处理（agent-a30479a90dae5d2fd.jsonl:L57-L58，源 :224-:239、:295-:329）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/rem-cmp-glm53/arm-a/real-estate-hmos/spec/baseline/features/F002-properties.md",
+          "at": "2026-10-23T19:10:32.925Z",
+          "reason": "正常输入：规格写明 loadMore 返回 false=无更多/失败，F002-AC04 要求 isLoading/error/hasMore 三态可观察、错误文案取信封 message，锚点指向源 loadMore catch；依赖 feature-base 网络层/信封（agent-a30479a90dae5d2fd.jsonl:L37-L38）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/rem-cmp-glm53/arm-a/real-estate-hmos/entry/src/main/ets/network/HttpClient.ets",
+          "at": "2026-10-23T19:12:08.583Z",
+          "reason": "正常输入：Read 回执的文件头契约为 request 永不 reject，HTTP 非 2xx/传输异常/解析失败都归一为失败信封，调用方一律按 envelope.status === 200 判成功；足以说明源端 catch 里的 HTTP 失败在目标端只会以信封出现（agent-a30479a90dae5d2fd.jsonl:L141-L142）。"
+        },
+        {
+          "key": "agent-a30479a90dae5d2fd.jsonl",
+          "at": "2026-10-23T19:34:48.656Z",
+          "reason": "已收到上述输入，Write 的 loadMore 在 fetchProperties 后直接取 res.data 走成功路径，仅保留 catch 并注释“HttpClient 契约永不 reject；此分支仅防御 repository 侧意外异常”，未把源 catch 的 error=信封 message、return false 改挂到 status!==200 分支；失败信封因此被当作空页并把 hasMore 置 false、return true（同转录 L456-L457；写前 L449 计划亦为“catch → error message”）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-7cb7554a3696dcbc7647",
+  "metadata": {
+    "migration": {
+      "project": "real-estate-hmos",
+      "server_session_id": "2a31d414-c042-46ed-a0b8-54374f2a7117",
+      "platforms": [
+        "claude-code"
+      ],
+      "tool_versions": {
+        "orchestrator": "hmigbot-plus",
+        "runtime_version": "1.5.5",
+        "runtime_commit": "1581baca00180f6be329cc6ca886968d694663d2",
+        "client_version": "hmigbot-plus-1.7.0",
+        "pack_version": "hmigbot-plus-1.7.0"
+      }
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "e5cd45b6-1651-425e-ab15-8d08fdd7d5eb"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3",
+        "glm-5.3-flash"
+      ],
+      "client_versions": [
+        "2.1.309"
+      ]
+    },
+    "source_set_id": "sources-9082156557e7e5c70625",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/rem-cmp-glm53/arm-a/real-estate-hmos",
+        "at": "2026-10-23T17:05:03.562Z",
+        "ref": "runs/423f9ea0-6bd7-4007-9926-23c2a20d5e6d/epoch-0/sessions/agent-a6833dc975b85efd8.jsonl:L175",
+        "request_ref": "runs/423f9ea0-6bd7-4007-9926-23c2a20d5e6d/epoch-0/sessions/agent-a6833dc975b85efd8.jsonl:L174",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/rem-cmp-glm53/arm-a/real-estate-hmos",
+        "at": "2026-10-23T17:05:03.562Z",
+        "ref": "runs/423f9ea0-6bd7-4007-9926-23c2a20d5e6d/epoch-0/sessions/agent-a6833dc975b85efd8.jsonl:L175",
+        "request_ref": "runs/423f9ea0-6bd7-4007-9926-23c2a20d5e6d/epoch-0/sessions/agent-a6833dc975b85efd8.jsonl:L174",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.10.10"
+  },
+  "revision": "d845c4c998696388b5fa4e1a08c0e411b71b4211e20396da3d5a142be7558e87"
+}

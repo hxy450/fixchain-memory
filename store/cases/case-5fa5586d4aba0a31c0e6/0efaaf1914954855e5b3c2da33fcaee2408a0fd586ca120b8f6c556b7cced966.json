@@ -1,0 +1,160 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-5fa5586d4aba0a31c0e6",
+  "created_at": "2026-11-01T20:33:43.045173+00:00",
+  "migration_key": "2a31d414-c042-46ed-a0b8-54374f2a7117",
+  "title": "rcp拦截器在401刷新链中直接读取相对路径Request.url导致getter抛错",
+  "when": "网络层实现阶段，在rcp Interceptor的401刷新/重试链中读取请求属性（如为日志取context.request.url）时",
+  "description": "rcp Session配置baseAddress，HttpClient以'users/me'等相对路径构造rcp.Request；拦截器在发送前拿到该Request，并把源端仅调试用的url日志迁移到刷新主链。",
+  "summary": "Base-3 Network生成者（agent-ac65d0a4437e50251）写AuthInterceptor前，实际读到rcp d.ts中\nRequest.url声明为URL类型、注释说明构造参数的string需要转换为URL（L100-L101），\n以及SessionConfiguration.baseAddress“对非绝对Request.url在发送到服务器时前置”（L105-L106）；\n源auth-refresh.interceptor.ts的对应日志只在!environment.production下console.info，\n且Angular侧request.url是以apiUrl开头的绝对地址（L31-L32）。生成者先考虑过自己拼绝对URL以避开边界情况（L244），\n随后改为baseAddress+相对path（L339），并在同批写出的HttpClient中以new rcp.Request(path, ...)构造请求（L366）。\n因而拦截器在发送前拿到的是相对路径Request。生成者却在retryAfterRefresh开头无保护地写\nhilog(..., context.request.url.toString())（L361），写后自检只担心URL类型能否在编译期解析（L421），\n没有考虑相对url在拦截阶段的运行期转换。偏差位于“已知相对路径+URL类型约束”到拦截器实现这一环。\nSlice 1之后只改了hook注释（agent-a36b31e1388979061.jsonl:L339），该日志行保留到返修前。\nCHECK-4 UT中，F001_AC21两例用new rcp.Request('users/me', ...)构造FakeContext调intercept，报Cannot convert to URL\n（agent-a2b7677b07387f61a.jsonl:L763-L764）。DiagProbe证实单独构造的相对路径Request读取url即抛\n'Cannot convert to URL'（L782-L783、L791-L792）。修复者在retryAfterRefresh开头加urlForLog，\ntry String(context.request.url)、catch时写'<unresolved-url>'，日志改用该变量（L825-L826），\narm-a最终保留此写法。关于job问题：测试桩与生产HttpClient用同样的相对路径构造Request，区别仅在测试绕过session.fetch。\n因此“相对路径只在测试捕获层出现”不成立；风险②说的是测试路径断言只能走入参捕获层。\nrcp d.ts写前已给出url为URL类型、baseAddress在发送时拼接，但没有明说getter对相对路径抛错，\n这一判断需要生成者结合自己选择的相对路径推得。\n",
+  "recommendations": [
+    "网络层实现阶段，Session用baseAddress+相对path构造rcp.Request时，拦截器内不要直接读取context.request.url；日志所需地址用baseAddress与原始path自行拼接，或用try/catch安全读取并给出占位值。",
+    "迁移源端仅调试用的日志（如!environment.production下的console.info）时，把取值放在不会抛错的旁路：日志失败不得中断401→refresh→retry主链；写完后用相对路径构造的Request走一次刷新分支自检。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/rem-cmp-glm53/arm-a/real-estate-hmos/entry/src/main/ets/network/AuthInterceptor.ets",
+        "since": "2026-10-23T23:48:32.740Z",
+        "at": "2026-10-26T06:03:48.708Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/rem-cmp-glm53/arm-a/src/real-estate-management/frontend/src/app/user/auth-refresh.interceptor.ts",
+          "at": "2026-10-23T18:07:39.277Z",
+          "reason": "正常输入：Read回执显示401刷新日志仅在!environment.production下console.info(credentialedRequest.url)，且请求url以apiUrl开头为绝对地址；该日志是调试旁路，不属于刷新链行为（agent-ac65d0a4437e50251.jsonl:L31-L32）。"
+        },
+        {
+          "key": "/Applications/DevEco-Studio.app/Contents/sdk/default/hms/ets/api/@hms.collaboration.rcp.d.ts",
+          "at": "2026-10-23T18:09:41.175Z",
+          "reason": "正常输入：Bash sed读取Request类定义，回执给出url: URL，并注明构造参数可为URLOrString、string需要转换为URL；足以提示相对字符串读url涉及运行期转换（agent-ac65d0a4437e50251.jsonl:L100-L101）。"
+        },
+        {
+          "key": "/Applications/DevEco-Studio.app/Contents/sdk/default/hms/ets/api/@hms.collaboration.rcp.d.ts",
+          "at": "2026-10-23T18:09:51.987Z",
+          "reason": "正常输入：Bash sed读取Interceptor/SessionConfiguration，回执说明RequestContext.request即被拦截的Request，baseAddress对非绝对Request.url在发送到服务器时前置；即拦截阶段的url仍是构造时的相对值（agent-ac65d0a4437e50251.jsonl:L105-L106）。"
+        },
+        {
+          "key": "agent-ac65d0a4437e50251.jsonl",
+          "at": "2026-10-23T18:28:25.285Z",
+          "reason": "已收到上述输入，并在L339决定baseAddress+相对path（L244曾考虑自拼绝对URL避边界）；Write AuthInterceptor时却在retryAfterRefresh开头无保护地写hilog(..., context.request.url.toString())，把源端调试日志放进刷新主链，未处理相对url读取（同转录L361-L362；写后自检L421只核编译期URL类型）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4,
+          "force": true,
+          "reason": "生成者用Bash设D为rcp d.ts路径后sed -n '2265,2420p' $D，回执即Request类定义（url: URL、string需转换为URL）；这是写AuthInterceptor前对该文件的真实读取，索引未解析变量路径。",
+          "evidence": [
+            {
+              "source": "runs/423f9ea0-6bd7-4007-9926-23c2a20d5e6d/epoch-0/sessions/agent-ac65d0a4437e50251.jsonl",
+              "line": 100
+            },
+            {
+              "source": "runs/423f9ea0-6bd7-4007-9926-23c2a20d5e6d/epoch-0/sessions/agent-ac65d0a4437e50251.jsonl",
+              "line": 101
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "生成者用Bash设D为rcp d.ts路径后sed -n '5700,5850p' $D，回执含RequestContext.request、Interceptor链及baseAddress在发送时前置非绝对Request.url的说明；写前真实读取，索引未解析变量路径。",
+          "evidence": [
+            {
+              "source": "runs/423f9ea0-6bd7-4007-9926-23c2a20d5e6d/epoch-0/sessions/agent-ac65d0a4437e50251.jsonl",
+              "line": 105
+            },
+            {
+              "source": "runs/423f9ea0-6bd7-4007-9926-23c2a20d5e6d/epoch-0/sessions/agent-ac65d0a4437e50251.jsonl",
+              "line": 106
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "材料中没有真实rcp Session下401刷新链的运行记录（后端不可达，U-006），未实测生产拦截器收到的Request.url是否已拼接baseAddress；本卡依据生产HttpClient的相对路径构造、d.ts的baseAddress发送时拼接说明，以及UT诊断中相对路径Request读取url抛错。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-5fa5586d4aba0a31c0e6",
+  "metadata": {
+    "migration": {
+      "project": "real-estate-hmos",
+      "server_session_id": "2a31d414-c042-46ed-a0b8-54374f2a7117",
+      "platforms": [
+        "claude-code"
+      ],
+      "tool_versions": {
+        "orchestrator": "hmigbot-plus",
+        "runtime_version": "1.5.5",
+        "runtime_commit": "1581baca00180f6be329cc6ca886968d694663d2",
+        "client_version": "hmigbot-plus-1.7.0",
+        "pack_version": "hmigbot-plus-1.7.0"
+      }
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "e5cd45b6-1651-425e-ab15-8d08fdd7d5eb"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3",
+        "glm-5.3-flash"
+      ],
+      "client_versions": [
+        "2.1.309"
+      ]
+    },
+    "source_set_id": "sources-9082156557e7e5c70625",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/rem-cmp-glm53/arm-a/real-estate-hmos",
+        "at": "2026-10-23T17:05:03.562Z",
+        "ref": "runs/423f9ea0-6bd7-4007-9926-23c2a20d5e6d/epoch-0/sessions/agent-a6833dc975b85efd8.jsonl:L175",
+        "request_ref": "runs/423f9ea0-6bd7-4007-9926-23c2a20d5e6d/epoch-0/sessions/agent-a6833dc975b85efd8.jsonl:L174",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/rem-cmp-glm53/arm-a/real-estate-hmos",
+        "at": "2026-10-23T17:05:03.562Z",
+        "ref": "runs/423f9ea0-6bd7-4007-9926-23c2a20d5e6d/epoch-0/sessions/agent-a6833dc975b85efd8.jsonl:L175",
+        "request_ref": "runs/423f9ea0-6bd7-4007-9926-23c2a20d5e6d/epoch-0/sessions/agent-a6833dc975b85efd8.jsonl:L174",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.10.10"
+  },
+  "revision": "0efaaf1914954855e5b3c2da33fcaee2408a0fd586ca120b8f6c556b7cced966"
+}
