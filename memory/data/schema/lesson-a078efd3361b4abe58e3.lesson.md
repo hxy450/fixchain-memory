@@ -1,6 +1,6 @@
 # relationalStore 事务体含 await 时用 createTransaction，不用 beginTransaction；单语句直接 await
 
-ID：`lesson-a078efd3361b4abe58e3` · 版本：2
+ID：`lesson-a078efd3361b4abe58e3` · 版本：3
 
 [本主题](index.md)
 
@@ -14,7 +14,7 @@ ArkTS 用 @kit.ArkData relationalStore 普通（非向量）关系库，DAO 的�
 
 ## 原因
 
-单条 SQL 本身是原子语句，已满足“写完才返回、失败不留半条”，为它套事务只多出失败点。共享 store 上 beginTransaction 开启的事务不绑定调用方：事务体内每次 await 都会让出执行，其他经同一 store 的异步库操作会落进这个事务，同一流程并发进入时再次开启事务会造成嵌套错位；createTransaction()（API 14+）返回独立的 Transaction 对象，事务内语句经它执行并由它 commit/rollback。两套接口的 @since 相同，@since 只说明接口出现的版本，不说明当前库类型与设备支持：事务 ID 一套曾在 API 24 真机的普通库上调用 beginTrans() 即返回 801，所有保存都失败，而 unit 判定与签名比对都发现不了。该接口的官方适用库类型尚未核实，beginTransaction() 也未做真机验证。
+单条 SQL 本身是原子语句，已满足“写完才返回、失败不留半条”，为它套事务只多出失败点。共享 store 上 beginTransaction 开启的事务不绑定调用方：事务体内每次 await 都会让出执行，其他经同一 store 的异步库操作会落进这个事务，同一流程并发进入时再次开启事务会造成嵌套错位；createTransaction()（API 14+）返回独立的 Transaction 对象，事务内语句经它执行并由它 commit/rollback。两套接口的 @since 相同，@since 只说明接口出现的版本，不说明当前库类型与设备支持：事务 ID 一套曾在 API 24 真机、API 26 模拟器的普通库上调用 beginTrans() 即返回 801，所有保存都失败，而 unit 判定与签名比对都发现不了。该接口的官方适用库类型尚未核实，beginTransaction() 也未做真机验证。
 
 ## 做法
 
@@ -27,10 +27,12 @@ ArkTS 用 @kit.ArkData relationalStore 普通（非向量）关系库，DAO 的�
 - 共享写入口至少做一次真实 RdbStore 写入（真机或模拟器）；只有 unit 判定或签名比对时，在报告中标出设备能力未验证
 - 检索 beginTransaction(：同一函数内在 commit 之前出现 await 的，逐个改为 Transaction 对象
 
-来源支持：2 张卡 · 已知 1 次迁移（部分未记录） · 已知 1 个应用（部分未记录）
+来源支持：3 张卡 · 已知 2 次迁移（部分未记录） · 已知 2 个应用（部分未记录）
 
 ## 来源（按需复核）
 
+- [case-3226636c565e0d7df08b](../../../store/cases/case-3226636c565e0d7df08b/37780fca29b0182c0ec5e1775e353ea3291b6bbedb86e51721f6e346af9ba755.json) · 结论：diagnosis, recommendation:2
+  卡片版本：`37780fca29b0182c0ec5e1775e353ea3291b6bbedb86e51721f6e346af9ba755`
 - [case-8402e3a379e2a8d7f434](../../../store/cases/case-8402e3a379e2a8d7f434/ebdad535a42c01e6ce53368392b21e85f277e256da86944e0c7b0e2893b1d956.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3, recommendation:4
   卡片版本：`ebdad535a42c01e6ce53368392b21e85f277e256da86944e0c7b0e2893b1d956`
 - [case-bbb6bcf0a09493406de9](../../../store/cases/case-bbb6bcf0a09493406de9/21a32e8e2f659dec5dc8a1982ba4cec150ff0dddab1577f972cec3d0a8b6d17a.json) · 结论：diagnosis, recommendation:2

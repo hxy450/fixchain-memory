@@ -1,0 +1,304 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-bb79a6275f14f9eb5438",
+  "created_at": "2026-11-01T21:19:44.928022+00:00",
+  "migration_key": "8441b4f1-805b-4276-a8a9-9f857fb7c9d0",
+  "title": "以 ArkTS url.URL 构造器是否抛错复刻 java.net.URL 的绝对性/合法性判定，宽松解析导致相对链接与非法串被放行",
+  "when": "实现阶段，把 Android 依赖 java.net.URL 抛 MalformedURLException 的 try-catch 分支（绝对性判定、补 http://、相对链接按 base 拼接、合法性校验、同步 base URL 构造）改写为 ArkTS 时",
+  "description": "源端以 URL(link) 是否抛错区分绝对/相对、有无 scheme 或合法与否，或以 URL(base, \"/abs/path\") 保留 scheme 与含显式端口的 authority；目标侧准备用 @kit.ArkTS 的 new url.URL(...) 加 try/catch 作同等判定。",
+  "summary": "两个生成期 worker 写前都实际收到了正确且足够的源码与规格：\nLinkUtils.kt 的 sloppyLinkToStrictURL 先 URL(url)、MalformedURLException 后补 http://，\nrelativeLinkIntoAbsoluteOrThrow 先 URL(link)、失败才 URL(base, link)；FeedParser.kt 的 icon 走\nrelativeLinkIntoAbsolute、alternate link 以 relativeLinkIntoAbsoluteOrThrow 过滤失败项；\nF002 规格给出判例 google.com → http://google.com、base=https://a.com/x + /y → https://a.com/y、\nhref=/feed + base → https://a.com/feed、xmlUrl=not-a-url 跳过；Retrofit.kt 为 URL(syncRemote.url, \"/api/v1/\")，\nfeature-base 写明默认 Base URL 为 https://feeder-sync.nononsenseapps.com:443/api/v1/。\n这些输入都依赖“java.net.URL 对无 scheme/相对/非法串抛错”这一源平台语义，判例本身已足以检验目标实现。\n\n偏差出在实现者把同一机制直接搬到 ArkTS url.URL 构造器上，且未核对 SDK：\n- Slice 3（F002）worker 在思考中断言“new url.URL('google.com') throws. Good.”，\n  随后 UrlService 的 sloppyLinkToStrictURL / relativeLinkIntoAbsolute / isValidUrlOrUri 以及\n  FeedDiscoveryService 的 resolveLink / toAbsolute 都写成 try { new url.URL(trimmed) } catch 来判断“已是绝对 URL”，\n  alternate link 也复用不过滤失败项的 resolveLink。它还读到已有 HttpClient 同样用 new url.URL，但只借此确认属性存在。\n  之后同一 worker 两次回改（href → trimmed）仍保留按抛错判定的结构。\n- Base-3 Network worker 在思考中写“protocol includes ':'; host includes port … wrapped in try/catch returning default. That's faithful.”，\n  buildSyncBaseUrl 写成 parsed.protocol + '//' + parsed.host + '/api/v1/'，catch 才回退默认地址。\nArkTS 构造器对这些串并不抛错（本地 @ohos.url.d.ts 中该构造器标注 @useinstead ohos.url.URL.parseURL，\n只有 parseURL 声明 10200002 Invalid url string；F002 fixer 修复时才 grep 到，agent-a1625038ded40d61a.jsonl:L95-L96），\n且 host 省略默认端口。于是 UT 实际值为 google.com/x.png、/y、/feed、/i.png 原样返回，not-a-url 被判合法；\n默认同步地址丢失 :443，'not a url' 得到 ///api/v1/（F002 fixer 输入 L20、L42；F006 fixer 输入 agent-a62b3ef66df183f0a.jsonl:L30）。\n三处片段均保留到返修前（fixer 的 old_string 与生成稿一致）。\n\n返修改为：UrlService/FeedDiscoveryService 新增 SCHEME_PATTERN，先按 scheme 判定绝对性，无 scheme 才补 http://，\n相对链接按 base 解析、空 link 回 base，isValidUrlOrUri 要求带 scheme 且可解析，alternate link 走 resolveLinkOrEmpty 过滤失败项\n（agent-a1625038ded40d61a.jsonl:L176-L207）；HttpClient.buildSyncBaseUrl 去掉 url.URL，按 scheme/authority 确定性截取并保留显式端口，\n非 http/https 或无 authority 回退默认（agent-a62b3ef66df183f0a.jsonl:L185-L188）。\nF002 规格映射表把 URL/URI → url.URL 记为“低”风险且未提解析严格度差异，但它没有给出错误等价，判例仍正确；本卡不把规格作者标为偏差起点。\n三处出自两个独立 worker、并非同一份参考材料，共同成因是各自对目标平台 URL API 的同一未核假设。\n",
+  "recommendations": [
+    "改写依赖 java.net.URL 抛错的分支前，先查本地 SDK 的 @ohos.url.d.ts：构造器已标 @useinstead parseURL，只有 parseURL 声明 10200002 抛错；不要假定 new url.URL(...) 会对无 scheme、相对或非法字符串抛错。",
+    "绝对性与合法性改用显式判定：先用 scheme 正则（如 /^[a-zA-Z][a-zA-Z0-9+.-]*:/）判断是否带 scheme，带 scheme 再解析校验；无 scheme 才补 http://，非绝对才按 base 解析；OrThrow 语义的调用点（如 alternate link）对失败项过滤而不是原样保留。",
+    "源码以 URL(base, \"/abs/path\") 取 scheme+authority 时，不用 url.URL.host 拼接（会省略 :443 这类默认端口），按字符串截取 scheme://authority 并保留显式端口；非法或非 http/https 输入显式回退默认值。",
+    "实现前把规格判例（如 google.com → http://google.com、/y → 按 base 拼接、not a url → 回退默认、带 :443 的默认地址原样保留）逐条对照所选目标 API 的真实返回或文档声明的抛错条件，确认后再写分支。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "E:/huawei_0930_project_cc/Feeder_Harmony_base/entry/src/main/ets/services/UrlService.ets",
+        "since": "2026-10-19T17:17:28.822Z",
+        "at": "2026-10-19T20:50:12.317Z"
+      },
+      "nodes": [
+        {
+          "key": "E:/huawei_0930_project_cc/Feeder-master/app/src/main/java/com/nononsenseapps/feeder/util/LinkUtils.kt",
+          "at": "2026-10-19T14:42:03.435Z",
+          "reason": "正常输入：Read 回执给出 sloppyLinkToStrictURL 先 URL(url)、MalformedURLException 后补 http://，relativeLinkIntoAbsoluteOrThrow 先 URL(link) 失败再 URL(base, link)；足以说明源逻辑依赖 java.net.URL 对无 scheme/相对串抛错（agent-adc94f83e73dcb3cf.jsonl:L156-L157）。"
+        },
+        {
+          "key": "E:/huawei_0930_project_cc/Feeder_Harmony_base/spec/baseline/features/F002-feed-subscription.md",
+          "at": "2026-10-19T14:40:29.089Z",
+          "reason": "正常输入：Read 回执含 AC109（\"\" 抛错；google.com → http://google.com）、AC110（base=https://a.com/x、link=/y → https://a.com/y；非法 link → 原值）、AC66（xmlUrl=not-a-url 跳过）；判例足以检验实现。映射表把 URL/URI → url.URL 记为低风险、未注严格度差异，但未给错误等价（agent-adc94f83e73dcb3cf.jsonl:L29、L32）。"
+        },
+        {
+          "key": "09ad9a5d-70a9-4c8e-8683-ce6d254061cc:adc94f83e73dcb3cf",
+          "at": "2026-10-19T14:48:32.375Z",
+          "reason": "已收到上述输入；思考中断言“new url.URL('google.com') throws. Good.”，未查 SDK（L211）。Write UrlService 时 sloppyLinkToStrictURL、relativeLinkIntoAbsolute、isValidUrlOrUri 都以 try { new url.URL(trimmed) } catch 判定“已是绝对/合法”（L324-L325）。L633-L643 回改只把 href 换成 trimmed，仍按抛错判定；该片段保留到 F002 fixer 的 old_string（agent-a1625038ded40d61a.jsonl:L179、L182）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "E:/huawei_0930_project_cc/Feeder_Harmony_base/entry/src/main/ets/services/FeedDiscoveryService.ets",
+        "since": "2026-10-19T17:17:28.822Z",
+        "at": "2026-10-19T20:50:12.317Z"
+      },
+      "nodes": [
+        {
+          "key": "E:/huawei_0930_project_cc/Feeder-master/app/src/main/java/com/nononsenseapps/feeder/model/FeedParser.kt",
+          "at": "2026-10-19T14:42:26.463Z",
+          "reason": "正常输入：Read 回执给出 getFeedIconInHtml 对 href 调 relativeLinkIntoAbsolute(base, href)，getAlternateFeedLinksInHtml 以 relativeLinkIntoAbsoluteOrThrow 过滤 MalformedURLException 的条目（FeedParser.kt:81-106、120-170；agent-adc94f83e73dcb3cf.jsonl:L187-L188）。"
+        },
+        {
+          "key": "E:/huawei_0930_project_cc/Feeder-master/app/src/main/java/com/nononsenseapps/feeder/util/LinkUtils.kt",
+          "at": "2026-10-19T14:42:03.435Z",
+          "reason": "正常输入：relativeLinkIntoAbsolute / OrThrow 先 URL(link)、失败再按 base 解析，依赖 java.net.URL 对相对串抛错（agent-adc94f83e73dcb3cf.jsonl:L156-L157）。"
+        },
+        {
+          "key": "09ad9a5d-70a9-4c8e-8683-ce6d254061cc:adc94f83e73dcb3cf",
+          "at": "2026-10-19T14:49:24.480Z",
+          "reason": "与 UrlService 同一假设：Write FeedDiscoveryService 时 resolveLink 写成 try { return new url.URL(trimmed).href } catch { // relative } 再按 base 解析，toAbsolute 同样以抛错判定是否补 http://，alternate link 复用不过滤失败项的 resolveLink（L338-L339）。L637/L639 回改只把 href 换成 trimmed；F002 规格 AC44（href=/feed + base → https://a.com/feed）已在写前收到（L32）。片段保留到 F002 fixer 的 old_string（agent-a1625038ded40d61a.jsonl:L200）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "E:/huawei_0930_project_cc/Feeder_Harmony_base/entry/src/main/ets/network/HttpClient.ets",
+        "since": "2026-10-19T17:17:28.822Z",
+        "at": "2026-10-19T20:50:12.317Z"
+      },
+      "nodes": [
+        {
+          "key": "E:/huawei_0930_project_cc/Feeder_Harmony_base/spec/baseline/feature-base.md",
+          "at": "2026-10-19T14:17:58.499Z",
+          "reason": "正常输入：Read 回执 Base URL 表写明 Feeder Sync 默认 https://feeder-sync.nononsenseapps.com:443/api/v1/、可配置 {syncRemote.url}/api/v1/，显式端口是契约的一部分（agent-ab8c3beae6fda3d2e.jsonl:L23-L24）。"
+        },
+        {
+          "key": "E:/huawei_0930_project_cc/Feeder-master/app/src/main/java/com/nononsenseapps/feeder/sync/Retrofit.kt",
+          "at": "2026-10-19T14:18:22.949Z",
+          "reason": "正常输入：Read 回执 Retrofit.kt:45 为 baseUrl(URL(syncRemote.url, \"/api/v1/\"))，即保留 scheme 与 authority（含显式端口）、以绝对路径覆盖原 path，非法 URL 抛错（agent-ab8c3beae6fda3d2e.jsonl:L63-L64）。"
+        },
+        {
+          "key": "09ad9a5d-70a9-4c8e-8683-ce6d254061cc:ab8c3beae6fda3d2e",
+          "at": "2026-10-19T14:27:30.888Z",
+          "reason": "已收到上述输入；思考中认定“host includes port … wrapped in try/catch returning default. That's faithful.”（L287），Write buildSyncBaseUrl 为 new url.URL(trimmed) 后拼 parsed.protocol + '//' + parsed.host + '/api/v1/'，catch 才回退默认（L291-L292）。结果默认地址丢 :443、'not a url' 不抛错得 ///api/v1/；片段保留到 F006 fixer 的 old_string（agent-a62b3ef66df183f0a.jsonl:L185）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "材料中没有直接打印 ArkTS 构造器对 'not a url' 等串得到的各字段值；F006 fixer 报告把 ///api/v1/ 解释为对 https://... 返回空 protocol/host，但该断言的输入按 UT 设计是 'not a url'（期望回退默认）。本卡按测试设计与实际值归因为非法输入未抛错，不确认 https 输入是否同样为空。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-bb79a6275f14f9eb5438",
+  "metadata": {
+    "migration": {
+      "project": "com.nononsenseapps.feeder",
+      "server_session_id": "8441b4f1-805b-4276-a8a9-9f857fb7c9d0",
+      "platforms": [
+        "claude-code"
+      ],
+      "tool_versions": {
+        "orchestrator": "hmigbot-plus",
+        "runtime_version": "v1.5.2",
+        "runtime_commit": "c47f332",
+        "client_version": "hmigbot-plus-1.7.0",
+        "pack_version": "hmigbot-lite-1.6.1"
+      }
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "b7778fd6-a8b8-45ab-9466-8e8457af2d5d"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "deepseek-flash"
+      ],
+      "client_versions": [
+        "2.1.247"
+      ]
+    },
+    "source_set_id": "sources-d7987638b71ceb02410c",
+    "environment": [
+      {
+        "name": "android.min_sdk",
+        "value": "29",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T12:26:01.929Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L17",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L16",
+        "phase": "generation"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T12:27:22.307Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L360",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L359",
+        "phase": "generation"
+      },
+      {
+        "name": "toolchain.kotlin",
+        "value": "2.4.21",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T12:27:22.307Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L360",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L359",
+        "phase": "generation"
+      },
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T12:27:22.307Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L360",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L359",
+        "phase": "generation"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "29",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder-master",
+        "at": "2026-10-19T13:12:19.923Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a9b5b8a2259e4f29e.jsonl:L74",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a9b5b8a2259e4f29e.jsonl:L72",
+        "phase": "generation"
+      },
+      {
+        "name": "toolchain.gradle",
+        "value": "9.8.1",
+        "basis": "configuration",
+        "artifact": "gradle-wrapper.properties",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder-master",
+        "at": "2026-10-19T13:12:43.305Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a9b5b8a2259e4f29e.jsonl:L86",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a9b5b8a2259e4f29e.jsonl:L85",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "23",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T13:13:19.182Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/main-09ad9a5d-70a9-4c8e-8683-ce6d254061cc.jsonl:L1779",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/main-09ad9a5d-70a9-4c8e-8683-ce6d254061cc.jsonl:L1777",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "23",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T13:13:19.182Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/main-09ad9a5d-70a9-4c8e-8683-ce6d254061cc.jsonl:L1779",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/main-09ad9a5d-70a9-4c8e-8683-ce6d254061cc.jsonl:L1777",
+        "phase": "generation"
+      },
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder-master",
+        "at": "2026-10-19T13:15:54.470Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a9b5b8a2259e4f29e.jsonl:L192",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a9b5b8a2259e4f29e.jsonl:L191",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "26.0.0",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T13:17:58.962Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-ac32c63c9ad585393.jsonl:L49",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-ac32c63c9ad585393.jsonl:L48",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "26.0.0",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T13:17:58.962Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-ac32c63c9ad585393.jsonl:L49",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-ac32c63c9ad585393.jsonl:L48",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.10.10"
+  },
+  "revision": "16b05d8a55cffb810e426356a8d50a1242191d4d0126d74d9ecdc44e6a66eded"
+}

@@ -1,0 +1,299 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-7eac25f956de5c81e8f8",
+  "created_at": "2026-11-01T21:19:34.510626+00:00",
+  "migration_key": "8441b4f1-805b-4276-a8a9-9f857fb7c9d0",
+  "title": "同步链客户端把构造期初始化改成按调用懒加载，并扩大或改变了异常与批次失败的传播范围",
+  "when": "规格提取与同步客户端实现阶段，把源端构造期初始化门禁、循环和批次中的异常传播范围（try/catch 包到哪一层、单批失败后是否继续）翻译成 ArkTS 契约和代码时",
+  "description": "源端同步客户端在构造函数里 runBlocking initialize()，业务方法经 safeBlock 未就绪即返回 1001；getRead 循环内解密异常会直接落到外层 catch 中断整批，只有解析结果为 null 才推进时间戳并 continue；markAsRead 用 chunked(100).forEach 忽略单批结果；feedDiffing 自带 try/catch；响应由 Moshi 严格反序列化。目标端改成异步 initialize、Either 返回值以及会给缺失字段填默认值的 DTO fromJson。",
+  "summary": "本问题有两类成因，都落在 slice 6 生成者 agent-a130be5217e61144a 写出的 SyncRestClient.ets，\n其中初始化门禁的偏差还落到了同一生成者写的 RssLocalSyncService.ets。\n\n一、规格正确、实现写偏（初始化门禁、设备列表严格解析、feedDiffing 异常范围）。\n生成者写前读到的 F006 主规格已经写明：AC77 要求 initialize() 未完成时任何调用都返回 1001，\n不得带空 client/key 发请求；AC05 要求未初始化或未配置时返回 1001；映射表 HARD 行要求把\nrunBlocking { initialize() } 翻译成 await SyncClient.initialize() 前置；races R1 也写了\ninitialize 的 Promise 完成后才允许发请求。AC62 要求缺字段或类型不符时报错，\n不得用默认对象静默替换业务数据。生成者还完整读过 SyncRestClient.kt，\n其中 feedDiffing 有自己的 try/catch。\n生成者的设计思考明确写了“secretKeys 为 null 时就尝试 decode，可覆盖未调用 initialize 的冷启”\n（agent-a130be5217e61144a.jsonl:L208），于是 L244 写出的 requireConfigured 调用 reloadRemote，\n在未初始化时自己从数据库解码密钥并照常发请求，没有 initialized 门禁。\n同一生成者在 L260 写 RssLocalSyncService.runSyncChainPhaseInternal 时，没有在 getFeeds 之前\nawait 初始化；它新增的 initialize(context) 也没有接到后台同步入口上。后台链路能用，\n靠的就是这个懒加载。设备列表方面，生成者已经注意到 DTO 的 fromJson 会给缺失字段填默认值，\n也只给 JoinResponse 补了校验（L239）；getDevices 和 removeDeviceRequest 仍直接用\nDeviceListResponse.fromJson，坏响应会被当成空列表，进而清空本地设备表。\nfeedDiffing 写成没有内部 catch 的版本，异常会冒泡到 getFeeds，lastFeedsRemoteHash 因此不会落库。\n\n二、规格先偏离，实现照着写（getRead 解密异常、markAsRead 单批失败）。\n规格作者 agent-a46a521da1d93da14 在 L77-L78 读过完整的 SyncRestClient.kt。源码里\ndecryptString 位于循环内，没有逐条 catch，抛错会落到外层 \"Error in getRead\" 并中断整批；\n只有 readMarkAdapter.fromJson 返回 null 时才推进时间戳并 continue。markAsRead 用\nchunked(100).forEach { sendReadMarksBatch(it) }，单批 Left 被忽略，最后返回 Right。\n规格作者在 L312 写 AC39 时，把“解密/解析为 null”合并成同一个 continue 分支，并写了“不中断整批”。\nL332 的 races 又写了 R9“损坏标记也推进”，以及 R4“后续批次是否继续由实现决定”，\n把源码确定的行为放宽成了可选项。生成者读到这两份规格后：getRead 给每条记录包 try/catch，\n解密失败也推进时间戳并 continue，注释直接引用 AC39 / races R9；markAsRead 按 R4 的放宽\n选择首批失败就返回 Left，思考里写着“R4 says implementation decides…We'll stop on failure”（L208）。\n生成者虽然也读了源码，但这两处都照规格实现，这一支只认定为传递。\n\n上述片段到返修时都还在：修复者编辑前的 old_string 与生成稿一致。修复者\nagent-a62b3ef66df183f0a 对照 SyncRestClient.kt 做了以下修改（L152-L177、L234-L238）：\n- 新增 initialized 门禁，doInitialize、create、join 完成后置位，requireConfigured 先检查门禁；\n- decryptString 移出逐条 try，异常中断整批，只有解析失败才推进时间戳并 continue；\n- markAsRead 每批独立 try/continue，结束后返回 Right；\n- feedDiffing 外包 try/catch，不再阻断 hash 持久化；\n- 新增 parseDeviceList 严格校验，供 getDevices 和 removeDeviceRequest 使用。\n加上门禁后，修复者发现后台同步从不经过 SyncPage 的 initialize，会永久返回 1001\n（L269-L281）。于是在 L283 公开 initializeFromDatabase，并在 L286 让\nrunSyncChainPhaseInternal 先调用它。这一处是补回规格要求的“初始化前置”，\n与懒加载属于同一个设计偏差，不是新需求。\n",
+  "recommendations": [
+    "规格提取阶段：总结源端循环或批次的错误处理时，按“抛异常”和“返回 null/Left”分开写传播范围。抛异常时写明会被哪一层 catch 接住、是否中断整批、是否推进游标；只有 null 分支才写 continue。不要把“解密失败”和“解析为 null”合并成一句。",
+    "规格提取阶段：源码行为确定时（例如 forEach 忽略单批 Left、最终返回 Right），照原样写进 AC 或 races 条目，不改写成“由实现决定”。",
+    "实现阶段：源端在构造期同步完成 initialize 的，在目标端设显式 initialized 门禁，未完成时返回 1001，并逐个检查 UI、后台等所有入口在首个请求前是否已 await 初始化。不要在 requireConfigured 一类的逐次守卫里顺手从数据库解码密钥，那样会绕过门禁。",
+    "实现阶段：逐个对照源函数的 try/catch 作用域，包括辅助函数内部的 catch（例如 feedDiffing），以及循环里哪些调用没有逐条 catch，保持相同的中断和继续语义。规格与已读源码不一致时，以源码为准并记录差异，不要只引用规格条目。",
+    "实现阶段：复用会给缺失字段填默认值的 DTO fromJson 时，凡结果会用于全量替换本地表（例如设备列表），先严格校验必需字段和类型，失败返回 999，同时保留本地数据。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "E:/huawei_0930_project_cc/Feeder_Harmony_base/entry/src/main/ets/services/SyncRestClient.ets",
+        "since": "2026-10-19T17:17:28.822Z",
+        "at": "2026-10-19T20:50:12.317Z"
+      },
+      "nodes": [
+        {
+          "key": "E:/huawei_0930_project_cc/Feeder-master/app/src/main/java/com/nononsenseapps/feeder/sync/SyncRestClient.kt",
+          "at": "2026-10-19T12:39:07.377Z",
+          "reason": "规格作者的正常输入：完整读取的回执里有 init{runBlocking{initialize()}}、safeBlock→1001、markAsRead 的 chunked(100).forEach{sendReadMarksBatch} 忽略单批结果；getRead 循环内 decryptString 无逐条 catch，只有 fromJson==null 时推进时间戳并 continue，外层 catch 'Error in getRead'；feedDiffing 自带 try/catch。足以写出正确的异常与批次契约（agent-a46a521da1d93da14.jsonl:L77-L78）。"
+        },
+        {
+          "key": "agent-a46a521da1d93da14.jsonl",
+          "at": "2026-10-19T12:51:20.900Z",
+          "reason": "读过上述源码后，L312 写 F006 主规格时，AC39 把“解密/解析为 null”合并成记录、推进 latestMessageTimestamp、continue 且不中断整批；L332 的 races 写了 R9“损坏标记也推进”，以及 R4“后续批次是否继续由实现决定”。解密异常的传播范围和 forEach 继续语义在源码到规格这一步偏离（同转录 L312-L313、L332-L333）。同一规格里 AC05/AC77、映射 HARD 行与 R1 的初始化门禁写得正确。",
+          "problem": true
+        },
+        {
+          "key": "E:/huawei_0930_project_cc/Feeder_Harmony_base/spec/baseline/features/F006-device-sync.md",
+          "at": "2026-10-19T15:20:09.349Z",
+          "reason": "生成者 Read 回执。正确部分：AC05/AC77（未完成 initialize 返回 1001，不得带空 key 发请求）、映射 HARD 行 runBlocking{initialize()}→await SyncClient.initialize() 前置、AC62（不得用默认对象静默替换业务数据），足以指导门禁和设备列表解析。偏差部分：同一回执里含规格作者写错的 AC39，是 getRead 分支的交付桥梁（agent-a130be5217e61144a.jsonl:L28-L29）。"
+        },
+        {
+          "key": "E:/huawei_0930_project_cc/Feeder_Harmony_base/spec/baseline/features/F006-device-sync.races.md",
+          "at": "2026-10-19T15:20:18.174Z",
+          "reason": "生成者 Read 回执。R1 正确要求 initialize 的 Promise 完成后才允许请求、未完成返回 1001；但 R4（后续批次由实现决定）和 R9（损坏标记也推进）把规格作者的偏差交付给了实现者（agent-a130be5217e61144a.jsonl:L58、L61）。"
+        },
+        {
+          "key": "E:/huawei_0930_project_cc/Feeder-master/app/src/main/java/com/nononsenseapps/feeder/sync/SyncRestClient.kt",
+          "at": "2026-10-19T15:20:41.198Z",
+          "reason": "生成者的正常输入：完整 Read 回执，含 init runBlocking、safeBlock、markAsRead forEach、getRead 外层 catch，以及 feedDiffing 的 try/catch 'Error in feedDiffing'（agent-a130be5217e61144a.jsonl:L127、L132）。"
+        },
+        {
+          "key": "agent-a130be5217e61144a.jsonl",
+          "at": "2026-10-19T15:23:36.680Z",
+          "reason": "门禁、设备列表和 feedDiffing 三处，是输入正确而实现写偏。设计思考里写了 secretKeys 为 null 时就 decode 以覆盖未 initialize 的冷启，也写了 DTO fromJson 会填默认值（L208、L239）。L244 Write 写出的 requireConfigured→reloadRemote 在未初始化时自行解码密钥并发请求；getDevices 和 removeDeviceRequest 直接用 DeviceListResponse.fromJson；feedDiffing 没有内部 catch。getRead 和 markAsRead 两处则照错误规格实现：逐条 try/catch 包住 decrypt 并推进时间戳（注释引用 AC39/R9），首批失败即 return Left（L208 引 R4）。同转录 L244-L245。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 6
+        },
+        {
+          "from": 4,
+          "to": 6
+        },
+        {
+          "from": 5,
+          "to": 6
+        },
+        {
+          "from": 6,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "E:/huawei_0930_project_cc/Feeder_Harmony_base/entry/src/main/ets/services/RssLocalSyncService.ets",
+        "since": "2026-10-19T17:17:28.822Z",
+        "at": "2026-10-19T20:50:12.317Z"
+      },
+      "summary": "生成者读到 F006 主规格的映射 HARD 行与 AC77，以及 races 的 R1 和同步编排顺序，\n都要求在 initialize 的 Promise 完成后才发同步请求。L260 写出的 runSyncChainPhaseInternal\n却直接依次调用 getFeeds、getRead 等方法，没有先初始化；文件里虽有\ninitialize(context)，但没有接到 FeedSyncService 调用的同步链钩子上。\n这条路径之所以还能工作，是因为同一生成者在 SyncRestClient 里让 requireConfigured 懒加载密钥。\n修复者恢复门禁后发现后台同步会永久返回 1001\n（agent-a62b3ef66df183f0a.jsonl:L269-L281），于是在 L286 让同步链阶段先 await\nclient.initializeFromDatabase()，失败时只记日志。\n",
+      "recommendations": [
+        "实现编排层时：凡后台任务或钩子入口会调用同步客户端，在第一个请求前显式 await 客户端初始化，并 grep 确认该初始化确实有调用方，不要依赖客户端内部的隐式懒加载。"
+      ],
+      "nodes": [
+        {
+          "key": "E:/huawei_0930_project_cc/Feeder_Harmony_base/spec/baseline/features/F006-device-sync.md",
+          "at": "2026-10-19T15:20:09.349Z",
+          "reason": "正常输入：生成者 Read 回执含映射 HARD 行 runBlocking{initialize()}→await SyncClient.initialize() 前置、异步初始化完成前不得发请求，以及 AC77（冷启初始化必须先于首个同步请求完成）（agent-a130be5217e61144a.jsonl:L28-L29）。"
+        },
+        {
+          "key": "E:/huawei_0930_project_cc/Feeder_Harmony_base/spec/baseline/features/F006-device-sync.races.md",
+          "at": "2026-10-19T15:20:18.174Z",
+          "reason": "正常输入：R1 要求 initialize 的 Promise 完成后才允许 getDevices 等调用、未完成返回 1001；同步编排顺序给出 getFeeds→getRead→getDevices→sendUpdatedFeeds→markAsRead（agent-a130be5217e61144a.jsonl:L58、L61）。"
+        },
+        {
+          "key": "agent-a130be5217e61144a.jsonl",
+          "at": "2026-10-19T15:24:12.189Z",
+          "reason": "已收到上述初始化前置要求，L260 Write 的 runSyncChainPhaseInternal 却从 getFeeds 开始直接调用客户端，没有 await 初始化；新增的 initialize(context) 没有接到同步链钩子入口。该路径依赖同一生成者写的 requireConfigured 懒加载（同转录 L208、L260-L261）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-7eac25f956de5c81e8f8",
+  "metadata": {
+    "migration": {
+      "project": "com.nononsenseapps.feeder",
+      "server_session_id": "8441b4f1-805b-4276-a8a9-9f857fb7c9d0",
+      "platforms": [
+        "claude-code"
+      ],
+      "tool_versions": {
+        "orchestrator": "hmigbot-plus",
+        "runtime_version": "v1.5.2",
+        "runtime_commit": "c47f332",
+        "client_version": "hmigbot-plus-1.7.0",
+        "pack_version": "hmigbot-lite-1.6.1"
+      }
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "b7778fd6-a8b8-45ab-9466-8e8457af2d5d"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "deepseek-flash"
+      ],
+      "client_versions": [
+        "2.1.247"
+      ]
+    },
+    "source_set_id": "sources-d7987638b71ceb02410c",
+    "environment": [
+      {
+        "name": "android.min_sdk",
+        "value": "29",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T12:26:01.929Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L17",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L16",
+        "phase": "generation"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T12:27:22.307Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L360",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L359",
+        "phase": "generation"
+      },
+      {
+        "name": "toolchain.kotlin",
+        "value": "2.4.21",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T12:27:22.307Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L360",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L359",
+        "phase": "generation"
+      },
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T12:27:22.307Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L360",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L359",
+        "phase": "generation"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "29",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder-master",
+        "at": "2026-10-19T13:12:19.923Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a9b5b8a2259e4f29e.jsonl:L74",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a9b5b8a2259e4f29e.jsonl:L72",
+        "phase": "generation"
+      },
+      {
+        "name": "toolchain.gradle",
+        "value": "9.8.1",
+        "basis": "configuration",
+        "artifact": "gradle-wrapper.properties",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder-master",
+        "at": "2026-10-19T13:12:43.305Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a9b5b8a2259e4f29e.jsonl:L86",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a9b5b8a2259e4f29e.jsonl:L85",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "23",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T13:13:19.182Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/main-09ad9a5d-70a9-4c8e-8683-ce6d254061cc.jsonl:L1779",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/main-09ad9a5d-70a9-4c8e-8683-ce6d254061cc.jsonl:L1777",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "23",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T13:13:19.182Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/main-09ad9a5d-70a9-4c8e-8683-ce6d254061cc.jsonl:L1779",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/main-09ad9a5d-70a9-4c8e-8683-ce6d254061cc.jsonl:L1777",
+        "phase": "generation"
+      },
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder-master",
+        "at": "2026-10-19T13:15:54.470Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a9b5b8a2259e4f29e.jsonl:L192",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a9b5b8a2259e4f29e.jsonl:L191",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "26.0.0",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T13:17:58.962Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-ac32c63c9ad585393.jsonl:L49",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-ac32c63c9ad585393.jsonl:L48",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "26.0.0",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T13:17:58.962Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-ac32c63c9ad585393.jsonl:L49",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-ac32c63c9ad585393.jsonl:L48",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.10.10"
+  },
+  "revision": "9283ffdd45774ecf042e2493def044910018878d49ebde64cb075aadc37448a9"
+}

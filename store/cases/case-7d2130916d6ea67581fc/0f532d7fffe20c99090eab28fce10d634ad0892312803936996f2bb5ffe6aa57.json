@@ -1,0 +1,339 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-7d2130916d6ea67581fc",
+  "created_at": "2026-11-01T21:35:16.962281+00:00",
+  "migration_key": "8441b4f1-805b-4276-a8a9-9f857fb7c9d0",
+  "title": "迁移订阅发现与编辑表单时丢掉已读到的源码条件分支：二次抓取、缺失Content-Type、SavedState优先与webview的appDefault判定",
+  "when": "业务实现与页面转换阶段，把源ViewModel/解析器的条件分支、平台状态恢复和派生判定谓词写成ArkTS服务与页面逻辑时",
+  "description": "源端以Either.isLeft回退、contentType?.type为null的else分支、SavedStateHandle.contains守卫或枚举集合谓词（isOpenItemWith*）表达行为；ArkTS没有同名机制，页面UI只暴露其中部分取值，规格AC或FWD-REF契约已点名这些分支。",
+  "summary": "本job有三处已核偏差，均发生在实现输出、而非规格缺失；写前输入已经正确且足够。\n\n一、FeedDiscoveryService（Slice 3 worker agent-adc94f83e73dcb3cf）。写前读到F002 api addendum\n“curl：Content-Type必须是text/*且subtype为plain或html，否则UnsupportedContentType”（L39-L40）、\nFeedParser.kt的curl：when(contentType?.type){\"text\"->plain/html; else->UnsupportedContentType}（L187-L188），\n以及SearchFeedViewModel.kt的parseFeedUrl.onRight：if(siteMetaData.isLeft()) 取feed.home_page_url\n再getSiteMetaData，结果feedImage取更新后的siteMetaData（L162-L163）。worker在思考中先计划\n“ctype为空且含<head>则接受”（L337），随后Write（L338-L339）写成contentType.length>0 && 非text/plain/html\n才判UnsupportedContentType，空/缺失Content-Type被放行；searchForFeeds只在开头按首次元数据算一次feedImage，\n没有实现isLeft时按home_page_url二次抓取，尽管同一次Write的最小解析器已经提取了home_page_url。\nF002主spec与addenda未单独写出二次抓取（AC49只要求feedImage来自SiteMetaData），但worker的任务是\n“读anchors→差异清单→实现”，源码已在写前读回；本分支停在实现者。两段代码保留到UT fixer\nagent-a1625038ded40d61a在18:22按Android源码修正（L188、L191-L194，回执L266的AC49_feedimage_fallback/AC50）。\n\n二、EditFeedPage草稿优先（同一Slice 3 worker）。写前读到F002主spec的F002-AC18“编辑页若SavedState已有值\n则不被数据库值覆盖”（L29/L32）、mapping addendum“首次进入编辑页时若SavedState尚未包含该键，按feed逐项回填”\n（L37-L38）、EditFeedScreenViewModel.kt中每个字段的if(!state.contains(...))守卫（L159/L161），以及页面converter\n留下的FWD-REF P-S3-101契约“fields are initialised from the feed only when they were not restored from saved state”\n（EditFeedPage读回L74-L75）。worker在思考中认定“SavedState not applicable in ArkTS… AC18 residual”（L307），\nsource-notes把AC18写成“ArkTS无等价物，残余”（L320），随后Edit（L413-L414）用无条件DB赋值替换了该FWD-REF。\ngroup closer agent-ad39329392cf4a2c6在16:28只把读取改走editFeedViewModel.load，赋值仍无条件；verify闭包据此把\nAC18判为未实现（main L6590）。修复新建EditFeedDraft/mergeFeedWithDraft与按feedId持久化的EditFeedDraftStore，\n加载时草稿优先、aboutToDisappear落草稿、保存成功后清理（main L6722-L6730、L6777-L6779、L6792-L6794）。\n\n三、CreateFeedPage的appDefault（页面converter agent-a34b6b5962e99e909）。该converter的派工只给页面spec，\n未给F002功能spec；页面spec列出4个单选（Use app default/Reader/Custom tab/Default browser，L9-L10），\n它同时读到CreateFeedScreenViewModel.kt的isOpenItemWithAppDefault：READER、WEBVIEW、BROWSER、CUSTOM_TAB均为false\n（L25-L26），并grep到PREF_VAL_OPEN_WITH_WEBVIEW=\"1\"（L113-L114）。Write（L129-L130）却只声明READER/BROWSER/CUSTOM_TAB\n三个常量，把app default写成“不等于这三者”，按可见单选项而非源谓词推导，webview值会被误判为应用默认。\n同时段的EditFeed converter agent-a772aaacf00a30fd5在EditFeedPage中完整排除了四个值，因此两页不一致来自两名\nconverter各自实现；其后Slice 3 worker、group closer等对CreateFeedPage的编辑均未改动这段判定。修复新增公共\nresolveOpenerFlags并让两页共用（main L7076-L7078、L7119-L7121）。\n\nEditFeedForm.ets与EditFeedDraftStore.ets是修复期新建的承载模块，生成期不存在，缺口已在上述页面分支归因。\n",
+  "recommendations": [
+    "实现源解析/搜索流程时，先把源码每个条件分支列成对照表（含onRight里的isLeft回退、contentType为null落入的else分支），逐项对应到ArkTS；不要只保留主路径或自行加宽松条件。本任务应保留：首次getSiteMetaData失败时按feed.home_page_url二次抓取并回填feedImage；Content-Type为空或缺失时返回UnsupportedContentType。",
+    "源依赖SavedStateHandle等平台机制、而规格AC已要求其可观察行为时，先设计等价实现（例如按feedId持久化表单草稿，加载时草稿字段优先于DB，页面离开时写入，保存成功后清理），不要直接登记为“无等价物残余”；替换FWD-REF时保留契约里写明的条件（only when not restored from saved state）。",
+    "派生判定按源ViewModel谓词的完整取值集实现，不按页面可见单选项推导；isOpenItemWithAppDefault需同时排除reader、webview、browser、custom_tab，常量值取源SettingsStore（0/1/2/3）。同一谓词出现在Create与Edit两页时，抽成共享函数或与另一页逐项核对。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "E:/huawei_0930_project_cc/Feeder_Harmony_base/entry/src/main/ets/services/FeedDiscoveryService.ets",
+        "since": "2026-10-19T17:17:28.822Z",
+        "at": "2026-10-19T20:50:12.317Z"
+      },
+      "nodes": [
+        {
+          "key": "E:/huawei_0930_project_cc/Feeder_Harmony_base/spec/baseline/features/F002-feed-subscription.api.md",
+          "at": "2026-10-19T14:40:34.110Z",
+          "reason": "正常输入：§站点发现第1条写明curl的Content-Type必须是text/*且subtype为plain或html，否则UnsupportedContentType；缺失Content-Type不满足该条件（agent-adc94f83e73dcb3cf.jsonl:L39-L40）。"
+        },
+        {
+          "key": "E:/huawei_0930_project_cc/Feeder-master/app/src/main/java/com/nononsenseapps/feeder/model/FeedParser.kt",
+          "at": "2026-10-19T14:42:26.463Z",
+          "reason": "正常输入：getSiteMetaData经curl；curl中when(contentType?.type)只有\"text\"且plain/html才读body，null类型落入else→UnsupportedContentType。足以确定空Content-Type不能放行（同转录L187-L188）。"
+        },
+        {
+          "key": "E:/huawei_0930_project_cc/Feeder-master/app/src/main/java/com/nononsenseapps/feeder/ui/compose/searchfeed/SearchFeedViewModel.kt",
+          "at": "2026-10-19T14:42:03.975Z",
+          "reason": "正常输入：parseFeedUrl(url).onRight中if(siteMetaData.isLeft())取feed.home_page_url，sloppyLinkToStrictURLOrNull后重新getSiteMetaData，SearchResult.feedImage取更新后的siteMetaData（同转录L162-L163）。"
+        },
+        {
+          "key": "agent-adc94f83e73dcb3cf.jsonl",
+          "at": "2026-10-19T14:49:24.480Z",
+          "reason": "已收到上述输入，Write的getSiteMetaData写成contentType.length>0且非text/plain|html才报UnsupportedContentType，空类型被放行；searchForFeeds只按首次元数据赋一次feedImage，未实现isLeft时的home_page_url二次抓取（思考L337计划对空ctype放宽；Write L338-L339）。两段保留到UT fixer在L188、L191-L194修改。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "E:/huawei_0930_project_cc/Feeder_Harmony_base/entry/src/main/ets/pages/EditFeedPage.ets",
+        "since": "2026-10-19T17:17:28.822Z",
+        "at": "2026-10-19T20:50:12.317Z"
+      },
+      "nodes": [
+        {
+          "key": "E:/huawei_0930_project_cc/Feeder_Harmony_base/spec/baseline/features/F002-feed-subscription.md",
+          "at": "2026-10-19T14:40:29.089Z",
+          "reason": "正常输入：F002-AC18写明编辑页若SavedState已有值则不被数据库值覆盖，判据为保存态feedTitle优先于DB值（agent-adc94f83e73dcb3cf.jsonl:L29、L32）。"
+        },
+        {
+          "key": "E:/huawei_0930_project_cc/Feeder_Harmony_base/spec/baseline/features/F002-feed-subscription.mapping.md",
+          "at": "2026-10-19T14:40:33.998Z",
+          "reason": "正常输入：§编辑字段回填写明首次进入编辑页时若SavedState尚未包含该键才按feed逐项回填（同转录L37-L38）。"
+        },
+        {
+          "key": "E:/huawei_0930_project_cc/Feeder-master/app/src/main/java/com/nononsenseapps/feeder/ui/compose/editfeed/EditFeedScreenViewModel.kt",
+          "at": "2026-10-19T14:42:03.867Z",
+          "reason": "正常输入：init中每个表单字段都由if(!state.contains(\"feedUrl\"/\"feedTitle\"/...))守卫，只有defaultTitle、feedImage无条件取DB（同转录L159、L161）。"
+        },
+        {
+          "key": "E:/huawei_0930_project_cc/Feeder_Harmony_base/entry/src/main/ets/pages/EditFeedPage.ets",
+          "at": "2026-10-19T14:40:56.325Z",
+          "reason": "正常输入：页面converter留下的FWD-REF P-S3-101契约写明表单字段only when they were not restored from saved state才从feed初始化（同转录L74-L75）。"
+        },
+        {
+          "key": "agent-adc94f83e73dcb3cf.jsonl",
+          "at": "2026-10-19T14:51:25.779Z",
+          "reason": "已收到上述输入，思考中判定SavedState not applicable、AC18 residual（L307），source-notes记为ArkTS无等价物（L320）；Edit用无条件feed赋值替换P-S3-101，丢掉草稿/保存态优先条件（L413-L414）。后续group closer只改读取入口，未改变本项。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 5
+        },
+        {
+          "from": 2,
+          "to": 5
+        },
+        {
+          "from": 3,
+          "to": 5
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "E:/huawei_0930_project_cc/Feeder_Harmony_base/entry/src/main/ets/pages/CreateFeedPage.ets",
+        "since": "2026-10-19T17:17:28.822Z",
+        "at": "2026-10-19T20:50:12.317Z"
+      },
+      "nodes": [
+        {
+          "key": "E:/huawei_0930_project_cc/Feeder_Harmony_base/spec/baseline/ui/page_0005_CreateFeedScreen.md",
+          "at": "2026-10-19T13:17:51.904Z",
+          "reason": "正常输入：页面spec列出4个RadioButtonSetting（Use app default→articleOpener=\"\"、Reader、Custom tab、Default browser），描述的是可见选项，没有给出appDefault判定式（agent-a34b6b5962e99e909.jsonl:L9-L10）。"
+        },
+        {
+          "key": "E:/huawei_0930_project_cc/Feeder-master/app/src/main/java/com/nononsenseapps/feeder/ui/compose/editfeed/CreateFeedScreenViewModel.kt",
+          "at": "2026-10-19T13:17:56.487Z",
+          "reason": "正常输入：isOpenItemWithAppDefault对PREF_VAL_OPEN_WITH_READER、WEBVIEW、BROWSER、CUSTOM_TAB均返回false，其余为true；同一converter随后grep到WEBVIEW=\"1\"（同转录L25-L26、L113-L114）。足以写出完整判定。"
+        },
+        {
+          "key": "agent-a34b6b5962e99e909.jsonl",
+          "at": "2026-10-19T13:20:52.477Z",
+          "reason": "已收到源谓词，Write只声明READER/BROWSER/CUSTOM_TAB三个常量，isOpenWith(OPENER_APP_DEFAULT)写成不等于这三者，漏排除webview，按可见单选项推导了派生判定（同转录L129-L130）。该段保留到main L7119-L7121改用resolveOpenerFlags。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "未上溯F002规格作者是否读到SearchFeedViewModel的isLeft二次抓取分支；本卡只归因已收到源码的实现者。"
+  ],
+  "unresolved_targets": [
+    {
+      "key": "E:/huawei_0930_project_cc/Feeder_Harmony_base/entry/src/main/ets/services/EditFeedDraftStore.ets",
+      "reason": "修复期（main L6728-L6730）新建的草稿持久化模块，生成期不存在、无生成写入可绑定；其承载的AC18缺口已在EditFeedPage图中归因到Slice 3 worker。"
+    },
+    {
+      "key": "E:/huawei_0930_project_cc/Feeder_Harmony_base/entry/src/main/ets/viewmodel/EditFeedForm.ets",
+      "reason": "修复期（main L6722-L6724新建、L7076-L7078增加resolveOpenerFlags）新建的共享表单模块，生成期不存在、无生成写入可绑定；其承载的草稿合并与appDefault判定缺口已分别在EditFeedPage、CreateFeedPage图中归因。"
+    }
+  ],
+  "job": "issue-7d2130916d6ea67581fc",
+  "metadata": {
+    "migration": {
+      "project": "com.nononsenseapps.feeder",
+      "server_session_id": "8441b4f1-805b-4276-a8a9-9f857fb7c9d0",
+      "platforms": [
+        "claude-code"
+      ],
+      "tool_versions": {
+        "orchestrator": "hmigbot-plus",
+        "runtime_version": "v1.5.2",
+        "runtime_commit": "c47f332",
+        "client_version": "hmigbot-plus-1.7.0",
+        "pack_version": "hmigbot-lite-1.6.1"
+      }
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "b7778fd6-a8b8-45ab-9466-8e8457af2d5d"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "deepseek-flash"
+      ],
+      "client_versions": [
+        "2.1.247"
+      ]
+    },
+    "source_set_id": "sources-d7987638b71ceb02410c",
+    "environment": [
+      {
+        "name": "android.min_sdk",
+        "value": "29",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T12:26:01.929Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L17",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L16",
+        "phase": "generation"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T12:27:22.307Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L360",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L359",
+        "phase": "generation"
+      },
+      {
+        "name": "toolchain.kotlin",
+        "value": "2.4.21",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T12:27:22.307Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L360",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L359",
+        "phase": "generation"
+      },
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T12:27:22.307Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L360",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L359",
+        "phase": "generation"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "29",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder-master",
+        "at": "2026-10-19T13:12:19.923Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a9b5b8a2259e4f29e.jsonl:L74",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a9b5b8a2259e4f29e.jsonl:L72",
+        "phase": "generation"
+      },
+      {
+        "name": "toolchain.gradle",
+        "value": "9.8.1",
+        "basis": "configuration",
+        "artifact": "gradle-wrapper.properties",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder-master",
+        "at": "2026-10-19T13:12:43.305Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a9b5b8a2259e4f29e.jsonl:L86",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a9b5b8a2259e4f29e.jsonl:L85",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "23",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T13:13:19.182Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/main-09ad9a5d-70a9-4c8e-8683-ce6d254061cc.jsonl:L1779",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/main-09ad9a5d-70a9-4c8e-8683-ce6d254061cc.jsonl:L1777",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "23",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T13:13:19.182Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/main-09ad9a5d-70a9-4c8e-8683-ce6d254061cc.jsonl:L1779",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/main-09ad9a5d-70a9-4c8e-8683-ce6d254061cc.jsonl:L1777",
+        "phase": "generation"
+      },
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder-master",
+        "at": "2026-10-19T13:15:54.470Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a9b5b8a2259e4f29e.jsonl:L192",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a9b5b8a2259e4f29e.jsonl:L191",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "26.0.0",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T13:17:58.962Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-ac32c63c9ad585393.jsonl:L49",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-ac32c63c9ad585393.jsonl:L48",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "26.0.0",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T13:17:58.962Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-ac32c63c9ad585393.jsonl:L49",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-ac32c63c9ad585393.jsonl:L48",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.10.10"
+  },
+  "revision": "0f532d7fffe20c99090eab28fce10d634ad0892312803936996f2bb5ffe6aa57"
+}

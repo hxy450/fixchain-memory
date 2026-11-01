@@ -1,6 +1,6 @@
 # 要靠其他文件或任务补实现的功能，登记成带负责方、验证方式和源端确定值的移交项，不只写在注释或动作摘要里
 
-ID：`lesson-4f81eeea17b94190c2de` · 版本：16
+ID：`lesson-4f81eeea17b94190c2de` · 版本：17
 
 [本主题](index.md)
 
@@ -26,7 +26,7 @@ ID：`lesson-4f81eeea17b94190c2de` · 版本：16
 6. 修复轮核出、但本轮不修的相邻偏差，当轮写入持久的偏差台账（如迁移报告的“已知未修偏差”），写明源端条件与文件位置；不只留在思考或会话上下文里，压缩会丢掉这类判断。
 7. 当场做不完的源行为登记为占位，不只写进报告的“保真缺口”；UI 阶段规格写明交互留给后续切片时登记占位，不照兄弟页写成与源端不符的真实实现。
 
-来源支持：41 张卡 · 已知 16 次迁移（部分未记录） · 已知 15 个应用（部分未记录）
+来源支持：42 张卡 · 已知 17 次迁移（部分未记录） · 已知 16 个应用（部分未记录）
 
 ## 来源（按需复核）
 
@@ -82,6 +82,8 @@ ID：`lesson-4f81eeea17b94190c2de` · 版本：16
   卡片版本：`d0184e877064d037eceb8bc968cb0949b5d0bffb239f02ec1d1a93bf7a391713`
 - [case-8555b02fdd531952938b](../../../store/cases/case-8555b02fdd531952938b/2c653cb3c662f222539425f30a42c5c464378add268afd8085c556bada7a052d.json) · 结论：recommendation:1
   卡片版本：`2c653cb3c662f222539425f30a42c5c464378add268afd8085c556bada7a052d`
+- [case-85c033903030498c795d](../../../store/cases/case-85c033903030498c795d/3639e381a53828ff395ed5070209b8b5beae8924f45b73ecc23e30b9d155366c.json) · 结论：recommendation:1
+  卡片版本：`3639e381a53828ff395ed5070209b8b5beae8924f45b73ecc23e30b9d155366c`
 - [case-8ba2ef4968af6a0f23e5](../../../store/cases/case-8ba2ef4968af6a0f23e5/670e7a80c0b655fc7d7bb1df8cb5b497707712e35ea7ba19f2032ba8ddc77f20.json) · 结论：diagnosis, recommendation:1
   卡片版本：`670e7a80c0b655fc7d7bb1df8cb5b497707712e35ea7ba19f2032ba8ddc77f20`
 - [case-8ffd5b5f684871fbeb3a](../../../store/cases/case-8ffd5b5f684871fbeb3a/48358a1b56ec7bb9e5a8f6f37ed576ef2bfcd0bf3547cfaff10333c86766d289.json) · 结论：recommendation:2

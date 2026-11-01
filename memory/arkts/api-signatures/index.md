@@ -1,6 +1,6 @@
 # arkts/api-signatures
 
-调用 ArkUI 组件属性方法或 SDK 接口时的参数类型、重载匹配与必填参数，成员名、所属类型与返回可空性的声明核对，依赖单位、默认行为与作用范围时读到字段注释而不以签名推定等价：@BuilderParam 槽内容的写法（箭头闭包只调用 @Builder、this 绑定），intl 格式化等接口不能省略的参数，源端单调计时的目标 API
+调用 ArkUI 组件属性方法或 SDK 接口时的参数类型、重载匹配与必填参数，成员名、所属类型与返回可空性的声明核对，依赖单位、默认行为与作用范围时读到字段注释而不以签名推定等价：@BuilderParam 槽内容的写法（箭头闭包只调用 @Builder、this 绑定），intl 格式化等接口不能省略的参数，源端单调计时的目标 API；cryptoFramework 摘要的空输入
 
 [上一级](../index.md)
 
@@ -10,6 +10,9 @@
   - 时机：实现或修复阶段，把 Android NumberFormat.getCurrencyInstance() 的价格格式化改写为 @kit.LocalizationKit 的 intl.NumberFormat，并确定币种来源与显示形式时
   - 情境：源端用不带币种参数的 NumberFormat.getCurrencyInstance() 按默认 locale 格式化金额；目标用 intl.NumberFormat(locale, { style: 'currency', ... })；任务或巡检要求“随系统 locale 选择币种”，而 SDK 声明里查不到 region→currency 的接口。
   - 例外：应用需要多币种或按用户地区切换币种时，不能用固定前缀代替格式化器
+- [MessageDigest 改用 cryptoFramework Md 时，空输入不调用 update，直接返回该算法的空输入摘要](lesson-31b2022cb16eba3d9f1e.lesson.md)
+  - 时机：实现阶段，把对可能为空的字符串求摘要（缓存键、内容哈希）的 MessageDigest 调用改写为 cryptoFramework.createMd 时
+  - 情境：源端对可能为空的字段（标题、摘要文本等）无条件求摘要，空串是正常路径；目标用 cryptoFramework.createMd + update({ data }) + digest()。
 - [TabContent.tabBar 只接受字符串、资源、CustomBuilder、TabBarOptions 与 SubTabBarStyle/BottomTabBarStyle，不传 { title } 对象](lesson-b402fa546504a1dd6db7.lesson.md)
   - 时机：页面实现或编译修复阶段，为 Tabs 的 TabContent 编写或改写页签时
   - 情境：目标主页用 Tabs + TabContent 做底部导航，页签为纯文字、文字加图标或带选中色的自定义样式；写者准备以对象字面量表达页签标题。

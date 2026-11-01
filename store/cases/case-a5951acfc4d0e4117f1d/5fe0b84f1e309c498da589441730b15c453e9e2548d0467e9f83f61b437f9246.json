@@ -1,0 +1,301 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-a5951acfc4d0e4117f1d",
+  "created_at": "2026-11-01T21:21:16.797743+00:00",
+  "migration_key": "8441b4f1-805b-4276-a8a9-9f857fb7c9d0",
+  "title": "把路由参数类留在页面模块并让路由层导入页面，运行期循环导入导致 RouteParam 未初始化",
+  "when": "功能切片实现与跨文件接线阶段，决定路由参数类放在哪个模块、路由封装与页面之间的 import 方向时",
+  "description": "ArkTS Navigation 迁移中，NavRouter 等路由/服务层需要构造某页面的参数类，而规格又规定各页面经 NavRouter 导航或接收路由层定义的 RouteParam；参数类当前定义在页面 .ets 文件里，页面之间也互相引用参数类。",
+  "summary": "Slice 1（F001）worker 写前读到 slice-01 的 integration_points：FeedPage/ArticlePage/SettingsPage.navPathStack ← RouteParam、\nonNavigateUp() → NavRouter.popOrFallback()，以及 F001 服务层契约 NavRouter.push(route, param: RouteParam)，\n即页面要依赖路由层、参数类型归路由层。它在思考中写过“Can't import page into router (cycle)”（MainPage 常量），\n对 FeedPageParam 却只按当时快照判断“FeedPage imports nothing from NavRouter, so no cycle”，并放弃“把 feed 参数放到共享 routing 文件”；\n随后把 FeedPage 内的 class FeedPageParam 改为 export，并 Write NavRouter 第14行 import { FeedPageParam } from '../pages/FeedPage'\n（agent-ab14294d43a272479.jsonl:L177、L180、L190-L192、L200-L201）。偏差位于“路由层/页面依赖方向”这一实现决策：路由层反向依赖页面模块。\n之后两次 group-closer 的结构 fix-forward 把环闭合：Group 1 closer 为消除 C2“No file instantiates RouteParam”在 NavRouter.ets 新增\nexport class RouteParam 基类（agent-a4e7a6eb64def5888.jsonl:L290、L310）；Group 2 closer 在 L41 已读到 NavRouter 第14行导入 FeedPage，\n仍为同类 C2 项在 SearchFeedPage 加 import { RouteParam } from '../routing/NavRouter' 并让 SearchFeedParam extends RouteParam\n（agent-ad39329392cf4a2c6.jsonl:L236-L239、L259）。FeedPage 早已导入 SearchFeedParam，于是 NavRouter → FeedPage → SearchFeedPage → NavRouter 成环；\nextends 是模块求值期依赖，NavRouter 先被加载时 SearchFeedPage 求值读到尚未初始化的 RouteParam，测试 HAP 启动即\nReferenceError: RouteParam is not initialized（agent-a586ed5974df06a54.jsonl:L152）。编译门与结构检查都不检测运行期模块初始化顺序，因此生成期未暴露。\n另一分支：Slice 5（F004）worker 读到 FeedPage 第38行 import { ArticleRouteParam } from './ArticlePage' 与第78行 export class FeedPageParam，\n自述“already circular imports exist, fine”后在 ArticlePage 写 import { FeedPageParam } from './FeedPage'（agent-a35f12e197f0b4cc1.jsonl:L51、L237、L427-L428），\n形成页面互导；该互导本身没有 extends，不是本次崩溃的触发点，但同样依赖页面模块承载路由参数，修复时一并改指向叶子模块。\n修复在 routing/FeedRouteParam.ets 新建只含 ID_ALL_FEEDS 与 FeedPageParam 的叶子模块，NavRouter、FeedPage、ArticlePage 改从该模块导入，\n主 HAP 重建通过（main-09ad9a5d-70a9-4c8e-8683-ce6d254061cc.jsonl:L3819-L3829），此后 1039 条用例可运行。\n",
+  "recommendations": [
+    "实现路由封装或服务层时，凡是路由层要构造、或多个页面共用的路由参数类（含 RouteParam 基类），先放进 routing/ 下不 import 任何 pages 的叶子模块；路由/服务模块不 import 页面模块。规格写明页面 → NavRouter 的依赖时，即使当前快照还没有环也按此方向落位。",
+    "判断是否成环时，把 slice integration_points 中计划的页面 → 路由依赖也算进去，不只 grep 当前文件；ArkTS 编译允许循环导入，不能以“编译通过/目前无环/已有环无妨”作为放行理由。",
+    "页面需要另一页面的参数类时，从叶子参数模块导入，不从对方页面文件导入；发现两页面已互导时先抽出参数类再接线。",
+    "结构 fix-forward 或接线时新增 `import { X } from M` 并让本文件类 `extends X`（或在顶层静态初始化中使用 X）前，先查 M 的 import 是否直接或间接引回本文件（例如 grep M 及其导入页面的 import 行）；若是，先把 X 移到叶子模块，或改用不需要继承的满足方式。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "E:/huawei_0930_project_cc/Feeder_Harmony_base/entry/src/main/ets/routing/NavRouter.ets",
+        "since": "2026-10-19T17:17:28.822Z",
+        "at": "2026-10-19T20:50:12.317Z"
+      },
+      "nodes": [
+        {
+          "key": "E:/huawei_0930_project_cc/Feeder_Harmony_base/spec/baseline/plans/slices/slice-01-F001-app-shell.md",
+          "at": "2026-10-19T14:39:57.183Z",
+          "reason": "正常输入：Slice 1 worker Read 回执列出 FeedPage/ArticlePage/SettingsPage.navPathStack ← RouteParam、onNavigateUp() → NavRouter.popOrFallback()，说明页面将依赖 NavRouter，路由层不应再反向依赖页面（agent-ab14294d43a272479.jsonl:L23-L24）。"
+        },
+        {
+          "key": "E:/huawei_0930_project_cc/Feeder_Harmony_base/spec/baseline/features/F001-app-shell.md",
+          "at": "2026-10-19T14:39:57.879Z",
+          "reason": "正常输入：F001 服务层契约写 NavRouter.push(route: string, param: RouteParam)，路由参数类型归路由层；对接点写各页面接收路由参数并经路由返回（同转录 L25、L28）。"
+        },
+        {
+          "key": "agent-ab14294d43a272479.jsonl",
+          "at": "2026-10-19T14:44:33.887Z",
+          "reason": "读到上述依赖方向后，L177 只按当时快照判断 FeedPage 不导入 NavRouter 故无环，并放弃把 feed 参数放到共享 routing 文件；Write NavRouter 第14行 import { FeedPageParam } from '../pages/FeedPage'，pushFeed 用它构造参数（同转录 L200-L201）。该导入保留到返修，修复改为 './FeedRouteParam'。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "E:/huawei_0930_project_cc/Feeder_Harmony_base/entry/src/main/ets/pages/FeedPage.ets",
+        "since": "2026-10-19T17:17:28.822Z",
+        "at": "2026-10-19T20:50:12.317Z"
+      },
+      "nodes": [
+        {
+          "key": "E:/huawei_0930_project_cc/Feeder_Harmony_base/spec/baseline/plans/slices/slice-01-F001-app-shell.md",
+          "at": "2026-10-19T14:39:57.183Z",
+          "reason": "正常输入：同上，integration_points 规定页面 → NavRouter 的依赖方向（agent-ab14294d43a272479.jsonl:L23-L24）。"
+        },
+        {
+          "key": "E:/huawei_0930_project_cc/Feeder_Harmony_base/spec/baseline/features/F001-app-shell.md",
+          "at": "2026-10-19T14:39:57.879Z",
+          "reason": "正常输入：NavRouter.push 的参数类型为路由层的 RouteParam（同转录 L25、L28）。"
+        },
+        {
+          "key": "agent-ab14294d43a272479.jsonl",
+          "at": "2026-10-19T14:44:14.491Z",
+          "reason": "为让 NavRouter 导入，Edit 把 FeedPage 内的 class FeedPageParam 改成 export class FeedPageParam（注释写明供 MainPage / NavRouter push 使用），使页面模块成为路由层依赖的参数类来源（同转录 L190-L192）。修复时该类与 ID_ALL_FEEDS 移出 FeedPage，改从 routing/FeedRouteParam 导入。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "E:/huawei_0930_project_cc/Feeder_Harmony_base/entry/src/main/ets/pages/ArticlePage.ets",
+        "since": "2026-10-19T17:17:28.822Z",
+        "at": "2026-10-19T20:50:12.317Z"
+      },
+      "summary": "Slice 5 worker 读到 FeedPage 已 import ArticlePage 的 ArticleRouteParam、并 export FeedPageParam，\n仍判断“already circular imports exist, fine”，在 ArticlePage 写 import { FeedPageParam } from './FeedPage'，形成页面互导。\n该互导没有模块求值期 extends，不是本次崩溃触发点；修复移动 FeedPageParam 后把这行改为从 routing/FeedRouteParam 导入。\n",
+      "recommendations": [
+        "页面需要另一页面的参数类时，从叶子参数模块导入，不从对方页面文件导入；已发现互导时先抽出参数类，不以“已有环无妨”放行。"
+      ],
+      "nodes": [
+        {
+          "key": "E:/huawei_0930_project_cc/Feeder_Harmony_base/entry/src/main/ets/pages/FeedPage.ets",
+          "at": "2026-10-19T15:20:12.973Z",
+          "reason": "正常输入：Slice 5 worker Read FeedPage 回执第38行 import { ArticleRouteParam } from './ArticlePage'、第78行 export class FeedPageParam，足以看出 ArticlePage 再导入 FeedPage 会形成互导（agent-a35f12e197f0b4cc1.jsonl:L50-L51）。"
+        },
+        {
+          "key": "agent-a35f12e197f0b4cc1.jsonl",
+          "at": "2026-10-19T15:31:06.233Z",
+          "reason": "L237 自述 FeedPage imports ArticleRouteParam from ArticlePage — already circular imports exist, fine；随后 Edit 在 ArticlePage import 区写入 import { FeedPageParam } from './FeedPage'（同转录 L427-L428），接受页面互导。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [
+    {
+      "key": "E:/huawei_0930_project_cc/Feeder_Harmony_base/entry/src/main/ets/routing/FeedRouteParam.ets",
+      "reason": "修复时新建的叶子模块（main 会话 L3819-L3823），生成期不存在，没有生成写入可归因；它承载的 FeedPageParam 的生成来源已在 NavRouter/FeedPage 图中归因。"
+    }
+  ],
+  "job": "issue-a5951acfc4d0e4117f1d",
+  "metadata": {
+    "migration": {
+      "project": "com.nononsenseapps.feeder",
+      "server_session_id": "8441b4f1-805b-4276-a8a9-9f857fb7c9d0",
+      "platforms": [
+        "claude-code"
+      ],
+      "tool_versions": {
+        "orchestrator": "hmigbot-plus",
+        "runtime_version": "v1.5.2",
+        "runtime_commit": "c47f332",
+        "client_version": "hmigbot-plus-1.7.0",
+        "pack_version": "hmigbot-lite-1.6.1"
+      }
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "b7778fd6-a8b8-45ab-9466-8e8457af2d5d"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "deepseek-flash"
+      ],
+      "client_versions": [
+        "2.1.247"
+      ]
+    },
+    "source_set_id": "sources-d7987638b71ceb02410c",
+    "environment": [
+      {
+        "name": "android.min_sdk",
+        "value": "29",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T12:26:01.929Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L17",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L16",
+        "phase": "generation"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T12:27:22.307Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L360",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L359",
+        "phase": "generation"
+      },
+      {
+        "name": "toolchain.kotlin",
+        "value": "2.4.21",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T12:27:22.307Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L360",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L359",
+        "phase": "generation"
+      },
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T12:27:22.307Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L360",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L359",
+        "phase": "generation"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "29",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder-master",
+        "at": "2026-10-19T13:12:19.923Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a9b5b8a2259e4f29e.jsonl:L74",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a9b5b8a2259e4f29e.jsonl:L72",
+        "phase": "generation"
+      },
+      {
+        "name": "toolchain.gradle",
+        "value": "9.8.1",
+        "basis": "configuration",
+        "artifact": "gradle-wrapper.properties",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder-master",
+        "at": "2026-10-19T13:12:43.305Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a9b5b8a2259e4f29e.jsonl:L86",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a9b5b8a2259e4f29e.jsonl:L85",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "23",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T13:13:19.182Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/main-09ad9a5d-70a9-4c8e-8683-ce6d254061cc.jsonl:L1779",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/main-09ad9a5d-70a9-4c8e-8683-ce6d254061cc.jsonl:L1777",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "23",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T13:13:19.182Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/main-09ad9a5d-70a9-4c8e-8683-ce6d254061cc.jsonl:L1779",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/main-09ad9a5d-70a9-4c8e-8683-ce6d254061cc.jsonl:L1777",
+        "phase": "generation"
+      },
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder-master",
+        "at": "2026-10-19T13:15:54.470Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a9b5b8a2259e4f29e.jsonl:L192",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a9b5b8a2259e4f29e.jsonl:L191",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "26.0.0",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T13:17:58.962Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-ac32c63c9ad585393.jsonl:L49",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-ac32c63c9ad585393.jsonl:L48",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "26.0.0",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T13:17:58.962Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-ac32c63c9ad585393.jsonl:L49",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-ac32c63c9ad585393.jsonl:L48",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.10.10"
+  },
+  "revision": "5fe0b84f1e309c498da589441730b15c453e9e2548d0467e9f83f61b437f9246"
+}

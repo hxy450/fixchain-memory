@@ -1,0 +1,325 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-7eb907f6ed073fe3b558",
+  "created_at": "2026-11-01T21:25:35.375128+00:00",
+  "migration_key": "8441b4f1-805b-4276-a8a9-9f857fb7c9d0",
+  "title": "把 Kotlin 严格解析（toLongOrNull/toIntOrNull/ZonedDateTime.parse/类型化解码）写成 JS 宽松解析",
+  "when": "数据层与服务层实现阶段，把 Kotlin 中将外部字符串或 JSON 转成数值、时间或类型化对象的解析调用改写为 ArkTS 时",
+  "description": "源码用 toIntOrNull/toLongOrNull、ZonedDateTime.parse、kotlinx.serialization decodeFromString 等严格解析，失败时回落默认值、null 或保留旧值；目标侧可选 parseInt、Number、Date.parse、`as` 类型断言等 JS/ArkTS 原语，它们接受的输入范围更宽或不做运行时检查。",
+  "summary": "四个目标的生成者写前都读到了对应 Kotlin 源码的严格解析调用，其中三处还在注释里写明了源函数；\n输出却换成了接受范围更宽的 JS 原语，自检只看了 ArkTS 编译兼容和正例。这是同一种偏差：\n只翻译了“失败时回落”分支，没有核对源函数到底拒绝哪些输入。\n- SettingsStore.ets：Base-5 生成者 Read SettingsStore.kt 的回执包含 L1000-1005\n  `SyncFrequency.entries.firstOrNull { it.minutes == value.toLongOrNull() } ?: MANUAL`\n  （agent-a3baa92cf2a78234c.jsonl:L37/L43）。Write 写成 `Number.parseInt(value, 10)` + switch，\n  思考里只考虑了 NaN 回落 MANUAL（L108、L119），随后 sed 改成全局 parseInt（L140-L141），\n  只是代码风格调整，语义没变。parseInt 只解析前缀，'15abc' 会命中 EVERY_15_MIN。\n- TooManyRequestsInterceptor.ets：Base-3 生成者 Read 的 TooManyRequestsInterceptor.kt 回执给出\n  L47 `retryAfter?.toIntOrNull() ?: 60` 和 L50 `now.plusSeconds(retryAfterSeconds + 1)`\n  （agent-ab8c3beae6fda3d2e.jsonl:L56-L57）。Write 的 parseRetryAfter 写成 `parseInt(raw, 10)`，\n  并加了源码里没有的 `parsed <= 0` 回退 60（L246）；L249 只把 isNaN 改成 Number.isNaN，L356 只改了头部读取，\n  `<= 0` 一直保留到修复前。结果 `Retry-After: 0` 被封锁 61 秒，带尾随字符的值也被按前缀接受。\n- FeedSyncService.ets：F003 生成者读到 FeedItem.kt L174-180 的 `ZonedDateTime.parse(entry.date_published)`，\n  失败时 `this.pubDate ?: now(clock)`（agent-a1f91f0fd27d90bfa.jsonl:L83-L84），mapping 规格中也写了\n  “日期字符串非法 → ZonedDateTime.parse 捕获 → 保留旧值/now”（L34-L36）。Write 的 parseDateMs 注释写着\n  源为 ZonedDateTime.parse，实际却用 `Date.parse(raw)`（L316）；思考只确认了“带时区的 ISO 串没问题”（L216、L318）。\n  Date.parse 接受 '2024-01-02' 这种纯日期，旧值因此被覆盖。\n- TranslationService.ets：F008 生成者读到 TranslationManager.kt L436-445\n  `runCatching { json.decodeFromString<CachedTranslations>(it) }.getOrNull() ?: CachedTranslations()`，\n  以及 L695-706 全为 String/String? 字段的数据类（agent-a99d982a4d4de93cb.jsonl:L44/L47）；\n  F008-AC35 要求缓存反序列化失败回落空缓存（L31/L34）。Write 的 readString/readNullableString 只写了 `value as string`\n  （L178），照搬了写前读到的 DeepLDto.ets 中同样只做断言的 helper（L91/L94）。loadCache 的 try/catch\n  只能捕获 JSON.parse 错误，数字字段会原样通过，不会回退。\n四个片段在 generation_end 前都没有其他写者改过。验证阶段 UT（F005 AC04、F003 AC27/AC51、F004 AC120）失败后，\n修复改成：整串 `^[+-]?\\d+$` 校验后再转数值（agent-ae4f8c003e6cc02e5.jsonl:L127-L128）；Retry-After 只在缺失、非数字或越界时回退 60\n（agent-adb096d4d6eb10add.jsonl:L217-L218、L308-L309）；先用 ISO_ZONED_DATE_TIME 正则校验再 Date.parse（同转录 L224-L225、L230-L231）；\n字段做 typeof 检查，不符就抛错，交给 loadCache 的 catch（agent-a930c242e537448f0.jsonl:L292-L293）。\n",
+  "recommendations": [
+    "改写 Kotlin 解析调用前，先写出源函数接受和拒绝的输入：toIntOrNull/toLongOrNull 要求整串是整数且在 Int/Long 范围内，ZonedDateTime.parse 要求带 T 时间和 Z/±HH:MM/[Zone]，kotlinx 解码遇到字段类型不符就抛错。parseInt 只解析前缀，Date.parse 接受纯日期等宽松格式，`as` 不做运行时检查，这些都不能直接当作等价替换。",
+    "整数串先用 `^[+-]?\\d+$` 做整串校验再转数值，并检查范围；只保留源码已有的回落分支，不要自己加 `<= 0` 这类源码没有的合法性规则。",
+    "源码用 ZonedDateTime.parse 时，先按 ISO_ZONED_DATE_TIME 校验格式，通过后再转 epoch millis；手写 fromJson 时对每个字段做 typeof 检查，不符就抛错交给外层回退，不要照搬项目里只做 `as T` 的读取 helper。",
+    "自检时给每个解析点准备一个源函数会拒绝的反例（如 '15abc'、'0'、'2024-01-02'、数字类型的字符串字段），确认目标实现的结果和源函数一致，不要只验证正例和编译兼容。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "E:/huawei_0930_project_cc/Feeder_Harmony_base/entry/src/main/ets/preferences/SettingsStore.ets",
+        "since": "2026-10-19T17:17:28.822Z",
+        "at": "2026-10-19T20:50:12.317Z"
+      },
+      "nodes": [
+        {
+          "key": "E:/huawei_0930_project_cc/Feeder-master/app/src/main/java/com/nononsenseapps/feeder/archmodel/SettingsStore.kt",
+          "at": "2026-10-19T14:18:22.346Z",
+          "reason": "正常输入：生成者完整 Read 源文件，回执包含 L1000-1005 syncFrequencyFromString = entries.firstOrNull { it.minutes == value.toLongOrNull() } ?: MANUAL，足以确定只有完整整数串才匹配（agent-a3baa92cf2a78234c.jsonl:L37、L43）。"
+        },
+        {
+          "key": "agent-a3baa92cf2a78234c.jsonl",
+          "at": "2026-10-19T14:22:08.788Z",
+          "reason": "读到 toLongOrNull 后，Write 把 syncFrequencyFromString 写成 Number.parseInt(value, 10) + switch，只处理了 NaN（L108、L119）；sed 改成全局 parseInt 仅是风格调整（L140-L141）。前缀解析让 '15abc' 命中 15 分钟，这个片段一直保留到验证修复前。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "E:/huawei_0930_project_cc/Feeder_Harmony_base/entry/src/main/ets/network/interceptors/TooManyRequestsInterceptor.ets",
+        "since": "2026-10-19T17:17:28.822Z",
+        "at": "2026-10-19T20:50:12.317Z"
+      },
+      "nodes": [
+        {
+          "key": "E:/huawei_0930_project_cc/Feeder-master/app/src/main/java/com/nononsenseapps/feeder/model/TooManyRequestsInterceptor.kt",
+          "at": "2026-10-19T14:18:19.123Z",
+          "reason": "正常输入：Read 回执给出 L47 retryAfter?.toIntOrNull() ?: 60 和 L50 now.plusSeconds(retryAfterSeconds + 1)。'0' 是合法值，只有缺失或非整数才回退 60（agent-ab8c3beae6fda3d2e.jsonl:L56-L57）。"
+        },
+        {
+          "key": "agent-ab8c3beae6fda3d2e.jsonl",
+          "at": "2026-10-19T14:28:58.343Z",
+          "reason": "Write 的 parseRetryAfter 用 parseInt 前缀解析，并加了源码没有的 parsed <= 0 回退 60（L246）；L249 只改了 Number.isNaN，L356 只改了头部读取，<= 0 一直保留，使 Retry-After: 0 被封锁 61 秒（同转录 L246-L250、L356-L357）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "E:/huawei_0930_project_cc/Feeder_Harmony_base/entry/src/main/ets/services/FeedSyncService.ets",
+        "since": "2026-10-19T17:17:28.822Z",
+        "at": "2026-10-19T20:50:12.317Z"
+      },
+      "nodes": [
+        {
+          "key": "E:/huawei_0930_project_cc/Feeder-master/app/src/main/java/com/nononsenseapps/feeder/db/room/FeedItem.kt",
+          "at": "2026-10-19T14:57:32.535Z",
+          "reason": "正常输入：Read 回执给出 L174-180 try ZonedDateTime.parse(entry.date_published)，catch 后 this.pubDate ?: now(clock)，可以确定日期解析的接受范围就是 ZonedDateTime.parse 的格式（agent-a1f91f0fd27d90bfa.jsonl:L83-L84）。"
+        },
+        {
+          "key": "E:/huawei_0930_project_cc/Feeder_Harmony_base/spec/baseline/features/F003-feed-fetch-parse.mapping.md",
+          "at": "2026-10-19T14:57:16.489Z",
+          "reason": "正常输入：mapping 写明 pubDate = ZonedDateTime.parse(entry.date_published)，失败时保留旧值或 now，“日期字符串非法”同样走保留旧值（同转录 L34-L36）。"
+        },
+        {
+          "key": "agent-a1f91f0fd27d90bfa.jsonl",
+          "at": "2026-10-19T15:07:24.671Z",
+          "reason": "Write 的 parseDateMs 注释写着源为 ZonedDateTime.parse，实现却用 Date.parse(raw)；思考只确认了带时区的 ISO 串（L216、L318），纯日期等 ZonedDateTime.parse 会拒绝的输入被接受，覆盖了旧值（同转录 L316-L317）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "E:/huawei_0930_project_cc/Feeder_Harmony_base/entry/src/main/ets/services/TranslationService.ets",
+        "since": "2026-10-19T17:17:28.822Z",
+        "at": "2026-10-19T20:50:12.317Z"
+      },
+      "nodes": [
+        {
+          "key": "E:/huawei_0930_project_cc/Feeder-master/app/src/main/java/com/nononsenseapps/feeder/model/TranslationManager.kt",
+          "at": "2026-10-19T15:53:22.857Z",
+          "reason": "正常输入：Read 回执给出 L436-445 loadCache = runCatching { json.decodeFromString<CachedTranslations>(it) }.getOrNull() ?: CachedTranslations()，以及 L695-706 全为 String/String? 字段的数据类，字段类型不符时解码失败并回退空缓存（agent-a99d982a4d4de93cb.jsonl:L44、L47）。"
+        },
+        {
+          "key": "E:/huawei_0930_project_cc/Feeder_Harmony_base/spec/baseline/features/F008-translation.md",
+          "at": "2026-10-19T15:53:20.127Z",
+          "reason": "正常输入：F008-AC35 要求缓存 JSON 解析失败或损坏时回落空缓存，反序列化失败返回 CachedTranslations() 默认值（同转录 L31、L34）。"
+        },
+        {
+          "key": "agent-a99d982a4d4de93cb.jsonl",
+          "at": "2026-10-19T15:57:48.955Z",
+          "reason": "Write 的 readString/readNullableString 只写了 value as string，照搬了写前读到的 DeepLDto.ets helper（L91、L94）；loadCache 的 catch 只覆盖 JSON.parse 错误，数字字段原样通过，没有回退空缓存（同转录 L178-L179）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "修复同时把多值 Retry-After 改为取最后一个，依据的是 OkHttp Response.header 的语义；生成者读到的 Kotlin 文件没有展示这一点，所以本卡不把 value[0] 算作已核偏差。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-7eb907f6ed073fe3b558",
+  "metadata": {
+    "migration": {
+      "project": "com.nononsenseapps.feeder",
+      "server_session_id": "8441b4f1-805b-4276-a8a9-9f857fb7c9d0",
+      "platforms": [
+        "claude-code"
+      ],
+      "tool_versions": {
+        "orchestrator": "hmigbot-plus",
+        "runtime_version": "v1.5.2",
+        "runtime_commit": "c47f332",
+        "client_version": "hmigbot-plus-1.7.0",
+        "pack_version": "hmigbot-lite-1.6.1"
+      }
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "b7778fd6-a8b8-45ab-9466-8e8457af2d5d"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "deepseek-flash"
+      ],
+      "client_versions": [
+        "2.1.247"
+      ]
+    },
+    "source_set_id": "sources-d7987638b71ceb02410c",
+    "environment": [
+      {
+        "name": "android.min_sdk",
+        "value": "29",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T12:26:01.929Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L17",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L16",
+        "phase": "generation"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T12:27:22.307Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L360",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L359",
+        "phase": "generation"
+      },
+      {
+        "name": "toolchain.kotlin",
+        "value": "2.4.21",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T12:27:22.307Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L360",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L359",
+        "phase": "generation"
+      },
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T12:27:22.307Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L360",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L359",
+        "phase": "generation"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "29",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder-master",
+        "at": "2026-10-19T13:12:19.923Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a9b5b8a2259e4f29e.jsonl:L74",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a9b5b8a2259e4f29e.jsonl:L72",
+        "phase": "generation"
+      },
+      {
+        "name": "toolchain.gradle",
+        "value": "9.8.1",
+        "basis": "configuration",
+        "artifact": "gradle-wrapper.properties",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder-master",
+        "at": "2026-10-19T13:12:43.305Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a9b5b8a2259e4f29e.jsonl:L86",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a9b5b8a2259e4f29e.jsonl:L85",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "23",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T13:13:19.182Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/main-09ad9a5d-70a9-4c8e-8683-ce6d254061cc.jsonl:L1779",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/main-09ad9a5d-70a9-4c8e-8683-ce6d254061cc.jsonl:L1777",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "23",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T13:13:19.182Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/main-09ad9a5d-70a9-4c8e-8683-ce6d254061cc.jsonl:L1779",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/main-09ad9a5d-70a9-4c8e-8683-ce6d254061cc.jsonl:L1777",
+        "phase": "generation"
+      },
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder-master",
+        "at": "2026-10-19T13:15:54.470Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a9b5b8a2259e4f29e.jsonl:L192",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a9b5b8a2259e4f29e.jsonl:L191",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "26.0.0",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T13:17:58.962Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-ac32c63c9ad585393.jsonl:L49",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-ac32c63c9ad585393.jsonl:L48",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "26.0.0",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T13:17:58.962Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-ac32c63c9ad585393.jsonl:L49",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-ac32c63c9ad585393.jsonl:L48",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.10.10"
+  },
+  "revision": "6cf1c95e0322499dbba90a974bba505f9f4fc45aabf6eacc8c9c824a359dc2d2"
+}

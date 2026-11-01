@@ -1,0 +1,372 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-d566b74cf503495617bb",
+  "created_at": "2026-11-01T21:30:24.336636+00:00",
+  "migration_key": "8441b4f1-805b-4276-a8a9-9f857fb7c9d0",
+  "title": "规格提取时把源端符号常量 ID_UNSET 臆填为 -1（源值 0），模型层固化为全局常量，卡片层识别冲突仍原样外露",
+  "when": "规格提取阶段，把源码中以符号常量表达的实体字段默认值、偏好缺省值落成具体数值时",
+  "description": "源端实体或偏好的默认值引用定义在另一文件的符号常量（如 Room 实体 `var id: Long = ID_UNSET`、`sp.getLong(key, ID_UNSET)`），规格表或目标代码需要写出该常量的具体值；目标端把该常量作为共享哨兵，被偏好缺省、导航/配置列表行 id 等多个模块复用。",
+  "summary": "规格作者（主会话）写 feature-base.md 前读到的 Feed.kt/FeedItem.kt 等实体只有 `var id: Long = ID_UNSET`\n这一符号引用；ID_UNSET 的定义 `const val ID_UNSET: Long = 0` 位于 AppDatabase.kt:30。主会话写前对 AppDatabase.kt\n做过 grep（@Database/version/entities）和 sed -n '40,60p'，返回内容都不含第30行；SettingsStore.kt 也只读到键名常量，\n没读到 `getLong(PREF_LAST_FEED_ID, ID_UNSET)` 等缺省表达式。输入只有符号、定义可达却未解析。\n本次输出却把 Feed/FeedItem 的 id 默认写成 -1，并把 pref_last_feed_id、pref_widget_last_feed_id、pref_last_article_id\n的缺省都写成 -1。偏差起点在源码到规格的常量取值环节：未解析符号定义，就按“未设置=-1”的习惯填了值。\n\nBase-1 Models worker 按派工读取 feature-base.md（id 默认 -1）与 Feed.kt（id = ID_UNSET），列出了 db/room 目录里的\nAppDatabase.kt 但没有读取，随即写出 `export const ID_UNSET: number = -1`，注释为“Room 未分配主键时的哨兵值”。\n注释语义与 Room autoGenerate 以 0 表示未分配相符，数值则直接取自规格的 -1，属于规格错误的传递，而不是该 worker\n另行把 Room 语义与常量值混为一谈。SettingsStore.ets 的 getLastFeedId/getLastWidgetFeedId 缺省值、FeedDao\n抽屉查询的 tag 聚合行 id 都 import 这个常量，因此 F001 UT（删除 pref_last_feed_id 后返回 -1）和\nF011 UT（默认数据源 feedId、tag 行 id 为 -1）都失败。\n\n卡片层另有一处独立偏差。F011 切片 worker 写 widget 前实际读到 F011-widget.md 写明\n`pref_widget_last_feed_id 初值 ID_UNSET = 0`，NavDrawer.kt 以 `ID_UNSET -> ContentType.Tag` 标识 tag 行，\n同时读到 Feed.ets 的 -1 以及 SettingsStore.ets、FeedDao.ets 对它的引用，并在思考中明确写出 HMOS -1 与 Android 0 冲突。\n但它以“不改 Base”“-1 不影响分支选择”为理由，只在本地定义 WIDGET_ID_UNSET=0：getWidgetFeedAndTag 仍经\ngetLastWidgetFeedId 读取，缺省返回 -1；toRow 仍把 tag 行的 -1 原样当作对外行 id（注释写明沿用 HMOS ID_UNSET(-1)，\n只靠 contentType 分类）；返回信封里也没有上报这一冲突。它只核对了分支是否等价，没保证对外可观察的值与 spec 一致。\n\n最终修改：F001 fixer 把 Feed.ets 的 ID_UNSET 改成 0（agent-a033ce56b392eacbc.jsonl:L238-L240，报告 L352 AC53）；\nF011 fixer 与它并发，在 getWidgetFeedAndTag 中以 WIDGET_ID_UNSET=0 直接读偏好，并在 toRow 中把 Tag 行对外 id\n投影为 0（agent-acfb5e47f3c665704.jsonl:L153-L157、L167-L168）。以最终 Feed.ets=0 为参照，SettingsStore 缺省值与\nFeedDao tag 行 id 都已是 0，widget 两处修改与根因修复效果重合，属冗余但无害的显式化（仅据代码推断，未重跑）。\n",
+  "recommendations": [
+    "规格提取阶段：源码中的字段或偏好默认值写的是符号常量（如 ID_UNSET）时，先 grep `const val ID_UNSET` 等定义取得实际值再写进规格表；没解析到定义时写符号名并标注待核，不按“未设置=-1”的习惯填数。",
+    "模型实现阶段：声明与源端同名的常量（ID_UNSET、ID_ALL_FEEDS 等）时，打开定义文件核对数值；规格表默认值与源定义冲突时以源定义为准，并回报规格。",
+    "功能实现阶段：功能 spec 给出的哨兵值（如 ID_UNSET=0）与已冻结的 Base 常量不一致时，不能只因分支选择等价就放行；对外暴露的值（偏好缺省、列表行 id）在本层投影成 spec 值，并在返回信封中上报 Base 冲突。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "E:/huawei_0930_project_cc/Feeder_Harmony_base/entry/src/main/ets/models/Feed.ets",
+        "since": "2026-10-19T17:17:28.822Z",
+        "at": "2026-10-19T20:50:12.317Z"
+      },
+      "nodes": [
+        {
+          "key": "E:/huawei_0930_project_cc/Feeder-master/app/src/main/java/com/nononsenseapps/feeder/db/room/Feed.kt",
+          "at": "2026-10-19T12:26:12.377Z",
+          "reason": "正常但只有符号的输入：主会话 Bash sed 读回 Feed 构造器 `@PrimaryKey(autoGenerate = true) var id: Long = ID_UNSET` 及 `constructor() : this(id = ID_UNSET)`，只给符号不给值，足以提示默认值要到 ID_UNSET 定义处取（main-09ad9a5d-70a9-4c8e-8683-ce6d254061cc.jsonl:L220-L222）。"
+        },
+        {
+          "key": "E:/huawei_0930_project_cc/Feeder-master/app/src/main/java/com/nononsenseapps/feeder/db/room/AppDatabase.kt",
+          "at": "2026-10-19T12:35:10.859Z",
+          "reason": "定义所在文件，可达但未解析：主会话写规格前 grep 了 @Database/version/entities（L634-L636），又 sed -n '40,60p' 读实体列表（L646-L648），两次返回都不含第30行 `const val ID_UNSET: Long = 0`（同转录）。"
+        },
+        {
+          "key": "main-09ad9a5d-70a9-4c8e-8683-ce6d254061cc.jsonl",
+          "at": "2026-10-19T12:35:45.573Z",
+          "reason": "Write feature-base.md：Feed、FeedItem 表 id 默认写 -1，偏好表 pref_last_feed_id、pref_widget_last_feed_id、pref_last_article_id 缺省也写 -1；写前思考只说偏好默认值 infer from code，没有查 ID_UNSET 定义（同转录 L676-L679）。源码到规格的常量取值在这里偏离。",
+          "problem": true
+        },
+        {
+          "key": "E:/huawei_0930_project_cc/Feeder_Harmony_base/spec/baseline/feature-base.md",
+          "at": "2026-10-19T13:56:15.591Z",
+          "reason": "交付桥梁：Base-1 Models worker 的 Read 回执包含 `| id | id | Long PK auto | -1 | 主键 |` 与偏好缺省 -1（agent-ad669ee302fdd96de.jsonl:L27-L28）。"
+        },
+        {
+          "key": "agent-ad669ee302fdd96de.jsonl",
+          "at": "2026-10-19T13:57:52.522Z",
+          "reason": "读到上述规格与 Feed.kt 的 `id: Long = ID_UNSET`（L36-L37）；L31-L32 列出了 AppDatabase.kt 但没有读取。写前思考为 'id = ID_UNSET = -1'（L131），Write Feed.ets 定义 `export const ID_UNSET: number = -1` 并作为 Feed.id 默认（L136-L137）。本链确认它把规格的 -1 传成了全局常量。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "主会话此前已 cd 到 Feeder-master，这次 Bash 用相对路径 sed -n '30,120p' app/src/main/java/.../db/room/Feed.kt，回执返回 Feed 构造器与 `var id: Long = ID_UNSET`；这是规格作者写前对该源文件的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/main-09ad9a5d-70a9-4c8e-8683-ce6d254061cc.jsonl",
+              "line": 220
+            },
+            {
+              "source": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/main-09ad9a5d-70a9-4c8e-8683-ce6d254061cc.jsonl",
+              "line": 222
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "同一工作目录下 Bash 用相对路径 sed -n '40,60p' app/src/main/java/.../db/room/AppDatabase.kt，回执只返回第40-60行的版本注释与 entities 列表，不含第30行 ID_UNSET 定义；这是规格作者写前对定义文件的真实但未覆盖该常量的读取。",
+          "evidence": [
+            {
+              "source": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/main-09ad9a5d-70a9-4c8e-8683-ce6d254061cc.jsonl",
+              "line": 646
+            },
+            {
+              "source": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/main-09ad9a5d-70a9-4c8e-8683-ce6d254061cc.jsonl",
+              "line": 648
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "E:/huawei_0930_project_cc/Feeder_Harmony_base/entry/src/main/ets/widget/FeedWidgetService.ets",
+        "since": "2026-10-19T17:17:28.822Z",
+        "at": "2026-10-19T20:50:12.317Z"
+      },
+      "nodes": [
+        {
+          "key": "E:/huawei_0930_project_cc/Feeder_Harmony_base/spec/baseline/features/F011-widget.md",
+          "at": "2026-10-19T15:20:18.190Z",
+          "reason": "正常输入：F011 功能 spec 写明 `pref_widget_last_feed_id: Long，初值 ID_UNSET = 0`，WidgetFeedAndTag.feedId 注释 ID_UNSET=0，AC02 分支为 `feedId > ID_UNSET(0)`；足以确定卡片数据源缺省 feedId 应为 0（agent-a24664d66ede91204.jsonl:L23、L26）。"
+        },
+        {
+          "key": "E:/huawei_0930_project_cc/Feeder_Harmony_base/entry/src/main/ets/preferences/SettingsStore.ets",
+          "at": "2026-10-19T15:20:25.485Z",
+          "reason": "Base 偏好层：Read 回执显示 getLastWidgetFeedId 以 import 自 models/Feed 的 ID_UNSET 为缺省（同转录 L51、L56）。"
+        },
+        {
+          "key": "E:/huawei_0930_project_cc/Feeder_Harmony_base/entry/src/main/ets/models/Feed.ets",
+          "at": "2026-10-19T15:20:30.518Z",
+          "reason": "上游错误输入：Read 回执为 `export const ID_UNSET: number = -1`（同转录 L66-L68），来自图1中规格到模型的传递。"
+        },
+        {
+          "key": "agent-a24664d66ede91204.jsonl",
+          "at": "2026-10-19T15:23:34.635Z",
+          "reason": "思考中已识别 'ID_UNSET = -1 defined in Feed model (but Android Room ID_UNSET is 0L)… The F011 spec says ID_UNSET=0… SettingsStore default -1 doesn't matter'，并决定不改 Base（L189）；随后 Write FeedWidgetService.ets，本地定义 WIDGET_ID_UNSET=0，getWidgetFeedAndTag 却仍 `await store.getLastWidgetFeedId()`，缺省返回 -1（L209-L210）。spec 要求的 0 没有落到对外缺省值。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "E:/huawei_0930_project_cc/Feeder_Harmony_base/entry/src/main/ets/viewmodel/FeedWidgetSettingsViewModel.ets",
+        "since": "2026-10-19T17:17:28.822Z",
+        "at": "2026-10-19T20:50:12.317Z"
+      },
+      "nodes": [
+        {
+          "key": "E:/huawei_0930_project_cc/Feeder_Harmony_base/spec/baseline/features/F011-widget.md",
+          "at": "2026-10-19T15:20:18.190Z",
+          "reason": "正常输入：spec 把 ID_UNSET 定为 0，AC08 要求配置页按 FeedUnreadCount.contentType 列出 All feeds/Saved/tag/子 feed/顶层 feed，并把所选 feedId/tag 写入偏好（agent-a24664d66ede91204.jsonl:L23、L26）。"
+        },
+        {
+          "key": "E:/huawei_0930_project_cc/Feeder-master/app/src/main/java/com/nononsenseapps/feeder/ui/compose/navdrawer/NavDrawer.kt",
+          "at": "2026-10-19T15:20:21.188Z",
+          "reason": "正常输入：源码 `FeedUnreadCount.contentType` 以 `ID_UNSET -> ContentType.Tag` 判定 tag 行，即 tag 行 id 就是 ID_UNSET；与 spec 的 0 合起来确定 tag 行 id 应为 0（同转录 L39-L40）。"
+        },
+        {
+          "key": "E:/huawei_0930_project_cc/Feeder_Harmony_base/entry/src/main/ets/database/dao/FeedDao.ets",
+          "at": "2026-10-19T15:20:27.936Z",
+          "reason": "Base DAO：getPagedNavDrawerItems 以 import 自 models/Feed 的 ID_UNSET 作为 tag 聚合行 id，并据 rowId === ID_UNSET 标 TAG（同转录 L60-L61）。"
+        },
+        {
+          "key": "E:/huawei_0930_project_cc/Feeder_Harmony_base/entry/src/main/ets/models/Feed.ets",
+          "at": "2026-10-19T15:20:30.518Z",
+          "reason": "上游错误输入：ID_UNSET=-1（同转录 L66-L68），因此 DAO 返回的 tag 行 id 为 -1。"
+        },
+        {
+          "key": "agent-a24664d66ede91204.jsonl",
+          "at": "2026-10-19T15:25:02.777Z",
+          "reason": "同一 worker 已在 L189 识别 -1/0 冲突，Write FeedWidgetSettingsViewModel.ets 时本地定义 WIDGET_ID_UNSET=0，toRow 却把 entry.feedId 原样作为行 id，并注释 'tag 行的 id 在 Base DAO 中沿用 HMOS ID_UNSET(-1)，因此类型判定走 contentType'（L264-L265）。它只保证分类正确，没把对外 tag 行 id 投影成 spec 的 0。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 5
+        },
+        {
+          "from": 2,
+          "to": 5
+        },
+        {
+          "from": 3,
+          "to": 5
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "主会话把默认值填成 -1 的直接依据未出现在转录中（写前思考只说偏好类型/默认值“infer from code”）；本卡只归因为未解析符号定义，不推定它参考了其他材料。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-d566b74cf503495617bb",
+  "metadata": {
+    "migration": {
+      "project": "com.nononsenseapps.feeder",
+      "server_session_id": "8441b4f1-805b-4276-a8a9-9f857fb7c9d0",
+      "platforms": [
+        "claude-code"
+      ],
+      "tool_versions": {
+        "orchestrator": "hmigbot-plus",
+        "runtime_version": "v1.5.2",
+        "runtime_commit": "c47f332",
+        "client_version": "hmigbot-plus-1.7.0",
+        "pack_version": "hmigbot-lite-1.6.1"
+      }
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "b7778fd6-a8b8-45ab-9466-8e8457af2d5d"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "deepseek-flash"
+      ],
+      "client_versions": [
+        "2.1.247"
+      ]
+    },
+    "source_set_id": "sources-d7987638b71ceb02410c",
+    "environment": [
+      {
+        "name": "android.min_sdk",
+        "value": "29",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T12:26:01.929Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L17",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L16",
+        "phase": "generation"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T12:27:22.307Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L360",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L359",
+        "phase": "generation"
+      },
+      {
+        "name": "toolchain.kotlin",
+        "value": "2.4.21",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T12:27:22.307Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L360",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L359",
+        "phase": "generation"
+      },
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T12:27:22.307Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L360",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L359",
+        "phase": "generation"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "29",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder-master",
+        "at": "2026-10-19T13:12:19.923Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a9b5b8a2259e4f29e.jsonl:L74",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a9b5b8a2259e4f29e.jsonl:L72",
+        "phase": "generation"
+      },
+      {
+        "name": "toolchain.gradle",
+        "value": "9.8.1",
+        "basis": "configuration",
+        "artifact": "gradle-wrapper.properties",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder-master",
+        "at": "2026-10-19T13:12:43.305Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a9b5b8a2259e4f29e.jsonl:L86",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a9b5b8a2259e4f29e.jsonl:L85",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "23",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T13:13:19.182Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/main-09ad9a5d-70a9-4c8e-8683-ce6d254061cc.jsonl:L1779",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/main-09ad9a5d-70a9-4c8e-8683-ce6d254061cc.jsonl:L1777",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "23",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T13:13:19.182Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/main-09ad9a5d-70a9-4c8e-8683-ce6d254061cc.jsonl:L1779",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/main-09ad9a5d-70a9-4c8e-8683-ce6d254061cc.jsonl:L1777",
+        "phase": "generation"
+      },
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder-master",
+        "at": "2026-10-19T13:15:54.470Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a9b5b8a2259e4f29e.jsonl:L192",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a9b5b8a2259e4f29e.jsonl:L191",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "26.0.0",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T13:17:58.962Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-ac32c63c9ad585393.jsonl:L49",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-ac32c63c9ad585393.jsonl:L48",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "26.0.0",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T13:17:58.962Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-ac32c63c9ad585393.jsonl:L49",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-ac32c63c9ad585393.jsonl:L48",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.10.10"
+  },
+  "revision": "6dc99110411eff065619273ffefe4ac75df007d30f9bb07cdb958c632edd7975"
+}

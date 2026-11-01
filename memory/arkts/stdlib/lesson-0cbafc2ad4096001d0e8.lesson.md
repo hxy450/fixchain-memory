@@ -1,6 +1,6 @@
 # Java/ICU 正则、String/List 方法与 Android 工具类不按形似 JS 内建改写：先列语义差异，不等价就按源实现移植
 
-ID：`lesson-0cbafc2ad4096001d0e8` · 版本：2
+ID：`lesson-0cbafc2ad4096001d0e8` · 版本：3
 
 [本主题](index.md)
 
@@ -10,7 +10,7 @@ ID：`lesson-0cbafc2ad4096001d0e8` · 版本：2
 
 ## 适用情境
 
-源方法体调用的是平台库而不是应用自身代码：Pattern/matches/replaceAll（\s、\p{L}、Pattern.quote 交替）、String.split("")、compareToIgnoreCase、List.remove(Object)、android.util.Base64.decode、Uri.parse(path).getPath()、ContentResolver.getType；目标只有 JS RegExp/String/Array 与内建解码可用，写者准备在注释里写“等价/直迁”。 也包括 String.replaceFirst(…, ignoreCase)、java.net.URL.host、Patterns.WEB_URL.matcher().matches()、io.ktor.http.Url 等依赖库语义的 URL 工具函数，目标准备改用手写正则或 @ohos.url URL（WHATWG 语义）。
+源方法体调用的是平台库而不是应用自身代码：Pattern/matches/replaceAll（\s、\p{L}、Pattern.quote 交替）、String.split("")、compareToIgnoreCase、List.remove(Object)、android.util.Base64.decode、Uri.parse(path).getPath()、ContentResolver.getType；目标只有 JS RegExp/String/Array 与内建解码可用，写者准备在注释里写“等价/直迁”。 也包括 Kotlin 的 contains/endsWith/startsWith（未传 ignoreCase）、lineSequence().firstOrNull(String::isNotBlank) 一类判定与截取；也包括 String.replaceFirst(…, ignoreCase)、java.net.URL.host、Patterns.WEB_URL.matcher().matches()、io.ktor.http.Url 等依赖库语义的 URL 工具函数，目标准备改用手写正则或 @ohos.url URL（WHATWG 语义）。
 
 ## 例外与边界
 
@@ -23,19 +23,23 @@ ID：`lesson-0cbafc2ad4096001d0e8` · 版本：2
 ## 做法
 
 1. 写“等价/直迁”前逐项列出所用调用的源端语义与 JS 内建的差异：正则字符类所属引擎、替换是否单遍、切分单位、比较规则、原地修改还是新建、解码容错、URI 解析与解码、未知值的平台默认；对不上的按源实现逐分支移植成共享函数，各调用点复用。
-2. 常用对照：\s、\p{L} 按 ICU 字符集写成显式 Unicode 类并用 u 标志；Pattern.quote 交替的 replaceAll 写成一个交替正则单遍替换；split("") 用 Array.from 按码点切；compareToIgnoreCase 逐字符先比 toUpperCase 再比 toLowerCase；List.remove(Object) 用 indexOf + splice 原地移除首个；Base64.decode(DEFAULT) 移植 android.util.Base64 的解码状态机；Uri.parse(path).getPath() 先解析 scheme/authority 再百分号解码；getType 未知扩展名回退 application/octet-stream 后再走源端归类。
+2. 常用对照：\s、\p{L} 按 ICU 字符集写成显式 Unicode 类并用 u 标志；Pattern.quote 交替的 replaceAll 写成一个交替正则单遍替换；split("") 用 Array.from 按码点切；compareToIgnoreCase 逐字符先比 toUpperCase 再比 toLowerCase；List.remove(Object) 用 indexOf + splice 原地移除首个；Base64.decode(DEFAULT) 移植 android.util.Base64 的解码状态机；Uri.parse(path).getPath() 先解析 scheme/authority 再百分号解码；getType 未知扩展名回退 application/octet-stream 后再走源端归类；Kotlin contains/endsWith/startsWith 不传 ignoreCase 即大小写敏感，不自行加 toLowerCase，isNotBlank/isBlank 只用于判断、返回原串不 trim，lineSequence()/lines() 按 \r\n、\n、\r 分行。
 3. 规格提取写这类契约时写语义点（切分与截断规则、正则引擎、舍入、解码容错、未知值默认）并标“需逐语义移植”，不用“非空白字符数”“拒绝某前缀”一类口语描述。
-4. 源仓库有覆盖这些函数的单测（如 app/src/test 下的 *Test.kt）时先读，把用例当作移植样例逐条对拍；常见差异：java.net.URL.host 不含 userinfo 与端口、replaceFirst 只替换首个、Kotlin String.replace 替换全部、matcher().matches() 为整串匹配、ktor Url 接受相对路径；选用 @ohos.url URL 替代 java.net.URL 或 ktor Url 前同样用这些用例核对，不以“边缘情况可接受”跳过。
+4. 源仓库有覆盖这些函数的单测（如 app/src/test 下的 *Test.kt）时先读，把用例当作移植样例逐条对拍；常见差异：java.net.URL.host 不含 userinfo 与端口、replaceFirst 只替换首个、Kotlin String.replace 替换全部、matcher().matches() 为整串匹配、ktor Url 接受相对路径；选用 @ohos.url URL 替代 java.net.URL 或 ktor Url 前同样用这些用例核对，不以“边缘情况可接受”跳过。源端以 URL(link) 是否抛 MalformedURLException 判定绝对、有无 scheme 或合法时，不用 new url.URL 构造器的抛错复刻：本地 @ohos.url.d.ts 中构造器标 @useinstead parseURL，已观察到它对无 scheme、相对路径与非法串不抛错，host 也省略默认端口；先用 scheme 正则（如 /^[a-zA-Z][a-zA-Z0-9+.-]*:/）判定，带 scheme 再解析校验，无 scheme 才补 http://，非绝对才按 base 解析，OrThrow 语义的调用点过滤失败项；URL(base, "/path") 取基址时按字符串截取 scheme://authority 并保留显式端口。
 
 ## 可选检查
 
 - 对“等价”有疑问时，用边界输入与源端对照：emoji 与组合字符、全角空格、大小写变体、尾随分隔符、含空白或非法字符的 Base64、带 scheme 与百分号编码的路径、未知扩展名
 
-来源支持：2 张卡 · 已知 1 次迁移（部分未记录） · 已知 1 个应用（部分未记录）
+来源支持：4 张卡 · 已知 2 次迁移（部分未记录） · 已知 2 个应用（部分未记录）
 
 ## 来源（按需复核）
 
 - [case-4b8ebe5007982e666e18](../../../store/cases/case-4b8ebe5007982e666e18/9ca849e7c68b415daca25b92377056b59b5595d109d328fcac0fac38ad921b92.json) · 结论：diagnosis, recommendation:1, recommendation:2
   卡片版本：`9ca849e7c68b415daca25b92377056b59b5595d109d328fcac0fac38ad921b92`
+- [case-63ee0b9d164865f45abd](../../../store/cases/case-63ee0b9d164865f45abd/eabc5fc92248ccb1cbd7e6a4a87c102869b9bd81d934ad6e85977bd484780692.json) · 结论：diagnosis, recommendation:1, recommendation:2
+  卡片版本：`eabc5fc92248ccb1cbd7e6a4a87c102869b9bd81d934ad6e85977bd484780692`
+- [case-bb79a6275f14f9eb5438](../../../store/cases/case-bb79a6275f14f9eb5438/16b05d8a55cffb810e426356a8d50a1242191d4d0126d74d9ecdc44e6a66eded.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:3
+  卡片版本：`16b05d8a55cffb810e426356a8d50a1242191d4d0126d74d9ecdc44e6a66eded`
 - [case-e9189514e875ef00f96f](../../../store/cases/case-e9189514e875ef00f96f/70962a835201462f5cdf9dc9d03b341d51dc0e830922cf32d7761f935762ea1b.json) · 结论：diagnosis, recommendation:1, recommendation:2, recommendation:4
   卡片版本：`70962a835201462f5cdf9dc9d03b341d51dc0e830922cf32d7761f935762ea1b`

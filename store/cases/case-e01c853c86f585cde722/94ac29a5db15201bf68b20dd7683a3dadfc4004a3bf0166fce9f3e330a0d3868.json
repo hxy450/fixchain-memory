@@ -1,0 +1,271 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-e01c853c86f585cde722",
+  "created_at": "2026-11-01T21:34:12.303451+00:00",
+  "migration_key": "8441b4f1-805b-4276-a8a9-9f857fb7c9d0",
+  "title": "抓取错误的分类与文案没有按源码路径逐字段移植：JSON 解码失败单独归类，HttpError 用自造 HTTP <code> 并混淆 message/description",
+  "when": "服务实现阶段，把源端抓取/解析路径的错误类型与错误数据字段翻译为目标错误模型时",
+  "description": "源端用一次 Either.catching(onCatch = RSSParseError) 包住 XML/JSON 等全部 Feed 格式的解析，sealed class 中虽另有 JsonFeedParseError 却不在该路径产生；非 2xx 时构造 HttpError(code, message = response.message)，description 默认 \"$code: $message\"。目标侧自建 FeedParserError 类，HTTP 走 rcp.Response（有可选的 reasonPhrase）。",
+  "summary": "Slice 4（F003）worker 写 FeedParser.ets / FeedSyncService.ets 之前已经读到三份正确且足够的输入：\nF003 规格 AC107「GoFeed JSON 解码失败（非法 JSON/字段类型不符）转换为 RSSParseError」、\nAC21「404 → HttpError(404, 原 message, null/头值)」；mapping 附录「gofeed JSON 非法 → RSSParseError」；\n源码 FeedParser.kt:235-252 用一次 Either.catching(onCatch = RSSParseError) 包住全部格式，\n:468-474 以 message = response.message 构造 HttpError，:541-548 HttpError 的 description 默认 \"$code: $message\"\n（agent-a1f91f0fd27d90bfa.jsonl:L29-L30、L34-L36、L51-L53）。\n输出却在三处偏离：\n(1) 分类：worker 在 L163 的推理里已写出“AC107 says GoFeed JSON decode failure → RSSParseError”，\n但仍按派工消息“XML/JSON 解码失败错误类型”的字面和错误表中 JsonFeedParseError 一行，\n在 parseFeedText 的 catch 中为 JSON_FEED 单独返回 FeedParserError.jsonFeedParse，\n文件头注释也写成“XML/JSON 解码失败 → RSSParseError / JsonFeedParseError”（L255-L256）。\n派工措辞没有指定 JSON 的 kind，与 AC107 并不矛盾；偏差出在实现者把源端 sealed class 中“存在该类型”当成“该路径产生该类型”。\n(2) 字段：同一次 Write 中 FeedParserError.httpError 把 message 与 description 都写成 code + ': ' + message，\n而源码只有 description 是这种拼接（L255-L256）。\n(3) 文案：worker 在 L246 推测“rcp Response typings maybe statusCode only. Use HTTP ${code} as message”；\n它在 L226-L227 已定位到 @hms.collaboration.rcp.d.ts 却没有打开核对，\n于是在 FeedSyncService.ets 的 parseFeedUrl、getSiteMetaData、fetchOgImage、syncFeed 四处非 2xx 分支都传入 'HTTP ' + statusCode（L316-L317），\n也没有在 source-notes 差异清单中登记这一替代。\n这些片段一直保留到生成结束后：verify 阶段为 AC18 测试接缝把 parseFeedUrl 的非 2xx 分支原样抽到 parseFeedResponseEnvelope（主会话 L7709），\n文案未变；UT 设计把它记为“HMOS 以 HTTP <code> 替代 response.message”（spec_conflict），这句是对实现的描述，不来自规格或决策账本中的平台差异声明。\n最终修复：F003 fixer 删除 JSON 专用分支，统一返回 rssParse（agent-adb096d4d6eb10add.jsonl:L208-L209、L213-L214）；\nverify round 12 新增 httpErrorMessage(response)，优先 response.reasonPhrase、缺失时回退 HTTP <code>，替换全部四处（主会话 L8177-L8179），\n并把 httpError 改为 message = 原因短语、description = \"code: message\"（主会话 L8242-L8244），F003 UT 179/179 通过（L8250）。\n",
+  "recommendations": [
+    "实现错误映射时，以源端该路径实际的 catch/构造为准：源码用一次 Either.catching(onCatch = RSSParseError) 包住全部格式时，JSON 解码失败也返回 RSSParseError。sealed class 中有 JsonFeedParseError，只能说明这个类型存在，不能说明这条路径会产生它；派工里笼统的“XML/JSON 解码失败错误类型”与 AC107 这类具体 AC 不一致时，按 AC 和源码实现。",
+    "移植错误数据类时逐字段对照构造与默认值：HttpError 的 message 取 response.message，description 默认 \"$code: $message\"；不要把 description 的拼接格式同时写进 message。",
+    "源码读取平台响应属性（如 OkHttp response.message）时，先打开目标 SDK 的类型声明（本例 @hms.collaboration.rcp.d.ts 的 Response.reasonPhrase）确认有无对应字段；有就使用并保留缺失时的回退，确实没有时才自造文案，并在差异清单中登记。",
+    "写完后用两个最小样例自查：非法 JSON 应返回 RSSParseError；带 reasonPhrase 'Not Found' 的 404 应得到 message = 'Not Found'、description = '404: Not Found'。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "E:/huawei_0930_project_cc/Feeder_Harmony_base/entry/src/main/ets/services/FeedParser.ets",
+        "since": "2026-10-19T17:17:28.822Z",
+        "at": "2026-10-19T20:50:12.317Z"
+      },
+      "nodes": [
+        {
+          "key": "E:/huawei_0930_project_cc/Feeder_Harmony_base/spec/baseline/features/F003-feed-fetch-parse.md",
+          "at": "2026-10-19T14:57:14.637Z",
+          "reason": "正常输入：Read 回执含 AC107“GoFeed JSON 解码失败……转换为 RSSParseError｜非法 JSON → Left(RSSParseError)”，以及 AC21“404 → HttpError(404, 原 message, null/头值)”，足以确定 JSON 失败的 kind 和 HttpError 的 message 取值（agent-a1f91f0fd27d90bfa.jsonl:L29-L30）。"
+        },
+        {
+          "key": "E:/huawei_0930_project_cc/Feeder_Harmony_base/spec/baseline/features/F003-feed-fetch-parse.mapping.md",
+          "at": "2026-10-19T14:57:16.489Z",
+          "reason": "正常输入：Read 回执的错误映射表写明“gofeed JSON 非法 → RSSParseError”“DTO 字段类型不符 → Moshi 抛异常 → RSSParseError”（同转录 L34、L36）。"
+        },
+        {
+          "key": "E:/huawei_0930_project_cc/Feeder-master/app/src/main/java/com/nononsenseapps/feeder/model/FeedParser.kt",
+          "at": "2026-10-19T14:57:23.517Z",
+          "reason": "正常输入：Read 回执给出 parseFeedResponse 用一次 Either.catching(onCatch = RSSParseError) 包住全部格式（:242-251）；HttpError 的 message 取 response.message（:468-474），只有 description 默认为 \"$code: $message\"（:541-548）（同转录 L51、L53）。"
+        },
+        {
+          "key": "agent-a1f91f0fd27d90bfa.jsonl",
+          "at": "2026-10-19T15:03:31.674Z",
+          "reason": "收到上述输入后，L163 推理已写出 AC107 的要求，仍按派工消息“XML/JSON 解码失败错误类型”的字面（L1，未指定 JSON 的 kind，与 AC107 不矛盾）和错误表中的 JsonFeedParseError 一行，让 JSON 单独归类。Write 在 parseFeedText 的 catch 中为 FeedFormat.JSON_FEED 返回 FeedParserError.jsonFeedParse，其余格式返回 rssParse；同一次 Write 中 httpError 把 message 和 description 都写成 statusCode + ': ' + message（同转录 L163、L255-L256）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "E:/huawei_0930_project_cc/Feeder_Harmony_base/entry/src/main/ets/services/FeedSyncService.ets",
+        "since": "2026-10-19T17:17:28.822Z",
+        "at": "2026-10-19T20:50:12.317Z"
+      },
+      "nodes": [
+        {
+          "key": "E:/huawei_0930_project_cc/Feeder_Harmony_base/spec/baseline/features/F003-feed-fetch-parse.md",
+          "at": "2026-10-19T14:57:14.637Z",
+          "reason": "正常输入：AC21 要求非 2xx 返回的 HttpError 携带原 message（404 → HttpError(404, 原 message, null/头值)）（agent-a1f91f0fd27d90bfa.jsonl:L29-L30）。"
+        },
+        {
+          "key": "E:/huawei_0930_project_cc/Feeder-master/app/src/main/java/com/nononsenseapps/feeder/model/FeedParser.kt",
+          "at": "2026-10-19T14:57:23.517Z",
+          "reason": "正常输入：curlAndOnResponse 在非 2xx 时以 message = response.message（HTTP 原因短语）构造 HttpError（:468-474）（同转录 L51、L53）。"
+        },
+        {
+          "key": "agent-a1f91f0fd27d90bfa.jsonl",
+          "at": "2026-10-19T15:07:24.671Z",
+          "reason": "worker 在 L226-L227 已定位到 @hms.collaboration.rcp.d.ts，却没有打开核对；L246 推测 rcp Response 可能只有 statusCode，决定用 HTTP ${code}。Write 在 parseFeedUrl、getSiteMetaData、fetchOgImage、syncFeed 四处非 2xx 分支传入 'HTTP ' + response.statusCode.toString()，以自造文案替代原因短语，也没有登记为差异（同转录 L246、L316-L317）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-e01c853c86f585cde722",
+  "metadata": {
+    "migration": {
+      "project": "com.nononsenseapps.feeder",
+      "server_session_id": "8441b4f1-805b-4276-a8a9-9f857fb7c9d0",
+      "platforms": [
+        "claude-code"
+      ],
+      "tool_versions": {
+        "orchestrator": "hmigbot-plus",
+        "runtime_version": "v1.5.2",
+        "runtime_commit": "c47f332",
+        "client_version": "hmigbot-plus-1.7.0",
+        "pack_version": "hmigbot-lite-1.6.1"
+      }
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "b7778fd6-a8b8-45ab-9466-8e8457af2d5d"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "deepseek-flash"
+      ],
+      "client_versions": [
+        "2.1.247"
+      ]
+    },
+    "source_set_id": "sources-d7987638b71ceb02410c",
+    "environment": [
+      {
+        "name": "android.min_sdk",
+        "value": "29",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T12:26:01.929Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L17",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L16",
+        "phase": "generation"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T12:27:22.307Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L360",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L359",
+        "phase": "generation"
+      },
+      {
+        "name": "toolchain.kotlin",
+        "value": "2.4.21",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T12:27:22.307Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L360",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L359",
+        "phase": "generation"
+      },
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T12:27:22.307Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L360",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L359",
+        "phase": "generation"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "29",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder-master",
+        "at": "2026-10-19T13:12:19.923Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a9b5b8a2259e4f29e.jsonl:L74",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a9b5b8a2259e4f29e.jsonl:L72",
+        "phase": "generation"
+      },
+      {
+        "name": "toolchain.gradle",
+        "value": "9.8.1",
+        "basis": "configuration",
+        "artifact": "gradle-wrapper.properties",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder-master",
+        "at": "2026-10-19T13:12:43.305Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a9b5b8a2259e4f29e.jsonl:L86",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a9b5b8a2259e4f29e.jsonl:L85",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "23",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T13:13:19.182Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/main-09ad9a5d-70a9-4c8e-8683-ce6d254061cc.jsonl:L1779",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/main-09ad9a5d-70a9-4c8e-8683-ce6d254061cc.jsonl:L1777",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "23",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T13:13:19.182Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/main-09ad9a5d-70a9-4c8e-8683-ce6d254061cc.jsonl:L1779",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/main-09ad9a5d-70a9-4c8e-8683-ce6d254061cc.jsonl:L1777",
+        "phase": "generation"
+      },
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder-master",
+        "at": "2026-10-19T13:15:54.470Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a9b5b8a2259e4f29e.jsonl:L192",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a9b5b8a2259e4f29e.jsonl:L191",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "26.0.0",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T13:17:58.962Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-ac32c63c9ad585393.jsonl:L49",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-ac32c63c9ad585393.jsonl:L48",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "26.0.0",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T13:17:58.962Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-ac32c63c9ad585393.jsonl:L49",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-ac32c63c9ad585393.jsonl:L48",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.10.10"
+  },
+  "revision": "94ac29a5db15201bf68b20dd7683a3dadfc4004a3bf0166fce9f3e330a0d3868"
+}

@@ -1,6 +1,6 @@
 # arkts/stdlib
 
-Java 标准库与语言语义到 ArkTS 的等价实现：读行、split/trim、BOM、String.format 与 Locale、Calendar 周规则，HashSet/HashMap 迭代序、有符号 byte 比较与 switch 返回码；DecimalFormat、BigDecimal 舍入与 Float.toString 的数值转文本，位置参数的字面插入（避开 String.replace 替换模式）；Java/ICU 正则字符类与单遍替换、split("")、compareToIgnoreCase、List.remove 与 Android 工具类（Base64、Uri、getType）的语义
+Java 标准库与语言语义到 ArkTS 的等价实现：读行、split/trim、BOM、String.format 与 Locale、Calendar 周规则，HashSet/HashMap 迭代序、有符号 byte 比较与 switch 返回码；DecimalFormat、BigDecimal 舍入与 Float.toString 的数值转文本，位置参数的字面插入（避开 String.replace 替换模式）；Java/ICU 正则字符类与单遍替换、split("")、compareToIgnoreCase、List.remove 与 Android 工具类（Base64、Uri、getType）的语义；Kotlin 严格解析（toIntOrNull、ZonedDateTime.parse、类型化解码）、字符串判定的大小写与 trim 语义、以 java.net.URL 抛错判定绝对性的替代
 
 [上一级](../index.md)
 
@@ -18,8 +18,11 @@ Java 标准库与语言语义到 ArkTS 的等价实现：读行、split/trim、B
   - 例外：规格或决策明确不要求复刻集合迭代序，并在验收中写明
 - [Java/ICU 正则、String/List 方法与 Android 工具类不按形似 JS 内建改写：先列语义差异，不等价就按源实现移植](lesson-0cbafc2ad4096001d0e8.lesson.md)
   - 时机：服务层、模型层与页面逻辑实现阶段，把源码直接调用的 Java 正则、String/List 方法或 Android 平台工具类翻译成 ArkTS 表达式时；规格提取阶段为这些调用写契约时
-  - 情境：源方法体调用的是平台库而不是应用自身代码：Pattern/matches/replaceAll（\\s、\\p{L}、Pattern.quote 交替）、String.split("")、compareToIgnoreCase、List.remove(Object)、android.util.Base64.decode、Uri.parse(path).getPath()、ContentResolver.getType；目标只有 JS RegExp/String/Array 与内建解码可用，写者准备在注释里写“等价/直迁”。 也包括 String.replaceFirst(…, ignoreCase)、java.net.URL.host、Patterns.WEB_URL.matcher().matches()、io.ktor.http.Url 等依赖库语义的 URL 工具函数，目标准备改用手写正则或 @ohos.url URL（WHATWG 语义）。
+  - 情境：源方法体调用的是平台库而不是应用自身代码：Pattern/matches/replaceAll（\\s、\\p{L}、Pattern.quote 交替）、String.split("")、compareToIgnoreCase、List.remove(Object)、android.util.Base64.decode、Uri.parse(path).getPath()、ContentResolver.getType；目标只有 JS RegExp/String/Array 与内建解码可用，写者准备在注释里写“等价/直迁”。 也包括 Kotlin 的 contains/endsWith/startsWith（未传 ignoreCase）、lineSequence().firstOrNull(String::isNotBlank) 一类判定与截取；也包括 String.replaceFirst(…, ignoreCase)、java.net.URL.host、Patterns.WEB_URL.matcher().matches()、io.ktor.http.Url 等依赖库语义的 URL 工具函数，目标准备改用手写正则或 @ohos.url URL（WHATWG 语义）。
   - 例外：规格或差异决策已明确接受对应差异，并写明受影响的输入
+- [Kotlin 严格解析（toIntOrNull、ZonedDateTime.parse、类型化解码）不改写成 parseInt、Date.parse 或 as](lesson-c1e00d34bafe6700a8ca.lesson.md)
+  - 时机：数据层与服务层实现阶段，把外部字符串或 JSON 转成数值、时间或类型化对象的 Kotlin 解析调用改写为 ArkTS 时
+  - 情境：源码用 toIntOrNull/toLongOrNull、ZonedDateTime.parse、Json.decodeFromString 等严格解析，失败时回落默认值、null 或保留旧值；目标侧可选 parseInt、Number、Date.parse 与 as 类型断言，它们接受的输入更宽或不做运行时检查。
 - [手写 getString/String.format 的位置参数插入时，不把用户数据作为 String.replace 的替换串：用 split/join 或替换回调字面插入](lesson-ecbaa1723e2beb9b1aec.lesson.md)
   - 时机：实现阶段，把 Android getString(resId, args) 或 String.format 的 %1$s、%s 位置参数改写为 ArkTS 字符串拼装（自写 formatRes 一类 helper）时
   - 情境：源端 getString(R.string.x, name) 把用户输入的名称、标题插入格式串（如克隆名后缀）；目标取到格式串后准备用 s.replace('%1$s', arg) 替换占位，或复用兄弟页面已有的同类 helper。

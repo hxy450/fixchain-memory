@@ -1,11 +1,14 @@
 # data/network
 
-网络层：服务地址与环境、运行配置的构建期注入、URL 拼接、拦截器注入的公共请求头、请求体字段与编码（表单或 JSON）、登录凭证来源与失效踢登，加解密工具的前置返回与异常回退、网关加密传输到 cryptoFramework 的移植，以及多路请求聚合结果的缓存写入与命中，拦截器读取的公共参数（设备标识、当前分组）的生产者，网络权限声明，请求通道内会话密钥前置门（ensureKey）的取舍与握手基址，按承载判定计费网络，链接 getter 追加的渠道等运行期参数，永不 reject 的信封客户端下源端 catch 失败语义的承接，rcp 拦截器读取请求属性（相对路径 url）
+网络层：服务地址与环境、运行配置的构建期注入、URL 拼接、拦截器注入的公共请求头、请求体字段与编码（表单或 JSON）、登录凭证来源与失效踢登，加解密工具的前置返回与异常回退、网关加密传输到 cryptoFramework 的移植，以及多路请求聚合结果的缓存写入与命中，拦截器读取的公共参数（设备标识、当前分组）的生产者，网络权限声明，请求通道内会话密钥前置门（ensureKey）的取舍与握手基址，按承载判定计费网络，链接 getter 追加的渠道等运行期参数，永不 reject 的信封客户端下源端 catch 失败语义的承接，rcp 拦截器读取请求属性（相对路径 url），OkHttp 缓存容量与 CacheControl 指令到 RCP ResponseCache 的映射
 
 [上一级](../index.md)
 
 ## 本级经验
 
+- [OkHttp 缓存映射到 RCP ResponseCache 时，maxSize 按实测单位传入并实写确认，缓存指令名逐项保留](lesson-17b7079006badd437bb1.lesson.md)
+  - 时机：网络层与图片策略实现阶段，把 OkHttp Cache(dir, N MiB) 的容量与 CacheControl 指令映射到 RCP ResponseCache 或请求缓存头时
+  - 情境：源端用 OkHttp Cache 提供自动 HTTP 缓存，并用 CacheControl.Builder().maxAge(...).maxStale(...) 控制图片缓存；目标用 @kit.RemoteCommunicationKit 的 rcp.ResponseCache / CacheConfiguration。
 - [Service 只收不透明请求体时，从源端调用链追到 body 的构造处照抄字段与取值来源，不用空对象占位](lesson-0bc494e864b2d8ab1a34.lesson.md)
   - 时机：数据层实现与规格提取阶段，编写 Repository 调用网络 Service、确定 POST 请求体字段时
   - 情境：目标 Service 方法只接收 data: Object（对应源端 @Body RequestBody），规格 API 表没列这个端点或它的请求字段；源端由 ViewModel 调用某个 Repository 方法，在那里组装 body（如 device_id 取自设备 ID 工具）。

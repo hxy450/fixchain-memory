@@ -1,6 +1,6 @@
 # 平台差异只收敛确实做不到的那一步：写“无对等”前查证并记录，替代方案只作用于源端同一路径，其余出口、分支与回退照源端保留
 
-ID：`lesson-9c973e50aaea054facdc` · 版本：5
+ID：`lesson-9c973e50aaea054facdc` · 版本：6
 
 [本主题](index.md)
 
@@ -30,7 +30,7 @@ ID：`lesson-9c973e50aaea054facdc` · 版本：5
 6. 计划或台账写“执行已批准不可用 UX”一类汇总前，逐项核对所引决策是否覆盖该能力；不在内的单列为接入任务或待批决策。
 7. 实现者只按差异条目列明的出口收敛；条目没覆盖的行为照源端实现，确需降级时登记为显式偏离或占位，不写成已实现。收到与源端基类行为冲突的开关接口位（如源端无条件开启前台派发，接口却要求按开关注册）时，回报规格冲突。差异决策的前提可以就地核对时（手边 SDK 声明里查得到所称不存在的接口，或理由只有成本、复杂度），回报决策冲突，不照写恒定状态、无效设置行或最小降级。
 
-来源支持：25 张卡 · 已知 4 次迁移（部分未记录） · 已知 4 个应用（部分未记录）
+来源支持：26 张卡 · 已知 5 次迁移（部分未记录） · 已知 5 个应用（部分未记录）
 
 ## 来源（按需复核）
 
@@ -54,6 +54,8 @@ ID：`lesson-9c973e50aaea054facdc` · 版本：5
   卡片版本：`0fcbb858330dc0692a5ef76947e2ee1aae9990c5195f78148938c87b3ce94fe8`
 - [case-76fcde297f6a5406e58f](../../../store/cases/case-76fcde297f6a5406e58f/4fe7565a766323ef4f1d2f178dcd030e8db4d702b78336c519b17cf80d48da0d.json) · 结论：recommendation:4, recommendation:5
   卡片版本：`4fe7565a766323ef4f1d2f178dcd030e8db4d702b78336c519b17cf80d48da0d`
+- [case-7d2130916d6ea67581fc](../../../store/cases/case-7d2130916d6ea67581fc/0f532d7fffe20c99090eab28fce10d634ad0892312803936996f2bb5ffe6aa57.json) · 结论：recommendation:2
+  卡片版本：`0f532d7fffe20c99090eab28fce10d634ad0892312803936996f2bb5ffe6aa57`
 - [case-7e6984a7fa6d5845737b](../../../store/cases/case-7e6984a7fa6d5845737b/28061d97667de8051e1a704ca4104b16d7db6a03989478ec6a0298430dae5dba.json) · 结论：diagnosis, recommendation:3
   卡片版本：`28061d97667de8051e1a704ca4104b16d7db6a03989478ec6a0298430dae5dba`
 - [case-7f8dcb2d9341693d1225](../../../store/cases/case-7f8dcb2d9341693d1225/9bc002a9ae47b1515ae4f83a7641866747bdf2d6e5d4dae238785c21ea360875.json) · 结论：diagnosis, recommendation:1

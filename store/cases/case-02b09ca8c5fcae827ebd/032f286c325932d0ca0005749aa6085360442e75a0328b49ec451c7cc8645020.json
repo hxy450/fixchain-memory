@@ -1,0 +1,275 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-02b09ca8c5fcae827ebd",
+  "created_at": "2026-11-01T21:28:59.991271+00:00",
+  "migration_key": "8441b4f1-805b-4276-a8a9-9f857fb7c9d0",
+  "title": "改写源码回退链与过滤选优管道时丢分支/换顺序，空串哈希未处理cryptoFramework空输入",
+  "when": "功能实现阶段，把源码中的语言目标回退链、注册表过滤/分组/选优管道以及MessageDigest摘要调用改写为ArkTS实现时",
+  "description": "源端目标语言比较对非DeepL提供方走`别名表 ?: Locale回退`；模型注册表先mapNotNull剔除不完整版本再按语言对groupBy并maxWith选最佳；缓存键对可能为空的title/snippet直接调用MessageDigest.digest，目标端改用cryptoFramework Md的update/digest。",
+  "summary": "Slice 8（F008翻译）实现者在写两个服务文件之前，已经完整读到三处 Android 源码，也读到了 F008 规格。三个偏差都在源码到 ArkTS 改写这一步，规格本身没有写反。\n（1）目标语言比较：TranslationLanguageUtils.kt 回执写明 asComparableTranslationTarget 对 isDeepL 走 asDeepL，\n否则走 asGenericComparableTranslationTarget = asDeepLComparableTranslationTarget() ?: asFallback(...)，\n规格 F008-AC19 也写明“nb 规范化为 no 后匹配 NORWEGIAN”，没有限定提供方（agent-a99d982a4d4de93cb.jsonl:L34、L46）。\n实现者 Write TranslationService.ets 时，asComparableTarget 只在 isDeepL 为真时查别名表，非 DeepL 直接 Locale 回退（同转录L178-L179）。\n结果非 DeepL 的目标 'NORWEGIAN' 被解析成 norwegian，与检测出的 no 不相等。\n（2）模型选择：BergamotModelManager.kt:266-301 的回执是先 mapNotNull 剔除不完整模型（isCompleteModel），再按语言对 groupBy、selectBestModelSet（L51）。\n实现者写前的计划只剩“Group by from/to/version; select best version”，isCompleteModel 被单列为辅助函数（L144）。\n实际 Write 的 TranslationModelManager.ets 先在全部版本里选最佳，再判断完整性，最佳版本不完整就整对丢弃（L172-L173）。\n（3）空串哈希：TranslationManager.kt:57-59 对 item.title/snippet 无条件 sha256，482-486 用 MessageDigest.digest(value.toByteArray())（L47）。\n规格 AC23 写明 title 为空视为 ready（L34），所以空串哈希是正常路径。实现者却把 sha256Text 写成无条件 md.update({data: bytes})（L172）。\n同文件的 sha256File 在读到 0 字节时跳出循环，不会调用 update，这只是循环结构的副作用。\ncryptoFramework 的 update 不接受空 DataBlob（运行时报 `build context fail.`）。这条平台限制没有出现在写前输入里，见 unknown。\n三处片段之后直到 generation_end 都没有再被改过，F008 UT round 0 全部暴露。\n修复经过：round 1 fixer 把非 DeepL 目标改为先查别名表、未命中再回退，并在分组时先用 isCompleteModel 过滤（agent-ac880f47017f6e309.jsonl:L297-L298、L335-L336）；\n当时对空串只是跳过 update（L332-L333）。round 2 改成空串直接返回 SHA-256(\"\") 常量（agent-ac124533d5283f303.jsonl:L326-L330、L387-L388）。\nclean 重建后的 round-2 全量 UT 中，F008 已没有失败项（main-09ad9a5d-70a9-4c8e-8683-ce6d254061cc.jsonl:L4183-L4191）。\n",
+  "recommendations": [
+    "实现阶段逐个对照源码 when/?: 回退链的每个分支。非DeepL的通用目标同样先查别名表（NORWEGIAN/NB→no等），查不到才走Locale解析；写完后拿规格样例（NORWEGIAN匹配nb）在非DeepL设置下自查一遍。",
+    "改写 filter/mapNotNull → groupBy → maxWith 这类管道时，保持“先过滤、后选优”：先在每个版本集合上剔除不完整模型，再从完整候选里选最佳版本。不要把完整性检查挪到选优之后。",
+    "把 MessageDigest.digest(bytes) 映射成 cryptoFramework Md 时，先确认空输入路径。源码或规格允许空title/snippet参与哈希，就让空串直接返回 SHA-256(\"\") 常量（e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855），非空时才 update 后 digest，并补一条空串用例。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "E:/huawei_0930_project_cc/Feeder_Harmony_base/entry/src/main/ets/services/TranslationService.ets",
+        "since": "2026-10-19T17:17:28.822Z",
+        "at": "2026-10-19T20:50:12.317Z"
+      },
+      "nodes": [
+        {
+          "key": "E:/huawei_0930_project_cc/Feeder-master/app/src/main/java/com/nononsenseapps/feeder/model/TranslationLanguageUtils.kt",
+          "at": "2026-10-19T15:53:22.727Z",
+          "reason": "正常输入：Read回执完整给出asComparableTranslationTarget（isDeepL→asDeepL，否则asGeneric）、L147的NORWEGIAN/NB→no，以及L157的asGeneric = asDeepL ?: asFallback。足以确定非DeepL目标也要先查别名表（agent-a99d982a4d4de93cb.jsonl:L45-L46）。"
+        },
+        {
+          "key": "E:/huawei_0930_project_cc/Feeder_Harmony_base/spec/baseline/features/F008-translation.md",
+          "at": "2026-10-19T15:53:20.127Z",
+          "reason": "正常输入：F008-AC19判据含“nb规范化为no后匹配NORWEGIAN”，没有限定DeepL；AC20另列DeepL别名映射（agent-a99d982a4d4de93cb.jsonl:L31、L34）。"
+        },
+        {
+          "key": "agent-a99d982a4d4de93cb.jsonl",
+          "at": "2026-10-19T15:57:48.955Z",
+          "reason": "上述两项都已收到，但Write TranslationService.ets时，LanguageDetect.asComparableTarget只在isDeepL为真时调用asDeepLComparableTarget，非DeepL直接asFallbackComparableTarget，源码的通用回退链少了别名表这一步（同转录L178-L179，写入内容第571-584行）。这段一直保留到round 1 fixer修改（agent-ac880f47017f6e309.jsonl:L297-L298）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "E:/huawei_0930_project_cc/Feeder_Harmony_base/entry/src/main/ets/services/TranslationModelManager.ets",
+        "since": "2026-10-19T17:17:28.822Z",
+        "at": "2026-10-19T20:50:12.317Z"
+      },
+      "nodes": [
+        {
+          "key": "E:/huawei_0930_project_cc/Feeder-master/app/src/main/java/com/nononsenseapps/feeder/localtranslation/BergamotModelManager.kt",
+          "at": "2026-10-19T15:53:23.214Z",
+          "reason": "正常输入：Read回执中parseMozillaRegistry（266-301）先groupBy版本集合并mapNotNull，用!files.isCompleteModel()剔除，再按from/to分组后map(::selectBestModelSet)。过滤先于选优，写得很明确（agent-a99d982a4d4de93cb.jsonl:L48、L51）。"
+        },
+        {
+          "key": "E:/huawei_0930_project_cc/Feeder-master/app/src/main/java/com/nononsenseapps/feeder/model/TranslationManager.kt",
+          "at": "2026-10-19T15:53:22.857Z",
+          "reason": "正常输入：Read回执中57-59行对item.title/snippet无条件计算sha256，482-486行用MessageDigest.digest(value.toByteArray())，空串照常求摘要（agent-a99d982a4d4de93cb.jsonl:L44、L47）。"
+        },
+        {
+          "key": "E:/huawei_0930_project_cc/Feeder_Harmony_base/spec/baseline/features/F008-translation.md",
+          "at": "2026-10-19T15:53:20.127Z",
+          "reason": "正常输入：AC23判据写明“title为空视为ready”，AC49/AC50分别给出完整性判定和版本选择，说明空串哈希、完整模型筛选都是本功能要覆盖的路径（agent-a99d982a4d4de93cb.jsonl:L34）。规格没有写出过滤与选优的先后，这个顺序由上面的源码给出。"
+        },
+        {
+          "key": "agent-a99d982a4d4de93cb.jsonl",
+          "at": "2026-10-19T15:56:41.991Z",
+          "reason": "写前计划只剩“Group by from/to/version; select best version”，isCompleteModel被单列（同转录L144）。Write TranslationModelManager.ets时先按语言对选bestIndex，再判断isCompleteModel，不完整就整对return（写入内容第468-501行）；sha256Text无条件md.update空Uint8Array（第1133-1140行）。前者偏离已读源码的过滤顺序；后者偏离源码与规格要求的空串可哈希，但cryptoFramework空输入限制不在写前输入中（L172-L173）。两段都保留到round 1/2 fixer修改。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "实现者写前收到的注入skill、工程内cryptoFramework用法（L149-L153，仅AesCbc/Mac）都没有提到Md.update拒绝空DataBlob。写后对SDK d.ts的grep只返回update/digest签名行（L417-L418），注释正文是否说明这一限制，在材料中无法核实。",
+    "round 1“跳过update直接digest”的写法从未在clean构建上复测：round-2 fixer怀疑round-1测试包是旧产物，又在clean重建前把它换成了常量。所以只能确认常量方案有效，不确定digest()无update是否可行。",
+    "algo-io把目标解析概括成“DeepL专用别名表或通用Locale解析”（L42），可能强化了把别名表限定给DeepL的理解；转录中没有直接证据表明实现者据此作了取舍，因此不把规格标为偏差起点。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-02b09ca8c5fcae827ebd",
+  "metadata": {
+    "migration": {
+      "project": "com.nononsenseapps.feeder",
+      "server_session_id": "8441b4f1-805b-4276-a8a9-9f857fb7c9d0",
+      "platforms": [
+        "claude-code"
+      ],
+      "tool_versions": {
+        "orchestrator": "hmigbot-plus",
+        "runtime_version": "v1.5.2",
+        "runtime_commit": "c47f332",
+        "client_version": "hmigbot-plus-1.7.0",
+        "pack_version": "hmigbot-lite-1.6.1"
+      }
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "b7778fd6-a8b8-45ab-9466-8e8457af2d5d"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "deepseek-flash"
+      ],
+      "client_versions": [
+        "2.1.247"
+      ]
+    },
+    "source_set_id": "sources-d7987638b71ceb02410c",
+    "environment": [
+      {
+        "name": "android.min_sdk",
+        "value": "29",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T12:26:01.929Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L17",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L16",
+        "phase": "generation"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T12:27:22.307Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L360",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L359",
+        "phase": "generation"
+      },
+      {
+        "name": "toolchain.kotlin",
+        "value": "2.4.21",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T12:27:22.307Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L360",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L359",
+        "phase": "generation"
+      },
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T12:27:22.307Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L360",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L359",
+        "phase": "generation"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "29",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder-master",
+        "at": "2026-10-19T13:12:19.923Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a9b5b8a2259e4f29e.jsonl:L74",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a9b5b8a2259e4f29e.jsonl:L72",
+        "phase": "generation"
+      },
+      {
+        "name": "toolchain.gradle",
+        "value": "9.8.1",
+        "basis": "configuration",
+        "artifact": "gradle-wrapper.properties",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder-master",
+        "at": "2026-10-19T13:12:43.305Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a9b5b8a2259e4f29e.jsonl:L86",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a9b5b8a2259e4f29e.jsonl:L85",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "23",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T13:13:19.182Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/main-09ad9a5d-70a9-4c8e-8683-ce6d254061cc.jsonl:L1779",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/main-09ad9a5d-70a9-4c8e-8683-ce6d254061cc.jsonl:L1777",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "23",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T13:13:19.182Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/main-09ad9a5d-70a9-4c8e-8683-ce6d254061cc.jsonl:L1779",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/main-09ad9a5d-70a9-4c8e-8683-ce6d254061cc.jsonl:L1777",
+        "phase": "generation"
+      },
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder-master",
+        "at": "2026-10-19T13:15:54.470Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a9b5b8a2259e4f29e.jsonl:L192",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a9b5b8a2259e4f29e.jsonl:L191",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "26.0.0",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T13:17:58.962Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-ac32c63c9ad585393.jsonl:L49",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-ac32c63c9ad585393.jsonl:L48",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "26.0.0",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T13:17:58.962Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-ac32c63c9ad585393.jsonl:L49",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-ac32c63c9ad585393.jsonl:L48",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.10.10"
+  },
+  "revision": "032f286c325932d0ca0005749aa6085360442e75a0328b49ec451c7cc8645020"
+}

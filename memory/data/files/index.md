@@ -1,6 +1,6 @@
 # data/files
 
-文件系统操作与导入导出：fileIo 建目录、移动与复制在目标已存在时的行为与幂等写法；导入导出按源端运行时与库默认语义实现（OOM 兜底、选择数量上限、zip 压缩方式、picker 显示名解码）；源端后台线程里的拷贝与导入改用异步 IO 或 taskpool；OutputStream 覆盖写改 fileIo 时的 TRUNC、短写与字节视图切片
+文件系统操作与导入导出：fileIo 建目录、移动与复制在目标已存在时的行为与幂等写法；导入导出按源端运行时与库默认语义实现（OOM 兜底、选择数量上限、zip 压缩方式、picker 显示名解码）；源端后台线程里的拷贝与导入改用异步 IO 或 taskpool；OutputStream 覆盖写改 fileIo 时的 TRUNC、短写与字节视图切片；gzip 损坏识别从抛异常改为魔数校验
 
 [上一级](../index.md)
 
@@ -19,3 +19,6 @@
 - [源端在后台线程执行的文件拷贝与导入改用异步 IO 或 taskpool：async 函数里调用 *Sync 接口仍阻塞主线程](lesson-ff5e8fbfb9ed491d99ee.lesson.md)
   - 时机：服务层实现阶段，把源端 AsyncTask、线程池或后台线程里的文件拷贝、读写与批量导入翻译为 ArkTS，并核对规格要求的并发或后台执行时
   - 情境：源端在 AsyncTask.doInBackground、executeOnExecutor(THREAD_POOL_EXECUTOR) 或 Executor 中拷贝附件、读写大文件，多个 URI 并行处理；规格或附录写明目标用 taskpool 并发、主线程只收束结果；实现者手里有 fileIo.copyFileSync、openSync/readSync 等同步接口。
+- [用 zlib 替代 GZIPInputStream 识别损坏数据时先校验 gzip 魔数：gzopen 'rb' 对非 gzip 输入不抛错](lesson-3d6d1981a3055c9a298b.lesson.md)
+  - 时机：数据层实现阶段，把依赖 GZIPInputStream 抛异常识别损坏或非 gzip 数据的读取路径改写为 HarmonyOS zlib 时
+  - 情境：源端读取 gzip 压缩的正文、缓存或备份文件，损坏或非 gzip 数据由 GZIPInputStream 抛 ZipException/EOFException 落入失败分支（如显示加载失败）；目标用 @ohos.zlib 的 gzopen(path, 'rb') 一类接口读取。

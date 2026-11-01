@@ -1,0 +1,343 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-63ee0b9d164865f45abd",
+  "created_at": "2026-11-01T21:26:40.356479+00:00",
+  "migration_key": "8441b4f1-805b-4276-a8a9-9f857fb7c9d0",
+  "title": "字符串判定与截取未按源码原语义翻译：自行加大小写归一或trim，私有路径helper凭函数名猜测",
+  "when": "业务逻辑实现阶段，把源码中的字符串匹配、筛选与截取表达式翻译为ArkTS等价判定时",
+  "description": "源码用Kotlin的contains/endsWith（未传ignoreCase）、lineSequence().firstOrNull(String::isNotBlank)或同文件私有helper（如lastPathSegment）表达匹配与截取；spec的AC只写概括句（如“含img”“扫描.ttf”“首行非空”）或只写函数名，目标端需要手写等价的字符串逻辑。",
+  "summary": "四个目标分别由四个并行切片生成者写出，偏差都发生在“已读到源码表达式 → 写出ArkTS等价判定”这一步。\nspec的AC是概括写法，没有写错，并且都标了真实源码锚点；生成者写前也实际读到了对应源码。\n- FeedParser：F003生成者Read GoFeedExtensions.kt，回执L53为`result.isBlank() && content.contains(\"img\")`；\n  spec AC08写“纯文本为空但原文含img时置为<image>”。Write却写成`content.toLowerCase().indexOf('img') >= 0`，\n  把大小写敏感的contains放宽为大小写不敏感，`<IMG>`也会命中。\n- FontService：F005生成者Read FontStore.kt，回执L38为`file.name.endsWith(\".ttf\")`；spec AC25写“扫描fontsDir下所有.ttf”。\n  Write写成`name.toLowerCase().endsWith('.ttf')`，`Upper.TTF`也会被收录。\n- TranslationService：F008生成者Read LocalTranslator.kt，回执L588-L595为\n  `lineSequence().firstOrNull(String::isNotBlank).orEmpty().take(80).ifBlank { fallback }`；spec AC82写“取首行非空并截断到80字符”。\n  Write用`split('\\n')`，并写`first = lines[index].trim()`，把“只用isNotBlank判断”改成“返回trim后的行”，也没有按\\r\\n、\\r分行。\n- ReaderRepository：F004生成者用grep -A 25查shouldOpenInPodcastPlayer，回执给出`val path = lastPathSegment(link).lowercase()`，\n  但同文件L52-L56的私有helper定义（先substringBefore('#')、再substringBefore('?')，最后取'/'之后的段）不在回执里。\n  spec AC61只写了函数名。生成者没有补读helper，Write时直接在整串link上取最后一个'/'之后的部分再取扩展名，\n  于是`a.mp3?x=1`得到`mp3?x=1`。本分支的偏差是看到helper调用后凭函数名自造语义。\n这些片段在生成结束后保持不变：verify阶段的读者读回了同样代码\n（agent-ab5808782a81dfd31.jsonl:L47、agent-a33eb337e17692ccd.jsonl:L34、agent-ae20c42a894c8d63a.jsonl:L49、agent-acedf9f9104a20a9e.jsonl:L58），\n随后UT按Android预期失败（F003 AC08_img_case、F005 AC25_uppercase_extension_excluded、F004 AC61、F008 AC82_preserve_spaces）。\n最终修复：两处去掉toLowerCase，改为大小写敏感（agent-adb096d4d6eb10add.jsonl:L210、agent-ae4f8c003e6cc02e5.jsonl:L139）；\n先按#和?截断再取最后路径段与扩展名（agent-a930c242e537448f0.jsonl:L244）；\n首个非空白行保留原文不trim，按/\\r\\n|\\n|\\r/分行，仍截断80字符（agent-ac880f47017f6e309.jsonl:L300）。\n",
+  "recommendations": [
+    "逐句翻译字符串判定时保留源API的默认语义：Kotlin的contains/endsWith/startsWith没传ignoreCase=true就是大小写敏感，不自行加toLowerCase；只有源码本身调用lowercase()或ignoreCase时才做归一化。",
+    "源码用isNotBlank/isBlank筛选时，trim()只用于判断，返回值保留原串；lineSequence()/lines()对应按/\\r\\n|\\n|\\r/分行，不要只split('\\n')。",
+    "源码调用私有或扩展helper（如lastPathSegment、toLocalTranslationError）时，写前补读该helper的定义；grep -A或sed片段没覆盖到定义就继续读，不按函数名推断语义。URL取路径段要先去掉#fragment和?query。",
+    "实现自检时用源码原句（不是spec概括句）构造边界输入核对：大写标签或扩展名、首尾带空格的行、带query或fragment的URL。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "E:/huawei_0930_project_cc/Feeder_Harmony_base/entry/src/main/ets/services/FeedParser.ets",
+        "since": "2026-10-19T17:17:28.822Z",
+        "at": "2026-10-19T20:50:12.317Z"
+      },
+      "nodes": [
+        {
+          "key": "E:/huawei_0930_project_cc/Feeder_Harmony_base/spec/baseline/features/F003-feed-fetch-parse.md",
+          "at": "2026-10-19T14:57:14.637Z",
+          "reason": "正常输入：Read回执中AC08写“纯文本内容为空但原文含img时plainContent置为<image>”，并标注真实锚点GoFeedExtensions.kt:48；概括正确，指向了需要逐句对照的源码（agent-a1f91f0fd27d90bfa.jsonl:L29-L30）。"
+        },
+        {
+          "key": "E:/huawei_0930_project_cc/Feeder-master/app/src/main/java/com/nononsenseapps/feeder/model/gofeed/GoFeedExtensions.kt",
+          "at": "2026-10-19T14:57:27.648Z",
+          "reason": "正常输入：Read回执L53为result.isBlank() && content.contains(\"img\")，Kotlin的contains未传ignoreCase，是大小写敏感判定；足以确定本项语义（agent-a1f91f0fd27d90bfa.jsonl:L65-L66）。"
+        },
+        {
+          "key": "agent-a1f91f0fd27d90bfa.jsonl",
+          "at": "2026-10-19T15:03:31.674Z",
+          "reason": "已收到上述源码与AC，Write FeedParser.ets时plainContentOf写成content.toLowerCase().indexOf('img') >= 0，自行加了大小写归一，<IMG>也会命中（同转录L255-L256）。后续读者在L1228读回的同片段未变（agent-ab5808782a81dfd31.jsonl:L47）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "E:/huawei_0930_project_cc/Feeder_Harmony_base/entry/src/main/ets/services/FontService.ets",
+        "since": "2026-10-19T17:17:28.822Z",
+        "at": "2026-10-19T20:50:12.317Z"
+      },
+      "nodes": [
+        {
+          "key": "E:/huawei_0930_project_cc/Feeder_Harmony_base/spec/baseline/features/F005-settings.md",
+          "at": "2026-10-19T14:40:03.196Z",
+          "reason": "正常输入：Read回执中AC25写“字体列表扫描fontsDir下所有.ttf（metadata必须可解析）”，并标注真实锚点FontStore.kt:35（agent-a6509f18c961bd566.jsonl:L27-L28）。"
+        },
+        {
+          "key": "E:/huawei_0930_project_cc/Feeder-master/app/src/main/java/com/nononsenseapps/feeder/archmodel/FontStore.kt",
+          "at": "2026-10-19T14:40:31.228Z",
+          "reason": "正常输入：Read回执L38为file.isFile && file.name.endsWith(\".ttf\")，没有ignoreCase，是大小写敏感的扩展名判定（agent-a6509f18c961bd566.jsonl:L68-L69）。"
+        },
+        {
+          "key": "agent-a6509f18c961bd566.jsonl",
+          "at": "2026-10-19T14:43:51.928Z",
+          "reason": "思考稿已把扫描写成!name.toLowerCase().endsWith('.ttf')（同转录L151），Write FontService.ets的refresh时照此写出，Upper.TTF也会被收录（L172-L173）。fixer读回的L485仍是该片段（agent-ae4f8c003e6cc02e5.jsonl:L33）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "E:/huawei_0930_project_cc/Feeder_Harmony_base/entry/src/main/ets/repositories/ReaderRepository.ets",
+        "since": "2026-10-19T17:17:28.822Z",
+        "at": "2026-10-19T20:50:12.317Z"
+      },
+      "nodes": [
+        {
+          "key": "/e/huawei_0930_project_cc/Feeder-master/app/src/main/java/com/nononsenseapps/feeder/ui/compose/feedarticle/PodcastPlayerLinks.kt",
+          "at": "2026-10-19T15:22:42.721Z",
+          "reason": "部分输入：grep -A 25回执给出shouldOpenInPodcastPlayer主体，其中val path = lastPathSegment(link).lowercase()，说明扩展名取自helper返回的路径段；但同文件L52-L56的私有helper定义（substringBefore('#')、substringBefore('?')、substringAfterLast('/')）不在回执范围内（agent-a35f12e197f0b4cc1.jsonl:L238-L239）。随后sed -n '1,20p'只读到扩展名集合（L241-L242）。spec AC61只写函数名，没有补充该语义。"
+        },
+        {
+          "key": "agent-a35f12e197f0b4cc1.jsonl",
+          "at": "2026-10-19T15:24:24.016Z",
+          "reason": "看到了lastPathSegment(link)调用，却没有补读helper定义；Write ReaderRepository.ets时自造为link.toLowerCase()后取最后一个'/'之后的部分再取最后'.'后缀，没有剥离?query与#fragment，a.mp3?x=1得到mp3?x=1（同转录L263-L264）。后续读者在L476-L483读回的同片段未变（agent-ae20c42a894c8d63a.jsonl:L49）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "生成者在Android源码目录对app/src/main/java/com/nononsenseapps/feeder/做grep -rn \"fun shouldOpenInPodcastPlayer\" -A 25，回执每行都带PodcastPlayerLinks.kt路径前缀，返回该函数L21-L46，含lastPathSegment(link).lowercase()调用；这是写ReaderRepository前对该文件的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a35f12e197f0b4cc1.jsonl",
+              "line": 238
+            },
+            {
+              "source": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a35f12e197f0b4cc1.jsonl",
+              "line": 239
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "E:/huawei_0930_project_cc/Feeder_Harmony_base/entry/src/main/ets/services/TranslationService.ets",
+        "since": "2026-10-19T17:17:28.822Z",
+        "at": "2026-10-19T20:50:12.317Z"
+      },
+      "nodes": [
+        {
+          "key": "E:/huawei_0930_project_cc/Feeder_Harmony_base/spec/baseline/features/F008-translation.md",
+          "at": "2026-10-19T15:53:20.127Z",
+          "reason": "正常输入：Read回执中AC82写“本地错误消息取首行非空并截断到80字符，否则使用兜底资源”，并标注真实锚点LocalTranslator.kt:588（agent-a99d982a4d4de93cb.jsonl:L31、L34）。概括没有写“trim”，也没要求保留空格，需要回看源码确定。"
+        },
+        {
+          "key": "E:/huawei_0930_project_cc/Feeder-master/app/src/main/java/com/nononsenseapps/feeder/localtranslation/LocalTranslator.kt",
+          "at": "2026-10-19T15:53:23.979Z",
+          "reason": "正常输入：Read回执L588-L595为lineSequence().firstOrNull(String::isNotBlank).orEmpty().take(MAX_LOCAL_TRANSLATION_ERROR_LENGTH).ifBlank { fallback }，只按isNotBlank筛行、返回原行不trim，lineSequence兼容\\r\\n与\\r（agent-a99d982a4d4de93cb.jsonl:L50、L55）。"
+        },
+        {
+          "key": "agent-a99d982a4d4de93cb.jsonl",
+          "at": "2026-10-19T15:57:48.955Z",
+          "reason": "已收到上述源码，Write TranslationService.ets时normalizeError写成message.split('\\n')，并first = lines[index].trim()，丢失首行首尾空格，且只按\\n分行（同转录L178-L179）。之后的自检只按spec核对“首行、80字符”（L545、L639）。fixer读回的同片段未变（agent-ac880f47017f6e309.jsonl:L121）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-63ee0b9d164865f45abd",
+  "metadata": {
+    "migration": {
+      "project": "com.nononsenseapps.feeder",
+      "server_session_id": "8441b4f1-805b-4276-a8a9-9f857fb7c9d0",
+      "platforms": [
+        "claude-code"
+      ],
+      "tool_versions": {
+        "orchestrator": "hmigbot-plus",
+        "runtime_version": "v1.5.2",
+        "runtime_commit": "c47f332",
+        "client_version": "hmigbot-plus-1.7.0",
+        "pack_version": "hmigbot-lite-1.6.1"
+      }
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "b7778fd6-a8b8-45ab-9466-8e8457af2d5d"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "deepseek-flash"
+      ],
+      "client_versions": [
+        "2.1.247"
+      ]
+    },
+    "source_set_id": "sources-d7987638b71ceb02410c",
+    "environment": [
+      {
+        "name": "android.min_sdk",
+        "value": "29",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T12:26:01.929Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L17",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L16",
+        "phase": "generation"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T12:27:22.307Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L360",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L359",
+        "phase": "generation"
+      },
+      {
+        "name": "toolchain.kotlin",
+        "value": "2.4.21",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T12:27:22.307Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L360",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L359",
+        "phase": "generation"
+      },
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T12:27:22.307Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L360",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L359",
+        "phase": "generation"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "29",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder-master",
+        "at": "2026-10-19T13:12:19.923Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a9b5b8a2259e4f29e.jsonl:L74",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a9b5b8a2259e4f29e.jsonl:L72",
+        "phase": "generation"
+      },
+      {
+        "name": "toolchain.gradle",
+        "value": "9.8.1",
+        "basis": "configuration",
+        "artifact": "gradle-wrapper.properties",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder-master",
+        "at": "2026-10-19T13:12:43.305Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a9b5b8a2259e4f29e.jsonl:L86",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a9b5b8a2259e4f29e.jsonl:L85",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "23",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T13:13:19.182Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/main-09ad9a5d-70a9-4c8e-8683-ce6d254061cc.jsonl:L1779",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/main-09ad9a5d-70a9-4c8e-8683-ce6d254061cc.jsonl:L1777",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "23",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T13:13:19.182Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/main-09ad9a5d-70a9-4c8e-8683-ce6d254061cc.jsonl:L1779",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/main-09ad9a5d-70a9-4c8e-8683-ce6d254061cc.jsonl:L1777",
+        "phase": "generation"
+      },
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder-master",
+        "at": "2026-10-19T13:15:54.470Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a9b5b8a2259e4f29e.jsonl:L192",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a9b5b8a2259e4f29e.jsonl:L191",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "26.0.0",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T13:17:58.962Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-ac32c63c9ad585393.jsonl:L49",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-ac32c63c9ad585393.jsonl:L48",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "26.0.0",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T13:17:58.962Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-ac32c63c9ad585393.jsonl:L49",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-ac32c63c9ad585393.jsonl:L48",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.10.10"
+  },
+  "revision": "eabc5fc92248ccb1cbd7e6a4a87c102869b9bd81d934ad6e85977bd484780692"
+}

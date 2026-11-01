@@ -1,0 +1,269 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-4315af870be24f182303",
+  "created_at": "2026-11-01T21:18:32.991668+00:00",
+  "migration_key": "8441b4f1-805b-4276-a8a9-9f857fb7c9d0",
+  "title": "RCP 响应缓存未生效：maxSize 按文档 MB 传入而运行时按字节解释，图片缓存指令 max-stale 被改写成 stale-while-revalidate",
+  "when": "网络层与图片策略实现阶段，把 OkHttp Cache 容量与 CacheControl 指令映射到 RCP ResponseCache / 请求缓存头时",
+  "description": "源端以 OkHttp Cache(dir, N MiB) 提供自动 HTTP 缓存，并用 CacheControl.Builder().maxAge(7d).maxStale(30d) 等指令控制图片缓存；目标端使用 @kit.RemoteCommunicationKit 的 rcp.ResponseCache / CacheConfiguration（API 26 运行时），容量与指令需要逐项换算。",
+  "summary": "本问题有两条已核的生成期偏差，成因不同，分图记录。\n其一（HttpClient.ets）：Base-3 Network 生成者写前实际读到 SDK 声明 @hms.collaboration.rcp.d.ts 中\nCacheConfiguration.maxSize 的注释“Unit: MB / Default 50”（agent-ab8c3beae6fda3d2e.jsonl:L161-L162），\n于是把 HTTP_CACHE_MAX_SIZE_MB=200 / IMAGE 300 原样传给 maxSize（同转录 L291-L292），并在自检里写下\n“ResponseCache maxSize is in MB”（L400）。生成者如实沿用文档，偏差起点是外部 SDK 文档与 API 26\n运行时的不一致：verify 闭包 round 7 用本地 TCP 服务实测，ResponseCache.set 报\n“item is too long for cache limits urlLen=45 bodyLen=21 headerChars=150”，200 被当作 200 字节\n（main-09ad9a5d-...jsonl:L6357、L6378-L6381）；改为 maxSizeMb*1024*1024 后 F001 75 项全部通过（L6382-L6390）。\nF003 UT 自建缓存用 maxSize: 10，同样落入这一单位问题。\n其二（ImagePolicy.ets）：F004 生成者读到的功能 spec 与 render 附录都写明“7 天 max-age / 30 天 max-stale”\n（agent-a35f12e197f0b4cc1.jsonl:L32-L33、L117/L119），自己的计划也写 max-stale 30d（L208），\n却在 L220 决定输出 'public, max-age=604800, stale-while-revalidate=2592000'，L287 落地；\nF004 fixer 依 OkHttp maxStale(30, DAYS).maxAge(7, DAYS) 改为 max-age=604800, max-stale=2592000\n（agent-a930c242e537448f0.jsonl:L289-L290、L347）。\n其余修改未完成生成期归因：ForceCache 拦截器改用 createCachedResponse 后，F003_AC28 仍报同一\n“Cannot read property response of undefined”（主会话 L4130、L4191），手工构造 CachedResponse\n会被拒绝缺少直接证据；生成者在该拦截器里用空 catch 吞掉 set 错误（L243、L245），使容量错误\n直到主会话加日志后才可见。keepCache=true 单独加入后缓存计数仍为 0（L6146），\nHttpResponseCacheInterceptor 的必要性也未与 maxSize 修正分离验证（对照用的裸 session 同样设 maxSize: 10，L6215、L6256）。\n",
+  "recommendations": [
+    "实现 RCP ResponseCache 时，不直接把 OkHttp 的 MiB 数当作 CacheConfiguration.maxSize；在 API 26 运行时按字节传入（MiB*1024*1024），并在设备/模拟器上做一次真实 2xx 写入，确认 cache.getState().count>0。",
+    "ResponseCache.set 失败不要空 catch 吞掉；至少记录错误信息（如 item is too long for cache limits），以便区分容量配置与记录构造问题。",
+    "迁移 OkHttp CacheControl 指令时逐项保持指令名：maxAge→max-age、maxStale→max-stale；不要用 stale-while-revalidate 替代 max-stale，二者语义不同。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "E:/huawei_0930_project_cc/Feeder_Harmony_base/entry/src/main/ets/network/HttpClient.ets",
+        "since": "2026-10-19T17:17:28.822Z",
+        "at": "2026-10-19T20:50:12.317Z"
+      },
+      "summary": "生成者写前读到的 SDK 声明把 CacheConfiguration.maxSize 标为 Unit: MB、默认 50，\n于是 createResponseCache 写成 maxSize: maxSizeMb（200/300）。API 26 运行时把它当字节，\n所有 ResponseCache 写入都因超过容量被拒绝。偏差起点在外部 SDK 文档与运行时不一致，\n生成者是如实传递者；最终改为 maxSizeMb*1024*1024（主会话 L6382-L6390）。\n同文件新增的 keepCache=true 与 HttpResponseCacheInterceptor 接线，必要性未单独验证，本图不归因。\n",
+      "recommendations": [
+        "配置 RCP ResponseCache 容量时按字节传入 MiB*1024*1024，并用一次真实写入加 getState() 计数验证容量生效，不只依赖 d.ts 的单位注释。"
+      ],
+      "nodes": [
+        {
+          "key": "C:/Program Files/Huawei/DevEco Studio/sdk/default/hms/ets/api/@hms.collaboration.rcp.d.ts",
+          "at": "2026-10-19T14:20:55.372Z",
+          "reason": "外部材料边界：Read 回执（agent-ab8c3beae6fda3d2e.jsonl:L161-L162，第 5014-5029 行）给出 CacheConfiguration.maxSize 'Unit: MB / Default value: 50'。主会话后来实测这与 API 26 运行时不符：maxSize=200 时 216 字节左右的记录被拒为 item is too long for cache limits，换算成字节后通过（main-09ad9a5d-70a9-4c8e-8683-ce6d254061cc.jsonl:L6357、L6378-L6390）。该文档的形成在迁移材料之外，无法继续上溯。",
+          "problem": true
+        },
+        {
+          "key": "agent-ab8c3beae6fda3d2e.jsonl",
+          "at": "2026-10-19T14:27:30.888Z",
+          "reason": "Base-3 Network 生成者按上述文档单位，在 createResponseCache 中写 maxSize: maxSizeMb，调用处传 HTTP_CACHE_MAX_SIZE_MB / IMAGE_HTTP_CACHE_MAX_SIZE_MB（L291-L292），自检记为 'ResponseCache maxSize is in MB; 200/300 set'（L400）。派工要求仅语法自检、不编译（L1），写前无法做运行时核对。本节点如实传递文档单位，不另认定独立失职。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "E:/huawei_0930_project_cc/Feeder_Harmony_base/entry/src/main/ets/services/ImagePolicy.ets",
+        "since": "2026-10-19T17:17:28.822Z",
+        "at": "2026-10-19T20:50:12.317Z"
+      },
+      "summary": "F004 生成者写前收到的 spec 已明确图片缓存为 7 天 max-age / 30 天 max-stale，计划阶段也照此记录；\n实现时却把 30 天写成 stale-while-revalidate=2592000（并加 public）。偏差在“正确输入→实现输出”这一环。\n该片段一直保留到 F004 UT 的 AC100 失败，fixer 改为 max-age=604800, max-stale=2592000。\n",
+      "recommendations": [
+        "实现缓存头时逐项对照源指令名，OkHttp maxStale 对应 max-stale；输出后用 spec 中的指令名核对返回字符串，不用语义不同的 stale-while-revalidate 替代。"
+      ],
+      "nodes": [
+        {
+          "key": "E:/huawei_0930_project_cc/Feeder_Harmony_base/spec/baseline/features/F004-article-reading.md",
+          "at": "2026-10-19T15:20:04.219Z",
+          "reason": "正常输入：Read 回执第 163 行“图片缓存：HTTP 图片缓存 300 MiB + 图片磁盘缓存 200 MiB，7 天 max-age / 30 天 max-stale”，足以确定指令名（agent-a35f12e197f0b4cc1.jsonl:L32-L33）。"
+        },
+        {
+          "key": "E:/huawei_0930_project_cc/Feeder_Harmony_base/spec/baseline/features/F004-article-reading.render.md",
+          "at": "2026-10-19T15:20:46.838Z",
+          "reason": "正常输入：Read 回执第 100 行“缓存：独立 HTTP 缓存 300 MiB + 磁盘 200 MiB；7 天 max-age / 30 天 max-stale”（agent-a35f12e197f0b4cc1.jsonl:L117、L119）。"
+        },
+        {
+          "key": "agent-a35f12e197f0b4cc1.jsonl",
+          "at": "2026-10-19T15:25:42.138Z",
+          "reason": "已收到上述输入，L208 计划仍写 'cacheControl headers max-age 7d/max-stale 30d'；L220 却改为返回 'public, max-age=604800, stale-while-revalidate=2592000'（括注 30 days max-stale），L287 的 Write 写入 cacheControlValue。请求端 max-stale 被换成语义不同的响应端扩展指令；本分支在此停止上溯。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [
+    {
+      "key": "E:/huawei_0930_project_cc/Feeder_Harmony_base/entry/src/main/ets/network/interceptors/ForceCacheOnSomeFailuresInterceptor.ets",
+      "reason": "已确认 F003 fixer 改用 rcp.createCachedResponse 并为 set 失败加日志（agent-adb096d4d6eb10add.jsonl:L220、L320）。但该诊断是推测：fixer 看不到被空 catch 吞掉的错误（L48、L174），改后 F003_AC28 仍报同一错误（主会话 L4130、L4191），round 4 改为注入 ResponseCacheWriter 测试接缝。后来唯一可见的 set 失败原因是容量单位（主会话 L6357、L6381），F003 UT 自建缓存也只设 maxSize: 10。手工构造 CachedResponse 是否会被拒绝缺少直接证据，因此本目标不画生成偏差链；空 catch 吞错的影响记在卡级 summary。"
+    },
+    {
+      "key": "E:/huawei_0930_project_cc/Feeder_Harmony_base/entry/src/main/ets/network/interceptors/HttpResponseCacheInterceptor.ets",
+      "reason": "该文件由主会话在修复期新建（main-09ad9a5d-70a9-4c8e-8683-ce6d254061cc.jsonl:L6263，19:58），生成期没有写者。新建依据是“RCP 不自动缓存 2xx”，但这个判断是在 maxSize 仍按 200 字节生效时做出的：用作对照的裸 session 也设 maxSize: 10（L6215、L6256），maxSize 修正（L6382）后没有再测去掉该拦截器的情况。所以无法判定缺少显式 2xx 写入是规格层还是实现层偏差；feature-base 只写了“缓存语义见 U-007”，没有给出自动写入的映射（agent-ab8c3beae6fda3d2e.jsonl:L23-L24）。"
+    }
+  ],
+  "job": "issue-4315af870be24f182303",
+  "metadata": {
+    "migration": {
+      "project": "com.nononsenseapps.feeder",
+      "server_session_id": "8441b4f1-805b-4276-a8a9-9f857fb7c9d0",
+      "platforms": [
+        "claude-code"
+      ],
+      "tool_versions": {
+        "orchestrator": "hmigbot-plus",
+        "runtime_version": "v1.5.2",
+        "runtime_commit": "c47f332",
+        "client_version": "hmigbot-plus-1.7.0",
+        "pack_version": "hmigbot-lite-1.6.1"
+      }
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "b7778fd6-a8b8-45ab-9466-8e8457af2d5d"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "deepseek-flash"
+      ],
+      "client_versions": [
+        "2.1.247"
+      ]
+    },
+    "source_set_id": "sources-d7987638b71ceb02410c",
+    "environment": [
+      {
+        "name": "android.min_sdk",
+        "value": "29",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T12:26:01.929Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L17",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L16",
+        "phase": "generation"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "37",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T12:27:22.307Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L360",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L359",
+        "phase": "generation"
+      },
+      {
+        "name": "toolchain.kotlin",
+        "value": "2.4.21",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T12:27:22.307Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L360",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L359",
+        "phase": "generation"
+      },
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T12:27:22.307Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L360",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a42d046723ba3a096.jsonl:L359",
+        "phase": "generation"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "29",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder-master",
+        "at": "2026-10-19T13:12:19.923Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a9b5b8a2259e4f29e.jsonl:L74",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a9b5b8a2259e4f29e.jsonl:L72",
+        "phase": "generation"
+      },
+      {
+        "name": "toolchain.gradle",
+        "value": "9.8.1",
+        "basis": "configuration",
+        "artifact": "gradle-wrapper.properties",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder-master",
+        "at": "2026-10-19T13:12:43.305Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a9b5b8a2259e4f29e.jsonl:L86",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a9b5b8a2259e4f29e.jsonl:L85",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "23",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T13:13:19.182Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/main-09ad9a5d-70a9-4c8e-8683-ce6d254061cc.jsonl:L1779",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/main-09ad9a5d-70a9-4c8e-8683-ce6d254061cc.jsonl:L1777",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "23",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T13:13:19.182Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/main-09ad9a5d-70a9-4c8e-8683-ce6d254061cc.jsonl:L1779",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/main-09ad9a5d-70a9-4c8e-8683-ce6d254061cc.jsonl:L1777",
+        "phase": "generation"
+      },
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder-master",
+        "at": "2026-10-19T13:15:54.470Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a9b5b8a2259e4f29e.jsonl:L192",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-a9b5b8a2259e4f29e.jsonl:L191",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "26.0.0",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T13:17:58.962Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-ac32c63c9ad585393.jsonl:L49",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-ac32c63c9ad585393.jsonl:L48",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "26.0.0",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "E:\\huawei_0930_project_cc\\Feeder_Harmony_base",
+        "at": "2026-10-19T13:17:58.962Z",
+        "ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-ac32c63c9ad585393.jsonl:L49",
+        "request_ref": "runs/0e94862f-4593-4f82-87d1-e0f9c789b01e/epoch-0/sessions/agent-ac32c63c9ad585393.jsonl:L48",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.10.10"
+  },
+  "revision": "84e753c25f601eb1ffe9fcc088fb2cad54200c01a84f3521e8bd942f07f4f155"
+}
