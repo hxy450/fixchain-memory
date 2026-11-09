@@ -55,7 +55,7 @@
 - [规格提取写验收条目时实读所引源码段落，照抄比较符、范围与名称变换，条目范围不超出本行源锚点，并给出边界样例](lesson-08854573a81a9fa03746.lesson.md)
   - 时机：规格提取阶段写阈值、列表范围、过滤条件、复制/变换类或持久化类验收条目并标注源码出处时；写“点击 X 进入 Y”的导航条目与对接点时
   - 情境：规格作者依赖预生成参考文档或源码片段写验收条目，并以“源码文件:行号”标注出处；读取可能被截断，或只读了参考文档的目录。也包括源端对同类数据维护多组独立集合（如按页面分别写入的两组收藏），规格按页面拆成多个功能分别写条目。也包括验收条目写“点击 X 进入 Y；源：某 Fragment”，规格作者只做了声明级检索、没有展开监听器函数体；同页有多个入口（Banner 进静态详情、列表子按钮按名称查询后进实时页），规格因存在详情页补出“列表项 → 详情”。
-- [规格提取把 AndroidManifest 声明（含未声明的平台缺省）解析成实际行为与鸿蒙目标值并指派实现：未声明 screenOrientation 时 EntryAbility 写 orientation: auto_rotation_restricted；未声明 windowSoftInputMode 时按是否含可滚动视图取 RESIZE/OFFSET，并写出首屏焦点与是否弹键盘；“默认”不能作目标值](lesson-c1d7ec16bb02aa152c33.lesson.md)
+- [规格提取把 AndroidManifest 声明（含未声明的平台缺省）解析成实际行为与鸿蒙目标值并指派实现：未声明 screenOrientation 时也按源允许方向集合显式设置 EntryAbility orientation（四向示例 auto_rotation_restricted）；未声明 windowSoftInputMode 时按是否含可滚动视图取 RESIZE/OFFSET，并写出首屏焦点与是否弹键盘；“默认”不能作目标值](lesson-c1d7ec16bb02aa152c33.lesson.md)
   - 时机：规格提取阶段，为每个 Activity 整理全屏、方向、软键盘等窗口行为，并整理 application 级属性（备份等）时；把“横竖屏双布局”“默认弹出”这类结论写进决策账本或页面规格时
   - 情境：窗口方向（如 screenOrientation=sensorLandscape）只声明在 AndroidManifest，Java 源码只见全屏标志一类调用；页面规格模板与元数据可能没有方向字段。也包括 application 显式 allowBackup=false，activity 未声明 screenOrientation、windowSoftInputMode 而依赖平台缺省；界面图谱把它们记为 unspecified/unknown，功能基线与计划都没有对应任务，目标备份配置保持模板值。 也包括各 activity 未声明 screenOrientation、源有 layout-land/values-land，规格只写“横竖屏双布局全支持”，module.json5 的 abilities 没有 orientation；以及未声明 windowSoftInputMode、布局含 EditText 和 ListView/ScrollView（或 Activity 继承 ListActivity），规格只写“无 windowSoftInputMode（默认弹出）”。
 - [规格提取时为每个导航目的地写页面入参契约：参数名、类型、是否可空或默认值与源端读取方式，不只留深链占位](lesson-f4d335605b44a60116b9.lesson.md)

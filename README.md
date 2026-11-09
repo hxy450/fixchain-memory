@@ -1,3 +1,11 @@
+# 多应用迁移经验库 · e613047f 修订版
+
+[阅读Memory](memory/index.md) · [查看137条修订依据](review/README.md)
+
+本分支发布基于e613047f的完整文本候选，共521条活跃Memory：137条正文修订，384条保持原文。修订范围、证据和限制见[逐条记录](review/revisions.json)。文本候选revision由`memory/manifest.json`固定；`store/`保留原案例版本，未按修订正文重新生成案例。
+
+---
+
 # 多应用迁移经验库
 
 [从 memory/index.md 开始阅读](memory/index.md)
@@ -9,7 +17,7 @@
 
 正式卡使用自包含的 `migloop-case/4`，保存模型总结、建议、归因图及必要身份与环境信息。迁移模型通常只阅读经验，证据卡用于按需复核；图的 UI 结合原始迁移转录重新生成，不把检查回执和展示缓存存成知识。
 
-当前知识版本以 `store/HEAD.json` 为准；`memory/manifest.json` 记录对应 revision、文件校验和与来源绑定。[MEMORY.md](MEMORY.md) 保留为兼容入口。
+`store/HEAD.json`标识原始案例库版本；本分支修订后的阅读正文以`memory/manifest.json`标识的文本候选版本为准，文件校验和与来源绑定同样由该清单记录。[MEMORY.md](MEMORY.md) 保留为兼容入口。
 
 ## 用这个库跑迁移实验
 
@@ -25,7 +33,7 @@
 
 旧版阅读包由 Git 历史保留，不按迁移复制多份。此前的 `runs/` 已退出当前 Git 树，本地的材料、稿件、报告与断点仍保留；原有提交没有改写。此次目录调整不改变卡片内容、经验语义或知识 revision。
 
-当前发布分支：`memory/multi-app-20261012`。留出 app ColorLines 的独立评测库在 `memory/colorlines-holdout`，不并入本分支。工作目录、转录、SQLite、模型日志、提案及本机调度信息不进入正式发布树。
+历史发布分支：`memory/multi-app-20261012`。本分支为`memory/reviewed-e613047f-20261109`。留出 app ColorLines 的独立评测库在 `memory/colorlines-holdout`，不并入本分支。工作目录、转录、SQLite、模型日志、提案及本机调度信息不进入正式发布树。
 
 机械检查保证格式、引用及所画历史关系符合契约，不等于归因语义认证或泛化效果证明。评测应冻结一个 Git commit / memory revision，在未入库应用上对照。
 

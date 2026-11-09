@@ -1,0 +1,537 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-99fd06c7bad0581426fb",
+  "created_at": "2026-10-14T15:32:53.149762+00:00",
+  "migration_key": "pf2048-glm531-3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f",
+  "title": "宽度限定词 values-w820dp 的 64dp 边距覆盖在资源迁移时被跳过，并以未核实的“F004/F010 断点处理”收尾，各页只拿到 10vp",
+  "when": "资源迁移阶段，处理 Android 宽度/最小宽度/屏幕尺寸限定目录（values-w<N>dp、values-sw<N>dp 等）中的值资源，决定跳过后如何把被覆盖的值交给界面实现时；以及界面实现阶段为引用共享 dimen 的边距取值时",
+  "description": "源工程在 values-w820dp/dimens.xml 中把布局共用的 activity_horizontal_margin 从 values 的 10dp 覆盖为 64dp（可用宽 ≥ 820dp 时生效），主菜单、抽屉头、关于页、统计页布局都引用该 dimen；HarmonyOS 资源限定词没有可用宽度维度，只能在运行时按窗口宽度判定；资源转换规则要求这类目录整目录跳过并标 unmapped。",
+  "summary": "资源迁移（Stage 0）a46a0c49 写前实际读到 values/dimens.xml 的 activity_horizontal_margin=10dp（agent-a46a0c49af597d7c3.jsonl L42-L43），\n并自行 cat 了 values-w820dp/dimens.xml，回执给出同名键 64dp 及“screens with more than 820dp of available width”的注释（L108-L109）。\n同时读到的 android2hmos_resources_convert 规则 conversion-rules.md 写 “Screen size qualifiers: sw<N>dp, w<N>dp, h<N>dp … skip entire directory,\nmark as unmapped”（L25-L26；SKILL.md 还写 skipping ensures correct conversion output），只要求在报告里标 unmapped，不要求把被覆盖的值作为运行时需求交接。\na46a0c49 照此只把 values/dimens.xml 转进 base/element/float.json（stage0_convert.py，L197-L198 清理重跑后 activity_horizontal_margin=10vp），\n并在 resource-mapping.md 写 “values-w820dp/dimens.xml → 跳过（unmapped）：w820dp 限定词无 HarmonyOS 等价（唯一键 activity_horizontal_margin=64dp 的宽屏覆盖，\nArkUI 断点方案在 F004/F010 处理）”（W216，L216-L217）。它知道这是会丢失的宽屏覆盖，却没有核对 F004/F010（两份 feature spec 在生成结束时都没有任何宽度断点或边距条目），\n没有在 placeholder-registry 登记（只登记了 4 条 MISSING_menu_*），交回主线程的回执也未提及（L232），64dp 分支在此失去承接者。偏差落在“跳过后交接”这一环。\n其后各页转换写前读到的都是只有 10vp 的 float.json：MainPage 转换 a4ecac72（L59-L60）、AboutPage 转换 a4c95b7e（L105-L108）、BasePage/StatsCard 的 Base-6 a0d3c995（L120-L121）；\n它们的 meta.json style_sources 也只列 values/dimens.xml（a4ecac72 L16-L17），grep resource-mapping.md 时只查图标行，没看到 L73 的跳过说明。\n于是 MainPage（a4ecac72 W82：底部区左右 padding、btn_prev/btn_next margin）、AboutPage（a4c95b7e W226：根左右 padding）、\nBasePage（a0d3c995 W247：抽屉头 logo 行 padding 与标题 margin）、StatsCard（a0d3c995 W227：根左右 padding、图片左右 padding、右列 paddingTop）\n都写成 $r('app.float.activity_horizontal_margin')，即固定 10vp；Slice 7（a65e1fed W151）与 Slice 8（a6dced83 W220）重写 MainPage/AboutPage 时原样保留，只做接线，未改变本项。\n规格侧也没有补上：spec/ref 的 design.md:307 写了“activity_horizontal_margin 10dp（w820dp 平板为 64dp）”、F17 横屏/平板适配，\n但主线程生成 baseline 时只读了 design.md/spec.md 的其他章节，ui-manifest 只把 values-w820dp 记为“非语言目录”，enrich_meta.py 的 STYLE_TRIO 未列该文件，\nF004/F010 与各页 spec 都没有宽度断点；这一缺口没有可绑定的读取，留在文字说明。\nStatsCard 里把水平、垂直边距和第三块 marginBottom 合成一个 ACTIVITY_MARGIN=10 常量是返修期间（repair L2399-L2467）引入的写法，不是生成遗留；生成期遗留的是缺 64 分支。\n经验核对：a46a0c49 首写前（L141 被拒，注入回执 L142）注入的 17 条经验均不涉及宽度限定词；跳过 w820dp 的决定在注入前的 L141 草稿与规划里已定，\n注入后它只按经验改 strarray、startWindow、矢量颜色引用等；lesson-a2f6a4ae9a72be740de6 被用于核实 menu_* 真缺值（L143 第 9 点），未用于本项。各转换 agent 收到的经验也不涉及本项，故不入图。\n返修 X6（repair/5d9e6180-…jsonl L4871-L4986）实测安卓横屏可用宽 865dp 取 64dp，新增 WindowModel.windowWidth 与 activityHorizontalMargin()（可用宽 ≥ 820 取 64，否则 10），\nEntryAbility 同步窗口宽并监听 windowSizeChange，BasePage/AboutPage/MainPage/StatsCard 改用该方法，StatsCard 拆出 ACTIVITY_VERTICAL_MARGIN 与 LOWER_MARGIN_BOTTOM，\n删去 float.json 的 activity_horizontal_margin（x6_edit.py L4907-L4915、x6_stats.py L4922-L4930）；临时阈值 810 只用于核对 64 分支，已改回 820（L4935-L4966），检查点 X6 6531b45（L4985-L4986），最终保留。\n",
+  "recommendations": [
+    "资源迁移阶段：遇到 values-w<N>dp / values-sw<N>dp / values-h<N>dp 等无法映射的尺寸限定目录，跳过前逐键列出被覆盖的值（键名、基础值、覆盖值、阈值，如 activity_horizontal_margin 10dp→64dp @ 可用宽 ≥ 820dp），在 resource-mapping 与 placeholder-registry 中登记为“运行时断点”需求，写明承接方（公共窗口模型或具体切片）和 resolve_by，并写进回执；写“由 Fxxx 处理”前先 grep 该 feature spec，确认已有对应条目，没有就登记，不写空头承接。",
+    "规格提取阶段：盘点 res 的 values-* 目录时，宽度限定目录和语言、夜间目录同样逐个处理：把被覆盖的 dimen 写进 ui-manifest 全局约定，并加入引用这些 dimen 的页面 meta.json style_sources，在 feature-base 指派一个运行时判定（窗口宽扣除左右避让后 ≥ 820vp 取 64vp，否则 10vp，窗口尺寸变化时重新计算）。spec/ref 已写出“w820dp 平板为 64dp”的，baseline 要承接下来。",
+    "界面实现阶段：源布局引用 @dimen/xxx 时，查源 res 下所有 values-*/dimens.xml 有没有覆盖同名键；如有宽度限定覆盖，不用单值 $r('app.float.xxx')，改用共享窗口模型按当前窗口宽度取值，各处统一调用；水平与垂直边距即使同为 10dp 也分开取值，避免一个常量代替多个源 dimen。",
+    "资源转换 skill 维护：android2hmos_resources_convert 中“Qualifiers without a HarmonyOS equivalent (skip entirely)”一条补充：跳过的是资源目录，不是行为；须输出被覆盖键的“需运行时实现”清单交给界面阶段，删去“skipping ensures correct conversion output”这类把跳过当作完成的说法。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-pf2048-glm5.31/entry/src/main/resources/base/element/float.json",
+        "since": "2026-10-14T02:47:19.609Z",
+        "at": "2026-10-14T13:11:05.496Z"
+      },
+      "nodes": [
+        {
+          "key": "/c/Users/hongy/projects/privacy-friendly-2048-SecUSo-4ee3cf3/app/src/main/res/values-w820dp/dimens.xml",
+          "at": "2026-10-13T20:27:53.176Z",
+          "reason": "正常输入：Stage 0 的 Bash cat 回执给出 activity_horizontal_margin=64dp，注释写明用于可用宽超过 820dp 的屏幕；足以说明 10dp 只是基础值，宽窗口需取 64（agent-a46a0c49af597d7c3.jsonl L108-L109）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-pf2048-glm5.31/.claude/skills/android2hmos_resources_convert/references/conversion-rules.md",
+          "at": "2026-10-13T20:23:03.575Z",
+          "reason": "上游缺口：Read 回执的限定词规则写 sw<N>dp、w<N>dp、h<N>dp 等“skip entire directory, mark as unmapped”（L25-L26），只要求在转换报告标 unmapped，没有要求把被覆盖的值作为运行时断点需求交给界面阶段（预载的 SKILL.md 还写 skipping ensures correct conversion output）。",
+          "problem": true
+        },
+        {
+          "key": "3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f:a46a0c49af597d7c3",
+          "at": "2026-10-13T20:40:23.657Z",
+          "reason": "读到 64dp 覆盖后，stage0_convert.py 只转 values/dimens.xml，L197-L198 清理重跑后 float.json 仅有 activity_horizontal_margin=10vp；W216 在 resource-mapping.md 写“跳过（unmapped）…64dp 的宽屏覆盖，ArkUI 断点方案在 F004/F010 处理”，但未核对 F004/F010（二者无任何断点条目）、未登记 placeholder-registry、回执 L232 未提，宽屏分支在此失去承接。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "Stage 0 的 Bash 命令 cat \"$A/values-w820dp/dimens.xml\"（A=源 res 目录），回执原文返回 activity_horizontal_margin=64dp 及 820dp 可用宽注释；这是该 agent 写 float.json 与 resource-mapping.md 前对该文件的真实读取。",
+          "evidence": [
+            {
+              "source": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a46a0c49af597d7c3.jsonl",
+              "line": 108
+            },
+            {
+              "source": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a46a0c49af597d7c3.jsonl",
+              "line": 109
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target",
+          "force": true,
+          "reason": "Bash 先以 json.dump 覆写 entry/src/main/resources/base/element/float.json（清理空名项），再重跑 stage0_convert.py（其 dimens 段只读 values/dimens.xml 并合并写入该文件），回执列出 floats 含 activity_horizontal_margin=10vp、无宽屏值；这是该 agent 对 float.json 的最后一次写入。",
+          "evidence": [
+            {
+              "source": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a46a0c49af597d7c3.jsonl",
+              "line": 197
+            },
+            {
+              "source": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a46a0c49af597d7c3.jsonl",
+              "line": 198
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-pf2048-glm5.31/entry/src/main/ets/pages/MainPage.ets",
+        "since": "2026-10-14T02:47:19.609Z",
+        "at": "2026-10-14T13:11:05.496Z"
+      },
+      "nodes": [
+        {
+          "key": "/c/Users/hongy/projects/privacy-friendly-2048-SecUSo-4ee3cf3/app/src/main/res/values-w820dp/dimens.xml",
+          "at": "2026-10-13T20:27:53.176Z",
+          "reason": "正常输入：activity_horizontal_margin 在可用宽 ≥ 820dp 时为 64dp（agent-a46a0c49af597d7c3.jsonl L108-L109）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-pf2048-glm5.31/.claude/skills/android2hmos_resources_convert/references/conversion-rules.md",
+          "at": "2026-10-13T20:23:03.575Z",
+          "reason": "上游缺口：w<N>dp 目录只要求跳过并标 unmapped，不要求交接被覆盖的值（agent-a46a0c49af597d7c3.jsonl L25-L26）。",
+          "problem": true
+        },
+        {
+          "key": "3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f:a46a0c49af597d7c3",
+          "at": "2026-10-13T20:40:23.657Z",
+          "reason": "float.json 只写 10vp，resource-mapping.md 以未核实的“F004/F010 处理”收尾，未登记、未回报（L197-L198、L216-L217、L232）。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-pf2048-glm5.31/entry/src/main/resources/base/element/float.json",
+          "at": "2026-10-13T20:44:16.684Z",
+          "reason": "交付桥梁：MainPage 转换 a4ecac72 的 Bash cat 回执中 activity_horizontal_margin 只有 10vp 一个值（agent-a4ecac72d4864e912.jsonl L59-L60）。"
+        },
+        {
+          "key": "3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f:a4ecac72d4864e912",
+          "at": "2026-10-13T20:59:28.936Z",
+          "reason": "meta.json style_sources 只列 values/dimens.xml（L16-L17），float.json 只有 10vp；W82 把 activity_main.xml 的底部区左右 padding 与 btn_prev/btn_next 边距写成 $r('app.float.activity_horizontal_margin')（L82-L83）。Slice 7 a65e1fed W151 重写时原样保留到返修。本链确认传递，不另推定其独立失职。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "Stage 0 的 Bash 命令 cat \"$A/values-w820dp/dimens.xml\"（A=源 res 目录），回执原文返回 activity_horizontal_margin=64dp 及 820dp 可用宽注释；这是该 agent 写 float.json 与 resource-mapping.md 前对该文件的真实读取。",
+          "evidence": [
+            {
+              "source": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a46a0c49af597d7c3.jsonl",
+              "line": 108
+            },
+            {
+              "source": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a46a0c49af597d7c3.jsonl",
+              "line": 109
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "Bash 先以 json.dump 覆写 entry/src/main/resources/base/element/float.json（清理空名项），再重跑 stage0_convert.py（其 dimens 段只读 values/dimens.xml 并合并写入该文件），回执列出 floats 含 activity_horizontal_margin=10vp、无宽屏值；这是该 agent 对 float.json 的最后一次写入。",
+          "evidence": [
+            {
+              "source": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a46a0c49af597d7c3.jsonl",
+              "line": 197
+            },
+            {
+              "source": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a46a0c49af597d7c3.jsonl",
+              "line": 198
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": 5,
+          "force": true,
+          "reason": "MainPage 转换 a4ecac72 的 Bash 命令 cat entry/src/main/resources/base/element/float.json，回执 activity_horizontal_margin 只有 10vp；在其 W82 写 MainPage 之前。",
+          "evidence": [
+            {
+              "source": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a4ecac72d4864e912.jsonl",
+              "line": 59
+            },
+            {
+              "source": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a4ecac72d4864e912.jsonl",
+              "line": 60
+            }
+          ]
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-pf2048-glm5.31/entry/src/main/ets/pages/AboutPage.ets",
+        "since": "2026-10-14T02:47:19.609Z",
+        "at": "2026-10-14T13:11:05.496Z"
+      },
+      "nodes": [
+        {
+          "key": "/c/Users/hongy/projects/privacy-friendly-2048-SecUSo-4ee3cf3/app/src/main/res/values-w820dp/dimens.xml",
+          "at": "2026-10-13T20:27:53.176Z",
+          "reason": "正常输入：activity_horizontal_margin 在可用宽 ≥ 820dp 时为 64dp（agent-a46a0c49af597d7c3.jsonl L108-L109）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-pf2048-glm5.31/.claude/skills/android2hmos_resources_convert/references/conversion-rules.md",
+          "at": "2026-10-13T20:23:03.575Z",
+          "reason": "上游缺口：w<N>dp 目录只要求跳过并标 unmapped，不要求交接被覆盖的值（agent-a46a0c49af597d7c3.jsonl L25-L26）。",
+          "problem": true
+        },
+        {
+          "key": "3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f:a46a0c49af597d7c3",
+          "at": "2026-10-13T20:40:23.657Z",
+          "reason": "float.json 只写 10vp，resource-mapping.md 以未核实的“F004/F010 处理”收尾，未登记、未回报（L197-L198、L216-L217、L232）。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-pf2048-glm5.31/entry/src/main/resources/base/element/float.json",
+          "at": "2026-10-13T20:48:05.102Z",
+          "reason": "交付桥梁：AboutPage 转换 a4c95b7e 的 cat 回执中 activity_horizontal_margin 只有 10vp（agent-a4c95b7ee551c66bf.jsonl L105-L108）。"
+        },
+        {
+          "key": "3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f:a4c95b7ee551c66bf",
+          "at": "2026-10-13T21:07:39.367Z",
+          "reason": "W226 把 activity_about.xml 根布局左右 padding 写成 $r('app.float.activity_horizontal_margin')（L226-L227）；Slice 8 a6dced83 W220 重写时原样保留到返修。本链确认传递，不另推定其独立失职。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "Stage 0 的 Bash 命令 cat \"$A/values-w820dp/dimens.xml\"（A=源 res 目录），回执原文返回 activity_horizontal_margin=64dp 及 820dp 可用宽注释；这是该 agent 写 float.json 与 resource-mapping.md 前对该文件的真实读取。",
+          "evidence": [
+            {
+              "source": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a46a0c49af597d7c3.jsonl",
+              "line": 108
+            },
+            {
+              "source": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a46a0c49af597d7c3.jsonl",
+              "line": 109
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "Bash 先以 json.dump 覆写 entry/src/main/resources/base/element/float.json（清理空名项），再重跑 stage0_convert.py（其 dimens 段只读 values/dimens.xml 并合并写入该文件），回执列出 floats 含 activity_horizontal_margin=10vp、无宽屏值；这是该 agent 对 float.json 的最后一次写入。",
+          "evidence": [
+            {
+              "source": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a46a0c49af597d7c3.jsonl",
+              "line": 197
+            },
+            {
+              "source": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a46a0c49af597d7c3.jsonl",
+              "line": 198
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": 5,
+          "force": true,
+          "reason": "AboutPage 转换 a4c95b7e 的 Bash 命令 cat 该 float.json，回执 activity_horizontal_margin 只有 10vp；在其 W226 写 AboutPage 之前。",
+          "evidence": [
+            {
+              "source": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a4c95b7ee551c66bf.jsonl",
+              "line": 105
+            },
+            {
+              "source": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a4c95b7ee551c66bf.jsonl",
+              "line": 108
+            }
+          ]
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-pf2048-glm5.31/entry/src/main/ets/components/common/BasePage.ets",
+        "since": "2026-10-14T02:47:19.609Z",
+        "at": "2026-10-14T13:11:05.496Z"
+      },
+      "nodes": [
+        {
+          "key": "/c/Users/hongy/projects/privacy-friendly-2048-SecUSo-4ee3cf3/app/src/main/res/values-w820dp/dimens.xml",
+          "at": "2026-10-13T20:27:53.176Z",
+          "reason": "正常输入：activity_horizontal_margin 在可用宽 ≥ 820dp 时为 64dp（agent-a46a0c49af597d7c3.jsonl L108-L109）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-pf2048-glm5.31/.claude/skills/android2hmos_resources_convert/references/conversion-rules.md",
+          "at": "2026-10-13T20:23:03.575Z",
+          "reason": "上游缺口：w<N>dp 目录只要求跳过并标 unmapped，不要求交接被覆盖的值（agent-a46a0c49af597d7c3.jsonl L25-L26）。",
+          "problem": true
+        },
+        {
+          "key": "3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f:a46a0c49af597d7c3",
+          "at": "2026-10-13T20:40:23.657Z",
+          "reason": "float.json 只写 10vp，resource-mapping.md 以未核实的“F004/F010 处理”收尾，未登记、未回报（L197-L198、L216-L217、L232）。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-pf2048-glm5.31/entry/src/main/resources/base/element/float.json",
+          "at": "2026-10-13T21:00:32.399Z",
+          "reason": "交付桥梁：Base-6 a0d3c995 用 python 读取 float.json，回执列出 activity_horizontal_margin=10vp（agent-a0d3c9957d8d7eea6.jsonl L120-L121）。"
+        },
+        {
+          "key": "3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f:a0d3c9957d8d7eea6",
+          "at": "2026-10-13T21:17:48.873Z",
+          "reason": "读到 nav_header_main.xml 的 paddingLeft=@dimen/activity_horizontal_margin（L63）与上述 10vp 后，W247 把抽屉头 logo 行 padding 与标题 margin 写成 $r('app.float.activity_horizontal_margin')（L247-L248），后续接线编辑未改此处，保留到返修。本链确认传递，不另推定其独立失职。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "Stage 0 的 Bash 命令 cat \"$A/values-w820dp/dimens.xml\"（A=源 res 目录），回执原文返回 activity_horizontal_margin=64dp 及 820dp 可用宽注释；这是该 agent 写 float.json 与 resource-mapping.md 前对该文件的真实读取。",
+          "evidence": [
+            {
+              "source": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a46a0c49af597d7c3.jsonl",
+              "line": 108
+            },
+            {
+              "source": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a46a0c49af597d7c3.jsonl",
+              "line": 109
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "Bash 先以 json.dump 覆写 entry/src/main/resources/base/element/float.json（清理空名项），再重跑 stage0_convert.py（其 dimens 段只读 values/dimens.xml 并合并写入该文件），回执列出 floats 含 activity_horizontal_margin=10vp、无宽屏值；这是该 agent 对 float.json 的最后一次写入。",
+          "evidence": [
+            {
+              "source": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a46a0c49af597d7c3.jsonl",
+              "line": 197
+            },
+            {
+              "source": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a46a0c49af597d7c3.jsonl",
+              "line": 198
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": 5,
+          "force": true,
+          "reason": "Base-6 a0d3c995 的 Bash python 以 json.load 读取 base/element/float.json 并打印全部键值，回执 activity_horizontal_margin=10vp；在其 W247 写 BasePage 之前。",
+          "evidence": [
+            {
+              "source": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a0d3c9957d8d7eea6.jsonl",
+              "line": 120
+            },
+            {
+              "source": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a0d3c9957d8d7eea6.jsonl",
+              "line": 121
+            }
+          ]
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-pf2048-glm5.31/entry/src/main/ets/components/common/StatsCard.ets",
+        "since": "2026-10-14T02:47:19.609Z",
+        "at": "2026-10-14T13:11:05.496Z"
+      },
+      "nodes": [
+        {
+          "key": "/c/Users/hongy/projects/privacy-friendly-2048-SecUSo-4ee3cf3/app/src/main/res/values-w820dp/dimens.xml",
+          "at": "2026-10-13T20:27:53.176Z",
+          "reason": "正常输入：activity_horizontal_margin 在可用宽 ≥ 820dp 时为 64dp（agent-a46a0c49af597d7c3.jsonl L108-L109）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-pf2048-glm5.31/.claude/skills/android2hmos_resources_convert/references/conversion-rules.md",
+          "at": "2026-10-13T20:23:03.575Z",
+          "reason": "上游缺口：w<N>dp 目录只要求跳过并标 unmapped，不要求交接被覆盖的值（agent-a46a0c49af597d7c3.jsonl L25-L26）。",
+          "problem": true
+        },
+        {
+          "key": "3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f:a46a0c49af597d7c3",
+          "at": "2026-10-13T20:40:23.657Z",
+          "reason": "float.json 只写 10vp，resource-mapping.md 以未核实的“F004/F010 处理”收尾，未登记、未回报（L197-L198、L216-L217、L232）。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-pf2048-glm5.31/entry/src/main/resources/base/element/float.json",
+          "at": "2026-10-13T21:00:32.399Z",
+          "reason": "交付桥梁：Base-6 a0d3c995 用 python 读取 float.json，回执列出 activity_horizontal_margin=10vp（agent-a0d3c9957d8d7eea6.jsonl L120-L121）。"
+        },
+        {
+          "key": "3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f:a0d3c9957d8d7eea6",
+          "at": "2026-10-13T21:16:10.013Z",
+          "reason": "读到 fragment_stats1.xml 的根 paddingLeft/Right、竖分隔线上下 margin、右列 paddingTop 均为 @dimen/activity_horizontal_margin（L65）与上述 10vp 后，W227 把这些处写成 $r('app.float.activity_horizontal_margin')（L227-L228），保留到返修；返修期间该文件又被改成 ACTIVITY_MARGIN=10 常量，X6 一并拆分。本链确认传递，不另推定其独立失职。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "Stage 0 的 Bash 命令 cat \"$A/values-w820dp/dimens.xml\"（A=源 res 目录），回执原文返回 activity_horizontal_margin=64dp 及 820dp 可用宽注释；这是该 agent 写 float.json 与 resource-mapping.md 前对该文件的真实读取。",
+          "evidence": [
+            {
+              "source": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a46a0c49af597d7c3.jsonl",
+              "line": 108
+            },
+            {
+              "source": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a46a0c49af597d7c3.jsonl",
+              "line": 109
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "Bash 先以 json.dump 覆写 entry/src/main/resources/base/element/float.json（清理空名项），再重跑 stage0_convert.py（其 dimens 段只读 values/dimens.xml 并合并写入该文件），回执列出 floats 含 activity_horizontal_margin=10vp、无宽屏值；这是该 agent 对 float.json 的最后一次写入。",
+          "evidence": [
+            {
+              "source": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a46a0c49af597d7c3.jsonl",
+              "line": 197
+            },
+            {
+              "source": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a46a0c49af597d7c3.jsonl",
+              "line": 198
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": 5,
+          "force": true,
+          "reason": "Base-6 a0d3c995 的 Bash python 以 json.load 读取 base/element/float.json 并打印全部键值，回执 activity_horizontal_margin=10vp；在其 W227 写 StatsCard 之前。",
+          "evidence": [
+            {
+              "source": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a0d3c9957d8d7eea6.jsonl",
+              "line": 120
+            },
+            {
+              "source": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a0d3c9957d8d7eea6.jsonl",
+              "line": 121
+            }
+          ]
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [
+    {
+      "key": "C:/Users/hongy/projects/transfer-app-pf2048-glm5.31/entry/src/main/ets/components/common/WindowModel.ets",
+      "reason": "已确认修改：X6 新增 windowWidth 与 activityHorizontalMargin()（可用宽 ≥ 820 取 64，临时阈值 810 已改回 820；repair L4907-L4915、L4935-L4966）。这是修复为运行时断点选的承载位置；生成期该文件只承担避让区同步，宽度判定要求在 Stage 0 已被跳过、从未交到它的写者（成因见 float.json 等图），没有一次写入带入或删去本项，故不绑定生成期写者。"
+    },
+    {
+      "key": "C:/Users/hongy/projects/transfer-app-pf2048-glm5.31/entry/src/main/ets/entryability/EntryAbility.ets",
+      "reason": "已确认修改：X6 在 syncAvoidAreaToModel 中同步 windowWidth 并新增 windowSizeChange 监听（repair L4907-L4915）。与 WindowModel 同属修复新增的承载代码；生成期写者的派工与规格均无宽度判定要求（成因见 float.json 等图），无可绑定的偏差写入。"
+    }
+  ],
+  "job": "issue-99fd06c7bad0581426fb",
+  "metadata": {
+    "migration": {
+      "id": "pf2048-glm531-3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f",
+      "project": "Privacy Friendly 2048"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.296",
+        "2.1.299"
+      ]
+    },
+    "source_set_id": "sources-1066f74383c81d5a2cd9",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-pf2048-glm5.31",
+        "at": "2026-10-13T20:25:53.379Z",
+        "ref": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a46a0c49af597d7c3.jsonl:L105",
+        "request_ref": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a46a0c49af597d7c3.jsonl:L104",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-pf2048-glm5.31",
+        "at": "2026-10-13T20:25:53.379Z",
+        "ref": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a46a0c49af597d7c3.jsonl:L105",
+        "request_ref": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a46a0c49af597d7c3.jsonl:L104",
+        "phase": "generation"
+      },
+      {
+        "name": "toolchain.gradle",
+        "value": "8.5",
+        "basis": "configuration",
+        "artifact": "gradle-wrapper.properties",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-pf2048-glm5.31",
+        "at": "2026-10-14T07:57:12.812Z",
+        "ref": "repair/5d9e6180-4c80-4423-a00d-ca7069d9da73.jsonl:L70",
+        "request_ref": "repair/5d9e6180-4c80-4423-a00d-ca7069d9da73.jsonl:L69",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "c16c307d-1222-4fb3-bc92-f319ab51b983"
+      ]
+    }
+  },
+  "revision": "608c410bc679145c9aa4016e8cbfde2614a21694188099e0dfbc047ab4ce4f70"
+}

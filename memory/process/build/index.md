@@ -9,7 +9,7 @@
 - [交付前要编译：项目根没有 hvigorw 时改用 DevEco 或命令行工具自带的 hvigorw、流水线构建入口；只跑读取源码文本的契约测试不算编译，仍不可用时按已知错误模式扫描并在回执写明未编译](lesson-25bc0b7518d335a947d6.lesson.md)
   - 时机：实现或修复阶段写完 ArkTS 代码、准备交付，而工程根目录找不到 hvigorw，或子任务约定把编译留给主线程统一执行时
   - 情境：工程根目录没有 hvigorw 脚本，本机另有 DevEco Studio 自带的 hvigorw/hvigorw.js、command-line-tools/bin/hvigorw 或流水线封装的构建命令；子代理常以“缺 hvigorw，交收尾编译”结束。 也包括并行领域子代理只用 node --test 跑按文本或正则读取源码的 .cjs 契约，就以“交主线程统一构建”结束。
-- [用 shell 一行命令改写含 $ 的 ArkTS 片段（如 $r(...)）时用单引号脚本或字面替换，改后读回每一处](lesson-6dae0bf2657b0e339742.lesson.md)
+- [用 shell 改写含 $ 的 ArkTS 片段时分别处理 shell 与替换语言的插值，优先字面编辑并逐处读回](lesson-6dae0bf2657b0e339742.lesson.md)
   - 时机：编译修复或批量改写阶段，用 perl -pi、sed -i 等一行命令替换含 $ 的 ArkTS 表达式时
   - 情境：修复脚本在双引号包裹的 shell 命令里写 perl/sed 替换串，替换内容含 $r('app.float.xxx') 等以 $ 开头的标记；ArkTS 把字符串传给 Length、ResourceColor 类参数也能编译通过。
 - [编译修复只改报错定位的行与符号，不以删掉功能或语义不同的替代换取通过；必须整文件重写时逐段对照上一版，未报错的写法原样保留](lesson-29744eb694376e8acaca.lesson.md)

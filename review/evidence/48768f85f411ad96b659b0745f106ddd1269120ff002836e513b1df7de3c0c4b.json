@@ -1,0 +1,171 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-066503e2574cd4edbd0b",
+  "created_at": "2026-10-14T03:25:04.198292+00:00",
+  "migration_key": "blockinger-glm531-c54518f5-0a64-4778-9630-e5bfe3f912cc",
+  "title": "把源端同步的先取消再振动拆成两个互不等待的异步平台调用",
+  "when": "功能切片实现阶段，封装平台能力网关、把源端连续的同步系统调用映射到返回 Promise 的目标 API 时",
+  "description": "源端在同一方法里依次同步调用两个平台方法，且后一个调用依赖前一个已经生效（如 Vibrator.cancel() 后立刻 vibrate(pattern)、stop 后 start）；目标 API 返回 Promise，网关或服务层接口按规格声明为 void，调用方仍按源顺序逐个调用。",
+  "summary": "Slice 7（F003 输入控制与振动）的迁移 worker 写 VibratorGateway 前，实际读到三份相互印证的输入：\nControls.java:142-143 的 vibrateBottom 先同步 v.cancel() 再 v.vibrate(new long[]{0,5+off,30+off,20+off},-1)\n（agent-a055f317a9b0a15a9.jsonl:L33-L34）；F003 规格的映射表把 startVibration 标为“Promise 形”，\n双段波形行写明“前置 stopVibration 截断”，AC32 写明“先取消当前振动再发双段波形”（同转录 L37-L38）；\n本机 SDK d.ts 的 grep 回执给出 startVibration(effect, attribute): Promise<void>（:190）、\nstopVibration(): Promise<void>（:304），同一回执还列出同步变体 stopVibrationSync(): void（:326）（同转录 L89、L91）。\n先后要求和两端调用的同步/异步差别都已在写前给出，足以要求网关保证“取消完成后才发波形”。\n本次输出却让 OhosVibratorGateway 的 vibrateTime/vibratePattern/cancel 各自发出 Promise、只挂 .catch 吞错，\n互不等待；GameControls.vibrateBottom 在调用点保持 cancel() 再 vibratePattern() 的源顺序\n（同转录 L145），worker 的源码笔记也只核了调用点顺序（“vibrateBottom … 先 cancel ✓”，同转录 L149），\n没有核两次平台调用的生效顺序。于是 stopVibration 可能晚于新波形生效、截掉落底振动。\n该写法在首稿（L137，注入前）就已存在；首写前注入的 15 条经验（L138）都没有提到同步→异步调用的先后，\nworker 据注入改写时只改了 BusinessError 日志格式与 hilog 级别（L140-L141），fire-and-forget 结构未受经验影响，\n因此经验不作为本卡成因节点。\n返修会话中，引擎复核代理把它列为“需设备确认”的风险（repair/2d743162-…jsonl:L4410，建议先 await 取消再发波形）；\n返修者用内部 Promise 队列 enqueue 串行化三个平台调用，前一调用完成（成功或失败）后才发下一个，吞错与日志不变，\n并以 hilog 顺序（CancelEnhanced StopVibrator → 网关记录 stop 结果 → InitPlayPattern/PlayPattern）确认\n（repair/2d743162-…jsonl:L6048、L6054-L6055、L6064；检查点 X10，commit cfeb0a7），修改在 FINAL 保留。\n",
+  "recommendations": [
+    "实现阶段：把源端连续的同步平台调用映射为返回 Promise 的目标 API 时，若网关方法按规格保持 void，在网关内部用 Promise 链队列串行发出（前一调用 settle 后才发下一调用，失败也继续），或改用 d.ts 中的同步变体（如 stopVibrationSync）；不要让每个方法各自 fire-and-forget 只挂 .catch。",
+    "写后自查：对每个返回 Promise 的平台调用，列出调用点上紧邻的前后平台调用，并问源端是否依赖它们的先后（先取消/停止再启动、先释放再创建）；依赖时确认目标端有 await 或队列。只核“调用点顺序与源码一致”不能代替生效顺序检查。",
+    "规格提取阶段：映射表把同步 API 换成 Promise 形、服务层又声明为 void 方法时，在契约中写出连续调用的串行要求（例如“cancel 完成后才发 pattern”），并给对应 AC 增加可单测的判据，如注入延迟完成的假 stop，断言 pattern 在 stop 完成后才发出。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-blockinger-glm5.31/entry/src/main/ets/game/controls/VibratorGateway.ets",
+        "since": "2026-10-13T10:53:09.711Z",
+        "at": "2026-10-13T22:29:44.396Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/blockinger-vocollapse-8b26057/src/org/blockinger/game/components/Controls.java",
+          "at": "2026-10-13T08:35:08.527Z",
+          "reason": "正常输入：worker Read 全文，回执含 vibrateBottom 的 v.cancel(); v.vibrate(new long[]{0,5+off,30+off,20+off},-1)（:142-143），两次同步调用按顺序生效；足以说明落底波形依赖取消先完成（agent-a055f317a9b0a15a9.jsonl:L33-L34）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-blockinger-glm5.31/spec/baseline/features/F003-game-controls.md",
+          "at": "2026-10-13T08:35:09.274Z",
+          "reason": "正常输入：Read 回执中映射表写 startVibration 为“Promise 形”、双段波形行写“前置 stopVibration 截断”，AC32 写“先取消当前振动再发双段波形”；服务层把网关方法声明为 void，但没有要求各调用独立发出（同转录 L37-L38）。"
+        },
+        {
+          "key": "C:/Users/hongy/AppData/Local/OpenHarmony/Sdk/23/ets/api/@ohos.vibrator.d.ts",
+          "at": "2026-10-13T08:37:42.670Z",
+          "reason": "正常输入：worker 用 Bash grep 本机 d.ts，回执列出 :190 startVibration(effect, attribute): Promise<void>、:304 stopVibration(): Promise<void>，以及 :326 stopVibrationSync(): void；两次平台调用都是异步，且有同步停止变体可选（同转录 L89、L91）。"
+        },
+        {
+          "key": "agent-a055f317a9b0a15a9.jsonl",
+          "at": "2026-10-13T08:52:16.273Z",
+          "reason": "已收到上述先后要求与 Promise 签名，Write 仍让 OhosVibratorGateway 的 vibrateTime/vibratePattern/cancel 各自调用 startVibration/stopVibration 后只挂 .catch、不等待前一调用，cancel→vibratePattern 的生效顺序没有保证。该结构在注入前首稿 L137 已存在，注入（L138）后的重写 L141-L142 只改日志格式。偏差位于已给出的顺序要求到网关实现这一环，本分支在此停止上溯。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "worker 写前用 Bash 对本机 @ohos.vibrator.d.ts 执行 grep（tool_use_id call_87565d4288314d87a2a6185f），回执返回 :190 startVibration(...): Promise<void>、:304 stopVibration(): Promise<void> 与 :326 stopVibrationSync(): void；这是该 worker 写网关前对 d.ts 的真实读取，支持其已收到两次平台调用均为异步的事实。",
+          "evidence": [
+            {
+              "source": "generation/c54518f5-0a64-4778-9630-e5bfe3f912cc/subagents/agent-a055f317a9b0a15a9.jsonl",
+              "line": 89
+            },
+            {
+              "source": "generation/c54518f5-0a64-4778-9630-e5bfe3f912cc/subagents/agent-a055f317a9b0a15a9.jsonl",
+              "line": 91
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "鸿蒙模拟器无振动器（start/stop 均返回 14600101），返修未实测到落底振动被截断；本卡依据 d.ts 的异步签名、复核报告与保留的串行化修改归因“先后无保证”，不声称已观测到截断。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-066503e2574cd4edbd0b",
+  "metadata": {
+    "migration": {
+      "id": "blockinger-glm531-c54518f5-0a64-4778-9630-e5bfe3f912cc",
+      "project": "Blockinger"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.296"
+      ]
+    },
+    "source_set_id": "sources-37319ba0846f9b0a14c5",
+    "environment": [
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-blockinger-glm5.31",
+        "at": "2026-10-13T03:35:43.538Z",
+        "ref": "generation/c54518f5-0a64-4778-9630-e5bfe3f912cc.jsonl:L423",
+        "request_ref": "generation/c54518f5-0a64-4778-9630-e5bfe3f912cc.jsonl:L422",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-blockinger-glm5.31",
+        "at": "2026-10-13T04:09:41.917Z",
+        "ref": "generation/c54518f5-0a64-4778-9630-e5bfe3f912cc/subagents/agent-a189cc44cdb902fa5.jsonl:L124",
+        "request_ref": "generation/c54518f5-0a64-4778-9630-e5bfe3f912cc/subagents/agent-a189cc44cdb902fa5.jsonl:L123",
+        "phase": "generation"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "35",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-blockinger-glm5.31",
+        "at": "2026-10-13T12:06:21.856Z",
+        "ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L296",
+        "request_ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L295",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "17",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-blockinger-glm5.31",
+        "at": "2026-10-13T12:06:21.856Z",
+        "ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L296",
+        "request_ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L295",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "8",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-blockinger-glm5.31",
+        "at": "2026-10-13T12:06:21.856Z",
+        "ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L296",
+        "request_ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L295",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "4795952a-b849-4427-ba3f-0bc9a11c6092"
+      ]
+    }
+  },
+  "revision": "1eb4dc52699cef3e5f84f794599dbfd3970a0e80e995bfdc592fdaaf4f84994e"
+}

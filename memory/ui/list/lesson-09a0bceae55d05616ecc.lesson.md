@@ -1,6 +1,6 @@
-# 会换位或增删的列表，位置相关值（首尾标记、序号、上移/下移可用态、首尾圆角）在渲染时按当前位置计算，不取 ForEach/Repeat 生成时的闭包 index
+# 会换位或增删的列表，位置相关值按当前位置更新：ForEach 不固化生成时 index，Repeat 保持 RepeatItem 的响应式传参链
 
-ID：`lesson-09a0bceae55d05616ecc` · 版本：1
+ID：`lesson-09a0bceae55d05616ecc` · 版本：2
 
 [本主题](index.md)
 
@@ -14,11 +14,11 @@ ID：`lesson-09a0bceae55d05616ecc` · 版本：1
 
 ## 原因
 
-键不含位置时，换位或增删后同键的项被复用、不重跑生成函数，闭包 index 和由它传入的 @Param 都停在旧位置；Compose 重组总按当前 index 重算，源端没有这个问题。来源中写者已读到“同键复用旧子组件、不重派 @Param”的说明，仍认为换位后闭包会随新 index 重建；修复期改用 Repeat 的 index 后上移仍然无效，按当前位置求值后才正确。
+ForEach 同键复用时，生成阶段固化的位置值可能停在旧位置；Repeat 会更新复用节点的 index，不能将其一概等同于冻结闭包。若只把 RepeatItem.item/index 的值传入 @Builder，仍可能丢失响应式更新；Compose 重组总按当前 index 重算，源端没有这个问题。来源中写者已读到“同键复用旧子组件、不重派 @Param”的说明，仍认为换位后闭包会随新 index 重建；修复期改用 Repeat 的 index 后上移仍然无效，按当前位置求值后才正确。
 
 ## 做法
 
-1. 位置相关值由依赖当前数组的表达式在渲染时求出（如 this.items.indexOf(item) 与 length 比较），不把生成函数参数里的 index 固化进子组件参数或行样式。
+1. 先区分 ForEach 与 Repeat 及参数通路。ForEach 不把生成时 index 固化进子组件或样式，可按依赖当前数组的表达式求当前位置；Repeat 与 @Builder 配合时优先传完整 RepeatItem 的引用，让 index 更新能到达 UI，不因稳定键就断言 index 必然过期。
 
 ## 可选检查
 

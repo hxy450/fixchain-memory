@@ -1,6 +1,6 @@
 # 页面转换逐项落实源 XML 的 gone 节点（代码只绑点击、没有设为可见的入口也不渲染）、固定尺寸点击容器与 tools:listitem 行布局
 
-ID：`lesson-f1a98587fe72ff68c5a8` · 版本：4
+ID：`lesson-f1a98587fe72ff68c5a8` · 版本：5
 
 [本主题](index.md)
 
@@ -24,7 +24,7 @@ ID：`lesson-f1a98587fe72ff68c5a8` · 版本：4
 4. 判定图标按钮是否显示时，先看 XML 初始 visibility，再查代码中对该 View 的全部 setVisibility；只有 findViewById 与点击监听、没有 VISIBLE 分支的 gone 入口不生成。目标工程其他页面的写法只决定怎样实现，不决定源页是否有该入口；有截图时新增可见元素前先用截图核对，协调者追加的入口要求与源布局或截图冲突时先回报冲突。
 5. 源端靠左右对称让中间控件居中时，隐藏一侧用同尺寸空占位（如返回键对侧的 44×44 空 Row）保持居中，不放可点击图标。
 6. 以源布局 View id 为清单逐个生成渲染节点；每个声明并赋值的展示状态，在 build 中都要有消费它的组件。
-7. 子控件的 setText、setVisibility 不代表父容器会显示：对 gone/invisible 的容器检索它自身 id 是否被设为可见，没有就不渲染或写 Visibility.None；转换前按页面状态（有数据、为空、结果、无结果）列出各自可见的标题与删除入口，确认同一语义只出现一次。
+7. 子控件的 setText、setVisibility 不代表父容器会显示：分别检索 gone/invisible 容器自身 id 是否被设为可见：源 gone 才不渲染或用 Visibility.None 移除占位；源 invisible 用 Visibility.Hidden 保留几何占位，不能把两者合并；转换前按页面状态（有数据、为空、结果、无结果）列出各自可见的标题与删除入口，确认同一语义只出现一次。
 
 来源支持：4 张卡 · 4 次迁移 · 4 个应用
 

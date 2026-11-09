@@ -1,6 +1,6 @@
-# APPROXIMATELY_LOCATION 与 LOCATION 成组声明、申请与判定：要精确定位也两项同申，任一授予就继续定位
+# APPROXIMATELY_LOCATION 与 LOCATION 成组声明、申请与判定：首次申请精确定位两项同申，任一授予就继续定位
 
-ID：`lesson-b72e0d67fe27db2ae041` · 版本：2
+ID：`lesson-b72e0d67fe27db2ae041` · 版本：3
 
 [本主题](index.md)
 
@@ -19,7 +19,7 @@ ID：`lesson-b72e0d67fe27db2ae041` · 版本：2
 ## 做法
 
 1. authResults 中任一定位权限授予（至少模糊位置为 0）就继续定位；只有精确权限缺失时按降级精度处理，两项都拒绝才走失败提示。
-2. Android 的 ACCESS_FINE_LOCATION + ACCESS_COARSE_LOCATION 映射为 LOCATION + APPROXIMATELY_LOCATION：需要精确定位时，module.json5 的 requestPermissions 与 requestPermissionsFromUser 的列表都同时包含两项，LOCATION 不单独申请；调用定位 API 前查 d.ts 的 @permission 注解，不以通用常用权限表代替。
+2. Android 的 ACCESS_FINE_LOCATION + ACCESS_COARSE_LOCATION 映射为 LOCATION + APPROXIMATELY_LOCATION：module.json5 中声明两项；首次动态请求精确定位时，requestPermissionsFromUser 的列表同时包含两项，首次申请定位组时不单独申请 LOCATION；已获模糊权限后需要精确位置时，可按当前 SDK 允许的增量路径申请 LOCATION。调用定位 API 前查 d.ts 的 @permission 注解，不以通用常用权限表代替。
 
 来源支持：2 张卡 · 2 次迁移 · 2 个应用
 

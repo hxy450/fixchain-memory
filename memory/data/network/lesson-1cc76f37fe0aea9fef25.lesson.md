@@ -1,6 +1,6 @@
-# 按源端 Retrofit 实际选中的重载确定请求体编码：post(url, Map)/@FieldMap 用表单，只有 @Body 用 JSON
+# 按源端 Retrofit 实际选中的重载确定请求体编码：本项目 post(url, Map)/@FieldMap 用表单，@Body 另核实际转换器与 Content-Type
 
-ID：`lesson-1cc76f37fe0aea9fef25` · 版本：1
+ID：`lesson-1cc76f37fe0aea9fef25` · 版本：2
 
 [本主题](index.md)
 
@@ -22,7 +22,7 @@ Android 通过 Retrofit 通用 post(url, Map) 包装或 @FormUrlEncoded + @Field
 
 ## 做法
 
-1. 为每个 POST 端点找到源端调用点与它选中的 ApiService 重载：@FormUrlEncoded/@FieldMap/@Field 用 formPost + formBody；@Body 才用 JSON。在端点目录与 API 清单里为端点记录 Content-Type，不只列参数名。
+1. 为每个 POST 端点找到源端调用点与它选中的 ApiService 重载：本项目已核实的 @FormUrlEncoded/@FieldMap/@Field 重载用 formPost + formBody；遇到 @Body 时继续核源端实际转换器、请求体类型和 Content-Type，确认该路径编码为 JSON 后才用 jsonBody，不仅凭 @Body 注解名决定。在端点目录与 API 清单里为端点记录 Content-Type，不只列参数名。
 2. 搬迁或复用既有端点与 jsonBody 调用时，把它们当作未核验的现状，按上一条核对编码，不一致就在交接里列为待修。
 3. 发现一处表单被迁成 JSON 后，按模式检索全仓 jsonBody/默认 post 调用及对应源端 post(url, Map) 调用点，覆盖所有适配器和端点目录，不只修当前模块。
 

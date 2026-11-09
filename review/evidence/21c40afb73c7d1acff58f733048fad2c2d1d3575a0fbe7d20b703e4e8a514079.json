@@ -1,0 +1,176 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-4e7e0e12d7b6b08c08b0",
+  "created_at": "2026-10-14T15:23:09.649185+00:00",
+  "migration_key": "pf2048-glm531-3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f",
+  "title": "统计卡把 LinearLayout 的 weightSum/wrap+weight 归一化成 layoutWeight，且宿主容器与卡片重复施加 fragment 根内边距",
+  "when": "界面实现阶段，把 Android LinearLayout 的 layout_weight/weightSum 分配翻译成 ArkUI 尺寸时；以及把 fragment 拆成宿主页容器与共享组件、接线时确定根内边距归属时",
+  "description": "源布局的 LinearLayout 声明了 weightSum 且与子权重之和不等（如根 weightSum=10 而子权重 4/1/9、右列 weightSum=6 而 8 个 wrap_content 子项各权重 1、下块 weightSum=9 而行权重合计 4.5），或 wrap_content 子项带权重、固有尺寸远大于权重行可用空间的图片；目标用共享组件承载 fragment 内容，宿主 TabContent 容器另写 padding。",
+  "summary": "StatsCard 写者（Base-6 公共组件）写前完整读到 fragment_stats1.xml：根 LinearLayout 四边 padding=activity 边距、weightSum=10 而子块权重 4/1/9（合计 14，第三块按 9/10 份额溢出被裁）；\n上块右列 weightSum=6、8 个 wrap_content TextView 各权重 1（前 6 个分到余量、后 2 个份额耗尽）；下块 weightSum=9、行权重 1/1/0.5(5dp)/1/1；\n方向格为 95dp 标签权重 1 + wrap_content 箭头权重 100、右边距 35dp（agent-a0d3c9957d8d7eea6.jsonl:L64-L65）。这些输入已足以确定布局。\n该写者的 Write 却在文件头注明“weightSum 10/14 混用按相对比例复现”，用 layoutWeight(4)/(1)/(9) 归一化；右列 labelValuePair 让 8 个 Text 各 layoutWeight(1) 平分；\n下块 4 行各 layoutWeight(1) 加固定 5vp 间隔，丢掉 weightSum=9 的留白；箭头写成 24×24 Contain（同转录 L226-L228）。\n之后它查到箭头 272×455px 的 mdpi 固有尺寸，在 L305 明确“不去复刻 Android 测量细节”，只补注释保留 24vp（L305-L307）。偏差位于“已读到正确的源权重语义 → 组件尺寸分配”这一环。\n规格 page_0006 与 P-S6-003 移交也只写“weight 4 / weight 1 / weight 9”，未记录 weightSum 与子权重不一致；但写者直接读了源 XML 并注意到不一致，因此本链停在写者。\n另一项双重内边距：页面转换者读到 fragment 根 padding 与无 padding 的 ViewPager（agent-afea60fb5e56686d7.jsonl:L45-L50），却把 fragment 根 padding（左右上 10、下 10+避让）写在 StatsPage 的 TabContent 宿主容器上（L160、L165）；\n同时把 fragment 内容交给 Base-6 的共享 StatsCard，其 P-S6-003 移交没写明根 padding 已由宿主承担。StatsCard 按源在根上再加了一次。\nSlice 6 接线者读到了 StatsPage 的宿主 padding 与 StatsCard 的根 padding（agent-a2922d10f59b90bc4.jsonl:L40-L41、L53-L54），仍把 StatsCard 放进带 padding 的容器写入 StatsPage（L175），四边各叠成 20。\n返修 C42 按卡片实测尺寸复刻 LinearLayout 算法绝对定位（rightColumnLayout 份额耗尽、weightSum 溢出、方向格 94.1dp 标签与 FIT_CENTER 箭头盒），\n并把 StatsPage 容器改为只保留底部避让、根 padding 由 StatsCard 承担（repair/5d9e6180-4c80-4423-a00d-ca7069d9da73.jsonl:L2156-L2157、L2408-L2409、L2426-L2427）。\n",
+  "recommendations": [
+    "界面实现时，LinearLayout 的 weightSum 与子权重之和不等时不要用 layoutWeight 归一化（layoutWeight 按权重和比例分配，等于忽略 weightSum）。应按 LinearLayout 算法计算：余量 = 可用尺寸 − 各子项自然尺寸之和，子项依次分得 余量×w/剩余weightSum；份额分完的子项只保留自然尺寸，权重和超过 weightSum 的末块按剩余空间裁切。可按容器实测尺寸算出位置后绝对定位，或用占位补足 weightSum 余下的份额。",
+    "wrap_content 子项带权重时，先测自然尺寸，再按权重分余量。图片固有尺寸超过权重行能给的空间时，按父级给出的上限夹紧盒子后 FIT_CENTER 等比缩小，不填 24vp 这类经验值。写完后抽取行中心、分隔线等 2–3 个位置，与安卓截图的 dp 值对比。",
+    "页面转换时，若把 fragment 内容交给共享组件，就在移交项写明 fragment 根 LinearLayout 的 padding 和背景由宿主还是组件承担，只能由一方实现。接线时对照宿主容器与组件根的 padding（例如 grep activity_horizontal_margin），发现同一来源的边距叠加就删去宿主一侧。",
+    "规格提取时，权重布局要同时写 weightSum 与子权重之和，例如“根 weightSum=10，子权重 4/1/9 合计 14，第三块溢出被裁；右列 weightSum=6 共 8 项，后 2 项份额为 0”，不能只列各子项权重。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-pf2048-glm5.31/entry/src/main/ets/components/common/StatsCard.ets",
+        "since": "2026-10-14T02:47:19.609Z",
+        "at": "2026-10-14T13:11:05.496Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/privacy-friendly-2048-SecUSo-4ee3cf3/app/src/main/res/layout/fragment_stats1.xml",
+          "at": "2026-10-13T20:55:42.086Z",
+          "reason": "正常输入：Base-6 写者 Read 回执给出完整布局，包括根 weightSum=10 与子权重 4/1/9、右列 weightSum=6 与 8 个 wrap_content 权重 1 的 TextView、下块 weightSum=9 与行权重 1/1/0.5/1/1、方向格 95dp 标签权重 1 + wrap_content 箭头权重 100（agent-a0d3c9957d8d7eea6.jsonl:L64-L65）。足以确定各块尺寸分配。"
+        },
+        {
+          "key": "agent-a0d3c9957d8d7eea6.jsonl",
+          "at": "2026-10-13T21:16:10.013Z",
+          "reason": "已读到上述源权重，Write StatsCard 时却注明“weightSum 10/14 混用按相对比例复现”，写成 layoutWeight 4:1:9；右列 8 个 Text 各 layoutWeight(1) 平分，下块 4 行平分并配固定 5vp 间隔，箭头写成 24×24 Contain（同转录 L226-L228）。后来查到箭头 272×455 后仍保留 24vp（L305-L307）。权重语义在此丢失。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-pf2048-glm5.31/entry/src/main/ets/pages/StatsPage.ets",
+        "since": "2026-10-14T02:47:19.609Z",
+        "at": "2026-10-14T13:11:05.496Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/privacy-friendly-2048-SecUSo-4ee3cf3/app/src/main/res/layout/activity_stats.xml",
+          "at": "2026-10-13T20:44:02.077Z",
+          "reason": "正常输入：页面转换者 Read 回执显示承载 fragment 的 ViewPager 没有 padding，页面层不加内边距（agent-afea60fb5e56686d7.jsonl:L45-L46）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/privacy-friendly-2048-SecUSo-4ee3cf3/app/src/main/res/layout/fragment_stats1.xml",
+          "at": "2026-10-13T20:44:05.219Z",
+          "reason": "正常输入：页面转换者 Read 回执显示四边 padding 写在 fragment 根 LinearLayout 上，属于 fragment 本身（agent-afea60fb5e56686d7.jsonl:L49-L50）。"
+        },
+        {
+          "key": "agent-afea60fb5e56686d7.jsonl",
+          "at": "2026-10-13T21:02:54.392Z",
+          "reason": "把 fragment 内容留给 Base-6 共享 StatsCard（statsCardSlot / P-S6-003），却把 fragment 根 padding（左右上 activity 边距、下 windowBottomPadding+10）写在 StatsPage 的 TabContent 宿主容器上（思考见 L90、L160，写入见 L165）。P-S6-003 移交未说明根 padding 已由宿主承担（L188）。返修删掉的正是这段宿主 padding。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-pf2048-glm5.31/entry/src/main/ets/components/common/StatsCard.ets",
+          "at": "2026-10-13T22:14:05.033Z",
+          "reason": "接线前输入：Slice 6 接线者 Read 回执显示 StatsCard 根 Column 已有四边 activity_horizontal/vertical_margin padding，即 fragment 根内边距已在组件内实现（agent-a2922d10f59b90bc4.jsonl:L53-L54）。"
+        },
+        {
+          "key": "agent-a2922d10f59b90bc4.jsonl",
+          "at": "2026-10-13T22:34:40.742Z",
+          "reason": "同时读到 StatsPage 宿主 padding（L40-L41）与 StatsCard 根 padding（L53-L54），Write StatsPage 时仍把 StatsCard 填进带 padding 的 TabContent 容器（L175）。思考中没有核对两处边距，四边内边距由此叠加成两份。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-4e7e0e12d7b6b08c08b0",
+  "metadata": {
+    "migration": {
+      "id": "pf2048-glm531-3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f",
+      "project": "Privacy Friendly 2048"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.296",
+        "2.1.299"
+      ]
+    },
+    "source_set_id": "sources-1066f74383c81d5a2cd9",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-pf2048-glm5.31",
+        "at": "2026-10-13T20:25:53.379Z",
+        "ref": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a46a0c49af597d7c3.jsonl:L105",
+        "request_ref": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a46a0c49af597d7c3.jsonl:L104",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-pf2048-glm5.31",
+        "at": "2026-10-13T20:25:53.379Z",
+        "ref": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a46a0c49af597d7c3.jsonl:L105",
+        "request_ref": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a46a0c49af597d7c3.jsonl:L104",
+        "phase": "generation"
+      },
+      {
+        "name": "toolchain.gradle",
+        "value": "8.5",
+        "basis": "configuration",
+        "artifact": "gradle-wrapper.properties",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-pf2048-glm5.31",
+        "at": "2026-10-14T07:57:12.812Z",
+        "ref": "repair/5d9e6180-4c80-4423-a00d-ca7069d9da73.jsonl:L70",
+        "request_ref": "repair/5d9e6180-4c80-4423-a00d-ca7069d9da73.jsonl:L69",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "c16c307d-1222-4fb3-bc92-f319ab51b983"
+      ]
+    }
+  },
+  "revision": "01e35fad86da84ee72ab8dae4e42ffdfe63b5ab1b816e24b5614e9d185c42115"
+}

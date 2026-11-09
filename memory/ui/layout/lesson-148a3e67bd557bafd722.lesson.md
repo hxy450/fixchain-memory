@@ -1,6 +1,6 @@
-# 源 manifest 未声明 android:supportsRtl 时布局方向恒为 LTR：有顺序或对齐语义的容器逐个显式 Direction.Ltr
+# 源 manifest 未声明 supportsRtl 时保留 LTR 契约：有顺序的 Row 显式 Direction.Ltr，Column 起始对齐另按 SDK 核验
 
-ID：`lesson-148a3e67bd557bafd722` · 版本：1
+ID：`lesson-148a3e67bd557bafd722` · 版本：2
 
 [本主题](index.md)
 
@@ -22,7 +22,7 @@ ArkUI 组件默认 Direction.Auto，跟随系统语言；来源实测子组件�
 
 ## 做法
 
-1. 规格把“布局方向恒 LTR”写成目标契约；实现时在每个有顺序或对齐语义的容器（按钮条 Row、alignItems(Start) 的 Column、对话框面板）上显式 .direction(Direction.Ltr)，不只设在最外层。
+1. 规格保留源 LTR 契约；有顺序语义的 Row 等受支持容器逐个写 .direction(Direction.Ltr)，不只设最外层。当前官方说明 direction 在 Column 上不生效，Column 的交叉轴起始对齐不能靠补此属性证明正确，应按目标 SDK 的有效对齐方式核验 RTL 下实际位置。
 
 ## 可选检查
 

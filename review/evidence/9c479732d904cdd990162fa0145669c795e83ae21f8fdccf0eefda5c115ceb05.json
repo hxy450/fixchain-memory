@@ -1,0 +1,210 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-e00d2f72aa6dfc37826b",
+  "created_at": "2026-10-15T11:46:42.625896+00:00",
+  "migration_key": "bubbleshooter-glm531-215b442f-adc8-42c4-a2cd-a215e38988c9",
+  "title": "源端“按密度解码、再最近邻预缩放、1:1 绘制”的位图，规格写成绘制期平滑缩放",
+  "when": "规格提取阶段，把源端位图的解码、预缩放和绘制方式翻译成目标画布的绘制契约时；渲染实现阶段按这份契约装载并绘制位图时",
+  "description": "源端自绘 View 用 BitmapFactory.decodeResource 解码只放在单一密度目录（如 drawable-ldpi）里的位图，再用 Bitmap.createScaledBitmap(raw, w, h, filter=false) 预缩放到运行时算出的尺寸，onDraw 里 drawBitmap(bmp, x, y, null) 原尺寸绘制；目标在 ArkUI Canvas 上用 drawImage 移植。",
+  "summary": "规格作者（生成主会话，a2h-spec）写规格前读过 MainGame.java（215b442f-adc8-42c4-a2cd-a215e38988c9.jsonl:L71-L72）。\n源码里位图分三步处理：构造器先 initGame(ROWS) 再 resizeBitmaps()；resizeBitmaps 用 decodeResource 解码 5 色球，\n再用 createScaledBitmap(rawBubbles[i], DIAM, DIAM, false) 预缩放；onDraw 用 drawBitmap(bubbles[..], x, y, null) 原尺寸绘制。\nL47-L48 的资源清单还显示 5 张球图只放在 res/drawable-ldpi，规格作者自己在 ui-manifest 里也记下了“仅 ldpi 单桶”（L232）。\n有了这些，足以确定两点：decodeResource 会按设备密度把 ldpi 原图放大（带滤波），filter=false 是最近邻采样。\n规格却把这条管线压成了一次绘制期缩放。page_0003（L261）、feature-base（L327）和 F001 的实现映射行（L374）都写成\n“decodeImage + drawImage 指定 w/h（或离屏预缩放缓存）”，F001 的渲染契约（L441）又写明\n“5 色球源图 decodeImage 后按 DIAM×DIAM 绘制（等价 createScaledBitmap(raw, DIAM, DIAM, false)，非滤波标志 false→不启用高质量滤波的行为等价为普通缩放）”。\n规格里没有密度解码这一步。filter=false 被当成“普通缩放”，可 ArkUI 画布的 imageSmoothingEnabled 默认为 true，绘制期缩放是平滑插值。\n之后主会话在 L648 复核过 ldpi 放大的问题，结论是“Android also scaled ldpi bitmaps up (blurry) ✓ same”，漏掉了源端最后一步是最近邻缩小、成像带锯齿。\nSlice1 写者读到了这份 F001（agent-a657166dd000a47ae.jsonl:L37-L38），也读过源码里的 false（L56-L57）。\n它在思考里明确按规格办：“draw-time scaling with dw=dh=DIAM is the mapped behavior”（L135）。\nL242 写出的 GameEngine.ets 中，loadBubbles 只按原尺寸解码一次（bubblesLoaded 进程级守护），render 每帧用 drawImage(..., DIAM, DIAM) 缩放，\n注释写的是“等价实现：原图 decode 一次 + 每帧 drawImage 指定 DIAM×DIAM 绘制期缩放（spec 实现映射行）”。\nMainGameView 的 boot 序列在 initGame 之前就调用 loadBubbles（L246 写入，L272 移到正确路径），这个顺序之所以成立，是因为位图不依赖 DIAM。\n返修 C21 用放大对比发现鸿蒙端泡泡是 75px 原图平滑放大到 132px，安卓端则有锯齿。修复新增 resizeBitmaps：\n先按 (75×dpi+60)/120 解码，再 scaleSync(..., AntiAliasingLevel.NONE) 缩到 DIAM，绘制改为 1:1，并去掉进程级守护、每个游戏页按当时的 DIAM 重做。\nMainGameView 里的调用随之改名；放到 initGame 之后的调整在更早的 C20 已经做了\n（repair/74bab117-5770-4198-a61f-f8af8748fade.jsonl:L2351、L3933-L3934、L3947-L3948、L3972-L3973）。\n主会话和写者首写前收到的经验提醒（memory-injections.json 中两人的注入）都没有涉及位图解码或缩放采样，这些经验没有参与本项偏差，不入图。\n",
+  "recommendations": [
+    "规格提取阶段翻译源端位图管线时，把每一步写成契约：解码是否按资源所在密度目录和设备密度缩放（decodeResource 对只放在单一密度目录的资源按 设备dpi/目录dpi 缩放，并带滤波）；预缩放的目标尺寸和 filter 标志（createScaledBitmap 的 filter=false 是最近邻，true 是双线性）；onDraw 是否按原尺寸绘制。不要把 filter=false 写成“普通缩放”。也不要把预缩放改写成 drawImage 带 dw/dh 的绘制期缩放而不写采样方式：ArkUI CanvasRenderingContext2D 的 imageSmoothingEnabled 默认为 true（canvas.d.ts @default true），绘制期缩放走平滑插值。",
+    "渲染实现阶段，源端是“预缩放一次、原尺寸绘制”时，目标也在 PixelMap 上预缩放：用 image.DecodingOptions.desiredSize 完成密度解码，再用 PixelMap.scaleSync(sx, sy, level) 缩到目标尺寸。filter=false 对应 image.AntiAliasingLevel.NONE（最近邻），filter=true 对应 LOW（双线性）。drawImage 不传 dw/dh。需要的数值去这些地方取：设备 dpi 用 display.getDefaultDisplaySync().densityPixels×160；目录 dpi 看源工程 res/drawable-<桶> 的目录名（ldpi 120、mdpi 160、hdpi 240、xhdpi 320、xxhdpi 480）；资源像素读源 PNG 的实际尺寸。解码尺寸按 Android 的取整写成 (int)(px×设备dpi/目录dpi+0.5)。",
+    "预缩放尺寸依赖运行时几何（例如由屏宽算出的格径）时，缩放要放在几何计算之后，并按源端的调用时机（每次构造视图实例）重做，不要用进程级的一次性守护缓存已缩放的位图。",
+    "本应用：5 色泡泡是 75×75，只在 res/drawable-ldpi（120dpi）；MainGame 构造器先 initGame(ROWS) 再 resizeBitmaps()。返修实测设备 densityPixels=3.5（560dpi），先按 (75×560+60)/120 解码到 350px，再用 AntiAliasingLevel.NONE 缩到 DIAM=132，1:1 绘制，每个游戏页按当时的 DIAM 重做。",
+    "核对方法：两端各截同一颗泡泡，用最近邻放大 4 倍并排看边缘，源端最近邻缩小应呈阶梯锯齿，平滑插值是柔边；同时核对同一行泡泡的像素间距等于 DIAM。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-bubbleshooter-glm5.31/entry/src/main/ets/engine/GameEngine.ets",
+        "since": "2026-10-15T07:01:36.043Z",
+        "at": "2026-10-15T10:37:17.179Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/bubble-shooter-ashroof7-c601d2e/src/com/bubbleshooter/MainGame.java",
+          "at": "2026-10-15T03:38:53.634Z",
+          "reason": "正常输入：主会话的 Read 回执给出构造器 initGame(ROWS) → resizeBitmaps()，resizeBitmaps 用 decodeResource 解码 5 色球，再用 createScaledBitmap(rawBubbles[i], DIAM, DIAM, false) 预缩放，onDraw 用 drawBitmap(..., null) 原尺寸绘制（215b442f-adc8-42c4-a2cd-a215e38988c9.jsonl:L71-L72）。同一会话 L47-L48 的资源清单显示 5 张球图只在 res/drawable-ldpi。这些足以确定“按密度解码、最近邻预缩放、1:1 绘制”三步。"
+        },
+        {
+          "key": "215b442f-adc8-42c4-a2cd-a215e38988c9.jsonl",
+          "at": "2026-10-15T04:03:21.672Z",
+          "reason": "规格作者读到上述源码后，在 page_0003（L261）、feature-base（L327）和 F001 实现映射行（L374）里把 createScaledBitmap 映射成“decodeImage + drawImage 指定 w/h”，又在 F001 渲染契约（L441）写“decodeImage 后按 DIAM×DIAM 绘制，非滤波标志 false→等价为普通缩放”。规格漏掉了密度解码，把最近邻预缩放改成了画布默认平滑的绘制期缩放。偏差从这里开始。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-bubbleshooter-glm5.31/spec/baseline/features/F001-game-engine.md",
+          "at": "2026-10-15T05:18:56.638Z",
+          "reason": "交付桥梁：写者读 F001 的回执里，第 56 行映射行是“image.decodeImage($r) + drawImage 指定 w/h（或离屏预缩放缓存）”，第 164 行是“位图缩放……等价为普通缩放”（agent-a657166dd000a47ae.jsonl:L37-L38）。"
+        },
+        {
+          "key": "agent-a657166dd000a47ae.jsonl",
+          "at": "2026-10-15T05:45:16.577Z",
+          "reason": "写者也读过源码里的 filter=false（L56-L57），但在思考里明确按规格办，认为绘制期缩放就是规格要的行为（L135）。L242 的 Write 让 loadBubbles 只按原尺寸解码一次（bubblesLoaded 进程级守护），render 用 drawImage(..., DIAM, DIAM) 每帧缩放，注释写明依据是“spec 实现映射行”。本链只确认规格传到了这里，不另认定写者独立失职。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-bubbleshooter-glm5.31/entry/src/main/ets/components/MainGameView.ets",
+        "since": "2026-10-15T07:01:36.043Z",
+        "at": "2026-10-15T10:37:17.179Z"
+      },
+      "summary": "MainGameView 是位图装载的调用点。写者在 L246 写出 boot 序列 measureDisplay → loadBubbles → firstDraw 复位 → initGame，\n写错了工程路径，L272 用 mv 移到正确位置，L278 又在目标文件上 Edit 过。\nloadBubbles 放在 initGame 之前，是因为按规格位图只按原尺寸解码、不依赖 DIAM；源端顺序则是 initGame(ROWS) 之后才 resizeBitmaps()。\n返修 C20 把 boot 改成同步，并把调用移到 initGame 之后（repair/74bab117-5770-4198-a61f-f8af8748fade.jsonl:L2351）；\nC21 把它改名为 resizeBitmaps，配合 GameEngine 的两步预缩放（L3933-L3934）。\n",
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/bubble-shooter-ashroof7-c601d2e/src/com/bubbleshooter/MainGame.java",
+          "at": "2026-10-15T03:38:53.634Z",
+          "reason": "正常输入：同第一张图。源码构造器先 initGame(ROWS) 再 resizeBitmaps()，预缩放以 DIAM 为目标尺寸（215b442f-adc8-42c4-a2cd-a215e38988c9.jsonl:L71-L72）。"
+        },
+        {
+          "key": "215b442f-adc8-42c4-a2cd-a215e38988c9.jsonl",
+          "at": "2026-10-15T04:03:21.672Z",
+          "reason": "同第一张图：F001 把预缩放写成“decodeImage 后按 DIAM×DIAM 绘制”的绘制期缩放（L374、L441），位图装载因此看起来与 DIAM 无关。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-bubbleshooter-glm5.31/spec/baseline/features/F001-game-engine.md",
+          "at": "2026-10-15T05:18:56.638Z",
+          "reason": "交付桥梁：写者读 F001 的回执里有上述映射行和渲染契约（agent-a657166dd000a47ae.jsonl:L37-L38）。"
+        },
+        {
+          "key": "agent-a657166dd000a47ae.jsonl",
+          "at": "2026-10-15T05:47:28.087Z",
+          "reason": "写者按规格的绘制期缩放设计，在 MainGameView 的 bootAsync 里把 loadBubbles 放在 initGame 之前调用（L246 写入，L272 移到正确路径，L278 Edit 目标文件）。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "规格作者写“非滤波标志 false→不启用高质量滤波的行为等价为普通缩放”时，没有记录它查过 Canvas 的 imageSmoothingEnabled 默认值或 Android 的 filter 语义；这句是凭记忆推断还是另有来源，转录里看不出来。本卡只确认，它读到的源码与资源清单已经足以写出正确的契约。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-e00d2f72aa6dfc37826b",
+  "metadata": {
+    "migration": {
+      "id": "bubbleshooter-glm531-215b442f-adc8-42c4-a2cd-a215e38988c9",
+      "project": "Bubble Shooter"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.300"
+      ]
+    },
+    "source_set_id": "sources-73c606e991f7899a0d19",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-bubbleshooter-glm5.31",
+        "at": "2026-10-15T04:35:29.626Z",
+        "ref": "generation/215b442f-adc8-42c4-a2cd-a215e38988c9/subagents/agent-ac02dc809a0314c48.jsonl:L42",
+        "request_ref": "generation/215b442f-adc8-42c4-a2cd-a215e38988c9/subagents/agent-ac02dc809a0314c48.jsonl:L41",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-bubbleshooter-glm5.31",
+        "at": "2026-10-15T04:35:29.626Z",
+        "ref": "generation/215b442f-adc8-42c4-a2cd-a215e38988c9/subagents/agent-ac02dc809a0314c48.jsonl:L42",
+        "request_ref": "generation/215b442f-adc8-42c4-a2cd-a215e38988c9/subagents/agent-ac02dc809a0314c48.jsonl:L41",
+        "phase": "generation"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "36",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-bubbleshooter-glm5.31",
+        "at": "2026-10-15T08:10:26.715Z",
+        "ref": "repair/74bab117-5770-4198-a61f-f8af8748fade.jsonl:L204",
+        "request_ref": "repair/74bab117-5770-4198-a61f-f8af8748fade.jsonl:L203",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "35",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-bubbleshooter-glm5.31",
+        "at": "2026-10-15T08:10:26.715Z",
+        "ref": "repair/74bab117-5770-4198-a61f-f8af8748fade.jsonl:L204",
+        "request_ref": "repair/74bab117-5770-4198-a61f-f8af8748fade.jsonl:L203",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "8",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-bubbleshooter-glm5.31",
+        "at": "2026-10-15T08:10:26.715Z",
+        "ref": "repair/74bab117-5770-4198-a61f-f8af8748fade.jsonl:L204",
+        "request_ref": "repair/74bab117-5770-4198-a61f-f8af8748fade.jsonl:L203",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "cbf73939-4b90-490a-a37c-bfc2bcc8a05e"
+      ]
+    }
+  },
+  "revision": "0526d27c110adaac3bc4a052e4357dc6fa30b1deeb0b9f4aa725056916604041"
+}

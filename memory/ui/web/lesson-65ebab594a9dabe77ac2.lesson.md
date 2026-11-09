@@ -1,6 +1,6 @@
 # WebView 排版与缩放按源端 WebSettings（未做设置时取 Android WebView 默认值）在 ArkWeb 中显式落实：HTML 声明 viewport，缩放与 JS 逐项对齐
 
-ID：`lesson-65ebab594a9dabe77ac2` · 版本：2
+ID：`lesson-65ebab594a9dabe77ac2` · 版本：3
 
 [本主题](index.md)
 
@@ -19,7 +19,7 @@ ArkWeb 无 viewport 时按桌面宽排版再整体缩小，正文字极小；规
 ## 做法
 
 1. 规格逐项写出 WebSettings 与回调触发范围的差异；无一对一属性时给出替代，如 head 注入 width=device-width, initial-scale=1 的 viewport。
-2. 每条 HTML 输出路径（含空文案兜底）都在 head 中声明 viewport。
+2. 先核源 HTML 的 viewport 与 WebSettings：本条来源为按设备宽排版、或未声明 viewport 且依赖 useWideViewPort=false 的路径，再为每条 HTML 输出（含空文案兜底）补齐对应的 device-width 视口。源已显式声明固定视口、缩放或桌面宽语义时按其原声明映射，不一律覆盖成 width=device-width, initial-scale=1。
 3. 源未修改 WebSettings 时逐项列出影响布局与交互的 Android 默认值，与 ArkWeb 默认值对照并显式设置：JS、缩放手势（Android 默认没有，写 zoomAccess(false)）、useWideViewPort/loadWithOverviewMode、文本自动缩放（overviewModeAccess、textAutosizing 按 Android 默认值显式设置）。
 4. 本地 HTML 没有 viewport meta 时，在 rawfile HTML 的 head 补 width=device-width, initial-scale=1，并保持 metaViewport 默认解析，不用 metaViewport(false) 模拟 useWideViewPort=false。
 

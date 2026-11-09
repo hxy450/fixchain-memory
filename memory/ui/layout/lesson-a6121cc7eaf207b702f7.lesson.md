@@ -1,6 +1,6 @@
 # 工具栏导航图标按实际生效者绘制：基类以 ActionBarDrawerToggle 接管同一 Toolbar 时画汉堡；否则窗口 ActionBar 页在 Manifest 有 parentActivityName 时 AppCompat 默认显示 Up，都没有且未调 setDisplayHomeAsUpEnabled(true) 才不画；菜单项按实际生效的 showAsAction 分流到图标位或溢出菜单（AppCompat 下 android:showAsAction 被忽略），可勾选项开启勾选指示
 
-ID：`lesson-a6121cc7eaf207b702f7` · 版本：4
+ID：`lesson-a6121cc7eaf207b702f7` · 版本：5
 
 [本主题](index.md)
 
@@ -19,7 +19,7 @@ ID：`lesson-a6121cc7eaf207b702f7` · 版本：4
 ## 做法
 
 1. 绘制导航图标前按顺序判定：①Activity 或其基类（常见 BaseActivity.onPostCreate）以同一 Toolbar 构造 ActionBarDrawerToggle 并 syncState() 时，导航图标是汉堡、点击开关抽屉，setDisplayHomeAsUpEnabled 不再决定图标，目标装配抽屉基座的汉堡栏；②否则看主题是否带窗口 ActionBar（NoActionBar + 自建 Toolbar 按 setSupportActionBar 之后的调用判断）；③窗口 ActionBar 页在 Manifest 声明 parentActivityName 或 PARENT_ACTIVITY meta-data 时 AppCompat 默认显示 Up，点 Up 走 onOptionsItemSelected 的 android.R.id.home 分支或回父页；④代码显式 setDisplayHomeAsUpEnabled(true/false) 时以它为准；都没有才不画，返回交给系统返回键与手势。复用模板或兄弟页标题栏前先按当前源核对。
-2. 生效的 showAsAction（AppCompat 读 app:showAsAction，框架 ActionBar 读 android:showAsAction）含 ifRoom/always 且有图标的项放工具栏图标位，仅 never/collapseActionView 的进溢出；checkable 项显式开启 selectIcon 等勾选指示。框架 ActionBar 的 withText 项只在窗口宽 ≥480dp 时在图标旁显示 TextAppearance.Holo.Widget.ActionBar.Menu 文字（12sp 粗体全大写），竖屏窄屏只显示图标。
+2. 生效的 showAsAction（AppCompat 读 app:showAsAction，框架 ActionBar 读 android:showAsAction）含 ifRoom/always 且有图标的项不能一律放工具栏图标位：先区分标志，并按源工程的可用空间与实际分配策略确定动作位和溢出；ifRoom 需核有空间的条件，放不下时按源策略进入溢出。其他标志、无图标项及组合标志的行为均回到源菜单配置与实现核对，不只按标志名称猜测；checkable 项显式开启 selectIcon 等勾选指示。框架 ActionBar 的 withText 项只在窗口宽 ≥480dp 时在图标旁显示 TextAppearance.Holo.Widget.ActionBar.Menu 文字（12sp 粗体全大写），竖屏窄屏只显示图标。
 3. Activity 基于 AppCompat 而菜单写 android:showAsAction 时，该属性被忽略，全部项进右上 ⋮ 溢出菜单，不转成标题栏图标或 NavDestination 图标菜单。
 4. 自绘框架 ActionBar 时多页共用一个标题栏组件，各页只传图标、标题、是否 Up 与动作项：显示该 Activity 或 application 的 manifest android:icon，Up 尖角与溢出按钮用平台原图（如 ic_ab_back_holo_dark_am、ic_menu_moreoverflow_normal_holo_dark），高度、背景与标题字号取平台样式及 values-land 覆盖值，随窗口尺寸切换。
 

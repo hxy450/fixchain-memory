@@ -16,13 +16,13 @@ JSON 与 XML 解析：打包资源的字段必填与空值语义，源解析器�
 - [源端访问解包后对象的字段时，先确定目标 res.data 对应哪一层类型，再逐层写取值键](lesson-dc5c370e370c2be803c1.lesson.md)
   - 时机：数据层服务实现阶段，把源端 Retrofit/Gson 响应 Bean 的字段访问路径翻译成目标端对原始 JSON 的逐键取值时；页面回调依赖服务层解析产出的 success、errorCode 等字段，准备给出“逐行一致”的复核结论时
   - 情境：源端 success 回调已把 BaseResponse&lt;T&gt; 解包成 T，业务代码写 result.data?.xxx；T 本身是含 data 字段的容器 Bean（如 {total, data:{…}}）；目标网络层把响应 data 原样返回，服务层用 getObject/getArray 按键手动取值。
-- [用 @ohos.xml 重建 SAX 开始事件时采用与回调顺序无关的组装，并自建命名空间作用域](lesson-447985a4376146f6d9f2.lesson.md)
+- [用 @ohos.xml 重建 SAX 开始事件时先核回调顺序和元素归属，再组装属性与命名空间作用域](lesson-447985a4376146f6d9f2.lesson.md)
   - 时机：实现阶段，用 XmlPullParser 的 token 与属性分离回调重建 namespace-aware 开始事件（本元素属性与命名空间 URI）时
   - 情境：源 SAX/XmlPullParser 在开始标签读取本元素属性并按 uri 加前缀分发命名空间；目标用 tokenValueCallbackFunction 与 attributeWithTagCallbackFunction 两路回调，SDK 声明未写两路回调先后，也未保证 getNamespace() 给出元素 URI。
 - [翻译源端 JSON 解析时按源解析器与取值 API 的语义定规则：org.json 的 getString 对 JSON null 返回 "null"、缺键才抛，JSONObject 构造接受的语法比 JSON.parse 宽](lesson-5034b56be6fd828164c9.lesson.md)
   - 时机：实现阶段把源端 JSON 解析函数翻成 ArkTS 手写解析器、决定各字段必填与空值处理时；把 org.json 读取导入文件的逻辑映射为 JSON.parse 并写失败验收时
   - 情境：源端用 Android org.json 的 getString 等读取打包 JSON 资源；对应 Kotlin 数据类字段声明为非空 String；目标解析器任一字段校验失败就让整页进入加载失败。也包括源端用 new JSONObject(text) 与 getJSONObject、getString 读取导入文件，规格把它写成“JSON.parse 加显式 class、纯语言构造”，失败条目只列非法 JSON、缺键与空集合。也包括源端 toRecipe、fromJson 一类函数用 getString/getInt/getJSONArray 读备份或许可数据，数据中有 "description": null 一类值；目标准备用 as string 直取、把 null 或缺键的数组读成空数组，或写成“非字符串即抛”的取值函数。
-- [自写 fromJson 从宽类型输入取值时用 typeof/instanceof 收窄：as 只是编译期断言，?? 只兜底缺失与 null](lesson-2622bc32995ac62389c3.lesson.md)
+- [自写 fromJson 按输入域验证类型：基元用 typeof，类实例才用 instanceof；as 的行为按 ArkTS 工具链核验，?? 只兜底缺失与 null](lesson-2622bc32995ac62389c3.lesson.md)
   - 时机：数据模型实现阶段，为迁移实体编写 fromJson 反序列化方法、确定字段取值与默认值时
   - 情境：ArkTS 模型的 fromJson 接收 Record&lt;string, Object&gt; 等宽类型输入，字段声明为 number/string/boolean 并带默认值；源端是强类型 data class（Int/Long/Boolean 字段），没有可照搬的序列化代码，由目标自行补写。
   - 例外：源端经 Gson 等解析器填充并容忍数字与字符串互转时，按源解析器的接受范围转换（见本主题 Gson 标量宽松转换的经验），不一律回落默认值

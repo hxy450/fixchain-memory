@@ -1,6 +1,6 @@
 # 单 Activity 壳内的 loadChildFragment 子页映射为壳内回退栈，不改成独立路由或清栈切页
 
-ID：`lesson-7bcb44f0e376ec67e5a8` · 版本：1
+ID：`lesson-7bcb44f0e376ec67e5a8` · 版本：2
 
 [本主题](index.md)
 
@@ -20,7 +20,7 @@ ID：`lesson-7bcb44f0e376ec67e5a8` · 版本：1
 
 1. 壳状态维护子回退栈（入栈记录上一页 tag 与参数），清栈入口清空它；返回键与上箭头先弹子栈，再走默认页、抽屉、退出分支；navigationTag 非空时覆盖底栏选中。
 2. 页面元数据为子组件且源经 loadChildFragment 打开的页，转换为以 @Param 接参数的可嵌入组件，由壳内容区按 tag 承载，不以已存在页面的先例覆盖。
-3. 调用点按源 API 区分 loadFragment（清栈并持久化）与 loadChildFragment（压栈）；映射启动器时核对构造器写入的默认 extras；登记提示与规格冲突时以规格为准。
+3. 调用点按源 API 区分 loadFragment（清栈并持久化）与 loadChildFragment（压栈）；映射启动器时核对构造器写入的默认 extras；登记提示与规格冲突时回到源调用链核对；规格已与源码行为一致时按规格修正登记，否则记录规格分歧，不把规格优先外推为可覆盖源端语义。
 
 来源支持：1 张卡 · 1 次迁移 · 1 个应用
 

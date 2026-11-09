@@ -27,6 +27,6 @@
 - [翻译含布尔组合的条件表达式时保留括号并列真值表](lesson-381ebc5899e92cbd23a2.lesson.md)
   - 时机：实现阶段，翻译含异或、与或组合的三元或条件表达式（如气泡箭头位置、方向相关分支）时
   - 情境：源表达式形如 a + ((x ^ y) ? 0 : b)，转述时容易丢掉内层括号或取反分支。
-- [翻译源端条件里的 == null / != null 前先核变量的声明类型与来源：非空类型上的空判断是恒定死分支，按“从不触发”迁移，不译成“未初始化/首启”触发或三态偏好](lesson-8c18bb22a8ecfe8c7f8a.lesson.md)
+- [翻译 == null / != null 前先核变量类型：化简比较子项后按完整 guard 求值，不把非空条件误读成首启或三态偏好](lesson-8c18bb22a8ecfe8c7f8a.lesson.md)
   - 时机：规格提取阶段把源端显示条件、弹窗或权限请求的触发条件写成页面契约与偏好默认值时；实现阶段按规格新增依赖该条件的弹窗、权限请求或协调服务时
   - 情境：Compose 页面用 collectAsState(initial = false) 收集 Flow&lt;Boolean&gt;（DataStore getter 映射为 preferences\[KEY\] == true 或带 ?: 默认值），显示条件里却把该状态与 null 比较；规格可能同时写着“该偏好 Boolean、默认 false”与“== null 表示从未写入/首次进入”。

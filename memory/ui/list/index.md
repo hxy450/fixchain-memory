@@ -22,7 +22,7 @@
 - [为某个宿主改写共享组件时加默认保持原行为的覆盖入参，并检索全部宿主调用点](lesson-67e0a326dea085296fb9.lesson.md)
   - 时机：列表页与弹层接线阶段，源宿主或子类 adapter 改配共享行内的按钮或显隐，或要给多页共享的组件新增宿主须接的事件时
   - 情境：子类用另一动作按钮配置改写次级按钮（图标、文案、点击一起换），宿主按状态把按钮设为 GONE，或为某个宿主给共享面板新增回调事件；目标行组件或面板被多页共享，写者常受写盘边界限制。
-- [会换位或增删的列表，位置相关值（首尾标记、序号、上移/下移可用态、首尾圆角）在渲染时按当前位置计算，不取 ForEach/Repeat 生成时的闭包 index](lesson-09a0bceae55d05616ecc.lesson.md)
+- [会换位或增删的列表，位置相关值按当前位置更新：ForEach 不固化生成时 index，Repeat 保持 RepeatItem 的响应式传参链](lesson-09a0bceae55d05616ecc.lesson.md)
   - 时机：界面实现阶段，把 Compose itemsIndexed 一类按当前 index 计算行参数的列表迁成 ForEach/Repeat，且列表会换位（上移、下移、拖动）、插入或删除条目时
   - 情境：源端每次重组把当前 index 传给条目（isFirst/isLast、序号、首尾行形状、移动按钮可用态）；目标 ForEach/Repeat 以实例 id 或内容为键（不含位置），在 itemGenerator 中用闭包 index 计算这些值并作为子组件的构造参数。
 - [侧栏分类页的右侧做成承载全部一级分组的 List + Scroller：点击 scrollToIndex、onScrollIndex 回写，并迁移程序滚动保护](lesson-7723af3766fb843a2577.lesson.md)

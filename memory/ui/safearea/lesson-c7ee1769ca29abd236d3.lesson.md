@@ -1,6 +1,6 @@
 # 全屏窗口下先确认路由页的内容原点：已在状态栏 inset 之下就只补源端顶距的剩余部分，背景需延伸到状态栏时在背景节点自身 expandSafeArea
 
-ID：`lesson-c7ee1769ca29abd236d3` · 版本：1
+ID：`lesson-c7ee1769ca29abd236d3` · 版本：3
 
 [本主题](index.md)
 
@@ -19,8 +19,8 @@ Android 页面在透明状态栏下用自屏幕顶部起算的固定顶距（lay
 ## 做法
 
 1. 定顶部布局前先确认内容原点：用 dumpLayout 看页面根节点 bounds 是否从状态栏下沿开始，不凭宿主的 expandSafeArea 推断子页面已铺满窗口。
-2. 迁移透明状态栏页面的固定顶距时二选一：页面已在 inset 之下就用“源端顶距 − 已消费的 inset”；页面根先 expandSafeArea(TOP) 才整额消费 windowTopPadding；inset 只计一次。
-3. 背景、色块或工具栏需要延伸到状态栏后面时，在该背景节点自身加 expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP])，文字内容再按 windowTopPadding 避让。
+2. 迁移透明状态栏页面的固定顶距时二选一：页面已在 inset 之下就用“源端顶距 − 已消费的 inset”；需要扩绘时先按节点职责设置 expandSafeArea(TOP)，改后重新核文字/布局原点与已消费 inset；expandSafeArea 不改变布局，仅实际尚未消费时才整额补 windowTopPadding，inset 只计一次。
+3. 背景、色块或工具栏需要延伸到状态栏后面时，在该背景节点自身加 expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP])，文字内容仍按第 2 步核对实际布局原点与已消费的 inset，只补尚未消费的避让部分，不因背景 expandSafeArea 再整额叠加 windowTopPadding。
 4. 新增或重写路由页前先读同工程已修复的兄弟页如何处理 inset 并沿用其结论；要反着做须写明依据。
 
 ## 可选检查

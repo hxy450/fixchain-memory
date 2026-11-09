@@ -1,0 +1,283 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-5b4026f2fabf83812ff2",
+  "created_at": "2026-10-15T11:28:27.871422+00:00",
+  "migration_key": "bubbleshooter-glm531-215b442f-adc8-42c4-a2cd-a215e38988c9",
+  "title": "把源端每局新建、旧实例不停的游戏循环线程收敛成全局单一帧循环句柄",
+  "when": "规格提取阶段，把源端 Thread 游戏循环映射为目标帧调度结构，并核对结算弹窗个数与叠放时",
+  "description": "源端每次开局或重开都 new 一个循环线程（如 initGame 里 new GameLoop），启动与停止只经由保存最新实例的字段（surfaceCreated/surfaceDestroyed），结算弹窗由循环线程 post 到 UI，弹窗按钮直接重开而不停旧循环；目标准备用 setInterval/displaySync 等帧调度实现。",
+  "summary": "规格作者（生成主会话）写前实际读到了 MainGame.java 与 GameLoop.java 全文（主转录 L71-L74）：initGame 第 79 行每局\nmainLoopThread = new GameLoop(this)；surfaceCreated/surfaceDestroyed 只操作 mainLoopThread（MainGame.java:180-200）；\nloseGame 先 surfaceDestroyed 停最新循环再弹 Lost，Retry 为 initGame(ROWS)+surfaceCreated；winGame 的 Next Level 为\ninitGame(ROWS+1)+surfaceCreated；run() 判负后每帧 post(loseGame)、出循环后无条件 post(winGame)。由此可推出：判负后\nLost 留在 Won 下面，点 Next Level 起新循环 B，再点仍在的 Lost 的 Retry 起循环 C，B 不会被停，两循环并存。这些输入已足够。\n首写前注入（主转录 L178）中，lesson-27d9e16a 的提醒是“GameLoop 线程→单一帧循环句柄（setInterval/postFrameCallback）；\nisRunning 停止、页面隐藏销毁停帧并丢弃迟到回调”，主会话把它列为要落实的第 6 条（L189）；lesson-14411595 要求“按可观察次数\n核对（弹窗个数…）…循环退出条件都按源码”，主会话据此只沿单个循环的退出路径数弹窗（L336），得出 Lost≥1 再叠 Won。\n输出因此偏离：page_0003 规格（L261）、feature-base（L327）、F001（L374）把 GameLoop(Thread) 映射为单一帧循环句柄，\nstartLoop/stopLoop 对应 surfaceCreated/surfaceDestroyed，GamePage 只设 wonVisible/lostVisible 两个状态；races 节（L441）\n写“目标并发模型：单一帧循环句柄”。主会话在 L552 思考里断定旧线程“isRunning 已置 false，会自行结束”，随后在 F001 写入\n“每局新实例不释放…帧循环句柄停止即清，不可观察差异（音频照常播放），行为等价”（L606）。D-004（L843）把 Lost 定为 1 个；\nD-010（L979）把“单帧循环句柄+模块级静态共享态”定为已批准架构，依据栏写明团队经验 lesson-27d9e16a。没有任何决策处理多循环并存。\n单例结构就在这一规格阶段引入。参考文档（分析器）只把“每局 new SoundPool 不 release”记为资源累积，没有写旧循环继续运行。\nSlice1 写者 agent-a657166dd000a47ae 读了 F001（L37-L38）、台账（L45-L46）和源码（L56-L59），自己写的 source-notes（L315）\n也记下了“末尾 new GameLoop(this)”，但派工红线第 3 条要求“setInterval(16ms) 单句柄”。写者在 GameEngine.ets（L242）写了\n静态 loopHandle/loopToken，startLoop 先 clearInterval 旧句柄；MainGameView（L246 先写到缺 .31 的同名目录，L272 mv 到目标，\nL278 再 Edit）的 onReady 调 startLoop、aboutToDisappear 调 stopLoop；GamePage（L325）用两个布尔旗，Next Level/Retry 调\ninitGame+startLoop 替换旧循环。写者首写前的提醒“lost+won 保持两旗两层弹窗”（写者转录 L217）进一步固定了两旗结构。\n这条链只确认规格的传递，不另认定写者有独立失职。\n返修实测：安卓普通判负弹 1~2 个 Lost 再叠 Won；Next Level 后再 Retry 时两循环并存，Lost 无限叠加（600+）。返修在检查点 C41\n新增 GameLoop.ets（实例字段、start 只能调一次、join/exit 后 post winGame、共享 60fps vsync 轮转），GameEngine 改为 MainGame\n的对应物（initGame 先 new GameLoop，surfaceCreated/Destroyed 照搬），GamePage 改为按出现顺序叠放的对话框列表，\nMainGameView 改为画布首次就绪即 surfaceCreated（返修转录 L2898-L3088、L3728）。D-004 的 Lost=1 在安卓实测区间内，保留不动。\n",
+  "recommendations": [
+    "修订 lesson-27d9e16a099c2fb437eb（版本 1）：补上适用边界。本条只管 View.invalidate 式的重绘请求；如果源端循环跑在 Thread（或自建 Runnable 循环）对象上，并且每轮初始化都 new 一个实例，就不适用：既不能收敛成全局唯一句柄，也不能在启动新循环时清掉旧句柄。机制：停止只经由保存最新实例的字段（如 surfaceDestroyed 里 field.isRunning=false 再 join），回调再次 init+start 时旧实例仍在跑，同时存活的循环数本身就是可观察行为，弹窗、音效、下压次数会随之倍增。判断信号：初始化或重开方法里 new XxxThread(...) 赋给同一字段，start/stop 只经该字段，对话框按钮直接 init+start、不先停旧实例。去哪里查：源端 Thread 子类的构造调用点、该字段的全部赋值、SurfaceHolder.Callback 的 surfaceCreated/surfaceDestroyed 方法体、对话框按钮 onClick。标题前半句写明“源端为 invalidate 重绘时”；做法第一步改为：先数源端循环实例的创建与停止路径，每个实例映射为一个目标循环对象（实例字段＋各自的帧订阅），停止只作用于最新引用。",
+    "修订 lesson-14411595fd9ac1e17683（版本 3）：补前提。可观察次数由同时存活的循环、线程或定时器实例数决定。按次数核对前，先列出各操作序列下有几个实例在跑、各自向 UI 投递什么，例如重开后仍留在下面的对话框再点重开、取消后再进入；次数＝每个实例的投递次数×存活实例数。只有旧实例已经停止时，“每轮 new 实例不释放”才是不可观察的资源泄漏；旧实例还在跑循环时，不能按“不可观察差异”收敛成单实例。判断信号：初始化或重开路径 new 线程或循环对象，stop/join 只作用于最新引用，重开不关闭已有对话框。去哪里查：源端 Thread/Runnable 子类的构造调用点、保存实例的字段及其停止方法体、各对话框按钮回调。把“先数存活实例，再数弹窗与副作用”放进标题前半句或做法第一步。",
+    "规格提取阶段（本应用）：MainGame.java:79 每局 new GameLoop；MainGame.java:180-200 的 surfaceCreated/surfaceDestroyed 只操作 mainLoopThread；GameLoop.java:61-81 的 loseGame 先停最新循环再弹 Lost。F001 应把 GameLoop 写成实例类：isRunning/speedX/speedY/q/soundPool/lost 为实例字段，Downperiod/neighbor 数组/visited 为静态共享。GameEngine.surfaceCreated/surfaceDestroyed 只作用于最新实例，post 走宏任务，结算对话框按出现顺序进列表。再为“Next Level 后再点底下 Lost 的 Retry”补一条验收：两循环并存，Lost 持续叠加。D-004 的 Lost=1 只约束单循环判负。",
+    "切片实现阶段：写前读到的源码显示每轮 new 循环线程，而规格或派工要求单一句柄、并在 startLoop 里清掉旧句柄时，把这一差异写进 handback 的 decision_gaps，回报规格分歧，不直接按单句柄实现。本应用里的落点是 GameEngine.startLoop 先 clearInterval 旧句柄，以及 GamePage 用 wonVisible/lostVisible 两个布尔旗承载对话框。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-bubbleshooter-glm5.31/entry/src/main/ets/engine/GameEngine.ets",
+        "since": "2026-10-15T07:01:36.043Z",
+        "at": "2026-10-15T10:37:17.179Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/bubble-shooter-ashroof7-c601d2e/src/com/bubbleshooter/MainGame.java",
+          "at": "2026-10-15T03:38:53.634Z",
+          "reason": "正常输入：主会话 Read 回执给出 initGame 第 79 行 mainLoopThread = new GameLoop(this)，以及 surfaceCreated/surfaceDestroyed（180-200 行）只操作 mainLoopThread。足以确定源端每局一个新循环实例，停止只作用于最新实例（主转录 L71-L72）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/bubble-shooter-ashroof7-c601d2e/src/com/bubbleshooter/GameLoop.java",
+          "at": "2026-10-15T03:38:53.951Z",
+          "reason": "正常输入：Read 回执给出 GameLoop extends Thread 及其实例字段；loseGame 先 surfaceDestroyed 再弹 Lost，Retry 为 initGame(ROWS)+surfaceCreated；winGame 的 Next Level 为 initGame(ROWS+1)+surfaceCreated；run() 判负后每帧 post(loseGame)，出循环后 post(winGame)。足以推出 Next Level 后再 Retry 时两循环并存（主转录 L73-L74）。"
+        },
+        {
+          "key": "215b442f-adc8-42c4-a2cd-a215e38988c9.jsonl",
+          "at": "2026-10-15T04:20:58.835Z",
+          "reason": "已读到上述源码，却把 GameLoop(Thread) 写成单一帧循环句柄：F001 的 startLoop/stopLoop 对应 surfaceCreated/surfaceDestroyed，races 节写“单一帧循环句柄”（L374、L441）。F001 还写入“每局新实例不释放…帧循环句柄停止即清，不可观察差异”（L606）。D-010 把“单帧循环句柄+模块级静态共享态”定为已批准架构（L979-L985）。源码到规格的偏差在这里形成。首写前注入（L178）对此有影响：lesson-27d9e16a（v1）提醒“GameLoop 线程→单一帧循环句柄（setInterval/postFrameCallback）”，被主会话列为第 6 条（L189），D-010 的依据栏也引用了它。该经验正文只讲 invalidate 重绘，缺少“源端每轮 new 线程时不适用”的边界。lesson-14411595（v3）要求“按可观察次数核对（弹窗个数…）…循环退出条件”，主会话据此只沿单个循环数弹窗（L336、L843）。该经验缺少“次数取决于同时存活的循环实例数”这一前提。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-bubbleshooter-glm5.31/spec/baseline/features/F001-game-engine.md",
+          "at": "2026-10-15T05:18:56.638Z",
+          "reason": "交付桥梁：写者的 Read 回执包含单一帧循环句柄映射、startLoop/stopLoop、GamePage 的 wonVisible/lostVisible，以及“每局新实例…行为等价”备注（写者转录 L37-L38）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-bubbleshooter-glm5.31/spec/decision-ledger.md",
+          "at": "2026-10-15T05:18:59.371Z",
+          "reason": "交付桥梁：写者的 Read 回执包含 D-004（Lost 定为 1 个）和 D-010（单帧循环句柄+模块级静态共享态，approved）（写者转录 L45-L46）。"
+        },
+        {
+          "key": "agent-a657166dd000a47ae.jsonl",
+          "at": "2026-10-15T05:45:16.577Z",
+          "reason": "读到上述规格与台账后写 GameEngine.ets：静态 loopHandle/loopToken，startLoop 先 clearInterval 旧句柄再起新句柄，判负时同帧 onGameOver('lost') 再 onGameOver('won')，文件头注明“架构（D-010 approved）”（写者转录 L242-L243）。写者也读了源码（L56-L59），但派工红线第 3 条要求“setInterval(16ms) 单句柄”。本链确认规格传递，不另认定写者独立失职。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 5
+        },
+        {
+          "from": 4,
+          "to": 6
+        },
+        {
+          "from": 5,
+          "to": 6
+        },
+        {
+          "from": 6,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-bubbleshooter-glm5.31/entry/src/main/ets/pages/GamePage.ets",
+        "since": "2026-10-15T07:01:36.043Z",
+        "at": "2026-10-15T10:37:17.179Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/bubble-shooter-ashroof7-c601d2e/src/com/bubbleshooter/GameLoop.java",
+          "at": "2026-10-15T03:38:53.951Z",
+          "reason": "正常输入：Read 回执给出 winGame/loseGame 每执行一次就 show 一个 AlertDialog；Next Level 只关 Won，留下的 Lost 仍可点 Retry 再起新循环；判负后每帧 post(loseGame)（主转录 L73-L74）。"
+        },
+        {
+          "key": "215b442f-adc8-42c4-a2cd-a215e38988c9.jsonl",
+          "at": "2026-10-15T04:20:58.835Z",
+          "reason": "F001 状态管理只给 GamePage 设 wonVisible、lostVisible 两个状态。对接点写 Next Level/Retry 为 initGame+startLoop，AC23 写“两个弹窗状态复位”（L374）。D-004 把 Lost 定为 1 个（L843）。弹窗个数被固定为单循环下的两层，没有给多循环留出对话框叠加的结构。数层数的依据是注入的 lesson-14411595（v3）“按可观察次数核对（弹窗个数…）”（L178、L336），但这条经验没有提示先数存活的循环实例。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-bubbleshooter-glm5.31/spec/baseline/features/F001-game-engine.md",
+          "at": "2026-10-15T05:18:56.638Z",
+          "reason": "交付桥梁：写者的 Read 回执包含上述状态与按钮契约（写者转录 L37-L38）。"
+        },
+        {
+          "key": "agent-a657166dd000a47ae.jsonl",
+          "at": "2026-10-15T05:49:27.173Z",
+          "reason": "按规格写 GamePage：@Local wonVisible/lostVisible 两个布尔旗；onGameOver 只置旗；onNextLevel/onRetryLevel 调 initGame+startLoop，替换旧循环（写者转录 L325-L326）。写者首写前的提醒“lost+won 保持两旗两层弹窗”（写者转录 L217）也指向同一结构。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-bubbleshooter-glm5.31/entry/src/main/ets/components/MainGameView.ets",
+        "since": "2026-10-15T07:01:36.043Z",
+        "at": "2026-10-15T10:37:17.179Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/bubble-shooter-ashroof7-c601d2e/src/com/bubbleshooter/MainGame.java",
+          "at": "2026-10-15T03:38:53.634Z",
+          "reason": "正常输入：Read 回执给出 surfaceCreated 为 mainLoopThread.isRunning=true + start()，surfaceDestroyed 只停 mainLoopThread（主转录 L71-L72）。"
+        },
+        {
+          "key": "215b442f-adc8-42c4-a2cd-a215e38988c9.jsonl",
+          "at": "2026-10-15T04:20:58.835Z",
+          "reason": "F001 把 surfaceCreated/surfaceDestroyed 写成全局 startLoop/stopLoop（L374、L441），D-010 定为单一句柄（L979）。画布就绪不再对应“启动最新一个循环实例”。依据是注入的 lesson-27d9e16a（v1）提醒“GameLoop 线程→单一帧循环句柄；isRunning 停止、页面隐藏销毁停帧（对应 surfaceDestroyed join）”（L178、L189）。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-bubbleshooter-glm5.31/spec/baseline/features/F001-game-engine.md",
+          "at": "2026-10-15T05:18:56.638Z",
+          "reason": "交付桥梁：写者的 Read 回执包含 startLoop/stopLoop 对应 surfaceCreated/surfaceDestroyed 的映射（写者转录 L37-L38）。"
+        },
+        {
+          "key": "agent-a657166dd000a47ae.jsonl",
+          "at": "2026-10-15T05:47:28.087Z",
+          "reason": "L246 写出 MainGameView：Canvas onReady 调 GameEngine.startLoop，aboutToAppear 先 initGame，aboutToDisappear 调 stopLoop。该文件先落在缺 .31 的同名目录，L272 用 mv 移到目标路径，L278 再对目标做 Edit。目标文件因此绑定到全局单句柄（写者转录 L246-L279）。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "经验参与偏差的入图依据缺失：lesson-27d9e16a099c2fb437eb（v1）与 lesson-14411595fd9ac1e17683（v3）是在主会话首写前注入的，注入记录在主转录 L178（被拒 Write 的 tool_result）。按普通边提交时，检查器回执 force_eligible；改用该行作 force 证据后，检查器以 invalid_force_source 拒绝，因为索引把这行登记为一次失败的写入操作（见 draft-1.yaml、draft-2.yaml 及 tmp/pack-1.out、tmp/pack-2.out）。因此经验节点没有画进图，两条经验的参与只写在主会话节点的 reason 与 summary 中，判断依据是主转录 L178、L189、L336、L843、L979 的原文。"
+  ],
+  "unresolved_targets": [
+    {
+      "key": "C:/Users/hongy/projects/transfer-app-bubbleshooter-glm5.31/entry/src/main/ets/engine/GameLoop.ets",
+      "reason": "返修新建的文件（返修转录 L2898-L2905），生成期没有写入。它承接的 GameLoop 实例结构在生成期被并入 GameEngine 的全局单例，成因见 GameEngine 图；这里没有可绑定的生成期写入链。"
+    }
+  ],
+  "job": "issue-5b4026f2fabf83812ff2",
+  "metadata": {
+    "migration": {
+      "id": "bubbleshooter-glm531-215b442f-adc8-42c4-a2cd-a215e38988c9",
+      "project": "Bubble Shooter"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.300"
+      ]
+    },
+    "source_set_id": "sources-73c606e991f7899a0d19",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-bubbleshooter-glm5.31",
+        "at": "2026-10-15T04:35:29.626Z",
+        "ref": "generation/215b442f-adc8-42c4-a2cd-a215e38988c9/subagents/agent-ac02dc809a0314c48.jsonl:L42",
+        "request_ref": "generation/215b442f-adc8-42c4-a2cd-a215e38988c9/subagents/agent-ac02dc809a0314c48.jsonl:L41",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-bubbleshooter-glm5.31",
+        "at": "2026-10-15T04:35:29.626Z",
+        "ref": "generation/215b442f-adc8-42c4-a2cd-a215e38988c9/subagents/agent-ac02dc809a0314c48.jsonl:L42",
+        "request_ref": "generation/215b442f-adc8-42c4-a2cd-a215e38988c9/subagents/agent-ac02dc809a0314c48.jsonl:L41",
+        "phase": "generation"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "36",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-bubbleshooter-glm5.31",
+        "at": "2026-10-15T08:10:26.715Z",
+        "ref": "repair/74bab117-5770-4198-a61f-f8af8748fade.jsonl:L204",
+        "request_ref": "repair/74bab117-5770-4198-a61f-f8af8748fade.jsonl:L203",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "35",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-bubbleshooter-glm5.31",
+        "at": "2026-10-15T08:10:26.715Z",
+        "ref": "repair/74bab117-5770-4198-a61f-f8af8748fade.jsonl:L204",
+        "request_ref": "repair/74bab117-5770-4198-a61f-f8af8748fade.jsonl:L203",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "8",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-bubbleshooter-glm5.31",
+        "at": "2026-10-15T08:10:26.715Z",
+        "ref": "repair/74bab117-5770-4198-a61f-f8af8748fade.jsonl:L204",
+        "request_ref": "repair/74bab117-5770-4198-a61f-f8af8748fade.jsonl:L203",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "cbf73939-4b90-490a-a37c-bfc2bcc8a05e"
+      ]
+    }
+  },
+  "revision": "43e98074974b2d60bab047b15264b217ca9d4855b956901208c3897b7e047c75"
+}

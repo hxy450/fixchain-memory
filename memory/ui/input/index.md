@@ -15,10 +15,10 @@
 - [Compose Switch 的 thumbContent（如选中时的勾选图标）等显式子内容，在目标原生开关没有对应参数时自绘承载，不假定 Toggle 会自动显示](lesson-c3a3797da8b412c31aa7.lesson.md)
   - 时机：界面实现阶段（含公共组件抽取），把 M3 Switch 等带内容槽的源控件映射为 ArkUI Toggle 等原生控件时
   - 情境：源端 Switch 传了 thumbContent = { if (checked) Icon(Icons.Rounded.Check) } 一类显式子内容；目标准备用 Toggle({ type: ToggleType.Switch })，写者认为原生开关打开时会自带勾选图标，或计划中的图标在落盘时被省略。
-- [EditText 的 inputType 键盘与候选提示和内容约束分开映射：textCapCharacters → autoCapitalizationMode、textNoSuggestions → enablePreviewText(false)、带符号数字用含 +/- 的键盘；只有源端有 digits/InputFilter 才过滤，程序写入按 maxLength 截断](lesson-0457a04c31208e1fb916.lesson.md)
+- [EditText 的 inputType 键盘与候选提示和内容约束分开映射：textCapCharacters → autoCapitalizationMode、textNoSuggestions 的候选提示与 enablePreviewText 的预上屏分别核验、带符号数字用含 +/- 的键盘；只有源端有 digits/InputFilter 才过滤，程序写入按 maxLength 截断](lesson-0457a04c31208e1fb916.lesson.md)
   - 时机：界面实现阶段（含公共输入组件设计、页面规格的控件映射与页面转换），把 Android EditText 的 inputType、digits、InputFilter、maxLength 与粘贴回填翻译成 ArkUI TextInput/TextArea 属性时
   - 情境：源布局用 textCapCharacters、textNoSuggestions、number、numberSigned 等 inputType 标志声明键盘与输入法行为，多数未配 android:digits 或 InputFilter，内容合法性在点击计算或保存时才校验；个别控件挂了 InputFilter.AllCaps；页面另有粘贴或扫描回填写入带 maxLength 的输入框。目标 ArkUI（SDK 6.x 可用 autoCapitalizationMode、enablePreviewText、InputType.Number/PhoneNumber）；映射参考只给 number → InputType.Number 与“capitalize 无直接对应，使用文本转换”。
-- [会被子页覆盖再返回的页面里，TextInput 的获焦回调先判别是否由用户触摸引起再写业务状态](lesson-4c476a62732697c56c22.lesson.md)
+- [被子页覆盖后返回的 TextInput 先识别焦点来源；仅触摸交互域可用 touch-down 守卫，不能误拦键盘主动走焦](lesson-4c476a62732697c56c22.lesson.md)
   - 时机：界面实现阶段，把 TextInput 的焦点回调接到页面业务状态，且页面常驻 NavBar 或保活容器、会被 pushPath 覆盖时
   - 情境：页面用 focused 之类的业务字段决定显示分支（如建议列表与分类）；从子页系统返回后，框架可能把焦点交还该 TextInput。
 - [把同页多组表单收集为执行请求时，按源执行方法实际读取的控件为每个模式设独立字段，不因同名复用其他表单的槽位](lesson-dee3401b34b8fab1a0fb.lesson.md)
@@ -57,6 +57,6 @@
 - [金额类输入可含小数时不用 InputType.Number：按源端解析函数选择允许小数点的输入方式](lesson-a5aeed3d4c376cd085d1.lesson.md)
   - 时机：界面实现阶段，把源端输入弹窗的 EditText 转成 ArkUI TextInput 并确定输入类型时
   - 情境：源端 EditText 未设数字 inputType（或为 numberDecimal），保存时用 toDoubleOrNull 一类解析允许小数；目标 TextInput 准备用 InputType.Number。
-- [首屏输入框按源端平台缺省获焦时，在窗口获焦后再 requestFocus：冷启动窗口激活晚于首屏查询，提前请求不会拉起输入法](lesson-9d42548ee3c075de3330.lesson.md)
+- [首屏输入框按源端平台缺省获焦时，在窗口获焦后再 requestFocus：核窗口激活与首屏查询的实际先后，不把控件 focused 当作输入法已显示](lesson-9d42548ee3c075de3330.lesson.md)
   - 时机：界面实现阶段，为首屏含输入框的页面落实冷启动初始焦点与软键盘时
   - 情境：源端靠平台缺省给第一个可获焦的 EditText 焦点并自动弹键盘（源码没有 requestFocus/showSoftInput），获焦条件随数据分支变化（如列表为空时）；目标为 NavDestination 页 + TextInput，ArkUI 不会自动给输入框焦点。

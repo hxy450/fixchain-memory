@@ -1,0 +1,189 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-6c0506e04f18067f4274",
+  "created_at": "2026-10-10T06:58:18.543277+00:00",
+  "migration_key": "game2048-glm53-d90de388-a6d4-4f09-8cd2-28dfc31c5901",
+  "title": "把源端同步装载的粗体字面写成带引号加 bold 的 Canvas font 规格，注册字体未生效且首次布局早于字体可用",
+  "when": "规格提取阶段，为源端自定义字体制定 ArkUI Canvas 的 font 串格式与字体可用时序契约时",
+  "description": "源端以 Typeface.createFromAsset 同步装载单一粗体字面的字体文件并直接 setTypeface 给 Paint，文本测宽参与布局计算；目标端用 font.registerFont 注册字族，在 Canvas 中以 ctx.font 字符串引用并用 measureText 测宽得到布局。",
+  "summary": "规格作者（生成主会话）写前实际读到 MainView.java:93-94：构造器内 Typeface.createFromAsset\n同步装载 ClearSans-Bold.ttf 并直接 paint.setTypeface，未请求额外粗体；随后 getLayout 的\ntextSize 等都在该字体下 measureText 得出（主会话 L66-L67）。这些输入足以说明：只需按注册字族名\n原样引用该字面，且字体须在首次测宽前可用。规格输出却在 feature-base.md:83 规定 Canvas 文本统一\nfont: \"bold <size>px 'ClearSans-Bold'\"，加上源端没有的 bold，并给注册字族名加了引号（主会话 L269/L276）；\nF003 实现映射把 Typeface 一行只写成\"rawfile 注册字体 → ctx.font 引用\"，风险标低、按\"字形差异 → visual 兜底\"处理\n（主会话 L306），而同一份 F003 的 AC03 已写明 textSize 依赖 measure(\"0000\")，即字体会影响布局。\n偏差出在源码到规格的映射这一环。\nSlice 3 渲染 worker 读到这两处规格（agent-a6ffdc5db8eb83d2e.jsonl:L25-L26、L102-L103、L109-L110），\n在 GameRenderer 中把 canvasFont 写成 bold ${sizePx}px '${FONT_FAMILY_CLEAR_SANS}'，注释直接引用 feature-base 格式（同转录 L173-L174）；\n构造器调用 registerClearSansFont() 后，onSizeChanged 同步 getLayout 测宽（L151-L152）；在 MainPage.recomputeGeometry 中，\nonSizeChanged 后立即读 renderer.getLayout() 同步命中几何（L202-L203）。\nBase-6 写 FontRegistry 时自己已指出字体文件本身是粗体、请求 bold 可能触发合成加粗，但因派工与 feature-base 都规定了 bold\n而保留（agent-ad622b887fb9d3ff7.jsonl:L63）；它的契约\"调用一次后即可 ctx.font 引用\"也延续了同步假设。\n之后的写者没有改这两处，生成检查点 dc92e69 中仍是原样。\n返修在设备上探针确认：新进程里带引号的写法无论是否 bold，首次布局都回落系统字体（textSize=110 / 115.8，\nClearSans 应为 105.6）；去掉引号后 6 次冷启的首次布局都得到 ClearSans 度量，其中一次仍需等约 37ms\n（repair L779、L810、L820、L831）。最终保留的修改：canvasFont 改为 `${size}px ClearSans-Bold`（无引号、normal 字重）；\n新增就绪探针（同字号下 ClearSans 与 sans-serif 测宽不同即视为就绪），未就绪按帧重试，超过 1000ms 记日志后用系统字体继续；\n布局完成后经 onLayout 回调让 MainPage 同步命中几何，并 invalidate（检查点 H2 35cf2f6，repair L855-L856）。\n",
+  "recommendations": [
+    "规格提取时，自定义字体只规定注册字族名与字号单位：Canvas font 串里字族名不加引号，不叠加源端未请求的 bold/italic；单一字面的字体文件按 normal 引用。",
+    "源端字体同步装载且参与 measureText 布局时，在规格中写明'首次测宽/布局前字体必须已可用'，不要把字体映射只归为字形风险或交给视觉兜底。",
+    "渲染实现组装 ctx.font 后，先用同字号下注册字族与 sans-serif 的 measureText 宽度对比，确认该串确实解析到注册字族；首次布局前做就绪检查（未就绪按帧重试、设超时降级），依赖布局结果的页面几何通过布局完成回调同步，不在 onSizeChanged 后立即同步读取。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-2048-glm5.3/entry/src/main/ets/view/GameRenderer.ets",
+        "since": "2026-10-09T18:47:43.289Z",
+        "at": "2026-10-10T04:36:17.957Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/2048-tpcstld-2863bbe/2048/base/src/main/java/com/tpcstld/twozerogame/MainView.java",
+          "at": "2026-10-09T15:31:50.243Z",
+          "reason": "正常输入：主会话 Read 回执包含 L93-94，构造器内 Typeface.createFromAsset 同步装载 ClearSans-Bold.ttf，并直接 setTypeface，没有额外粗体；getLayout 在该 Paint 下测宽。足以确定只需原样引用该字面，且字体须在首次测宽前可用（d90de388 主会话 L66-L67）。"
+        },
+        {
+          "key": "d90de388-a6d4-4f09-8cd2-28dfc31c5901.jsonl",
+          "at": "2026-10-09T15:42:38.417Z",
+          "reason": "读到上述源码后，Write feature-base.md:83 规定 font: \"bold <size>px 'ClearSans-Bold'\"，加入源端没有的 bold 并给字族名加引号（L269/L276）；Write F003 实现映射把 Typeface 一行写成'rawfile 注册字体 → ctx.font 引用'、风险低、字形差异由 visual 兜底，没有写首次测宽前字体须可用（L306）。源码到规格在此偏离。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-2048-glm5.3/spec/baseline/features/F003-rendering-animation.md",
+          "at": "2026-10-09T17:27:13.528Z",
+          "reason": "交付桥梁：Slice 3 worker 的 Read 回执包含 F003:51 的 Typeface 映射行（注册→引用、风险低），以及 AC03 的 measure 依赖（agent-a6ffdc5db8eb83d2e.jsonl:L25-L26）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-2048-glm5.3/spec/baseline/feature-base.md",
+          "at": "2026-10-09T17:31:36.308Z",
+          "reason": "交付桥梁：同一 worker 的 Grep 与 Read 回执都返回 feature-base.md:83 的 font: \"bold <size>px 'ClearSans-Bold'\"（agent-a6ffdc5db8eb83d2e.jsonl:L102-L103、L109-L110）。"
+        },
+        {
+          "key": "agent-a6ffdc5db8eb83d2e.jsonl",
+          "at": "2026-10-09T17:44:00.954Z",
+          "reason": "读到上述规格后，Write GameRenderer：构造器调用 registerClearSansFont()，onSizeChanged 同步 getLayout 测宽（L151-L152）；随后 Edit 新增 canvasFont，返回 bold ${sizePx}px '${FONT_FAMILY_CLEAR_SANS}'，注释写明取自 feature-base 格式（L173-L174）。本链确认规格传到目标，不另认定其独立失职。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 5
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-2048-glm5.3/entry/src/main/ets/pages/MainPage.ets",
+        "since": "2026-10-09T18:47:43.289Z",
+        "at": "2026-10-10T04:36:17.957Z"
+      },
+      "summary": "本图只看就绪时序这一支。F003 把 Typeface 映射写成注册后即可引用的低风险项，没有要求首次测宽前字体须可用；\nSlice 3 worker 据此在 MainPage.recomputeGeometry 中调用 renderer.onSizeChanged 后，立即同步读取 renderer.getLayout()，\n再 syncInputGeometry 和 requestRender（agent-a6ffdc5db8eb83d2e.jsonl:L202-L203）。返修让布局可能推迟到字体就绪之后，因此改为由 renderer.onLayout 回调同步命中几何，\nrecomputeGeometry 不再同步读取 getLayout()（检查点 H2，最终保留）。\n",
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/2048-tpcstld-2863bbe/2048/base/src/main/java/com/tpcstld/twozerogame/MainView.java",
+          "at": "2026-10-09T15:31:50.243Z",
+          "reason": "正常输入：主会话 Read 回执显示字体在构造器内同步装载，早于 onSizeChanged/getLayout 测宽（d90de388 主会话 L66-L67）。"
+        },
+        {
+          "key": "d90de388-a6d4-4f09-8cd2-28dfc31c5901.jsonl",
+          "at": "2026-10-09T15:42:38.417Z",
+          "reason": "Write F003 时把 Typeface 映射写成'注册→引用'、风险低、只按字形差异由视觉兜底；而同一文件的 AC03 已写明布局字号依赖 measure，规格却没有写字体须在首次布局前可用（L306）。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-2048-glm5.3/spec/baseline/features/F003-rendering-animation.md",
+          "at": "2026-10-09T17:27:13.528Z",
+          "reason": "交付桥梁：Slice 3 worker 的 Read 回执包含上述映射行（agent-a6ffdc5db8eb83d2e.jsonl:L25-L26）。"
+        },
+        {
+          "key": "agent-a6ffdc5db8eb83d2e.jsonl",
+          "at": "2026-10-09T17:46:36.121Z",
+          "reason": "沿用注册后即可同步测宽的假设，Edit MainPage.recomputeGeometry：renderer.onSizeChanged 之后立即 this.geometry = renderer.getLayout() 并同步输入几何（同转录 L202-L203）。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "生成期材料中没有任何输入说明 font.registerFont 是异步装载，也没有说明 Canvas 如何解析带引号的注册字族名；本卡归因的是规格把源端没有的 bold 与引号写成固定格式、并把字体映射降为字形风险，不认定生成者明知平台行为仍然写错。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-6c0506e04f18067f4274",
+  "metadata": {
+    "migration": {
+      "id": "game2048-glm53-d90de388-a6d4-4f09-8cd2-28dfc31c5901",
+      "project": "2048"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.295",
+        "2.1.296"
+      ]
+    },
+    "source_set_id": "sources-8cc5e9d8f4b3bafc7d31",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-2048-glm5.3",
+        "at": "2026-10-09T15:56:56.310Z",
+        "ref": "generation/d90de388-a6d4-4f09-8cd2-28dfc31c5901.jsonl:L692",
+        "request_ref": "generation/d90de388-a6d4-4f09-8cd2-28dfc31c5901.jsonl:L686",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-2048-glm5.3",
+        "at": "2026-10-09T15:56:56.310Z",
+        "ref": "generation/d90de388-a6d4-4f09-8cd2-28dfc31c5901.jsonl:L692",
+        "request_ref": "generation/d90de388-a6d4-4f09-8cd2-28dfc31c5901.jsonl:L686",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.10.4",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "4566ae59-a9cb-4783-8d98-daad7bff832a"
+      ]
+    }
+  },
+  "revision": "c8b2d52930bb30d10872c03805dfcf4ae3ae03d332a7e207298a22246e256247"
+}

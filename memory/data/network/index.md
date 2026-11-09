@@ -21,7 +21,7 @@
 - [拦截器按本地键读取的公共参数都要有生产者：按源端初始化序列补齐写入步骤，只迁读取侧不算完成](lesson-7e04234bdf5aef97b651.lesson.md)
   - 时机：迁移或重构隐私同意后的初始化链、网络公共参数与拦截器时，确认每个公参字段由谁写入时
   - 情境：目标拦截器每次请求从偏好键或当前选中项缓存读取设备标识、当前分组等公参；源端这些值由隐私同意后的 SDK 初始化序列（如获取 OAID）或同步后的默认选中处理写入，目标只迁了读取侧。
-- [按源端 Retrofit 实际选中的重载确定请求体编码：post(url, Map)/@FieldMap 用表单，只有 @Body 用 JSON](lesson-1cc76f37fe0aea9fef25.lesson.md)
+- [按源端 Retrofit 实际选中的重载确定请求体编码：本项目 post(url, Map)/@FieldMap 用表单，@Body 另核实际转换器与 Content-Type](lesson-1cc76f37fe0aea9fef25.lesson.md)
   - 时机：接口层实现、模块抽取或把调用搬到平台适配层时，为每个 POST 端点确定请求体编码；发现同类编码偏差后确定修复范围时
   - 情境：Android 通过 Retrofit 通用 post(url, Map) 包装或 @FormUrlEncoded + @FieldMap/@Field 发送参数；目标端点目录的默认 post 是 application/json，另有 formPost/formBody 一类表单写法；目标里已有端点定义或 jsonBody 调用可以直接沿用；规格或 API 清单只列参数名、不写 Content-Type。
   - 例外：服务端契约已确认同一端点也接受 JSON（接口文档或抓包证明），且当前决策选择 JSON
@@ -43,7 +43,7 @@
 - [源端构建期注入的服务地址、签名与响应解密材料，按决策从私有构建配置接入并实现同算法解码器；不以空配置装配网络客户端](lesson-30ccd1d65d2c39029256.lesson.md)
   - 时机：网络基础设施实现与装配阶段，实现网络运行配置来源、响应解密，并在装配根构造 HTTP 客户端时
   - 情境：源端通过 BuildConfig/gradle 注入 API 地址、请求签名材料与 release 响应的 AES 等解密密钥，并在解析前解密响应；目标决策要求密钥不进源码、构建期从本地私有配置注入，网络层对空配置拒绝发包；另有决策只记录了“未提供测试环境或测试账号”。也包括目标用 process.getEnvironmentVar 读取可选运行配置（成功码、渠道、客户端身份）并以 `|| 默认值` 兜底的情形。
-- [用字符串拼接替代 Retrofit 时，在拼接函数里统一处理 baseUrl 与 path 之间的斜杠，不依赖各接口 path 的写法](lesson-d767b84213eb5ef93034.lesson.md)
+- [用 HttpClient 替代 Retrofit 时先保留根路径与相对路径解析语义，再规范化 baseUrl/path 的分隔符](lesson-d767b84213eb5ef93034.lesson.md)
   - 时机：网络层实现阶段，把 Retrofit 接口迁成自写 HttpClient，确定 baseUrl 常量与各 Service 的 path 如何连成完整 URL 时
   - 情境：源端用 Retrofit 的 baseUrl 加 @GET/@POST 相对路径（多数不带前导 /，少数带），目标端改用 @kit.NetworkKit http 手工拼 URL；参考模板示范 `${baseUrl}${path}` 直接拼接；baseUrl 常量与各 Service 的 path 分散在不同文件里声明。
 - [移植加解密工具时逐分支保留源工具的前置返回与异常回退：空串不进 Cipher，解密失败回退为原文](lesson-4232e195ff42fc63ba43.lesson.md)

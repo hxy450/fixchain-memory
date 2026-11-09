@@ -1,6 +1,6 @@
 # 整体着色的气泡用 bindPopup 的 popupColor，而不是只给内容加背景
 
-ID：`lesson-05dc4eb9548bf3fef6ae` · 版本：1
+ID：`lesson-05dc4eb9548bf3fef6ae` · 版本：2
 
 [本主题](index.md)
 
@@ -14,7 +14,7 @@ ID：`lesson-05dc4eb9548bf3fef6ae` · 版本：1
 
 ## 原因
 
-只给 builder 内容加 backgroundColor 时，箭头与外框沿用默认的透明加模糊底色。
+只给 builder 内容加 backgroundColor 不会同时设置气泡容器的箭头与外框颜色。当前官方自定义 Popup 文档区分默认值：API 10 为 #4d4d4d，API 11 起为透明色加模糊填充；源气泡需整体纯色时应显式设置容器色与模糊样式，不把某一版默认外推到全部 SDK。
 
 ## 做法
 

@@ -1,6 +1,6 @@
-# TabContent.tabBar 只接受字符串、资源、CustomBuilder、TabBarOptions 与 SubTabBarStyle/BottomTabBarStyle，不传 { title } 对象
+# TabContent.tabBar 按目标 SDK 重载传值：常用字符串、资源或 Builder，不把 { title } 当作通用页签参数
 
-ID：`lesson-b402fa546504a1dd6db7` · 版本：1
+ID：`lesson-b402fa546504a1dd6db7` · 版本：2
 
 [本主题](index.md)
 
@@ -18,7 +18,7 @@ tabBar 的重载里没有 title 字段；{ title: 'X' } 在全部重载下都不
 
 ## 做法
 
-1. 纯文字页签写 .tabBar('首页')；文字加图标用 TabBarOptions 的 { icon, text } 或 BottomTabBarStyle；需要按选中态改颜色等自定义样式时用 @Builder 方法作为 CustomBuilder 传入。
+1. 先核目标 SDK 的重载；API 18+ Stage 模型还支持 ComponentContent，不能把旧常用类型清单当作永久全集。纯文字页签写 .tabBar('首页')；文字加图标用 TabBarOptions 的 { icon, text } 或 BottomTabBarStyle；需要按选中态改颜色等自定义样式时用 @Builder 方法作为 CustomBuilder 传入。
 
 来源支持：1 张卡 · 1 次迁移 · 1 个应用
 

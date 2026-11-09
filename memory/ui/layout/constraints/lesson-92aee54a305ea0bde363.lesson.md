@@ -1,6 +1,6 @@
 # Stack 中内容尺寸的子项按 alignContent 定位：子项自身的 .align() 不改变它在父容器中的位置，需要的对齐用满尺寸容器或显式 position
 
-ID：`lesson-92aee54a305ea0bde363` · 版本：7
+ID：`lesson-92aee54a305ea0bde363` · 版本：8
 
 [本主题](index.md)
 
@@ -18,11 +18,11 @@ Stack 按 alignContent 放置未撑满的子节点；Text 的 .align() 只对齐
 
 ## 做法
 
-1. 同一 Stack 中各子项对齐需求不同时，给文字包一个满高容器：Column().width(源端比例).height('100%').justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Start)，或给子项按源公式单独 position/offset。
+1. 同一 Stack 中各子项对齐需求不同时，先确认父 Stack 有可解析的确定高度，再给文字包一个满高容器；父级仍由内容定高时，先按源几何确定该对齐区域，不能直接套百分比。确定父高后的示例：Column().width(源端比例).height('100%').justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Start)，或给子项按源公式单独 position/offset。
 2. 删除 height('100%')、.align() 等手段前，确认替代约束仍实现原来的纵向位置；枚举名以 ArkUI SDK 为准，不照搬 Compose 的 Alignment 名称。
 3. 按 layout_gravity 单独对齐某个子项（如 end|bottom 的角标）时，在已知 W×H 的容器里写 position({ x: W - 子宽, y: H - 子高 })，或给该子项单独套一个 alignContent 为对应方向的 Stack。
 4. 逐个核对源 Box 子项的 Modifier.align：非默认位置写成 position({ left: 0, bottom: 0 })、markAnchor 等实际属性；规格或报告里的“底部对齐”要落到代码属性上。
-5. 子项单向贴边时可改父 Stack({ alignContent })；同一 Stack 内混合对齐用 .position({ left/right/top/bottom })、markAnchor 或满幅透明容器配 justifyContent/alignItems，并保留源 margin。
+5. 子项单向贴边时可改父 Stack({ alignContent })；同一 Stack 内混合对齐用 .position({ left/right/top/bottom })、markAnchor 或在父尺寸已确定时用满幅容器配 justifyContent/alignItems，并让无交互的覆盖部分按实际命中策略透传，不仅设置透明底色；保留源 margin。
 6. 叠层按源布局声明顺序复核 z 序（后声明者在上），无法按序排列时补 zIndex。
 7. 标题栏按约束建互斥的水平槽位：Row 内左侧固定宽槽（宽取标题的 marginStart）放返回入口，layoutWeight(1) 的标题居中，右侧固定槽放操作入口；也可用 RelativeContainer + alignRules 对应 start/end 约束。
 

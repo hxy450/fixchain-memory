@@ -12,7 +12,7 @@ ArkUI V2 状态刷新与订阅：@Builder 参数（含异步重赋值的数组�
 - [共享单例 ViewModel 按规格的键丢弃过期响应，页面各加载入口先做单飞，不写成“新请求取消上一请求”](lesson-c883a0ff96c32dfbd9ba.lesson.md)
   - 时机：页面接线阶段，把 aboutToAppear、Refresh 的 onRefreshing、@Monitor 等多个加载入口接到共享单例 ViewModel 或 Service 时
   - 情境：目标 ViewModel 为单例，run() 对任何新请求先取消上一请求；页面同时存在 aboutToAppear、Refresh（refreshing 初值可能为 true）与切城监听等入口；规格要求按 areaId 一类键丢弃旧城市的迟到响应、一次刷新只产生一次请求。
-- [列表条目以新对象替换或整表重建时，ForEach/Repeat 键要包含会变且需要显示的字段；要稳定键就改为可观察实例原位更新](lesson-2e636699fa65aefd63f0.lesson.md)
+- [列表替换对象时先区分 ForEach 与 Repeat 更新通路：ForEach 复用旧参数可改键或改为可观察实例，Repeat 保持完整响应式传参](lesson-2e636699fa65aefd63f0.lesson.md)
   - 时机：功能实现与页面接线阶段，为可编辑或会重新拉取的列表选定条目更新方式与 ForEach 键时；为消除重建抖动而稳定 ForEach/Repeat 的键时
   - 情境：列表条目编辑（如改名）后以保留 id 的新对象替换，或操作成功后重新请求列表并整表 setList（id 不变、计数等字段变化）；ArkUI 用 ForEach 渲染，并把条目字段作为子组件的 @Param 传入；源端是 Compose 不设 key 的 forEach 加不可变 copy，或 RecyclerView 整表刷新。也包括分页或 Swiper 的页模型是普通 interface，键原先拼入请求状态与数据导致每次加载都销毁重建（抖动），修复者准备把键缩成只含页标识。也包括 RecyclerView 的 remove+add+notifyItemChanged 被迁成 arr\[pos\] = 新实例、splice 或整表赋值，行内显示取自条目可变字段（下载态、播放态），注释以“@Trace 字段级刷新”代替键检查。也包括源端 removeAllViews 后逐项 inflate 的结果区改成嵌套 ForEach，键只用显示内容拼接（内容可能完全相同，如多个全零数据块），条目是普通 class，每次计算整体重建。
   - 例外：更新方式是对 @ObservedV2 条目的 @Trace 字段原地赋值，子组件绑定的仍是同一对象，此时可保留只含 id 的键
@@ -50,17 +50,17 @@ ArkUI V2 状态刷新与订阅：@Builder 参数（含异步重赋值的数组�
 - [翻译“离开组合即销毁”的状态复位时，同时列出目标框架会替用户恢复的界面状态](lesson-1f6e36f8e8bf9df951da.lesson.md)
   - 时机：规格提取阶段，把源端 remember（非 rememberSaveable）随组合销毁的状态语义翻译成目标端复位方案时
   - 情境：源页面离开组合时丢弃全部状态，其中 focused 等由框架事件驱动的字段直接决定显示分支；目标端该页面常驻在 Navigation 的 NavBar（或 Stack、Tabs 保活）中，经 pushPath 进入子页后再系统返回。
-- [规格要求乐观更新时，先本地翻转状态再发请求，回调只用服务端真值回填](lesson-18c8e7630a96d66540bc.lesson.md)
+- [已批准契约要求乐观更新时，先本地翻转状态再发请求，回调只用服务端真值回填](lesson-18c8e7630a96d66540bc.lesson.md)
   - 时机：界面交互实现阶段，编写收藏、点赞类切换的点击处理，确定本地状态翻转与服务端调用的先后时
   - 情境：验收要求点击后状态翻转、界面即时刷新（乐观更新）；源端把选中态设置写在网络接口的成功回调里；目标用状态变量驱动图标并异步调用接口。
 - [负责上抛自身可见性的组件必须常建，不被条件构建或 Visibility.None 包住](lesson-3a00fd66c5188f5cfdf4.lesson.md)
   - 时机：界面实现阶段，翻译“容器初始隐藏、内部组件常驻并自行通知宿主显示”的结构，或向他人预留的条件槽位嵌入组件时
   - 情境：源容器 visibility=gone，但内部 Fragment 在 onCreate 即挂载，并由它调用宿主的可见性方法；目标用 if 或 Visibility 控制容器。
-- [迁移 Compose remember 状态时按源端的求值与重建时机落实：无键 remember 只在首次组合求值，remember(key) 只在 key 变化时重算，条件挂载的子组件每次显示都是新状态，无 key 惰性项随位置重建](lesson-3b4a96141329db62a6af.lesson.md)
+- [迁移 Compose remember 状态时按源端的求值与重建时机落实：无键 remember 只在首次组合求值，remember(key) 只在 key 变化时重算，条件挂载的子组件每次显示都是新状态，无 key 惰性项按实际位置身份核对重建](lesson-3b4a96141329db62a6af.lesson.md)
   - 时机：界面实现或公共组件抽取阶段，把 Compose 中 remember、derivedStateOf、LaunchedEffect 持有或算出的局部状态迁到 ArkUI（写成 @Computed、getter 或缓存字段，提升为页级 @Local，放进常驻的 ListItem 或子组件，或改成选择 handler 里的直接赋值），并决定何时求值、何时复位时
   - 情境：源端状态写在无键 remember { … } 或 remember { derivedStateOf { … } } 包住的一次性判定（如按目标值是否含小数点决定是否显示小数）、remember(k1, k2){…} 派生值、条件挂载（if (show) Dialog/卡片）子组件内的 remember 与 LaunchedEffect，或 LazyColumn 中不设 key 的 item{}/items 项里；源码没有显式重算或清空，时机依赖组合身份。目标准备写成每次渲染都重算的 @Computed、getter，或把状态放到页级 @Local、常驻组件，或在每次点击时重写派生值。
   - 例外：目标保持与源端相同的挂载结构（条件渲染的子组件自己持有状态、每次显示新建实例），重建语义已自然保留
-- [迁移按状态切换的显示时同时迁移 setVisibility 分支：该状态下隐藏的控件不渲染，显示的区块要实现](lesson-43a9050245b1afa165bf.lesson.md)
+- [迁移按状态切换的显示时同时迁移 setVisibility 分支：逐状态区分 VISIBLE、INVISIBLE 保位与 GONE 不占位，显示区块和数据来源要实现](lesson-43a9050245b1afa165bf.lesson.md)
   - 时机：界面实现与巡检修复阶段，迁移登录态等状态下控件的显示内容与显隐时；把 ViewHolder.bind 中的 setVisibility 逻辑移植到共享行组件时
   - 情境：源端 Fragment 按登录态等状态对多个控件 setVisibility（如登录后隐藏用户名、显示签到区），部分 setText 被注释；目标 ArkTS 按状态条件渲染；工程可能有显隐或绑定检查器报告源控件丢失。
 - [随状态变化的控件参数不作 @Builder 值参，改为内联读取状态或用 @ComponentV2 子组件的 @Param](lesson-8d2979542fa2cd65150c.lesson.md)

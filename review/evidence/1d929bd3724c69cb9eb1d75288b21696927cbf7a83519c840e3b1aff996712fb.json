@@ -1,0 +1,498 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-05f3fb8501654bad9261",
+  "created_at": "2026-10-07T04:53:52.213217+00:00",
+  "migration_key": "antennapod-glm53-3c838ae1-111b-475a-a085-e9464ec2fde4",
+  "title": "把MainActivity内容区的loadChildFragment子页映射成清栈切页或独立NavDestination路由，丢失壳内回退栈与壳元素",
+  "when": "壳层导航实现与页面形态决策阶段，为源端单Activity壳内压栈加载的子Fragment确定目标端承载方式、返回与底部导航选中语义时",
+  "description": "源端MainActivity用loadChildFragment在main_content_view内hide当前+add子Fragment+addToBackStack（单集详情、搜索、FeedInfo、FeedSettings、在线搜索、区段“更多”、未清栈打开的feed），子页期间底部导航与迷你播放条仍在，工具栏displayUpArrow随回退栈深度切换，带navigationTag时同步底部导航选中；MainActivityStarter构造即写clear_back_stack=false。目标端同时存在Navigation+NavDestination路由与壳内容槽（fragmentContent按tag切换）。",
+  "summary": "壳实现分支（Slice 4，agent-ab0066cefb71c5242）：写前读到F001规格，AC22写明loadChildFragment\n为hide主fragment+add+addToBackStack、带navigationTag时同步底部导航选中，并标到ShellRouter.loadChild；\n服务层契约列出loadChild(page, effect, tag?)；AC23返回首分支为回退栈非空→popBackStack；AC90要求\nsetupToolbarToggle(displayUpArrow)；六区段onMoreClick→loadChild(...)，AC61 action_search→loadChildFragment(SearchFragment)。\n这些已足以要求壳内子回退栈。输出却把loadChild判成“HMOS由Navigation栈处理子页（pushPathByName，NavDestination盖在壳上）”：\nAppShellViewModel没有任何子栈状态；ShellRouter只写loadPage/loadFeedPage（清栈replace+持久化），\nonNavIntent非清栈分支写成pushPathByName('FeedItemlistPage')或直接改lastNavTag；MainPage返回首分支用navPathStack.size()>1；\nHomeSectionPage搜索写成pushPathByName('SearchPage')；DownloadsSectionPage“更多”写成ShellRouter.loadPage（清栈），\n后者还沿用了registry P-S4-049“loadChildFragment等价=MainPage.loadFragment”的错误提示而未以规格为准。\n页面形态分支：规格与转换把子Fragment写成NavDestination路由页（EpisodeDetailPage、SearchPage等），推入后离开壳，无底栏与迷你条。\n打开feed分支：下游写者在只有清栈loadFeedPage的ShellRouter上，把MainActivityStarter.withOpenFeed(feedId)接成清栈切页。\n这些片段保留到返修前（修复主会话L1297-L1415读回原状）。最终修复在AppShellViewModel增加ShellBackEntry、childBackStack、\ncurrentChildParam、displayUpArrow/rootNavTag、bottomNavSelectedTag；ShellRouter增加loadChildPage/loadChildFeedPage/popChildPage，\nloadPage清栈；MainPage以保活层渲染回退栈与嵌入子页，ShellNavIcon按栈深切换上箭头/汉堡；五个子页改为@Param嵌入组件，\nSplashPage pageMap去掉5条路由；各调用点改loadChildPage/loadChildFeedPage或openFeedInMainActivity(clearBackStack)\n（修复主会话L1416-L1455、L3943-L4316、L10062-L10094；agent-a1176460b670e556f.jsonl L137-L150补navigationTag选中通道）。\n",
+  "recommendations": [
+    "壳实现阶段：对规格中每条“标:”指向的目标方法（如ShellRouter.loadChild）逐条落地或登记缺口；不要用平台Navigation路由栈替代源端单Activity内容区回退栈，先判定子页期间底栏、迷你播放条等壳元素是否仍应可见。",
+    "实现loadChildFragment等价时，在壳状态中维护子回退栈（入栈记录上一页tag与参数），loadFragment/清栈入口清空它；返回键与工具栏上箭头先弹子栈，再走默认页/抽屉/退出分支；navigationTag非空时覆盖底部导航选中。",
+    "区段“更多”、搜索、单集详情等调用点按源端实际API区分loadFragment（清栈+持久化）与loadChildFragment（压栈、不持久化）；registry提示与规格冲突时以规格AC为准并回写registry。",
+    "规格提取与页面转换阶段：meta.page_type=sub_component且源码经loadChildFragment打开的页面，规格不得推荐NavDestination全屏页，转换为可嵌入组件（@Param参数），由壳内容区按tag承载；不以已存在页面的先例覆盖meta与源码加载方式。",
+    "接线阶段映射MainActivityStarter等启动器时，同时核对构造器写入的默认extras（clear_back_stack=false）与读取端默认值，再选择清栈或压栈。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/services/ShellRouter.ets",
+        "since": "2026-10-03T04:49:05.918Z",
+        "at": "2026-10-06T17:26:02.113Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/spec/baseline/features/F001-app-shell-home.md",
+          "at": "2026-10-02T15:04:19.021Z",
+          "reason": "正常输入：Read回执含服务层契约loadChild(page, effect: TransitionEffect, tag?)、AC22（hide+add+addToBackStack，带navigationTag同步选中，标:ShellRouter.loadChild）、AC23、AC27、AC90；足以要求ShellRouter提供壳内子回退栈（agent-ab0066cefb71c5242.jsonl L26-L28，规格行164/309/310/314/392）。"
+        },
+        {
+          "key": "agent-ab0066cefb71c5242.jsonl",
+          "at": "2026-10-02T15:41:51.855Z",
+          "reason": "思考中把loadChild改判为“Navigation栈处理子页、NavDestination盖在壳上”（L303），Write的ShellRouter只有loadPage/loadFeedPage，onNavIntent非清栈分支写pushPathByName('FeedItemlistPage')与shell.lastNavTag直赋，深链写pushPathByName('SearchPage')，无loadChild（L362-L363）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/viewmodels/AppShellViewModel.ets",
+        "since": "2026-10-03T04:49:05.918Z",
+        "at": "2026-10-06T17:26:02.113Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/spec/baseline/features/F001-app-shell-home.md",
+          "at": "2026-10-02T15:04:19.021Z",
+          "reason": "正常输入：同一Read回执的AC22/AC23/AC90给出回退栈非空判定、displayUpArrow=栈深与navigationTag选中同步，需要壳状态承载子栈（agent-ab0066cefb71c5242.jsonl L26-L28）。"
+        },
+        {
+          "key": "agent-ab0066cefb71c5242.jsonl",
+          "at": "2026-10-02T15:36:04.586Z",
+          "reason": "Write的AppShellViewModel只有navMode/lastNavTag/drawerOpen/播放sheet等@Trace字段，没有子回退栈、子页参数或选中覆盖值；子页只能靠lastNavTag替换或外部路由（L332-L333）。修复后补ShellBackEntry、childBackStack、currentChildParam、displayUpArrow/rootNavTag、bottomNavSelectedTag。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/pages/MainPage.ets",
+        "since": "2026-10-03T04:49:05.918Z",
+        "at": "2026-10-06T17:26:02.113Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/spec/baseline/features/F001-app-shell-home.md",
+          "at": "2026-10-02T15:04:19.021Z",
+          "reason": "正常输入：AC23返回首分支“回退栈非空→popBackStack”指源端主内容区Fragment回退栈；MainPage契约写loadPage(tag)/loadChild(page, effect)（规格行274/310）（agent-ab0066cefb71c5242.jsonl L26-L28）。"
+        },
+        {
+          "key": "agent-ab0066cefb71c5242.jsonl",
+          "at": "2026-10-02T15:52:38.135Z",
+          "reason": "Edit写handleMainBackPress，首分支为navPathStack.size()>1交系统弹栈，把源端内容区回退栈等同Navigation路由栈；fragmentContent仍只按lastNavTag切换，无子页层（L428-L429，设计依据L303第46段）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/pages/HomeSectionPage.ets",
+        "since": "2026-10-03T04:49:05.918Z",
+        "at": "2026-10-06T17:26:02.113Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/spec/baseline/features/F001-app-shell-home.md",
+          "at": "2026-10-02T15:04:19.021Z",
+          "reason": "正常输入：AC61写action_search→loadChildFragment(SearchFragment)，结合AC22即壳内压栈（agent-ab0066cefb71c5242.jsonl L26-L28，规格行354）。"
+        },
+        {
+          "key": "agent-ab0066cefb71c5242.jsonl",
+          "at": "2026-10-02T15:55:22.427Z",
+          "reason": "Edit把onSearchClick写成this.navPathStack.pushPathByName('SearchPage', new NoParam())，搜索页推到壳外路由（L448-L449；决策见L303“P-S4-018 resolves to pushPathByName('SearchPage')”）。修复改为ShellRouter.loadChildPage(SEARCH_TAG, new SearchParam())。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/pages/DownloadsSectionPage.ets",
+        "since": "2026-10-03T04:49:05.918Z",
+        "at": "2026-10-06T17:26:02.113Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/spec/baseline/features/F001-app-shell-home.md",
+          "at": "2026-10-02T15:04:19.021Z",
+          "reason": "正常输入：六区段onMoreClick→loadChild(…CompletedDownloadsFragment)，AC21/AC22区分loadFragment清栈与loadChildFragment压栈（agent-ab0066cefb71c5242.jsonl L26-L28，规格行277/308/309）。"
+        },
+        {
+          "key": "agent-ab0066cefb71c5242.jsonl",
+          "at": "2026-10-02T16:09:51.500Z",
+          "reason": "Edit把handleMoreClick写成ShellRouter.loadPage('DownloadsFragment')（清栈+saveLastNavFragment），沿用registry P-S4-049“loadChildFragment等价=MainPage.loadFragment”提示（L52读回执）而未按规格loadChild（L571-L572）。修复改为ShellRouter.loadChildPage('DownloadsFragment')。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/pages/SearchPage.ets",
+        "since": "2026-10-03T04:49:05.918Z",
+        "at": "2026-10-06T17:26:02.113Z"
+      },
+      "summary": "SearchFragment转换者写前读到meta.json page_type=sub_component、规格“Fragment，宿主MainActivity”与\n“Toolbar返回=popBackStack返回上级”，转换skill也写明嵌入宿主的子页生成plain struct、不包NavDestination。\n输出却以“loadChildFragment是fragment栈push、非tab，故应为NavDestination页（同EpisodeDetailPage先例）”\n写出NavDestination路由页（Consumer navPathStack，返回pop），推入后离开壳。偏差在页面转换的形态判定；\n规格转换表“NavDestination标题栏”措辞与已有EpisodeDetailPage先例是同向干扰。最终修复改为@Param嵌入组件，\n由MainPage壳内容区按SEARCH_TAG承载，返回走popChildPage，SplashPage pageMap去掉SearchPage路由。\n",
+      "recommendations": [
+        "页面转换阶段：meta.page_type=sub_component且源端由宿主Activity内容区加载的Fragment，生成可嵌入组件并以参数类接收入参，不包NavDestination；不以已有页面先例覆盖meta与源码加载方式。"
+      ],
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/spec/baseline/ui-snapshots/page_0021_SearchFragment/meta.json",
+          "at": "2026-10-01T09:29:43.654Z",
+          "reason": "正常输入：Read回执page_type为sub_component、needs_immersive_safearea=false（agent-a4eeed72f04ae66cf.jsonl L26-L27）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/spec/baseline/ui/page_0021_SearchFragment.md",
+          "at": "2026-10-01T09:29:43.508Z",
+          "reason": "正常输入：溯源写“Fragment，宿主MainActivity”，导航表写Toolbar返回=popBackStack返回上级、在线搜索=loadChildFragment；转换表“NavDestination标题栏”措辞有同向干扰（agent-a4eeed72f04ae66cf.jsonl L24-L25）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/pages/EpisodeDetailPage.ets",
+          "at": "2026-10-01T09:30:59.418Z",
+          "reason": "先例输入：Read回执头注释为“NavDestination全屏页（spec备注推荐形态）”，被转换者当作loadChildFragment子页的形态先例（agent-a4eeed72f04ae66cf.jsonl L66-L67、L64）。"
+        },
+        {
+          "key": "agent-a4eeed72f04ae66cf.jsonl",
+          "at": "2026-10-01T09:40:21.085Z",
+          "reason": "思考中先承认page_type=sub_component，随后以“loadChildFragment=fragment stack push、非tab”及EpisodeDetailPage先例判为NavDestination页（L28、L54、L64），Write出NavDestination包裹、@Consumer navPathStack、返回pop的SearchPage（L168-L169）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/pages/EpisodeDetailPage.ets",
+        "since": "2026-10-03T04:49:05.918Z",
+        "at": "2026-10-06T17:26:02.113Z"
+      },
+      "summary": "页面规格作者（批次b2-03）写前读到FeedItemlistFragment以activity.loadChildFragment(ItemPagerFragment.newInstance(...))\n打开单集详情，并按meta.page_type=sub_component判定needs_immersive_safearea=false；却在page_0029规格备注\n“本页在ArkUI端若实现为NavDestination全屏页（推荐）”，handback也宣称0029/0024/0025将实现为NavDestination全屏页。\n偏差先出现在源码到规格的页面形态描述。转换者读到该备注后照此写出NavDestination路由页，推入后离开壳。\n最终修复改为@Param param的嵌入组件，由壳内容区按TAG_ITEM_PAGER承载，返回走popChildPage。\n",
+      "recommendations": [
+        "规格提取阶段：页面形态以源端加载方式与meta.page_type为准；源码经loadChildFragment进入宿主内容区的子页，规格写“壳内容区子页、保留底栏/迷你条”，不推荐NavDestination全屏页。"
+      ],
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/AntennaPod-develop/app/src/main/java/de/danoeh/antennapod/ui/screen/feed/FeedItemlistFragment.java",
+          "at": "2026-09-30T16:01:07.345Z",
+          "reason": "正常输入：Read回执第385行activity.loadChildFragment(ItemPagerFragment.newInstance(feed.getItems(), …))，说明单集详情是MainActivity内容区压栈子页（agent-a9a64beafccb8b222.jsonl L102-L103）。"
+        },
+        {
+          "key": "agent-a9a64beafccb8b222.jsonl",
+          "at": "2026-09-30T16:05:26.958Z",
+          "reason": "Write的page_0029规格沉浸式节按sub_component填false，却加备注“若实现为NavDestination全屏页（推荐）”，转换表写NavDestination标题栏（L162-L163；handback L251）。源码到规格在此偏离。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/spec/baseline/ui/page_0029_ItemPagerFragment.md",
+          "at": "2026-10-01T08:55:18.937Z",
+          "reason": "交付桥梁：转换者Read回执含上述备注，转换者随后引用“spec的备注…So I implement as NavDestination”（agent-af4fc2f275e200339.jsonl L17-L18、L49）。"
+        },
+        {
+          "key": "agent-af4fc2f275e200339.jsonl",
+          "at": "2026-10-01T09:06:47.557Z",
+          "reason": "按规格备注Write出NavDestination全屏页、hideTitleBar自绘工具栏、@Consumer navPathStack的EpisodeDetailPage（L94-L95）；本链确认传递。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/components/FeedStatisticsDialog.ets",
+        "since": "2026-10-03T04:49:05.918Z",
+        "at": "2026-10-06T17:26:02.113Z"
+      },
+      "summary": "Slice 9写者读到FeedStatisticsDialogFragment的new MainActivityStarter(getContext()).withOpenFeed(feedId).start()，\n又读到Slice 4写出的ShellRouter：公开入口只有清栈loadFeedPage，NavIntentExtras.clearBackStack字段默认false而注释称“默认true”，\n非清栈分支是未注册的pushPathByName('FeedItemlistPage')。写者在思考中察觉默认值矛盾，却未查MainActivityStarter构造器\n（其写入EXTRA_CLEAR_BACK_STACK=false，即压栈子页），把默认分支写成ShellRouter.loadFeedPage（清栈+持久化）。\n壳缺loadChild是上游条件，本写者未核启动器默认值是本分支偏差。最终修复改为ShellRouter.loadChildFeedPage(args.feedId)。\n",
+      "recommendations": [
+        "接线阶段映射MainActivityStarter.withOpenFeed等启动器时，读取启动器构造器写入的默认extras与handleNavIntent读取默认值，确认是否清栈后再选择壳入口；壳缺对应入口时登记缺口而非改用清栈入口。"
+      ],
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/spec/baseline/features/F001-app-shell-home.md",
+          "at": "2026-10-02T15:04:19.021Z",
+          "reason": "正常输入：AC22/AC27要求loadChildFragment与非清栈feed打开走子页装载（agent-ab0066cefb71c5242.jsonl L26-L28）。"
+        },
+        {
+          "key": "agent-ab0066cefb71c5242.jsonl",
+          "at": "2026-10-02T15:41:51.855Z",
+          "reason": "Write的ShellRouter未提供loadChild，非清栈feed分支为pushPathByName('FeedItemlistPage')（L362-L363）。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/services/ShellRouter.ets",
+          "at": "2026-10-02T18:30:12.880Z",
+          "reason": "交付桥梁：Slice 9写者Read回执仍只有loadPage/loadFeedPage公开入口，NavIntentExtras.clearBackStack=false与注释“默认true”并存（agent-acbe7eb55cd71dca5.jsonl L123-L124）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/AntennaPod-develop/ui/statistics/src/main/java/de/danoeh/antennapod/ui/statistics/feed/FeedStatisticsDialogFragment.java",
+          "at": "2026-10-02T18:20:02.815Z",
+          "reason": "正常输入：Read回执第34行new MainActivityStarter(getContext()).withOpenFeed(feedId).start()（agent-acbe7eb55cd71dca5.jsonl L42、L44）。"
+        },
+        {
+          "key": "agent-acbe7eb55cd71dca5.jsonl",
+          "at": "2026-10-02T18:57:29.823Z",
+          "reason": "思考中察觉clearBackStack默认值矛盾却未查MainActivityStarter构造器，判定withOpenFeed=loadFeedPage（L127），Edit写入ShellRouter.loadFeedPage(args.feedId)（L219-L220）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 5
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [
+    {
+      "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/components/common/ShellNavIcon.ets",
+      "reason": "修复新建文件（修复主会话L1449-L1450），生成期无此文件；生成侧对应为各页仅抽屉模式渲染汉堡的navIconSlot，未逐页溯源其写者与写前输入。"
+    },
+    {
+      "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/pages/PreviewChildPage.ets",
+      "reason": "修复新建文件（预览宿主内子页承载），生成期无此文件，无生成来源可溯。"
+    },
+    {
+      "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/pages/SplashPage.ets",
+      "reason": "已确认修复删去EpisodeDetail/FeedInfo/FeedSettings/Search/OnlineSearch五条pageMap路由；生成期由§3a-bis装配（agent-ac18f7478ecc539fe.jsonl L118）登记既有NavDestination页，未单独核该装配的写前输入。"
+    },
+    {
+      "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/pages/FeedInfoPage.ets",
+      "reason": "已确认由NavDestination路由页改为嵌入组件；首写者agent-aa75eb45f4862593b.jsonl L139，page_0025规格同由b2-03写（handback称将实现为NavDestination全屏页），与EpisodeDetailPage分支同类，未逐项核写前输入。"
+    },
+    {
+      "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/pages/feed/FeedSettingsPage.ets",
+      "reason": "已确认由NavDestination路由页改为嵌入组件；首写者agent-af9e65ded6db0ee4c.jsonl L165，未核其写前规格与形态判定。"
+    },
+    {
+      "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/pages/OnlineSearchPage.ets",
+      "reason": "已确认由NavDestination路由页改为嵌入组件；首写者agent-af66d080d2417d8f7.jsonl L203，未核其写前规格与形态判定。"
+    },
+    {
+      "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/pages/AddFeedPage.ets",
+      "reason": "已确认pushPathByName('OnlineSearchPage')与loadFeedPage改loadChildPage/loadChildFeedPage；首写者agent-a5c49339568bdd159.jsonl等，未逐个调用点核写前输入。"
+    },
+    {
+      "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/pages/AllEpisodesPage.ets",
+      "reason": "已确认SearchPage/EpisodeDetailPage的pushPathByName改loadChildPage；调用点由agent-a2665b6468828cce7.jsonl等写入，未逐个核写前输入。"
+    },
+    {
+      "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/pages/FeedItemlistPage.ets",
+      "reason": "已确认FeedInfo/FeedSettings/Search/EpisodeDetail的pushPathByName改loadChildPage并接ShellNavIcon；生成调用点写者未逐个核。"
+    },
+    {
+      "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/pages/SubscriptionPage.ets",
+      "reason": "已确认pushPathByName('SearchPage')改loadChildPage；该调用点生成写者未核。"
+    },
+    {
+      "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/components/download/DownloadLogDetailsDialog.ets",
+      "reason": "已确认loadFeedPage改loadChildFeedPage；生成写入为agent-ae663eba77aefacb6.jsonl（2026-10-02T21:04:42Z），与FeedStatisticsDialog分支同类，未核写前输入。"
+    },
+    {
+      "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/pages/VideoplayerPage.ets",
+      "reason": "已确认navPathStack.clear()（CLEAR_TOP等价）改openFeedInMainActivity；生成写入为agent-ae06e93bbc48a2102.jsonl（2026-10-02T20:23:21Z），未核写前输入。"
+    },
+    {
+      "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/services/FeedManagementService.ets",
+      "reason": "已确认openFeedInMainActivity增加clearBackStack（缺省false）与pendingOpenFeedClearBackStack；原清栈实现的生成写者未核。"
+    },
+    {
+      "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/pages/DiscoveryPage.ets",
+      "reason": "保留差异中该文件只见国家选择弹窗改写，未见本问题路由/选中改动；Discovery选中通道实际修在ShellRouter/MainPage/AppShellViewModel（已归入AC22 navigationTag分支），该文件无可溯的本问题片段。"
+    }
+  ],
+  "job": "issue-05f3fb8501654bad9261",
+  "metadata": {
+    "migration": {
+      "id": "antennapod-glm53-3c838ae1-111b-475a-a085-e9464ec2fde4",
+      "project": "AntennaPod"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.285",
+        "2.1.286",
+        "2.1.287",
+        "2.1.288",
+        "2.1.289"
+      ]
+    },
+    "source_set_id": "sources-5f9a4b68d8866c1b1233",
+    "environment": [
+      {
+        "name": "toolchain.kotlin",
+        "value": "2.3.20",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-09-30T15:43:45.309Z",
+        "ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a3da0f444ffe5d81f.jsonl:L27",
+        "request_ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a3da0f444ffe5d81f.jsonl:L25",
+        "phase": "generation"
+      },
+      {
+        "name": "toolchain.agp",
+        "value": "8.11.0",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-09-30T15:43:45.309Z",
+        "ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a3da0f444ffe5d81f.jsonl:L27",
+        "request_ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a3da0f444ffe5d81f.jsonl:L25",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-09-30T17:34:05.597Z",
+        "ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a5c631d1e662fac13.jsonl:L54",
+        "request_ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a5c631d1e662fac13.jsonl:L53",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-09-30T17:34:05.597Z",
+        "ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a5c631d1e662fac13.jsonl:L54",
+        "request_ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a5c631d1e662fac13.jsonl:L53",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.0.2(22)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-10-04T16:26:51.075Z",
+        "ref": "repair/ae3bb09d-1f58-48a4-91c8-85a20fd96fc1.jsonl:L215",
+        "request_ref": "repair/ae3bb09d-1f58-48a4-91c8-85a20fd96fc1.jsonl:L214",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.0.1(21)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-10-04T16:26:51.075Z",
+        "ref": "repair/ae3bb09d-1f58-48a4-91c8-85a20fd96fc1.jsonl:L215",
+        "request_ref": "repair/ae3bb09d-1f58-48a4-91c8-85a20fd96fc1.jsonl:L214",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.4",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "040e09cc-8de1-45ba-bc4b-5202da7f9c23"
+      ]
+    }
+  },
+  "revision": "a373b466540a298073450a55e68d4a64a6a180fd8fbe15307d211031c7ebe33b"
+}

@@ -1,0 +1,427 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-c9f54856d3fb74cbd54b",
+  "created_at": "2026-09-27T17:46:17.675561+00:00",
+  "migration_key": "9264617d-5373-4aca-8c7d-94c70606545c",
+  "title": "把蓝牙回调参数和页面缓存当作开关真值：非终态回调覆盖、快照拦截与单协议断开误判",
+  "when": "系统能力接入与状态接线阶段，决定蓝牙开关/连接状态以什么为真值、在何处门控与回读时",
+  "description": "Android 端在点击和广播处理时实时读取 BluetoothAdapter，只在 ACTION_STATE_CHANGED 的 STATE_ON/STATE_OFF 终态及 ACL 设备级连接/断开时刷新 UI；目标实现改用 HarmonyOS access.on('stateChange')、A2DP/HFP 分协议 connectionStateChange，并经 ViewModel 与页面 @Local 副本驱动开关、设备入口和连接页。",
+  "summary": "状态回调：生成期 slice02_vm_worker 已把状态变化写成 onBluetoothStateChanged() 先回读\nbluetoothService.isEnabled() 再刷新设备。生成期修复波 slice05_f005 写前读到这段实现\n（agent-01a08bc3 L365/L374），却在 L441-L444 改为平台回调 stateChanged(state === STATE_ON)，\nViewModel 直接 this.bluetoothEnabled = enabled，OFF 即清空设备。TURNING/BLE 等非终态和迟到回调\n因此都会被当成“关闭”覆盖当前真值。\nF006 修复期 f006_bluetooth_impl 写前读到 Android BlueToothUtil（L146/L149：ACTION_STATE_CHANGED\n只在 STATE_ON/STATE_OFF 终态通知，连接/断开走 ACL 设备级广播）和 DeviceConnectActivity\n（L139/L142：页面只注册监听并开始扫描，没有蓝牙开关拦截）。它删除并重写 BluetoothService/ViewModel\n（L321-L331、L356-L364），仍保留上述映射与参数直写；又把 A2DP/HFP 单个协议的 STATE_DISCONNECTED\n直接上报为设备断开。新增 DeviceConnectViewModel（L370-L373）时，load() 在申请权限前先按 isEnabled()\n拦截；任何 false 回调都会清空列表并弹 BLUETOOTH_DISABLED；待断开设备收到首个协议 false 即判定成功。\n入口与水合：convert_0003_bluetooth 写前读到 Fragment 点击时实时 isBluetoothEnabled()（L58/L67），\n输出却以页面 @Local bluetoothEnabled 快照拦截“切换蓝牙设备”（L238-L241）。slice02_vm_worker\n读到 initView 先同步读蓝牙开关再读两个偏好（L36/L39），但 load() 把 bluetoothEnabled 放在权限、\n两个偏好和通知的四次 await 之后才赋值（L73-L76）；F006 重写原样保留。\n修复依据：09-14 真机确认 getState 为 STATE_ON(2)，移除页面本地拦截并修复迟到 OFF 覆盖\n（epoch-1 main L2123、L2192）。独立审查读回的新 BluetoothService 回调改为 access.getState() 回读：\nON/BLE_ON 视为开启，仅当当前状态与回调同为 STATE_OFF 才报关闭（agent-01a08e4c L897）。\n页面 onOpenDevicePicker 直接交给 ViewModel，先申请权限、再实时判定开关（agent-01a08e4c L928）。\nROUND12 把系统状态同步前移（main L2291）。09-15 ROUND44 新增“所有协议都断开才算断开”helper\n（agent-01a0a2d3 L456 BluetoothService.ets:78-79），连接页只在回调或回读确认后显示成功\n（agent-01a0a3b0 L6 继承答复）。\nopenDevicePicker 先读状态后申请权限的写法，与 Android L100-L111 及 F003-AC03 的给定顺序一致。\nROUND7 前移权限后设备入口仍被拦截，因此这一步不单独归因。顶部开关读 ViewModel 字段（ROUND11），\n以及 09-15 顶部开关内联（ROUND46-47），均由截断后的代理写入，本卡不归因。\n",
+  "recommendations": [
+    "系统能力接入时，订阅 access.on('stateChange') 后只让终态驱动开关：收到回调即以 access.getState() 回读，STATE_ON（按业务可含 STATE_BLE_ON）为开；只有回读和回调都为 STATE_OFF 才报关闭。TURNING_*、BLE 过渡态和迟到回调不得直接写成 false。",
+    "重写已有状态处理前，先对照被替换的旧逻辑和源端广播分支：旧实现已是“变化时回读 isEnabled()”、源端只处理 STATE_ON/STATE_OFF 时，不要改成信任回调参数。",
+    "分协议连接回调需按设备聚合：A2DP/HFP 任一仍连接，或 getConnectedDevices 并集中仍含该设备，都不能判定断开或断开成功；连接、配对成功也要以系统回调或回读确认。",
+    "页面/ViewModel 接线时，源端在点击瞬间实时读取系统状态的门控，应放到 ViewModel/Service 的决策点：先完成权限申请，再实时回读，不要用页面 @Local 快照拦截导航。目标页不要新增源端没有的开关拦截。",
+    "初始水合时，先同步读取可立即获得的系统真值（getState）并通知 UI，再等待偏好、通知授权等异步读取；不要把系统状态与无关 await 绑成一次性赋值。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "D:/temp_ctools/app_shared_bike_riding_records_harmony/entry/src/main/ets/services/BluetoothService.ets",
+        "since": "2026-09-10T19:10:12.041Z",
+        "at": "2026-09-15T09:23:49.093Z"
+      },
+      "nodes": [
+        {
+          "key": "D:/temp_ctools/app_shared_bike_riding_records_harmony/entry/src/main/ets/viewmodels/BluetoothViewModel.ets",
+          "at": "2026-09-10T14:59:13.189Z",
+          "reason": "正常输入：slice05_f005 带行号读回现有 ViewModel，其中 onBluetoothStateChanged() 先回读 bluetoothService.isEnabled() 再 refreshDevices()，即状态变化以系统回读为真值（agent-01a08bc3 L365/L374）。"
+        },
+        {
+          "key": "agent-01a08bc3-3474-7a60-be77-2580b38b7040.jsonl",
+          "at": "2026-09-10T15:04:38.130Z",
+          "reason": "读到上述回读实现后，为补订阅，在平台层新增 access.on('stateChange') 回调 stateChanged(state === access.BluetoothState.STATE_ON)，把每次回调参数直接折算成开关真值，非 STATE_ON 一律为关（同转录 L441-L444）。",
+          "problem": true
+        },
+        {
+          "key": "D:/app-shared-bike-riding-records-android/app/src/main/java/com/shared/riding/util/BlueToothUtil.kt",
+          "at": "2026-09-11T01:50:04.525Z",
+          "reason": "正常输入：f006_bluetooth_impl 读取第 1-280 行，ACTION_STATE_CHANGED 只在 STATE_ON/STATE_OFF 终态通知监听者，中间态只用于失败判断；ACL_CONNECTED/ACL_DISCONNECTED 为设备级连接事件（agent-01a08e25 L146/L149）。"
+        },
+        {
+          "key": "agent-01a08e25-d1d1-7e40-81ae-77b4e7f2f3a7.jsonl",
+          "at": "2026-09-11T01:58:47.537Z",
+          "reason": "读到终态语义后，删除并重写 BluetoothService：stateCallback 仍以 state === STATE_ON 映射每次回调；connectionCallback 又按单个 A2DP/HFP 协议 STATE_DISCONNECTED 上报设备 connected=false（同转录 L321-L331）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "exec 并行 Get-Content 带行号读取 BluetoothViewModel.ets 等七个文件，回执含 onBluetoothStateChanged() 回读 isEnabled() 的实现；这是 slice05_f005 写前对该文件的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08bc3-3474-7a60-be77-2580b38b7040.jsonl",
+              "line": 365
+            },
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08bc3-3474-7a60-be77-2580b38b7040.jsonl",
+              "line": 374
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": "target",
+          "force": true,
+          "reason": "apply_patch 的 Update File 直接修改 BluetoothService.ets，加入 subscribe/stateCallback 与 state === STATE_ON 映射，回执成功。",
+          "evidence": [
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08bc3-3474-7a60-be77-2580b38b7040.jsonl",
+              "line": 441
+            },
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08bc3-3474-7a60-be77-2580b38b7040.jsonl",
+              "line": 444
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "exec 用 Get-Content 读取 BlueToothUtil.kt 第 1-280 行，回执含 ACTION_STATE_CHANGED 终态分支与 ACL 连接/断开处理。",
+          "evidence": [
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08e25-d1d1-7e40-81ae-77b4e7f2f3a7.jsonl",
+              "line": 146
+            },
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08e25-d1d1-7e40-81ae-77b4e7f2f3a7.jsonl",
+              "line": 149
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": "target",
+          "force": true,
+          "reason": "apply_patch 的 Add File 重建 BluetoothService.ets（此前 L321 已删除旧文件），回执成功，内容含 state === STATE_ON 回调映射与按协议 connected 上报。",
+          "evidence": [
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08e25-d1d1-7e40-81ae-77b4e7f2f3a7.jsonl",
+              "line": 328
+            },
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08e25-d1d1-7e40-81ae-77b4e7f2f3a7.jsonl",
+              "line": 331
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "D:/temp_ctools/app_shared_bike_riding_records_harmony/entry/src/main/ets/viewmodels/BluetoothViewModel.ets",
+        "since": "2026-09-10T19:10:12.041Z",
+        "at": "2026-09-15T09:23:49.093Z"
+      },
+      "nodes": [
+        {
+          "key": "D:/temp_ctools/app_shared_bike_riding_records_harmony/entry/src/main/ets/viewmodels/BluetoothViewModel.ets",
+          "at": "2026-09-10T14:59:13.189Z",
+          "reason": "正常输入：slice05_f005 读回的现有 onBluetoothStateChanged() 以 isEnabled() 回读为准（agent-01a08bc3 L365/L374）。"
+        },
+        {
+          "key": "agent-01a08bc3-3474-7a60-be77-2580b38b7040.jsonl",
+          "at": "2026-09-10T15:04:38.130Z",
+          "reason": "同一补丁新增 stateCallback：this.bluetoothEnabled = enabled，false 时清空 connectedDevices，把回调参数直写为 ViewModel 真值，取代回读（同转录 L441-L444）。",
+          "problem": true
+        },
+        {
+          "key": "D:/app-shared-bike-riding-records-android/app/src/main/java/com/shared/riding/ui/bluetooth/BlueToothFragment.kt",
+          "at": "2026-09-10T13:44:38.730Z",
+          "reason": "正常输入：slice02_vm_worker 读取锚点源码，initView 先同步 isBluetoothEnabled() 设置开关图，再读自动弹窗与通知偏好；同批读到 F003-AC01 要求出现时显示真实开关（agent-01a08b8f-4a5a L36/L39、L29/L32）。"
+        },
+        {
+          "key": "agent-01a08b8f-4a5a-78e1-8353-bd8dbc151372.jsonl",
+          "at": "2026-09-10T13:46:38.063Z",
+          "reason": "新建 ViewModel 时，load() 依次 await 权限、两个偏好和通知授权，最后才赋值 bluetoothEnabled = isEnabled()，把可同步取得的系统开关拖到无关异步读取之后（同转录 L73-L76）。",
+          "problem": true
+        },
+        {
+          "key": "D:/app-shared-bike-riding-records-android/app/src/main/java/com/shared/riding/util/BlueToothUtil.kt",
+          "at": "2026-09-11T01:50:04.525Z",
+          "reason": "正常输入：f006_bluetooth_impl 读到 ACTION_STATE_CHANGED 只在终态通知（agent-01a08e25 L146/L149）。"
+        },
+        {
+          "key": "agent-01a08e25-d1d1-7e40-81ae-77b4e7f2f3a7.jsonl",
+          "at": "2026-09-11T02:00:25.746Z",
+          "reason": "删除并重写 ViewModel，仍以 this.bluetoothEnabled = enabled 直写回调参数，OFF 即清空设备与电量；load() 仍在四次 await 后才读开关（同转录 L356-L364）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "exec 带行号读取 BluetoothViewModel.ets，回执含 onBluetoothStateChanged() 回读实现；属 slice05_f005 写前读取。",
+          "evidence": [
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08bc3-3474-7a60-be77-2580b38b7040.jsonl",
+              "line": 365
+            },
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08bc3-3474-7a60-be77-2580b38b7040.jsonl",
+              "line": 374
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": "target",
+          "force": true,
+          "reason": "同一 apply_patch 还含 Update File BluetoothViewModel.ets，新增 stateCallback 直写 enabled，回执成功。",
+          "evidence": [
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08bc3-3474-7a60-be77-2580b38b7040.jsonl",
+              "line": 441
+            },
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08bc3-3474-7a60-be77-2580b38b7040.jsonl",
+              "line": 444
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "exec 按锚点 Get-Content -Raw 读取 BlueToothFragment.kt 等 Android 源码，回执含 initView 先读 isBluetoothEnabled() 的片段。",
+          "evidence": [
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b8f-4a5a-78e1-8353-bd8dbc151372.jsonl",
+              "line": 36
+            },
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b8f-4a5a-78e1-8353-bd8dbc151372.jsonl",
+              "line": 39
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": "target",
+          "force": true,
+          "reason": "apply_patch 的 Add File 新建 BluetoothViewModel.ets，load() 四次 await 后才读开关，回执成功。",
+          "evidence": [
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b8f-4a5a-78e1-8353-bd8dbc151372.jsonl",
+              "line": 73
+            },
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b8f-4a5a-78e1-8353-bd8dbc151372.jsonl",
+              "line": 76
+            }
+          ]
+        },
+        {
+          "from": 5,
+          "to": 6,
+          "force": true,
+          "reason": "exec 读取 BlueToothUtil.kt 第 1-280 行，回执含 ACTION_STATE_CHANGED 仅终态通知的分支。",
+          "evidence": [
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08e25-d1d1-7e40-81ae-77b4e7f2f3a7.jsonl",
+              "line": 146
+            },
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08e25-d1d1-7e40-81ae-77b4e7f2f3a7.jsonl",
+              "line": 149
+            }
+          ]
+        },
+        {
+          "from": 6,
+          "to": "target",
+          "force": true,
+          "reason": "apply_patch 的 Add File 重建 BluetoothViewModel.ets（L356 已删除旧文件），回执成功，保留参数直写与 load() 次序。",
+          "evidence": [
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08e25-d1d1-7e40-81ae-77b4e7f2f3a7.jsonl",
+              "line": 361
+            },
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08e25-d1d1-7e40-81ae-77b4e7f2f3a7.jsonl",
+              "line": 364
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "D:/temp_ctools/app_shared_bike_riding_records_harmony/entry/src/main/ets/pages/BluetoothPage.ets",
+        "since": "2026-09-10T19:10:12.041Z",
+        "at": "2026-09-15T09:23:49.093Z"
+      },
+      "nodes": [
+        {
+          "key": "D:/app-shared-bike-riding-records-android/app/src/main/java/com/shared/riding/ui/bluetooth/BlueToothFragment.kt",
+          "at": "2026-09-10T12:04:49.633Z",
+          "reason": "正常输入：convert_0003_bluetooth 读到 layoutChangeDevice 点击时实时调用 BlueToothUtil.isBluetoothEnabled()，关闭才提示“请先开启蓝牙”，随后申请蓝牙权限再进设备页（agent-01a08b32 L58/L67）。"
+        },
+        {
+          "key": "agent-01a08b32-fa46-7641-a5b0-e326706fe92d.jsonl",
+          "at": "2026-09-10T12:15:21.416Z",
+          "reason": "新建页面时 onOpenDevicePicker 改为读取页面 @Local bluetoothEnabled 快照（if (!this.bluetoothEnabled) 提示并 return），在任何 ViewModel 权限申请或实时回读之前拦截入口（同转录 L238-L241）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "exec 并行读取页面快照与 Android 锚点，其中含 BlueToothFragment.kt 全文，回执含 layoutChangeDevice 点击时实时 isBluetoothEnabled() 的分支。",
+          "evidence": [
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b32-fa46-7641-a5b0-e326706fe92d.jsonl",
+              "line": 58
+            },
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b32-fa46-7641-a5b0-e326706fe92d.jsonl",
+              "line": 67
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": "target",
+          "force": true,
+          "reason": "apply_patch 的 Add File 新建 BluetoothPage.ets，onOpenDevicePicker 以 @Local bluetoothEnabled 拦截，回执成功。",
+          "evidence": [
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b32-fa46-7641-a5b0-e326706fe92d.jsonl",
+              "line": 238
+            },
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08b32-fa46-7641-a5b0-e326706fe92d.jsonl",
+              "line": 241
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "D:/temp_ctools/app_shared_bike_riding_records_harmony/entry/src/main/ets/viewmodels/DeviceConnectViewModel.ets",
+        "since": "2026-09-10T19:10:12.041Z",
+        "at": "2026-09-15T09:23:49.093Z"
+      },
+      "nodes": [
+        {
+          "key": "D:/app-shared-bike-riding-records-android/app/src/main/java/com/shared/riding/ui/bluetooth/activity/DeviceConnectActivity.kt",
+          "at": "2026-09-11T01:49:56.099Z",
+          "reason": "正常输入：f006_bluetooth_impl 读到设备连接页 initView 只注册监听并 startDiscovery，不做蓝牙开关拦截；连接/断开结果来自监听回调（agent-01a08e25 L139/L142）。"
+        },
+        {
+          "key": "D:/app-shared-bike-riding-records-android/app/src/main/java/com/shared/riding/util/BlueToothUtil.kt",
+          "at": "2026-09-11T01:50:04.525Z",
+          "reason": "正常输入：同一代理读到终态才通知开关变化，设备连接/断开按 ACL 设备级事件分发（agent-01a08e25 L146/L149）。"
+        },
+        {
+          "key": "agent-01a08e25-d1d1-7e40-81ae-77b4e7f2f3a7.jsonl",
+          "at": "2026-09-11T02:01:51.621Z",
+          "reason": "新增 DeviceConnectViewModel：load() 在申请权限前先以 isEnabled() 拦截为 BLUETOOTH_DISABLED；stateCallback 收到任何 false 就清空列表并弹关闭提示；onConnectionChanged 对待断开设备收到首个协议 false 即判定断开成功（同转录 L370-L373）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3,
+          "force": true,
+          "reason": "exec 用 Get-Content 读取 BlueToothFragment.kt 与 DeviceConnectActivity.kt 全文，回执含设备页 initView 只注册监听并 startDiscovery。",
+          "evidence": [
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08e25-d1d1-7e40-81ae-77b4e7f2f3a7.jsonl",
+              "line": 139
+            },
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08e25-d1d1-7e40-81ae-77b4e7f2f3a7.jsonl",
+              "line": 142
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "exec 读取 BlueToothUtil.kt 第 1-280 行，回执含终态通知与 ACL 设备级连接事件。",
+          "evidence": [
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08e25-d1d1-7e40-81ae-77b4e7f2f3a7.jsonl",
+              "line": 146
+            },
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08e25-d1d1-7e40-81ae-77b4e7f2f3a7.jsonl",
+              "line": 149
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": "target",
+          "force": true,
+          "reason": "apply_patch 的 Add File 新建 DeviceConnectViewModel.ets，回执成功，含 isEnabled() 先行拦截、false 即关闭提示与首个协议 false 判定断开。",
+          "evidence": [
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08e25-d1d1-7e40-81ae-77b4e7f2f3a7.jsonl",
+              "line": 370
+            },
+            {
+              "source": "runs/21d966e9-289e-4f40-b128-0b4957c12261/epoch-0/sessions/agent-01a08e25-d1d1-7e40-81ae-77b4e7f2f3a7.jsonl",
+              "line": 373
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "未核实该真机（API 23）在未授予 ACCESS_BLUETOOTH 时 access.getState() 的实际表现；SDK since 13 的注释已不标 @permission。权限前移（ROUND7）后入口仍被拦截，故权限顺序不作独立偏差归因。",
+    "09-14 ROUND7-12 与 09-15 ROUND44-47 的源码写入发生在截断后的 five_page_flow_closure/根线程；修改内容依据后续读取（agent-01a08e4c L897/L928/L982、agent-01a0a2d3 L438/L456）和根代理报告。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-c9f54856d3fb74cbd54b",
+  "metadata": {
+    "migration": {
+      "project": "骑行记录",
+      "server_session_id": "9264617d-5373-4aca-8c7d-94c70606545c"
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "b8a0e4bd-257d-4c7c-adeb-30d94a4f03fa"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "gpt-5.6-sol",
+        "gpt-5.6-terra",
+        "gpt-6-astra"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.153.4"
+      ]
+    },
+    "source_set_id": "sources-51973a3274ea587edce3",
+    "card_tool_version": "0.8.3"
+  },
+  "revision": "44393c2b1eb069a8783fb6cdaf2173655cd8ced3e5c347c5d8df872baf20fba2"
+}

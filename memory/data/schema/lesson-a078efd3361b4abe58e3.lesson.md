@@ -1,6 +1,6 @@
 # relationalStore 共享写入口：单条语句直接 await execute/insert/delete，多语句事务用 beginTransaction/commit/rollBack；不选 d.ts 声明 801 的 beginTrans()/execute(sql, txId) 事务 ID 接口
 
-ID：`lesson-a078efd3361b4abe58e3` · 版本：1
+ID：`lesson-a078efd3361b4abe58e3` · 版本：2
 
 [本主题](index.md)
 
@@ -14,7 +14,7 @@ ArkTS 用 @kit.ArkData relationalStore 普通（非向量）关系库，DAO 的�
 
 ## 原因
 
-单条 SQL 本身是原子语句，已满足“写完才返回、失败不留半条”，为它套事务只多出失败点。两套事务接口 @since 相同，@since 只说明接口出现的版本，不说明当前库类型与设备支持；来源中事务 ID 一套在 API 24 真机的普通库上调用 beginTrans() 即返回 801，所有保存都失败，而 unit 判定与签名比对都发现不了。该接口的官方适用库类型未在来源中核实，参考写法 beginTransaction() 也未在来源中做真机验证。
+单条 SQL 本身是原子语句，已满足“写完才返回、失败不留半条”，为它套事务只多出失败点。两套事务接口 @since 相同，@since 只说明接口出现的版本，不说明当前库类型与设备支持；来源中事务 ID 一套在 API 24 真机的普通库上调用 beginTrans() 即返回 801，所有保存都失败，当时只核 unit 判定方式与签名，没有覆盖当前 StoreConfig 的接口适用性及真实 RdbStore 写入，因而未发现；按库类型静态核对文档和能力分支、或增加真实写入测试仍可检出。该接口的官方适用库类型未在来源中核实，参考写法 beginTransaction() 也未在来源中做真机验证。
 
 ## 做法
 

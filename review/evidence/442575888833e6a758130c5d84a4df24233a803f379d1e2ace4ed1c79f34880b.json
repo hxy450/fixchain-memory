@@ -1,0 +1,226 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-8128c57ee5fb2e4f49d1",
+  "created_at": "2026-09-27T13:25:56.297945+00:00",
+  "migration_key": "c48c34f6-1f91-421f-aa50-0064cb39d8cd",
+  "title": "把经 buildAnnotatedStringWithUrls 加工的描述文本降成纯 Text，链接不着色也不可点",
+  "when": "界面实现阶段，把源端 Compose 文本组件译成 ArkUI Text、对照功能验收项决定是否保留源码对展示文本的加工（链接识别、着色、点击）时",
+  "description": "源组件不直接显示原始字符串，而是先调用工具函数（如 buildAnnotatedStringWithUrls）生成带 LinkAnnotation 的 AnnotatedString 再交给 Text；页面规格与功能验收项只写了空值隐藏、折叠展开等布局行为，没有提链接；该工具类在规格里被挂到别的功能，或者没有独立的目标文件。",
+  "summary": "本问题有两个已核偏差点，分属规格提取与界面实现两个阶段。\n规格提取：规格作者 agent-01a0b876 写前读到设计文档 3.7「配方浏览、详情与编辑模块」的核心算法第 7 条\n「URL 提取：正则匹配 http/https/ftp/gopher/telnet/file，构建 AnnotatedString LinkAnnotation」\n（agent-01a0b876-96a1-7550-afdf-4e6243cc94b0.jsonl:L149-L150），随后自己写的 feature-base.md 组件表也写明\nDescriptionCard「blank suppressed; >2 lines expandable; URL spans」（同转录 L162-L164）。但它用\ngenerate_stage1_features.py 生成 F003 时（L175，最终一次运行 L322-L323），android_source_anchors 不含 Description.kt，\nutil 只列 NumberUtils，F003-AC02 只写“空描述隐藏、超过两行折叠、展开不限行”，没有链接；同一脚本把\nAnnotatedStringUtils.kt 挂到 F009 About，写成“Credits text links every URL”。About.kt 并不调用这个工具\n（About 转换者 agent-01a0b8ed-ee64-7e60-9b39-0b749dd17642.jsonl:L39-L42 读后即指出；源码调用点只有 Description.kt:37\n与 RecipeEdit.kt:335，见 agent-01a0b99f-5862-77e1-8c9c-4454786950c7.jsonl:L116 的 grep 回执）。\n页面规格 page_0003 同样只把 DescriptionCard 锚到 Description.kt，结构和转换决策都没提链接。\n界面实现：详情页转换者 agent-01a0b8b4 读了 F003（agent-01a0b8b4-fd8f-7330-8cb3-9bc3620685e3.jsonl:L62-L63），\n也直接读了 Description.kt（L89-L90）：第 26 行 import buildAnnotatedStringWithUrls，第 37 行\nval descriptionWithLinks = buildAnnotatedStringWithUrls(descriptionText)，第 62-63 行 Text(text = descriptionWithLinks)，\n预览里的描述还带着一条 YouTube 链接。仅凭源码就足以知道描述要识别链接、着色并可点击。它也注意到了：\n写前推理写着“link parsing in description: source builds URLs, but no requirement F003 except text. Could make full plain text.”\n（L216），自检时又写“source Description URLs not clickable; spec AC02 only expand. Fine.”（L519）。\n也就是说，它把“验收项没列”当成可以删掉源码行为的依据，没有去读 AnnotatedStringUtils.kt；\n08:18:44 的 apply_patch 把 DescriptionCard 写成 Text(this.descriptionText) 加 maxLines、省略号和展开箭头\n（L237-L239），正好只实现了 F003-AC02。派工只允许它写 RecipeDetailsPage.ets（L7），但它既没在页面内实现等价逻辑，\n也没登记占位；结构化报告里 low_confidence_uncertain_regions 为空，也没有写出这次降级（L528）。\n之后主会话 09:45-09:47 为过编译把 onTextLayout 换成字数阈值（main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl:L1275、L1283、L1308），\nText(this.descriptionText) 未变，纯文本一直保留到返修。ECAT 第一轮按文件级缺口移植出 AnnotatedStringUtils.ets\n（main-01a0b99c-840a-7343-90f4-1e256f32367b.jsonl:L8 第 14 项；agent-01a0b99f-5862 L131、L271、L283），派工要求不接线；\n第二轮判官指出 DescriptionCard 仍是纯 Text（main-01a0b99c L588），worker 在 DescriptionCard 引入\nbuildAnnotatedStringWithUrls（agent-01a0b9e0-fd9b-7c11-9545-865aed507e15.jsonl:L239、L330），生成者再改成\nTextController.setStyledString 并用 Text('', { controller }) 过编译（main-01a0b99c L722）。\n",
+  "recommendations": [
+    "界面实现阶段移植 Compose 文本组件时，先确认传给 Text 的是原始字符串还是工具函数加工后的 AnnotatedString；遇到 buildAnnotatedStringWithUrls 这类调用，读它的定义，把链接识别、链接样式和点击行为落实到目标端（ArkUI 可用 StyledString + UrlStyle，经 TextController.setStyledString 设置），不要只渲染原始字符串。",
+    "源码里有、验收项没写的可见行为，不能据此判定可删：按源码实现；做不了就登记占位并在报告的未决项里写明降级，同时指出规格缺口。",
+    "派工限定只写页面文件而共享工具类尚无目标文件时，在页面内实现等价逻辑，或登记前向引用交给后续切片；不要静默省略。",
+    "规格提取阶段为 UI 组件写验收项时，逐项覆盖组件源码对展示文本的加工（本例的 URL spans），并同步到该功能的 android_source_anchors；工具类按真实调用点归属功能（grep 调用者），不要凭名字挂到不调用它的页面。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/private/tmp/testCofi-codex/entry/src/main/ets/pages/RecipeDetailsPage.ets",
+        "since": "2026-09-19T10:26:37.280Z",
+        "at": "2026-09-19T13:59:12.701Z"
+      },
+      "nodes": [
+        {
+          "key": "/private/tmp/testCofi-codex/spec/ref/Cofi_design.md",
+          "at": "2026-09-19T07:05:48.203Z",
+          "reason": "规格作者的正常输入：sed 截取设计文档 583-1004 行再 cat，回执含 3.7.7 核心算法第 7 条「URL 提取：正则匹配 http/https/ftp/gopher/telnet/file，构建 AnnotatedString LinkAnnotation」，属于配方浏览、详情与编辑模块；足以说明详情页描述需要链接能力（agent-01a0b876-96a1-7550-afdf-4e6243cc94b0.jsonl:L149-L150）。"
+        },
+        {
+          "key": "agent-01a0b876-96a1-7550-afdf-4e6243cc94b0.jsonl",
+          "at": "2026-09-19T07:20:00.605Z",
+          "reason": "规格偏差：读到上述要求，并在 feature-base.md 写出 DescriptionCard 带 URL spans（L162-L164）；但 generate_stage1_features.py（L175）生成的 F003 锚点不含 Description.kt、AC02 只写空值隐藏与折叠展开，AnnotatedStringUtils.kt 反被挂到 F009 About credits（About.kt 并不调用）。最终一次运行该脚本写出 F003 在 L322-L323。",
+          "problem": true
+        },
+        {
+          "key": "/private/tmp/testCofi-codex/spec/baseline/features/F003-recipe-details.md",
+          "at": "2026-09-19T08:09:03.648Z",
+          "reason": "交付桥梁：详情页转换者 sed 读取 F003 回执，anchors 无 Description.kt，util 只有 NumberUtils，F003-AC02 只要求空描述隐藏、超过两行折叠、展开不限行，没有链接（agent-01a0b8b4-fd8f-7330-8cb3-9bc3620685e3.jsonl:L62-L63）；转换者随后正是以“F003 没有这项要求”为由改成纯文本（同转录 L216）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/others/Cofi/app/src/main/java/com/omelan/cofi/components/Description.kt",
+          "at": "2026-09-19T08:09:39.858Z",
+          "reason": "转换者的正常输入：nl 读取回执给出第 26 行 import buildAnnotatedStringWithUrls、第 37 行 descriptionWithLinks = buildAnnotatedStringWithUrls(descriptionText)、第 62-63 行 Text(text = descriptionWithLinks)，预览描述含 YouTube 链接；足以说明描述需识别链接、着色并可点击（agent-01a0b8b4-fd8f-7330-8cb3-9bc3620685e3.jsonl:L89-L90）。"
+        },
+        {
+          "key": "agent-01a0b8b4-fd8f-7330-8cb3-9bc3620685e3.jsonl",
+          "at": "2026-09-19T08:18:44.351Z",
+          "reason": "实现偏差：读到源码与 F003 后，推理里明确写“source builds URLs, but no requirement F003 except text. Could make full plain text.”（L216），随后 apply_patch 把 DescriptionCard 写成 Text(this.descriptionText) 加 maxLines/省略号/展开箭头，只落实 F003-AC02，丢掉 buildAnnotatedStringWithUrls 的链接加工；未实现等价逻辑、未登记占位，报告未写降级（同转录 L237-L239、L519、L528）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "规格作者 exec_command 用 sed 截取 spec/ref/Cofi_design.md 第 583-1004 行写入 /tmp/design_timer.txt 后 cat，回执含 3.7.7 第 7 条 URL 提取与 AnnotatedString LinkAnnotation；经临时文件的 shell 读取没有被自动解析。",
+          "evidence": [
+            {
+              "source": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/agent-01a0b876-96a1-7550-afdf-4e6243cc94b0.jsonl",
+              "line": 149
+            },
+            {
+              "source": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/agent-01a0b876-96a1-7550-afdf-4e6243cc94b0.jsonl",
+              "line": 150
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "规格作者用 apply_patch 新建 spec/.a2h/generate_stage1_features.py，其中 F003 段的锚点不含 Description.kt、F003-AC02 只写空值隐藏与折叠展开（L175）；最后一次在工程根执行 python3 spec/.a2h/generate_stage1_features.py（脚本先清空再重写 spec/baseline/features/*.md）并返回成功（L322-L323）。脚本写文件没有被自动解析。",
+          "evidence": [
+            {
+              "source": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/agent-01a0b876-96a1-7550-afdf-4e6243cc94b0.jsonl",
+              "line": 175
+            },
+            {
+              "source": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/agent-01a0b876-96a1-7550-afdf-4e6243cc94b0.jsonl",
+              "line": 322
+            },
+            {
+              "source": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/agent-01a0b876-96a1-7550-afdf-4e6243cc94b0.jsonl",
+              "line": 323
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": 5,
+          "force": true,
+          "reason": "详情页转换者 exec_command 在工程根执行 sed -n '1,75p' spec/baseline/features/F003-recipe-details.md，回执给出 anchors（无 Description.kt）与只含折叠展开的 F003-AC02；相对路径的 shell 读取没有被自动解析。",
+          "evidence": [
+            {
+              "source": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/agent-01a0b8b4-fd8f-7330-8cb3-9bc3620685e3.jsonl",
+              "line": 62
+            },
+            {
+              "source": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/agent-01a0b8b4-fd8f-7330-8cb3-9bc3620685e3.jsonl",
+              "line": 63
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": 5,
+          "force": true,
+          "reason": "详情页转换者 exec_command 执行 nl -ba 读取 Description.kt 绝对路径，回执给出第 26 行 import buildAnnotatedStringWithUrls、第 37 行 descriptionWithLinks 与第 62-63 行 Text(text = descriptionWithLinks)；nl 管道读取没有被自动解析。",
+          "evidence": [
+            {
+              "source": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/agent-01a0b8b4-fd8f-7330-8cb3-9bc3620685e3.jsonl",
+              "line": 89
+            },
+            {
+              "source": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/agent-01a0b8b4-fd8f-7330-8cb3-9bc3620685e3.jsonl",
+              "line": 90
+            }
+          ]
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [
+    {
+      "key": "/private/tmp/testCofi-codex/entry/src/main/ets/AnnotatedStringUtils.ets",
+      "reason": "ECAT 第一轮按文件级缺口新建（agent-01a0b99f-5862-77e1-8c9c-4454786950c7.jsonl:L131、L271、L283），生成期没有任何 agent 写过这个路径，无法用真实写入边连到目标。已核的缺口来源与本卡同一：规格把 AnnotatedStringUtils.kt 只挂到 F009 About，About 转换者读后判定 About.kt 不用它而略过（agent-01a0b8ed-ee64-7e60-9b39-0b749dd17642.jsonl:L39-L42）；真正的调用方 DescriptionCard 的转换者只被允许写页面文件，也没有移植或登记。"
+    }
+  ],
+  "job": "issue-8128c57ee5fb2e4f49d1",
+  "metadata": {
+    "migration": {
+      "project": "Cofi",
+      "server_session_id": "c48c34f6-1f91-421f-aa50-0064cb39d8cd",
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "glm-5.3"
+      ],
+      "tool_versions": {
+        "orchestrator": "hmigbot-plus",
+        "runtime_version": "v1.4.8",
+        "runtime_commit": "09ac508",
+        "client_version": "hmigbot-plus-1.6.0",
+        "pack_version": "hmigbot-plus-1.6.0",
+        "codex_cli_version": "0.147.0"
+      }
+    },
+    "analysis": {
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "platforms": [
+        "claude-code"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "glm-5.3"
+      ],
+      "providers": [
+        "hmigbot"
+      ],
+      "client_versions": [
+        "0.147.0"
+      ]
+    },
+    "source_set_id": "sources-abe23f8631388b5ebff0",
+    "environment": [
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0-alpha17",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": null,
+        "at": "2026-09-19T06:34:53.774Z",
+        "ref": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl:L71",
+        "request_ref": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl:L70",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.0.1(21)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-09-19T06:37:07.791Z",
+        "ref": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl:L128",
+        "request_ref": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl:L127",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.0.1(21)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-09-19T06:37:07.791Z",
+        "ref": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl:L128",
+        "request_ref": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/main-01a0b85d-596f-7b91-9c44-fd9f6a1b0dec.jsonl:L127",
+        "phase": "generation"
+      },
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0-alpha17",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": null,
+        "at": "2026-09-19T08:12:43.229Z",
+        "ref": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/agent-01a0b8b4-dac7-7520-b644-8055f38660ad.jsonl:L167",
+        "request_ref": "runs/f0b2ddbc-bfec-44b6-a375-5866de1977b8/epoch-0/sessions/agent-01a0b8b4-dac7-7520-b644-8055f38660ad.jsonl:L166",
+        "phase": "generation"
+      }
+    ],
+    "card_tool_version": "0.8.3"
+  },
+  "revision": "d0184e877064d037eceb8bc968cb0949b5d0bffb239f02ec1d1a93bf7a391713"
+}

@@ -1,6 +1,6 @@
-# 源端禁用态只靠代码换背景、文字色固定时，不用 ArkUI .enabled(false)（会对整个组件降透明）：显式切换背景与投影，用 hitTestBehavior(HitTestMode.None) 或回调内判态拦截点击
+# 源端禁用态只靠代码换背景、文字色固定时，不用 ArkUI .enabled(false)（本例目标按钮会整体降透明）：显式切换背景与投影，用 hitTestBehavior(HitTestMode.None) 或回调内判态拦截点击
 
-ID：`lesson-99080bd3bfc1bcbb9c5f` · 版本：1
+ID：`lesson-99080bd3bfc1bcbb9c5f` · 版本：2
 
 [本主题](index.md)
 
@@ -18,12 +18,12 @@ ID：`lesson-99080bd3bfc1bcbb9c5f` · 版本：1
 
 ## 原因
 
-Android 的 setEnabled 只改状态，颜色由 drawable 与 textColor 选择器决定；ArkUI enabled(false) 会对整个组件（背景与文字）施加默认禁用透明度，源端“不透明灰底、纯白字”就变成发虚的浅灰。
+Android 的 setEnabled 只改状态，颜色由 drawable 与 textColor 选择器决定；本例 ArkUI 按钮的 enabled(false) 会对按钮整体（背景与文字）施加默认禁用透明度，源端“不透明灰底、纯白字”就变成发虚的浅灰。
 
 ## 做法
 
 1. 先查源端禁用外观的来源：背景 drawable、textColor 有无 state_enabled 分支，按钮 stateListAnimator 在禁用时是否归零。只来自代码换背景时，规格写“禁用 = 换背景 + 不响应点击”，判据写禁用态取色等于源背景值、文字为源色。
-2. 实现时不写 .enabled(false)：背景按启停态切换，禁用时投影置空，用 hitTestBehavior(HitTestMode.None) 拦截点击（或在回调内判态直接返回）。
+2. 实现时不写 .enabled(false)：背景按启停态切换，禁用时投影置空，用 hitTestBehavior(HitTestMode.None) 拦截点击（或在回调内判态直接返回）。这只处理外观与点击，仍须核源禁用时的按键、焦点及无障碍等交互状态；替代方案满足源禁用合同后才采用，不能只凭取色或触屏点击就宣称等价。
 
 来源支持：1 张卡 · 1 次迁移 · 1 个应用
 

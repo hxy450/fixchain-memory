@@ -1,0 +1,160 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-dcca102a6a4baff0e7a7",
+  "created_at": "2026-10-14T03:03:55.237569+00:00",
+  "migration_key": "blockinger-glm531-c54518f5-0a64-4778-9630-e5bfe3f912cc",
+  "title": "把 getTextBounds 的墨迹包围盒高度映射成字体行框 fontBoundingBox",
+  "when": "规格提取阶段写 Paint 文字度量到 TextMetrics 的映射行时；渲染实现阶段按映射计算 Canvas 文字行高或行距时",
+  "description": "源端自绘 View 用 Paint.getTextBounds(text, start, end, Rect) 取一段具体字符的包围盒高度来定行高或间距（如 HUD 标签与数值的行距、自适应字号循环），目标用 CanvasRenderingContext2D.measureText 返回的 TextMetrics 计算。",
+  "summary": "规格作者（a2h-spec c4-02，agent-a2c6f1f54ffeaf438）写前 Read 了 Display.java：自适应字号循环与收尾都用\ntextPaint.getTextBounds(\"Level:32\", 0, 6, textRect) 后取 textRect.height() 作 textHeight（收尾 +3），\ndrawTextFillBox 让每组标签与数值只隔 1×textHeight、组间再加 textEmptySpacing（L51-L52）。源 API 是所测 6 个字符的墨迹紧包围盒，\n输入正确且足以确定语义；规格作者自己在 AC15 里也写成“前 6 字符包围盒高度”。但它 grep canvas.d.ts 时只搜 fontBoundingBox（L96-L97），\n首稿映射行直接写成 getTextBounds.height → fontBoundingBoxAscent + fontBoundingBoxDescent、“高度≈ascent+descent”（L127，被 hook 拒写）。\n首写被拒时注入 lesson-f876887b（v1，Paint.ascent/descent 基线修正需按 hhea 实测选字段），召回摘要把它套到 getTextBounds：\n“规格标‘字段待实测（对照字体hhea）’……AC15不断言具体字段”（L128）。该经验只覆盖字体级 Paint.ascent/descent，\n正文还要求“不把墨迹级字段列为等价候选”，没有排除 getTextBounds 这类墨迹级源度量。规格作者据此重写：主规格映射行保留 fontBoundingBox 为候选、\n注“须与字体 hhea 上/下伸实测吻合才等价……团队经验（lesson-f876）”（L135），render 附录与 algo-io 同样写成“候选 fontBoundingBox……对照字体 hhea”（L141、L143）。\n偏差起于源码到规格的度量层级映射，经验把它包装成“待实测 hhea”，并没有指向正确的 actualBoundingBox*。\n渲染实现者（Slice 6，agent-a751f4c39ad1a4c77）读到这三份规格（L28、L34、L37）；首写被拒时又注入同一经验，摘要直接写\n“getTextBounds高→fontBoundingBoxAscent+Descent再Math.trunc；注释保留『需实测hhea』标记”（L107），思考中照此计划（L108 第 8 条）。\n它核 d.ts 时回执里已出现 TextMetrics 首个字段的注释“到 rendered text 矩形边界顶部的距离”（L118），但仍按规格与经验在 GameRenderer.ets 写出\nmeasureBoundsHeight = Math.trunc(fontBoundingBoxAscent + fontBoundingBoxDescent)，并注释【需实测 hhea】（L127-L128）。\n该片段到生成结束未再被改动，返修读回时仍在 GameRenderer.ets:231-240（repair L3994）。字体行框含上下伸，比墨迹包围盒约大 1.4 倍，\n使 HUD 八行等距排开、标签与数值脱开、组间空白被吃掉。返修改为 Math.ceil(actualBoundingBoxAscent) + Math.ceil(actualBoundingBoxDescent)\n（墨迹包围盒，按 Skia roundOut 外扩取整），临时日志实测 89px 时 \"Level:\" 墨迹上伸 68、下伸 1，textHeight=72，与安卓分组一致\n（repair L4007、L4020、L4048，检查点 C27 commit 216694e）。同一 diff 中 padding_columns 按方向取值属另一问题，本卡不归因。\n经验 lesson-f876887b 两次以召回注入参与偏差（规格作者 L128、实现者 L107），注入落在被拒 Write 的 tool_result 上，\n检查器把该行绑定为该 agent 的写操作，force 回执为 invalid_force_source，因此经验节点未入图，其作用以本段与修订建议记录。\n",
+  "recommendations": [
+    "规格提取阶段：先按源 API 判断文字度量层级再写 TextMetrics 映射。Paint.getTextBounds(…, Rect) 与 Rect.height() 是所测字符的墨迹紧包围盒，映射到 actualBoundingBoxAscent + actualBoundingBoxDescent（Skia roundOut：两项各自向外取整，用 Math.ceil）；Paint.ascent/descent/getFontMetrics 才是字体级行框。映射行写清所测子串（本例 \"Level:32\" 前 6 字符即 \"Level:\"）与取整方式，不把 fontBoundingBox* 列为 getTextBounds 的候选。",
+    "规格或经验只给“候选字段 + 待实测”时，渲染实现阶段先读 d.ts 中各候选字段的注释（actualBoundingBox* 指渲染文字的矩形边界，fontBoundingBox* 指所有字体的最高矩形边界），按源 API 语义选字段，并在报告中标注与规格的差异；不要把“待实测”标记当作保留错误候选的理由。",
+    "最小检查：在当前字号下同时记录 actualBoundingBox* 与 fontBoundingBox*，用源公式算出 textHeight 与 textEmptySpacing；行高偏大会直接吃掉组间留白（本例字体行框约比墨迹包围盒大 1.4 倍）。",
+    "修订 lesson-f876887b216b6caf9f39（版本 1）：在 title 写明只适用于字体级度量（Paint.ascent/descent/getFontMetrics 的基线修正），并补例外：源端用 Paint.getTextBounds 或 Rect 包围盒取文字高度时，直接对应 actualBoundingBoxAscent/Descent（两项各自 Math.ceil，对应 Skia roundOut），不做 hhea 实测，也不列 fontBoundingBox* 为候选；how 第一步先按源 API 名判断字体级还是墨迹级。“不把墨迹级字段列为等价候选”只在源度量是字体级时成立。判断信号：源码出现 getTextBounds(…, rect)、rect.height()，或度量参数是一段具体字符（如 \"Level:32\", 0, 6）。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-blockinger-glm5.31/entry/src/main/ets/game/render/GameRenderer.ets",
+        "since": "2026-10-13T10:53:09.711Z",
+        "at": "2026-10-13T22:29:44.396Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/blockinger-vocollapse-8b26057/src/org/blockinger/game/components/Display.java",
+          "at": "2026-10-13T04:06:39.759Z",
+          "reason": "正常输入：规格作者 Read 回执给出 :152-153/:162-163 textPaint.getTextBounds(\"Level:32\", 0, 6, textRect); textHeight = textRect.height()（收尾 +3），:244-257 标签与数值相隔 1×textHeight、组间加 textEmptySpacing。getTextBounds 写入 Rect 的是所测字符的墨迹包围盒，足以确定映射语义（agent-a2c6f1f54ffeaf438.jsonl:L51-L52）。"
+        },
+        {
+          "key": "agent-a2c6f1f54ffeaf438.jsonl",
+          "at": "2026-10-13T04:23:55.491Z",
+          "reason": "读到上述源码后，只 grep 了 fontBoundingBox（L96-L97），首稿映射行写 getTextBounds.height → fontBoundingBoxAscent + fontBoundingBoxDescent、“高度≈ascent+descent”（L127，被 hook 拒写）。被拒回执注入 lesson-f876887b（v1）摘要“getTextBounds→TextMetrics 不可凭字段名断等价：规格标‘字段待实测（对照字体hhea）’……AC15不断言具体字段”（L128）；该经验只覆盖 Paint.ascent/descent 字体级度量，且要求不把墨迹级字段列为候选。重写的 F002 主规格映射行仍以 fontBoundingBox 为候选，注“须与字体 hhea 上/下伸实测吻合才等价……团队经验（lesson-f876）”，AC15 不断言字段（L135-L136）；render 附录与 algo-io 同样写成“候选 fontBoundingBox……对照字体 hhea”（L141、L143）。源码到规格的度量层级映射在此偏离。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-blockinger-glm5.31/spec/baseline/features/F002-game-render.md",
+          "at": "2026-10-13T08:34:31.637Z",
+          "reason": "交付桥梁：渲染实现者 Read 回执中实现映射第 101 行为 Paint.getTextBounds(\"Level:32\",0,6,rect).height → TextMetrics 高度字段（候选 fontBoundingBoxAscent+fontBoundingBoxDescent）、字段选择待实测（hhea）、团队经验 lesson-f876；AC15 不断言具体字段（agent-a751f4c39ad1a4c77.jsonl:L27-L28）。"
+        },
+        {
+          "key": "agent-a751f4c39ad1a4c77.jsonl",
+          "at": "2026-10-13T09:00:24.533Z",
+          "reason": "读到上述规格（L28，另有 render 附录 L34、algo-io L37 同样写法）；首写被拒回执又注入 lesson-f876887b，摘要直接写“getTextBounds高→fontBoundingBoxAscent+Descent再Math.trunc；注释保留『需实测hhea』标记”（L107），思考中记为“✓ planned”（L108 第 8 条）。d.ts 回执已含 TextMetrics 首字段“到 rendered text 矩形边界顶部”的注释（L118），仍 Write 出 measureBoundsHeight = Math.trunc(m.fontBoundingBoxAscent + m.fontBoundingBoxDescent) 并注释【需实测 hhea】（L127-L128）。本链确认规格与经验摘要的传递，不另推定独立失职。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "召回注入只存在于被拒 Write 的 hook tool_result（规格作者 L128、实现者 L107），索引中没有经验文件到这两个 agent 的读操作；用该行作 force 证据被判 invalid_force_source（pack-2.out），经验节点未入图。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-dcca102a6a4baff0e7a7",
+  "metadata": {
+    "migration": {
+      "id": "blockinger-glm531-c54518f5-0a64-4778-9630-e5bfe3f912cc",
+      "project": "Blockinger"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.296"
+      ]
+    },
+    "source_set_id": "sources-37319ba0846f9b0a14c5",
+    "environment": [
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-blockinger-glm5.31",
+        "at": "2026-10-13T03:35:43.538Z",
+        "ref": "generation/c54518f5-0a64-4778-9630-e5bfe3f912cc.jsonl:L423",
+        "request_ref": "generation/c54518f5-0a64-4778-9630-e5bfe3f912cc.jsonl:L422",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-blockinger-glm5.31",
+        "at": "2026-10-13T04:09:41.917Z",
+        "ref": "generation/c54518f5-0a64-4778-9630-e5bfe3f912cc/subagents/agent-a189cc44cdb902fa5.jsonl:L124",
+        "request_ref": "generation/c54518f5-0a64-4778-9630-e5bfe3f912cc/subagents/agent-a189cc44cdb902fa5.jsonl:L123",
+        "phase": "generation"
+      },
+      {
+        "name": "android.compile_sdk",
+        "value": "35",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-blockinger-glm5.31",
+        "at": "2026-10-13T12:06:21.856Z",
+        "ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L296",
+        "request_ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L295",
+        "phase": "repair"
+      },
+      {
+        "name": "android.target_sdk",
+        "value": "17",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-blockinger-glm5.31",
+        "at": "2026-10-13T12:06:21.856Z",
+        "ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L296",
+        "request_ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L295",
+        "phase": "repair"
+      },
+      {
+        "name": "android.min_sdk",
+        "value": "8",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-blockinger-glm5.31",
+        "at": "2026-10-13T12:06:21.856Z",
+        "ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L296",
+        "request_ref": "repair/2d743162-b6c3-46ba-a4b3-79b9013a1662.jsonl:L295",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "4795952a-b849-4427-ba3f-0bc9a11c6092"
+      ]
+    }
+  },
+  "revision": "c3f4aa806e095ccbb20dac52965ec0ad4b581f8d16092bba4f44d4d9200580fd"
+}

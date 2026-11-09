@@ -10,7 +10,7 @@
   - 时机：实现或修复阶段，把 Android NumberFormat.getCurrencyInstance() 的价格格式化改写为 @kit.LocalizationKit 的 intl.NumberFormat，并确定币种来源与显示形式时
   - 情境：源端用不带币种参数的 NumberFormat.getCurrencyInstance() 按默认 locale 格式化金额；目标用 intl.NumberFormat(locale, { style: 'currency', ... })；任务或巡检要求“随系统 locale 选择币种”，而 SDK 声明里查不到 region→currency 的接口。
   - 例外：应用需要多币种或按用户地区切换币种时，不能用固定前缀代替格式化器
-- [TabContent.tabBar 只接受字符串、资源、CustomBuilder、TabBarOptions 与 SubTabBarStyle/BottomTabBarStyle，不传 { title } 对象](lesson-b402fa546504a1dd6db7.lesson.md)
+- [TabContent.tabBar 按目标 SDK 重载传值：常用字符串、资源或 Builder，不把 { title } 当作通用页签参数](lesson-b402fa546504a1dd6db7.lesson.md)
   - 时机：页面实现或编译修复阶段，为 Tabs 的 TabContent 编写或改写页签时
   - 情境：目标主页用 Tabs + TabContent 做底部导航，页签为纯文字、文字加图标或带选中色的自定义样式；写者准备以对象字面量表达页签标题。
 - [传给 ArkUI 属性方法的值按其实际重载定型，不传 string | Resource 联合值](lesson-63660a8304f7d3920bfc.lesson.md)

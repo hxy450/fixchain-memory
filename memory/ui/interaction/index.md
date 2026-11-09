@@ -6,7 +6,7 @@
 
 ## 本级经验
 
-- [Activity 级 onKeyDown 映射到页面根节点（NavDestination 或 @Entry 根）的 onKeyEvent，并确认页内至少有一个可获焦组件让焦点链经过本页（源端缺省可获焦的 ImageButton/Button 对应件设 focusable(true)）；不把 onKeyEvent 挂在需先抢焦点的子组件上](lesson-80e1d2c095a3698a7156.lesson.md)
+- [Activity 级按键映射到页面根 onKeyEvent：核实际焦点链与消费结果，保留源按钮的获焦能力，不以 consumed:0 判链未经过页面](lesson-80e1d2c095a3698a7156.lesson.md)
   - 时机：页面实现与输入接线阶段，为源端 Activity 级硬件按键回调（onKeyDown、dispatchKeyEvent）选择 ArkUI onKeyEvent 的挂载节点时；接收“焦点获取归本任务”一类移交时
   - 情境：安卓源在 Activity 上覆写 onKeyDown 或 dispatchKeyEvent 处理方向键、MENU、Ctrl+Z 等，不依赖某个 View 持有焦点；目标页面是 Navigation 下的 NavDestination 或 @Entry 页，交互由内部 Canvas、自绘子组件或 Image + onClick 承载。也包括页内没有 Button/TextInput 或 focusable(true) 组件，源端按键控件是缺省可获焦的 ImageButton/Button。
 - [Button 内按状态切换图标时写成一个 if/else 或单个 Image 按状态选资源，不写两个互斥的独立 if](lesson-ed5556325b6d8f510e2f.lesson.md)
@@ -42,14 +42,14 @@
   - 时机：界面实现阶段，把带 Modifier.clickable/toggleable/selectable，或 Card、Surface(onClick) 的 Compose 容器转成挂 onClick 的 ArkUI 容器时；把 ListView、PreferenceActivity 中由主题 listSelector 提供按压态的可点击行转成 ArkUI 列表行时；把 GridView 条目转成 Grid/GridItem 时
   - 情境：源端容器经 clickable/toggleable（可带 role = Button、Switch）或 Card/Surface(onClick) 响应点击，没有把 indication 设为 null，按压时由主题提供涟漪或状态层；目标用 Column/Row/Stack 加 .onClick 实现，ArkUI 通用容器默认没有按压反馈（Button 自带的按压效果除外）。 也包括 View 体系的 ListView、PreferenceActivity 行没有把 background 或 listSelector 设为 null，按压态由主题选择器（如 Holo 暗色 list_selector_holo_dark）提供；写者在 d.ts 里找不到通用容器的 stateEffect，就放弃了按压态。 也包括 GridView 条目：GridView 未改写 listSelector 与 drawSelectorOnTop，Activity 主题分散在 res/values 与 values-v11/v14 等多个 styles.xml，低 minSdk 的旧工程在新设备上走 values-v11+ 的 Holo 父主题。
   - 例外：源端显式 indication = null 或自定义 indication 时，按源端写法处理；目标用自带按压效果的 Button 承载点击时，不再叠加
-- [源端在触发瞬间读取锚点窗口位置时，目标在点击回调里取本次手势坐标或即时查询，onAreaChange 缓存只作兜底；锚点取源端传入的同一元素](lesson-963bf871aa4e910a8fc8.lesson.md)
+- [源端在触发瞬间读取锚点窗口位置时，目标在点击回调里即时查询同一锚点，触点坐标仅在源语义允许时使用，onAreaChange 缓存只作兜底；锚点取源端传入的同一元素](lesson-963bf871aa4e910a8fc8.lesson.md)
   - 时机：界面实现与修复阶段，为从点击处发出的动效或气泡（完成彩纸、锚点提示）确定起点坐标与锚点元素时
   - 情境：源端在动效或弹窗被调用时用 getLocationInWindow 读取传入锚点 View 的当下窗口中心；目标列表项存在 translate 平移、LazyForEach/Repeat 节点复用或弹层内滚动，写者准备用 onAreaChange 缓存控件位置。
 - [源端监听回调体被注释时按无响应控件迁移；审计不因“已裁定/集成点”注释放行与源端运行态相背的接线](lesson-f3e614f295aa409485fd.lesson.md)
   - 时机：1:1 对齐审计与修复阶段，判定目标端交互接线是否与安卓运行态一致，或重写组件时决定是否保留随行的 onClick 时
   - 情境：安卓控件注册了 setOnClickListener，但回调体被整段注释（如选图调用被注释），XML 也可能写着 clickable；目标端按规格集成点把它接成可用功能，代码注释自述源码为死码并写着“裁定/集成点”；项目要求 1:1 忠实复刻（含源码缺陷）。
   - 例外：项目决策明确要求启用该功能，且用户已知并接受与源端不同
-- [源端禁用态只靠代码换背景、文字色固定时，不用 ArkUI .enabled(false)（会对整个组件降透明）：显式切换背景与投影，用 hitTestBehavior(HitTestMode.None) 或回调内判态拦截点击](lesson-99080bd3bfc1bcbb9c5f.lesson.md)
+- [源端禁用态只靠代码换背景、文字色固定时，不用 ArkUI .enabled(false)（本例目标按钮会整体降透明）：显式切换背景与投影，用 hitTestBehavior(HitTestMode.None) 或回调内判态拦截点击](lesson-99080bd3bfc1bcbb9c5f.lesson.md)
   - 时机：规格提取阶段为 setEnabled/android:enabled 切换的控件写转换决策时；界面实现阶段落实控件禁用态外观与点击拦截时
   - 情境：源端在 setEnabled(false) 的同时 setBackgroundResource 换成没有 state_enabled 分支的灰色 drawable，textColor 是固定颜色而非 ColorStateList（AppCompat 按钮禁用时投影另归零）；映射参考把 setEnabled(false)/android:enabled 一律对到 .enabled(false)。
   - 例外：源端禁用外观本身来自 state_enabled 选择器或半透明（ColorStateList 的 disabled 项、Compose 组件默认禁用色）时，按源端色值显式写出；目标默认禁用透明度恰与源值一致时才直接用 .enabled()

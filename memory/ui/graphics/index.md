@@ -14,7 +14,7 @@
   - 时机：规格提取与界面实现阶段，为 AnimatedImageVector/animated-vector 图标确定实现方案、各状态显示的帧与状态切换时的过渡时；以及资源迁移阶段遇到 animated-vector 时
   - 情境：源码用 AnimatedImageVector.animatedVectorResource 与 rememberAnimatedVectorPainter(icon, atEnd)，atEnd 由完成、运行等状态决定，animated-vector 的 objectAnimator 以 pathData 的 valueFrom/valueTo、duration 与 interpolator 描述两态形变；目标没有直接等价组件，资源目录里的同名媒体是资源迁移从起始帧导出的静态 SVG；规格可能允许资源动画或等价符号，或写“图标态切换即可满足”。
   - 例外：决策记录以编号批准省略形变过渡、差异验收与之一致时，按批准的两态静态帧或等价符号实现，仍按状态分别给出起止帧
-- [android:background 的整屏背景位图按拉伸铺满映射，不默认用 ImageFit.Cover 裁切；被铺满且未置顶的 SurfaceView 盖住时不建背景层](lesson-7708f650eb4b55dce045.lesson.md)
+- [普通伸展 BitmapDrawable 的整屏背景按 Fill 映射：先核 gravity/tileMode、九宫格与组合资源，再核 SurfaceView 遮挡](lesson-7708f650eb4b55dce045.lesson.md)
   - 时机：界面实现阶段，把源根布局的 android:background 背景图转换为 ArkUI 背景 Image 或背景图属性时；规格提取阶段为承载自绘游戏视图的页面确定背景层与画布叠放关系时
   - 情境：源根容器以 android:background=@drawable/xxx 铺设整屏背景位图，背景上画有需要完整显示的图文；目标用 Stack 底层 Image 或背景图属性重建。 也包括根容器内 addView 或布局了铺满的 SurfaceView/GLSurfaceView 子类（未调用 setZOrderOnTop(true)，绘制时 drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR) 清屏或不画底色），目标准备用 Stack 叠放背景 Image 与透明 Canvas。
   - 例外：源端是 ImageView 且显式 scaleType=centerCrop 一类裁切语义，按该 scaleType 映射；源容器内铺满的 SurfaceView/GLSurfaceView/VideoView 未 setZOrderOnTop(true)：该区域的父容器背景在源端不可见，不建背景层，按做法第 1 步取可见底色

@@ -1,6 +1,6 @@
 # 从组件外的共享函数打开自定义弹窗时，用 wrapBuilder + ComponentContent 交给 openCustomDialog(content)：不在 options.builder 闭包里直接调用全局 @Builder
 
-ID：`lesson-a3ac761b0d52a6bccb9f` · 版本：1
+ID：`lesson-a3ac761b0d52a6bccb9f` · 版本：2
 
 [本主题](index.md)
 
@@ -18,7 +18,7 @@ SDK 声明要求 openCustomDialog 的 builder 写成 () => { this.xxx() } 调用
 
 ## 做法
 
-1. 共享函数打开弹窗时：wrapBuilder(全局 Builder) 加 new ComponentContent(uiContext, wrapped, 参数)，用 openCustomDialog(content, options) 打开、closeCustomDialog(content) 关闭，并在 onDidDisappear 与打开失败分支调用 content.dispose()。
+1. 共享函数打开弹窗时：wrapBuilder(全局 Builder) 加 new ComponentContent(uiContext, wrapped, 参数)，用 openCustomDialog(content, options) 打开、closeCustomDialog(content) 关闭，把 content.dispose() 纳入同一 owner 的幂等收尾，在正常消失和打开失败时释放；主动离页/关闭路径也保留兜底，确认该内容不再被弹窗使用后只释放一次，不能仅依赖退场中断时可能不触发的 onDidDisappear。
 2. 保留 options.builder 写法时，把 @Builder 放在发起弹窗的 @ComponentV2 内，按 builder: () => { this.xxx() } 调用，由各入口组件自己打开；抽成共享 helper 时不能省掉这层 this 绑定。
 
 ## 可选检查

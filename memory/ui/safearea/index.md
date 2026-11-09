@@ -33,7 +33,7 @@
 - [源窗口按 adjustResize 避让软键盘（声明 adjustResize，或未声明 windowSoftInputMode 而窗口含可滚动视图）时设 KeyboardAvoidMode.RESIZE：各页都如此时在窗口级统一设置，否则在该页显示期间设置、离开时还原；不以默认 OFFSET 记作等价](lesson-f86b02e97cc77e31d51a.lesson.md)
   - 时机：页面实现阶段，为含文本输入的页面（编辑表单等 NavDestination 子页）落实源端软键盘避让方式时；为未声明 windowSoftInputMode 的含输入框窗口确定目标避让方式时
   - 情境：源 Activity 声明 windowSoftInputMode=adjustResize，页面在滚动内容或尾部用 imePadding 让键盘弹出时内容区收缩、仍可滚到末项；规格或页面元数据写明 adjustResize + imePadding 并要求等价避让；目标未设键盘避让模式，转换者不确定默认行为是否等价。 也包括源 Activity 未声明 windowSoftInputMode、内容含 ListView/ScrollView（平台隐式 adjustResize），规格只写“默认弹出”，召回因“源端未声明 adjustResize”而排除了本条。
-- [源端只在三键导航时给导航栏着色：以 TYPE_SYSTEM 底部避让高度判定导航方式，非手势时用 navigationBarColor 着色并随避让区变化更新](lesson-8bc258c2833be65f4fcd.lesson.md)
+- [源端按导航方式着色时保留条件与可见目标：先核目标系统栏颜色能力，再选择实现或登记平台差异](lesson-8bc258c2833be65f4fcd.lesson.md)
   - 时机：规格提取与入口窗口实现阶段，把源 Activity 按导航方式设置导航栏颜色的分支映射到目标窗口系统栏属性时
   - 情境：源端在 Activity 中按是否手势导航决定导航栏底色（如非手势导航时 setNavigationBarColor(背景色带透明度)），判定依赖隐藏系统资源（config_navBarInteractionMode）或系统设置；目标为全屏沉浸窗口，入口用 getWindowAvoidArea 测避让区、用 setWindowSystemBarProperties 设置系统栏。
 - [源端给根视图设状态栏高度的顶部 padding 并自绘底色时：目标在页面容器上设 padding 与背景色、系统栏保持透明，子内容按扣除状态栏后的尺寸布局](lesson-baf0ca22a69e7b76f636.lesson.md)

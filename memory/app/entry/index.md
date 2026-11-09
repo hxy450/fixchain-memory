@@ -18,7 +18,7 @@
 - [源端“getLast(Custom)NonConfigurationInstance 为空才按启动参数建立状态”只在配置变化重建时取回实例：目标按“本次是否由配置变化重建”区分，正常进入一律按入口参数分支，不用单例是否存在代替](lesson-ed571550c44efdeb321e.lesson.md)
   - 时机：规格提取与页面实现阶段，翻译源 Activity.onCreate 中“取回保留实例为空才读启动参数”的建局或建状态逻辑时
   - 情境：源 Activity 未声明 configChanges，用 onRetain(Custom)NonConfigurationInstance 与 getLast(Custom)NonConfigurationInstance 跨配置变化保留对象，该对象可能同时是静态单例（只在退出时 destroy）；目标页面不因配置变化重建，单例跨页面常驻，同一页面有多个入口模式（如新开与续局）。
-- [源端在入口 onCreate 首帧前按偏好设主题时，目标在 EntryAbility.onCreate 同步读取偏好并在 loadContent 前 setColorMode；恢复函数返回 Promise 而调用方不等待，就是首帧后才生效](lesson-dcb3c5e66dec2d126234.lesson.md)
+- [源端首帧前恢复主题时显式建立完成顺序：未等待 Promise 不保证首帧前生效，setColorMode 调用时机按目标 SDK 核验](lesson-dcb3c5e66dec2d126234.lesson.md)
   - 时机：入口与应用级配置阶段，规格提取或实现冷启动时应用持久化外观设置（深浅色等）的时机，并为启动恢复写移交或接线时
   - 情境：源入口 Activity 在 onCreate 首行（super.onCreate 之前）按 SharedPreferences 同步设置 DayNight 主题；目标 ApplicationContext.setColorMode 是进程态，偏好仓库只提供异步 init；功能规格只写“保存后即时生效”，没有冷启动恢复要求；恢复函数由一个任务写成 async，并以 HANDOFF 交给入口接线者调用。
 - [源端返回栈靠框架在进程回收后重建（rememberNavController、savedInstanceState、Activity 任务栈）时，规格单列“回收后重建”分支：只在系统回收后恢复整栈并保留各页原参数，强停、划掉、覆盖安装后按冷启分流；目标显式开启 UIAbility 恢复与 Navigation recoverable](lesson-b0405a29415547485ecb.lesson.md)

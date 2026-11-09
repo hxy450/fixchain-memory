@@ -1,6 +1,6 @@
 # values 批量转 element JSON 按目标格式出口：颜色只写 hex 或已定义的 $color:，数组项写成 {value} 对象并映射引用，不可解析值不原样写出
 
-ID：`lesson-94a3f7a5ec5ad8f8a3e8` · 版本：1
+ID：`lesson-94a3f7a5ec5ad8f8a3e8` · 版本：2
 
 [本主题](index.md)
 
@@ -14,7 +14,7 @@ ID：`lesson-94a3f7a5ec5ad8f8a3e8` · 版本：1
 
 ## 原因
 
-HarmonyOS 资源编译只接受 #rgb/#argb/#rrggbb/#aarrggbb 或指向已定义条目的 $color:xxx 颜色值，strarray 的 value 必须是 [{"value": ...}] 对象数组、引用写成 $string:xxx；脚本把解析不到的值原样返回、把 XML 列表直接当作 value，编译门会按资源类别逐个报 CompileResource 错误。来源的转换规则文档已写明这些格式，脚本仍把 @android:color 与未定义的 @color/ 原样写进 color.json、把 string-array 写成纯字符串并保留 @string/；运行后只看了 unresolved 总数就宣布通过，错误结构还被镜像到 zh_CN。
+本转换器将颜色出口限制为 #rgb/#argb/#rrggbb/#aarrggbb 或指向已定义条目的 $color:xxx，属于保守输出策略；平台文档还允许合法的 $ohos:color:xxx 系统色引用，不能把该脚本白名单当成平台格式的穷尽集合，strarray 的 value 必须是 [{"value": ...}] 对象数组、引用写成 $string:xxx；脚本把解析不到的值原样返回、把 XML 列表直接当作 value，编译门会按资源类别逐个报 CompileResource 错误。来源的转换规则文档已写明这些格式，脚本仍把 @android:color 与未定义的 @color/ 原样写进 color.json、把 string-array 写成纯字符串并保留 @string/；运行后只看了 unresolved 总数就宣布通过，错误结构还被镜像到 zh_CN。
 
 ## 做法
 

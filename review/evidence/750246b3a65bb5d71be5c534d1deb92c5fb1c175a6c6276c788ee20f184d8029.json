@@ -1,0 +1,273 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-8402e3a379e2a8d7f434",
+  "created_at": "2026-10-11T23:19:25.403049+00:00",
+  "migration_key": "9aa88a78-601e-448f-9145-671a57ef3256",
+  "title": "单条RDB写入改用事务ID接口beginTrans，真机API 24返回801导致保存全部失败",
+  "when": "数据层实现阶段，为RDB共享写入口选择事务或单语句执行接口时",
+  "description": "ArkTS使用@kit.ArkData relationalStore普通（非向量）关系库，DAO的单条INSERT/DELETE经由共享写入口执行；规格要求写入完成后才返回、失败不留半条记录；SDK中同时存在beginTransaction()/commit()/rollBack()与beginTrans()/execute(sql, txId, args)/commit(txId)/rollback(txId)两套事务接口，后者声明BusinessError 801能力不支持。",
+  "summary": "Base-2数据库重试worker（/root/base_02_database_retry，agent-01a08fd8）写前实际读到：\nbase-plan的Base-2验收“使用当前API支持的@kit.ArkData RDB……插入与删除在事务完成后才返回，异常回滚”（L1207-L1208）；\narkts-data-layer的v2-rdb-advanced.md给出事务写法beginTransaction()/commit()/rollBack()，另注明API 14+可用createTransaction()，\n并说明事务用于多行写入；同批读到的rdbstore-dao-patterns.md中单条insert/delete直接调用store接口（L1211-L1212）。\n它随后grep并读取本机SDK的@ohos.data.relationalStore.d.ts：beginTransaction()为@since 12且未列801，\n紧随其后的beginTrans(): Promise<number>同为@since 12，却列出“801 - Capability not supported the sql(attach,begin,commit,rollback etc.)”，\ntxId重载execute(sql, txId, args)/commit(txId)/rollback(txId)也在返回中（L1234-L1247）。\n这些输入已足以按参考写法实现事务，或对单条语句直接await执行；输出却没有采用参考写法，\n而在AppDatabase.executeWrite()中写成beginTrans()取事务ID→execute(sql, transactionId, args)→commit(transactionId)，失败rollback(transactionId)，\n同一patch给三个DAO的insert/deleteById注释写“within a committed transaction”（L1270-L1271）。\nworker报告自检只写了compatibleSdkVersion 12、targetSdkVersion 24，未见对801声明或该接口适用store类型的核对（同patch中的base-02-worker.md）。\n该偏差位于“已给出受支持事务写法→实际选用SDK接口”这一实现环节；生成期内AppDatabase只有这一次写入，beginTrans片段保留到交付。\n交付后用户报告无法保存银行卡（main L10692）；修复者在真机看到database_ready_success后submit_failed code=801，\n定位到executeWrite在beginTrans()处失败（agent-01a09dc4 L419、L465），把executeWrite改为单条await activeStore.execute(sql, args)，\n日志stage改为statement、异常文案改为Database write failed（L521-L522、L601-L602），三个DAO注释改为“as an atomic statement”（L554-L555），\n真机保存成功（L784；main L11010）。\n背景：生成期F003-AC13判定方式为unit（spec中“判:unit | await 完成后 resolve，异常时事务回滚”），未要求真机真实写入；它只解释为何验收未暴露，不替代上述实现偏差归因。\n",
+  "recommendations": [
+    "数据层实现选择RDB事务接口时，优先沿用skill参考已给出的beginTransaction()/commit()/rollBack()（或在满足API级别时用createTransaction()）；不要因为Promise或事务ID签名更顺手，就换成参考未列出的beginTrans()/execute(sql, txId, args)/commit(txId)。",
+    "从SDK d.ts取接口时，@since只说明接口出现的版本，不说明当前库类型和设备支持它；同类接口中只有一个声明801能力不支持时，先确认它适用于当前StoreConfig（是否向量库等）再用于共享写入口。",
+    "单条INSERT/DELETE本身是原子语句，满足“写完才返回、失败不留半条记录”时可直接await execute(sql, args)或insert/delete；只有多语句写入才包显式事务，并把这一判断写进worker报告。",
+    "共享写入口的验收至少做一次真实RdbStore写入（真机或模拟器）；只用unit判定或签名比对时，在报告中标注设备能力未验证。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/a/Desktop/app_nfc_harmony/entry/src/main/ets/database/AppDatabase.ets",
+        "since": "2026-09-11T18:52:37.023Z",
+        "at": "2026-09-14T04:06:23.696Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/a/Desktop/app_nfc_harmony/spec/baseline/plans/base-plan.md",
+          "at": "2026-09-11T09:42:14.447Z",
+          "reason": "正常输入：sed读取Base-2段，返回acceptance要求使用当前API支持的@kit.ArkData RDB，插入与删除在事务完成后才返回、异常回滚并显式失败；只规定原子语义，未指定事务接口（agent-01a08fd8-77df-7761-866d-770caba8e4cb.jsonl:L1207-L1208）。"
+        },
+        {
+          "key": "/Users/a/Desktop/app_nfc_harmony/.agents/skills/arkts-data-layer/references/v2-rdb-advanced.md",
+          "at": "2026-09-11T09:42:20.880Z",
+          "reason": "正常输入：sed读取回执给出事务写法store.beginTransaction()、store.commit()、失败store.rollBack()，注明API 14+另有createTransaction()，并把事务定位为多行写入；同次读取的rdbstore-dao-patterns.md单条insert/delete直接调用store接口。足以指导本项接口选择（同转录L1211-L1212）。"
+        },
+        {
+          "key": "/Applications/DevEco-Studio.app/Contents/sdk/default/openharmony/ets/api/@ohos.data.relationalStore.d.ts",
+          "at": "2026-09-11T09:43:14.067Z",
+          "reason": "正常输入：grep与sed返回beginTransaction(): void（@since 12，未列801）及beginTrans(): Promise<number>（@since 12，列出801 Capability not supported the sql(attach,begin,commit,rollback etc.)），以及commit(txId)/rollback(txId)签名；两套接口的能力差别已在回执中可见（同转录L1234-L1239，后续L1242-L1247返回rollback(txId)与execute(sql, txId, args)行号）。"
+        },
+        {
+          "key": "agent-01a08fd8-77df-7761-866d-770caba8e4cb.jsonl",
+          "at": "2026-09-11T09:46:44.440Z",
+          "reason": "已收到上述计划、skill参考与d.ts，apply_patch新建AppDatabase.ets时未用参考的beginTransaction/commit/rollBack，而写成await beginTrans()取事务ID、execute(sql, transactionId, args)、commit(transactionId)、失败rollback(transactionId)；报告只核对compatibleSdkVersion 12/targetSdkVersion 24，未处理801声明。偏差在此形成，生成期内无其他写者改动该片段（同转录L1270-L1271，L1276 rg回读确认）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4,
+          "force": true,
+          "reason": "生成者exec在项目根执行sed -n '/Base-2/,/Base-3/p' spec/baseline/plans/base-plan.md，回执返回Base-2 acceptance（事务完成后才返回、异常回滚）；这是写前对计划的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/46b0e579-a0a3-480c-8429-285628ab68e5/epoch-0/sessions/agent-01a08fd8-77df-7761-866d-770caba8e4cb.jsonl",
+              "line": 1207
+            },
+            {
+              "source": "runs/46b0e579-a0a3-480c-8429-285628ab68e5/epoch-0/sessions/agent-01a08fd8-77df-7761-866d-770caba8e4cb.jsonl",
+              "line": 1208
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": 4,
+          "force": true,
+          "reason": "生成者exec在项目根sed读取.agents/skills/arkts-data-layer/references/rdbstore-dao-patterns.md与v2-rdb-advanced.md，回执包含beginTransaction/commit/rollBack事务写法与createTransaction说明；这是写前对skill参考的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/46b0e579-a0a3-480c-8429-285628ab68e5/epoch-0/sessions/agent-01a08fd8-77df-7761-866d-770caba8e4cb.jsonl",
+              "line": 1211
+            },
+            {
+              "source": "runs/46b0e579-a0a3-480c-8429-285628ab68e5/epoch-0/sessions/agent-01a08fd8-77df-7761-866d-770caba8e4cb.jsonl",
+              "line": 1212
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "生成者exec对该d.ts执行sed -n '6600,6788p'等，回执返回beginTransaction()与beginTrans()的声明及801能力不支持说明；这是写前对SDK声明的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/46b0e579-a0a3-480c-8429-285628ab68e5/epoch-0/sessions/agent-01a08fd8-77df-7761-866d-770caba8e4cb.jsonl",
+              "line": 1238
+            },
+            {
+              "source": "runs/46b0e579-a0a3-480c-8429-285628ab68e5/epoch-0/sessions/agent-01a08fd8-77df-7761-866d-770caba8e4cb.jsonl",
+              "line": 1239
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "/Users/a/Desktop/app_nfc_harmony/entry/src/main/ets/database/FinancialCardInfoDao.ets",
+        "since": "2026-09-11T18:52:37.023Z",
+        "at": "2026-09-14T04:06:23.696Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/a/Desktop/app_nfc_harmony/.agents/skills/arkts-data-layer/references/v2-rdb-advanced.md",
+          "at": "2026-09-11T09:42:20.880Z",
+          "reason": "正常输入：同主图，参考给出beginTransaction/commit/rollBack事务写法，并以多行写入为事务场景（agent-01a08fd8-77df-7761-866d-770caba8e4cb.jsonl:L1211-L1212）。"
+        },
+        {
+          "key": "agent-01a08fd8-77df-7761-866d-770caba8e4cb.jsonl",
+          "at": "2026-09-11T09:46:44.440Z",
+          "reason": "同一apply_patch新建本DAO，insert/deleteById调用共享executeWrite，并把注释写成within a committed transaction，依赖主图中beginTrans事务ID写法；本文件行为随AppDatabase失效，修复只改注释（同转录L1270-L1271）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "生成者exec在项目根sed读取arkts-data-layer的rdbstore-dao-patterns.md与v2-rdb-advanced.md，回执包含beginTransaction/commit/rollBack事务写法；这是写前对skill参考的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/46b0e579-a0a3-480c-8429-285628ab68e5/epoch-0/sessions/agent-01a08fd8-77df-7761-866d-770caba8e4cb.jsonl",
+              "line": 1211
+            },
+            {
+              "source": "runs/46b0e579-a0a3-480c-8429-285628ab68e5/epoch-0/sessions/agent-01a08fd8-77df-7761-866d-770caba8e4cb.jsonl",
+              "line": 1212
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ],
+      "summary": "本文件由同一生成者在同一patch中写出，insert/deleteById只调用AppDatabase.executeWrite，注释写“within a committed transaction”。\n真机801发生在共享executeWrite中，本文件行为随之失败；修复只把两处注释改为“as an atomic statement”（agent-01a09dc4 L554-L555）。\n"
+    },
+    {
+      "target": {
+        "key": "/Users/a/Desktop/app_nfc_harmony/entry/src/main/ets/database/NfcSavedItemDao.ets",
+        "since": "2026-09-11T18:52:37.023Z",
+        "at": "2026-09-14T04:06:23.696Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/a/Desktop/app_nfc_harmony/.agents/skills/arkts-data-layer/references/v2-rdb-advanced.md",
+          "at": "2026-09-11T09:42:20.880Z",
+          "reason": "正常输入：同主图，参考给出beginTransaction/commit/rollBack事务写法，并以多行写入为事务场景（agent-01a08fd8-77df-7761-866d-770caba8e4cb.jsonl:L1211-L1212）。"
+        },
+        {
+          "key": "agent-01a08fd8-77df-7761-866d-770caba8e4cb.jsonl",
+          "at": "2026-09-11T09:46:44.440Z",
+          "reason": "同一apply_patch新建本DAO，insert/deleteById调用共享executeWrite，注释写within a committed transaction，依赖主图中beginTrans事务ID写法（同转录L1270-L1271）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "生成者exec在项目根sed读取arkts-data-layer的rdbstore-dao-patterns.md与v2-rdb-advanced.md，回执包含beginTransaction/commit/rollBack事务写法；这是写前对skill参考的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/46b0e579-a0a3-480c-8429-285628ab68e5/epoch-0/sessions/agent-01a08fd8-77df-7761-866d-770caba8e4cb.jsonl",
+              "line": 1211
+            },
+            {
+              "source": "runs/46b0e579-a0a3-480c-8429-285628ab68e5/epoch-0/sessions/agent-01a08fd8-77df-7761-866d-770caba8e4cb.jsonl",
+              "line": 1212
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ],
+      "summary": "本文件由同一生成者在同一patch中写出，insert/deleteById只调用AppDatabase.executeWrite，注释写“within a committed transaction”。\n保存失败根因在共享executeWrite；修复只把两处注释改为“as an atomic statement”（agent-01a09dc4 L554-L555）。\n"
+    },
+    {
+      "target": {
+        "key": "/Users/a/Desktop/app_nfc_harmony/entry/src/main/ets/database/NfcReadHistoryDao.ets",
+        "since": "2026-09-11T18:52:37.023Z",
+        "at": "2026-09-14T04:06:23.696Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/a/Desktop/app_nfc_harmony/.agents/skills/arkts-data-layer/references/v2-rdb-advanced.md",
+          "at": "2026-09-11T09:42:20.880Z",
+          "reason": "正常输入：同主图，参考给出beginTransaction/commit/rollBack事务写法，并以多行写入为事务场景（agent-01a08fd8-77df-7761-866d-770caba8e4cb.jsonl:L1211-L1212）。"
+        },
+        {
+          "key": "agent-01a08fd8-77df-7761-866d-770caba8e4cb.jsonl",
+          "at": "2026-09-11T09:46:44.440Z",
+          "reason": "同一apply_patch新建本DAO，insert/deleteById调用共享executeWrite，注释写within a committed transaction，依赖主图中beginTrans事务ID写法（同转录L1270-L1271）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2,
+          "force": true,
+          "reason": "生成者exec在项目根sed读取arkts-data-layer的rdbstore-dao-patterns.md与v2-rdb-advanced.md，回执包含beginTransaction/commit/rollBack事务写法；这是写前对skill参考的真实读取。",
+          "evidence": [
+            {
+              "source": "runs/46b0e579-a0a3-480c-8429-285628ab68e5/epoch-0/sessions/agent-01a08fd8-77df-7761-866d-770caba8e4cb.jsonl",
+              "line": 1211
+            },
+            {
+              "source": "runs/46b0e579-a0a3-480c-8429-285628ab68e5/epoch-0/sessions/agent-01a08fd8-77df-7761-866d-770caba8e4cb.jsonl",
+              "line": 1212
+            }
+          ]
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ],
+      "summary": "本文件由同一生成者在同一patch中写出，写入方法只调用AppDatabase.executeWrite，注释写“within a committed transaction”。\n保存失败根因在共享executeWrite；修复只把两处注释改为“as an atomic statement”（agent-01a09dc4 L554-L555）。\n"
+    }
+  ],
+  "unknown": [
+    "生成者推理内容加密、派工消息加密，材料中看不到它弃用参考写法、改选beginTrans的具体理由。",
+    "材料中的SDK d.ts返回未见“仅向量库可用”一类说明；事务ID接口在普通库上返回801的官方适用范围未在材料中核实，本卡只依据d.ts的801声明与真机结果。",
+    "材料中修复只验证了单语句execute(sql, args)，未在真机验证beginTransaction()写法；建议中的替代事务写法是skill参考给出的，不是本次实测结论。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-8402e3a379e2a8d7f434",
+  "metadata": {
+    "migration": {
+      "project": "NFC",
+      "server_session_id": "9aa88a78-601e-448f-9145-671a57ef3256"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "codex"
+      ],
+      "models": [
+        "codex-auto-review",
+        "gpt-5.6-sol"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.145.0-alpha.27"
+      ]
+    },
+    "source_set_id": "sources-c99832c177c1f1855569",
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "64096d20-6599-407d-87b8-7d05b3c67b9d"
+      ]
+    }
+  },
+  "revision": "ebdad535a42c01e6ce53368392b21e85f277e256da86944e0c7b0e2893b1d956"
+}

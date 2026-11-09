@@ -1,6 +1,6 @@
-# Kotlin/Java Float 的运算与比较迁到 ArkTS 时对齐 float32：算术每步 Math.fround 后再按 Java (int) 截断，==/!= 两侧 fround 后用 ===，不自加容差；选中、存在判断与删除共用同一比较
+# Kotlin/Java Float 的运算与比较迁到 ArkTS 时对齐 float32：按源类型树在 Float 转换和运算结果处 Math.fround，再按 Java (int) 规则收窄，==/!= 两侧 fround 后用 ===，不自加容差；选中、存在判断与删除共用同一比较
 
-ID：`lesson-0deb51172ebdd2e056a9` · 版本：2
+ID：`lesson-0deb51172ebdd2e056a9` · 版本：4
 
 [本主题](index.md)
 
@@ -24,7 +24,7 @@ ID：`lesson-0deb51172ebdd2e056a9` · 版本：2
 
 1. 比较两侧都按 Float 语义归一：解析或计算得到的值用 Math.fround 转成 float32（也可在写入状态时就 fround），再用 ===；不加 ε 容差。
 2. 同一组值的选中判断、存在判断与删除过滤调用同一个比较函数。
-3. 源式含 (float) 或 f 字面量的算术：每个操作数与每步结果用 Math.fround 舍入到 float32（double 中间值对单精度加减乘除再舍入不产生二次舍入误差），最后按 Java (int) 截断；规格把“float 运算”和“float→int 收窄”分两行写，不写“正常值 Math.trunc 等价”；同一公式只实现一处，其余方法复用。
+3. 源式含 (float) 或 f 字面量的算术：按源表达式的类型与求值顺序，在 Float 转换点和 Float 运算结果处用 Math.fround 舍入到 float32，保留原 int 子式与显式 double 运算，最后按 Java (int) 收窄规则转换；规格把“float 运算”和“float→int 收窄”分两行写，不写“正常值 Math.trunc 等价”；同一公式只实现一处，其余方法复用。
 
 来源支持：2 张卡 · 2 次迁移 · 2 个应用
 

@@ -1,6 +1,6 @@
 # ImageView tint 着色的渐变装饰层用容器 linearGradient 实现
 
-ID：`lesson-fcd86aeea6209ea0718b` · 版本：1
+ID：`lesson-fcd86aeea6209ea0718b` · 版本：2
 
 [本主题](index.md)
 
@@ -14,7 +14,7 @@ ID：`lesson-fcd86aeea6209ea0718b` · 版本：1
 
 ## 原因
 
-fillColor 不会改写 SVG 的 url(#grad) 渐变填充，深色主题下留下亮带。
+来源工程的 SVG 模式下，fillColor 未达到预期的渐变 tint，深色主题留下亮带；当前官方说明 fillColor 会替换 SVG 可绘制元素填色，不能把旧个例推广为所有 SDK/解析模式都不改渐变。迁移该装饰层可保留已用的容器 linearGradient 方案，其他 SVG 着色按目标模式核验。
 
 ## 做法
 

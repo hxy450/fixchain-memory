@@ -1,6 +1,6 @@
 # 源布局有按状态切换的 Lottie 动画层时接入 @ohos/lottie 并迁移动画 JSON，不以静态兜底图静默替代
 
-ID：`lesson-ea55fe23fea47c1cfca3` · 版本：1
+ID：`lesson-ea55fe23fea47c1cfca3` · 版本：2
 
 [本主题](index.md)
 
@@ -14,7 +14,7 @@ Android 页面在静态背景 ImageView 之上叠加 LottieAnimationView，代�
 
 ## 原因
 
-只迁静态兜底图、不接动画层，页面在所有状态下都显示同一张静态图，与源端的动态头图明显不符，且不会被编译或结构检查发现。来源中转换者读到 LottieAnimationView 叠层与 setBgAnimationByStatus 调用，派工还要求检测到动画信号时转入动画迁移流程，输出仍只有一张静态图，没有依赖、没有迁移 JSON、没有占位，报告也没提动画层；返修重建又改成固定夜景图，直到后来补上 lottie 组件。
+只迁静态兜底图、不接动画层，页面在所有状态下都显示同一张静态图，与源端的动态头图明显不符，编译通过不能证明动画保真；结构核对仍可检查源动画层、目标依赖、JSON资产与状态选择表是否对应，不能把当时遗漏写成结构检查必然无效。来源中转换者读到 LottieAnimationView 叠层与 setBgAnimationByStatus 调用，派工还要求检测到动画信号时转入动画迁移流程，输出仍只有一张静态图，没有依赖、没有迁移 JSON、没有占位，报告也没提动画层；返修重建又改成固定夜景图，直到后来补上 lottie 组件。
 
 ## 做法
 

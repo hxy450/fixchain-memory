@@ -1,0 +1,150 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-a1849836a1bfff3c265c",
+  "created_at": "2026-10-14T14:16:55.400263+00:00",
+  "migration_key": "pf2048-glm531-3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f",
+  "title": "把GestureDetector滑动改成原始触摸状态机：末指抬起误判为touches为空，且丢了onFling的触发路径",
+  "when": "规格提取与界面实现阶段，把Android GestureDetector驱动的滑动手势（onFling回调）映射为ArkUI触摸处理时",
+  "description": "源端OnTouchListener只把事件转交GestureDetector.onTouchEvent，方向判定写在SimpleOnGestureListener.onFling里；目标端准备在手势区域用.onTouch手写Down/Move/Up状态机，或用PanGesture等识别器替代。",
+  "summary": "规格作者a953b48写前读到Gestures.java：onTouch只return gestureDetector.onTouchEvent(event)，\nonFling内是|diff|>50且|velocity|>0的方向矩阵（agent-a953b48410b4230e4.jsonl:L96-L97）。onFling是否回调由GestureDetector决定，条件包括触摸容差、长按、双击和VelocityTracker最小抛掷速度。\n它首写前被注入lesson-68023ac5（v1，讲原始getAction onTouch的首指过滤），提醒是“手势契约写首指过滤：非首指Down/非末指Up不触发…”（L126），L128记下这条手势契约。\n随后规格的手势行把onFling写成“PanGesture(onActionEnd)…位移>50px且速度>0”，并加上“ArkUI逐指派发需过滤——非首指Down、非末指Up不进状态机”，但没写GestureDetector的触发条件（L160-L161）。\n主会话派给它的批次注意事项里也已有“Gestures.onFling→PanGesture/手势判定（…首指语义）”一句（同转录L1）。\n转换者aea1f8读到这份规格和Gestures.java（agent-aea1f8cd87d32adc5.jsonl:L16-L17、L29-L30）。L80思考中，它认为规格的首指过滤措辞“预期onTouch过滤”，\n又凭记忆假定“Up事件的touches不含已抬起的手指”，于是把规格里的PanGesture改成onTouch首指状态机。\n首写前被注入同一经验，提醒是“滑动手势用onTouch状态机：Down/Up时touches.length>1直接忽略…末指Up/Cancel取changedTouches[0]”（L93）。\n它据此在L95定为“Up/Cancel要求touches.length === 0（末指）”。\nWrite写出Up分支要求event.touches.length === 0 && changedTouches.length > 0才judgeSwipe，\n速度用起点到抬起的总位移除以总时长，只要求>0，没有复刻GestureDetector的触发路径（L213-L214）。\n转换者核过SDK d.ts，但只核了字段名，d.ts对touches只写“All finger information”（L134-L141）。派工又禁止编译构建，所以写出后未经设备验证。\nArkUI的Up事件里touches仍含正在抬起的手指，该条件永不成立，滑动永不触发。\nSlice 5的a011首写前收到同一经验的提醒：“非首指Down（touches>1）与未全抬Up（touches!=0）继续丢弃”（agent-a011f89ca98ef9833.jsonl:L140）。\n它在W171全量重写GamePage时保留了该过滤和平均速度，只把方向矩阵改为调用SwipeGestureHandler.onPanEnd（L171）。\n生成结束快照81f0b13的GamePage.ets:313仍是这一条件。这一步没有改变本项问题，所以只在此说明，不进图。\n返修加DBGFIX日志实测Up为type=1 touches=1（repair L463-L476）。随后新增FlingGestureDetector，复刻GestureDetector的onFling触发路径：8dp容差、400ms长按、双击、LSQ2速度、最小/最大抛掷速度。\nonBoardTouch改为把每个事件交给检测器，并删除swipeTracking/judgeSwipe（repair L654-L655、L668-L669，检查点C25 f27d3ab），最终保留。\nlesson-68023ac5参与偏差的方式有两处：\n其一，它只写“非末指抬起不进状态机”和“touches.length>1忽略”，没写明ArkUI Up事件的touches含抬起手指、末指抬起时length===1；适用情境还把touches写成“在屏触点”。\n三条提醒和两个agent都把“末指抬起”理解成touches为空。\n其二，它的前提是原始getAction onTouch，例外只列getActionMasked/pointerId，没覆盖GestureDetector源。\n于是规格和实现都把框架识别器当成原始触摸处理，丢了onFling的触发路径。\n按运行目录规则，这条经验本应作为problem输入节点入图，并以force边连到规格作者和转换者，证据分别是agent-a953b48410b4230e4.jsonl:L126和agent-aea1f8cd87d32adc5.jsonl:L93。\n普通边回执确实标为force_eligible；但补上force后，两行都被索引登记为被拒的Write page_0001_SplashActivity.md和Edit placeholder-registry.md，pack回执invalid_force_source（reviewed relation contradicts indexed operation endpoints），force不能绕过。\n因此图中不放经验节点，只在修订建议里点名，见draft-2.yaml与pack-2.out。\n",
+  "recommendations": [
+    "规格提取阶段：源端onTouch只return gestureDetector.onTouchEvent(event)、方向写在onFling时，把GestureDetector的触发条件写进契约，不只转写onFling内的位移/速度矩阵。条件包括：抬起时VelocityTracker速度超过最小抛掷速度才回调（50dp/s，上限8000dp/s）；未移出8dp触摸容差、400ms长按、双击第二击都不回调。",
+    "界面实现阶段，用ArkUI .onTouch手写手势时：Up事件的touches仍包含正在抬起的手指，末指抬起按type===Up且touches.length===1判定（或按id跟踪），不写touches.length===0；不用总位移/总时长的平均速度代替抬起前的速度。写前用hilog打一次type/touches/changedTouches，或构造事件单测确认；派工禁止构建、不能上设备时，在报告里把手势标为未验证。",
+    "修订 lesson-68023ac5f088c72a775a（版本 1）：标题和做法第一步写明ArkUI事实：Up事件的touches仍含正在抬起的手指，末指抬起是type===Up且touches.length===1，不是0；适用情境里“touches（在屏触点）”改为“touches（含本次抬起手指的全部触点）”。另加例外：源端onTouch只转交GestureDetector.onTouchEvent、方向写在SimpleOnGestureListener.onFling/onScroll时不套用本经验，按GestureDetector的触发路径复刻（触摸容差、长按、双击、VelocityTracker最小/最大抛掷速度）。判断信号：源码有new GestureDetector(...)、extends SimpleOnGestureListener，或onTouch中return gestureDetector.onTouchEvent(event)。本次规格作者、转换者和Slice 5的三条提醒都把末指抬起读成touches为空，Slice 5的提醒直接写成“touches!=0继续丢弃”。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-pf2048-glm5.31/entry/src/main/ets/pages/GamePage.ets",
+        "since": "2026-10-14T02:47:19.609Z",
+        "at": "2026-10-14T13:11:05.496Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/privacy-friendly-2048-SecUSo-4ee3cf3/app/src/main/java/org/secuso/privacyfriendly2048/activities/helper/Gestures.java",
+          "at": "2026-10-13T13:16:12.179Z",
+          "reason": "正常输入：规格作者Read回执给出onTouch只return gestureDetector.onTouchEvent(event)，GestureListener extends SimpleOnGestureListener，onFling内为SWIPE_THRESHOLD=50、SWIPE_VELOCITY_THRESHOLD=0的方向矩阵。这足以说明onFling何时回调由GestureDetector决定，不是每次抬起都判定（agent-a953b48410b4230e4.jsonl:L96-L97）。"
+        },
+        {
+          "key": "3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f:a953b48410b4230e4",
+          "at": "2026-10-13T13:29:07.930Z",
+          "reason": "读到Gestures.java（L96-L97），并在L126被注入lesson-68023ac5，L128记下“Gesture contract: first-pointer filter…one fling per gesture”。Write的page_0008规格手势行写成“PanGesture(onActionEnd)手势判定：位移…>50px（px域）且速度>0…首指语义：ArkUI逐指派发需过滤——非首指Down、非末指Up不进状态机”。GestureDetector的触摸容差、长按、双击和最小抛掷速度都没写，源码到规格在此偏离（L160-L161）。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-pf2048-glm5.31/spec/baseline/ui/page_0008_GameActivity.md",
+          "at": "2026-10-13T20:42:56.457Z",
+          "reason": "交付桥梁：转换者Read回执的转换决策表仍是上述手势行，期间无其他写入。派工要求必读该规格，称其“含…手势首指契约”（agent-aea1f8cd87d32adc5.jsonl:L1、L16-L17）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/privacy-friendly-2048-SecUSo-4ee3cf3/app/src/main/java/org/secuso/privacyfriendly2048/activities/helper/Gestures.java",
+          "at": "2026-10-13T20:43:06.660Z",
+          "reason": "正常输入：转换者自己也Read了Gestures.java，回执同样显示onTouch转交gestureDetector.onTouchEvent，方向矩阵在onFling内（agent-aea1f8cd87d32adc5.jsonl:L29-L30）。"
+        },
+        {
+          "key": "3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f:aea1f8cd87d32adc5",
+          "at": "2026-10-13T21:17:26.985Z",
+          "reason": "L80思考凭记忆认定“Up event: touches excludes lifted”，并以规格的首指过滤措辞为由，把规格的PanGesture改成onTouch状态机。L93被注入lesson-68023ac5，提醒“Down/Up时touches.length>1直接忽略…末指Up/Cancel取changedTouches[0]”；L95据此定为“on Up/Cancel…require touches.length === 0 (last finger)”。Write写出Up分支touches.length===0才judgeSwipe，速度用总位移/总时长且只要求>0（L213-L214）。ArkUI Up事件的touches含抬起手指，判定永不执行；GestureDetector的触发路径也未复刻。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 5
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [
+    {
+      "key": "C:/Users/hongy/projects/transfer-app-pf2048-glm5.31/entry/src/main/ets/viewmodels/FlingGestureDetector.ets",
+      "reason": "返修新增文件：生成结束快照81f0b13中不存在，首次由返修会话Write（repair L654-L655），生成期没有写者可连。它补的是GestureDetector onFling触发路径的缺失，这一缺失的成因已在GamePage.ets图中归因：规格把onFling简化为位移>50px且速度>0，转换者用平均速度的onTouch状态机。"
+    }
+  ],
+  "job": "issue-a1849836a1bfff3c265c",
+  "metadata": {
+    "migration": {
+      "id": "pf2048-glm531-3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f",
+      "project": "Privacy Friendly 2048"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.296",
+        "2.1.299"
+      ]
+    },
+    "source_set_id": "sources-1066f74383c81d5a2cd9",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-pf2048-glm5.31",
+        "at": "2026-10-13T20:25:53.379Z",
+        "ref": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a46a0c49af597d7c3.jsonl:L105",
+        "request_ref": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a46a0c49af597d7c3.jsonl:L104",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-pf2048-glm5.31",
+        "at": "2026-10-13T20:25:53.379Z",
+        "ref": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a46a0c49af597d7c3.jsonl:L105",
+        "request_ref": "generation/3b2b2c62-09ca-4856-8ee0-fb66b63ffe8f/subagents/agent-a46a0c49af597d7c3.jsonl:L104",
+        "phase": "generation"
+      },
+      {
+        "name": "toolchain.gradle",
+        "value": "8.5",
+        "basis": "configuration",
+        "artifact": "gradle-wrapper.properties",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-pf2048-glm5.31",
+        "at": "2026-10-14T07:57:12.812Z",
+        "ref": "repair/5d9e6180-4c80-4423-a00d-ca7069d9da73.jsonl:L70",
+        "request_ref": "repair/5d9e6180-4c80-4423-a00d-ca7069d9da73.jsonl:L69",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "c16c307d-1222-4fb3-bc92-f319ab51b983"
+      ]
+    }
+  },
+  "revision": "6f99b4d129e0f8a38a9cfc2897362983a26a6c7c0f371eefe66bb3d193abfe39"
+}

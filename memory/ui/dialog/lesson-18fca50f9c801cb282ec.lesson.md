@@ -1,6 +1,6 @@
 # 源对话框带目标系统弹窗没有的槽位（setView 注入的复选框等自定义布局、Compose AlertDialog 的 icon）时改用自定义弹窗承载，不写成 AlertDialog.show 的参数，也不自行省略
 
-ID：`lesson-18fca50f9c801cb282ec` · 版本：3
+ID：`lesson-18fca50f9c801cb282ec` · 版本：4
 
 [本主题](index.md)
 
@@ -23,7 +23,7 @@ AlertDialog.show 的参数只有标题、副标题、必填的 message、按钮�
 ## 做法
 
 1. 先看源对话框是否调用 setView、加载自定义布局或传入 icon：都没有时才考虑 AlertDialog.show（按钮槽位与外观取舍见例外）；有则用自定义弹窗，在同一个自定义构建里放图标、标题、正文、复选框与按钮，确认回调读取复选状态后再执行源端的偏好写入与后续动作。
-2. V1 页面可用 @CustomDialog + CustomDialogController；@ComponentV2 页面用 UIContext.getPromptAction().openCustomDialog 或状态驱动浮层，不用 CustomDialogController 承载 V2 组件。
+2. V1 页面可用 @CustomDialog + CustomDialogController；@ComponentV2 页面优先用 UIContext.getPromptAction().openCustomDialog；项目明确采用状态驱动浮层时，按源端允许或禁止点外/返回关闭分别处理，并保留对应取消回调，以及显示期间的背景无障碍隔离和关闭后的恢复，不能仅凭外观相似视为等价；不用 CustomDialogController 承载 V2 组件。
 3. 只能先落简化弹窗时，把丢失的交互或视觉元素（控件、偏好写入、图标）登记为占位与回补点，并在报告中列为与源端的差异；有决策台账时先查台账，未命中就作为决策缺口上报，不以“仅视觉降级”或兄弟页先例自行定案，也不以不存在的参数假装等价。
 
 ## 依赖经验

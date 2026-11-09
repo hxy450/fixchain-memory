@@ -28,7 +28,7 @@
 - [动态布局文本的字号、行距按源端 dp × 文字倍率落成 vp，只有 bounds、padding、背景等几何乘设计画布比例](lesson-4c494b9f89c7e9db2b55.lesson.md)
   - 时机：动态或灵活组件的渲染实现阶段，把源端动态布局文本的字号、行距换算成 ArkUI 预览、测量或原生绘制尺寸时
   - 情境：源端动态文本以 fontSize.dpF × dynamicTextScale × fontSizeScale 设字号、以 lineSpacing.dpF 设行距，只有节点宽高、位置、padding、背景按根尺寸与设计宽度之比缩放；目标预览用 renderWidth / document.width 一类画布比例统一换算几何。
-- [单行 ellipsize=middle/start 在目标 TextOverflow 没有同名成员时实现测量式中间截断，不降级为尾部省略](lesson-a184209501ba02cb62e7.lesson.md)
+- [单行省略先查完整 SDK 能力：无现成映射时 middle 测量保头尾、start 测量保尾部，不统一降级为尾部省略](lesson-a184209501ba02cb62e7.lesson.md)
   - 时机：界面实现阶段，转换单行文本的省略位置（ellipsize），而目标 TextOverflow 枚举没有对应成员时
   - 情境：源 TextView 用 android:ellipsize="middle"（或 start）配合 lines=1/maxLines=1 显示文件名等尾部有意义的文本，可能还有关键字 Span 高亮；ArkUI Text 的 TextOverflow 只有尾部 Ellipsis 等模式，映射参考只给 end → Ellipsis 示例。
   - 例外：项目已批准以尾部省略作为平台差异

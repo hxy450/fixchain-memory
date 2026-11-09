@@ -1,6 +1,6 @@
 # Windows PowerShell 5.1 读取 UTF-8 中文规格、账本与源码要显式 -Encoding UTF8；回执出现乱码就当作没读
 
-ID：`lesson-6a3a7f46c8fec282affa` · 版本：3
+ID：`lesson-6a3a7f46c8fec282affa` · 版本：4
 
 [本主题](index.md)
 
@@ -14,11 +14,11 @@ ID：`lesson-6a3a7f46c8fec282affa` · 版本：3
 
 ## 原因
 
-Windows PowerShell 5.1 的 Get-Content/Select-String 默认按系统 ANSI 代码页解码无 BOM 的 UTF-8 文件，中文条款变成乱码而 ASCII 标识照常显示，读取者容易以为已经读到了条款。来源为同一应用的多次切片实现：实现者读到的功能规格中文正文均为乱码，只凭 AC 编号与方法名实现，漏掉了“成功后才写缓存”“先授权再定位、拒绝不能静默”“登录成功后重载任务数据”等只写在中文正文里的条件。同样的误解码还会吞掉中文注释行尾的换行，使下一行代码显示在注释后面；另一应用的返修者据此误判权限判断“被乱码注释吞掉”，按合并后的行写的补丁找不到上下文。
+Windows PowerShell 5.1 在直接读取无 BOM 文件时，Get-Content 默认按系统 ANSI 代码页解码，而 Select-String 默认假定 UTF-8；两者不能合并归因为同一默认编码。若输入字节、显式参数或输出管线不匹配，中文条款变成乱码而 ASCII 标识照常显示，读取者容易以为已经读到了条款。来源为同一应用的多次切片实现：实现者读到的功能规格中文正文均为乱码，只凭 AC 编号与方法名实现，漏掉了“成功后才写缓存”“先授权再定位、拒绝不能静默”“登录成功后重载任务数据”等只写在中文正文里的条件。乱码回执还可能让代码显示为并入注释；这种显示不能证明原文件的换行字节已改变；另一应用的返修者据此误判权限判断“被乱码注释吞掉”，按合并后的行写的补丁找不到上下文。
 
 ## 做法
 
-1. 在 PowerShell 5.1 中读取文本一律带编码：Get-Content -Raw -Encoding UTF8、Select-String -Encoding UTF8；批量读取前也可先设置 $OutputEncoding = [Console]::OutputEncoding = [Text.UTF8Encoding]::new()。
+1. 在 PowerShell 5.1 中读取文本一律带编码：Get-Content -Raw -Encoding UTF8、Select-String -Encoding UTF8；外部程序或控制台传输另核 $OutputEncoding 与 [Console]::OutputEncoding；这些输出设置不能替代 Get-Content/Select-String 的输入 -Encoding 参数。
 2. 回执里出现成片乱码时，把该文件视为未读，用 UTF-8 重读后再据此实现；不要凭可读的 AC 编号、方法名推断条款内容。
 3. 乱码回执里代码看似并入注释行时，先用 UTF-8 重读，或以 analyzer 行号、补丁上下文核对原文件的行结构，再判断代码是否真被注释。
 

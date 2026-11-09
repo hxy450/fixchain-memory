@@ -42,7 +42,7 @@
   - 时机：界面实现阶段，为图片组件确定宽高约束时；校准阶段处理图片比例、宽度类的不确定占位时
   - 情境：源 ImageView 为 wrap_content + adjustViewBounds（可带 layout_constrainedWidth 与 bias），宽度受同行兄弟和边距约束，高度应随位图固有比例跟随；目标用 Row 内的 Image 承接。
   - 例外：当前父布局或明确的尺寸规则已给出图片盒的宽高，此时只需设置盒内缩放
-- [并排 wrap_content 图片列不按固有 dp 写死宽度：按固有宽度比例分列，高度用 aspectRatio](lesson-0618cdf331560d389f0e.lesson.md)
+- [并排 wrap_content 图片列先核源父测量约束：已确认随可用宽度分配时按固有宽度比例分列，高度用 aspectRatio](lesson-0618cdf331560d389f0e.lesson.md)
   - 时机：界面实现阶段，把 match_parent 父行中并排的 wrap_content 图片列转换为 ArkUI Row/Column 并确定列宽时；修复“右侧顶满/被遮挡”时
   - 情境：源布局在 match_parent 的水平 LinearLayout 中并排放置 wrap_content 图片列，列宽来自 drawable 固有尺寸与左右、列间 margin，其总和接近或超过常见手机屏宽；目标要在宽度不同的设备上与源截图对齐。
 - [把原由 Tabs、Grid 等容器分配槽位的子项搬进自绘 Row/Column 时重新确定主轴尺寸：等分用 layoutWeight(1)，不保留依赖旧容器的 width('100%')](lesson-c572346f0be19acf5579.lesson.md)

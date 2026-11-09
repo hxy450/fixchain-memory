@@ -1,6 +1,6 @@
-# 规格提取把 AndroidManifest 声明（含未声明的平台缺省）解析成实际行为与鸿蒙目标值并指派实现：未声明 screenOrientation 时 EntryAbility 写 orientation: auto_rotation_restricted；未声明 windowSoftInputMode 时按是否含可滚动视图取 RESIZE/OFFSET，并写出首屏焦点与是否弹键盘；“默认”不能作目标值
+# 规格提取把 AndroidManifest 声明（含未声明的平台缺省）解析成实际行为与鸿蒙目标值并指派实现：未声明 screenOrientation 时也按源允许方向集合显式设置 EntryAbility orientation（四向示例 auto_rotation_restricted）；未声明 windowSoftInputMode 时按是否含可滚动视图取 RESIZE/OFFSET，并写出首屏焦点与是否弹键盘；“默认”不能作目标值
 
-ID：`lesson-c1d7ec16bb02aa152c33` · 版本：3
+ID：`lesson-c1d7ec16bb02aa152c33` · 版本：5
 
 [本主题](index.md)
 
@@ -14,11 +14,11 @@ ID：`lesson-c1d7ec16bb02aa152c33` · 版本：3
 
 ## 原因
 
-只读 Java 源码会漏掉 manifest 属性；规格与页面元数据都没有方向字段时，实现者会以“规格未覆盖”跳过。记为 unspecified/unknown 的项没有目标值，下游没有写者，模板默认值（如允许备份）会保留到交付。鸿蒙 EntryAbility 不写 orientation 就不随传感器旋转，只迁两套布局时横屏分支永不出现；未声明 windowSoftInputMode 时安卓缺省 adjustUnspecified 由系统按窗口是否含可滚动视图取 adjustResize 或 adjustPan，而 ArkUI 缺省 OFFSET 整页上推；状态半 stateUnspecified 让首个可获焦视图为 EditText 时自动弹键盘，ArkUI 不会自动给输入框焦点。另一应用中注入的一行提醒只剩“无screenOrientation=跟随旋转”“无windowSoftInputMode（默认）”，写者照写安卓语义就算交差，目标值没有进入任何任务。
+只读 Java 源码会漏掉 manifest 属性；规格与页面元数据都没有方向字段时，实现者会以“规格未覆盖”跳过。记为 unspecified/unknown 的项没有目标值，下游没有写者，模板默认值（如允许备份）会保留到交付。来源手机中 EntryAbility 未声明 orientation、也未在运行时设置方向时，窗口不随传感器旋转，只迁两套布局仍不会触发横屏分支；这不是所有设备的统一缺省。官方说明未配置时由系统判定：通常直板机默认竖屏且不旋转，平板可四向旋转并受系统旋转锁控制，其他产品形态须分别核对。未声明 windowSoftInputMode 时安卓缺省 adjustUnspecified 由系统按窗口是否含可滚动视图取 adjustResize 或 adjustPan，而 ArkUI 缺省 OFFSET 整页上推；状态半 stateUnspecified 让首个可获焦视图为 EditText 时自动弹键盘，ArkUI 不会自动给输入框焦点。另一应用中注入的一行提醒只剩“无screenOrientation=跟随旋转”“无windowSoftInputMode（默认）”，写者照写安卓语义就算交差，目标值没有进入任何任务。
 
 ## 做法
 
-1. 逐个 activity 列出 manifest 属性，把未声明项解析成实际行为再写鸿蒙目标值，“默认/按系统缺省”不能作结论：未声明 screenOrientation（随系统旋转）时，module.json5 的 EntryAbility 写 orientation: auto_rotation_restricted，与权限并列为 module.json5 必做项；sensorLandscape 等锁定值写成“进入页 setPreferredOrientation(对应方向)、离开恢复”的验收条目。
+1. 逐个 activity 列出 manifest 属性，把未声明项解析成实际行为再写鸿蒙目标值，“默认/按系统缺省”不能作结论：未声明 screenOrientation 时，先核源允许的方向集合、产品形态与系统旋转锁行为，再在 module.json5 为 EntryAbility 显式选对应 orientation，并与权限并列为必做项；auto_rotation_restricted 是受锁控制的四向策略，只有与源合同一致时采用，不能把它无条件套到禁止倒竖等源场景；sensorLandscape 等锁定值写成“进入页 setPreferredOrientation(对应方向)、离开恢复”的验收条目。
 2. 未声明 windowSoftInputMode 且含 EditText 时拆成两条验收并各自指派：调整方式——窗口含 ListView/ListActivity/ScrollView 等可滚动视图为 adjustResize（目标窗口级 setKeyboardAvoidMode(KeyboardAvoidMode.RESIZE)），否则为 adjustPan（OFFSET）；状态——首屏焦点给布局顺序中第一个可获焦视图（AdapterView 只在有数据时可获焦），写清各数据分支谁获焦、是否自动弹键盘。
 3. application 级属性同样逐项映射（如 allowBackup → allowToBackupRestore）并为每项指派实现任务，不留 unknown。
 

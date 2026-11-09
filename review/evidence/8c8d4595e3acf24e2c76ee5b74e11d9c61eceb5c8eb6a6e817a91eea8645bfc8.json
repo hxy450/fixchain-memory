@@ -1,0 +1,298 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-60d268b503cb75aa01a2",
+  "created_at": "2026-10-07T04:57:30.566397+00:00",
+  "migration_key": "antennapod-glm53-3c838ae1-111b-475a-a085-e9464ec2fde4",
+  "title": "ArkWeb 节目说明：onLoadIntercept 拦住自身 loadData、WebSettings 视口未入契约、播放页装载契约在占位交接中丢失",
+  "when": "界面实现、规格映射与占位接线阶段，把 Android ShownotesWebView（shouldOverrideUrlLoading、WebSettings、loadDataWithBaseURL）迁成 ArkWeb Web 组件，确定导航拦截判据、视口声明和 loadData 装载参数时",
+  "description": "源端用 WebView.loadDataWithBaseURL 装载本地清洗出的 HTML，用 shouldOverrideUrlLoading 只处理用户点开的链接，用 setUseWideViewPort(false)/setLoadWithOverviewMode(true) 按设备宽排版；目标端改用 Web + WebviewController.loadData + onLoadIntercept，HTML 由独立清洗服务产出，同一 Web 装载逻辑由页面转换、功能切片和占位关闭分批写成。",
+  "summary": "单集详情（EpisodeDetailComponent）：生成者 af20b9cd 写前已读 ShownotesWebView.java（shouldOverrideUrlLoading 只处理链接导航，\nAndroid 不会为 loadDataWithBaseURL 自身回调它）和 ItemFragment.onFragmentLoaded 的 loadDataWithBaseURL；思考中也写到\n\"ArkUI onLoadIntercept 对初始装载同样回调\"\"请求 URL 可能是 baseUrl 或 about:blank\"，并想到\"仅用户点击的 http(s) 链接\"这一判据\n（agent-af20b9cd01fa3f430.jsonl:L107、L144）。但 Write 只用 isMainFrame() 过滤，再按 url === 'https://127.0.0.1' || 'about:blank'\n逐字放行，其余主框架加载一律 openInBrowser 并 return true（L150-L151）。loadData 自身主框架导航的 URL 并不是 baseUrl 原串，\n正文导航被当成外链拦掉：修复会话真机 hilog 出现 \"EpisodeDetailComponent openLink failed\"，Web 停在 about:blank（修复主会话 L2527-L2533）。\n同批 4 分钟前的 ItemDescriptionPanel 生成者 ac46 读到同样源码，写的是 isMainFrame && isRequestGesture，说明写前材料已足够。\naf20 还假设\"DB 异步加载超过一帧，controller 已挂接\"，没有加挂接守卫（L144）。修复改为只拦\nisMainFrame()&&isRequestGesture()，并新增 controllerAttached/webDataLoaded，挂接后只装载一次（修复主会话 L2553-L2565）。最终保留。\n\n视口（ShownotesRenderer）：F008 规格作者 a7e72 写前读到 ShownotesWebView 的 setUseWideViewPort(false)/setLoadWithOverviewMode(true)\n（agent-a7e72a0c90ef8a4ad.jsonl:L90-L91）。但它在 F008 §mapping 的 ShownotesWebView 行只写了 loadData 五参和\"onLoadIntercept 返回 true 截获\"，\n结论标为\"行为等价\"，没有写 WebSettings 视口映射，也没写 onLoadIntercept 会为 loadData 自身导航回调（L292-L293）。Slice 16 的\na2665 读到这一行（agent-a2665b6468828cce7.jsonl:L31-L32），又读了 ShownotesCleaner.java（L97-L98；源端靠 WebView 设置控制视口，\n清洗器里本来就没有 viewport）。它写出的 ShownotesRenderer 两条产出路径都只有 <head></head> 或 style 注入，没有 viewport 声明（L317-L318）。\nArkWeb 没有 viewport 时按 980px 桌面宽排版再整体缩小，正文字极小；修复在两条路径都注入\nwidth=device-width, initial-scale=1（修复主会话 L3242-L3265）。旁证：两个 Web 宿主转换者都看到了这项设置，但都没落实。\naf20 在报告里写\"ArkWeb 无 1:1 属性，默认视口行为近似\"（af20 L223）；ac46 把它登记为 P-S6-UNC-005，写\"依赖清洗侧注入 CSS 承担\"（ac46 L123）。\n这两处都没有交到清洗服务作者手里。\n\n播放页（ItemDescriptionPanel）：ac46 读到 ItemDescriptionFragment.java 的 loadDataWithBaseURL(\"https://127.0.0.1\", data, \"text/html\",\n\"utf-8\", \"about:blank\")，以及 load() 中的 ShownotesCleaner（agent-ac46dcf4921bfbda6.jsonl:L27-L30）。它判断三参 loadData \"功能上近似\"（L87），\n于是写成三参 loadData，正文直接装原始描述，把 baseUrl/historyUrl 和清洗都并入 forward-ref P-S6-027（\"如需 baseUrl… 切 5 参重载\"，\nL107-L108、L123-L124）。Slice 6 Step 3d 的 a3a307 grep 到 P-S6-027 原条目（agent-a3a307bca64776d79.jsonl:L335-L336），\n又看到 EpisodeDetailComponent 的 P-S16-046 标记（L338-L339）。它决定只接 DB 装载段，把 P-S6-027 标成\"已闭合\"，\n并在思考中写\"no new marker needed since P-S16-046 already owns the cleaner\"（L340）。它的 Edit 删掉了 baseUrl 注记，保留三参 loadData\n和原始文本，只留一句\"端口归 P-S16-046（Slice 16）\"（L386-L387）。P-S16-046 登记的是 EpisodeDetailComponent#buildWebviewData。\nSlice 16 的 a2665 grep 结果中其实有这行 ItemDescriptionPanel.ets:105（a2665 L54-L55），但它只在 EpisodeDetailComponent 闭合了\nP-S16-046（L511；ShownotesRenderer 头注\"消费方：EpisodeDetailComponent.buildWebviewData\"）。播放页因此到生成收官仍是三参 loadData 加原始文本。\n修复 pass-2（agent-a37c11da1d273ee04.jsonl:L194-L226）按工单提示补了 processShownotes、baseUrl/historyUrl，改为成功后才记 loadedData，\n并在首个 onPageEnd 补发一次 about:blank 竞态。round0b 仍是前三次打开空白，加载出来时深色主题是黑字（agent-a51c31fccb3417995.jsonl:L1）。\npass-3 换了假设：Web 在启动时随隐藏、屏外的播放层创建，不出正文；正文颜色只烘焙一次。据此，AudioPlayerPage 的 descriptionPageShown\n锁存值作为 active 传入，首次选中才创建 Web；src 直接用带 <base href> 的 data URL，首个 onPageEnd 后才 loadData；同时监听\nThemeState.theme 与 environment 重新产出 HTML。pass-2 的 about:blank 补发逻辑被移除（a51c31 L263-L317、L665），round0c 通过。\npass-2 没有留下新的偏差：它的补发逻辑已删除，保留下来的 baseUrl/清洗接入后续仍在用。深色黑字也不是 pass-2 引入的：原始文本版本同样没有主题色，\n只是要等正文显示出来才看得到。\n",
+  "recommendations": [
+    "实现阶段迁移 shouldOverrideUrlLoading 时，用请求属性区分用户导航和程序装载：onLoadIntercept 先判 isMainFrame()&&isRequestGesture()，再分发时码或外链。不要猜测 loadData 产生的请求 URL 后逐字放行；确需按 URL 判断，先打印真实 getRequestUrl() 核对。",
+    "实现阶段调用 controller.loadData 前，以 onControllerAttached 置位作为前提，未挂接时缓存数据、挂接后补发一次。不要用“异步加载足够慢”推定已挂接。",
+    "规格提取阶段映射 WebView 时，把 WebSettings（useWideViewPort/loadWithOverviewMode/cacheMode/mixedContent）和回调触发范围的差异逐项写进契约；ArkWeb 无 1:1 属性就给出替代（如 HTML head 注入 <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">），不要笼统标“行为等价”。",
+    "产出供 ArkWeb 渲染的 HTML 时，检查每条输出路径（含空文案兜底）的 head 是否声明 viewport；源端靠 WebView 设置实现的排版行为，要在 HTML 或 Web 属性中显式落实。",
+    "占位接线阶段关闭 forward-ref 时，对照 registry 原条目逐项核对（装载参数、清洗、主题）。未完成的部分在本文件登记新占位，不要用注释借用另一文件的占位编号。关闭共享能力占位时，把 grep 命中的所有消费方逐个接上或重新登记。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/components/EpisodeDetailComponent.ets",
+        "since": "2026-10-03T04:49:05.918Z",
+        "at": "2026-10-06T17:26:02.113Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/AntennaPod-develop/app/src/main/java/de/danoeh/antennapod/ui/view/ShownotesWebView.java",
+          "at": "2026-10-01T10:39:30.093Z",
+          "reason": "正常输入：Read 回执给出 WebViewClient.shouldOverrideUrlLoading 的语义：时码链接走回调，其余走 openInBrowser 并 return true。它只针对链接导航，不覆盖 loadDataWithBaseURL 自身的装载，足以要求“只拦用户导航”（agent-af20b9cd01fa3f430.jsonl:L34-L35）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/AntennaPod-develop/app/src/main/java/de/danoeh/antennapod/ui/screen/episode/ItemFragment.java",
+          "at": "2026-10-01T10:39:23.124Z",
+          "reason": "正常输入：Read 回执给出 onFragmentLoaded 用 loadDataWithBaseURL(\"https://127.0.0.1\", webviewData, \"text/html\", \"utf-8\", \"about:blank\") 装载正文，说明正文来自程序装载而不是链接导航（同转录 L30-L31）。"
+        },
+        {
+          "key": "agent-af20b9cd01fa3f430.jsonl",
+          "at": "2026-10-01T10:53:51.214Z",
+          "reason": "思考中已认定 onLoadIntercept 会为初始装载回调，但不确定其 URL（L107），最后用 isMainFrame()+URL 逐字等于 WEB_BASE_URL/about:blank 作放行判据，其余主框架加载都 openInBrowser 并 return true。它还假设异步加载完成时 controller 已挂接，不加守卫（L144）。Write 将这段写进目标（L150-L151），保留到 d16b3d0；修复时真机实测 loadData 导航被当外链拦截（修复主会话 L2527-L2533）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/services/ShownotesRenderer.ets",
+        "since": "2026-10-03T04:49:05.918Z",
+        "at": "2026-10-06T17:26:02.113Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/AntennaPod-develop/app/src/main/java/de/danoeh/antennapod/ui/view/ShownotesWebView.java",
+          "at": "2026-09-30T16:22:48.874Z",
+          "reason": "正常输入：规格作者 Read 回执第 70-72 行给出 setMixedContentMode、setUseWideViewPort(false)、setLoadWithOverviewMode(true)，足以说明正文按设备宽排版依赖 WebView 设置（agent-a7e72a0c90ef8a4ad.jsonl:L90-L91）。"
+        },
+        {
+          "key": "agent-a7e72a0c90ef8a4ad.jsonl",
+          "at": "2026-09-30T16:51:12.383Z",
+          "reason": "读到上述 WebSettings 后，Write 的 F008 §mapping 中 ShownotesWebView 行只含 loadData 五参签名与 onLoadIntercept 返回 true 截获，结论“行为等价”，没写视口/overview 设置的 ArkWeb 落点，也没写 onLoadIntercept 会为 loadData 自身导航回调；全文无 viewport/WideViewPort 字样（同转录 L292-L293）。源码到规格的映射在此遗漏。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/spec/baseline/features/F008-episodes-lists-detail.md",
+          "at": "2026-10-02T19:46:52.578Z",
+          "reason": "交付桥梁：Slice 16 实现者 Read 回执第 157 行仍是同一 ShownotesWebView 映射行，回执中无视口要求（agent-a2665b6468828cce7.jsonl:L31-L32）。"
+        },
+        {
+          "key": "agent-a2665b6468828cce7.jsonl",
+          "at": "2026-10-02T20:24:50.522Z",
+          "reason": "收到的 F008 与 ShownotesCleaner.java（L97-L98，源端清洗器本来不含 viewport）都没有视口要求。它 Write 的 ShownotesRenderer 中，空文案路径返回 <html><head></head>…，正常路径只在 head 注入 style（L317-L318）。本链确认遗漏如何传到目标，不另推定此人独立失职。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/components/player/ItemDescriptionPanel.ets",
+        "since": "2026-10-03T04:49:05.918Z",
+        "at": "2026-10-06T17:26:02.113Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/AntennaPod-develop/app/src/main/java/de/danoeh/antennapod/ui/screen/playback/audio/ItemDescriptionFragment.java",
+          "at": "2026-10-01T10:39:45.586Z",
+          "reason": "正常输入：Read 回执给出 load() 经 ShownotesCleaner(context, description, duration).processShownotes() 产出 HTML，再以 loadDataWithBaseURL(\"https://127.0.0.1\", data, \"text/html\", \"utf-8\", \"about:blank\") 装载（agent-ac46dcf4921bfbda6.jsonl:L27-L30）。"
+        },
+        {
+          "key": "agent-ac46dcf4921bfbda6.jsonl",
+          "at": "2026-10-01T10:49:41.995Z",
+          "reason": "思考中把三参 loadData 判为“功能上近似”（L87）。Write 写成 loadData(this.loadedData, 'text/html', 'utf-8')，正文直装原始描述（L107-L108）。baseUrl/historyUrl 和清洗链都只并入 forward-ref P-S6-027 的说明（“如需 baseUrl… 切 loadData 5 参重载”），并以 Bash 追加到 registry（L123-L124）。源端装载参数在此第一次被降成可选。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/spec/placeholder-registry.md",
+          "at": "2026-10-02T15:44:51.364Z",
+          "reason": "交付桥梁：Slice 6 Step 3d 接线者 grep 回执第 800 行是 P-S6-027 原条目，含 ShownotesCleaner 清洗链与“如需 baseUrl/historyUrl 语义切 loadData 5 参重载”（agent-a3a307bca64776d79.jsonl:L335-L336）。"
+        },
+        {
+          "key": "agent-a3a307bca64776d79.jsonl",
+          "at": "2026-10-02T15:50:47.737Z",
+          "reason": "读到 P-S6-027 原条目和 EpisodeDetailComponent 的 P-S16-046 标记（L338-L339）后，决定只接 DB 段，借用 P-S16-046 承接清洗，不再登记新占位（L340）。Edit 把 load() 改成“P-S6-027 已闭合（DB 装载段接线）”，删去 baseUrl/historyUrl 注记，保留三参 loadData 与原始文本，只留一句“端口归 P-S16-046（Slice 16）”（L386-L387）。P-S16-046 只登记在 EpisodeDetailComponent#buildWebviewData，Slice 16 闭合时未接本文件；该片段一直保留到 d16b3d0，由修复 pass-2/3 改写。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "force": true,
+          "reason": "ac46 用 Bash heredoc（cat >> placeholder-registry.md）追加 page_0032 段，内含 P-S6-027 行（清洗链 + 如需 baseUrl/historyUrl 切 5 参），回执 appended；这是 P-S6-027 条目写入 registry 的真实调用。",
+          "evidence": [
+            {
+              "source": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-ac46dcf4921bfbda6.jsonl",
+              "line": 123
+            },
+            {
+              "source": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-ac46dcf4921bfbda6.jsonl",
+              "line": 124
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "a3a307 在 Edit 前用 Bash grep 检索 spec/placeholder-registry.md 中的 P-S6-016 与 P-S6-027，回执第 800 行返回 P-S6-027 原条目全文；这是接线者写前读取该条目的真实调用。",
+          "evidence": [
+            {
+              "source": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a3a307bca64776d79.jsonl",
+              "line": 335
+            },
+            {
+              "source": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a3a307bca64776d79.jsonl",
+              "line": 336
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "播放页首开空白的根因（Web 在隐藏/屏外层中创建不出正文）是 pass-3 由 dump 缺 rootWebArea 和换主题后才露出旧色正文推断的，未经 hilog 证实（a51c31 L665）。生成期 AudioPlayerPage 按源 offscreenPageLimit=2 让两页常驻，写前材料里没有 ArkWeb 不可见创建约束，因此本卡不对首开空白归因。",
+    "生成期写前材料里没有查到“shownotes HTML 须随应用内主题切换重新产出”的要求（Android 靠 recreate 重新 load）。本卡只归因清洗与装载参数在交接中丢失，主题监听缺失不单独归因。"
+  ],
+  "unresolved_targets": [
+    {
+      "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/pages/AudioPlayerPage.ets",
+      "reason": "已确认 pass-3 新增 descriptionPageShown 锁存值并作为 active 传给 ItemDescriptionPage（agent-a51c31fccb3417995.jsonl:L295、L665）。它针对的“Web 随隐藏/屏外播放层创建而不出正文”是 pass-3 的推断，未经 hilog 证实。生成期本页按源 offscreenPageLimit=2 用 cachedCount 让两页常驻，写前未找到 ArkWeb 不可见创建约束的输入，无法确认生成期偏差及其来源。"
+    }
+  ],
+  "job": "issue-60d268b503cb75aa01a2",
+  "metadata": {
+    "migration": {
+      "id": "antennapod-glm53-3c838ae1-111b-475a-a085-e9464ec2fde4",
+      "project": "AntennaPod"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.285",
+        "2.1.286",
+        "2.1.287",
+        "2.1.288",
+        "2.1.289"
+      ]
+    },
+    "source_set_id": "sources-5f9a4b68d8866c1b1233",
+    "environment": [
+      {
+        "name": "toolchain.kotlin",
+        "value": "2.3.20",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-09-30T15:43:45.309Z",
+        "ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a3da0f444ffe5d81f.jsonl:L27",
+        "request_ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a3da0f444ffe5d81f.jsonl:L25",
+        "phase": "generation"
+      },
+      {
+        "name": "toolchain.agp",
+        "value": "8.11.0",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-09-30T15:43:45.309Z",
+        "ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a3da0f444ffe5d81f.jsonl:L27",
+        "request_ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a3da0f444ffe5d81f.jsonl:L25",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-09-30T17:34:05.597Z",
+        "ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a5c631d1e662fac13.jsonl:L54",
+        "request_ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a5c631d1e662fac13.jsonl:L53",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-09-30T17:34:05.597Z",
+        "ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a5c631d1e662fac13.jsonl:L54",
+        "request_ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a5c631d1e662fac13.jsonl:L53",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.0.2(22)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-10-04T16:26:51.075Z",
+        "ref": "repair/ae3bb09d-1f58-48a4-91c8-85a20fd96fc1.jsonl:L215",
+        "request_ref": "repair/ae3bb09d-1f58-48a4-91c8-85a20fd96fc1.jsonl:L214",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.0.1(21)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-10-04T16:26:51.075Z",
+        "ref": "repair/ae3bb09d-1f58-48a4-91c8-85a20fd96fc1.jsonl:L215",
+        "request_ref": "repair/ae3bb09d-1f58-48a4-91c8-85a20fd96fc1.jsonl:L214",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.4",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "040e09cc-8de1-45ba-bc4b-5202da7f9c23"
+      ]
+    }
+  },
+  "revision": "4c9e9c004967e82833493fa2cf9fa6df0cf9cf14bf3fab9df3ada7255951c08c"
+}

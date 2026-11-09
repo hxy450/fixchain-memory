@@ -1,0 +1,652 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-1ff61bb8eea97c7cac7f",
+  "created_at": "2026-10-07T05:13:44.755849+00:00",
+  "migration_key": "antennapod-glm53-3c838ae1-111b-475a-a085-e9464ec2fde4",
+  "title": "BottomSheetDialogFragment 迁移为 bindSheet：按方法名把 setupFullHeight 写成全高，宿主沿用缺 showClose 的外壳参数",
+  "when": "界面规格提取、弹层内容组件实现和功能切片宿主接线阶段，把 Android BottomSheetDialogFragment 映射为 ArkUI bindSheet，确定弹层高度档位、外壳参数（showClose/dragBar/背景）与内容根高度时",
+  "description": "源端是 Material BottomSheetDialogFragment：有的在 onShow 里调用名为 setupFullHeight 的方法（方法体只回填原 LayoutParams 并 setState(STATE_EXPANDED)），有的不改 peek/state；根布局为 wrap_content，或 match_parent 但位于 BottomSheet 的 wrap_content 容器中；界面没有关闭按钮和拖拽把手。目标用 bindSheet 嵌入内容组件，外壳参数由各宿主页配置，同一内容组件会被多个宿主复用。",
+  "summary": "本问题有三条已核成因，分别落在规格提取、宿主接线和高度档位选择。\n其一，规格提取。三名并行的规格作者写前都 Read 到 setupFullHeight 的方法体：只把 getLayoutParams() 原样\nsetLayoutParams 回去，再 setState(STATE_EXPANDED)，并没有改高度（SleepTimerDialog.java:135-143、\nItemFilterDialog.java:92-100、SubscriptionsFilterDialog.java:117-125）。page_0072/0067/0076 却按方法名写成\n“setupFullHeight 强制 STATE_EXPANDED 全高展开”，转换决策给出 bindSheet detents:[SheetSize.LARGE]（或“detents 全高”）。\n三份规格的派工文字都没有提到全高，误读出自对方法名的直译。实现者照此写内容组件：SleepTimerSheet、ItemFilterSheet\n和 SubscriptionsFilterPage 的 Scroll 根都写成 .height('100%')，SubscriptionsFilterPage 宿主写 detents:[LARGE]+dragBar:true。\n实现者自己也读到了源布局：time_dialog.xml 根 ScrollView 为 wrap_content；filter_dialog.xml 根为 match_parent，\n但位于 wrap_content 的 BottomSheet 容器中，实际仍随内容高度。实现者仍沿用了规格的全高语义。\n宿主为 FIT_CONTENT 时，height('100%') 会把弹层撑到上限，于是睡眠定时内容悬在中部、筛选面板全高。\n修复去掉 Scroll 根的 height('100%')，宿主改为 SheetSize.FIT_CONTENT + dragBar:false\n（repair 主会话 L14577-L14629、L15421-L15442）。\n其二，宿主接线。内容组件头注释写明 detents/dragBar/showClose 等外壳参数由宿主决定，ItemFilterSheet 头注释还\n给出了带 showClose:false 的宿主样例。Slice 5 给 FeedItemlistPage 挂 5 个 bindSheet、给 NavDrawerComponent 挂 2 个，\noptions 都只写了 height/dragBar 或 detents，既没设 showClose，也没设 backgroundColor，结果 ArkUI 默认显示系统关闭 X。\nSlice 15/16 写宿主前 grep 了 FeedItemlistPage 的锚点块，把同样的 options 复制到 QueuePage、InboxPage、AllEpisodesPage\n等页；Slice 16 写前已经整读过含 showClose:false 样例的 ItemFilterSheet 头注释，仍没有采用。\n修复给 31 处缺 showClose 的 bindSheet 补上 showClose:false（L15499-L15520），pass-1/2 又统一了底色\ncolor_surface_variant（M3 BottomSheet colorSurfaceContainerLow）和遮罩 dialog_scrim。\n其三，高度档位。VariableSpeedDialog 和 ShareDialog 都是不改 peek/state 的 BottomSheetDialogFragment，按内容高度展示，\n也没有拖拽把手。Stage 1 倍速壳页转换者把它近似成 detents:[MEDIUM,LARGE]+dragBar:true，并登记为待真机核对；\nSharePage 转换者在头注释写“BottomSheetDialogFragment 默认半开/全开 detents”，Slice 16 据此给分享面板写\ndetents:[MEDIUM,LARGE]。修复统一改为 FIT_CONTENT（L14710-L14716；pass-2 agent-a37c11da1d273ee04.jsonl:L812-L846）。\n这些片段都保留在 d16b3d0 中（retained-application.patch 的“-”行）。\n底部安全区和底色另有输入缺口，单列在 unknown。\n",
+  "recommendations": [
+    "规格提取时，看方法体而不是方法名来判定弹层高度：setupFullHeight 只 setState(STATE_EXPANDED)、LayoutParams 原样回填时，写“按内容高度完整展开”，映射为 height: SheetSize.FIT_CONTENT。只有看到 setLayoutParams(MATCH_PARENT)、setPeekHeight 或 skipCollapsed 等实际改高度的代码，才写全高或多档 detents。",
+    "实现 bindSheet 内容组件时，内容根 Scroll/Column 不写 height('100%')。源根布局为 wrap_content，或为 match_parent 但位于 BottomSheet 的 wrap_content 容器中，都按随内容高度处理；内容超出时由弹层上限约束后滚动。",
+    "宿主接线写 bindSheet options 时，逐项处理 ArkUI 默认值与源端不同的参数。Material BottomSheetDialog 没有关闭按钮和拖拽把手，应显式写 showClose:false、dragBar:false。内容组件头注释已给出宿主样例时，以样例和源端为准，不要直接复制邻近页面的 options。",
+    "复用项目内已有的 bindSheet 锚点块作先例前，先对照源端 Dialog 核对 height/detents、showClose、dragBar、backgroundColor 和 maskColor 是否齐全，避免缺项扩散到多个宿主页。",
+    "BottomSheetDialogFragment 未改 peek/state 时，不要用 MEDIUM/LARGE 多档去近似拖拽行为，应直接用 FIT_CONTENT。确实拿不准时，把源根布局的高度写进待核对登记。",
+    "规格提取阶段遇到 Material3 BottomSheet 页面，在规格中补记两点：库默认背景 colorSurfaceContainerLow（本项目主题映射为 color_surface_variant），以及底部系统栏内边距（paddingBottomSystemWindowInsets）。不要把 modal_overlay 的“跳过沉浸式四件套”理解成 bindSheet 会自动避让底部导航条。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/dialogs/SleepTimerSheet.ets",
+        "since": "2026-10-03T04:49:05.918Z",
+        "at": "2026-10-06T17:26:02.113Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/AntennaPod-develop/app/src/main/java/de/danoeh/antennapod/ui/screen/playback/SleepTimerDialog.java",
+          "at": "2026-09-30T16:00:03.318Z",
+          "reason": "正常输入：规格作者的 Read 回执（agent-a05a52ff585e4d012.jsonl:L88-L89）含 onCreateDialog→setOnShowListener→setupFullHeight。方法体只把 bottomSheet.getLayoutParams() 原样 setLayoutParams 回去，再 behavior.setState(STATE_EXPANDED)，没有改高度，足以判定弹层是按内容高度完整展开。"
+        },
+        {
+          "key": "agent-a05a52ff585e4d012.jsonl",
+          "at": "2026-09-30T16:04:26.889Z",
+          "reason": "读到上述方法体后，Write page_0072（同转录 L142-L143）时溯源写成“setupFullHeight 强制 STATE_EXPANDED 全高展开”，页面结构写“bindSheet（detents 全高）”，转换决策写“BottomSheetDialogFragment (STATE_EXPANDED) → detents:[SheetSize.LARGE]，全高展开语义用 detents 表达”。源码到规格的高度语义在此偏离。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/spec/baseline/ui/page_0072_SleepTimerDialog.md",
+          "at": "2026-10-02T03:37:01.222Z",
+          "reason": "交付桥梁：实现者的 Read 回执（agent-a55239ecd72d4f497.jsonl:L17-L18）包含上述“全高展开”溯源和 detents:[LARGE] 转换决策。"
+        },
+        {
+          "key": "agent-a55239ecd72d4f497.jsonl",
+          "at": "2026-10-02T03:57:01.425Z",
+          "reason": "写前另外读了 SleepTimerDialog.java 和 time_dialog.xml（L29-L32，根 ScrollView 的 layout_height=wrap_content）。Write（L209-L210）仍按规格写头注释“全高展开语义由宿主 detents:[SheetSize.LARGE] 表达，见 spec page_0072 转换决策”，Scroll 根写 .height('100%')。该片段保留到 d16b3d0；修复把宿主改为 FIT_CONTENT 并删掉这一行。本链确认偏差的传递。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/components/ItemFilterSheet.ets",
+        "since": "2026-10-03T04:49:05.918Z",
+        "at": "2026-10-06T17:26:02.113Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/AntennaPod-develop/app/src/main/java/de/danoeh/antennapod/ui/screen/feed/ItemFilterDialog.java",
+          "at": "2026-09-30T16:01:27.083Z",
+          "reason": "正常输入：规格作者的 Read 回执（agent-a9a64beafccb8b222.jsonl:L115-L116）中 setupFullHeight（:92-100）同样只回填原 LayoutParams 并 setState(STATE_EXPANDED)，没有改高度。"
+        },
+        {
+          "key": "agent-a9a64beafccb8b222.jsonl",
+          "at": "2026-09-30T16:07:59.459Z",
+          "reason": "Write page_0067（同转录 L174-L175）时写成“BottomSheetDialogFragment 抽象基类，展开态全高”“根: BottomSheetDialog（STATE_EXPANDED 全高）”，转换决策为“bindSheet（detents 全高）”。与 page_0072 是独立写出的同一误读。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/spec/baseline/ui/page_0067_ItemFilterDialog.md",
+          "at": "2026-10-02T03:34:46.608Z",
+          "reason": "交付桥梁：实现者的 Read 回执（agent-a0b8573842bb2d546.jsonl:L18-L19）包含上述全高描述。"
+        },
+        {
+          "key": "agent-a0b8573842bb2d546.jsonl",
+          "at": "2026-10-02T03:53:13.780Z",
+          "reason": "写前另外读了 filter_dialog.xml（L32，根 ScrollView 为 match_parent，但处在 BottomSheet 的 wrap_content 容器中）。Write（L188-L189）头注释写“BottomSheetDialogFragment STATE_EXPANDED 全高展开”，宿主样例写 detents:[SheetSize.LARGE]，Scroll 根写 .height('100%')。实际宿主 FeedItemlistPage/AllEpisodesPage 用的是 FIT_CONTENT，这个 100% 把筛选面板撑到了全高；修复删除了这一行（repair 主会话 L15441-L15442）。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/pages/SubscriptionsFilterPage.ets",
+        "since": "2026-10-03T04:49:05.918Z",
+        "at": "2026-10-06T17:26:02.113Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/AntennaPod-develop/app/src/main/java/de/danoeh/antennapod/ui/screen/subscriptions/SubscriptionsFilterDialog.java",
+          "at": "2026-09-30T16:01:03.416Z",
+          "reason": "正常输入：规格作者的 Read 回执（agent-add142788f0a258cc.jsonl:L104、L107）中 setupFullHeight（:117-125）只回填原 LayoutParams 并 setState(STATE_EXPANDED)。"
+        },
+        {
+          "key": "agent-add142788f0a258cc.jsonl",
+          "at": "2026-09-30T16:06:21.127Z",
+          "reason": "Write page_0076（同转录 L178-L179）时写成“setupFullHeight 强制 STATE_EXPANDED 展开态”“根布局: BottomSheetDialog（全高展开）”，转换决策为“bindSheet（detents 全高）”，安全区一节还写了“Sheet 自身避让系统栏”。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/spec/baseline/ui/page_0076_SubscriptionsFilterDialog.md",
+          "at": "2026-10-02T03:35:47.071Z",
+          "reason": "交付桥梁：实现者的 Read 回执（agent-a6e796b54d53eb741.jsonl:L16-L17）包含上述全高描述。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/components/ItemFilterSheet.ets",
+          "at": "2026-10-02T03:55:30.026Z",
+          "reason": "同族先例：实现者的 Read 回执（同转录 L149-L150）含 ItemFilterSheet 头注释里的宿主样例 detents:[LARGE]、dragBar:true、showClose:false、backgroundColor background_elevated，其中高度和底色带着同一偏差。"
+        },
+        {
+          "key": "agent-a6e796b54d53eb741.jsonl",
+          "at": "2026-10-02T04:01:09.589Z",
+          "reason": "写前另外读了 filter_dialog.xml（L28）。Write（L169-L170）中宿主写 detents:[SheetSize.LARGE] + dragBar:true，注释为“setupFullHeight → STATE_EXPANDED 全高展开（ItemFilterSheet 家族同款外壳参数）”，backgroundColor 为 background_elevated，filterSheetBuilder 的 Scroll 根写 .height('100%')。修复改为 FIT_CONTENT + dragBar:false + color_surface_variant，并删掉了根上的 100%。本链确认偏差的传递。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 5
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/pages/FeedItemlistPage.ets",
+        "since": "2026-10-03T04:49:05.918Z",
+        "at": "2026-10-06T17:26:02.113Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/components/RemoveFeedSheet.ets",
+          "at": "2026-10-02T15:26:57.534Z",
+          "reason": "正常输入：Slice 5 的 Read 回执（agent-a57c4d7c907557f95.jsonl:L313-L314）中，头注释写明内容组件直接嵌入宿主 bindSheet builder，detents 等外壳参数由宿主配置。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/components/ItemSortSheet.ets",
+          "at": "2026-10-02T15:48:45.191Z",
+          "reason": "正常输入：Read 回执（同转录 L458-L459）头注释写“detents/dragBar/showClose 等外壳参数归宿主”，并说明结构取自 sort_dialog.xml（GridLayout+CheckBox，没有关闭按钮）。宿主须就 showClose 作出决定。"
+        },
+        {
+          "key": "agent-a57c4d7c907557f95.jsonl",
+          "at": "2026-10-02T16:22:47.728Z",
+          "reason": "Edit（L700-L701）挂了 5 个零尺寸 bindSheet 锚点：filter/sort/errorDetails 写 { height: SheetSize.FIT_CONTENT, dragBar: false }，removeFeed/downloadLog 写 { detents: [SheetSize.MEDIUM, SheetSize.LARGE] }。全部没有设 showClose 和 backgroundColor，ArkUI 默认显示系统关闭 X 和默认底色，与源端无关闭按钮的 BottomSheet 不符。这些 options 保留到 d16b3d0；修复补了 showClose:false、color_surface_variant 和 dialog_scrim。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/components/drawer/NavDrawerComponent.ets",
+        "since": "2026-10-03T04:49:05.918Z",
+        "at": "2026-10-06T17:26:02.113Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/components/ItemSortSheet.ets",
+          "at": "2026-10-02T15:48:45.191Z",
+          "reason": "正常输入：Slice 5 的 Read 回执（agent-a57c4d7c907557f95.jsonl:L458-L459）写明 showClose 等外壳参数由宿主决定。"
+        },
+        {
+          "key": "agent-a57c4d7c907557f95.jsonl",
+          "at": "2026-10-02T17:32:47.789Z",
+          "reason": "补交付 feed 菜单域时 Edit（L888-L889），给 removeFeed 和 tagSettings 两个弹层写 { detents: [SheetSize.MEDIUM, SheetSize.LARGE] }，没有设 showClose。这是与 FeedItemlistPage 相同的缺项，保留到 d16b3d0，修复补了 showClose:false。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/pages/AllEpisodesPage.ets",
+        "since": "2026-10-03T04:49:05.918Z",
+        "at": "2026-10-06T17:26:02.113Z"
+      },
+      "nodes": [
+        {
+          "key": "agent-a57c4d7c907557f95.jsonl",
+          "at": "2026-10-02T16:22:47.728Z",
+          "reason": "上游缺项：Slice 5 在 FeedItemlistPage 写下缺 showClose、缺 backgroundColor 的 bindSheet 锚点块（同转录 L700-L701）。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/pages/FeedItemlistPage.ets",
+          "at": "2026-10-02T20:55:09.285Z",
+          "reason": "交付桥梁：Slice 16 用 Bash grep/sed 读取锚点块，回执（agent-a2665b6468828cce7.jsonl:L418-L421）返回上述 options；随后的思考写“The bindSheet pattern is clear”（L422）。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/components/ItemFilterSheet.ets",
+          "at": "2026-10-02T19:56:01.826Z",
+          "reason": "正常输入：Slice 16 整读 ItemFilterSheet 的回执（同转录 L121-L122），头注释宿主样例明确含 showClose:false。"
+        },
+        {
+          "key": "agent-a2665b6468828cce7.jsonl",
+          "at": "2026-10-02T20:56:33.501Z",
+          "reason": "Write AllEpisodesPage（L424-L425）时，filter/sort 照抄 { height: SheetSize.FIT_CONTENT, dragBar: false }，share/swipe 写 { detents: [SheetSize.MEDIUM, SheetSize.LARGE] }，全都没有 showClose 和 backgroundColor。写前已收到含 showClose:false 的样例却没有采用，转而复制了邻页的缺项先例。修复补了 showClose:false、color_surface_variant 和 dialog_scrim，share 弹层改为 FIT_CONTENT。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 4,
+          "force": true,
+          "reason": "Slice 16 写 AllEpisodesPage 前用 Bash grep -n \"bindSheet\" -A 6 和 sed -n '1455,1500p' 读取 FeedItemlistPage.ets，回执返回 { height: SheetSize.FIT_CONTENT, dragBar: false } 等 5 个锚点 options；随后思考称 bindSheet pattern is clear 并立即 Write。这支持生成者写前收到并沿用了这一先例。",
+          "evidence": [
+            {
+              "source": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a2665b6468828cce7.jsonl",
+              "line": 418
+            },
+            {
+              "source": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a2665b6468828cce7.jsonl",
+              "line": 419
+            },
+            {
+              "source": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a2665b6468828cce7.jsonl",
+              "line": 420
+            },
+            {
+              "source": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a2665b6468828cce7.jsonl",
+              "line": 421
+            }
+          ]
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/pages/InboxPage.ets",
+        "since": "2026-10-03T04:49:05.918Z",
+        "at": "2026-10-06T17:26:02.113Z"
+      },
+      "nodes": [
+        {
+          "key": "agent-a57c4d7c907557f95.jsonl",
+          "at": "2026-10-02T16:22:47.728Z",
+          "reason": "上游缺项：Slice 5 在 FeedItemlistPage 写下缺 showClose 的 bindSheet 锚点块（同转录 L700-L701）。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/pages/FeedItemlistPage.ets",
+          "at": "2026-10-02T20:18:36.721Z",
+          "reason": "交付桥梁：Slice 15 用 Grep 查看 FeedItemlistPage 的 bindSheet，回执（agent-ab6e9696fba1c7311.jsonl:L311-L312）返回上述 5 个锚点及其 options。"
+        },
+        {
+          "key": "agent-ab6e9696fba1c7311.jsonl",
+          "at": "2026-10-02T20:46:24.684Z",
+          "reason": "写前读过 ItemSortSheet 头注释（L189-L190，只写了外壳参数归宿主，没给出取值）。Write InboxPage（L425-L426）给 sort/share 弹层照抄 { height: SheetSize.FIT_CONTENT, dragBar: false }，没有 showClose 和底色。本链确认缺项随先例传递；修复补了 showClose:false、color_surface_variant 和 dialog_scrim。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/pages/QueuePage.ets",
+        "since": "2026-10-03T04:49:05.918Z",
+        "at": "2026-10-06T17:26:02.113Z"
+      },
+      "nodes": [
+        {
+          "key": "agent-a57c4d7c907557f95.jsonl",
+          "at": "2026-10-02T16:22:47.728Z",
+          "reason": "上游缺项：Slice 5 在 FeedItemlistPage 写下缺 showClose 的 bindSheet 锚点块（同转录 L700-L701）。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/pages/FeedItemlistPage.ets",
+          "at": "2026-10-02T20:18:36.721Z",
+          "reason": "交付桥梁：Slice 15 的 Grep 回执（agent-ab6e9696fba1c7311.jsonl:L311-L312）返回上述锚点 options。"
+        },
+        {
+          "key": "agent-ab6e9696fba1c7311.jsonl",
+          "at": "2026-10-02T20:34:48.051Z",
+          "reason": "Write QueuePage（L391-L392）给 sort/share 弹层照抄 { height: SheetSize.FIT_CONTENT, dragBar: false }，没有 showClose 和底色；排序面板根 .padding(16) 也没补底部系统栏 inset（属 unknown 中的模板缺口）。修复补了 showClose:false、color_surface_variant、dialog_scrim，以及 16+windowBottomPadding。"
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/pages/EpisodeDetailPage.ets",
+        "since": "2026-10-03T04:49:05.918Z",
+        "at": "2026-10-06T17:26:02.113Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/AntennaPod-develop/app/src/main/java/de/danoeh/antennapod/ui/share/ShareDialog.java",
+          "at": "2026-10-02T04:17:30.318Z",
+          "reason": "正常输入：SharePage 转换者的 Read 回执（agent-a4350f4b223608cc1.jsonl:L29、L32）显示 ShareDialog 直接 extends BottomSheetDialogFragment，没有 setupFullHeight，也没有改 peek/state/高度，弹层按内容高度展示。"
+        },
+        {
+          "key": "agent-a4350f4b223608cc1.jsonl",
+          "at": "2026-10-02T04:38:28.247Z",
+          "reason": "Write SharePage.ets（L132-L133）时头注释写“BottomSheetDialogFragment 默认半开/全开 detents 等外壳参数归宿主配置”，宿主样例写 { detents: [...] }，把源端的内容高度弹层描述成了两档 detents。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/pages/SharePage.ets",
+          "at": "2026-10-02T19:56:27.003Z",
+          "reason": "交付桥梁：Slice 16 的 Read 回执（agent-a2665b6468828cce7.jsonl:L126-L127）包含上述“默认半开/全开 detents”头注释。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/components/ItemFilterSheet.ets",
+          "at": "2026-10-02T19:56:01.826Z",
+          "reason": "正常输入：同一 agent 的 Read 回执（L121-L122）中，宿主样例明确含 showClose:false。"
+        },
+        {
+          "key": "agent-a2665b6468828cce7.jsonl",
+          "at": "2026-10-02T21:14:33.819Z",
+          "reason": "Edit EpisodeDetailPage（L501-L502）给分享弹层写 { detents: [SheetSize.MEDIUM, SheetSize.LARGE] }，没有 showClose。档位来自 SharePage 头注释；showClose 缺项则是在已收到样例的情况下仍遗漏。修复改为 { height: SheetSize.FIT_CONTENT, dragBar: false, showClose: false }（repair 主会话 L14710-L14716、L15504-L15505）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 5
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/pages/FavoritesPage.ets",
+        "since": "2026-10-03T04:49:05.918Z",
+        "at": "2026-10-06T17:26:02.113Z"
+      },
+      "nodes": [
+        {
+          "key": "agent-a4350f4b223608cc1.jsonl",
+          "at": "2026-10-02T04:38:28.247Z",
+          "reason": "上游偏差：SharePage 头注释把内容高度的 ShareDialog 写成“默认半开/全开 detents”（同转录 L132-L133）。",
+          "problem": true
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/pages/SharePage.ets",
+          "at": "2026-10-02T19:56:27.003Z",
+          "reason": "交付桥梁：Slice 16 的 Read 回执（agent-a2665b6468828cce7.jsonl:L126-L127）包含该头注释。"
+        },
+        {
+          "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/components/ItemFilterSheet.ets",
+          "at": "2026-10-02T19:56:01.826Z",
+          "reason": "正常输入：同一 agent 的 Read 回执（L121-L122），宿主样例含 showClose:false。"
+        },
+        {
+          "key": "agent-a2665b6468828cce7.jsonl",
+          "at": "2026-10-02T21:11:04.702Z",
+          "reason": "Write FavoritesPage（L467-L468）给 share 和 swipe 两个弹层写 { detents: [SheetSize.MEDIUM, SheetSize.LARGE] }，没有 showClose。修复把 share 改为 FIT_CONTENT+dragBar:false，两处都补了 showClose:false。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    },
+    {
+      "target": {
+        "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/pages/PlaybackSpeedDialogPage.ets",
+        "since": "2026-10-03T04:49:05.918Z",
+        "at": "2026-10-06T17:26:02.113Z"
+      },
+      "nodes": [
+        {
+          "key": "C:/Users/hongy/projects/AntennaPod-develop/app/src/main/java/de/danoeh/antennapod/ui/screen/playback/VariableSpeedDialog.java",
+          "at": "2026-10-01T04:38:42.654Z",
+          "reason": "正常输入：倍速壳页转换者的 Read 回执（agent-ac52c938df6f205b9.jsonl:L46、L48）显示 VariableSpeedDialog 直接 extends BottomSheetDialogFragment，没有 setupFullHeight，也没有改 peek/state/高度，弹层按内容高度展示。"
+        },
+        {
+          "key": "agent-ac52c938df6f205b9.jsonl",
+          "at": "2026-10-01T04:50:23.391Z",
+          "reason": "Write PlaybackSpeedDialogPage（L87-L88）时宿主写 detents:[SheetSize.MEDIUM, SheetSize.LARGE] + dragBar:true，把源端没有改过的默认内容高度弹层近似成两档并加了拖拽条。Slice 6 随后补了 UNC 注释“detents 为 BottomSheetDialogFragment 拖拽展开行为的近似（真机视觉核对后定稿）”，取值保留到 d16b3d0。修复改为 FIT_CONTENT + dragBar:false，并补了底色和遮罩（pass-2 agent-a37c11da1d273ee04.jsonl:L812-L846）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 2
+        },
+        {
+          "from": 2,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "BottomSheet 底色（M3 默认 colorSurfaceContainerLow）和底部系统栏内边距（Widget.Material3.BottomSheet 的 paddingBottomSystemWindowInsets）都是 Material 库默认样式，生成期的规格、设计文档和 skill 参考都没有描述。多名转换者读到过 styles.xml 中 colorSurfaceContainerLow→color_surface_variant 的映射，但没有输入说明 BottomSheet 用它作背景。a2h-spec 页面模板对 modal_overlay 自动判定 needs_immersive_safearea=false，并让 converter 跳过安全区；page_0076 还写了“Sheet 自身避让系统栏”。没有找到写前已收到正确要求的 agent，因此这两项只在 summary 和建议中说明，不另画偏差链。"
+  ],
+  "unresolved_targets": [
+    {
+      "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/components/ItemSortSheet.ets",
+      "reason": "已确认 pass-1 把根 padding 改成 bottom 16+windowBottomPadding（paddingBottomSystemWindowInsets 等价）。写前输入只有 meta.json 的 page_type=modal_overlay，以及 a2h-spec 模板“modal_overlay → needs_immersive_safearea=false → converter 跳过”的规则；没有输入给出 BottomSheet 底部系统栏 inset。这属于上游模板和库默认样式的缺口，没有找到偏离了已收到输入的 agent。本文件的边框圆角、Checkbox 形状改动属于其他问题。"
+    },
+    {
+      "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/dialogs/VariableSpeedSheet.ets",
+      "reason": "已确认 pass-2 给内容根补了 bottom 16+windowBottomPadding。生成期 page_0074 规格同样按 modal_overlay 判定跳过安全区，没有底部 inset 要求，属于上游输入缺口，未画偏差链。"
+    },
+    {
+      "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/components/download/DownloadLogSheet.ets",
+      "reason": "本文件的保留差异只有 txtvReason 颜色 icon_red、工具栏 TitleLarge 字号和清除图标着色（pass-2 agent-a37c11da1d273ee04.jsonl:L342-L343），属于 toolbar-title / action-icon-tint 等其他问题。下载日志弹层的底色、遮罩和 dragBar 改动落在宿主 FeedItemlistPage（已由 Slice 5 那条链覆盖）和 CompletedDownloadsPage（不在本 job 目标中），本文件内没有本问题的保留改动可归因。"
+    },
+    {
+      "key": "C:/Users/hongy/projects/transfer-app-antennapod-glm5.3/entry/src/main/ets/pages/SharePage.ets",
+      "reason": "本文件的保留差异只有 getLinkWithFallback 回退链、Checkbox 方形和 calc 宽度，都属于其他问题。本轮 showClose 脚本误改的文档注释已在 repair 主会话 L15519-L15520 还原。SharePage 头注释“默认半开/全开 detents”作为交付桥梁，已在 EpisodeDetailPage 和 FavoritesPage 两张图中入图。"
+    }
+  ],
+  "job": "issue-1ff61bb8eea97c7cac7f",
+  "metadata": {
+    "migration": {
+      "id": "antennapod-glm53-3c838ae1-111b-475a-a085-e9464ec2fde4",
+      "project": "AntennaPod"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.285",
+        "2.1.286",
+        "2.1.287",
+        "2.1.288",
+        "2.1.289"
+      ]
+    },
+    "source_set_id": "sources-5f9a4b68d8866c1b1233",
+    "environment": [
+      {
+        "name": "toolchain.kotlin",
+        "value": "2.3.20",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-09-30T15:43:45.309Z",
+        "ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a3da0f444ffe5d81f.jsonl:L27",
+        "request_ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a3da0f444ffe5d81f.jsonl:L25",
+        "phase": "generation"
+      },
+      {
+        "name": "toolchain.agp",
+        "value": "8.11.0",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-09-30T15:43:45.309Z",
+        "ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a3da0f444ffe5d81f.jsonl:L27",
+        "request_ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a3da0f444ffe5d81f.jsonl:L25",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-09-30T17:34:05.597Z",
+        "ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a5c631d1e662fac13.jsonl:L54",
+        "request_ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a5c631d1e662fac13.jsonl:L53",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.0(23)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-09-30T17:34:05.597Z",
+        "ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a5c631d1e662fac13.jsonl:L54",
+        "request_ref": "generation/3c838ae1-111b-475a-a085-e9464ec2fde4/subagents/agent-a5c631d1e662fac13.jsonl:L53",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.0.2(22)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-10-04T16:26:51.075Z",
+        "ref": "repair/ae3bb09d-1f58-48a4-91c8-85a20fd96fc1.jsonl:L215",
+        "request_ref": "repair/ae3bb09d-1f58-48a4-91c8-85a20fd96fc1.jsonl:L214",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.0.1(21)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "C:\\Users\\hongy\\projects\\transfer-app-antennapod-glm5.3",
+        "at": "2026-10-04T16:26:51.075Z",
+        "ref": "repair/ae3bb09d-1f58-48a4-91c8-85a20fd96fc1.jsonl:L215",
+        "request_ref": "repair/ae3bb09d-1f58-48a4-91c8-85a20fd96fc1.jsonl:L214",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.4",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "040e09cc-8de1-45ba-bc4b-5202da7f9c23"
+      ]
+    }
+  },
+  "revision": "cc69235df441f52f2023b37f688670cb3c8ffddec1751b9653b3aefd35c321f7"
+}

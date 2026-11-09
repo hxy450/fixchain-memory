@@ -9,7 +9,7 @@
 - [Java long 常量进入 SQL 或字符串时检查 JS 安全整数范围](lesson-5f669c379cfcdb14ad10.lesson.md)
   - 时机：实现阶段，把 Long.MAX_VALUE 等 Java long 哨兵移植到 SQL 拼接、比较或字符串时
   - 情境：源把 long 常量拼进 SQL；目标准备以 number 常量声明再拼接。
-- [Kotlin/Java Float 的运算与比较迁到 ArkTS 时对齐 float32：算术每步 Math.fround 后再按 Java (int) 截断，==/!= 两侧 fround 后用 ===，不自加容差；选中、存在判断与删除共用同一比较](lesson-0deb51172ebdd2e056a9.lesson.md)
+- [Kotlin/Java Float 的运算与比较迁到 ArkTS 时对齐 float32：按源类型树在 Float 转换和运算结果处 Math.fround，再按 Java (int) 规则收窄，==/!= 两侧 fround 后用 ===，不自加容差；选中、存在判断与删除共用同一比较](lesson-0deb51172ebdd2e056a9.lesson.md)
   - 时机：实现阶段，把 Kotlin/Java 中 Float 的算术（含随后 (int) 截断）与 ==/!= 比较（选项选中判断、列表去重、删除过滤）翻译成 ArkTS 时；规格提取阶段为 float 表达式写数值契约时
   - 情境：源端用 value.toFloat() == state 一类写法比较 Float（如倍率、刻度选项与当前值），值来自字符串解析或滑杆；目标 number 为双精度，写者担心浮点误差，准备用 Math.abs(a - b) &lt; ε 容差比较，或在不同位置各写一套比较。 也包括 Java 用 (float) 强转与 f 字面量计算比值、透明度、字号后再 (int) 截断，规格只写了 float→int 收窄（NaN→0、±∞ 饱和、向零截断），实现照写成 double 表达式。
   - 例外：源端本身就用容差或先舍入再比较

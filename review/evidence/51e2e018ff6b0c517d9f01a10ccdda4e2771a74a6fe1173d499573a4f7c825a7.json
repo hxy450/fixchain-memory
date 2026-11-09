@@ -1,0 +1,190 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-36f0b5f441f81e98f6c6",
+  "created_at": "2026-10-11T21:45:23.965553+00:00",
+  "migration_key": "acdd6966-d460-4d88-b0a6-5dc0c5262ee5",
+  "title": "把Compose的对象/列表项身份语义直译到ArkUI：脏检查引用比较恒不等、新增卡不复位、换位后位置参数过期",
+  "when": "页面实现阶段，将源端依赖对象身份或列表项身份的状态逻辑（未保存脏检查、列表尾部输入卡复位、列表项位置相关参数）翻译成ArkUI V2状态与ForEach渲染时",
+  "description": "源Compose页面用引用比较判断列表是否改动（remember初值与入参是同一对象）、无key的LazyColumn尾项随位置变化丢弃remember状态、itemsIndexed内容每次重组拿到当前index；目标使用ArkUI V2 @Local数组和按key复用子组件的ForEach/Repeat。",
+  "summary": "生成期编辑页写者（a2h-execute 续跑会话中的页面转换子代理）写前实际读到：\nRecipeEdit.kt 中 stepsToEdit 默认 listOf()、steps = remember(stepsToEdit){ mutableStateOf(stepsToEdit) }，\ncanSafelyExit 以 steps !== stepsToEdit 引用比较（L172/L214/L234-239）——未改动时两者本就是同一对象；\nitemsIndexed 每次重组把当前 index 传给 isFirst/isLast/orderInRecipe（L359-394）；尾部新增卡是无 key 的 item{}（L417-441），\nStepAddCard.kt 的 pickedType/stepName 等仅 remember(stepToEdit)，saveStep 不自清（L64-114），复位依赖该项随位置变化被重建。\n另读到 ui-migration-pitfalls P-05：同 key 项被框架复用旧子组件、不重派 @Param。页面规格只抽象写了“引用不等 + 值不等”、\nitemsIndexed 与“尾部新增卡渲染空 StepAddCard”，没有要求“换位不重挂”，也未误导。\n输出却在三处偏离（agent-a099e355ad83c788a.jsonl:L138 Write，思考见 L117、L123、L136）：\n1) 新建两个独立数组 `@Local steps = []` 与 `private initialStepsRef = []`，canSafelyExit 写成 `this.steps === this.initialStepsRef`；\n   写者在 L117 认为“所有修改都产生新数组，语义完全一致”，没核对初值同一性：新增模式两个 [] 恒不等；编辑模式 V2 把 @Local 数组包成代理，\n   与 initFromRecipe 里保存的原始数组也不相等（写者未读 arkts-state-manager 参考；该参考只说明 ArrayProxy 用于刷新）。结果每次离开都弹“未保存”。\n2) 尾部新增卡放在常驻的条件 ListItem 中，状态只在 aboutToAppear 初始化，onTailCardSave 只追加；\n   写者在 L123 明确推断“Android 尾卡保存后保留上一条输入，虽怪但忠实”，误读了无 key LazyColumn 项按位置标识的复位语义。\n3) ForEach 以实例 uid+内容字段为 key（不含位置），在 itemGenerator 中把闭包 index 写进 isFirst/isLast/orderInRecipe 与行形状；\n   写者在 L123/L136 认为换位后“闭包随新 index 重建”“params re-assigned”，与已读 P-05 相反；换位后同 key 项不重跑生成函数，上移/下移可用态过期。\n这三段在 L138 写入后直到生成结束保持不变（后续 Edit 只改仓库接线、安全区、常量与 API 名等，三段与生成完成快照一致）。\n修复会话的大改写 R1:L8123 仍保留 initialStepsRef 引用比较、固定尾卡，并把 ForEach index 换成 Repeat ri.index（同一缺陷），\n随后复审子代理 R1:L11838 指出前两项；修复者 R1:L12524 改为 stepsReplaced 标志（保存/删除/移动/追加置位、载入复位），\nR1:L13993 尾卡改为 ForEach([steps.length]) 按步数为键重建，R1:L14258/L14261 运行期发现上移无效后改为 this.steps.indexOf(ri.item) 取当前位置。\n修复期新引入的 moveButton @Builder 值参不刷新（报告 #12）不属生成偏差，本卡不归因。\n",
+  "recommendations": [
+    "实现引用比较的脏检查前，先确认源端“未改动”时比较两侧是否为同一对象（如 remember(x){ mutableStateOf(x) }）；ArkUI V2 中不要拿 @Local 数组与另存的原始数组或另一个 [] 字面量做 ===，改用显式“已替换”标志（每条修改路径置位、载入时复位）或比较 UIUtils.getTarget 后的原对象，并分别在新增、编辑两个入口验证“未改动直接返回”。",
+    "翻译 LazyColumn/LazyList 项时逐项核对有无 key：无 key 项按位置标识，位置一变 remember 状态即丢弃；目标侧用常驻组件承载时，要用位置相关键（如 ForEach([steps.length])）重建或保存后显式复位。推断出“源保存后仍保留旧输入”这类反常行为时，先回查框架身份语义，不要以“源就是这样”收束。",
+    "ForEach/Repeat 的 key 不含位置时，同 key 项换位不会重跑生成函数，闭包 index 与构造 @Param 都不刷新；isFirst/isLast/orderInRecipe/行形状等位置相关值应在渲染时按当前数组位置（indexOf）计算，并在换位后检查上移/下移可用态。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/entry/src/main/ets/pages/RecipeEditPage.ets",
+        "since": "2026-10-01T14:11:08.477Z",
+        "at": "2026-10-01T23:45:55.694Z"
+      },
+      "nodes": [
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Cofi/app/src/main/java/com/omelan/cofi/pages/RecipeEdit.kt",
+          "at": "2026-10-01T10:42:04.576Z",
+          "reason": "正常输入：写者 Read 回执给出 stepsToEdit 默认 listOf() 且 steps=remember(stepsToEdit){mutableStateOf(stepsToEdit)}、canSafelyExit 用 steps !== stepsToEdit（L172/L214/L234-239）；itemsIndexed 内容以当前 index 计算 isFirst/isLast/orderInRecipe（L359-394）；尾部新增卡为无 key 的 item{}（L417-441）。足以确定未改动时引用相等、位置参数随重组刷新、尾卡随位置变化重建（agent-a099e355ad83c788a.jsonl:L20、L23）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/L1/Cofi/app/src/main/java/com/omelan/cofi/components/StepAddCard.kt",
+          "at": "2026-10-01T10:42:04.376Z",
+          "reason": "正常输入：Read 回执显示 pickedType/stepName/stepTime/stepValue 均为 remember(stepToEdit)，saveStep 只回调 save 不清空（L64-114），说明尾卡保存后的复位只能来自所在列表项被重建（agent-a099e355ad83c788a.jsonl:L21-L22）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/.claude/skills/android-ui-graph-query/references/ui-migration-pitfalls.md",
+          "at": "2026-10-01T10:46:31.648Z",
+          "reason": "正常输入：P-05 写明同 key 时框架复用旧子组件、不重派 @Param，key 须含所有影响显示的可变字段；足以提示位置相关参数在换位后不会自动刷新（agent-a099e355ad83c788a.jsonl:L103-L104，片段 L58-L63）。"
+        },
+        {
+          "key": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos/spec/baseline/ui/page_0003_RecipeEdit.md",
+          "at": "2026-10-01T10:42:01.464Z",
+          "reason": "正常输入：页面规格写 canSafelyExit 为 steps/name/description/pickedIcon 与初始值比对（引用不等 + 值不等）、步骤列表 itemsIndexed 双 AnimatedVisibility、尾部新增卡在无打开编辑器时渲染空 StepAddCard；内容抽象但无误，未要求换位不重挂（agent-a099e355ad83c788a.jsonl:L14-L15，规格 L35-L37、L64）。"
+        },
+        {
+          "key": "agent-a099e355ad83c788a.jsonl",
+          "at": "2026-10-01T10:58:04.519Z",
+          "reason": "收到上述输入后，Write 写出两个独立 [] 并以 this.steps === this.initialStepsRef 判脏（L117 认为新数组即可“语义完全一致”）；尾卡常驻且仅 aboutToAppear 初始化（L123 推断源尾卡保存后保留输入）；ForEach key 不含位置却把闭包 index 写入 isFirst/isLast/orderInRecipe（L123/L136 认为换位后参数会重派，与 P-05 相反）。三段至生成结束未变（同转录 L138）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 5
+        },
+        {
+          "from": 2,
+          "to": 5
+        },
+        {
+          "from": 3,
+          "to": 5
+        },
+        {
+          "from": 4,
+          "to": 5
+        },
+        {
+          "from": 5,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "编辑模式“代理≠原数组”与 ForEach 闭包 index 过期均未在生成态构建上直接运行；前者依据 V2 ArrayProxy 语义与复审结论（med-high），后者依据 ForEach 同 key 复用语义及修复期 Repeat 同构缺陷的运行观察（R1:L14258）。新增模式恒不等由两个独立 [] 字面量直接成立。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-36f0b5f441f81e98f6c6",
+  "metadata": {
+    "migration": {
+      "project": "Cofi",
+      "server_session_id": "acdd6966-d460-4d88-b0a6-5dc0c5262ee5"
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-sonnet-5",
+        "glm-5.3"
+      ],
+      "client_versions": [
+        "2.1.247"
+      ]
+    },
+    "source_set_id": "sources-22befa667a51476d2497",
+    "environment": [
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0-alpha17",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos",
+        "at": "2026-10-01T06:38:41.480Z",
+        "ref": "generation/9176a7f7b2203f7a/runs/721fb7c7-0508-4e2f-8b79-cfb906c65d16/epoch-0/sessions/agent-ad0f8989f195b578f.jsonl:L18",
+        "request_ref": "generation/9176a7f7b2203f7a/runs/721fb7c7-0508-4e2f-8b79-cfb906c65d16/epoch-0/sessions/agent-ad0f8989f195b578f.jsonl:L17",
+        "phase": "generation"
+      },
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0-alpha17",
+        "basis": "configuration",
+        "artifact": "build.gradle",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/L1/Cofi",
+        "at": "2026-10-01T06:58:28.349Z",
+        "ref": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/main-507b2f1f-5d21-4455-a17e-460566675ced.jsonl:L45",
+        "request_ref": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/main-507b2f1f-5d21-4455-a17e-460566675ced.jsonl:L43",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos",
+        "at": "2026-10-01T08:45:11.210Z",
+        "ref": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/agent-a6b66d337af813fff.jsonl:L63",
+        "request_ref": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/agent-a6b66d337af813fff.jsonl:L62",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/Users/fengyi/Workspace/migbot_set/l123-cc-glm53/harmony/cofi-hmos",
+        "at": "2026-10-01T10:50:10.334Z",
+        "ref": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/agent-a099e355ad83c788a.jsonl:L122",
+        "request_ref": "generation/16f46ce17825f8bb/runs/fa70ab0a-396c-4a4a-80bc-3b1f5983b892/epoch-0/sessions/agent-a099e355ad83c788a.jsonl:L121",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-10-01T14:45:59.485Z",
+        "ref": "repair/cofi-migration-complete-20261007/fix-cofi-opus/stream-01.jsonl:L288",
+        "request_ref": "repair/cofi-migration-complete-20261007/fix-cofi-opus/stream-01.jsonl:L287",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": null,
+        "at": "2026-10-01T14:45:59.485Z",
+        "ref": "repair/cofi-migration-complete-20261007/fix-cofi-opus/stream-01.jsonl:L288",
+        "request_ref": "repair/cofi-migration-complete-20261007/fix-cofi-opus/stream-01.jsonl:L287",
+        "phase": "repair"
+      },
+      {
+        "name": "libraries.material3",
+        "value": "1.4.0-alpha17",
+        "basis": "configuration",
+        "artifact": "libs.versions.toml",
+        "cwd": null,
+        "at": "2026-10-01T14:53:18.885Z",
+        "ref": "repair/cofi-migration-complete-20261007/fix-cofi-opus/stream-01.jsonl:L713",
+        "request_ref": "repair/cofi-migration-complete-20261007/fix-cofi-opus/stream-01.jsonl:L712",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.5",
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "e0dce297-f0f9-4e8e-adb6-f2a8eeef850a"
+      ]
+    }
+  },
+  "revision": "6e2b86cc0863dd4232f59587c36db65173759de237ec7ebf70bc99eac7b8cc1f"
+}

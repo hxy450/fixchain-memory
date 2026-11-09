@@ -1,6 +1,6 @@
 # 按 Android px 公式移植自绘 View 时先定画布上下文单位：用 LengthMetricsUnit.PX 构造，让字号、测宽、几何与触点同域，dp 常量与 vp 输入在边界换算
 
-ID：`lesson-7083c6ad69ab19ad17dd` · 版本：1
+ID：`lesson-7083c6ad69ab19ad17dd` · 版本：2
 
 [本主题](index.md)
 
@@ -14,7 +14,7 @@ ID：`lesson-7083c6ad69ab19ad17dd` · 版本：1
 
 ## 原因
 
-CanvasRenderingContext2D 默认按 vp 解释坐标与字号，要在 px 域运算须在构造时传入 LengthMetricsUnit.PX。单位没定下来时，各写者按各自理解混用：px 字号被当成 vp 放大、measureText 结果偏小、已 vp2px 的触点与 vp 几何比较而点不中。多数写法一致不能代替对构造签名的核对。
+CanvasRenderingContext2D 默认坐标按 vp 解释，字体字符串的显式 px/vp 后缀还需独立按 font 契约核对，要在 px 域运算须在构造时传入 LengthMetricsUnit.PX。单位没定下来时，各写者按各自理解混用：显式 px 字号按物理像素使用而与默认 vp 几何混域、测宽相对几何偏小且派生布局可能放大、已 vp2px 的触点与 vp 几何比较而点不中。多数写法一致不能代替对构造签名的核对。
 
 ## 做法
 

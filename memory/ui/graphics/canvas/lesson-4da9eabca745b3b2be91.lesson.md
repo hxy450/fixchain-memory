@@ -1,6 +1,6 @@
 # SurfaceView 自建线程的 lockCanvas 循环按线程实例迁移：vsync 回调驱动，页面隐藏按 surface 失效写结果
 
-ID：`lesson-4da9eabca745b3b2be91` · 版本：1
+ID：`lesson-4da9eabca745b3b2be91` · 版本：2
 
 [本主题](index.md)
 
@@ -19,7 +19,7 @@ ID：`lesson-4da9eabca745b3b2be91` · 版本：1
 
 ## 原因
 
-这类循环的节拍、同时存活的实例数和停止时机都会被用户看到。无 sleep 的 lockCanvas 循环由显示 vsync 节流，按帧计数的速度与周期依赖实际帧率；setInterval/setTimeout 排在 UI 线程任务队列里、不对齐 vsync，实际频率可能明显低于 1000/周期，逻辑整体变慢。停止只经保存最新实例的字段时，重开前未停的旧实例继续运行，弹窗、音效与下压等副作用随存活实例数倍增；收敛成全局唯一句柄，或启动新循环时清掉旧句柄，会抹掉这种并存。页面隐藏、切后台或 Activity 重建时 surface 先失效，lockCanvas 返回 null（SurfaceHolder.lockCanvas 文档：surface 未创建或不可编辑时返回 null），循环体不判空就在绘制处空指针崩溃；线程结束后 surfaceCreated 再 start() 抛 IllegalThreadStateException，SurfaceView 捕获后只记日志（本机 android-36.1 源码 SurfaceView.java 的 “Exception configuring surface”），新 surface 留空。写成“页面隐藏即停帧并丢弃迟到回调”会丢掉这些结果。
+这类循环的节拍、同时存活的实例数和停止时机都会被用户看到。无 sleep 的 lockCanvas 循环由显示 vsync 节流，按帧计数的速度与周期依赖实际帧率；setInterval/setTimeout 排在 UI 线程任务队列里、不对齐 vsync，实际频率可能明显低于 1000/周期，逻辑整体变慢。停止只经保存最新实例的字段时，重开前未停的旧实例继续运行，弹窗、音效与下压等副作用按各事件源在同一操作序列与观察窗口内的实际触发次数累加（包括窗口内触发后已停止的实例）；只有各实例贡献相同时，才可简写为随实例数倍增。收敛成全局唯一句柄，或启动新循环时清掉旧句柄，会抹掉这种并存。页面隐藏、切后台或 Activity 重建时 surface 先失效，lockCanvas 返回 null（SurfaceHolder.lockCanvas 文档：surface 未创建或不可编辑时返回 null），循环体不判空就在绘制处空指针崩溃；线程结束后 surfaceCreated 再 start() 抛 IllegalThreadStateException，SurfaceView 捕获后只记日志（本机 android-36.1 源码 SurfaceView.java 的 “Exception configuring surface”），新 surface 留空。写成“页面隐藏即停帧并丢弃迟到回调”会丢掉这些结果。
 
 ## 做法
 

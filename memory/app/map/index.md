@@ -6,7 +6,7 @@
 
 ## 本级经验
 
-- [APPROXIMATELY_LOCATION 与 LOCATION 成组声明、申请与判定：要精确定位也两项同申，任一授予就继续定位](lesson-b72e0d67fe27db2ae041.lesson.md)
+- [APPROXIMATELY_LOCATION 与 LOCATION 成组声明、申请与判定：首次申请精确定位两项同申，任一授予就继续定位](lesson-b72e0d67fe27db2ae041.lesson.md)
   - 时机：定位能力实现阶段，编写定位权限的 module.json5 声明、运行期申请与申请结果判定时
   - 情境：目标同时申请 ohos.permission.APPROXIMATELY_LOCATION 与 ohos.permission.LOCATION；工程 skill 提供通用的权限辅助模板（遍历 authResults，任一不为 0 即返回失败）；功能规格只要求两项权限都声明、都处理。源端以 ACCESS_FINE_LOCATION 与 ACCESS_COARSE_LOCATION 一起请求；工程的通用权限表可能只列了 ohos.permission.LOCATION。
 - [原生地图组件接入 Swiper/Tabs 预构建的页面：可见时初始化或恢复、隐藏时暂停、卸载才释放，并显式写出地图与覆盖层的触摸分工](lesson-0e997c4e9745728b7db6.lesson.md)

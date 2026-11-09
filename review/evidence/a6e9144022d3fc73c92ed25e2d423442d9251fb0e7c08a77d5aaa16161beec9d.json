@@ -1,0 +1,167 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-95ecda83193d15f5e699",
+  "created_at": "2026-09-27T16:12:03.823053+00:00",
+  "migration_key": "34f1eb1d-61e3-4b07-b51c-a3ef5890fad8",
+  "title": "把未核定义的isPlayingState臆定为PLAYING或PAUSED，playPause暂停后无法续播",
+  "when": "业务逻辑实现阶段，将源端播放/暂停切换（playPause/toggle）方法翻译成目标引擎状态分支时",
+  "description": "源端playPause以isPlayingState()等辅助谓词分派pause/play，读到的源码片段只含调用、未含谓词定义；规格状态机已列出PAUSED经playPause转PLAYING的转移。",
+  "summary": "F001 Slice 1生成者写PlaybackEngineService前，实际读到状态机附录的转移表：\nT1「NONE/PAUSED/STOPPED + play()或playPause()且已prepared → PLAYING」、\nT2「PLAYING + pause()或playPause() → PAUSED」（agent-a7dd9c7dbb9b41828.jsonl:L53-L54），\n以及F001-AC01「PLAYING点击转PAUSED……再点恢复PLAYING」（同转录L48-L49）；\n源码AbstractPlayer.playPause的回执为「isPlayingState() ? pause() : play()」（L165-L166），\n但返回的1060-1330行不含isPlayingState定义，全部材料中也未见该定义被读取。\n规格对“暂停态再点应play”的要求已正确、足够。生成者在思考中未回查定义，\n直接假定「isPlayingState = state==PLAYING || PAUSED」（L269），\n并写入源码理解笔记第7条（L357）；随后Write目标文件时把playPause写成\n`if (state === PLAYING || state === PAUSED) this.pause() else this.play()`（L390-L391），\n而同一文件头注释仍复述「T1 play/playPause→PLAYING；T2 pause/playPause→PAUSED」。\n偏差位于“已给出的状态转移要求 → 实现分支条件”一环：把pause()的前置守卫范围套用到切换分派上，\n使PAUSED永远走pause()。该片段原样保留到返修：2026-09-21用户报告「暂停后点击无法继续播放」，\n修复Edit的old_string与生成写入一致，改为仅PLAYING→pause()、其余→play()，\n由playInternal的prepared分支avPlayer.start续播，hilog复核notify paused/playing与进度续走\n（main-7e6e56d7.jsonl:L2511、L2531-L2533、L2555）。\n",
+  "recommendations": [
+    "实现切换类方法（playPause/toggle）前，把每个当前状态逐一对到规格转移表：本例PAUSED必须走play()，PLAYING才走pause()；写完用“暂停后再点”一次对照T1。",
+    "源码以辅助谓词（如isPlayingState()）分派分支时，先读到谓词定义再翻译；读不到定义就以规格转移表和验收用例为准，不凭名称推断其覆盖PAUSED。",
+    "不要把某方法的前置守卫（pause()允许的起始态）直接复用为另一方法的分派条件；两者语义不同，需分别对照规格。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "D:/tusi/app_rings_harmony/entry/src/main/ets/services/PlaybackEngineService.ets",
+        "since": "2026-09-20T10:51:00Z",
+        "at": "2026-09-23T02:54:21Z"
+      },
+      "nodes": [
+        {
+          "key": "D:/tusi/app_rings_harmony/spec/baseline/features/F001-playback.state-machine.md",
+          "at": "2026-09-17T14:05:08.304Z",
+          "reason": "正常输入：Read回执转移表T1写明PAUSED在play()或playPause()后转PLAYING，T2写明仅PLAYING经pause()/playPause()转PAUSED；足以确定playPause在PAUSED态应调用play（agent-a7dd9c7dbb9b41828.jsonl:L53-L54）。"
+        },
+        {
+          "key": "D:/tusi/app_rings_harmony/spec/baseline/features/F001-playback.md",
+          "at": "2026-09-17T14:05:03.717Z",
+          "reason": "正常输入：Read回执AC01要求播放中点击转PAUSED、再点恢复PLAYING，并把PlayerClient.playPause映射到PlaybackEngineService.playPause（同转录L48-L49）。"
+        },
+        {
+          "key": "/d/tusi/app-rings-android/player/src/main/java/snow/player/AbstractPlayer.java",
+          "at": "2026-09-17T14:08:33.315Z",
+          "reason": "源码输入：Bash sed 1060-1330行回执给出playPause为isPlayingState()则pause()否则play()，但该范围未含isPlayingState定义；这是本项材料边界，规格转移表已补足所需语义（同转录L165-L166）。"
+        },
+        {
+          "key": "7bcbff75-9586-4d4e-8fa0-8e1600913ad9:a7dd9c7dbb9b41828",
+          "at": "2026-09-17T14:20:02.045Z",
+          "reason": "已收到T1/AC01，却在思考中假定isPlayingState=PLAYING||PAUSED（L269）、写入源码笔记第7条（L357），Write目标时把playPause写成PLAYING||PAUSED→pause()，PAUSED态无法进入play()；文件头注释同时复述T1（L390-L391）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 4
+        },
+        {
+          "from": 2,
+          "to": 4
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "force": true,
+          "reason": "生成者Bash进入Android工程后sed读取AbstractPlayer.java 1060-1330行，回执返回playPause为isPlayingState()则pause()否则play()；这支持生成者写前已看到源端分派结构，但该范围未含isPlayingState定义。",
+          "evidence": [
+            {
+              "source": "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/agent-a7dd9c7dbb9b41828.jsonl",
+              "line": 165
+            },
+            {
+              "source": "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/agent-a7dd9c7dbb9b41828.jsonl",
+              "line": 166
+            }
+          ]
+        },
+        {
+          "from": 4,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unresolved_targets": [],
+  "job": "issue-95ecda83193d15f5e699",
+  "metadata": {
+    "migration": {
+      "project": "免费来电多多",
+      "server_session_id": "34f1eb1d-61e3-4b07-b51c-a3ef5890fad8"
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "4c2ade21-d470-4b84-97bf-86300d6a72d9"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code",
+        "codex"
+      ],
+      "models": [
+        "glm-5.3",
+        "glm-5.3-flash",
+        "gpt-5.6-sol"
+      ],
+      "providers": [
+        "openai"
+      ],
+      "client_versions": [
+        "0.155.0-alpha.9.2",
+        "2.1.274",
+        "2.1.275",
+        "2.1.276",
+        "2.1.278",
+        "2.1.280"
+      ]
+    },
+    "source_set_id": "sources-8decedd1032cf015dca8",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "D:\\tusi\\app_rings_harmony",
+        "at": "2026-09-17T06:35:46.709Z",
+        "ref": "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/agent-ac567ed4068ed6644.jsonl:L149",
+        "request_ref": "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/agent-ac567ed4068ed6644.jsonl:L148",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "5.0.0(12)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "D:\\tusi\\app_rings_harmony",
+        "at": "2026-09-17T06:35:46.709Z",
+        "ref": "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/agent-ac567ed4068ed6644.jsonl:L149",
+        "request_ref": "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/agent-ac567ed4068ed6644.jsonl:L148",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "D:\\tusi\\app_rings_harmony\\entry\\build\\default\\outputs\\default",
+        "at": "2026-09-22T02:47:00.902Z",
+        "ref": "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/agent-a52e02c077767c03c.jsonl:L15",
+        "request_ref": "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/agent-a52e02c077767c03c.jsonl:L14",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "5.0.0(12)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "D:\\tusi\\app_rings_harmony\\entry\\build\\default\\outputs\\default",
+        "at": "2026-09-22T02:47:00.902Z",
+        "ref": "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/agent-a52e02c077767c03c.jsonl:L15",
+        "request_ref": "runs/a2f2578c-c126-4a0f-bb19-921e2acabab4/epoch-0/sessions/agent-a52e02c077767c03c.jsonl:L14",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.8.3"
+  },
+  "revision": "d546088d9a5794ca4f9575b1e07af534a9c63ef5136ebf8fb426fce172fa107c"
+}

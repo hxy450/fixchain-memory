@@ -1,6 +1,6 @@
 # TableLayout 加外部表头与 fake header 行的表格按内容测量列宽：表体每列宽取 fake header（文字＋paddingRight）与各单元格单行自然宽的最大值，不自拟 fr 比例或权重
 
-ID：`lesson-6cb9ad45093ce2ca28af` · 版本：1
+ID：`lesson-6cb9ad45093ce2ca28af` · 版本：2
 
 [本主题](index.md)
 
@@ -14,7 +14,7 @@ ID：`lesson-6cb9ad45093ce2ca28af` · 版本：1
 
 ## 原因
 
-TableLayout 的列宽由该列所有行（含零高的 fake header）的自然宽决定，fake header 让表体列宽不小于外部表头，两者因此对齐；改成固定比例或权重，列宽与内容脱钩，长内容折行或留出大片空白，表头与表体也不再对齐。来源中规格作者只读了合成 view.xml，转换者读到原始 XML 的 paddingRight 与零高行注释，仍以“规格权威决策”沿用了比例列。
+TableLayout 的列宽由该列所有行（含零高的 fake header）的自然宽决定，fake header 为表体各列提供与本例外部表头对应的宽度下界；表头与表体是否实际对齐还须按源的独立布局及当前内容核对，不能从“有 fake header”推出任意数据下必然同宽；改成固定比例或权重，列宽与内容脱钩，长内容折行或留出大片空白，表头与表体也不再对齐。来源中规格作者只读了合成 view.xml，转换者读到原始 XML 的 paddingRight 与零高行注释，仍以“规格权威决策”沿用了比例列。
 
 ## 做法
 

@@ -1,6 +1,6 @@
 # ConstraintLayout 改写成 Column 顺序流前先列出各子项锚点：锚父底、锚兄弟与双 0dp 比例子项都要保留语义
 
-ID：`lesson-3fe0026df9abc72ff788` · 版本：2
+ID：`lesson-3fe0026df9abc72ff788` · 版本：3
 
 [本主题](index.md)
 
@@ -14,13 +14,13 @@ ID：`lesson-3fe0026df9abc72ff788` · 版本：2
 
 ## 原因
 
-顺序流里的 margin 相对前后兄弟，照抄锚父底的 margin 会叠在后续占位兄弟之上（偏高一个兄弟高度）；把锚兄弟简化成父容器底部对齐会压到兄弟上；双 0dp 比例子项的边长是 min(可用宽, 可用高)，只写 width('100%').aspectRatio(1) 在高度受限时会溢出。写者往往在思考中复述了这些约束，写码时仍按顺序堆叠。
+顺序流里的 margin 相对前后兄弟，照抄锚父底的 margin 会叠在后续占位兄弟之上（偏高一个兄弟高度）；把锚兄弟简化成父容器底部对齐会压到兄弟上；来源双 0dp、比例 1:1 子项的边长是 min(可用宽, 可用高)，只写 width('100%').aspectRatio(1) 在高度受限时会溢出。写者往往在思考中复述了这些约束，写码时仍按顺序堆叠。
 
 ## 做法
 
 1. 转换前列出每个子项的锚点；多个子项锚父底时，用 Stack/RelativeContainer 按原 margin 贴底，或扣除后续流式兄弟的占位高度重算 margin。
 2. 锚在兄弟上方的元素，底距 = 兄弟高度 + 其 padding + 自身 margin，不简化成父容器底部对齐。
-3. 双 0dp 加 dimensionRatio 的子项按 min(可用宽, 可用高) 定边长：高度受限时写 height('100%').aspectRatio(r) 并限制宽度，源里的上下 margin 放到承担 layoutWeight 的容器上。
+3. 双 0dp 加 dimensionRatio=1:1 的子项按 min(可用宽, 可用高) 定边长：高度受限时写 height('100%').aspectRatio(1) 并限制宽度；源比例不为 1:1 时按实际宽高比及可用宽、高两向上限求解，不能直接套此正方形边长。源里的上下 margin 放到承担 layoutWeight 的容器上。
 4. 注释里列出的尺寸与边距逐项对照实际修饰链，注释有而代码没有的按缺失处理。
 
 ## 可选检查

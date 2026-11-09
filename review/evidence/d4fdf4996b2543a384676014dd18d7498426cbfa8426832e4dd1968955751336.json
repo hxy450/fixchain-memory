@@ -1,0 +1,189 @@
+{
+  "schema": "migloop-case/4",
+  "id": "case-0fef61d9f1aa5cc24534",
+  "created_at": "2026-10-02T19:36:40.566050+00:00",
+  "migration_key": "fac5eaa9-b1e9-4607-b90e-dadb4e885f36",
+  "title": "把鸿蒙系统自带的华为账号Kit当作待入仓的三方SDK，华为登录通道留成恒返null的占位",
+  "when": "规格提取与决策阶段，为源端厂商账号/渠道SDK登录通道确定鸿蒙侧实现路径时；实现阶段遇到规格写明“待裁决”的通道时",
+  "description": "Android源通过HMS账号SDK（反射装载impl、Empty回退控制可见性）发起华为账号授权，产出authorizationCode交后端bindHuawei；迁移目标为HarmonyOS，华为账号授权由系统Kit（@kit.AccountKit）提供，而规格和决策表把它与微信、支付宝、荣耀等三方SDK并列为占位候选。",
+  "summary": "规格作者ac0020dad06422e67写F002前，实际读到cross-module-contracts.md中\n“HuaweiLoginButton → Account Kit登录按钮重做”“华为登录 → Account Kit，反射层整体消除”\n（ac0020dad06422e67.jsonl:L32/L35），以及page_0005 UI spec的“鸿蒙侧可映射华为Account Kit（Phase 3决策）”（L45/L46）。\n它在思考中也写明“HarmonyOS: Account Kit exists (@kit.AccountKit authentication) … platform DOES have quasi-equivalent”（L189）。\nL201在hmos-references-collection中grep AccountKit无结果后，它对preferences、onForeground调用了arkts-knowledge-verifier（L210-L218），\n却没有核查AccountKit。L228写F002时，PD-C8-F002-03被归入“C8三方无等价”，实现映射HARD-DIV行写“无1:1等价 → HuaweiGateway占位”，\n替代路径写“鸿蒙侧系统级账号体系形态未定（Account Kit vs 占位，grill #2裁决）”，AC24绑定`决:PD-C8-F002-03 → 标:HuaweiGateway.huaweiLogin`。\n偏差起点是源端到规格的平台能力分类：输入已指向系统Kit，规格却写成三方无对等，并把实现路径延后裁决。\n\n这不是已批准的最终延后。Gate C由Stop-hook自动审查以“同意A，7张全批”批了这张写有“grill #2裁Account Kit”的卡\n（2ce43a97-0e6a-4a0f-a9b6-a5aac5a90177.jsonl:L2007-L2008）。到plan阶段grill #2时，T1预知清单没有列华为账号，\nHARD-GATE自检又把微信P-S2-001对到PD-C8-F002-03（同转录L3012、L3047、L3067）。这项延后裁决没有出题，也没有关闭；\nF002原文未改，随后交到实现阶段。\n\nSlice 2实现者ac0ebd026061aeccf读到上述F002（ac0ebd026061aeccf.jsonl:L142-L143），也读到page_0005的“可映射华为Account Kit”（L150-L151），\n以及registry中P-S2-007 forward-ref“华为账号登录入口（HuaweiSdkService HMOS等价）建立，resolve_by=Slice 2 Step 3d”（L161-L162）。\n它没有查决策账本中的grill #2结论，也没有查看SDK kits目录。L248写huaweiLogin恒return null，注释称“鸿蒙侧账号体系形态未定（grill #2裁决）、SDK未入仓”。\nL289-L292又把P-S2-007翻为resolved，另登记thirdparty-sdk占位P-S2-017“华为账号SDK(HMOS)等价入仓”。\n原本未决的问题由此落成占位，触发条件也基于错误前提：系统Kit并不需要入仓。截至返修前，目标文件的huaweiLogin片段一直保持该形态。\n\n修复时，ECAT iter6判别器列出huaweiLogin/honorLogin恒返null（7e49e8dd-9559-4bed-9f6d-0e98e41652c6.jsonl:L1461）。\n生成器只列一次SDK的hms/ets/kits目录，就看到@kit.AccountKit.d.ts（L1469-L1479），随后派g-channels（L1516）。\na701a76e28fccda6f.jsonl:L212把huaweiLogin改为HuaweiIDProvider.createAuthorizationWithHuaweiIDRequest(scopes=['openid'])\n→ AuthenticationController.executeRequest → authorizationCode，并把P-S2-017翻为resolved。\nshowHuaweiChannel仍为false，原因是AGC client_id和证书指纹未配置。\n支付宝的鸿蒙cashiersdk只有支付、没有auth（a701a76e28fccda6f.jsonl:L126），荣耀也没有HarmonyOS账号SDK；这两项只把注释改成准确的平台事实并保留占位，属于按平台事实延后，不在本卡归因范围。\n修复后的构建日志中没有ChannelGateway报错（L244-L247）；截至观察截止，该文件没有后续写入。\n",
+  "recommendations": [
+    "规格提取阶段：对源端厂商账号/渠道SDK，先判断目标平台是否已由系统Kit原生提供同类能力，例如鸿蒙华为账号对应@kit.AccountKit的authentication.HuaweiIDProvider。若已提供，就把平台API与产出写进规格，例如authorizationCode → bindHuawei，不要归入“三方无等价”HARD-DIV。拿不准时，到SDK的hms/ets/kits或api目录检索d.ts，或做一次知识核验再定。",
+    "决策闸门阶段：把各PD卡中“由grill #N裁决/形态未定”的条目逐条列出，出题或明确关闭；HARD-GATE自检按PD内容与通道对应registry行，不按编号凑对，以免某一通道的待决事项被别的决策顶掉。",
+    "实现阶段：规格写着“X vs 占位，待裁决”时，先查决策账本有无结论，再检索SDK kits目录确认能力是否随系统提供；系统Kit不要登记“SDK入仓”类触发器。若运行期仍依赖AGC client_id等配置，先实现真实调用链，再把渠道可见性门绑定到配置条件，不要用恒null替代。"
+  ],
+  "graphs": [
+    {
+      "target": {
+        "key": "/private/tmp/testAIPPT2/entry/src/main/ets/services/ChannelGateway.ets",
+        "since": "2026-09-19T05:23:13.192Z",
+        "at": "2026-09-19T15:38:59.780Z"
+      },
+      "nodes": [
+        {
+          "key": "/private/tmp/testAIPPT2/spec/baseline/cross-module-contracts.md",
+          "at": "2026-09-18T11:25:48.545Z",
+          "reason": "正常输入：规格作者Read回执给出HuaweiLoginButton行“华为账号登录 → Account Kit登录按钮重做”，风险点2写“迁移目标本身是HarmonyOS……华为登录 → Account Kit，反射层整体消除”。这足以说明华为通道在目标平台有系统级对等能力（ac0020dad06422e67.jsonl:L32/L35）。"
+        },
+        {
+          "key": "/private/tmp/testAIPPT2/spec/baseline/ui/page_0005_LoginActivity.md",
+          "at": "2026-09-18T11:26:20.067Z",
+          "reason": "正常输入：登录页UI spec的映射表写“华为一键登录……鸿蒙侧可映射华为Account Kit（Phase 3决策）；appServiceIsInit()==false时隐藏”（ac0020dad06422e67.jsonl:L45/L46）。"
+        },
+        {
+          "key": "2ce43a97-0e6a-4a0f-a9b6-a5aac5a90177:ac0020dad06422e67",
+          "at": "2026-09-18T11:53:08.710Z",
+          "reason": "偏差起点：已收到上述输入，自己的思考也确认@kit.AccountKit存在（L189），但未对AccountKit做核验（L201、L210-L218）。Write F002时把PD-C8-F002-03归为“C8三方无等价”，HARD-DIV行写“无1:1等价 → HuaweiGateway占位”，替代路径写“Account Kit vs 占位，grill #2裁决”，AC24标到HuaweiGateway.huaweiLogin（同转录L228）。",
+          "problem": true
+        },
+        {
+          "key": "/private/tmp/testAIPPT2/spec/baseline/features/F002-login-auth.md",
+          "at": "2026-09-19T00:07:35.135Z",
+          "reason": "交付桥梁：Slice 2实现者的Read回执里仍是同一段PD-C8-F002-03替代路径（第67行）、HARD-DIV行（第140行）和AC24（第197行）；grill #2未对其作出裁决或修订（ac0ebd026061aeccf.jsonl:L142-L143）。"
+        },
+        {
+          "key": "/private/tmp/testAIPPT2/spec/baseline/ui/page_0005_LoginActivity.md",
+          "at": "2026-09-19T00:07:56.314Z",
+          "reason": "实现者实际收到的旁证输入：同一UI spec仍写“鸿蒙侧可映射华为Account Kit（Phase 3决策）”，提示该通道有平台映射可查（ac0ebd026061aeccf.jsonl:L150-L151）。"
+        },
+        {
+          "key": "/private/tmp/testAIPPT2/spec/placeholder-registry.md",
+          "at": "2026-09-19T00:08:41.828Z",
+          "reason": "实现者grep回执：P-S2-007为forward-ref“华为账号登录入口（HuaweiSdkService HMOS等价）建立”，resolve_by=Slice 2 Step 3d，即计划期期望本slice建立HMOS等价入口，而不是等待三方SDK（ac0ebd026061aeccf.jsonl:L161-L162）。"
+        },
+        {
+          "key": "2ce43a97-0e6a-4a0f-a9b6-a5aac5a90177:ac0ebd026061aeccf",
+          "at": "2026-09-19T00:23:43.320Z",
+          "reason": "传递并固化偏差：实现者收到“待grill #2裁决”的规格、“可映射Account Kit”和“本slice建立HMOS等价入口”三条输入，没有查账本结论或SDK kits。Write时huaweiLogin恒return null，注释称“SDK未入仓”（L248）；随后把P-S2-007翻为resolved，另立thirdparty-sdk占位P-S2-017“华为账号SDK(HMOS)等价入仓”，并Edit目标文件marker（L289-L292、L300）。",
+          "problem": true
+        }
+      ],
+      "edges": [
+        {
+          "from": 1,
+          "to": 3
+        },
+        {
+          "from": 2,
+          "to": 3
+        },
+        {
+          "from": 3,
+          "to": 4
+        },
+        {
+          "from": 4,
+          "to": 7
+        },
+        {
+          "from": 5,
+          "to": 7
+        },
+        {
+          "from": 6,
+          "to": 7,
+          "force": true,
+          "reason": "实现者写目标前用Bash对placeholder-registry.md执行grep，检索P-S2、P-B3-001和P-B5-001各行；回执返回P-S2-007 forward-ref行“华为账号登录入口（HuaweiSdkService HMOS等价）建立 | registered | forward-ref | Slice 2 Step 3d”。这是该实现者本人对registry的真实读取，早于它00:19的Write和00:23的Edit。",
+          "evidence": [
+            {
+              "source": "ac0ebd026061aeccf.jsonl",
+              "line": 161
+            },
+            {
+              "source": "ac0ebd026061aeccf.jsonl",
+              "line": 162
+            }
+          ]
+        },
+        {
+          "from": 7,
+          "to": "target"
+        }
+      ]
+    }
+  ],
+  "unknown": [
+    "slice-02账本建议Step 3b/3c加载arkts-login（实现者skill列表含该项，ac0ebd026061aeccf.jsonl:L20），但实现者未调用；材料中没有该skill正文，无法确认它是否覆盖华为账号Account Kit登录。"
+  ],
+  "unresolved_targets": [],
+  "job": "issue-0fef61d9f1aa5cc24534",
+  "metadata": {
+    "migration": {
+      "project": "DeepAI全能PPT",
+      "server_session_id": "fac5eaa9-b1e9-4607-b90e-dadb4e885f36"
+    },
+    "analysis": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "root_session_ids": [
+        "c8284269-4179-4eb8-8fec-f36d62f9293e"
+      ]
+    },
+    "observed_in_materials": {
+      "platforms": [
+        "claude-code"
+      ],
+      "models": [
+        "GLM-5.3-Flash",
+        "claude-fable-5-1"
+      ],
+      "client_versions": [
+        "2.1.247",
+        "2.1.278"
+      ]
+    },
+    "source_set_id": "sources-ef87c31e31b2c26de3b2",
+    "environment": [
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/private/tmp/testAIPPT2",
+        "at": "2026-09-18T15:57:46.578Z",
+        "ref": "2ce43a97-0e6a-4a0f-a9b6-a5aac5a90177.jsonl:L1942",
+        "request_ref": "2ce43a97-0e6a-4a0f-a9b6-a5aac5a90177.jsonl:L1940",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.1.1(24)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/private/tmp/testAIPPT2",
+        "at": "2026-09-18T15:57:46.578Z",
+        "ref": "2ce43a97-0e6a-4a0f-a9b6-a5aac5a90177.jsonl:L1942",
+        "request_ref": "2ce43a97-0e6a-4a0f-a9b6-a5aac5a90177.jsonl:L1940",
+        "phase": "generation"
+      },
+      {
+        "name": "harmonyos.compatible_sdk",
+        "value": "6.0.1(21)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/private/tmp/testAIPPT2",
+        "at": "2026-09-19T11:26:45.988Z",
+        "ref": "7e49e8dd-9559-4bed-9f6d-0e98e41652c6.jsonl:L434",
+        "request_ref": "7e49e8dd-9559-4bed-9f6d-0e98e41652c6.jsonl:L429",
+        "phase": "repair"
+      },
+      {
+        "name": "harmonyos.target_sdk",
+        "value": "6.0.1(21)",
+        "basis": "configuration",
+        "artifact": "build-profile.json5",
+        "cwd": "/private/tmp/testAIPPT2",
+        "at": "2026-09-19T15:38:26.603Z",
+        "ref": "eb0d3903-1f96-4816-9e18-bef3d88833f1.jsonl:L339",
+        "request_ref": "eb0d3903-1f96-4816-9e18-bef3d88833f1.jsonl:L337",
+        "phase": "repair"
+      }
+    ],
+    "card_tool_version": "0.10.4"
+  },
+  "revision": "f16a6c7b806ec9d6745719340b36b0aafc5dde68a90c7f7ff46e53ee43c3a2d4"
+}

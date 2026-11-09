@@ -1,6 +1,6 @@
 # 分开单行文本盒与多行行距，不把 Compose lineHeight 同名直映为 ArkUI .lineHeight
 
-ID：`lesson-2a2924aaebbfbea80780` · 版本：1
+ID：`lesson-2a2924aaebbfbea80780` · 版本：2
 
 [本主题](index.md)
 
@@ -24,7 +24,7 @@ ID：`lesson-2a2924aaebbfbea80780` · 版本：1
 
 1. 规格与令牌分别表达“行间距离”和“单行文本盒高度”；源端单行保持自然高度时，不对所有 Text 无条件施加 .lineHeight，也不把样式 lineHeight 直接加进容器高度。
 2. 多行沿用当前工程已成立的排版映射；已有条件匹配的标定支持时，可用 lineSpacing(LengthMetrics.fp(lineHeight − fontSize), { onlyBetweenLines: true })；只修单行时保留原本正确的多行路径，不顺带全局换公式。
-3. 容器确需显式高度时，单行文本取字体自然高度（字号 × 字体 hhea (ascent+descent)/unitsPerEm）或令牌派生值，无法确定时用 onSizeChange 回读子项实高；空串是否保留高度服从源端行为，确需占位才设 minHeight。
+3. 容器确需显式高度时，单行文本取已核定的字体自然高度或令牌派生值（用 hhea 度量推导时，先核 ascent/descender 的符号与工具导出约定，再求行框比例，不能把有符号原字段直接当正距离相加），无法确定时用 onSizeChange 回读子项实高；空串是否保留高度服从源端行为，确需占位才设 minHeight。
 
 ## 可选检查
 
