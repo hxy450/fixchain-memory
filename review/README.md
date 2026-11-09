@@ -12,3 +12,7 @@
 候选manifest的父版本字段记录历史文本候选链，不对应本分支重新生成的store快照。
 
 Memory正文与原候选字节一致，官方证据没有额外插入正文。本目录是随分支交付的修订依据；它不包含评测答案、模型凭据或完整外部评测仓库。`store/`保留原始案例，Memory文本候选版本以`memory/manifest.json`为准。
+
+正文哈希的两种口径：`original_sha256`、`revised_sha256`按LF规范化文本计算；`revised_file_sha256`与`memory/manifest.json`按实际文件字节计算。原候选换行字节不作改写。
+
+离线校验：在仓库根运行`python3 review/validate.py`。
