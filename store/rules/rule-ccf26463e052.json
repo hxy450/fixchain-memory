@@ -1,0 +1,148 @@
+{
+ "id": "rule-ccf26463e052",
+ "title": "源端同步先 cancel 再 vibrate 时，网关用 Promise 队列串行发出停止和振动",
+ "product": "代码",
+ "triggers": [
+  {
+   "read": "源端同一方法里先同步调用 `Vibrator.cancel()` 再调用 `vibrate(long[] pattern, int repeat)`（或别的 stop 后 start、先释放再创建），后一调用依赖前一调用已生效",
+   "wrong": "目标网关的 void 方法里 `vibrator.stopVibration()` 和 `vibrator.startVibration(...)` 各自发出、只挂 `.catch`，后一调用不等前一调用完成；只核了调用点顺序和源码一致"
+  }
+ ],
+ "scope": "把源端连续的同步平台调用映射到返回 Promise 的鸿蒙 API，而网关或服务层方法按规格保持 void 时",
+ "exceptions": [],
+ "how": [
+  {
+   "text": "网关内部持有一条 Promise 链：`private chain: Promise<void> = Promise.resolve()`；每个平台调用写成 `this.chain = this.chain.then(() => vibrator.stopVibration()).catch((e: BusinessError) => { 记日志 })`，前一调用 settle（成功或失败）后才发下一个，吞错和日志照旧",
+   "support": [
+    "case-066503e2574cd4edbd0b#diagnosis",
+    "case-066503e2574cd4edbd0b#recommendation:1"
+   ]
+  },
+  {
+   "text": "取消这一步也可以改用同步变体 `vibrator.stopVibrationSync()`，之后再发 `startVibration`",
+   "support": [
+    "case-066503e2574cd4edbd0b#recommendation:1"
+   ]
+  },
+  {
+   "text": "对每个返回 Promise 的平台调用，列出调用点紧邻的前后平台调用；源端依赖它们的先后时，目标端必须有 await 或进同一队列",
+   "support": [
+    "case-066503e2574cd4edbd0b#recommendation:2"
+   ]
+  }
+ ],
+ "values": [
+  {
+   "value": "function startVibration(effect: VibrateEffect, attribute: VibrateAttribute): Promise<void>",
+   "meaning": "发起振动，异步返回",
+   "source": "鸿蒙 SDK 的 ets/api/@ohos.vibrator.d.ts，vibrator.startVibration",
+   "support": []
+  },
+  {
+   "value": "function stopVibration(): Promise<void>",
+   "meaning": "停止任何类型的振动，异步返回",
+   "source": "鸿蒙 SDK 的 ets/api/@ohos.vibrator.d.ts，vibrator.stopVibration",
+   "support": []
+  },
+  {
+   "value": "function stopVibrationSync(): void",
+   "meaning": "停止振动的同步变体（声明里 @since 12）",
+   "source": "鸿蒙 SDK 的 ets/api/@ohos.vibrator.d.ts，vibrator.stopVibrationSync",
+   "support": []
+  },
+  {
+   "value": "function stopVibration(stopMode: VibratorStopMode): Promise<void>",
+   "meaning": "同族接口：按停止模式停止，同样异步返回",
+   "source": "鸿蒙 SDK 的 ets/api/@ohos.vibrator.d.ts，vibrator.stopVibration(stopMode)",
+   "support": []
+  },
+  {
+   "value": "队列串行后日志顺序为：取消完成 → 网关记录 stop 结果 → 发波形",
+   "meaning": "串行化之后取消先于新波形生效",
+   "source": "卡里修好并验证过",
+   "support": [
+    "case-066503e2574cd4edbd0b#diagnosis"
+   ]
+  }
+ ],
+ "lookups": [],
+ "why": "两次调用互不等待时 stopVibration 可能晚于新波形生效，把刚发出的振动截掉",
+ "keys": {
+  "read": [
+   "Vibrator",
+   "cancel()",
+   "vibrate",
+   "VibrationEffect",
+   "getSystemService",
+   "VIBRATOR_SERVICE"
+  ],
+  "product": [
+   "vibrator.startVibration",
+   "vibrator.stopVibration",
+   "stopVibrationSync",
+   "Promise",
+   ".catch",
+   "await",
+   "then"
+  ]
+ },
+ "probe": {
+  "pattern": "stopVibration\\([^)]*\\)\\s*\\.catch\\(",
+  "note": "stopVibration 的 Promise 只挂了 .catch、没有 await 也没进队列；后面若紧跟 startVibration，生效顺序没有保证"
+ },
+ "unverified": [
+  "鸿蒙模拟器没有振动器，未实测到落底振动被截断；串行修改靠日志顺序确认",
+  "改用 stopVibrationSync 的写法卡里没有上机验证"
+ ],
+ "alternatives_unverified": [],
+ "siblings_checked": "搜 function stopVibration：@ohos.vibrator.d.ts 里有 5 个重载（Promise 版 3 个、callback 版 2 个），另有同步变体 stopVibrationSync；搜 function \\w+Sync(：同文件另有 isSupportEffectSync、getEffectInfoSync、getVibratorInfoSync 三个，与先后无关，未写进 values",
+ "refs": [
+  {
+   "what": "startVibration 的 Promise 签名",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/api/@ohos.vibrator.d.ts vibrator.startVibration",
+   "quote": "function startVibration(effect: VibrateEffect, attribute: VibrateAttribute): Promise<void>;",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  },
+  {
+   "what": "stopVibration 无参的 Promise 签名",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/api/@ohos.vibrator.d.ts vibrator.stopVibration",
+   "quote": "Stop any type of vibration. * * @permission ohos.permission.VIBRATE * @returns { Promise<void> } Promise used to return the result.",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  },
+  {
+   "what": "stopVibration() 签名",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/api/@ohos.vibrator.d.ts vibrator.stopVibration",
+   "quote": "function stopVibration(): Promise<void>;",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  },
+  {
+   "what": "同步变体 stopVibrationSync",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/api/@ohos.vibrator.d.ts vibrator.stopVibrationSync",
+   "quote": "function stopVibrationSync(): void;",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  },
+  {
+   "what": "stopVibrationSync 最早的 @since",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/api/@ohos.vibrator.d.ts vibrator.stopVibrationSync",
+   "quote": "* @throws { BusinessError } 14600101 - Device operation failed. * @syscap SystemCapability.Sensors.MiscDevice * @atomicservice * @since 12 */",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  },
+  {
+   "what": "按停止模式的 stopVibration（同族）",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/api/@ohos.vibrator.d.ts vibrator.stopVibration",
+   "quote": "function stopVibration(stopMode: VibratorStopMode): Promise<void>;",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  }
+ ],
+ "sources": [
+  "case-066503e2574cd4edbd0b"
+ ],
+ "general": false,
+ "status": "active"
+}

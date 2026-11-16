@@ -1,0 +1,195 @@
+{
+ "proposal": "fam-0630",
+ "round": 3,
+ "product": "代码",
+ "avg_similarity": 0.197,
+ "rules": [
+  {
+   "id": "rule-1e258117560c",
+   "title": "源端事务迁到 RdbStore 后体内要 await 的，改用 createTransaction 返回的事务对象",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源端 db.beginTransaction() … setTransactionSuccessful() / endTransaction() 包着多步写入",
+     "wrong": "目标端在共享的 store 上 store.beginTransaction() 后，同一函数里 await store.insert / store.update / store.delete 再 store.commit()"
+    }
+   ],
+   "keys": {
+    "read": [
+     "beginTransaction",
+     "setTransactionSuccessful",
+     "endTransaction",
+     "SQLiteDatabase",
+     "insert",
+     "delete"
+    ],
+    "product": [
+     "beginTransaction",
+     "createTransaction",
+     "Transaction",
+     "TransactionType.IMMEDIATE",
+     "commit",
+     "rollback",
+     "await"
+    ]
+   }
+  },
+  {
+   "id": "rule-33473ff9bb79",
+   "title": "源端 Cursor.getString 读 REAL 列时，迁到 ResultSet 按 %g 复刻文本",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源码用 `cursor.getString(i)` 读回 REAL（浮点）列，再交给 String 入口解析",
+     "wrong": "目标端 relationalStore 里同样用 `rs.getString(idx)` 读 REAL 列，得到全精度文本，和 Android 的文本不同"
+    }
+   ],
+   "keys": {
+    "read": [
+     "Cursor",
+     "getString",
+     "REAL",
+     "CursorWindow",
+     "SQLiteOpenHelper",
+     "rawQuery"
+    ],
+    "product": [
+     "ResultSet",
+     "getString",
+     "getDouble",
+     "getColumnTypeSync",
+     "ColumnType.REAL",
+     "relationalStore"
+    ]
+   }
+  },
+  {
+   "id": "rule-7e61f71be86d",
+   "title": "SQLiteOpenHelper 子类迁成 RdbStore 时按 store.version 分派建表、升级、降级报错",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源端类 extends SQLiteOpenHelper，构造里 super(context, name, factory, VERSION)，重写 onCreate / onUpgrade",
+     "wrong": "目标端 getRdbStore 打开后直接调建表，或写成 store.version >= VERSION 就 return、否则建表并写 version；没有 version === 0 建表、小于 VERSION 走 onUpgrade、大于 VERSION 抛错的分派"
+    },
+    {
+     "read": "规格或决策台账写「升级路径不迁移」「onCreate 即唯一入口」",
+     "wrong": "目标端把 onUpgrade 分派骨架连同 store.version 写回一起删掉，只剩建表"
+    }
+   ],
+   "keys": {
+    "read": [
+     "SQLiteOpenHelper",
+     "onCreate",
+     "onUpgrade",
+     "onDowngrade",
+     "getWritableDatabase",
+     "getReadableDatabase",
+     "setVersion",
+     "升级路径不迁移"
+    ],
+    "product": [
+     "relationalStore",
+     "getRdbStore",
+     "RdbStore",
+     "store.version",
+     "onUpgrade",
+     "onCreate"
+    ]
+   }
+  },
+  {
+   "id": "rule-bac3cb04485b",
+   "title": "用缓存的 Promise 做 RdbStore 单例时，打开失败在 catch 里复位缓存，下次访问重试",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源端每次访问都调 getWritableDatabase() / getReadableDatabase()",
+     "wrong": "目标端 init 把包着 relationalStore.getRdbStore 的 Promise 存进单例字段后永不清空，一次失败后每次 DAO 调用都拿到同一个 rejected Promise"
+    }
+   ],
+   "keys": {
+    "read": [
+     "SQLiteOpenHelper",
+     "getWritableDatabase",
+     "getReadableDatabase",
+     "SQLiteException"
+    ],
+    "product": [
+     "getRdbStore",
+     "RdbStore",
+     "Promise",
+     "catch",
+     "init",
+     "getStore"
+    ]
+   }
+  }
+ ],
+ "existing_families": [
+  {
+   "topic": "data/database",
+   "topic_name": "数据库",
+   "dir": "sqlite-write-timing-key",
+   "name": "源端 SQLite 落库的主键、时机和建库",
+   "line": "读到源端 SQLiteOpenHelper / SQLiteDatabase 落库（落库前拼组合主键、首次打开才建库、写完就发事件），产物里是 relationalStore 的 getRdbStore、insert / update / batchInsert 和写库后的事件发送",
+   "similarity": 0.14
+  },
+  {
+   "topic": "data/database",
+   "topic_name": "数据库",
+   "dir": "rdb-transaction-api",
+   "name": "RdbStore 的事务接口（beginTrans 与 beginTransaction）",
+   "line": "读到 relationalStore.getRdbStore 的 StoreConfig 没有 vector: true、参考写法给的是 beginTransaction / createTransaction，或规格要求单条增删写完才返回，产物里是 beginTrans() 取 txId 再 execute(sql, txId, args) / commit(txId) 的写法",
+   "similarity": 0.122
+  },
+  {
+   "topic": "data/database",
+   "topic_name": "数据库",
+   "dir": "room-to-rdb",
+   "name": "Room 数据库迁成 relationalStore 的建表和版本",
+   "line": "源端 Room 的 @Database / @Entity / Migration、导出的 schema JSON 和 RoomDatabase.Callback；产物里 relationalStore 的 CREATE TABLE 字符串、StoreConfig 的 name、store.version 和升级分支",
+   "similarity": 0.103
+  },
+  {
+   "topic": "lifecycle",
+   "topic_name": "生命周期与启动",
+   "dir": "object-lifetime",
+   "name": "源端对象、静态字段和监听的存活期",
+   "line": "读到源 Activity 的实例字段存会话数据、类的 static 字段、getLastNonConfigurationInstance 判空分支、Fragment 只注册不注销的监听；产物里服务的 getInstance() 单例、静态引擎的每局复位函数、hasInstance() 分支、aboutToDisappear 里补的注销",
+   "similarity": 0.042
+  },
+  {
+   "topic": "dialog",
+   "topic_name": "弹窗与浮层",
+   "dir": "alertdialog-cancel-back",
+   "name": "可取消的 AlertDialog 的返回键和取消去向",
+   "line": "读到 AlertDialog.Builder 默认可取消或带 setOnCancelListener、源 Activity 的 onBackPressed 先取消打开的对话框；产物里页内 Stack 浮层弹窗只接了蒙层 onClick、NavDestination 没有 .onBackPressed，或改用 openCustomDialog 承载",
+   "similarity": 0.039
+  },
+  {
+   "topic": "data/model",
+   "topic_name": "数据模型与解析",
+   "dir": "per-record-errors",
+   "name": "逐条解析和导入时单条记录出错的处理",
+   "line": "源端在循环里逐条 getJSONObject、解析、insert，或列表解析里单条记录的字段取不到；产物里先全量校验再写库、单条失败就 throw 让整页失败",
+   "similarity": 0.035
+  },
+  {
+   "topic": "navigation",
+   "topic_name": "页面导航与标题栏",
+   "dir": "fragment-backstack-subpage",
+   "name": "Fragment 事务压栈打开的子页",
+   "line": "读到 FragmentTransaction 的 replace 或 hide + add 加 addToBackStack 在宿主内容区打开子页（含 page_type=sub_component、CardView 卡片式宿主）；产物里子页写成 NavDestination、pushPathByName 推出壳外或清栈切页",
+   "similarity": 0.032
+  },
+  {
+   "topic": "logic/async",
+   "topic_name": "异步与并发",
+   "dir": "java-thread-loop-semantics",
+   "name": "Java 线程、执行器和轮询循环的执行语义",
+   "line": "读到源端 Executors.newSingleThreadExecutor 串行写任务、Thread.currentThread 判重入，或 while (!isConnected()) { sleep; connect(); } 重连循环；交回的 Promise 队列在任务体内 await 同队列方法，或循环里多加了取消出口",
+   "similarity": 0.031
+  }
+ ]
+}

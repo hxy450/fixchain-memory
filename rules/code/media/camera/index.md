@@ -1,0 +1,21 @@
+# 相机、录像与录音
+
+源端有 Camera / Camera2 的 CameraDevice、预览和拍照会话、CaptureRequest / CaptureResult / CameraCharacteristics 的参数键、快门点击和长按连拍、MediaRecorder 录像、CamcorderProfile 选档、AudioRecord 采集，目标端有 cameraManager、CameraInput、PhotoSession / VideoSession、PhotoOutput.capture、VideoOutput、ManualExposure / ManualFocus / ManualIso、AVRecorder 或 AudioCapturer 时
+
+## 触发族
+
+- [相机的打开、关闭和重开](camera-open-close/index.md)（1 条）：读到源端相机在 onResume 打开、onPause 关闭，关闭进行中只置 reopen 标志、onDestroy 限时等关闭任务完成；产物里 CameraInput.open / close 的调用、关闭进行中收到的打开请求、aboutToDisappear 里的释放路径
+- [Camera2 手动参数迁到相机会话的单位和取值换算](camera2-manual-params/index.md)（5 条）：读到源端 CaptureRequest / CameraCharacteristics 的数值键（SENSOR_EXPOSURE_TIME、CONTROL_AE_COMPENSATION_RANGE / STEP、SENSOR_INFO_SENSITIVITY_RANGE、LENS_FOCUS_DISTANCE）；产物里 ManualExposure、AutoExposure、ManualIso、ManualFocus 的 set… / get… / getSupported… 调用和写进能力字段的值
+- [MediaRecorder 的音源、封装格式和音频参数](mediarecorder-audio-format/index.md)（4 条）：读到源端 MediaRecorder 的 setAudioSource(AudioSource.CAMCORDER / UNPROCESSED)、setOutputFormat(THREE_GPP / WEBM)、只在录音开关打开时才调的 setAudioEncoder；产物里 AVRecorderConfig 的 audioSourceType、fileFormat 和 AVRecorderProfile 的音频字段
+- [录像的视频档、帧率和录像会话](video-profile-session/index.md)（3 条）：读到源端打开相机后按 CamcorderProfile 建视频质量表、按尺寸和 videoFrameRate / setCaptureRate 选档，MediaRecorder 的 surface 进相机会话；产物里当前档的索引由谁赋值、VideoSession 的 NORMAL_VIDEO 能力面、videoProfiles 的帧率匹配和 VideoOutput 的配置与启动
+- [相机会话和录像输出的拆卸与释放](camera-session-teardown/index.md)（3 条）：读到源端在后台线程阻塞执行 Camera.stopPreview()、Camera.release()，或 MediaRecorder.release 之后 reconnect 相机；产物里 session.stop / release、cameraInput.close、各 output 的 release 有没有按顺序 await，拆卸 hook 是不是 () => void，重建会话前有没有 beginConfig + removeInput
+- [AudioRecord 录音采集的创建和启动](audio-record-capture/index.md)（1 条）：读到源端监听类在构造里建 AudioRecord 并 startRecording()、调用方另调 start() 起采样线程、线程退出时 release()；产物里 AudioCapturer 的异步 create() 成功后有没有调 start()、发启动和停止的状态回调
+- [手动 ISO、曝光、捕获结果和录音振幅](iso-exposure-amplitude/index.md)（3 条）：读到源端 Camera2 的 CaptureResult（SENSOR_SENSITIVITY、SENSOR_EXPOSURE_TIME，在 onCaptureCompleted 里写入）、CONTROL_AE_MODE 手动曝光，或 MediaRecorder.getMaxAmplitude 采样；产物里 PhotoSession 的 setIso / setExposureMode、getIso / getExposureDuration / onIsoInfoChange，AVRecorder 的振幅读取，或这些数据源留着恒 0 的基类默认
+- [拍照调用和它的回调（takePicture、PhotoOutput.capture）](take-picture-flow/index.md)（7 条）：读到源端 takePicture(pictureCallback, errorCallback)、拍照函数里构造的回调对象、拍照前 setRotation / JPEG_ORIENTATION、长按连拍和多帧结果回调；产物里桥接契约的 takePicture 签名、编排器的完成 / 失败入口和请求代数、PhotoCaptureSetting.rotation、photoAssetAvailable 的结果分派和连拍循环
+- [拍照 profile 的格式和取字节通路（photoProfiles、CameraFormat）](photo-profile-format/index.md)（3 条）：读到 getSupportedOutputCapability 返回的 photoProfiles、camera.CameraFormat 的 JPEG / RGBA_8888 / DNG 等格式，和 photoAvailable 里 getComponent(image.ComponentType.JPEG) 取字节；产物里选 profile 和能力枚举只认 CAMERA_FORMAT_JPEG、没有 JPEG 就 throw、按 DNG 判 RAW，或非 JPEG profile 没有取数据通路
+- [Camera2 会话的输出配置和拍照数据](camera-session-output/index.md)（4 条）：读到 CameraDevice.createCaptureSession 一次带的预览、ImageReader、MediaRecorder surface，onImageAvailable 里复制 JPEG 后 image.close()，DngCreator 写 RAW；产物里 beginConfig / addInput / addOutput / commitConfig 的次序、photoAvailable 里 getComponent 后的 byteBuffer 和 photo.release()、.dng 媒体资产
+- [相机能力位、模式和可选值](camera-capabilities/index.md)（7 条）：读到 CameraCharacteristics 的能力键（SENSOR_ORIENTATION、CONTROL_AWB_AVAILABLE_MODES、INFO_SUPPORTED_HARDWARE_LEVEL）、打开相机时缓存的能力字段、带约束或过滤参数的尺寸选择；产物里能力 getter 的实现、写成常量 true 的能力位、写死的角度和模式列表
+- [相机打开回调里消费的一次性拍照请求](camera-open-request/index.md)（2 条）：读到 CameraDevice.StateCallback.onOpened 里读一次性标志、按它 postDelayed 后 takePicture，或契约写「相机打开完成回调内调用、先开后拍」、派工把这个标志通道交给别的切片；产物里在 aboutToAppear / onShown / onPageShow 里直接拍，或把标志写成常量 false 而没留注入点和 FWD-REF
+- [拉起相机前的能力预检和权限申请](camera-launch-precheck/index.md)（1 条）：读到拍照方法里先 hasSystemFeature / isAvailable(…FEATURE_CAMERA) 预检、再运行时申请 Manifest.permission.CAMERA，回调里才建文件、拉相机；产物里直接 await cameraPicker.pick(...)，用 catch 顶替预检和 ohos.permission.CAMERA 申请
+- [相机预览的 TextureView 和 XComponent](camera-preview-surface/index.md)（1 条）：读到源端 TextureView 子类重写 onMeasure 按预览比例测量、用 setTransform(matrix) 留边或缩放；产物里预览 XComponent 的 setXComponentSurfaceRect、onAreaChange 和只记进字段的 scale / offset
+- [拍照和停录后的缩略图](camera-thumbnail/index.md)（2 条）：读到源端 updateThumbnail(thumbnail, isVideo, wantAnimation) 同时更新画廊按钮和预览覆盖层、停录后 MediaMetadataRetriever.getFrameAtTime 取帧再 createScaledBitmap；产物里只写共享状态的画廊字段、void 掉参数、用 PixelMapParams 的固定宽高取帧

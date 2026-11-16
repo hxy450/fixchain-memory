@@ -1,0 +1,216 @@
+{
+ "proposal": "fam-0578",
+ "round": 3,
+ "product": "代码",
+ "avg_similarity": 0.184,
+ "rules": [
+  {
+   "id": "rule-122dd0733424",
+   "title": "ResponseCache.set 的失败不要空 catch 吞掉，至少把错误信息记进日志",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "",
+     "wrong": "拦截器或缓存封装里 await cache.set(...) 外面是空的 catch {}，缓存写入失败没有任何日志"
+    }
+   ],
+   "keys": {
+    "read": [
+     "Interceptor",
+     "CacheInterceptor",
+     "OkHttp",
+     "Cache"
+    ],
+    "product": [
+     "ResponseCache",
+     "set(",
+     "catch",
+     "hilog.error",
+     "rcp.Interceptor",
+     "createCachedResponse"
+    ]
+   }
+  },
+  {
+   "id": "rule-6706332be130",
+   "title": "request.agent 下载在 create 和注册回调之后要调 task.start()",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源端用 OkHttp 或 getInputStream 下载到缓存；参考模板按 request.agent.create → on('completed') → await task.start() 落码",
+     "wrong": "代码里有 request.agent.create(...) 和 task.on('completed' / 'failed', ...)，却没有 task.start()；后续保存、分享、复制一直等不到完成"
+    }
+   ],
+   "keys": {
+    "read": [
+     "OkHttp",
+     "getInputStream",
+     "OkHttpClient",
+     "request.agent",
+     "download",
+     "cacheDir"
+    ],
+    "product": [
+     "request.agent.create",
+     "task.start",
+     "start()",
+     "on('completed'",
+     "on('response'",
+     "statusCode",
+     "request.agent.remove"
+    ]
+   }
+  },
+  {
+   "id": "rule-7a228d1ef4a7",
+   "title": "OkHttp Cache 的 MiB 容量迁到 rcp CacheConfiguration.maxSize 时按字节传",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "OkHttp 的 Cache(dir, N MiB) 提供自动 HTTP 缓存，容量常量按 MiB 写",
+     "wrong": "rcp.ResponseCache 的 CacheConfiguration.maxSize 直接传 MiB 数（如 maxSize: 200），ResponseCache.set 报 item is too long for cache limits，缓存计数一直为 0"
+    }
+   ],
+   "keys": {
+    "read": [
+     "OkHttp",
+     "OkHttpClient.Builder",
+     "Cache",
+     "cache(",
+     "1024 * 1024",
+     "MiB"
+    ],
+    "product": [
+     "rcp.ResponseCache",
+     "CacheConfiguration",
+     "maxSize",
+     "getState",
+     "RemoteCommunicationKit",
+     "item is too long for cache limits"
+    ]
+   }
+  },
+  {
+   "id": "rule-7e0d654591be",
+   "title": "OkHttp 的 maxStale 迁成 max-stale，不用 stale-while-revalidate 代替",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "OkHttp 的 CacheControl.Builder().maxAge(7, DAYS).maxStale(30, DAYS) 控制图片缓存；规格写「7 天 max-age / 30 天 max-stale」",
+     "wrong": "目标缓存头写成 `public, max-age=604800, stale-while-revalidate=2592000`，max-stale 被换成别的指令"
+    }
+   ],
+   "keys": {
+    "read": [
+     "CacheControl.Builder",
+     "maxAge",
+     "maxStale",
+     "TimeUnit.DAYS",
+     "Cache-Control",
+     "OkHttp"
+    ],
+    "product": [
+     "Cache-Control",
+     "max-age",
+     "max-stale",
+     "stale-while-revalidate",
+     "rcp.CacheControl",
+     "headers"
+    ]
+   }
+  },
+  {
+   "id": "rule-8fd0a673b4b3",
+   "title": "规格写鉴权头「统一注入」时，代码有 token 就给所有请求带 Bearer，不按端点表注入",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "规格或端点契约写「SDK 层统一注入」「defaultRequest 拦截，auth != null 时 headers[Authorization]=Bearer」",
+     "wrong": "代码按端点表的 auth 列决定带不带 Authorization: Bearer，查不到端点（未登记路径）或 auth=none 时不带"
+    }
+   ],
+   "keys": {
+    "read": [
+     "defaultRequest",
+     "Authorization",
+     "Bearer",
+     "interceptor",
+     "auth"
+    ],
+    "product": [
+     "Authorization",
+     "Bearer",
+     "header",
+     "auth",
+     "token"
+    ]
+   }
+  }
+ ],
+ "existing_families": [
+  {
+   "topic": "network",
+   "topic_name": "网络",
+   "dir": "okhttp-interceptor",
+   "name": "源端 OkHttp 拦截器和统一响应壳",
+   "line": "读到源端 OkHttp 的 Interceptor 里 addHeader 加公共头（Authorization 等）、按错误码分支踢登，或统一响应包装类（code、message、data），产物里是 @ohos.net.http 封装的默认 header、响应解包和 token 失效判定",
+   "similarity": 0.098
+  },
+  {
+   "topic": "system/account",
+   "topic_name": "登录、授权与三方 SDK",
+   "dir": "auth-callback-state",
+   "name": "单会话授权回调的 state 校验",
+   "line": "读到每次请求带随机 state 的 SDK 授权（SendAuthReq 一类）、规格写「state 错配拒绝」「旧回调必须失效」「迟到回调」；产物里回调处理的判断顺序和它的契约测试",
+   "similarity": 0.056
+  },
+  {
+   "topic": "network",
+   "topic_name": "网络",
+   "dir": "response-header",
+   "name": "Retrofit Response<> 带的响应头",
+   "line": "读到源端 Retrofit 接口返回 Response<BaseResponse<T>>、Repository 从 headers()[\"Authorization\"] 取 token，交回的 HTTP 封装或解析函数只返回、只读 body",
+   "similarity": 0.044
+  },
+  {
+   "topic": "logic/async",
+   "topic_name": "异步与并发",
+   "dir": "partial-failure-cache",
+   "name": "ViewModel 多路请求的部分失败和缓存",
+   "line": "读到源 ViewModel 先读缓存再请求、几个请求各自 launch、只在 Result.Success 时替换数据（或规格写「失败读有效缓存、不清空整页」），交回的代码把任一失败映射成整页 ERROR、返回 FAILED 加空模型，或全失败时仍写新时间戳的缓存",
+   "similarity": 0.042
+  },
+  {
+   "topic": "network",
+   "topic_name": "网络",
+   "dir": "presign-log-upload",
+   "name": "预签名上传的诊断日志包",
+   "line": "读过的源码里上传函数先取 presign 地址再 PUT，打包日志目录、设备信息和 ObjectBox 分表 TXT，清单有 android:usesCleartextTraffic；交回的代码里网络层对上传地址的 https 校验和归档里装了什么",
+   "similarity": 0.038
+  },
+  {
+   "topic": "system/device",
+   "topic_name": "设备与连接",
+   "dir": "connectivity-network-state",
+   "name": "ConnectivityManager 的网络类型和计费判断",
+   "line": "读到源端注册 CONNECTIVITY_ACTION 接收器、getActiveNetworkInfo 按 TYPE_WIFI / TYPE_MOBILE / TYPE_ETHERNET 分支，或 isActiveNetworkMetered；交回的没有 createNetConnection 监听，或计费只看 NET_CAPABILITY_NOT_METERED、不按 bearerTypes 区分",
+   "similarity": 0.038
+  },
+  {
+   "topic": "logic/strings",
+   "topic_name": "字符串、字节与编解码",
+   "dir": "byte-literal-index",
+   "name": "源码里的字节数组字面量和切片下标",
+   "line": "读过的源码里有 byte[] 字面量、substring(起, 止) 这类按下标取的区间，规格另写了公式或区间；交回的代码里 Uint8Array 的逐下标内容和切片端点",
+   "similarity": 0.037
+  },
+  {
+   "topic": "network",
+   "topic_name": "网络",
+   "dir": "network-config-init",
+   "name": "网络配置的注入和初始化时机",
+   "line": "读到 buildConfigField / BuildConfig 里的地址和签名材料、Hilt @Provides 里带上的 Retrofit baseUrl、决策要求私有注入；产物里 HttpClient 的 baseUrl 空串默认、init() 的调用点、BuildProfile 读取和装配根的配置构造",
+   "similarity": 0.034
+  }
+ ]
+}

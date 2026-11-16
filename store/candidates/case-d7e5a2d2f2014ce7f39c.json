@@ -1,0 +1,295 @@
+{
+ "case": "case-d7e5a2d2f2014ce7f39c",
+ "rules": [
+  {
+   "title": "源 Activity 未声明 configChanges 的 Compose 界面，规格写“重建后按新尺寸重算”验收",
+   "product": "规格",
+   "triggers": [
+    {
+     "read": "AndroidManifest 里 Activity 没有 android:configChanges；Compose 组件在 BoxWithConstraints 里读 maxWidth，再在带键的 LaunchedEffect(key)（键不含宽度）里按宽度算格数、列数写回 ViewModel",
+     "wrong": "AC 写“仅 key 变化触发、画布宽度变化不重算”或“转屏后两端均不重算”，同一份规格里又写着源端转屏重建、remember 复位"
+    }
+   ],
+   "scope": "规格提取阶段，源端是 Compose、承载它的 Activity 未声明 configChanges、首次组合副作用读取容器尺寸时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "把“重建后按新尺寸重算”单独写成一条验收：转屏或窗口尺寸变化时整棵组合重新进入，带键的 LaunchedEffect、remember(key) 不论键变没变都按新约束再跑一次；判据给出转屏前后两个宽度下的期望值",
+     "support": [
+      "case-d7e5a2d2f2014ce7f39c#recommendation:1",
+      "case-d7e5a2d2f2014ce7f39c#diagnosis"
+     ]
+    },
+    {
+     "text": "不写“宽度变化不重算”“键不变就不重跑”：后者只描述同一组合内的重组",
+     "support": [
+      "case-d7e5a2d2f2014ce7f39c#recommendation:1"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "configChanges 没有列出的配置变化发生时，Activity 会被重启",
+     "meaning": "未声明 configChanges 时转屏走重建，不是重组",
+     "source": "Android SDK 平台资源 data/res/values/attrs_manifest.xml，configChanges（按应用的 compileSdk 取对应平台）；android.content.pm.ActivityInfo#configChanges",
+     "support": []
+    },
+    {
+     "value": "转屏涉及 orientation（用户旋转设备）和 screenSize（横竖切换时可用尺寸变化）两个标志",
+     "meaning": "configChanges 里两者都声明了才不重建",
+     "source": "Android SDK 平台资源 data/res/values/attrs_manifest.xml，configChanges 的 orientation、screenSize（按应用的 compileSdk 取对应平台）",
+     "support": []
+    },
+    {
+     "value": "源端转屏重建后首次组合，LaunchedEffect 再跑一次并读到新的 maxWidth，按新宽度重算格数",
+     "meaning": "源端可观察行为是“转屏后重算”",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-d7e5a2d2f2014ce7f39c#diagnosis"
+     ]
+    }
+   ],
+   "lookups": [
+    {
+     "what": "源 Activity 转屏时是否重建",
+     "where": "源工程 AndroidManifest.xml 里承载该 Compose 界面的 activity 元素的 android:configChanges",
+     "how": "没写，或没同时含 orientation 和 screenSize 时，转屏会重建、整棵组合重新进入"
+    }
+   ],
+   "why": "把重建当成重组，规格会写出“宽度变化不重算”，目标端转屏后格数不变、只占画布一小块",
+   "keys": {
+    "read": [
+     "AndroidManifest",
+     "android:configChanges",
+     "BoxWithConstraints",
+     "maxWidth",
+     "LaunchedEffect",
+     "remember",
+     "Compose"
+    ],
+    "product": [
+     "AC",
+     "验收",
+     "转屏",
+     "重建",
+     "重算",
+     "宽度变化不重算"
+    ]
+   },
+   "probe": null,
+   "unverified": [
+    "Compose 带键 LaunchedEffect 在重建后随首次组合重跑，出自卡里上机观察，本机没有 Compose 运行时源码核对"
+   ],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法是规格里的验收写法，不落在目标端具体接口上",
+   "refs": [
+    {
+     "what": "未声明的配置变化会让 Activity 重启",
+     "kind": "android-sdk",
+     "where": "platforms/android-36/data/res/values/attrs_manifest.xml configChanges",
+     "quote": "If not specified, the activity will be restarted if any of these configuration changes happen in the system.",
+     "version": "android-36"
+    },
+    {
+     "what": "ActivityInfo.configChanges 的含义",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/android/content/pm/ActivityInfo.java ActivityInfo#configChanges",
+     "quote": "Bit mask of kinds of configuration changes that this activity * can handle itself (without being restarted by the system).",
+     "version": "android-36.1"
+    },
+    {
+     "what": "orientation 标志对应设备旋转",
+     "kind": "android-sdk",
+     "where": "platforms/android-36/data/res/values/attrs_manifest.xml configChanges orientation",
+     "quote": "The screen orientation has changed, that is the user has rotated the device. --> <flag name=\"orientation\" value=\"0x0080\" />",
+     "version": "android-36"
+    },
+    {
+     "what": "screenSize 标志在横竖切换时变化",
+     "kind": "android-sdk",
+     "where": "platforms/android-36/data/res/values/attrs_manifest.xml configChanges screenSize",
+     "quote": "This represents a change in the currently available size, so will change when the user switches between landscape and portrait. --> <flag name=\"screenSize\" value=\"0x0400\" />",
+     "version": "android-36"
+    }
+   ]
+  },
+  {
+   "title": "转屏不重建的目标页，依赖宽度的一次性计算挂到 onAreaChange 宽度变化上",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源端 Compose 在 BoxWithConstraints 里读 maxWidth，用带键的 LaunchedEffect(key) 算格数或列数；AndroidManifest 的 Activity 没有 android:configChanges",
+     "wrong": "onAreaChange 只在首次测量时发计算事件（如“上次值 < 0”守卫），之后只由键对应的 @Monitor 触发，转屏只重绘"
+    }
+   ],
+   "scope": "目标 UIAbility 与 NavDestination 转屏不重建、源端每次重建都会按新宽度重算的一次性计算",
+   "exceptions": [],
+   "how": [
+    {
+     "text": ".onAreaChange((oldValue: Area, newValue: Area) => { … })：首次测量照常算；之后旧宽 > 0 且新旧宽不同时再算一次；宽度不变不产生副作用，交给 VM 的同值短路",
+     "support": [
+      "case-d7e5a2d2f2014ce7f39c#recommendation:2",
+      "case-d7e5a2d2f2014ce7f39c#diagnosis"
+     ]
+    },
+    {
+     "text": "规格写着“宽度变化不重算”而源 Activity 未声明 configChanges 时，先核对源 Manifest 和重建路径，再决定是否照写",
+     "support": [
+      "case-d7e5a2d2f2014ce7f39c#recommendation:2"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "onAreaChange(event: (oldValue: Area, newValue: Area) => void): T",
+     "meaning": "组件尺寸或位置变化完成后回调，转屏后宽度变化从这里拿到",
+     "source": "鸿蒙 SDK 的 ets/component/common.d.ts，CommonMethod.onAreaChange",
+     "support": []
+    },
+    {
+     "value": "Area.width: Length",
+     "meaning": "新旧宽度比较用的字段",
+     "source": "鸿蒙 SDK 的 ets/component/units.d.ts，Area.width",
+     "support": []
+    },
+    {
+     "value": "非首次且宽度确有变化时也发计算事件后，转横屏按新宽度重算铺满画布，转回竖屏恢复原格数",
+     "meaning": "按此改后保留",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-d7e5a2d2f2014ce7f39c#diagnosis"
+     ]
+    },
+    {
+     "value": "目标 UIAbility 与 NavDestination 转屏时不重建，宽度变化只表现为 onAreaChange 回调",
+     "meaning": "源端靠重建触发的计算，目标端要自己在尺寸变化里重放",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-d7e5a2d2f2014ce7f39c#diagnosis"
+     ]
+    }
+   ],
+   "lookups": [],
+   "why": "只在首次测量时计算，转屏后格数不变，网格只占画布的一部分",
+   "keys": {
+    "read": [
+     "BoxWithConstraints",
+     "maxWidth",
+     "LaunchedEffect",
+     "android:configChanges",
+     "AndroidManifest",
+     "Compose"
+    ],
+    "product": [
+     "onAreaChange",
+     "Area",
+     "newValue.width",
+     "oldValue.width",
+     "@Monitor",
+     "转屏"
+    ]
+   },
+   "probe": {
+    "pattern": "onAreaChange\\(",
+    "note": "组件监听了尺寸变化；若里面只在首次测量时触发依赖宽度的计算，而源端转屏会重建重算，要补宽度变化分支"
+   },
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "搜 oldValue: Area, newValue: Area：鸿蒙 SDK ets/component 下只有 CommonMethod.onAreaChange 一个",
+   "refs": [
+    {
+     "what": "onAreaChange 的签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/component/common.d.ts CommonMethod.onAreaChange",
+     "quote": "onAreaChange(event: (oldValue: Area, newValue: Area) => void): T;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "onAreaChange 的触发时机",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/component/common.d.ts CommonMethod.onAreaChange",
+     "quote": "This callback is triggered when the size or position of this component change finished.",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "Area.width 的类型",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/component/units.d.ts Area.width",
+     "quote": "Defines the width property. * * @type { Length } * @syscap SystemCapability.ArkUI.ArkUI.Full * @crossplatform * @form * @atomicservice * @since 11 */ width: Length;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    }
+   ]
+  },
+  {
+   "title": "交叉验证遇 ref 与 AC 对源端行为说法相反时，回源码和 Manifest 推执行路径",
+   "product": "规格",
+   "triggers": [
+    {
+     "read": "ref 文档写“旋转后按新宽度重算”，feature AC 写“宽度变化不重算”，两者说的是同一源端行为",
+     "wrong": "交叉验证记录以“带源锚的 AC 优先”结束冲突，把 ref 的相反说法当异常值舍掉，没有推重建后的执行路径，也没登记待裁决"
+    }
+   ],
+   "scope": "规格交叉验证阶段处理 ref 文档与功能规格 AC 的冲突时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "回到源码与 AndroidManifest 推出该行为的执行路径（例如 Activity 是否声明 configChanges、重建后首次组合是否重跑副作用），按推出的结果改 AC 或 ref",
+     "support": [
+      "case-d7e5a2d2f2014ce7f39c#recommendation:3",
+      "case-d7e5a2d2f2014ce7f39c#diagnosis"
+     ]
+    },
+    {
+     "text": "推不出就登记为待裁决项，两种说法都保留，不以“AC 带源锚就优先”结束",
+     "support": [
+      "case-d7e5a2d2f2014ce7f39c#recommendation:3"
+     ]
+    }
+   ],
+   "values": [],
+   "lookups": [],
+   "why": "按“源锚优先”舍掉正确的 ref，错误的 AC 被确认下来，实现者照写",
+   "keys": {
+    "read": [
+     "ref",
+     "AC",
+     "源锚",
+     "转屏",
+     "configChanges",
+     "交叉验证"
+    ],
+    "product": [
+     "交叉验证",
+     "待裁决",
+     "源锚优先",
+     "异常值",
+     "冲突"
+    ]
+   },
+   "probe": null,
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法是交叉验证的裁决方式，不落在具体接口上",
+   "refs": []
+  }
+ ],
+ "left_out": [
+  {
+   "text": "具体到出事网格组件的修法和源文件行号（onAreaChange 非首次宽变也发格数事件、格数变化重开随机局）",
+   "reason": "只对出事应用成立"
+  },
+  {
+   "text": "修订一条已有经验，补 Compose 源端“重建=整棵组合重新进入”的分支",
+   "reason": "针对经验库本身的建议"
+  },
+  {
+   "text": "另一条经验被召回到适用范围之外（召回失败）",
+   "reason": "针对经验库本身的建议"
+  }
+ ],
+ "corrections": [],
+ "gaps": [
+  "Compose 带键 LaunchedEffect、remember(key) 在 Activity 重建后随首次组合重跑：依赖库代码本机没有源码，按卡写"
+ ],
+ "conflicts": []
+}

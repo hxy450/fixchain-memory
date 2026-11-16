@@ -1,0 +1,239 @@
+{
+ "case": "case-6b781bb8b1a4eb80b808",
+ "rules": [
+  {
+   "title": "手写 proto3 编解码按 wire type 选读写法，wire 0 的 int32 不用 fixed32 读",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "字段表（字段号 | wire type | 标量类型）里有 wire type 0 的 `INT32` 字段（可能为负），同时有 fixed32/sfixed32 定长字段",
+     "wrong": "encode 写 `w.int32(N, …)`，decode 对同一字段写 `r.fixed32()`；或 decode 用无符号 `r.varint()` 读负值字段"
+    }
+   ],
+   "scope": "目标端没有 protobuf 运行时、按字段表手写编解码时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "按 wire type 而不是值有无符号选方法：wire 0 用 varint 族（int32/uint32/enum/bool），wire 5 用 fixed32/sfixed32/float，wire 1 用 fixed64 族",
+     "support": [
+      "case-6b781bb8b1a4eb80b808#recommendation:1"
+     ]
+    },
+    {
+     "text": "int32 解码按 varint 读完全部字节（负值线上占 10 字节），取低 32 位后用 `value | 0` 还原符号，读指针推进与 varint 一致",
+     "support": [
+      "case-6b781bb8b1a4eb80b808#recommendation:1",
+      "case-6b781bb8b1a4eb80b808#diagnosis"
+     ]
+    },
+    {
+     "text": "每个 message 写完逐字段对照 encode 的 `w.xxx(N,` 与 decode 里字段 N 分支的 `r.xxx()`，并用「负值有符号字段后接更高字段号」的 round-trip 用例检查后续字段不错位",
+     "support": [
+      "case-6b781bb8b1a4eb80b808#recommendation:3"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "WIRETYPE_VARINT = 0，WIRETYPE_FIXED64 = 1，WIRETYPE_LENGTH_DELIMITED = 2，WIRETYPE_FIXED32 = 5；TAG_TYPE_BITS = 3",
+     "meaning": "wire type 取值，tag 低 3 位是 wire type",
+     "source": "com.google.protobuf.WireFormat#WIRETYPE_VARINT 等（Android SDK 源码）",
+     "support": []
+    },
+    {
+     "value": "readInt32() 返回 readRawVarint32()；readEnum() 同样",
+     "meaning": "int32、enum 按 varint 读",
+     "source": "com.google.protobuf.CodedInputStream#readInt32",
+     "support": []
+    },
+    {
+     "value": "readFixed32()、readSFixed32() 都返回 readRawLittleEndian32()；readFloat() 是 Float.intBitsToFloat(readRawLittleEndian32())",
+     "meaning": "wire 5 的三种标量都读 4 字节小端",
+     "source": "com.google.protobuf.CodedInputStream#readFixed32、readSFixed32、readFloat",
+     "support": []
+    },
+    {
+     "value": "int32 负值：computeInt32SizeNoTag 走「Must sign-extend」返回 MAX_VARINT_SIZE = 10",
+     "meaning": "负的 int32 在线上是 10 字节 varint",
+     "source": "com.google.protobuf.CodedOutputStream#computeInt32SizeNoTag；com.google.protobuf.WireFormat#MAX_VARINT_SIZE",
+     "support": []
+    }
+   ],
+   "lookups": [],
+   "why": "wire 0 字段按 4 字节定长读时固定消耗 4 字节，该字段一出现其后整条流错位",
+   "keys": {
+    "read": [
+     "wire type",
+     "INT32",
+     "protobuf",
+     "FIXED32",
+     "SFIXED32",
+     "ProtoAdapter#INT32",
+     "tag="
+    ],
+    "product": [
+     "int32()",
+     "fixed32()",
+     "sfixed32()",
+     "varint()",
+     "le32()",
+     "| 0",
+     "decode",
+     "encode"
+    ]
+   },
+   "probe": {
+    "pattern": "=\\s*r\\.fixed32\\(\\)",
+    "note": "decode 用 fixed32 读；对照字段表确认该字段 wire type 是 5，不是 0"
+   },
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法落在手写编解码的方法选择上，鸿蒙 SDK 里没有对应接口",
+   "refs": [
+    {
+     "what": "wire type 常量",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/com/google/protobuf/WireFormat.java WireFormat#WIRETYPE_VARINT",
+     "quote": "public static final int WIRETYPE_VARINT = 0; public static final int WIRETYPE_FIXED64 = 1; public static final int WIRETYPE_LENGTH_DELIMITED = 2;",
+     "version": "android-36.1"
+    },
+    {
+     "what": "WIRETYPE_FIXED32 和 TAG_TYPE_BITS",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/com/google/protobuf/WireFormat.java WireFormat#WIRETYPE_FIXED32",
+     "quote": "public static final int WIRETYPE_FIXED32 = 5;",
+     "version": "android-36.1"
+    },
+    {
+     "what": "tag 低 3 位",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/com/google/protobuf/WireFormat.java WireFormat#TAG_TYPE_BITS",
+     "quote": "static final int TAG_TYPE_BITS = 3;",
+     "version": "android-36.1"
+    },
+    {
+     "what": "readInt32 按 varint 读",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/com/google/protobuf/CodedInputStream.java CodedInputStream#readInt32",
+     "quote": "public int readInt32() throws IOException { return readRawVarint32(); }",
+     "version": "android-36.1"
+    },
+    {
+     "what": "readEnum 按 varint 读",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/com/google/protobuf/CodedInputStream.java CodedInputStream#readEnum",
+     "quote": "public int readEnum() throws IOException { return readRawVarint32(); }",
+     "version": "android-36.1"
+    },
+    {
+     "what": "readFixed32 读 4 字节小端",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/com/google/protobuf/CodedInputStream.java CodedInputStream#readFixed32",
+     "quote": "public int readFixed32() throws IOException { return readRawLittleEndian32(); }",
+     "version": "android-36.1"
+    },
+    {
+     "what": "readSFixed32 读 4 字节小端",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/com/google/protobuf/CodedInputStream.java CodedInputStream#readSFixed32",
+     "quote": "public int readSFixed32() throws IOException { return readRawLittleEndian32(); }",
+     "version": "android-36.1"
+    },
+    {
+     "what": "readFloat 读 4 字节小端",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/com/google/protobuf/CodedInputStream.java CodedInputStream#readFloat",
+     "quote": "public float readFloat() throws IOException { return Float.intBitsToFloat(readRawLittleEndian32()); }",
+     "version": "android-36.1"
+    },
+    {
+     "what": "负 int32 要符号扩展成 10 字节",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/com/google/protobuf/CodedOutputStream.java CodedOutputStream#computeInt32SizeNoTag",
+     "quote": "if (value >= 0) { return computeUInt32SizeNoTag(value); } else { // Must sign-extend. return MAX_VARINT_SIZE; }",
+     "version": "android-36.1"
+    },
+    {
+     "what": "MAX_VARINT_SIZE 是 10",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/com/google/protobuf/WireFormat.java WireFormat#MAX_VARINT_SIZE",
+     "quote": "static final int MAX_VARINT_SIZE = 10;",
+     "version": "android-36.1"
+    }
+   ]
+  },
+  {
+   "title": "手写 codec 基座时每个写方法配对称的读方法，方法名与 proto 标量类型一致",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "字段表里同时有 `INT32`（wire 0）和 FIXED32/SFIXED32（wire 5）字段",
+     "wrong": "Writer 有 int32()，Reader 只有无符号 varint()、le32() 和返回有符号值的 fixed32()，缺 int32()；或名为 fixed32() 的方法却做 sfixed32 的符号还原"
+    }
+   ],
+   "scope": "编写手写 protobuf 编解码的公共基座（Reader/Writer）时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "读写成对提供：writer.int32↔reader.int32，uint32↔uint32，fixed32↔fixed32，sfixed32↔sfixed32；方法名与 proto 标量类型一致，fixed32 返回无符号、sfixed32 返回有符号",
+     "support": [
+      "case-6b781bb8b1a4eb80b808#recommendation:2"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "readFixed32() 与 readSFixed32() 在 Java 里都返回 int（同为 readRawLittleEndian32）",
+     "meaning": "Java 没有无符号 int，两者只差语义；ArkTS 的 number 能表示无符号值，fixed32 应读成 0–2^32-1",
+     "source": "com.google.protobuf.CodedInputStream#readFixed32、readSFixed32",
+     "support": []
+    }
+   ],
+   "lookups": [],
+   "why": "读端唯一的有符号读法是 4 字节定长时，实现者会拿它去读 wire 0 的有符号字段，导致流错位",
+   "keys": {
+    "read": [
+     "INT32",
+     "UINT32",
+     "FIXED32",
+     "SFIXED32",
+     "wire type"
+    ],
+    "product": [
+     "int32()",
+     "uint32()",
+     "fixed32()",
+     "sfixed32()",
+     "varint()",
+     "le32()"
+    ]
+   },
+   "probe": null,
+   "unverified": [
+    "fixed32 在 ArkTS 里读成无符号是按 proto 标量语义推的，卡里只说了方法名要与语义一致"
+   ],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法落在手写基座的 API 设计上，鸿蒙 SDK 里没有对应接口",
+   "refs": [
+    {
+     "what": "readFixed32 的实现",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/com/google/protobuf/CodedInputStream.java CodedInputStream#readFixed32",
+     "quote": "public int readFixed32() throws IOException { return readRawLittleEndian32(); }",
+     "version": "android-36.1"
+    },
+    {
+     "what": "readSFixed32 的实现",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/com/google/protobuf/CodedInputStream.java CodedInputStream#readSFixed32",
+     "quote": "public int readSFixed32() throws IOException { return readRawLittleEndian32(); }",
+     "version": "android-36.1"
+    }
+   ]
+  }
+ ],
+ "left_out": [],
+ "corrections": [],
+ "gaps": [],
+ "conflicts": []
+}

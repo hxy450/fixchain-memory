@@ -1,0 +1,137 @@
+{
+ "group": "same-0052",
+ "merged": [
+  {
+   "members": [
+    "rule-c4b14602e93a",
+    "rule-25fd6efc1ccd"
+   ],
+   "reason": "触发同是 Kotlin 的 toIntOrNull / toLongOrNull 直译成 ArkTS 时没按源函数的接受范围写（一个是 parseInt 前缀解析、一个是 /^-?\\d+$/ 漏了 + 号和范围，作两个触发保留）；做法同是 /^[+-]?\\d+$/ 整串校验加源类型范围检查，不通过走源码回落，两卡不矛盾",
+   "rule": {
+    "title": "toIntOrNull/toLongOrNull 用 /^[+-]?\\d+$/ 整串校验加范围检查，不用前缀解析",
+    "product": "代码",
+    "triggers": [
+     {
+      "read": "Kotlin 源里把外部字符串转数用 toIntOrNull() / toLongOrNull()，失败时 ?: 回落默认值、null 或某个枚举",
+      "wrong": "目标写成 parseInt(value, 10) / Number.parseInt 只判 NaN，带尾随字符的串按前缀被接受；或者在回落分支外加了源码没有的 `<= 0` 之类合法性规则"
+     },
+     {
+      "read": "Kotlin 对字符串调用 toIntOrNull()（如可空链上的 ?.toIntOrNull()）",
+      "wrong": "注释写「toIntOrNull 等价」，实现是 /^-?\\d+$/ 匹配后 parseInt：不接受 + 号，也不检查 Int 范围"
+     }
+    ],
+    "scope": "把 Kotlin 的 toIntOrNull / toLongOrNull 整数解析（设置项、HTTP 头、外部 JSON 字段等）改写成 ArkTS 时",
+    "exceptions": [],
+    "how": [
+     {
+      "text": "先用 /^[+-]?\\d+$/ 校验整串，通过后再转数（Number(value) 或 parseInt），并检查落在源类型范围内（Int 为 -2147483648..2147483647）；不匹配或越界就走源码的回落值（toIntOrNull 本身返回 null）",
+      "support": [
+       "case-7eb907f6ed073fe3b558#recommendation:2",
+       "case-7eb907f6ed073fe3b558#recommendation:1",
+       "case-7eb907f6ed073fe3b558#diagnosis",
+       "case-dfd68051bcdcc94eba9f#recommendation:7",
+       "case-dfd68051bcdcc94eba9f#diagnosis"
+      ]
+     },
+     {
+      "text": "只保留源码已有的回落分支（如 ?: 60），不加源码没有的合法性规则（如把 0 当非法）",
+      "support": [
+       "case-7eb907f6ed073fe3b558#recommendation:2",
+       "case-7eb907f6ed073fe3b558#diagnosis"
+      ]
+     }
+    ],
+    "values": [
+     {
+      "value": "/^[+-]?\\d+$/ 整串校验后再转数值",
+      "meaning": "卡里修好的整数解析；改前 parseInt 让 '15abc' 命中 15，自加的 <= 0 让合法的 0 被回退",
+      "source": "卡里修好并验证过",
+      "support": [
+       "case-7eb907f6ed073fe3b558#diagnosis"
+      ]
+     },
+     {
+      "value": "toIntOrNull 接受可选的 + / - 号，超出 Int 范围返回 null",
+      "meaning": "直译要保留这两点",
+      "source": "卡里修好并验证过",
+      "support": [
+       "case-dfd68051bcdcc94eba9f#diagnosis"
+      ]
+     },
+     {
+      "value": "MIN_VALUE = 0x80000000，MAX_VALUE = 0x7fffffff",
+      "meaning": "32 位 int 的范围，toIntOrNull 超出就返回 null",
+      "source": "java.lang.Integer 的 MIN_VALUE、MAX_VALUE",
+      "support": []
+     },
+     {
+      "value": "Number.MAX_SAFE_INTEGER = 9007199254740991（2^53 − 1）",
+      "meaning": "Long 范围的值超过它时 Number 转出来不精确，要另行处理",
+      "source": "鸿蒙 SDK 的 ets/build-tools/ets-loader/node_modules/typescript/lib/lib.es2015.core.d.ts，NumberConstructor.MAX_SAFE_INTEGER",
+      "support": []
+     }
+    ],
+    "lookups": [],
+    "why": "parseInt 只解析前缀、/^-?\\d+$/ 不收 + 号也不查范围，源函数会拒绝或接受的输入在目标结果不同；自加的规则又会拒绝源端接受的值",
+    "keys": {
+     "read": [
+      "toIntOrNull",
+      "toLongOrNull",
+      "toInt",
+      "?:",
+      "firstOrNull",
+      "Retry-After",
+      "Int",
+      "String"
+     ],
+     "product": [
+      "parseInt",
+      "Number.parseInt",
+      "Number",
+      "isNaN",
+      "Number.isNaN",
+      "RegExp",
+      "test",
+      "Number.isSafeInteger",
+      "null",
+      "2147483647"
+     ]
+    },
+    "probe": {
+     "pattern": "/\\^-\\?\\\\d\\+\\$/",
+     "note": "整数正则不含 + 号；若是直译 toIntOrNull，改成 [+-]? 并加 Int 范围检查"
+    },
+    "unverified": [
+     "case-7eb907f6ed073fe3b558 的 compileSdk 是 37，本机核对用的是 android-36.1 源码"
+    ],
+    "alternatives_unverified": [],
+    "siblings_checked": "无：做法落在 JS 通用的字符串转数和正则上，没有专门参数类型可搜",
+    "refs": [
+     {
+      "what": "Integer.MIN_VALUE",
+      "kind": "android-sdk",
+      "where": "sources/android-36.1/java/lang/Integer.java Integer.MIN_VALUE",
+      "quote": "@Native public static final int   MIN_VALUE = 0x80000000;",
+      "version": "android-36.1"
+     },
+     {
+      "what": "Integer.MAX_VALUE",
+      "kind": "android-sdk",
+      "where": "sources/android-36.1/java/lang/Integer.java Integer.MAX_VALUE",
+      "quote": "@Native public static final int   MAX_VALUE = 0x7fffffff;",
+      "version": "android-36.1"
+     },
+     {
+      "what": "Number.MAX_SAFE_INTEGER",
+      "kind": "harmony-dts",
+      "where": "openharmony/ets/build-tools/ets-loader/node_modules/typescript/lib/lib.es2015.core.d.ts NumberConstructor.MAX_SAFE_INTEGER",
+      "quote": "The value of Number.MAX_SAFE_INTEGER is 9007199254740991 2^53 − 1. */ readonly MAX_SAFE_INTEGER: number;",
+      "version": "API 23（HarmonyOS 6.1.0）"
+     }
+    ],
+    "status": "active"
+   }
+  }
+ ],
+ "kept": []
+}

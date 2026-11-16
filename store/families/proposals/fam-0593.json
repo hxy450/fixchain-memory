@@ -1,0 +1,139 @@
+{
+ "proposal": "fam-0593",
+ "round": 3,
+ "product": "代码",
+ "avg_similarity": 0.332,
+ "rules": [
+  {
+   "id": "rule-2f46601f850a",
+   "title": "回填返回 Either 或 Result 的调用时，按源端 onLeft 消费返回值，不只 await",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "Kotlin 调用链 `.onLeft { Log.e(TAG, \"… ${it.code}, ${it.body}\") }`；目标签名返回 Promise<Either<错误, 结果>>；槽位注释写「Left 错误只记录」",
+     "wrong": "只有一行 await 调用、不接返回值，Left 分支没有任何 hilog.error / console.error 日志"
+    }
+   ],
+   "keys": {
+    "read": [
+     "Either",
+     "onLeft",
+     "Log.e",
+     "Result",
+     "fold",
+     "doWork"
+    ],
+    "product": [
+     "Either",
+     "isLeft",
+     "await",
+     "hilog.error",
+     "console.error",
+     "FWD-REF"
+    ]
+   }
+  },
+  {
+   "id": "rule-a7a3484e94f8",
+   "title": "逐个对照源函数的 try/catch 作用域，保持相同的中断和继续语义",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源端辅助函数内部自带 `try { … } catch (e: Exception)`（失败只记日志）",
+     "wrong": "目标辅助函数没有内部 `catch`，异常冒泡到调用方，调用方后续的持久化（如 hash 落库）被跳过"
+    },
+    {
+     "read": "源端循环里 decrypt(...) 一类调用没有逐条 `catch`，抛错落到外层 catch 中断整批",
+     "wrong": "目标给每条记录包 `try` / `catch`，解密失败也推进游标并 `continue`"
+    },
+    {
+     "read": "源端 chunked(N).forEach { 发送一批 } 忽略单批失败结果",
+     "wrong": "目标首批失败就 `return` 失败值，后续批次不再发送"
+    }
+   ],
+   "keys": {
+    "read": [
+     "try",
+     "catch",
+     "chunked",
+     "forEach",
+     "continue",
+     "Log.e"
+    ],
+    "product": [
+     "try",
+     "catch",
+     "continue",
+     "return",
+     "for"
+    ]
+   }
+  }
+ ],
+ "existing_families": [
+  {
+   "topic": "data",
+   "topic_name": "数据与存储",
+   "dir": "repository-port",
+   "name": "照源码移植的 Service、Repository 和 Dao 调用",
+   "line": "读到源端 Service / ViewModel 经 Repository、Dao 的调用（分阶段的缓存读写、@Body 请求体的组装、按多个键的查询）；产物里移植后的方法少了调用、参数或字段：漏掉某阶段的副作用、写方法没有调用者、body 写成 {}、少了月份键",
+   "similarity": 0.056
+  },
+  {
+   "topic": "logic/errors",
+   "topic_name": "异常与日志",
+   "dir": "log-calls",
+   "name": "新写或改写的日志调用",
+   "line": "源端 Log.e / Log.w 或静默吞错的 catch，工程已有 hilog 写法；产物里 catch 和边界处新写的 console.error / hilog 调用缺定位字段或带了敏感内容",
+   "similarity": 0.051
+  },
+  {
+   "topic": "arkts/build",
+   "topic_name": "构建与模块",
+   "dir": "function-export-import",
+   "name": "跨文件复用的函数的导出和导入",
+   "line": "读到要复用的函数定义在 pages/ 下注册成路由的页面模块里、页面模块的导出注释写着只供 UT 消费，或源端 Kotlin object / Java 静态工具类以 X.method(...) 调用；产物里 import { … } from '…/pages/…'、为此新加的 export function，或 import { X } 和工具文件导出的顶层 export function 对不上",
+   "similarity": 0.05
+  },
+  {
+   "topic": "layout",
+   "topic_name": "布局与尺寸",
+   "dir": "table-layout-columns",
+   "name": "TableLayout 的列宽",
+   "line": "读到原始布局 XML 里 TableLayout 表头单元 wrap_content 带 android:paddingRight，另有 0dp 高、padding 相同的对齐 TableRow；产物里表格列写成 .layoutWeight 比例常量或 columnsTemplate 的 fr，对齐行被删掉",
+   "similarity": 0.047
+  },
+  {
+   "topic": "theme",
+   "topic_name": "主题、颜色与样式",
+   "dir": "in-app-theme-switch",
+   "name": "应用内切换主题和深色模式",
+   "line": "读到源端按偏好 setTheme、recreate、AppCompatDelegate.setDefaultNightMode 切换浅色 / 深色主题；产物里 setColorMode 的调用时机、getColorSync 命令式取色和系统栏内容色",
+   "similarity": 0.041
+  },
+  {
+   "topic": "list/data",
+   "topic_name": "数据、键与刷新",
+   "dir": "list-data-refresh",
+   "name": "列表数据源、条目的键和更新后的刷新",
+   "line": "读到 Adapter 的 getItemCount、setList / submitList、remove + add + notifyItemChanged、onResume 或回调后改数据、分页追加和返回刷新；产物里 IDataSource 的成员、ForEach / Repeat 的键函数、传给 @Builder 的数据和整表回写",
+   "similarity": 0.039
+  },
+  {
+   "topic": "logic",
+   "topic_name": "业务逻辑与源码语义",
+   "dir": "callback-branches",
+   "name": "带结果回调的拦截和分支",
+   "line": "源端回调按 result.on(true) 继续、result.on(false) 中止（如登录拦截后续做原操作）；产物里拦截处只 return 中止，或注释写「对齐源端回调」却少了分支",
+   "similarity": 0.039
+  },
+  {
+   "topic": "logic",
+   "topic_name": "业务逻辑与源码语义",
+   "dir": "viewmodel-steps",
+   "name": "源 ViewModel 方法在请求、提交前后的步骤",
+   "line": "读到源 ViewModel 的方法在请求前查库回填参数、提交时先经 Repository 写入、推进后预取图片，或在弹层 onExpanded 时才加载，交回的代码少了这一步或换了调用时机（只 showToast、直接用传入对象的字段、页面初始化就请求）",
+   "similarity": 0.036
+  }
+ ]
+}

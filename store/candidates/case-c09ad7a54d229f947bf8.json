@@ -1,0 +1,186 @@
+{
+ "case": "case-c09ad7a54d229f947bf8",
+ "rules": [
+  {
+   "title": "从 AAR 字节码重建 Material 图标路径时，映射 PathBuilder 全部方法含 arcTo，未映射就报错",
+   "product": "资源",
+   "triggers": [
+    {
+     "read": "源码用 `Icons.Outlined.*` / `Icons.Filled.*` 引用 Compose material-icons 矢量，res 下没有对应 drawable；AAR 里的图标是编译进 class 的 PathBuilder 调用（moveTo、curveToRelative、reflectiveCurveTo、arcToRelative、close）",
+     "wrong": "转出的 SVG 里有只移动不绘制的子路径（如 `m-1.5,0` 后直接是下一个 M/m 或路径结束），图标只画出外框"
+    }
+   ],
+   "scope": "资源迁移时用自写转换器从 material-icons AAR 字节码重建图标的 SVG path",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "按 PathBuilder 的全部路径方法建映射，arcTo/arcToRelative 写成 A/a：参数依次为两个半径、旋转角、isMoreThanHalf、isPositiveArc（两个布尔按 0/1 写）、终点",
+     "support": [
+      "case-c09ad7a54d229f947bf8#recommendation:1"
+     ]
+    },
+    {
+     "text": "遇到没有映射的 PathBuilder 调用直接报错停止，不跳过",
+     "support": [
+      "case-c09ad7a54d229f947bf8#recommendation:1"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "A 的参数顺序：rx ry x-axis-rotation large-arc-flag sweep-flag x y；large-arc-flag 大弧 1 小弧 0，sweep-flag 顺时针 1 逆时针 0",
+     "meaning": "isMoreThanHalf 对 large-arc-flag，isPositiveArc 对 sweep-flag",
+     "source": "ts-drawing-components-path.md，SVG路径描述规范",
+     "support": []
+    },
+    {
+     "value": "M：在给定坐标处开始一个新的子路径",
+     "meaning": "只有 M/m 的子路径不画任何东西",
+     "source": "ts-drawing-components-path.md，SVG路径描述规范",
+     "support": []
+    },
+    {
+     "value": "arcToRelative(r, r, 0, true, true, dx, 0) 写成 `a r,r 0 1,1 dx,0`",
+     "meaning": "两个布尔按 0/1 写出的样子；补回弧段后图标完整",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-c09ad7a54d229f947bf8#diagnosis"
+     ]
+    }
+   ],
+   "lookups": [
+    {
+     "what": "图标实际用到的 PathBuilder 方法",
+     "where": "Gradle 缓存里 material-icons-core / material-icons-extended AAR 的 classes，按源码引用的变体和图标名找对应类",
+     "how": "列出该类里所有 PathBuilder 调用的方法名，逐个确认都在映射表里"
+    }
+   ],
+   "why": "未映射的弧段被静默丢掉，只剩移动指令，图标缺掉圆点等部件",
+   "keys": {
+    "read": [
+     "Icons.Outlined",
+     "Icons.Filled",
+     "ImageVector",
+     "PathBuilder",
+     "arcTo",
+     "arcToRelative",
+     "materialIcon",
+     "material-icons-extended"
+    ],
+    "product": [
+     "pathData",
+     "svg",
+     "path d=",
+     "Path",
+     "commands",
+     "$r('app.media"
+    ]
+   },
+   "probe": {
+    "pattern": "[Mm]\\s*-?[\\d.]+[,\\s]+-?[\\d.]+\\s*(?=[Mm]|[\"'<]|$)",
+    "note": "子路径只有移动、没有绘制指令，多半是转换时丢了弧段等指令"
+   },
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法落在自写转换器上，不落在鸿蒙 SDK 接口上",
+   "refs": [
+    {
+     "what": "A 指令的参数",
+     "kind": "oh-docs",
+     "where": "zh-cn/application-dev/reference/apis-arkui/arkui-ts/ts-drawing-components-path.md SVG路径描述规范",
+     "quote": "rx：椭圆的x轴半径。</br>ry：椭圆的y轴半径。</br>x-axis-rotation：椭圆相对于坐标系的旋转角度。</br>large-arc-flag：标记绘制大弧(1)还是小弧(0)。</br>sweep-flag：标记向顺时针(1)还是逆时针(0)方向绘制。",
+     "version": "docs f41b9345"
+    },
+    {
+     "what": "A 指令的终点参数",
+     "kind": "oh-docs",
+     "where": "zh-cn/application-dev/reference/apis-arkui/arkui-ts/ts-drawing-components-path.md SVG路径描述规范",
+     "quote": "x：终点参数的x坐标值。</br>y：终点参数的y坐标值。",
+     "version": "docs f41b9345"
+    },
+    {
+     "what": "M 只开始新的子路径",
+     "kind": "oh-docs",
+     "where": "zh-cn/application-dev/reference/apis-arkui/arkui-ts/ts-drawing-components-path.md SVG路径描述规范",
+     "quote": "在给定的(x, y)坐标处开始一个新的子路径。",
+     "version": "docs f41b9345"
+    }
+   ]
+  },
+  {
+   "title": "宣告图标转换通过前逐个产物做结构检查，抽样比对要覆盖含弧段的图标",
+   "product": "资源",
+   "triggers": [
+    {
+     "read": "AAR 里的图标路径是 PathBuilder 调用，转换靠自写字节码解析",
+     "wrong": "映射表写「bbox + 锚点 + 交叉比对 PASS」，抽样只用了不含弧段的图标；产物里有只含 `M`/`m` 的子路径"
+    }
+   ],
+   "scope": "批量转换图标后写转换结论和资源映射表时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "逐个 SVG 检查：每个子路径至少有一条绘制指令，解析到的 PathBuilder 调用数等于输出指令数",
+     "support": [
+      "case-c09ad7a54d229f947bf8#recommendation:2"
+     ]
+    },
+    {
+     "text": "与官方 SVG 抽样比对时样本覆盖实际出现过的每类指令（含弧段）；比出的差异先排除比对器和转换器自身的问题，再记为版本漂移",
+     "support": [
+      "case-c09ad7a54d229f947bf8#recommendation:2"
+     ]
+    }
+   ],
+   "values": [],
+   "lookups": [],
+   "why": "包围盒和抽样比对查不出丢指令，缺部件的图标会被宣告通过",
+   "keys": {
+    "read": [
+     "PathBuilder",
+     "arcToRelative",
+     "Icons.Outlined",
+     "ImageVector",
+     "material-icons-core"
+    ],
+    "product": [
+     "svg",
+     "path d=",
+     "bbox",
+     "PASS",
+     "版本漂移",
+     "resource-mapping"
+    ]
+   },
+   "probe": {
+    "pattern": "[Mm]\\s*-?[\\d.]+[,\\s]+-?[\\d.]+\\s*(?=[Mm]|[\"'<]|$)",
+    "note": "有只移动不绘制的子路径，转换不完整"
+   },
+   "unverified": [
+    "子路径中间丢掉弧段时不会留下只移动的子路径，这项结构检查查不出，要靠调用数与指令数相等那一项"
+   ],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法是对产物的结构检查，不落在接口上",
+   "refs": []
+  }
+ ],
+ "left_out": [
+  {
+   "text": "修订某条经验的做法第 1 步和可选检查",
+   "reason": "针对经验库本身的建议"
+  },
+  {
+   "text": "某个图标五个圆点的圆心坐标和具体写法",
+   "reason": "只对出事应用成立"
+  },
+  {
+   "text": "AAR 里原始调用序列没直接核对、其余图标是否中途用过 arcTo 没逐个核",
+   "reason": "其他：调查时没核到的点，不是做法"
+  }
+ ],
+ "corrections": [],
+ "gaps": [
+  "Compose PathBuilder 的方法清单和 arcToRelative 的参数名：库代码本机只有编译产物，按卡写"
+ ],
+ "conflicts": []
+}

@@ -1,0 +1,373 @@
+{
+ "case": "case-6be1461999c00a7fe781",
+ "rules": [
+  {
+   "title": "计划里的网络层任务没有 API 清单作依据时，先产出清单再派基础设施实现",
+   "product": "计划与派工",
+   "triggers": [
+    {
+     "read": "源工程有独立的网络模块（Retrofit Service、BuildConfig.BASE_URL、鉴权拦截器、统一响应壳），流程要求先产出 API 清单（spec/baseline/api-inventory/）",
+     "wrong": "规格产物里没有 API 清单；计划的网络层任务只写「网络层 (HTTP 请求封装)」，没有基址、接口路径、响应壳（成功码、message/data 字段）、鉴权头和网络权限"
+    }
+   ],
+   "scope": "规格提取到基础设施实现之间，安排 HTTP 请求封装和登录注册等调用的任务时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "先跑 API 清单提取（子代理派发失败时按 skill 的降级条款在主线程前台跑），清单里要有 base_urls、各 endpoint 路径、统一响应壳的成功码和 message/data 字段、鉴权头",
+     "support": [
+      "case-6be1461999c00a7fe781#recommendation:1"
+     ]
+    },
+    {
+     "text": "清单齐了才进 Gate B 或派基础设施实现；网络层任务引用清单，写明基址、路径、成功码、鉴权头和 INTERNET 权限",
+     "support": [
+      "case-6be1461999c00a7fe781#recommendation:1",
+      "case-6be1461999c00a7fe781#recommendation:3"
+     ]
+    }
+   ],
+   "values": [],
+   "lookups": [],
+   "why": "没有网络契约时，下游自拟基址和路径、漏掉响应壳解包和网络权限，请求全部打错地方",
+   "keys": {
+    "read": [
+     "Retrofit",
+     "BuildConfig.BASE_URL",
+     "@POST",
+     "@GET",
+     "Interceptor",
+     "android.permission.INTERNET",
+     "api-inventory"
+    ],
+    "product": [
+     "api-inventory",
+     "API 清单",
+     "网络层",
+     "HTTP 请求封装",
+     "Gate B",
+     "base_urls",
+     "响应壳"
+    ]
+   },
+   "probe": null,
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法是计划和规格条目，不落在接口上",
+   "refs": []
+  },
+  {
+   "title": "HTTP 封装的基址和接口路径逐字取自源端 BuildConfig 和 Retrofit 注解，不自拟",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源端网络模块里有 BuildConfig.BASE_URL（或构造 Retrofit 时的 baseUrl(...)），Service 接口方法上有 @POST(\"…\") / @GET(\"…\") 注解",
+     "wrong": "目标封装的 BASE_URL 是源码里搜不到的域名（用应用名拼的占位域名），页面里 post('/…') 的路径和源端注解里的路径不一致"
+    }
+   ],
+   "scope": "把 Retrofit 网络层迁成目标端的 HTTP 请求封装和页面调用时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "BASE_URL 逐字取源端 BuildConfig.BASE_URL，连同它的上下文路径；每个接口路径逐字取对应 Service 方法 @POST / @GET 注解里的值",
+     "support": [
+      "case-6be1461999c00a7fe781#recommendation:2",
+      "case-6be1461999c00a7fe781#diagnosis"
+     ]
+    },
+    {
+     "text": "写完对账：搜目标 BASE_URL 与源端值一致，每个页面调用路径与源 Service 注解一一对上",
+     "support": [
+      "case-6be1461999c00a7fe781#recommendation:4"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "修复后基址按源端 BuildConfig 的值（含上下文路径）写，登录注册路径按源 Service 注解改正，请求正常",
+     "meaning": "卡里的修法",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-6be1461999c00a7fe781#diagnosis"
+     ]
+    }
+   ],
+   "lookups": [
+    {
+     "what": "源端基址",
+     "where": "源工程网络模块的 Gradle 构建脚本里 buildConfigField 定义的 BASE_URL，或网络装配类里 Retrofit.Builder().baseUrl(...) 的实参",
+     "how": "按构建变体取实际值，原样写进目标常量，保留末尾的上下文路径和斜杠"
+    },
+    {
+     "what": "每个接口的路径",
+     "where": "源工程网络模块里 Retrofit Service 接口，按方法名找 @POST / @GET 注解",
+     "how": "注解括号里的字符串原样作路径，拼在基址后面"
+    }
+   ],
+   "why": "自拟的域名和路径在服务端不存在，所有请求失败",
+   "keys": {
+    "read": [
+     "BuildConfig.BASE_URL",
+     "buildConfigField",
+     "Retrofit",
+     "baseUrl",
+     "@POST",
+     "@GET",
+     "NetworkModule"
+    ],
+    "product": [
+     "BASE_URL",
+     "post(",
+     "get(",
+     "http.createHttp",
+     "request(",
+     "url"
+    ]
+   },
+   "probe": {
+    "pattern": "BASE_URL\\s*[:=][^\\n]*['\"]https?://",
+    "note": "目标里定义基址的地方；逐字比对源端 BuildConfig.BASE_URL"
+   },
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法落在字符串常量和路径的取值上，不落在接口参数上",
+   "refs": []
+  },
+  {
+   "title": "源端有统一响应壳和鉴权拦截器时，目标封装带 Authorization 头并按成功码解包",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源端有统一响应包装类（code、message、data 字段）按成功码判定，OkHttp Interceptor 给请求加 Authorization 头",
+     "wrong": "目标封装直接 JSON.parse(result) as T 返回，没有按成功码解包，header 里没有 Authorization，也没判 responseCode 是否 2xx"
+    }
+   ],
+   "scope": "目标端用 @ohos.net.http 写 HTTP 请求封装、源端有响应壳和鉴权拦截器时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "request(url, { method, header: { 'Authorization': 照源拦截器取的 token 写法 }, extraData }) 发请求",
+     "support": [
+      "case-6be1461999c00a7fe781#recommendation:2",
+      "case-6be1461999c00a7fe781#diagnosis"
+     ]
+    },
+    {
+     "text": "响应先判 responseCode 在 200–299，再解析 result 按源包装类解包：code 不等于源成功码时抛错并带 message，否则返回 data；空响应要处理",
+     "support": [
+      "case-6be1461999c00a7fe781#recommendation:2",
+      "case-6be1461999c00a7fe781#recommendation:4",
+      "case-6be1461999c00a7fe781#diagnosis"
+     ]
+    },
+    {
+     "text": "请求结束调用 httpRequest.destroy()",
+     "support": [
+      "case-6be1461999c00a7fe781#diagnosis"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "request(url: string, options?: HttpRequestOptions): Promise<HttpResponse>",
+     "meaning": "发请求，鉴权头放在 options.header",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.net.http.d.ts，HttpRequest.request",
+     "support": []
+    },
+    {
+     "value": "header?: Object，默认 'content-type': 'application/json'",
+     "meaning": "请求头；不写时带默认 content-type",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.net.http.d.ts，HttpRequestOptions.header",
+     "support": []
+    },
+    {
+     "value": "responseCode: ResponseCode | number；result: string | Object | ArrayBuffer",
+     "meaning": "HTTP 状态码和响应体，先判状态码再解包",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.net.http.d.ts，HttpResponse.responseCode、HttpResponse.result",
+     "support": []
+    },
+    {
+     "value": "destroy(): void",
+     "meaning": "销毁这次请求",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.net.http.d.ts，HttpRequest.destroy",
+     "support": []
+    },
+    {
+     "value": "补上 Authorization、成功码不符时抛错、HTTP 非 2xx 判断和业务消息空值保护后保留",
+     "meaning": "卡里的修法",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-6be1461999c00a7fe781#diagnosis"
+     ]
+    }
+   ],
+   "lookups": [
+    {
+     "what": "源成功码和响应壳字段名",
+     "where": "源工程网络模块里的响应包装类，以及调用方判定成功的那段代码",
+     "how": "读出成功码的值和 code、message、data 的字段名，原样用在目标解包里"
+    },
+    {
+     "what": "鉴权头的写法",
+     "where": "源工程网络模块里的 OkHttp Interceptor 实现",
+     "how": "读出头名、取 token 的来源和拼法（是否带前缀），目标照写"
+    }
+   ],
+   "why": "不解包时业务失败也被当成成功，不带鉴权头时需要登录的接口全部被拒",
+   "keys": {
+    "read": [
+     "Interceptor",
+     "Authorization",
+     "addHeader",
+     "Retrofit",
+     "code",
+     "message",
+     "data"
+    ],
+    "product": [
+     "http.createHttp",
+     "request(",
+     "header",
+     "Authorization",
+     "responseCode",
+     "JSON.parse",
+     "destroy"
+    ]
+   },
+   "probe": {
+    "pattern": "JSON\\.parse\\([^)]*\\)\\s+as\\s+T\\b",
+    "note": "响应体直接转成泛型返回，没有按成功码解包"
+   },
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "搜 options?: HttpRequestOptions：HttpRequest.request、HttpRequest.requestInStream 两类带它；做法用 request，requestInStream 只计数",
+   "refs": [
+    {
+     "what": "HttpRequest.request 签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.net.http.d.ts HttpRequest.request",
+     "quote": "request(url: string, options?: HttpRequestOptions): Promise<HttpResponse>;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "header 默认值",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.net.http.d.ts HttpRequestOptions.header",
+     "quote": "HTTP request header. default is 'content-type': 'application/json' * @type {?Object} * @syscap SystemCapability.Communication.NetStack * @crossplatform * @atomicservice * @since 11 */ header?: Object;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "HttpResponse.responseCode",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.net.http.d.ts HttpResponse.responseCode",
+     "quote": "responseCode: ResponseCode | number;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "HttpResponse.result",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.net.http.d.ts HttpResponse.result",
+     "quote": "result: string | Object | ArrayBuffer;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "HttpRequest.destroy",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.net.http.d.ts HttpRequest.destroy",
+     "quote": "Destroys an HTTP request. * @syscap SystemCapability.Communication.NetStack * @crossplatform * @atomicservice * @since 11 */ destroy(): void;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    }
+   ]
+  },
+  {
+   "title": "源端声明 INTERNET 权限且目标有网络请求时，module.json5 声明 INTERNET",
+   "product": "资源",
+   "triggers": [
+    {
+     "read": "源 AndroidManifest.xml 有 <uses-permission android:name=\"android.permission.INTERNET\" />",
+     "wrong": "目标 module.json5 没有 requestPermissions，或其中没有 ohos.permission.INTERNET，而代码里用了 @ohos.net.http 发请求"
+    }
+   ],
+   "scope": "目标端有网络请求的模块",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "和网络封装同一轮，在 module.json5 的 module 下写 \"requestPermissions\": [{ \"name\": \"ohos.permission.INTERNET\" }]",
+     "support": [
+      "case-6be1461999c00a7fe781#recommendation:3",
+      "case-6be1461999c00a7fe781#diagnosis"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "ohos.permission.INTERNET：权限级别 normal，授权方式 system_grant",
+     "meaning": "系统授权，只需在配置文件声明，不用运行时弹窗申请",
+     "source": "permissions-for-all.md，ohos.permission.INTERNET",
+     "support": []
+    },
+    {
+     "value": "system_grant 权限的 reason 和 usedScene 是选填",
+     "meaning": "声明时只写 name 即可",
+     "source": "declare-permissions.md，声明样例",
+     "support": []
+    },
+    {
+     "value": "HttpRequest 的请求方法注释里写明 @permission ohos.permission.INTERNET",
+     "meaning": "不声明时请求不能发出",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.net.http.d.ts，HttpRequest.request",
+     "support": []
+    }
+   ],
+   "lookups": [],
+   "why": "没声明 INTERNET 时目标端的网络请求全部失败",
+   "keys": {
+    "read": [
+     "AndroidManifest.xml",
+     "uses-permission",
+     "android.permission.INTERNET",
+     "Retrofit",
+     "OkHttp"
+    ],
+    "product": [
+     "module.json5",
+     "requestPermissions",
+     "ohos.permission.INTERNET",
+     "@ohos.net.http",
+     "http.createHttp"
+    ]
+   },
+   "probe": null,
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法是配置文件里的权限声明，不落在接口参数上",
+   "refs": [
+    {
+     "what": "INTERNET 的权限级别和授权方式",
+     "kind": "oh-docs",
+     "where": "zh-cn/application-dev/security/AccessToken/permissions-for-all.md ohos.permission.INTERNET",
+     "quote": "## ohos.permission.INTERNET 允许使用Internet网络。 获取该权限后，应用可以获取IP地址、进行DNS解析或自定义DNS规则等。 **权限级别**：normal **授权方式**：系统授权（system_grant）",
+     "version": "docs f41b9345"
+    },
+    {
+     "what": "system_grant 权限 reason、usedScene 选填",
+     "kind": "oh-docs",
+     "where": "zh-cn/application-dev/security/AccessToken/declare-permissions.md 声明样例",
+     "quote": "2.ohos.permission.USE_BLUETOOTH为system_grant权限，reason和usedScene为选填字段。",
+     "version": "docs f41b9345"
+    },
+    {
+     "what": "request 需要 INTERNET 权限",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.net.http.d.ts HttpRequest.request",
+     "quote": "@permission ohos.permission.INTERNET",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    }
+   ]
+  }
+ ],
+ "left_out": [],
+ "corrections": [],
+ "gaps": [],
+ "conflicts": []
+}

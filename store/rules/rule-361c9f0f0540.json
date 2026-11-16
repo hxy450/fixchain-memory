@@ -1,0 +1,106 @@
+{
+ "id": "rule-361c9f0f0540",
+ "title": "手写 int32 负值 varint 时拆成 lo/hi 两个 32 位半字逐 7 位写，不写死 0xFF",
+ "product": "代码",
+ "triggers": [
+  {
+   "read": "proto 字段类型是 `int32`（不是 `sint32`），wire type 0（varint），值可能为负",
+   "wrong": "手写的编码函数在低 4 组 7 位之后直接写死 `0xff` ×5 再加 `0x01`，第 5 组没取低 32 位的 bit28..31"
+  }
+ ],
+ "scope": "目标端没有 protobuf 运行时、在 ArkTS 里用 32 位位运算手写 int32 varint 编码时",
+ "exceptions": [],
+ "how": [
+  {
+   "text": "负值按 64 位符号扩展：lo = v >>> 0，hi = 0xFFFFFFFF；第 1–4 组取 (lo >>> 7k) & 0x7f（k = 0..3），第 5 组取 ((lo >>> 28) | ((hi & 0x0f) << 4)) & 0x7f，第 6–10 组从 hi >>> 3 起逐 7 位取，除最后一组外都或上 0x80",
+   "support": [
+    "case-315ff2de8e2d8d4c0c8d#diagnosis",
+    "case-315ff2de8e2d8d4c0c8d#recommendation:1"
+   ]
+  },
+  {
+   "text": "不凭「高位全 1」拼常量字节，单独核对跨 32 位边界的第 5 组（bit28..34）由哪些位组成",
+   "support": [
+    "case-315ff2de8e2d8d4c0c8d#recommendation:1"
+   ]
+  }
+ ],
+ "values": [
+  {
+   "value": "int32 以无符号 varint 写出，负值长 10 字节",
+   "meaning": "负 int32 先符号扩展成 64 位再编码",
+   "source": "android.util.proto.ProtoOutputStream#writeInt32",
+   "support": []
+  },
+  {
+   "value": "负值走 writeRawVarint64(val)，每次取 val & 0x7F 或上 0x80，再 val >>>= 7",
+   "meaning": "标准的逐 7 位拆分，按 64 位做",
+   "source": "android.util.proto.ProtoOutputStream#writeUnsignedVarintFromSignedInt；android.util.proto.EncodedBuffer#writeRawVarint64",
+   "support": []
+  },
+  {
+   "value": "第 5 组 = (lo >>> 28) | ((hi & 0x0f) << 4)",
+   "meaning": "修好后的跨边界分组，INT32_MIN 等用例通过",
+   "source": "卡里修好并验证过",
+   "support": [
+    "case-315ff2de8e2d8d4c0c8d#diagnosis"
+   ]
+  }
+ ],
+ "lookups": [],
+ "why": "写死高位时只有 v ≥ -2^28 编对，INT32_MIN 到 -268435457 会编成错误字节",
+ "keys": {
+  "read": [
+   "int32",
+   "sint32",
+   "varint",
+   "wire type 0",
+   "proto3",
+   "CodedOutputStream"
+  ],
+  "product": [
+   ">>>",
+   "0x7f",
+   "0x80",
+   "0xff",
+   "varint",
+   "encode",
+   "Uint8Array"
+  ]
+ },
+ "probe": {
+  "pattern": "0x[fF]{2}\\s*,\\s*0x[fF]{2}\\s*,\\s*0x[fF]{2}\\s*,\\s*0x[fF]{2}\\s*,\\s*0x[fF]{2}\\s*,\\s*0x0?1\\b",
+  "note": "编码里写死了 5 个 0xff 加 0x01；核对第 5 组是否取了低 32 位的 bit28..31"
+ },
+ "unverified": [],
+ "alternatives_unverified": [],
+ "siblings_checked": "无：做法落在自写的位运算上，不落在平台接口上",
+ "refs": [
+  {
+   "what": "int32 负值为 10 字节",
+   "kind": "android-sdk",
+   "where": "sources/android-36.1/android/util/proto/ProtoOutputStream.java ProtoOutputStream#writeInt32",
+   "quote": "Note that these are stored in memory as signed values and written as unsigned * varints, which if negative, are 10 bytes long.",
+   "version": "android-36.1"
+  },
+  {
+   "what": "负值走 64 位 varint",
+   "kind": "android-sdk",
+   "where": "sources/android-36.1/android/util/proto/ProtoOutputStream.java ProtoOutputStream#writeUnsignedVarintFromSignedInt",
+   "quote": "private void writeUnsignedVarintFromSignedInt(int val) { if (val >= 0) { mBuffer.writeRawVarint32(val); } else { mBuffer.writeRawVarint64(val); } }",
+   "version": "android-36.1"
+  },
+  {
+   "what": "64 位 varint 的拆分",
+   "kind": "android-sdk",
+   "where": "sources/android-36.1/android/util/proto/EncodedBuffer.java EncodedBuffer#writeRawVarint64",
+   "quote": "if ((val & ~0x7FL) == 0) { writeRawByte((byte)val); return; } else { writeRawByte((byte)((val & 0x7F) | 0x80)); val >>>= 7; }",
+   "version": "android-36.1"
+  }
+ ],
+ "sources": [
+  "case-315ff2de8e2d8d4c0c8d"
+ ],
+ "general": false,
+ "status": "active"
+}

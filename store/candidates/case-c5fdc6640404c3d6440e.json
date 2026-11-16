@@ -1,0 +1,531 @@
+{
+ "case": "case-c5fdc6640404c3d6440e",
+ "rules": [
+  {
+   "title": "解析 X.509 RSA 公钥时，createAsyKeyGenerator 只写 'RSA'+位数，不加 |PKCS1",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "Java 端 KeyFactory.getInstance(\"RSA\") + X509EncodedKeySpec 解析 BEGIN PUBLIC KEY 公钥，Cipher.getInstance(\"RSA/ECB/OAEPWithSHA-256AndMGF1Padding\") 加密",
+     "wrong": "写成 createAsyKeyGenerator('RSA1024|PKCS1') 这类：规格串带 |PKCS1 等后缀，或位数和实际公钥不符；真机报 create c generator fail"
+    }
+   ],
+   "scope": "把安卓 Java 的 RSA 公钥解析和 RSA-OAEP 加密迁成 ArkTS cryptoFramework 时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "生成器写 cryptoFramework.createAsyKeyGenerator('RSA' + 实际公钥位数)，如 'RSA2048'（素数个数默认 2，|PRIMES_2 可省）；不附加 PKCS1、X509 等编码后缀",
+     "support": [
+      "case-c5fdc6640404c3d6440e#recommendation:1"
+     ]
+    },
+    {
+     "text": "“BEGIN PUBLIC KEY” 的 X.509 PEM 直接交给 generator.convertPemKeySync(pem, null)，用返回 KeyPair 的 pubKey 做加密",
+     "support": [
+      "case-c5fdc6640404c3d6440e#recommendation:1"
+     ]
+    },
+    {
+     "text": "填充和摘要写进 createCipher：RSA/ECB/OAEPWithSHA-256AndMGF1Padding（MGF1 也是 SHA-256）写成 createCipher('RSA2048|PKCS1_OAEP|SHA256|MGF1_SHA256')；PKCS1 这类填充名只写在 createCipher 里",
+     "support": [
+      "case-c5fdc6640404c3d6440e#recommendation:1",
+      "case-c5fdc6640404c3d6440e#diagnosis"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "function createAsyKeyGenerator(algName: string): AsyKeyGenerator",
+     "meaning": "非对称密钥生成器的工厂函数，algName 多个参数用 | 拼接",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.security.cryptoFramework.d.ts，cryptoFramework.createAsyKeyGenerator",
+     "support": []
+    },
+    {
+     "value": "RSA 生成器的字符串参数 = RSA密钥类型 | 素数个数，如 RSA2048|PRIMES_2；默认素数为 2，PRIMES_2 可省略",
+     "meaning": "生成器规格串里只有密钥类型和素数个数，没有编码或填充项",
+     "source": "crypto-asym-key-generation-conversion-spec.md，RSA / 使用字符串参数生成",
+     "support": []
+    },
+    {
+     "value": "convertPemKeySync(pubKey: string | null, priKey: string | null): KeyPair",
+     "meaning": "把 PEM 字符串转成 KeyPair；只转公钥时 priKey 传 null（@since 12）",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.security.cryptoFramework.d.ts，AsyKeyGenerator.convertPemKeySync",
+     "support": []
+    },
+    {
+     "value": "convertPemKey 的公钥需满足 X.509 规范、PKCS#1 规范、PEM 编码格式",
+     "meaning": "“BEGIN PUBLIC KEY” 的 X.509 SPKI PEM 可以直接转换，不需要在生成器上标编码",
+     "source": "crypto-convert-string-data-to-asym-key-pair.md，说明",
+     "support": []
+    },
+    {
+     "value": "function createCipher(transformation: string): Cipher",
+     "meaning": "加解密实例的工厂函数，填充和摘要写在 transformation 里，用 | 拼接",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.security.cryptoFramework.d.ts，cryptoFramework.createCipher",
+     "support": []
+    },
+    {
+     "value": "RSA2048|PKCS1_OAEP|SHA256|MGF1_SHA256",
+     "meaning": "RSA2048、PKCS1_OAEP 填充、摘要 SHA256、掩码摘要 MGF1_SHA256 的加解密规格串",
+     "source": "crypto-asym-encrypt-decrypt-spec.md，填充模式为PKCS1_OAEP",
+     "support": []
+    },
+    {
+     "value": "RSA/ECB/OAEPWithSHA-256AndMGF1Padding 由 OpenSSLCipherRSA$OAEP$SHA256 实现，OAEP 摘要和 MGF1 摘要默认都取 SHA-256（oaepMd = mgf1Md = defaultMd）",
+     "meaning": "源端没传 OAEPParameterSpec 时，目标端摘要和掩码摘要都写 SHA256 / MGF1_SHA256",
+     "source": "com.android.org.conscrypt.OpenSSLProvider；com.android.org.conscrypt.OpenSSLCipherRSA$OAEP#OAEP",
+     "support": []
+    },
+    {
+     "value": "生成器写成 'RSA1024|PKCS1' 或 'RSA2048|PKCS1' 时真机报 create c generator fail；改成 'RSA2048' 后 X.509 PEM 转换和加密正常",
+     "meaning": "去掉 |PKCS1 后缀、位数按实际公钥写，是验证过的写法",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-c5fdc6640404c3d6440e#diagnosis"
+     ]
+    }
+   ],
+   "lookups": [
+    {
+     "what": "服务端公钥的位数",
+     "where": "源端代码里生成或约定这把密钥处写明的长度（KeyPairGenerator.initialize 的参数、接口说明），或实际取回的 PEM",
+     "how": "写成 'RSA' + 位数；只拿到 PEM 时，可在目标端转换后用 pubKey.getAsyKeySpec(cryptoFramework.AsyKeySpecItem.RSA_N_BN) 取模数，按模数的二进制位数取位数"
+    },
+    {
+     "what": "OAEP 的摘要和 MGF1 摘要",
+     "where": "源端 Java 里 Cipher.init 传入的 OAEPParameterSpec（含 MGF1ParameterSpec），没有就看 Cipher.getInstance 的变换名",
+     "how": "OAEPParameterSpec 的摘要名对应 SHA256 等，MGF1ParameterSpec.SHA256 对应 MGF1_SHA256；没传 OAEPParameterSpec 时两者都取变换名里的摘要"
+    }
+   ],
+   "why": "生成器规格串不合法时真机创建失败，公钥解析不出来，加密传输不可用",
+   "keys": {
+    "read": [
+     "X509EncodedKeySpec",
+     "KeyFactory",
+     "BEGIN PUBLIC KEY",
+     "RSA/ECB/OAEPWithSHA-256AndMGF1Padding",
+     "OAEPParameterSpec",
+     "MGF1ParameterSpec",
+     "Cipher.getInstance",
+     "PEM"
+    ],
+    "product": [
+     "createAsyKeyGenerator",
+     "convertPemKeySync",
+     "convertPemKey",
+     "RSA2048",
+     "PKCS1",
+     "PKCS1_OAEP",
+     "MGF1_SHA256",
+     "createCipher",
+     "cryptoFramework",
+     "AsyKeyGenerator"
+    ]
+   },
+   "probe": {
+    "pattern": "createAsyKeyGenerator\\(\\s*['\"`]RSA\\d*\\|(?!PRIMES_\\d)",
+    "note": "RSA 生成器规格串里带了素数个数以外的后缀（如 |PKCS1），应只写 'RSA' + 位数"
+   },
+   "unverified": [
+    "'|PKCS1' 被拒的精确原因没有另行验证，只知道真机报 create c generator fail、去掉后通过",
+    "文档说用于密钥转换时得到的密钥规格跟密钥数据一致；生成器位数和公钥不一致但不带后缀时会不会失败，卡里没验证"
+   ],
+   "alternatives_unverified": [],
+   "siblings_checked": "搜 function create…(algName: string / transformation: string)：cryptoFramework 里同样用 | 拼规格串的工厂函数另有 createSymKeyGenerator、createMac、createMd、createCipher、createSign、createVerify、createKeyAgreement、createKdf 8 个；和本做法相关的 createCipher 写进 values",
+   "refs": [
+    {
+     "what": "createAsyKeyGenerator 的签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.security.cryptoFramework.d.ts cryptoFramework.createAsyKeyGenerator",
+     "quote": "function createAsyKeyGenerator(algName: string): AsyKeyGenerator;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "algName 多个参数用 | 拼接",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.security.cryptoFramework.d.ts cryptoFramework.createAsyKeyGenerator",
+     "quote": "* @param { string } algName - indicates the algorithm name. Multiple parameters need to be concatenated by \"|\".",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "RSA 生成器字符串参数的组成",
+     "kind": "oh-docs",
+     "where": "zh-cn/application-dev/security/CryptoArchitectureKit/crypto-asym-key-generation-conversion-spec.md RSA / 使用字符串参数生成",
+     "quote": "具体的“字符串参数”由“RSA密钥类型”和“素数个数”使用符号“|”拼接而成，用于在创建非对称密钥生成器时，指定密钥规格。",
+     "version": "docs f41b9345"
+    },
+    {
+     "what": "PRIMES_2 可省略",
+     "kind": "oh-docs",
+     "where": "zh-cn/application-dev/security/CryptoArchitectureKit/crypto-asym-key-generation-conversion-spec.md RSA / 使用字符串参数生成",
+     "quote": "生成RSA非对称密钥时，默认素数为2，PRIMES_2参数可省略。",
+     "version": "docs f41b9345"
+    },
+    {
+     "what": "用于密钥转换时密钥规格跟密钥数据一致",
+     "kind": "oh-docs",
+     "where": "zh-cn/application-dev/security/CryptoArchitectureKit/crypto-asym-key-generation-conversion-spec.md RSA / 使用字符串参数生成",
+     "quote": "创建RSA非对称密钥生成器时，若用于随机生成密钥，生成的RSA密钥规格与创建时指定的密钥规格一致；若用于密钥转换，生成的RSA密钥规格与转换时指定的密钥数据规格一致。",
+     "version": "docs f41b9345"
+    },
+    {
+     "what": "convertPemKeySync 的签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.security.cryptoFramework.d.ts AsyKeyGenerator.convertPemKeySync",
+     "quote": "convertPemKeySync(pubKey: string | null, priKey: string | null): KeyPair;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "convertPemKey 接受的公钥格式",
+     "kind": "oh-docs",
+     "where": "zh-cn/application-dev/security/CryptoArchitectureKit/crypto-convert-string-data-to-asym-key-pair.md 说明",
+     "quote": "公钥需满足X.509规范、PKCS\\#1规范、PEM编码格式。",
+     "version": "docs f41b9345"
+    },
+    {
+     "what": "createCipher 的签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.security.cryptoFramework.d.ts cryptoFramework.createCipher",
+     "quote": "function createCipher(transformation: string): Cipher;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "OAEP 规格串的写法",
+     "kind": "oh-docs",
+     "where": "zh-cn/application-dev/security/CryptoArchitectureKit/crypto-asym-encrypt-decrypt-spec.md 填充模式为PKCS1_OAEP",
+     "quote": "当需要非对称密钥类型为RSA2048、填充模式为PKCS1_OAEP、摘要算法为SHA256、掩码摘要为MGF1_SHA256的RSA密钥，其字符串参数为\"RSA2048|PKCS1_OAEP|SHA256|MGF1_SHA256\"。",
+     "version": "docs f41b9345"
+    },
+    {
+     "what": "安卓 OAEPWithSHA-256AndMGF1Padding 的实现类",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/com/android/org/conscrypt/OpenSSLProvider.java OpenSSLProvider",
+     "quote": "putRSACipherImplClass( \"RSA/ECB/OAEPWithSHA-256AndMGF1Padding\", \"OpenSSLCipherRSA$OAEP$SHA256\");",
+     "version": "android-36.1"
+    },
+    {
+     "what": "OAEP 摘要和 MGF1 摘要默认相同",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/com/android/org/conscrypt/OpenSSLCipherRSA.java OpenSSLCipherRSA$OAEP#OAEP",
+     "quote": "oaepMd = mgf1Md = defaultMd;",
+     "version": "android-36.1"
+    },
+    {
+     "what": "SHA256 子类用 SHA-256 作默认摘要",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/com/android/org/conscrypt/OpenSSLCipherRSA.java OpenSSLCipherRSA$OAEP$SHA256",
+     "quote": "public static final class SHA256 extends OAEP { public SHA256() { super(EvpMdRef.SHA256.EVP_MD, EvpMdRef.SHA256.SIZE_BYTES);",
+     "version": "android-36.1"
+    }
+   ]
+  },
+  {
+   "title": "Cipher 的 update/doFinal 结果先判空再取 .data，改成同步 API 时保留兜底",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "Java 端用 Cipher.getInstance(\"AES/GCM/NoPadding\") 加密可能为空的请求体、解密响应",
+     "wrong": "目标端对 cipher.updateSync(...)、cipher.doFinalSync(...) 或 await cipher.doFinal(...) 的结果直接取 .data，没有 ?.data ?? new Uint8Array(0) 这类判空"
+    },
+    {
+     "read": "为修 Promise / DataBlob 类型的编译错误，把异步 update / doFinal 改写成 updateSync / doFinalSync",
+     "wrong": "改写后把原来的 ?.data ?? 兜底删掉，直接写 result.data"
+    }
+   ],
+   "scope": "ArkTS cryptoFramework 的 Cipher 做对称加解密（GCM 等模式）时，取 update/updateSync、doFinal/doFinalSync 的返回值",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "每次取结果都判空：const out = cipher.updateSync(input); const part = out ? out.data : new Uint8Array(0)；doFinalSync(...)、await doFinal(...) 同样写，再按顺序把各段拼起来",
+     "support": [
+      "case-c5fdc6640404c3d6440e#recommendation:2"
+     ]
+    },
+    {
+     "text": "从异步改写成同步 API 时原有的空值兜底原样保留；声明里返回类型写的是非空 DataBlob，不能据此删掉判空",
+     "support": [
+      "case-c5fdc6640404c3d6440e#recommendation:2",
+      "case-c5fdc6640404c3d6440e#diagnosis"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "updateSync(data: DataBlob): DataBlob",
+     "meaning": "Cipher 的同步分段加解密，声明上返回非空 DataBlob",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.security.cryptoFramework.d.ts，Cipher.updateSync",
+     "support": []
+    },
+    {
+     "value": "doFinalSync(data: DataBlob | null): DataBlob",
+     "meaning": "Cipher 的同步收尾加解密，声明上返回非空 DataBlob",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.security.cryptoFramework.d.ts，Cipher.doFinalSync",
+     "support": []
+    },
+    {
+     "value": "doFinal(data: DataBlob | null): Promise<DataBlob>",
+     "meaning": "同族接口：Cipher 的异步收尾，结果同样要判空",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.security.cryptoFramework.d.ts，Cipher.doFinal",
+     "support": []
+    },
+    {
+     "value": "doFinal 的结果可能为 null，用 .data 前先判空；解密时 GCM、CCM、CFB、OFB、CTR 模式 doFinal 传 null 返回 null",
+     "meaning": "文档写明的可空情形，doFinalSync 的注意事项同 doFinal",
+     "source": "js-apis-cryptoFramework.md，Cipher / doFinal 的说明",
+     "support": []
+    },
+    {
+     "value": "update 没凑满一个新分组时此次输出为 null",
+     "meaning": "update/updateSync 的结果也可能为 null",
+     "source": "js-apis-cryptoFramework.md，Cipher / update 的说明",
+     "support": []
+    },
+    {
+     "value": "删掉兜底后真机在空请求体加密和响应解密两处读到 null 的 data；补回判空后加解密正常",
+     "meaning": "GCM 空明文加密、GCM 解密收尾都会出现 null 结果",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-c5fdc6640404c3d6440e#diagnosis"
+     ]
+    }
+   ],
+   "lookups": [],
+   "why": "结果为 null 时直接取 .data 抛异常，加密或解密在运行时失败，而编译照样通过",
+   "keys": {
+    "read": [
+     "Cipher.getInstance",
+     "AES/GCM/NoPadding",
+     "doFinal",
+     "update",
+     "GCMParameterSpec",
+     "Promise",
+     "DataBlob"
+    ],
+    "product": [
+     "updateSync",
+     "doFinalSync",
+     "doFinal",
+     "update",
+     "DataBlob",
+     ".data",
+     "cryptoFramework",
+     "createCipher"
+    ]
+   },
+   "probe": {
+    "pattern": "\\.(?:updateSync|doFinalSync|update|doFinal)\\([^;\\n]*\\)\\)?\\s*\\.data\\b",
+    "note": "对 Cipher 加解密结果直接取 .data，没有判空；结果先赋给变量的写法搜不到，要看变量取 .data 前有没有判空"
+   },
+   "unverified": [
+    "文档写 doFinalSync 的 data 在对称加解密中允许为 null、但不允许传 {data: 空 Uint8Array}；空请求体时该传什么，卡里没写"
+   ],
+   "alternatives_unverified": [],
+   "siblings_checked": "搜 updateSync( 和 doFinalSync(：cryptoFramework 里 Cipher.updateSync、Cipher.doFinalSync 返回 DataBlob；Mac.doFinalSync 也返回 DataBlob，Mac、Md、Sign、Verify 的 updateSync 返回 void；文档写明结果可能为 null 的只有 Cipher 这几个，异步 Cipher.doFinal 写进 values",
+   "refs": [
+    {
+     "what": "Cipher.updateSync 的签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.security.cryptoFramework.d.ts Cipher.updateSync",
+     "quote": "updateSync(data: DataBlob): DataBlob;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "Cipher.doFinalSync 的签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.security.cryptoFramework.d.ts Cipher.doFinalSync",
+     "quote": "doFinalSync(data: DataBlob | null): DataBlob;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "Cipher.doFinal 的 Promise 签名（同族）",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.security.cryptoFramework.d.ts Cipher.doFinal",
+     "quote": "doFinal(data: DataBlob | null): Promise<DataBlob>;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "doFinal 的结果可能为 null",
+     "kind": "oh-docs",
+     "where": "zh-cn/application-dev/reference/apis-crypto-architecture-kit/js-apis-cryptoFramework.md doFinal",
+     "quote": "doFinal的结果可能为null，因此使用.data字段访问doFinal结果的具体数据前，请记得先判断结果是否为null，避免产生异常。",
+     "version": "docs f41b9345"
+    },
+    {
+     "what": "解密时 GCM 等模式 doFinal 传 null 返回 null",
+     "kind": "oh-docs",
+     "where": "zh-cn/application-dev/reference/apis-crypto-architecture-kit/js-apis-cryptoFramework.md doFinal",
+     "quote": "对于解密，GCM、CCM、CFB、OFB和CTR模式，如果doFinal传null，则返回结果为null；",
+     "version": "docs f41b9345"
+    },
+    {
+     "what": "update 没凑满分组时输出 null",
+     "kind": "oh-docs",
+     "where": "zh-cn/application-dev/reference/apis-crypto-architecture-kit/js-apis-cryptoFramework.md update",
+     "quote": "可以理解为update只要凑满一个新的分组就会有输出，如果没有凑满则此次update输出为null，将当前未被加解密的数据留着，等下一次update或doFinal传入数据时，拼接起来继续凑分组。",
+     "version": "docs f41b9345"
+    },
+    {
+     "what": "doFinalSync 的注意事项同 doFinal",
+     "kind": "oh-docs",
+     "where": "zh-cn/application-dev/reference/apis-crypto-architecture-kit/js-apis-cryptoFramework.md doFinalSync",
+     "quote": "其他注意事项同接口[doFinal()](#dofinal)说明。",
+     "version": "docs f41b9345"
+    },
+    {
+     "what": "doFinalSync 不允许传空 Uint8Array 的 DataBlob",
+     "kind": "oh-docs",
+     "where": "zh-cn/application-dev/reference/apis-crypto-architecture-kit/js-apis-cryptoFramework.md doFinalSync",
+     "quote": "加密或者解密的数据。在对称加解密中允许为null，但不允许传入{data: Uint8Array(空) }。",
+     "version": "docs f41b9345"
+    }
+   ]
+  },
+  {
+   "title": "ArkTS Buffer 转独立 Uint8Array 时按 length 分配后 copy，不用 .buffer 视图",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "构建输出报 Property 'byteLength' does not exist on type 'Buffer'",
+     "wrong": "代码里写 new Uint8Array(buf.buffer, buf.byteOffset, buf.length) 或 new Uint8Array(buffer.from(...).buffer)，或把 byteLength 机械替换成 length 后仍保留这种视图；真机抛 RangeError: The newByteLength is out of range"
+    }
+   ],
+   "scope": "ArkTS 里用 @kit.ArkTS 的 buffer（buffer.from、buffer.alloc 得到的 Buffer）交出独立的 Uint8Array（如填进 cryptoFramework 的 DataBlob）时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "写成 const out = new Uint8Array(buf.length); buf.copy(out); 之后把 out 交给 DataBlob 等下游",
+     "support": [
+      "case-c5fdc6640404c3d6440e#recommendation:3"
+     ]
+    },
+    {
+     "text": "编译报 Buffer 上没有某个 Node 属性时，按 ArkTS buffer 的声明改写法，不把 byteLength 之类字段名换成 length 了事",
+     "support": [
+      "case-c5fdc6640404c3d6440e#recommendation:3"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "length: number",
+     "meaning": "Buffer 的字节数；Buffer 类上没有 byteLength 属性",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.buffer.d.ts，Buffer.length",
+     "support": []
+    },
+    {
+     "value": "copy(target: Buffer | Uint8Array, targetStart?: number, sourceStart?: number, sourceEnd?: number): number",
+     "meaning": "把本 Buffer 的数据拷到目标里，sourceEnd 默认是本 Buffer 的 length，返回拷贝的字节数",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.buffer.d.ts，Buffer.copy",
+     "support": []
+    },
+    {
+     "value": "byteOffset：Buffer 通过内存池创建时（allocUninitializedFromPool，或 buffer.from() 传字符串且长度加内存池偏移小于 4kb）是相对内存池的偏移；直接分配（alloc）时是 0",
+     "meaning": "buf.buffer 可能是整个内存池，按 .buffer/.byteOffset 取视图不可靠",
+     "source": "js-apis-buffer.md，Buffer / 属性",
+     "support": []
+    },
+    {
+     "value": "copy(target: FastBuffer | Uint8Array, targetStart?: number, sourceStart?: number, sourceEnd?: number): number",
+     "meaning": "同族接口：FastBuffer 的 copy",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.fastbuffer.d.ts，FastBuffer.copy",
+     "support": []
+    },
+    {
+     "value": "视图写法在真机加密和解密两处抛 RangeError: The newByteLength is out of range；改成按 length 分配后拷贝即恢复",
+     "meaning": "验证过的写法是显式拷贝",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-c5fdc6640404c3d6440e#diagnosis"
+     ]
+    }
+   ],
+   "lookups": [],
+   "why": "Node 式视图在 ArkTS 的 Buffer 上取到的范围不对，编译通过但真机抛 RangeError 或拿错字节",
+   "keys": {
+    "read": [
+     "byteLength",
+     "Buffer",
+     "buffer.from",
+     "Property 'byteLength' does not exist on type 'Buffer'",
+     "byteOffset",
+     "Uint8Array"
+    ],
+    "product": [
+     "buffer.from",
+     "Uint8Array",
+     ".buffer",
+     "byteOffset",
+     "length",
+     "copy",
+     "DataBlob",
+     "@kit.ArkTS"
+    ]
+   },
+   "probe": {
+    "pattern": "new\\s+Uint8Array\\([^;\\n]*\\.buffer\\s*[,)]",
+    "note": "用 Buffer 的 .buffer（可带 byteOffset）构造 Uint8Array 视图；若 buf 是 ArkTS buffer.Buffer，应改成按 length 分配后 copy"
+   },
+   "unverified": [
+    "RangeError 的精确机制（.buffer 与 byteOffset 所指的内存）卡里没验证；同一写法曾经成功过一次，和运行时缓冲状态有关"
+   ],
+   "alternatives_unverified": [
+    "buffer.from(buffer: Buffer | Uint8Array) 也会把数据拷进新 Buffer，卡里没验证"
+   ],
+   "siblings_checked": "搜 copy(target:：@ohos.buffer.d.ts 的 Buffer.copy 和 @ohos.fastbuffer.d.ts 的 FastBuffer.copy 两个，FastBuffer.copy 写进 values",
+   "refs": [
+    {
+     "what": "Buffer.length 是字节数",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.buffer.d.ts Buffer.length",
+     "quote": "* Returns the number of bytes in buf * * @type { number }",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "Buffer.copy 的签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.buffer.d.ts Buffer.copy",
+     "quote": "copy(target: Buffer | Uint8Array, targetStart?: number, sourceStart?: number, sourceEnd?: number): number;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "copy 的 sourceEnd 默认是 length",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.buffer.d.ts Buffer.copy",
+     "quote": "* The default value is the length of this Buffer instance. * @returns { number } The number of bytes copied",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "byteOffset 在内存池创建时是相对内存池的偏移",
+     "kind": "oh-docs",
+     "where": "zh-cn/application-dev/reference/apis-arkts/js-apis-buffer.md Buffer / 属性",
+     "quote": "当Buffer通过内存池创建时（如使用[allocUninitializedFromPool](#bufferallocuninitializedfrompool)创建Buffer，或使用buffer.from()传入字符串，且字符串长度加当前内存池偏移量小于4kb），返回相对于内存池的偏移量。",
+     "version": "docs f41b9345"
+    },
+    {
+     "what": "FastBuffer.copy 的签名（同族）",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.fastbuffer.d.ts FastBuffer.copy",
+     "quote": "copy(target: FastBuffer | Uint8Array, targetStart?: number, sourceStart?: number, sourceEnd?: number): number;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    }
+   ]
+  }
+ ],
+ "left_out": [
+  {
+   "text": "加密传输编译通过后在真机上用空请求体 GET 和实际网关各做一次完整往返，失败时透传阶段和原始异常",
+   "reason": "要上机或截图才能做"
+  },
+  {
+   "text": "配置加载失败后补失败日志、允许重新请求的改动",
+   "reason": "其他：卡里没有单独归因，只是传输失败暴露后的补充"
+  }
+ ],
+ "corrections": [],
+ "gaps": [
+  "声明和文档只列出合法的 RSA 生成器字符串参数，没写带非法后缀（如 |PKCS1）时的报错内容"
+ ],
+ "conflicts": [
+  "声明里 Cipher.updateSync / doFinalSync 的返回类型是非空 DataBlob，文档和卡里真机都显示结果可能为 null；照卡和文档判空"
+ ]
+}

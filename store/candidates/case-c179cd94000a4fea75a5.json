@@ -1,0 +1,379 @@
+{
+ "case": "case-c179cd94000a4fea75a5",
+ "rules": [
+  {
+   "title": "源端 Long 的服务器 id、hash、userId 字段，ArkTS 模型写 bigint，不写 number",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源端 bean 或接口里有 val id: Long、Long?、Java 的 long userId、@Query(\"userId\") userId: Long",
+     "wrong": "目标模型写成 id: number = 0、userId: number、number | null，fromJson 里 (json['id'] as number)，服务方法参数 (userId: number)"
+    }
+   ],
+   "scope": "源端用 Long 承载服务器生成的 id、hash、userId，迁成 ArkTS 数据模型和各层参数时",
+   "exceptions": [
+    {
+     "text": "确认取值不超过 2^53 的 Long（如 13 位毫秒时间戳、时长）可以用 number，并在注释写明理由",
+     "support": [
+      "case-c179cd94000a4fea75a5#recommendation:1"
+     ]
+    }
+   ],
+   "how": [
+    {
+     "text": "逐个列出源端 bean 和接口里的 Long 字段与参数，服务器生成的 id、hash、userId 在模型字段和各层方法参数上都写 bigint",
+     "support": [
+      "case-c179cd94000a4fea75a5#recommendation:1",
+      "case-c179cd94000a4fea75a5#diagnosis"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "long 的最大值是 2^63-1（Long.MAX_VALUE = 0x7fffffffffffffffL），SIZE = 64",
+     "meaning": "源端 Long 是 64 位整数",
+     "source": "java.lang.Long#MAX_VALUE、java.lang.Long#SIZE",
+     "support": []
+    },
+    {
+     "value": "绝对值超过 2^53 – 1 的整数要按 BigInt 才能保精度",
+     "meaning": "ArkTS 的 number 只能精确表示到 2^53 – 1，19 位 id 会被舍入",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.util.json.d.ts，json.BigIntMode.PARSE_AS_BIGINT",
+     "support": []
+    },
+    {
+     "value": "UserBean 一类模型的 id、hash 和各层 userId 改成 bigint",
+     "meaning": "改后 19 位 id 不再丢精度",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-c179cd94000a4fea75a5#diagnosis"
+     ]
+    }
+   ],
+   "lookups": [],
+   "why": "number 是双精度，超过 2^53 的 id 会被舍入成别的值，登录、查询都拿错 id",
+   "keys": {
+    "read": [
+     "Long",
+     "Long?",
+     "long",
+     "@Query",
+     "@SerializedName",
+     "userId"
+    ],
+    "product": [
+     "bigint",
+     "BigInt",
+     "number",
+     "userId",
+     "fromJson",
+     "as number"
+    ]
+   },
+   "probe": {
+    "pattern": "\\b(?:id|[a-z]\\w*Id|\\w*[Hh]ash)\\s*[?!]?:\\s*number\\b",
+    "note": "id、xxxId、hash 一类字段或参数写成 number；对照源端是不是 Long"
+   },
+   "unverified": [
+    "卡里没核到生成者当时知道 id 有 19 位，只按源端声明为 Long 归因"
+   ],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法是类型映射，不落在具体接口上",
+   "refs": [
+    {
+     "what": "Long.MAX_VALUE 是 2^63-1",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/java/lang/Long.java Long#MAX_VALUE",
+     "quote": "A constant holding the maximum value a {@code long} can * have, 2<sup>63</sup>-1. */ @Native public static final long MAX_VALUE = 0x7fffffffffffffffL;",
+     "version": "android-36.1"
+    },
+    {
+     "what": "Long.SIZE 是 64",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/java/lang/Long.java Long#SIZE",
+     "quote": "@Native public static final int SIZE = 64;",
+     "version": "android-36.1"
+    },
+    {
+     "what": "超过 ±(2^53 – 1) 的数要按 BigInt 解析",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.util.json.d.ts json.BigIntMode.PARSE_AS_BIGINT",
+     "quote": "Parse as BigInt when number less than -(2^53 – 1) or greater than (2^53 – 1).",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    }
+   ]
+  },
+  {
+   "title": "响应里有 64 位整数字段时不用裸 JSON.parse，换保精度解析，请求体配 bigint 的 replacer",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "响应模型里有 Long 字段（val id: Long、userId: Long）",
+     "wrong": "HTTP 层统一写 JSON.parse(body) as BaseResponse<T>，请求体 JSON.stringify(data)，没有 bigint 处理"
+    }
+   ],
+   "scope": "网络层解析响应、序列化请求体，且其中有服务器生成的 64 位整数字段时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "解析前把这些 64 位整数加引号，再 JSON.parse(text, reviver)，reviver 里把它们转成 BigInt(值)",
+     "support": [
+      "case-c179cd94000a4fea75a5#recommendation:2",
+      "case-c179cd94000a4fea75a5#diagnosis"
+     ]
+    },
+    {
+     "text": "请求体用 JSON.stringify(data, replacer)，replacer 里 typeof v === 'bigint' 时返回 v.toString()",
+     "support": [
+      "case-c179cd94000a4fea75a5#recommendation:2",
+      "case-c179cd94000a4fea75a5#diagnosis"
+     ]
+    },
+    {
+     "text": "最小检查：解析一个含 19 位整数 id 的 JSON 后，id.toString() 原样返回这 19 位",
+     "support": [
+      "case-c179cd94000a4fea75a5#recommendation:2"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "JSON.parse 前给 64 位整数加引号、reviver 转 BigInt，请求用 bigint 的 replacer",
+     "meaning": "修复后响应里的 19 位 id 原样保留",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-c179cd94000a4fea75a5#diagnosis"
+     ]
+    },
+    {
+     "value": "type Transformer = (this: Object, key: string, value: Object) => Object | undefined | null",
+     "meaning": "reviver / replacer 函数的形状：按键名和值返回替换后的值",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.util.json.d.ts，json.Transformer",
+     "support": []
+    }
+   ],
+   "lookups": [],
+   "why": "裸 JSON.parse 在解析那一步就把 19 位 id 舍入，模型字段改成 bigint 也救不回来",
+   "keys": {
+    "read": [
+     "Long",
+     "Gson",
+     "Retrofit",
+     "@Query",
+     "@Body",
+     "userId"
+    ],
+    "product": [
+     "JSON.parse",
+     "JSON.stringify",
+     "reviver",
+     "replacer",
+     "BigInt",
+     "bigint",
+     "BaseResponse"
+    ]
+   },
+   "probe": {
+    "pattern": "JSON\\.parse\\(\\s*\\w+\\s*\\)\\s*as\\s+\\w+",
+    "note": "响应用裸 JSON.parse(...) as T 解析；响应里有 64 位整数字段时会丢精度"
+   },
+   "unverified": [
+    "卡里上机的目标 SDK 是 6.0.2(22)，本机核实用的是 API 23"
+   ],
+   "alternatives_unverified": [
+    "@ohos.util.json 的 json.parse(text, reviver?, { bigIntMode: json.BigIntMode.PARSE_AS_BIGINT })：声明里超过 ±(2^53 – 1) 的数按 BigInt 解析，卡里没验证"
+   ],
+   "siblings_checked": "无：卡里的做法用的是全局 JSON 的 reviver / replacer，没有专门参数类型可搜；@ohos.util.json 里同样接受 Transformer 的 parse、stringify 共 2 个，记进 alternatives_unverified",
+   "refs": [
+    {
+     "what": "Transformer 的形状",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.util.json.d.ts json.Transformer",
+     "quote": "type Transformer = (this: Object, key: string, value: Object) => Object | undefined | null;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    }
+   ]
+  },
+  {
+   "title": "用正则加引号和 reviver 转 BigInt 时，范围限定到已知的 64 位字段名",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "",
+     "wrong": "预处理用 `\\d{16,}` 一类正则把响应里所有 16 位以上整数加引号，reviver 把所有 16 位以上的纯数字字符串都 BigInt(…) 成 bigint"
+    }
+   ],
+   "scope": "网络层或持久化层用「正则预处理 + reviver」全局方案保 64 位精度时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "正则和 reviver 只匹配已知的 64 位字段名（按 \"<字段名>\"\\s*:\\s*\\d+ 这样带键名的写法），reviver 里按 key 判断再转 BigInt",
+     "support": [
+      "case-c179cd94000a4fea75a5#recommendation:5",
+      "case-c179cd94000a4fea75a5#diagnosis"
+     ]
+    },
+    {
+     "text": "replacer 把 bigint 以字符串发出前，先确认后端接受字符串形式的数字；确认不了就按字段单独处理",
+     "support": [
+      "case-c179cd94000a4fea75a5#recommendation:5"
+     ]
+    }
+   ],
+   "values": [],
+   "lookups": [
+    {
+     "what": "哪些字段是 64 位整数",
+     "where": "源工程的响应 bean 和 Retrofit 接口声明里类型为 Long / long 的字段和参数",
+     "how": "把这些字段名列成白名单，正则和 reviver 只认这些键"
+    }
+   ],
+   "why": "全局正则会把后端本来按字符串返回的字段和别的长整数也转成 bigint，bigint 以字符串发出时后端未必接受",
+   "keys": {
+    "read": [
+     "Long",
+     "long",
+     "@Query",
+     "@SerializedName",
+     "Gson"
+    ],
+    "product": [
+     "reviver",
+     "replacer",
+     "BigInt",
+     "JSON.parse",
+     "RegExp",
+     "\\d{16,}"
+    ]
+   },
+   "probe": {
+    "pattern": "\\\\d\\{1\\d,?\\}",
+    "note": "代码里有 \\d{16,} 一类按位数匹配长整数的正则；看它是否限定了字段名"
+   },
+   "unverified": [
+    "后端是否接受字符串形式的 64 位数字，卡里没有核验"
+   ],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法是限定正则和 reviver 的范围，不落在具体接口上",
+   "refs": []
+  },
+  {
+   "title": "模型带 bigint 字段时，每条 JSON 持久化往返都配成对的 replacer / reviver",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源端被存进偏好或数据库的 bean 有 Long 字段",
+     "wrong": "存取用户等对象时用裸 JSON.stringify(obj) 存、JSON.parse(json) 取，DAO 或 preferences 里存的 JSON 也没处理 bigint"
+    }
+   ],
+   "scope": "数据模型里有 bigint 字段、又要以 JSON 存进偏好、数据库或文件时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "每条持久化路径写配对的 stringify（replacer 把 bigint 转字符串）和 parse（reviver 把这些字段转回 BigInt）",
+     "support": [
+      "case-c179cd94000a4fea75a5#recommendation:3",
+      "case-c179cd94000a4fea75a5#diagnosis"
+     ]
+    },
+    {
+     "text": "存完读回来比较 id 是否和存之前一致",
+     "support": [
+      "case-c179cd94000a4fea75a5#recommendation:3"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "给用户存取加配对的 stringify / parse 函数",
+     "meaning": "修复时网络层改好后，存下的 id 仍被舍入，补上这对函数才一致",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-c179cd94000a4fea75a5#diagnosis"
+     ]
+    }
+   ],
+   "lookups": [],
+   "why": "网络层保住了精度，存一次再读回来 id 仍会被舍入",
+   "keys": {
+    "read": [
+     "Long",
+     "SharedPreferences",
+     "Room",
+     "@Entity",
+     "Gson"
+    ],
+    "product": [
+     "JSON.stringify",
+     "JSON.parse",
+     "preferences",
+     "relationalStore",
+     "bigint",
+     "reviver",
+     "replacer"
+    ]
+   },
+   "probe": {
+    "pattern": "JSON\\.stringify\\(\\s*\\w+\\s*\\)",
+    "note": "裸 JSON.stringify(obj)；对象里有 bigint 字段时要配 replacer，并在读回时配 reviver"
+   },
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法落在全局 JSON 的通用方法上，没有专门参数类型可搜",
+   "refs": []
+  },
+  {
+   "title": "源端参数是 Long 的 id / userId，规格的 ArkTS 目标签名写 bigint，不照模板写 number",
+   "product": "规格",
+   "triggers": [
+    {
+     "read": "源码方法参数 userId: Long、@Query(\"userId\") userId: Long",
+     "wrong": "规格「服务层（ArkTS 目标接口）」写成 (userId: number)，或照模板示例写 (feedItemId: number)"
+    }
+   ],
+   "scope": "规格提取时写服务层 ArkTS 目标签名、源端参数是 Long 的 id 或 userId",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "目标签名里这些参数写 bigint，或注明「64 位，禁用 number」",
+     "support": [
+      "case-c179cd94000a4fea75a5#recommendation:4"
+     ]
+    }
+   ],
+   "values": [],
+   "lookups": [],
+   "why": "规格写成 number 后，切片实现照抄，64 位 id 在各层都被舍入",
+   "keys": {
+    "read": [
+     "Long",
+     "userId",
+     "@Query",
+     "ViewModel",
+     "fun"
+    ],
+    "product": [
+     "服务层（ArkTS 目标接口）",
+     "userId: number",
+     "bigint",
+     "64 位",
+     "禁用 number"
+    ]
+   },
+   "probe": {
+    "pattern": "\\w*[Ii]d\\s*:\\s*number",
+    "note": "规格签名里 id 类参数写成 number；对照源端是不是 Long"
+   },
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：规格类做法，不落在具体接口上",
+   "refs": []
+  }
+ ],
+ "left_out": [],
+ "corrections": [],
+ "gaps": [],
+ "conflicts": [
+  "卡内：修复时主会话说 bigint 以字符串发出后「后端收到的还是数字」，卡里指出这与 JSON 行为不符且没核验后端是否接受"
+ ]
+}

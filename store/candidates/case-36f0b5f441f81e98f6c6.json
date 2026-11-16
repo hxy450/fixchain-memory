@@ -1,0 +1,304 @@
+{
+ "case": "case-36f0b5f441f81e98f6c6",
+ "rules": [
+  {
+   "title": "源端靠引用比较判脏时，V2 里不拿 @Local 数组和另存数组做 ===，改用已替换标志",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "Compose 里 `remember(x) { mutableStateOf(x) }` 取初值，退出前的未保存判断用 state !== x 引用比较（未改动时两侧是同一对象）",
+     "wrong": "目标新建两个独立数组 `@Local steps = []` 与另存的初始数组，判脏写成 this.steps === this.initial…，新增模式两个 [] 恒不等，编辑模式 @Local 代理与原数组也不等"
+    }
+   ],
+   "scope": "把源端依赖对象身份的未保存判断迁成 ArkUI 状态管理 V2 时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "先确认源端未改动时比较两侧是否同一对象；目标改用显式的「已替换」布尔标志：保存、删除、移动、追加等每条修改路径置 true，载入时复位为 false",
+     "support": [
+      "case-36f0b5f441f81e98f6c6#recommendation:1",
+      "case-36f0b5f441f81e98f6c6#diagnosis"
+     ]
+    },
+    {
+     "text": "确要比对象时比较 UIUtils.getTarget(this.steps) 与载入时保存的原对象；在新增、编辑两个入口各验证一次「未改动直接返回」",
+     "support": [
+      "case-36f0b5f441f81e98f6c6#recommendation:1"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "状态管理 V2 给 @Trace、@Local 装饰的 Date、Map、Set、Array 添加一层代理",
+     "meaning": "@Local 数组与赋给它的原数组 === 不成立",
+     "source": "arkts-new-getTarget.md，概述",
+     "support": []
+    },
+    {
+     "value": "static getTarget<T extends object>(source: T): T（@since 12）",
+     "meaning": "取代理前的原始对象",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.arkui.StateManagement.d.ts，UIUtils.getTarget",
+     "support": []
+    },
+    {
+     "value": "改为 stepsReplaced 一类标志（修改路径置位、载入复位）后，未改动离开不再弹「未保存」",
+     "meaning": "卡里的修法",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-36f0b5f441f81e98f6c6#diagnosis"
+     ]
+    }
+   ],
+   "lookups": [],
+   "why": "两个独立数组或代理与原数组永远不相等，每次离开都弹「未保存」",
+   "keys": {
+    "read": [
+     "remember",
+     "mutableStateOf",
+     "!==",
+     "listOf()"
+    ],
+    "product": [
+     "@Local",
+     "===",
+     "UIUtils.getTarget",
+     "@ComponentV2",
+     "aboutToAppear"
+    ]
+   },
+   "probe": {
+    "pattern": "this\\.\\w+\\s*[!=]==\\s*this\\.\\w*(initial|origin|snapshot)\\w*",
+    "note": "拿状态数组和另存的初始数组做引用比较；V2 下代理与原数组不等"
+   },
+   "unverified": [
+    "编辑模式「代理 ≠ 原数组」没有在生成态构建上直接运行验证，依据 V2 代理语义和复审结论"
+   ],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法落在判脏逻辑上；getTarget 只有 UIUtils 一处",
+   "refs": [
+    {
+     "what": "V2 给 @Local 数组加代理",
+     "kind": "oh-docs",
+     "where": "zh-cn/application-dev/ui/state-management/arkts-new-getTarget.md 概述",
+     "quote": "状态管理V2中，会给使用状态变量装饰器如[\\@Trace](./arkts-new-observedV2-and-trace.md)、[\\@Local](./arkts-new-local.md)装饰的Date、Map、Set、Array添加一层代理用于观测API调用产生的变化。",
+     "version": "docs f41b9345"
+    },
+    {
+     "what": "getTarget 签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.arkui.StateManagement.d.ts UIUtils.getTarget",
+     "quote": "static getTarget<T extends object>(source: T): T;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "getTarget 取原始对象",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.arkui.StateManagement.d.ts UIUtils.getTarget",
+     "quote": "Get raw object from the Object wrapped with an ObservedObject. * If input parameter is a regular Object without ObservedObject, return Object itself.",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    }
+   ]
+  },
+  {
+   "title": "LazyColumn 无 key 的项按位置标识，目标常驻组件要按位置相关键重建或保存后复位",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "LazyColumn / LazyList 里无 key 的 `item { }`（如列表尾部的新增卡），内部状态只 remember(…)，保存回调不自清",
+     "wrong": "目标把它放进常驻的条件 ListItem，状态只在 aboutToAppear 初始化，保存后只追加不复位，上一条输入留在卡里"
+    }
+   ],
+   "scope": "把 Compose 惰性列表的项迁成 ArkUI List + ForEach / Repeat 时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "逐项核对源端有无 key：无 key 的项位置一变 remember 状态就丢；目标用位置相关键重建，如 ForEach([this.steps.length], () => { … }, (n: number) => `${n}`)，或保存后显式复位输入状态",
+     "support": [
+      "case-36f0b5f441f81e98f6c6#recommendation:2",
+      "case-36f0b5f441f81e98f6c6#diagnosis"
+     ]
+    },
+    {
+     "text": "推断出「源保存后仍保留旧输入」这类反常行为时，先回查框架的身份语义再定",
+     "support": [
+      "case-36f0b5f441f81e98f6c6#recommendation:2"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "(arr: Array<any>, itemGenerator: (item: any, index: number) => void, keyGenerator?: (item: any, index: number) => string): ForEachAttribute",
+     "meaning": "ForEach 的签名",
+     "source": "鸿蒙 SDK 的 ets/component/for_each.d.ts，ForEachInterface",
+     "support": []
+    },
+    {
+     "value": "键值变化时框架视为数组项已被替换，按新键值创建新组件",
+     "meaning": "用随步数变化的键可让尾卡重建、状态复位",
+     "source": "arkts-rendering-control-foreach.md，键值生成规则",
+     "support": []
+    },
+    {
+     "value": "尾卡改为 ForEach([steps.length]) 按步数为键重建后，保存一条后尾卡回到空白",
+     "meaning": "卡里的修法",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-36f0b5f441f81e98f6c6#diagnosis"
+     ]
+    }
+   ],
+   "lookups": [],
+   "why": "常驻组件不会随位置重建，源端靠重建实现的复位丢了，保存后仍留着上一条输入",
+   "keys": {
+    "read": [
+     "LazyColumn",
+     "item {",
+     "itemsIndexed",
+     "remember",
+     "key ="
+    ],
+    "product": [
+     "ForEach",
+     "ListItem",
+     "aboutToAppear",
+     "keyGenerator",
+     "Repeat"
+    ]
+   },
+   "probe": null,
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法落在 ForEach 键值的用法上，ForEach 只有一个签名",
+   "refs": [
+    {
+     "what": "ForEach 签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/component/for_each.d.ts ForEachInterface",
+     "quote": "(arr: Array<any>, itemGenerator: (item: any, index: number) => void, keyGenerator?: (item: any, index: number) => string): ForEachAttribute;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "键值变化时创建新组件",
+     "kind": "oh-docs",
+     "where": "zh-cn/application-dev/ui/rendering-control/arkts-rendering-control-foreach.md 键值生成规则",
+     "quote": "当键值变化时，ArkUI框架会视为该数组元素已被替换或修改，并会基于新的键值创建一个新的组件。",
+     "version": "docs f41b9345"
+    }
+   ]
+  },
+  {
+   "title": "ForEach/Repeat 的键不含位置时，位置相关值在渲染时按 indexOf 取当前位置",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "Compose `itemsIndexed` 每次重组把当前 index 传给 isFirst / isLast / 序号等位置相关参数",
+     "wrong": "ForEach 的键是实例 id + 内容（不含位置），却在 itemGenerator 里把闭包 index（或 Repeat 的 ri.index）写进 isFirst / isLast / 序号和行形状"
+    }
+   ],
+   "scope": "列表项可换位（上移、下移、删除），且项上有依赖位置的显示或可用态时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "位置相关值在渲染时按当前数组位置计算：const i = this.steps.indexOf(item)，由 i 推 isFirst（i === 0）、isLast（i === this.steps.length - 1）、序号和行形状",
+     "support": [
+      "case-36f0b5f441f81e98f6c6#recommendation:3",
+      "case-36f0b5f441f81e98f6c6#diagnosis"
+     ]
+    },
+    {
+     "text": "换位后检查上移、下移按钮的可用态",
+     "support": [
+      "case-36f0b5f441f81e98f6c6#recommendation:3"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "键值没变时 ForEach 不会把数据更新同步给子组件，子组件仍绑定旧的数组项",
+     "meaning": "同键项换位后，构造时传入的位置参数不刷新",
+     "source": "arkts-rendering-control-foreach.md，数据变化不渲染",
+     "support": []
+    },
+    {
+     "value": "itemGenerator 声明了 index 而 keyGenerator 没声明时，框架在键值后拼接 index",
+     "meaning": "键是否含位置还取决于 keyGenerator 有没有声明 index",
+     "source": "arkts-rendering-control-foreach.md，键值生成规则",
+     "support": []
+    },
+    {
+     "value": "改用 this.steps.indexOf(ri.item) 取当前位置后，上移、下移恢复有效",
+     "meaning": "卡里的修法",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-36f0b5f441f81e98f6c6#diagnosis"
+     ]
+    }
+   ],
+   "lookups": [],
+   "why": "同键项换位时不重跑生成函数，闭包里的旧 index 让首尾判断和上移、下移可用态过期",
+   "keys": {
+    "read": [
+     "itemsIndexed",
+     "LazyColumn",
+     "index",
+     "isFirst",
+     "isLast"
+    ],
+    "product": [
+     "ForEach",
+     "Repeat",
+     "ri.index",
+     "keyGenerator",
+     "indexOf",
+     "@Param"
+    ]
+   },
+   "probe": {
+    "pattern": "is(First|Last)\\s*:\\s*(index|ri\\.index|idx)\\b",
+    "note": "位置相关参数取自闭包 index；键不含位置时换位后会过期"
+   },
+   "unverified": [
+    "ForEach 闭包 index 过期没有在生成态构建上直接运行，依据同键复用语义和修复期 Repeat 的运行观察"
+   ],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法落在渲染时取位置上；ForEach 只有一个签名，Repeat 的 index 见 conflicts",
+   "refs": [
+    {
+     "what": "键值不变时不同步数据给子组件",
+     "kind": "oh-docs",
+     "where": "zh-cn/application-dev/ui/rendering-control/arkts-rendering-control-foreach.md 数据变化不渲染",
+     "quote": "但是新的`articleList[0]`生成的key没有变，ForEach不会将数据更新同步给子组件，因此第一个组件仍然绑定旧的`articleList[0]`。",
+     "version": "docs f41b9345"
+    },
+    {
+     "what": "keyGenerator 未声明 index 时框架拼接 index",
+     "kind": "oh-docs",
+     "where": "zh-cn/application-dev/ui/rendering-control/arkts-rendering-control-foreach.md 键值生成规则",
+     "quote": "如果开发者在`itemGenerator`函数中声明了`index`参数，但未在`keyGenerator`函数中声明`index`参数，框架会在`keyGenerator`函数返回值的基础上拼接`index`，作为最终的键值",
+     "version": "docs f41b9345"
+    },
+    {
+     "what": "Repeat 找到相同键值时更新 index（见 conflicts）",
+     "kind": "oh-docs",
+     "where": "zh-cn/application-dev/ui/rendering-control/arkts-new-rendering-control-repeat.md 节点更新/复用能力说明",
+     "quote": "若在旧数组中能找到相同键值，直接使用对应的子组件节点，并更新索引index。",
+     "version": "docs f41b9345"
+    }
+   ]
+  }
+ ],
+ "left_out": [
+  {
+   "text": "修复期新引入的 @Builder 值参不刷新问题",
+   "reason": "其他：修复期新问题，卡里不归因"
+  }
+ ],
+ "corrections": [],
+ "gaps": [
+  "Compose LazyColumn 无 key 项按位置标识、remember 状态随位置丢弃属于依赖库行为，本机没有源码原文，按卡写"
+ ],
+ "conflicts": [
+  "Repeat 文档说相同键值的节点复用时更新索引 index，卡里说 Repeat 的 ri.index 换位后同样过期（修复期运行观察）；做法按卡写成渲染时 indexOf 取位置",
+  "ForEach 文档说 itemGenerator 声明 index 而 keyGenerator 未声明时框架会把 index 拼进键值，卡里没写 keyGenerator 是否声明了 index，「键不含位置」成立与否取决于这一点"
+ ]
+}

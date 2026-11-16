@@ -1,0 +1,285 @@
+{
+ "case": "case-f4de4c0baf567b736a95",
+ "rules": [
+  {
+   "title": "DisposableEffect 挂在承载多屏的外层 Composable 时，规格把清理归到外层生命周期",
+   "product": "规格",
+   "triggers": [
+    {
+     "read": "同一个 Composable 里先声明 DisposableEffect(Unit) { onDispose { …cancel(); player.stop() } }，再用状态变量 if (screen == …) 切换两个屏幕",
+     "wrong": "目标拆成两个页面后，规格范围只写一个页面，对接点写「页面销毁：取消播放任务并 stop()」、判据写「页面退出后无持续音频」；没写切到另一屏时播放继续"
+    }
+   ],
+   "scope": "规格提取时，把源端一个 Composable 内多屏共享的资源清理映射成目标端多页面的生命周期契约",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "对照源码确认 onDispose 的真实触发：只有承载这些屏的外层 Composable 离开组合时；只改 screen 状态的切屏不触发",
+     "support": [
+      "case-f4de4c0baf567b736a95#recommendation:2",
+      "case-f4de4c0baf567b736a95#diagnosis"
+     ]
+    },
+    {
+     "text": "清理归属写成外层生命周期（目标端通常是 Ability 或 Navigation 宿主页），跨页对接点写「切到另一屏不停止播放，Ability 销毁时 stop()」",
+     "support": [
+      "case-f4de4c0baf567b736a95#recommendation:1"
+     ]
+    },
+    {
+     "text": "逐个列出源码里改 screen 状态的入口，确认它们对应的目标导航动作没有被写成释放条件",
+     "support": [
+      "case-f4de4c0baf567b736a95#recommendation:2"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "切到另一屏只改 screen，外层 Composable 仍在组合中，onDispose 不触发，播放任务和播放器继续存在",
+     "meaning": "源端的实际行为",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-f4de4c0baf567b736a95#diagnosis"
+     ]
+    },
+    {
+     "value": "非栈顶页面 push 进栈时 NavDestination 触发 onHidden；aboutToDisappear 只在自定义组件析构销毁前执行",
+     "meaning": "目标端推入子页时下层页面不销毁",
+     "source": "arkts-navigation-navdestination.md，页面生命周期",
+     "support": []
+    }
+   ],
+   "lookups": [],
+   "why": "把外层清理收窄成单页退出时，计划和代码会在切屏时停止共享播放，和源端「切屏继续播放」不一致",
+   "keys": {
+    "read": [
+     "DisposableEffect",
+     "onDispose",
+     "BackHandler",
+     "mutableStateOf",
+     "@Composable",
+     "player.stop"
+    ],
+    "product": [
+     "对接点",
+     "页面销毁",
+     "页面退出",
+     "涉及页面",
+     "NavPathStack",
+     "Ability",
+     "stop()"
+    ]
+   },
+   "probe": {
+    "pattern": "页面(销毁|退出)[^\\n]{0,20}stop",
+    "note": "规格把停止播放挂在页面退出上；核对源端清理是不是挂在承载多屏的外层"
+   },
+   "unverified": [
+    "卡里没有设备复现「播放中切到另一屏」时音频是否被打断"
+   ],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法写在规格文档里，不落在具体接口上",
+   "refs": [
+    {
+     "what": "push 时下层触发 onHidden",
+     "kind": "oh-docs",
+     "where": "zh-cn/application-dev/ui/arkts-navigation-navdestination.md 页面生命周期",
+     "quote": "NavDestination组件执行隐藏后执行（非栈顶页面push进栈，栈顶页面pop出栈或应用切换到后台）。",
+     "version": "docs f41b9345"
+    },
+    {
+     "what": "aboutToDisappear 只在析构前",
+     "kind": "oh-docs",
+     "where": "zh-cn/application-dev/ui/arkts-navigation-navdestination.md 页面生命周期",
+     "quote": "自定义组件析构销毁之前执行，不允许在该方法中改变状态变量。",
+     "version": "docs f41b9345"
+    }
+   ]
+  },
+  {
+   "title": "切片计划不把共享服务的 stop 挂到页面 onDisappear，最终释放写在拥有它的 Ability",
+   "product": "计划与派工",
+   "triggers": [
+    {
+     "read": "规格写「页面销毁：取消播放任务并 stop()」，源端清理挂在承载多屏的外层 Composable 的 DisposableEffect 上",
+     "wrong": "切片计划的对接点写「某页面.onDisappear → 共享播放服务.stop()」，并把这个回调登记成跨切片编辑或占位"
+    }
+   ],
+   "scope": "计划阶段为共享服务（播放、连接等）写停止和释放的对接点时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "写对接点前先确认页面挂载方式（Navigation 首页内容还是 NavPathStack 页面）和推入子页时实际触发的回调",
+     "support": [
+      "case-f4de4c0baf567b736a95#recommendation:3"
+     ]
+    },
+    {
+     "text": "对接点写成：共享服务的最终释放放在拥有它的层级（如 EntryAbility.onDestroy），页面离开只解除自身监听",
+     "support": [
+      "case-f4de4c0baf567b736a95#recommendation:3",
+      "case-f4de4c0baf567b736a95#diagnosis"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "onDestroy(): void | Promise<void>",
+     "meaning": "UIAbility 销毁回调，共享服务的最终释放点",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.app.ability.UIAbility.d.ts，UIAbility.onDestroy",
+     "support": []
+    }
+   ],
+   "lookups": [],
+   "why": "计划把释放挂在页面回调上，后面的收尾者照计划填占位，切屏时就会停掉共享服务",
+   "keys": {
+    "read": [
+     "DisposableEffect",
+     "onDispose",
+     "页面销毁",
+     "对接点",
+     "涉及页面"
+    ],
+    "product": [
+     "对接点",
+     "onDisappear",
+     "跨切片编辑",
+     "占位登记",
+     "EntryAbility.onDestroy",
+     "stop()"
+    ]
+   },
+   "probe": {
+    "pattern": "onDisappear\\s*→[^\\n]{0,40}\\.(stop|dispose)\\(",
+    "note": "计划把共享服务的停止挂在页面 onDisappear 上；核对释放应归哪一层"
+   },
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法写在计划文档里，不落在具体接口的参数类型上",
+   "refs": [
+    {
+     "what": "UIAbility.onDestroy 签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.app.ability.UIAbility.d.ts UIAbility.onDestroy",
+     "quote": "onDestroy(): void | Promise<void>;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    }
+   ]
+  },
+  {
+   "title": "共享播放服务不在页面 aboutToDisappear 里 stop，页面离开只解除监听，Ability 销毁时停止",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源端 DisposableEffect 的 onDispose 挂在承载多屏的外层 Composable 上，切屏只改状态变量",
+     "wrong": "页面的 aboutToDisappear() / onDisappear() 里调用 dispose() 或共享播放服务的 stop()"
+    }
+   ],
+   "scope": "把源端多屏共享的播放器、播放任务迁成目标端共享服务，页面挂在 Navigation 下时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "页面离开（打开另一屏）时只把自己注册在服务上的监听置空，不调 dispose() / stop()；回到页面时在 aboutToAppear / onShown 里恢复",
+     "support": [
+      "case-f4de4c0baf567b736a95#diagnosis",
+      "case-f4de4c0baf567b736a95#recommendation:3"
+     ]
+    },
+    {
+     "text": "共享服务在拥有它的 EntryAbility 的 onDestroy() 里 stop()",
+     "support": [
+      "case-f4de4c0baf567b736a95#diagnosis",
+      "case-f4de4c0baf567b736a95#recommendation:3"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "打开另一屏时页面只解除播放监听、其他离开仍 dispose，aboutToAppear 与 onShown 复位；EntryAbility.onDestroy 停止共享播放服务",
+     "meaning": "修复后保留到截止的写法",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-f4de4c0baf567b736a95#diagnosis"
+     ]
+    },
+    {
+     "value": "onDestroy(): void | Promise<void>",
+     "meaning": "UIAbility 的销毁回调",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.app.ability.UIAbility.d.ts，UIAbility.onDestroy",
+     "support": []
+    },
+    {
+     "value": "onHidden(callback: Callback<VisibilityChangeReason>): NavDestinationAttribute",
+     "meaning": "NavDestination 被推入的页面盖住时触发，不是销毁",
+     "source": "鸿蒙 SDK 的 ets/component/nav_destination.d.ts，NavDestinationAttribute.onHidden",
+     "support": []
+    },
+    {
+     "value": "非栈顶页面 push 进栈时下层触发 onHidden；aboutToDisappear 只在自定义组件析构销毁前执行",
+     "meaning": "推入子页时下层页面的 aboutToDisappear 不一定触发，别靠它判断「切屏」",
+     "source": "arkts-navigation-navdestination.md，页面生命周期",
+     "support": []
+    }
+   ],
+   "lookups": [],
+   "why": "页面退出就停共享服务时，切到另一屏会打断源端本来继续的播放",
+   "keys": {
+    "read": [
+     "DisposableEffect",
+     "onDispose",
+     "player.stop",
+     "BackHandler",
+     "@Composable"
+    ],
+    "product": [
+     "aboutToDisappear",
+     "onDisappear",
+     "dispose",
+     "stop",
+     "EntryAbility",
+     "onDestroy",
+     "onShown",
+     "onHidden"
+    ]
+   },
+   "probe": {
+    "pattern": "aboutToDisappear\\s*\\(\\s*\\)\\s*(:\\s*void\\s*)?\\{[^}]*\\.(stop|dispose)\\(",
+    "note": "页面析构时停止或释放服务；核对它是不是多页共享、应归 Ability"
+   },
+   "unverified": [
+    "卡里没有设备复现「播放中打开另一屏」，Navigation 首页内容在推入子页时 aboutToDisappear 是否触发只是推断"
+   ],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法落在生命周期回调的选择上，这些回调没有专门的参数类型可搜",
+   "refs": [
+    {
+     "what": "UIAbility.onDestroy 签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.app.ability.UIAbility.d.ts UIAbility.onDestroy",
+     "quote": "onDestroy(): void | Promise<void>;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "NavDestination.onHidden 签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/component/nav_destination.d.ts NavDestinationAttribute.onHidden",
+     "quote": "onHidden(callback: Callback<VisibilityChangeReason>): NavDestinationAttribute;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "push 时下层触发 onHidden",
+     "kind": "oh-docs",
+     "where": "zh-cn/application-dev/ui/arkts-navigation-navdestination.md 页面生命周期",
+     "quote": "NavDestination组件执行隐藏后执行（非栈顶页面push进栈，栈顶页面pop出栈或应用切换到后台）。",
+     "version": "docs f41b9345"
+    }
+   ]
+  }
+ ],
+ "left_out": [],
+ "corrections": [],
+ "gaps": [
+  "Compose DisposableEffect 的 onDispose 只在离开组合时触发：androidx.compose.runtime 本机只有编译产物，按卡写"
+ ],
+ "conflicts": []
+}

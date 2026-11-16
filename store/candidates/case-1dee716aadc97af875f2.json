@@ -1,0 +1,536 @@
+{
+ "case": "case-1dee716aadc97af875f2",
+ "rules": [
+  {
+   "title": "宿主生命周期不停播放器时，规格的 AVPlayer 映射写明切后台续播并登 HARD-DIV/PD",
+   "product": "规格",
+   "triggers": [
+    {
+     "read": "宿主 Activity/Fragment 的 onPause、onStop、onDestroy 里不调用 MediaPlayer（或 ExoPlayer）的 pause/stop/release，只有显式退出或再次点击才停，播放会在退后台后继续到 onCompletion",
+     "wrong": "规格的跨栈映射行把「MediaPlayer 内联播放 → AVPlayer」判为「行为等价」，生命周期 AC 里没有「切后台继续播放至结束」，也没有 HARD-DIV 或 PD 登记"
+    }
+   ],
+   "scope": "安卓用 MediaPlayer/ExoPlayer 播放音频、迁成 AVPlayer 时，规格里的跨栈映射行和生命周期 AC",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "先核对宿主 onPause/onStop/onDestroy 是否调用播放器的 pause/stop/release；都不调用时，在 AC 里显式写一条「切后台继续播放至结束」，并把这一映射行标为 HARD-DIV/PD，不写「行为等价」",
+     "support": [
+      "case-1dee716aadc97af875f2#recommendation:1"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "后台播放媒体类型（STREAM_USAGE_MUSIC、STREAM_USAGE_MOVIE、STREAM_USAGE_AUDIOBOOK）时，必须接入 AVSession 并申请 AUDIO_PLAYBACK 类型长时任务",
+     "meaning": "前台 AVPlayer 本身不能退后台续播，规格里这一行不是行为等价",
+     "source": "continuous-task.md，使用场景（关于AUDIO_PLAYBACK（音视频播放）说明）",
+     "support": []
+    },
+    {
+     "value": "不满足接入规范时，退至后台播放会被系统静音并冻结，切回前台才解除静音并恢复",
+     "meaning": "漏写这条 AC 时目标端的实际表现",
+     "source": "continuous-task.md，使用场景（关于AUDIO_PLAYBACK（音视频播放）说明）",
+     "support": []
+    },
+    {
+     "value": "只接前台 AVPlayer 时，目标端退后台被系统静音暂停，源端继续播放到结束",
+     "meaning": "双机对照看到的差异",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-1dee716aadc97af875f2#diagnosis"
+     ]
+    }
+   ],
+   "lookups": [],
+   "why": "判成行为等价后实现阶段只做前台播放，目标端退后台被静音暂停，源端却继续播放",
+   "keys": {
+    "read": [
+     "MediaPlayer",
+     "ExoPlayer",
+     "onPause",
+     "onStop",
+     "onDestroy",
+     "stop",
+     "release",
+     "onCompletion"
+    ],
+    "product": [
+     "AVPlayer",
+     "行为等价",
+     "HARD-DIV",
+     "PD",
+     "AC",
+     "切后台继续播放",
+     "跨栈映射"
+    ]
+   },
+   "probe": {
+    "pattern": "AVPlayer[^\\n]*行为等价",
+    "note": "映射行把 AVPlayer 判为行为等价；宿主生命周期不停播放器时应改标 HARD-DIV/PD 并加后台续播 AC"
+   },
+   "unverified": [
+    "卡里上机对照出自 HarmonyOS 6.1.1(24)，本机文档副本和声明按 API 23 核对"
+   ],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法落在规格的 AC 和登记上，不落在具体接口上",
+   "refs": [
+    {
+     "what": "后台播放媒体类型必须接 AVSession 并申请 AUDIO_PLAYBACK 长时任务",
+     "kind": "oh-docs",
+     "where": "zh-cn/application-dev/task-management/continuous-task.md 使用场景",
+     "quote": "当应用需要在后台播放媒体类型（流类型为STREAM_USAGE_MUSIC、STREAM_USAGE_MOVIE和STREAM_USAGE_AUDIOBOOK）和游戏类型（流类型为STREAM_USAGE_GAME）时，必须接入媒体会话服务（[AVSession](../media/avsession/avsession-overview.md)）并申请AUDIO_PLAYBACK类型长时任务。",
+     "version": "docs f41b9345"
+    },
+    {
+     "what": "不满足接入规范时退后台被静音并冻结",
+     "kind": "oh-docs",
+     "where": "zh-cn/application-dev/task-management/continuous-task.md 使用场景",
+     "quote": "如果应用不满足上述接入规范，退至后台播放时会被系统静音并冻结，无法在后台正常播放，直到应用重新切回前台时，才会解除静音并恢复播放。",
+     "version": "docs f41b9345"
+    }
+   ]
+  },
+  {
+   "title": "安卓播放会跨过退后台时，AVPlayer 控制器配 AVSession 和 AUDIO_PLAYBACK 长时任务",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "MediaPlayer/ExoPlayer 的 stop/release 只在显式退出或再次点击时调用，宿主 onPause/onStop 不碰播放器",
+     "wrong": "播放控制器只有 media.createAVPlayer、fdSrc、on('stateChange')/on('error') 和 release，没有 avSession.createAVSession，也没有 backgroundTaskManager.startBackgroundRunning"
+    }
+   ],
+   "scope": "安卓端退后台仍继续播放的音频，迁成 AVPlayer 时的播放控制器代码",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "进入 playing 后：session = await avSession.createAVSession(context, tag, 'audio')，session.setAVPlaybackState({...})；再 backgroundTaskManager.startBackgroundRunning(context, backgroundTaskManager.BackgroundMode.AUDIO_PLAYBACK, wantAgent)",
+     "support": [
+      "case-1dee716aadc97af875f2#recommendation:2",
+      "case-1dee716aadc97af875f2#diagnosis"
+     ]
+    },
+    {
+     "text": "停止、播完、出错、页面销毁时都调 backgroundTaskManager.stopBackgroundRunning(context)，再 session.destroy()；不要只写 playback/startPlaying/stopPlaying 三段的前台等价",
+     "support": [
+      "case-1dee716aadc97af875f2#recommendation:2",
+      "case-1dee716aadc97af875f2#diagnosis"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "createAVSession(context: Context, tag: string, type: AVSessionType): Promise<AVSession>",
+     "meaning": "创建媒体会话，第二个参数是自定义名字，第三个才是类型",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.multimedia.avsession.d.ts，avSession.createAVSession",
+     "support": []
+    },
+    {
+     "value": "type AVSessionType = 'audio' | 'video' | 'voice_call' | 'video_call' | 'photo'",
+     "meaning": "音频播放用 'audio'",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.multimedia.avsession.d.ts，avSession.AVSessionType",
+     "support": []
+    },
+    {
+     "value": "setAVPlaybackState(state: AVPlaybackState): Promise<void>",
+     "meaning": "AVSession 上报播放状态",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.multimedia.avsession.d.ts，AVSession.setAVPlaybackState",
+     "support": []
+    },
+    {
+     "value": "destroy(): Promise<void>",
+     "meaning": "AVSession 销毁会话、释放服务端资源",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.multimedia.avsession.d.ts，AVSession.destroy",
+     "support": []
+    },
+    {
+     "value": "startBackgroundRunning(context: Context, bgMode: BackgroundMode, wantAgent: WantAgent): Promise<void>",
+     "meaning": "申请长时任务，需要 ohos.permission.KEEP_BACKGROUND_RUNNING",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.resourceschedule.backgroundTaskManager.d.ts，backgroundTaskManager.startBackgroundRunning",
+     "support": []
+    },
+    {
+     "value": "BackgroundMode.AUDIO_PLAYBACK = 2",
+     "meaning": "音频播放类长时任务",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.resourceschedule.backgroundTaskManager.d.ts，backgroundTaskManager.BackgroundMode",
+     "support": []
+    },
+    {
+     "value": "stopBackgroundRunning(context: Context): Promise<void>",
+     "meaning": "取消长时任务",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.resourceschedule.backgroundTaskManager.d.ts，backgroundTaskManager.stopBackgroundRunning",
+     "support": []
+    }
+   ],
+   "lookups": [],
+   "why": "只做前台 AVPlayer 时，退后台被系统静音暂停，源端却继续播放到结束",
+   "keys": {
+    "read": [
+     "MediaPlayer",
+     "ExoPlayer",
+     "onPause",
+     "onStop",
+     "stop",
+     "release",
+     "onCompletion",
+     "setOnCompletionListener"
+    ],
+    "product": [
+     "createAVPlayer",
+     "avSession",
+     "createAVSession",
+     "setAVPlaybackState",
+     "backgroundTaskManager",
+     "startBackgroundRunning",
+     "BackgroundMode.AUDIO_PLAYBACK",
+     "stopBackgroundRunning",
+     "destroy",
+     "WantAgent"
+    ]
+   },
+   "probe": {
+    "pattern": "createAVPlayer\\s*\\(",
+    "note": "文件用了 AVPlayer；同一控制器里没有 createAVSession 和 startBackgroundRunning 时，核对源端是否退后台继续播放"
+   },
+   "unverified": [
+    "文档示例在 createAVSession 之后调 session.activate()，卡里没写这一步，是否必需未核实",
+    "卡里上机结果出自 HarmonyOS 6.1.1(24)，本机声明是 API 23"
+   ],
+   "alternatives_unverified": [
+    "startBackgroundRunning(context, bgModes: string[], wantAgent)（since 12，如 ['audioPlayback']）和 startBackgroundRunning(context, request: ContinuousTaskRequest)（since 21）两个重载，卡里没用"
+   ],
+   "siblings_checked": "搜 bgMode: BackgroundMode：另有已废弃（deprecated since 9）的 @ohos.backgroundTaskManager.startBackgroundRunning 两个重载，没写进 values；搜 type: AVSessionType：只有 createAVSession 的两个重载",
+   "refs": [
+    {
+     "what": "createAVSession 的签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.multimedia.avsession.d.ts avSession.createAVSession",
+     "quote": "function createAVSession(context: Context, tag: string, type: AVSessionType): Promise<AVSession>;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "createAVSession 的 tag 参数",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.multimedia.avsession.d.ts avSession.createAVSession",
+     "quote": "@param { string } tag - A user-defined name for this session * @param { AVSessionType } type - The type of session {@link AVSessionType}",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "AVSessionType 的取值",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.multimedia.avsession.d.ts avSession.AVSessionType",
+     "quote": "type AVSessionType = 'audio' | 'video' | 'voice_call' | 'video_call' | 'photo';",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "setAVPlaybackState 的签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.multimedia.avsession.d.ts AVSession.setAVPlaybackState",
+     "quote": "setAVPlaybackState(state: AVPlaybackState): Promise<void>;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "AVSession.destroy",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.multimedia.avsession.d.ts AVSession.destroy",
+     "quote": "Destroy this session, the server will clean up the session resources * @returns { Promise<void> } void promise when executed successfully",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "startBackgroundRunning 的签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.resourceschedule.backgroundTaskManager.d.ts backgroundTaskManager.startBackgroundRunning",
+     "quote": "function startBackgroundRunning(context: Context, bgMode: BackgroundMode, wantAgent: WantAgent): Promise<void>;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "startBackgroundRunning 需要 KEEP_BACKGROUND_RUNNING 权限",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.resourceschedule.backgroundTaskManager.d.ts backgroundTaskManager.startBackgroundRunning",
+     "quote": "@permission ohos.permission.KEEP_BACKGROUND_RUNNING * @param { Context } context - App running context. * @param { BackgroundMode } bgMode - Indicates which background mode to request.",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "BackgroundMode.AUDIO_PLAYBACK 的值",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.resourceschedule.backgroundTaskManager.d.ts backgroundTaskManager.BackgroundMode",
+     "quote": "audio playback mode * * @syscap SystemCapability.ResourceSchedule.BackgroundTaskManager.ContinuousTask * @atomicservice * @since 12 */ AUDIO_PLAYBACK = 2,",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "stopBackgroundRunning 的签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.resourceschedule.backgroundTaskManager.d.ts backgroundTaskManager.stopBackgroundRunning",
+     "quote": "function stopBackgroundRunning(context: Context): Promise<void>;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    }
+   ]
+  },
+  {
+   "title": "申请 AUDIO_PLAYBACK 长时任务时，module.json5 补 backgroundModes 和权限",
+   "product": "资源",
+   "triggers": [
+    {
+     "read": "",
+     "wrong": "代码里有 startBackgroundRunning(…BackgroundMode.AUDIO_PLAYBACK…)，module.json5 的 abilities 项没有 \"backgroundModes\": [\"audioPlayback\"]，requestPermissions 里没有 ohos.permission.KEEP_BACKGROUND_RUNNING"
+    }
+   ],
+   "scope": "目标工程要在后台继续播放音频时的 module.json5",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "在发起播放的那个 UIAbility 的 abilities 项里加 \"backgroundModes\": [\"audioPlayback\"]",
+     "support": [
+      "case-1dee716aadc97af875f2#diagnosis",
+      "case-1dee716aadc97af875f2#recommendation:3"
+     ]
+    },
+    {
+     "text": "在 module 的 requestPermissions 里加 { \"name\": \"ohos.permission.KEEP_BACKGROUND_RUNNING\" }",
+     "support": [
+      "case-1dee716aadc97af875f2#diagnosis",
+      "case-1dee716aadc97af875f2#recommendation:3"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "abilities 的 backgroundModes：当前 UIAbility 的长时任务集合，字符串数组，可缺省",
+     "meaning": "音频播放填 audioPlayback",
+     "source": "module-configuration-file.md，abilities标签",
+     "support": []
+    },
+    {
+     "value": "AUDIO_PLAYBACK 对应的配置项是 audioPlayback",
+     "meaning": "backgroundModes 里写的字符串",
+     "source": "continuous-task.md，使用场景（长时任务类型表）",
+     "support": []
+    },
+    {
+     "value": "ohos.permission.KEEP_BACKGROUND_RUNNING：权限级别 normal，授权方式 system_grant",
+     "meaning": "只需在 requestPermissions 声明，不用运行时弹窗申请",
+     "source": "permissions-for-all.md，ohos.permission.KEEP_BACKGROUND_RUNNING",
+     "support": []
+    }
+   ],
+   "lookups": [],
+   "why": "缺了这两项，startBackgroundRunning 申请不到长时任务，退后台仍被静音或挂起",
+   "keys": {
+    "read": [
+     "startBackgroundRunning",
+     "BackgroundMode.AUDIO_PLAYBACK",
+     "createAVSession",
+     "backgroundTaskManager",
+     "MediaPlayer"
+    ],
+    "product": [
+     "module.json5",
+     "abilities",
+     "backgroundModes",
+     "audioPlayback",
+     "requestPermissions",
+     "ohos.permission.KEEP_BACKGROUND_RUNNING"
+    ]
+   },
+   "probe": null,
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法落在 module.json5 的配置项上，没有接口参数类型可搜",
+   "refs": [
+    {
+     "what": "abilities 标签的 backgroundModes",
+     "kind": "oh-docs",
+     "where": "zh-cn/application-dev/quick-start/module-configuration-file.md abilities标签",
+     "quote": "| backgroundModes | 标识当前UIAbility组件的长时任务集合，指定用于满足特定类型的长时任务。",
+     "version": "docs f41b9345"
+    },
+    {
+     "what": "AUDIO_PLAYBACK 的配置项是 audioPlayback",
+     "kind": "oh-docs",
+     "where": "zh-cn/application-dev/task-management/continuous-task.md 使用场景",
+     "quote": "| AUDIO_PLAYBACK | 音视频播放。<br> **说明：** 从API version 12开始，支持在原子化服务中使用。 | audioPlayback | 音频、视频在后台播放，音视频投播。 |",
+     "version": "docs f41b9345"
+    },
+    {
+     "what": "Stage 模型要声明 KEEP_BACKGROUND_RUNNING 和 backgroundModes",
+     "kind": "oh-docs",
+     "where": "zh-cn/application-dev/task-management/continuous-task.md Stage模型",
+     "quote": "需要申请ohos.permission.KEEP_BACKGROUND_RUNNING权限",
+     "version": "docs f41b9345"
+    },
+    {
+     "what": "KEEP_BACKGROUND_RUNNING 是 normal、system_grant",
+     "kind": "oh-docs",
+     "where": "zh-cn/application-dev/security/AccessToken/permissions-for-all.md ohos.permission.KEEP_BACKGROUND_RUNNING",
+     "quote": "## ohos.permission.KEEP_BACKGROUND_RUNNING 允许Service Ability在后台持续运行。 **权限级别**：normal **授权方式**：系统授权（system_grant）",
+     "version": "docs f41b9345"
+    }
+   ]
+  },
+  {
+   "title": "移交 module.json5 配置缺口时，按所用 skill 的检查清单抄全，含后台播放两项",
+   "product": "计划与派工",
+   "triggers": [
+    {
+     "read": "所用 skill 的 module.json5 检查清单要求 backgroundModes: [audioPlayback] 和 ohos.permission.KEEP_BACKGROUND_RUNNING；派工的写盘边界不许改 module.json5",
+     "wrong": "交给收尾者的 module.json5 移交项（deferred-work）只列 skills 和运行时权限（如 ohos.permission.MICROPHONE），没有 backgroundModes: [audioPlayback] 和 ohos.permission.KEEP_BACKGROUND_RUNNING"
+    }
+   ],
+   "scope": "worker 不能改 module.json5、把配置缺口登记成移交项交给收尾者时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "移交项从所用 skill 的 module.json5 检查清单逐项抄全，不只列运行时权限；用到后台音频时必须写上 abilities 的 \"backgroundModes\": [\"audioPlayback\"] 和 requestPermissions 的 ohos.permission.KEEP_BACKGROUND_RUNNING",
+     "support": [
+      "case-1dee716aadc97af875f2#recommendation:3"
+     ]
+    },
+    {
+     "text": "收尾者落地 module.json5 之前，对照同一份清单核一遍",
+     "support": [
+      "case-1dee716aadc97af875f2#recommendation:3"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "后台音频要的配置：abilities 的 backgroundModes 含 audioPlayback，requestPermissions 含 ohos.permission.KEEP_BACKGROUND_RUNNING",
+     "meaning": "移交项里不能少的两项",
+     "source": "continuous-task.md，Stage模型",
+     "support": []
+    }
+   ],
+   "lookups": [],
+   "why": "移交清单漏项时收尾者照单落地，module.json5 一直没有后台播放配置",
+   "keys": {
+    "read": [
+     "module.json5",
+     "写盘边界",
+     "检查清单",
+     "backgroundModes",
+     "KEEP_BACKGROUND_RUNNING",
+     "skill"
+    ],
+    "product": [
+     "deferred-work",
+     "移交",
+     "closer",
+     "requestPermissions",
+     "backgroundModes",
+     "audioPlayback",
+     "ohos.permission.KEEP_BACKGROUND_RUNNING"
+    ]
+   },
+   "probe": null,
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法落在移交清单的条目上，不落在具体接口上",
+   "refs": [
+    {
+     "what": "Stage 模型声明后台模式类型",
+     "kind": "oh-docs",
+     "where": "zh-cn/application-dev/task-management/continuous-task.md Stage模型",
+     "quote": "在[module.json5配置文件](../quick-start/module-configuration-file.md)中abilities下的backgroundModes字段里，为需要使用长时任务的UIAbility声明相应的长时任务类型",
+     "version": "docs f41b9345"
+    },
+    {
+     "what": "Stage 模型需要 KEEP_BACKGROUND_RUNNING 权限",
+     "kind": "oh-docs",
+     "where": "zh-cn/application-dev/task-management/continuous-task.md Stage模型",
+     "quote": "需要申请ohos.permission.KEEP_BACKGROUND_RUNNING权限",
+     "version": "docs f41b9345"
+    }
+   ]
+  },
+  {
+   "title": "台账以「会新增播控卡片」为由把后台续播记成平台差异时，改记缺失功能并接入",
+   "product": "规格",
+   "triggers": [
+    {
+     "read": "安卓 MediaPlayer 播放在宿主 onPause/onStop 后继续，退后台播到结束",
+     "wrong": "决策台账或平台差异登记里写「接入 AVSession 会新增控制中心播控卡片」，据此不接 AVSession、不做后台续播"
+    }
+   ],
+   "scope": "源端退后台继续播放、目标端未做后台播放，台账里把它登成平台差异时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "撤销这条平台差异，改记为缺失功能：源端继续播放而目标端被系统静音，按 AVSession + AUDIO_PLAYBACK 长时任务 + backgroundModes/KEEP_BACKGROUND_RUNNING 接入",
+     "support": [
+      "case-1dee716aadc97af875f2#recommendation:4",
+      "case-1dee716aadc97af875f2#diagnosis"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "从 API version 20 开始，接入 AVSession 后后台任务模块不发通知栏通知，由 AVSession 发通知",
+     "meaning": "播控卡片是后台播放本来就有的系统表现，不是接入带来的额外差异",
+     "source": "continuous-task.md，使用场景（关于AUDIO_PLAYBACK（音视频播放）说明）",
+     "support": []
+    },
+    {
+     "value": "未接入时退后台被系统静音暂停，接入 createAVSession + startBackgroundRunning(AUDIO_PLAYBACK) 后与源端一致，平台差异撤销",
+     "meaning": "这是缺失功能，不是平台不可行",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-1dee716aadc97af875f2#diagnosis"
+     ]
+    }
+   ],
+   "lookups": [],
+   "why": "记成平台差异后后台续播永远不做，目标端退后台静音，源端功能丢失",
+   "keys": {
+    "read": [
+     "MediaPlayer",
+     "onPause",
+     "onStop",
+     "stop",
+     "release",
+     "onCompletion"
+    ],
+    "product": [
+     "平台差异",
+     "AVSession",
+     "控制中心",
+     "播控卡片",
+     "决策台账",
+     "后台播放"
+    ]
+   },
+   "probe": {
+    "pattern": "(播控卡片|控制中心)[^\\n]*(平台差异|不接入)|(平台差异|不接入)[^\\n]*(播控卡片|控制中心)",
+    "note": "台账以播控卡片为由登了平台差异；源端退后台继续播放时应改记缺失功能"
+   },
+   "unverified": [
+    "卡里上机对照出自 HarmonyOS 6.1.1(24)，本机文档副本按 API 23 核对"
+   ],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法落在台账登记上，不落在具体接口上",
+   "refs": [
+    {
+     "what": "接入 AVSession 后由 AVSession 发通知",
+     "kind": "oh-docs",
+     "where": "zh-cn/application-dev/task-management/continuous-task.md 使用场景",
+     "quote": "从API version 20开始，申请AUDIO_PLAYBACK类型长时任务但不接入AVSession，申请长时任务成功后会在通知栏显示通知；接入AVSession后，后台任务模块不会发送通知栏通知，由AVSession发送通知。",
+     "version": "docs f41b9345"
+    }
+   ]
+  }
+ ],
+ "left_out": [
+  {
+   "text": "把接入 AVSession 的取舍记为平台差异前，先真机退后台实测（dumpsys audio / AudioBackgroundManager 日志）确认两端行为",
+   "reason": "要上机或截图才能做"
+  }
+ ],
+ "corrections": [
+  {
+   "was": "createAVSession(context,'audio')",
+   "now": "createAVSession(context, tag, 'audio')：第二个参数是 string 类型的 tag，第三个才是 AVSessionType",
+   "ref": "鸿蒙 SDK @ohos.multimedia.avsession.d.ts，avSession.createAVSession"
+  }
+ ],
+ "gaps": [],
+ "conflicts": []
+}

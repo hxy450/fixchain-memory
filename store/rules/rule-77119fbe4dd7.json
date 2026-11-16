@@ -1,0 +1,139 @@
+{
+ "id": "rule-77119fbe4dd7",
+ "title": "源端相机能力 getter 读打开期缓存时，目标在会话 commit 后快照一次，getter 只读内存",
+ "product": "代码",
+ "triggers": [
+  {
+   "read": "源端打开相机时调一次 CameraManager#getCameraCharacteristics（或包它的能力枚举）存进字段，能力 getter 只返回这个字段",
+   "wrong": "目标的能力 getter 每次调用都执行 cameraManager.getSupportedOutputCapability(...) 和 session.isFocusModeSupported(...)、getExposureBiasRange() 等同步查询，只在注释里说有缓存"
+  },
+  {
+   "read": "UI 访问器、定时绘制（setInterval、onDraw 回调）或会话切换的代码里调用控制器的能力 getter",
+   "wrong": "被调用的 getter 实现里含 session.isFocusModeSupported(...) 或 cameraManager.getSupportedOutputCapability(...) 这类同步相机服务调用"
+  }
+ ],
+ "scope": "把安卓相机控制器里读打开期缓存的能力 getter 迁成 HarmonyOS 相机实现时",
+ "exceptions": [],
+ "how": [
+  {
+   "text": "在初次 photo 会话 await session.commitConfig() 之后，调一次 getSupportedOutputCapability 和会话上的各项能力查询，存成能力快照；公开 getter 只返回快照",
+   "support": [
+    "case-d160173a312daca7fc69#recommendation:1",
+    "case-d160173a312daca7fc69#recommendation:3"
+   ]
+  },
+  {
+   "text": "显示尺寸、zoom 这类派生值在内存里更新；快照未就绪时 throw 明确的错误，不返回部分结果",
+   "support": [
+    "case-d160173a312daca7fc69#recommendation:3",
+    "case-d160173a312daca7fc69#diagnosis"
+   ]
+  },
+  {
+   "text": "UI 绘制、定时器、访问器消费控制器值前，看 getter 里有没有 session. 或 manager. 的调用；有就改读快照或缓存",
+   "support": [
+    "case-d160173a312daca7fc69#recommendation:4"
+   ]
+  }
+ ],
+ "values": [
+  {
+   "value": "getSupportedOutputCapability(camera: CameraDevice, mode: SceneMode): CameraOutputCapability",
+   "meaning": "同步返回的能力查询（返回值不是 Promise）",
+   "source": "鸿蒙 SDK 的 ets/api/@ohos.multimedia.camera.d.ts，CameraManager.getSupportedOutputCapability",
+   "support": []
+  },
+  {
+   "value": "isFocusModeSupported(afMode: FocusMode): boolean；会话没配置时抛 7400103 Session not config",
+   "meaning": "会话上的能力查询是同步的，并依赖会话已 commit",
+   "source": "鸿蒙 SDK 的 ets/api/@ohos.multimedia.camera.d.ts，FocusQuery.isFocusModeSupported",
+   "support": []
+  },
+  {
+   "value": "getExposureBiasRange(): Array<number>；同样在会话没配置时抛 7400103",
+   "meaning": "同类的会话能力查询",
+   "source": "鸿蒙 SDK 的 ets/api/@ohos.multimedia.camera.d.ts，AutoExposureQuery.getExposureBiasRange",
+   "support": []
+  },
+  {
+   "value": "commitConfig(): Promise<void>",
+   "meaning": "会话配置提交，快照在它完成之后读",
+   "source": "鸿蒙 SDK 的 ets/api/@ohos.multimedia.camera.d.ts，Session.commitConfig",
+   "support": []
+  },
+  {
+   "value": "初次 photo 会话 commit 后读一次能力快照、派生值在内存派生、未就绪抛异常；关闭期间旧 UI 引用读取要兼容",
+   "meaning": "返修后的做法",
+   "source": "卡里修好并验证过",
+   "support": [
+    "case-d160173a312daca7fc69#diagnosis"
+   ]
+  }
+ ],
+ "lookups": [],
+ "why": "每次访问都走同步相机服务调用时，UI 访问和定时绘制反复跨进程，结果还随当时的会话状态变",
+ "keys": {
+  "read": [
+   "CameraManager",
+   "getCameraCharacteristics",
+   "CameraCharacteristics",
+   "CameraDevice",
+   "CameraCaptureSession",
+   "createCaptureSession"
+  ],
+  "product": [
+   "getSupportedOutputCapability",
+   "isFocusModeSupported",
+   "getExposureBiasRange",
+   "commitConfig",
+   "PhotoSession",
+   "CameraOutputCapability",
+   "session.",
+   "cameraManager"
+  ]
+ },
+ "probe": {
+  "pattern": "get\\w*\\([^)]*\\)\\s*(:\\s*[\\w<>\\[\\]|]+\\s*)?\\{[^}]*\\b(session|manager|cameraManager)\\??\\.",
+  "note": "getter 体里直接调了 session 或 manager；源端若读的是打开期缓存，应改成读快照"
+ },
+ "unverified": [
+  "卡里的上机行为出自 HarmonyOS 6.1.1(24)，本机按 API 23 的声明核实"
+ ],
+ "alternatives_unverified": [],
+ "siblings_checked": "无：做法落在会话提交后读取的时机上，涉及多个各自不同的查询方法，没有共同的参数类型可搜；7400103 在 FocusQuery、AutoExposureQuery 等会话查询的声明里都有",
+ "refs": [
+  {
+   "what": "getSupportedOutputCapability 的签名",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/api/@ohos.multimedia.camera.d.ts CameraManager.getSupportedOutputCapability",
+   "quote": "getSupportedOutputCapability(camera: CameraDevice, mode: SceneMode): CameraOutputCapability;",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  },
+  {
+   "what": "isFocusModeSupported 同步，会话未配置抛 7400103",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/api/@ohos.multimedia.camera.d.ts FocusQuery.isFocusModeSupported",
+   "quote": "* @throws { BusinessError } 7400103 - Session not config, only throw in session usage. * @syscap SystemCapability.Multimedia.Camera.Core * @atomicservice * @since 19 */ isFocusModeSupported(",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  },
+  {
+   "what": "getExposureBiasRange 同步，会话未配置抛 7400103",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/api/@ohos.multimedia.camera.d.ts AutoExposureQuery.getExposureBiasRange",
+   "quote": "7400103 - Session not config, only throw in session usage. * @syscap SystemCapability.Multimedia.Camera.Core * @atomicservice * @since 19 */ getExposureBiasRange(): Array<number>;",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  },
+  {
+   "what": "commitConfig 的签名",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/api/@ohos.multimedia.camera.d.ts Session.commitConfig",
+   "quote": "Commit capture session config. * * @returns { Promise<void> } Promise used to return the result.",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  }
+ ],
+ "sources": [
+  "case-d160173a312daca7fc69"
+ ],
+ "general": false,
+ "status": "active"
+}

@@ -1,0 +1,197 @@
+{
+ "id": "rule-109a87a7d762",
+ "title": "源端 SoundPool 短音效，目标用 createSoundPool 预加载后 play，不每次建 AVPlayer",
+ "product": "代码",
+ "triggers": [
+  {
+   "read": "源端 new SoundPool(maxStreams, AudioManager.STREAM_MUSIC, srcQuality) 或 SoundPool.Builder，初始化时 load(context, resId, priority)，事件时 play(soundID, ...)",
+   "wrong": "每次播放都 media.createAVPlayer() → 设 fdSrc → prepare → prepared 后 play，播完 release"
+  }
+ ],
+ "scope": "源端用 android.media.SoundPool 播放短音效、迁成 ArkTS 音效服务时",
+ "exceptions": [],
+ "how": [
+  {
+   "text": "初始化时建一次 pool = await media.createSoundPool(maxStreams, { usage: audio.StreamUsage.STREAM_USAGE_MUSIC, rendererFlags: 0 })，maxStreams 取源端构造的第 1 个参数",
+   "support": [
+    "case-6734103a0f798cbf6699#recommendation:4",
+    "case-6734103a0f798cbf6699#diagnosis"
+   ]
+  },
+  {
+   "text": "初始化时逐个音效 const rf = context.resourceManager.getRawFdSync('<rawfile 名>')；soundID = await pool.load(rf.fd, rf.offset, rf.length)，三个字段原样传，不拼成 fd:// 的 url",
+   "support": [
+    "case-6734103a0f798cbf6699#recommendation:2",
+    "case-6734103a0f798cbf6699#recommendation:4"
+   ]
+  },
+  {
+   "text": "事件触发时 pool.play(soundID)，用默认参数",
+   "support": [
+    "case-6734103a0f798cbf6699#recommendation:4",
+    "case-6734103a0f798cbf6699#diagnosis"
+   ]
+  }
+ ],
+ "values": [
+  {
+   "value": "function createSoundPool(maxStreams: number, audioRenderInfo: audio.AudioRendererInfo): Promise<SoundPool>",
+   "meaning": "创建音频池，maxStreams 取 1 到 32",
+   "source": "鸿蒙 SDK 的 ets/api/@ohos.multimedia.media.d.ts，media.createSoundPool",
+   "support": []
+  },
+  {
+   "value": "usage: StreamUsage；rendererFlags: number（保留字段，建议设 0）",
+   "meaning": "AudioRendererInfo 的两个必填字段",
+   "source": "鸿蒙 SDK 的 ets/api/@ohos.multimedia.audio.d.ts，AudioRendererInfo",
+   "support": []
+  },
+  {
+   "value": "load(fd: number, offset: number, length: number): Promise<number>",
+   "meaning": "按 fd 加载，返回 soundID",
+   "source": "鸿蒙 SDK 的 ets/api/multimedia/soundPool.d.ts，SoundPool.load",
+   "support": []
+  },
+  {
+   "value": "load(uri: string) 不能加载 rawfile 目录里的资源",
+   "meaning": "rawfile 音效只能走 fd、offset、length 的重载",
+   "source": "鸿蒙 SDK 的 ets/api/multimedia/soundPool.d.ts，SoundPool.load",
+   "support": []
+  },
+  {
+   "value": "getRawFdSync(path: string): RawFileDescriptor（含 fd、offset、length）",
+   "meaning": "取 rawfile 的描述符，三个字段原样交给 load",
+   "source": "鸿蒙 SDK 的 ets/api/@ohos.resourceManager.d.ts，ResourceManager.getRawFdSync",
+   "support": []
+  },
+  {
+   "value": "play(soundID: number, params?: PlayParameters): Promise<number>",
+   "meaning": "播放已加载的音效，返回 streamID；params 不传用默认值",
+   "source": "鸿蒙 SDK 的 ets/api/multimedia/soundPool.d.ts，SoundPool.play",
+   "support": []
+  },
+  {
+   "value": "资源加载完成通过 on('loadComplete') 通知，收到回调后再 play",
+   "meaning": "初始化时 load、事件时 play 的先后要满足这一点",
+   "source": "using-soundpool-for-playback.md，开发步骤及注意事项",
+   "support": []
+  },
+  {
+   "value": "改成 createSoundPool、初始化时 load、play 用默认参数后，触发到出声从约 290ms 降到约 40ms",
+   "meaning": "改法的依据",
+   "source": "卡里修好并验证过",
+   "support": [
+    "case-6734103a0f798cbf6699#diagnosis"
+   ]
+  }
+ ],
+ "lookups": [
+  {
+   "what": "要预加载的音效和它们在目标端的 rawfile 名",
+   "where": "源工程里 SoundPool.load(context, R.raw.…, priority) 的调用；目标工程 resources/rawfile 下迁过来的音频文件",
+   "how": "每个 load 调用对应一次 getRawFdSync + pool.load，记下返回的 soundID 给对应事件的 play 用"
+  }
+ ],
+ "why": "每次新建 AVPlayer 要走完 prepare 才出声，延迟明显，连续触发的音效跟不上",
+ "keys": {
+  "read": [
+   "android.media.SoundPool",
+   "SoundPool",
+   "SoundPool.Builder",
+   "AudioManager.STREAM_MUSIC",
+   "load",
+   "play",
+   "maxStreams"
+  ],
+  "product": [
+   "media.createSoundPool",
+   "SoundPool",
+   "getRawFdSync",
+   "load",
+   "play",
+   "createAVPlayer",
+   "fdSrc",
+   "AudioRendererInfo",
+   "STREAM_USAGE_MUSIC"
+  ]
+ },
+ "probe": {
+  "pattern": "createAVPlayer\\(",
+  "note": "目标端在建 AVPlayer；若对应的源端是 SoundPool 短音效且每次播放都新建，应改成 createSoundPool 预加载"
+ },
+ "unverified": [],
+ "alternatives_unverified": [
+  "SoundPool.setInterruptMode(media.SoundInterruptMode.NO_INTERRUPT) 让同一音效也并行播放（声明 @since 23），卡里没验证"
+ ],
+ "siblings_checked": "搜 audio.AudioRendererInfo 作参数：本机 ets/api 下建播放器的只有 media.createSoundPool 两个重载，另有 4 个按 rendererInfo 查询首选输出设备的方法与选型无关",
+ "refs": [
+  {
+   "what": "createSoundPool 的 Promise 签名",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/api/@ohos.multimedia.media.d.ts media.createSoundPool",
+   "quote": "function createSoundPool(maxStreams: number, audioRenderInfo: audio.AudioRendererInfo): Promise<SoundPool>;",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  },
+  {
+   "what": "AudioRendererInfo.usage",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/api/@ohos.multimedia.audio.d.ts AudioRendererInfo.usage",
+   "quote": "usage: StreamUsage;",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  },
+  {
+   "what": "rendererFlags 建议设 0",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/api/@ohos.multimedia.audio.d.ts AudioRendererInfo.rendererFlags",
+   "quote": "Audio renderer flags. This method is currently reserved, suggest setting the default value to 0.",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  },
+  {
+   "what": "SoundPool.load 的 fd 重载",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/api/multimedia/soundPool.d.ts SoundPool.load",
+   "quote": "load(fd: number, offset: number, length: number): Promise<number>;",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  },
+  {
+   "what": "uri 重载不能加载 rawfile",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/api/multimedia/soundPool.d.ts SoundPool.load",
+   "quote": "This API cannot be used to load resources in the **rawfile** directory.",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  },
+  {
+   "what": "getRawFdSync 签名",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/api/@ohos.resourceManager.d.ts ResourceManager.getRawFdSync",
+   "quote": "getRawFdSync(path: string): RawFileDescriptor;",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  },
+  {
+   "what": "SoundPool.play 的 Promise 签名",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/api/multimedia/soundPool.d.ts SoundPool.play",
+   "quote": "play(soundID: number, params?: PlayParameters): Promise<number>;",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  },
+  {
+   "what": "收到 loadComplete 再 play",
+   "kind": "oh-docs",
+   "where": "zh-cn/application-dev/media/media/using-soundpool-for-playback.md 开发步骤及注意事项",
+   "quote": "当系统加载完毕音频资源文件的时候，会通过loadComplete回调，通知用户资源加载完成，请在收到回调之后，再进行后续的play操作。",
+   "version": "docs f41b9345"
+  },
+  {
+   "what": "setInterruptMode 的默认模式（替代写法的出处）",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/api/multimedia/soundPool.d.ts SoundPool.setInterruptMode",
+   "quote": "Sets the interrupt mode for sound parallel play. The default mode is SoundInterruptMode.SAME_SOUND_INTERRUPT.",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  }
+ ],
+ "sources": [
+  "case-6734103a0f798cbf6699"
+ ],
+ "general": false,
+ "status": "active"
+}

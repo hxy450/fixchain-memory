@@ -1,0 +1,548 @@
+{
+ "case": "case-b49b06a3f59e5828d836",
+ "rules": [
+  {
+   "title": "photoAvailable 的 byteBuffer 要异步消费时，先 slice(0) 复制再释放 Photo",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源端 onImageAvailable 里先把 JPEG 复制成 byte[] 再 image.close()；目标的保存服务把字节排进后台队列异步保存",
+     "wrong": "photoAvailable 回调里 getComponent 之后立即 photo.release()，再把同一个 component.byteBuffer 交给异步保存，中间没有复制"
+    }
+   ],
+   "scope": "拍照回调取出的 JPEG 字节在回调返回后才被消费时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "await photo.main.getComponent(image.ComponentType.JPEG) 后先 const bytes = component.byteBuffer.slice(0) 复制，再在 finally 里 photo.release()，把复制出的 bytes 交给保存队列",
+     "support": [
+      "case-b49b06a3f59e5828d836#recommendation:1",
+      "case-b49b06a3f59e5828d836#diagnosis"
+     ]
+    },
+    {
+     "text": "不复制时，把 release 放到字节消费完成后的 finally 里；不能先释放再用同一个 ArrayBuffer",
+     "support": [
+      "case-b49b06a3f59e5828d836#recommendation:1"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "interface Photo { main: image.Image; release(): Promise<void> }",
+     "meaning": "Photo 持有主图，release 释放 Photo 对象",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.multimedia.camera.d.ts，camera.Photo",
+     "support": []
+    },
+    {
+     "value": "getComponent(componentType: ComponentType): Promise<Component>",
+     "meaning": "从 image.Image 取指定分量",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.multimedia.image.d.ts，Image.getComponent",
+     "support": []
+    },
+    {
+     "value": "readonly byteBuffer: ArrayBuffer",
+     "meaning": "Component 的分量数据，是 Photo 所持原生图像的缓冲",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.multimedia.image.d.ts，Component.byteBuffer",
+     "support": []
+    },
+    {
+     "value": "close() 之后再读写先前 getBuffer 得到的 ByteBuffer 行为未定义",
+     "meaning": "源端先复制再 close 的原因",
+     "source": "android.media.Image#close",
+     "support": []
+    },
+    {
+     "value": "await getComponent → byteBuffer.slice(0) → finally 中 release",
+     "meaning": "返修后的写法",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-b49b06a3f59e5828d836#diagnosis"
+     ]
+    }
+   ],
+   "lookups": [],
+   "why": "先释放 Photo 再用它的缓冲，后台保存时读到的是已释放的原生内存",
+   "keys": {
+    "read": [
+     "onImageAvailable",
+     "ImageReader",
+     "acquireNextImage",
+     "getPlanes",
+     "getBuffer",
+     "image.close",
+     "ImageFormat.JPEG"
+    ],
+    "product": [
+     "photoAvailable",
+     "PhotoOutput",
+     "getComponent",
+     "byteBuffer",
+     "ComponentType.JPEG",
+     "release",
+     "slice"
+    ]
+   },
+   "probe": null,
+   "unverified": [
+    "SDK 声明没写 byteBuffer 在 Photo.release 之后的有效期",
+    "卡里环境是 API 24（HarmonyOS 6.1.1），本机声明是 API 23"
+   ],
+   "alternatives_unverified": [],
+   "siblings_checked": "搜 readonly byteBuffer: ArrayBuffer：@ohos.multimedia.image.d.ts 里另有 ImageBufferData 一处，与拍照回调无关，没写进 values",
+   "refs": [
+    {
+     "what": "Photo.main",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.multimedia.camera.d.ts camera.Photo",
+     "quote": "main: image.Image; /** * Release Photo object.",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "Image.getComponent",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.multimedia.image.d.ts Image.getComponent",
+     "quote": "getComponent(componentType: ComponentType): Promise<Component>;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "Component.byteBuffer",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.multimedia.image.d.ts Component.byteBuffer",
+     "quote": "readonly byteBuffer: ArrayBuffer;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "Image.close 之后缓冲行为未定义",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/android/media/Image.java Image#close",
+     "quote": "attempting to read from * or write to {@link ByteBuffer ByteBuffers} returned by an earlier * {@link Plane#getBuffer} call will have undefined behavior.",
+     "version": "android-36.1"
+    }
+   ]
+  },
+  {
+   "title": "迁移 Bitmap.recycle 时给每个 PixelMap 定唯一所有者，只释放一次",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源端 bitmap = 后处理结果.bitmap 重新赋值，缩略图和末尾 bitmap.recycle() 都针对成品，调用方另外再 recycle()",
+     "wrong": "后处理结果只放进局部变量，缩略图和末尾 release() 仍用入参 PixelMap；调用方在保存函数返回后又各自 release() 同一个 PixelMap"
+    }
+   ],
+   "scope": "把 Bitmap 的处理和回收链路迁成 PixelMap，后处理会替换输入并释放旧图时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "后处理返回新图时用返回值覆盖同一个变量，编码、缩略图和末尾 release() 都针对这个成品",
+     "support": [
+      "case-b49b06a3f59e5828d836#recommendation:2",
+      "case-b49b06a3f59e5828d836#diagnosis"
+     ]
+    },
+    {
+     "text": "删掉调用方重复的 release()，每个 PixelMap 只由它的所有者释放一次；源端调用方的 recycle() 不逐行照搬",
+     "support": [
+      "case-b49b06a3f59e5828d836#recommendation:2",
+      "case-b49b06a3f59e5828d836#diagnosis"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "public void recycle() { if (!mRecycled) { nativeRecycle(mNativePtr); …",
+     "meaning": "Java 的 recycle 可重复调用，第二次起不做事，源端调用方的 recycle 只是冗余",
+     "source": "android.graphics.Bitmap#recycle",
+     "support": []
+    },
+    {
+     "value": "PixelMap 释放后，任何访问其内部数据的方法调用都会失败",
+     "meaning": "PixelMap.release 不能当成可重复的冗余调用",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.multimedia.image.d.ts，PixelMap.release",
+     "support": []
+    },
+    {
+     "value": "删除三处调用方 release，工作变量只承载最终位图并在末尾释放一次",
+     "meaning": "返修后的写法",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-b49b06a3f59e5828d836#diagnosis"
+     ]
+    }
+   ],
+   "lookups": [],
+   "why": "成品没人释放，原图被二次乃至三次释放，缩略图可能取自已释放或未处理的位图",
+   "keys": {
+    "read": [
+     "Bitmap",
+     "recycle",
+     "isRecycled",
+     "createBitmap",
+     "Bitmap.compress",
+     "createScaledBitmap"
+    ],
+    "product": [
+     "PixelMap",
+     "release",
+     "createPixelMap",
+     "ImagePacker",
+     "packing",
+     "createThumbnail"
+    ]
+   },
+   "probe": null,
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：release 是通用的释放方法，没有专门参数类型可搜",
+   "refs": [
+    {
+     "what": "Bitmap.recycle 可重复调用",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/android/graphics/Bitmap.java Bitmap#recycle",
+     "quote": "public void recycle() { if (!mRecycled) { nativeRecycle(mNativePtr);",
+     "version": "android-36.1"
+    },
+    {
+     "what": "PixelMap 释放后访问会失败",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.multimedia.image.d.ts PixelMap.release",
+     "quote": "Releases this PixelMap object. After release, any method call that accesses the object's internal data will fail.",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    }
+   ]
+  },
+  {
+   "title": "FileOutputStream 覆盖写迁成 fileIo 时，加 TRUNC 并按 writeSync 返回值写完",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源端 new FileOutputStream(file) 或 openOutputStream(uri) 加 OutputStream.write(data) 整文件写入",
+     "wrong": "fileIo.openSync(path, OpenMode.WRITE_ONLY | OpenMode.CREATE) 没有 TRUNC，只调一次 writeSync 且不检查返回的字节数"
+    }
+   ],
+   "scope": "把源端整文件覆盖写入迁成 @ohos.file.fs 时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "打开模式写 fileIo.OpenMode.WRITE_ONLY | fileIo.OpenMode.CREATE | fileIo.OpenMode.TRUNC",
+     "support": [
+      "case-b49b06a3f59e5828d836#recommendation:3"
+     ]
+    },
+    {
+     "text": "按 writeSync 的返回值循环写剩余部分直到写完，某次返回 0 时报错",
+     "support": [
+      "case-b49b06a3f59e5828d836#recommendation:3",
+      "case-b49b06a3f59e5828d836#diagnosis"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "const TRUNC = 0o1000（File truncate len 0）",
+     "meaning": "打开时把文件截成 0 长度",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.file.fs.d.ts，OpenMode.TRUNC",
+     "support": []
+    },
+    {
+     "value": "writeSync(fd: number, buffer: ArrayBuffer | string, options?: WriteOptions): number，返回实际写入的字节数",
+     "meaning": "写入可能不足量，要看返回值",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.file.fs.d.ts，fileIo.writeSync",
+     "support": []
+    },
+    {
+     "value": "FileOutputStream(File file) 等于 this(file, false)",
+     "meaning": "源端不追加，从文件开头覆盖写",
+     "source": "java.io.FileOutputStream#FileOutputStream",
+     "support": []
+    },
+    {
+     "value": "新增循环写、TRUNC 和精确切片后保留到最终",
+     "meaning": "返修后的写法",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-b49b06a3f59e5828d836#diagnosis"
+     ]
+    },
+    {
+     "value": "write(fd: number, buffer: ArrayBuffer | string, options?: WriteOptions): Promise<number>",
+     "meaning": "同族接口：异步写，同样返回写入字节数",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.file.fs.d.ts，fileIo.write",
+     "support": []
+    },
+    {
+     "value": "writeSync(buffer: ArrayBuffer | string, options?: WriteOptions): number",
+     "meaning": "同族接口：Stream 和 RandomAccessFile 上的同步写",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.file.fs.d.ts，Stream.writeSync",
+     "support": []
+    }
+   ],
+   "lookups": [],
+   "why": "不截断时新内容比旧文件短会留下旧尾巴，单次写不足量时文件不完整",
+   "keys": {
+    "read": [
+     "FileOutputStream",
+     "openOutputStream",
+     "OutputStream.write",
+     "ContentResolver",
+     "flush",
+     "close"
+    ],
+    "product": [
+     "fileIo.openSync",
+     "OpenMode.TRUNC",
+     "OpenMode.WRITE_ONLY",
+     "OpenMode.CREATE",
+     "writeSync",
+     "closeSync"
+    ]
+   },
+   "probe": {
+    "pattern": "OpenMode\\.WRITE_ONLY\\s*\\|\\s*fileIo\\.OpenMode\\.CREATE\\s*\\)|OpenMode\\.WRITE_ONLY\\s*\\|\\s*OpenMode\\.CREATE\\s*\\)",
+    "note": "打开模式只有 WRITE_ONLY | CREATE；若是覆盖写已有文件，要加 TRUNC"
+   },
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "搜 buffer: ArrayBuffer | string：@ohos.file.fs.d.ts 里有 fileIo.write、fileIo.writeSync、RandomAccessFile.write/writeSync、Stream.write/writeSync 六个，fileIo.write 与 Stream.writeSync 写进 values",
+   "refs": [
+    {
+     "what": "OpenMode.TRUNC",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.file.fs.d.ts OpenMode.TRUNC",
+     "quote": "File truncate len 0. * * @constant * @syscap SystemCapability.FileManagement.File.FileIO * @crossplatform * @atomicservice * @since 11 */ const TRUNC = 0o1000;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "writeSync 返回写入字节数",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.file.fs.d.ts fileIo.writeSync",
+     "quote": "@returns { number } Length of the data written, in bytes.",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "writeSync 的签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.file.fs.d.ts fileIo.writeSync",
+     "quote": "declare function writeSync(fd: number, buffer: ArrayBuffer | string, options?: WriteOptions): number;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "FileOutputStream(File) 不追加",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/java/io/FileOutputStream.java FileOutputStream#FileOutputStream",
+     "quote": "public FileOutputStream(File file) throws FileNotFoundException { this(file, false); }",
+     "version": "android-36.1"
+    },
+    {
+     "what": "fileIo.write（同族）",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.file.fs.d.ts fileIo.write",
+     "quote": "declare function write(fd: number, buffer: ArrayBuffer | string, options?: WriteOptions): Promise<number>;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "Stream.writeSync（同族）",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.file.fs.d.ts Stream.writeSync",
+     "quote": "writeSync(buffer: ArrayBuffer | string, options?: WriteOptions): number;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    }
+   ]
+  },
+  {
+   "title": "Uint8Array 交给写入接口时按 byteOffset/byteLength 切片，不直接传 .buffer",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "字节以 Uint8Array 视图传递，可能是 subarray 等返回的视图（如 EXIF 处理后的结果）",
+     "wrong": "写入或提交媒体资源时直接传 bytes.buffer"
+    }
+   ],
+   "scope": "把 Uint8Array 交给只收 ArrayBuffer 的接口（如 fileIo.writeSync）时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "传 bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)，只取视图覆盖的那一段",
+     "support": [
+      "case-b49b06a3f59e5828d836#recommendation:3",
+      "case-b49b06a3f59e5828d836#diagnosis"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "writeSync(fd: number, buffer: ArrayBuffer | string, options?: WriteOptions): number",
+     "meaning": "写入接口收 ArrayBuffer，Uint8Array 要先转",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.file.fs.d.ts，fileIo.writeSync",
+     "support": []
+    },
+    {
+     "value": "返修新增精确切片后保留到最终",
+     "meaning": "返修后的写法",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-b49b06a3f59e5828d836#diagnosis"
+     ]
+    }
+   ],
+   "lookups": [],
+   "why": "视图的 .buffer 是整个底层缓冲，会把视图外的字节一起写进文件",
+   "keys": {
+    "read": [
+     "byte[]",
+     "Arrays.copyOfRange",
+     "ByteBuffer",
+     "ExifInterface",
+     "OutputStream.write"
+    ],
+    "product": [
+     "Uint8Array",
+     "subarray",
+     "byteOffset",
+     "byteLength",
+     "bytes.buffer",
+     "ArrayBuffer"
+    ]
+   },
+   "probe": {
+    "pattern": "\\b\\w+\\.buffer\\s*[,)]",
+    "note": "把某个类型化数组的 .buffer 直接当参数传；若它可能是视图，要按 byteOffset/byteLength 切片"
+   },
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法落在 ArrayBuffer 切片上，不是带专门参数类型的接口",
+   "refs": [
+    {
+     "what": "writeSync 收 ArrayBuffer",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.file.fs.d.ts fileIo.writeSync",
+     "quote": "declare function writeSync(fd: number, buffer: ArrayBuffer | string, options?: WriteOptions): number;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    }
+   ]
+  },
+  {
+   "title": "抽取原生图像回调时，规格把「先复制字节再 close」写成验收条目",
+   "product": "规格",
+   "triggers": [
+    {
+     "read": "源端 onImageAvailable 里先把 JPEG 复制到 byte[] 再 image.close()",
+     "wrong": "规格只抽出「无回调时立即 close」，没有「先复制字节再 close / release」的验收条目"
+    }
+   ],
+   "scope": "规格里抽取 onImageAvailable 这类原生图像回调的验收条目",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "验收写明：回调交出的字节若被异步消费，先复制再释放（目标端 component.byteBuffer.slice(0) 之后再 photo.release()）",
+     "support": [
+      "case-b49b06a3f59e5828d836#recommendation:4",
+      "case-b49b06a3f59e5828d836#diagnosis"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "close() 之后再读写先前 getBuffer 得到的 ByteBuffer 行为未定义",
+     "meaning": "源端先复制再 close 的原因",
+     "source": "android.media.Image#close",
+     "support": []
+    }
+   ],
+   "lookups": [],
+   "why": "规格没写时，接线的人只补拍照调用，先释放再交出缓冲",
+   "keys": {
+    "read": [
+     "onImageAvailable",
+     "ImageReader",
+     "acquireNextImage",
+     "image.close",
+     "getBuffer"
+    ],
+    "product": [
+     "验收",
+     "AC",
+     "先复制再释放",
+     "photoAvailable",
+     "byteBuffer",
+     "release"
+    ]
+   },
+   "probe": null,
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法是规格里的验收条目，不落在具体接口上",
+   "refs": [
+    {
+     "what": "Image.close 之后缓冲行为未定义",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/android/media/Image.java Image#close",
+     "quote": "attempting to read from * or write to {@link ByteBuffer ByteBuffers} returned by an earlier * {@link Plane#getBuffer} call will have undefined behavior.",
+     "version": "android-36.1"
+    }
+   ]
+  },
+  {
+   "title": "拍照管线跨功能划分时，为控制器侧的 JPEG 取帧指明归属",
+   "product": "计划与派工",
+   "triggers": [
+    {
+     "read": "源端拍照链路分成控制器侧（取帧、复制、close）和保存服务两部分",
+     "wrong": "功能拆分里两边都把控制器侧的 JPEG 取帧和缓冲释放划为 out of scope，补图元的派工只要求补 capture 调用"
+    }
+   ],
+   "scope": "拍照管线跨多个功能（如相机控制与拍照保存）拆分时的任务拆分和派工",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "任务拆分里写明控制器侧 JPEG 取帧（含先复制再释放的顺序）归哪个功能，不让两边都声明 out of scope",
+     "support": [
+      "case-b49b06a3f59e5828d836#recommendation:4",
+      "case-b49b06a3f59e5828d836#diagnosis"
+     ]
+    }
+   ],
+   "values": [],
+   "lookups": [],
+   "why": "两边都不认领时，取帧的复制和释放顺序没人交代，接线者照异步契约直接交出原生缓冲",
+   "keys": {
+    "read": [
+     "onImageAvailable",
+     "CameraCaptureSession",
+     "ImageReader",
+     "takePicture"
+    ],
+    "product": [
+     "out of scope",
+     "任务拆分",
+     "派工",
+     "归属",
+     "capture",
+     "photoAvailable"
+    ]
+   },
+   "probe": null,
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法是任务拆分里写什么，不落在具体接口上",
+   "refs": []
+  }
+ ],
+ "left_out": [
+  {
+   "text": "用「保存后 release 只调用一次」的单测核对位图所有权",
+   "reason": "其他：单测核对，不是产物里的写法"
+  },
+  {
+   "text": "照搬 skill 示例前先确认示例场景（新建文件、字符串内容）与本次是否一致",
+   "reason": "没有产物里看得到的触发"
+  }
+ ],
+ "corrections": [],
+ "gaps": [
+  "TypedArray 的 .buffer 是整个底层缓冲、ArrayBuffer.slice 复制出新缓冲，属于 ECMAScript 语义，不在三类来源里"
+ ],
+ "conflicts": [
+  "卡里把 openOutputStream(saveUri) 也算作整文件覆盖写；ContentResolver 的注释说 \"w\" 模式是否截断由各 Provider 决定"
+ ]
+}

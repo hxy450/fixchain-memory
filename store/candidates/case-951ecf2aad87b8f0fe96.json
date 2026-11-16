@@ -1,0 +1,237 @@
+{
+ "case": "case-951ecf2aad87b8f0fe96",
+ "rules": [
+  {
+   "title": "源加密工具对空串直接返回时，目标加密封装开头保留同样的分支，空值不进 Cipher",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "安卓 AES 工具首行有前置返回：if (TextUtils.isEmpty(content)) return \"\"，或 Kotlin 的 if (content.isEmpty() || password.isEmpty()) return \"\"",
+     "wrong": "目标端加密封装无条件 cryptoFramework.createCipher(...) → init → doFinal({ data: 编码后的 value })，没有空值分支"
+    }
+   ],
+   "scope": "网络层把安卓请求参数加密工具（逐值 AES 等）移植成 ArkTS 加密封装时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "逐分支列出源工具的前置返回（空串、密钥长度、异常回退），在目标封装里逐一保留，输出与源端一致",
+     "support": [
+      "case-951ecf2aad87b8f0fe96#recommendation:1"
+     ]
+    },
+    {
+     "text": "空串分支写在封装开头：if (value.length === 0) return ''，不调用 createCipher / doFinal",
+     "support": [
+      "case-951ecf2aad87b8f0fe96#diagnosis",
+      "case-951ecf2aad87b8f0fe96#recommendation:1"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "封装开头加 if (value.length === 0) return '' 后，缺值参数的请求能正常发出",
+     "meaning": "修法；修前空值进 Cipher 时在组装阶段抛 byteLength of undefined，请求没发出",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-951ecf2aad87b8f0fe96#diagnosis"
+     ]
+    },
+    {
+     "value": "TextUtils.isEmpty(@Nullable CharSequence str)：str 为 null 或长度为 0 时返回 true",
+     "meaning": "源端这个分支对 null 和空串都直接返回",
+     "source": "android.text.TextUtils#isEmpty",
+     "support": []
+    },
+    {
+     "value": "doFinal(data: DataBlob | null): Promise<DataBlob>；doFinalSync(data: DataBlob | null): DataBlob",
+     "meaning": "Cipher 结束加密的接口",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.security.cryptoFramework.d.ts，Cipher.doFinal",
+     "support": []
+    },
+    {
+     "value": "doFinal 的结果可能为 null，用 .data 取数据前要先判断",
+     "meaning": "不加前置分支时，取结果的 .data 可能直接报错",
+     "source": "js-apis-cryptoFramework.md，doFinal",
+     "support": []
+    }
+   ],
+   "lookups": [
+    {
+     "what": "源加密工具有哪些前置返回分支",
+     "where": "源工程里加密工具类（如 AES 工具的 .java / .kt）的 encrypt / decrypt 方法开头",
+     "how": "把每个 if (…) return … 的条件和返回值逐条列出，目标封装逐条对应"
+    }
+   ],
+   "why": "空值送进 Cipher 后抛异常，请求在组装阶段就失败，没有发出",
+   "keys": {
+    "read": [
+     "TextUtils.isEmpty",
+     "isEmpty",
+     "Cipher",
+     "AES/CBC/PKCS5Padding",
+     "Cipher.getInstance",
+     "doFinal",
+     "encrypt"
+    ],
+    "product": [
+     "cryptoFramework",
+     "createCipher",
+     "doFinal",
+     "doFinalSync",
+     "DataBlob",
+     "AES128|CBC|PKCS7"
+    ]
+   },
+   "probe": null,
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法是封装开头的空值分支，不落在某个接口的参数类型上",
+   "refs": [
+    {
+     "what": "TextUtils.isEmpty 的语义",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/android/text/TextUtils.java TextUtils#isEmpty",
+     "quote": "Returns true if the string is null or 0-length.",
+     "version": "android-36.1"
+    },
+    {
+     "what": "Cipher.doFinal 签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.security.cryptoFramework.d.ts Cipher.doFinal",
+     "quote": "doFinal(data: DataBlob | null): Promise<DataBlob>;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "Cipher.doFinalSync 签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.security.cryptoFramework.d.ts Cipher.doFinalSync",
+     "quote": "doFinalSync(data: DataBlob | null): DataBlob;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "doFinal 结果可能为 null",
+     "kind": "oh-docs",
+     "where": "zh-cn/application-dev/reference/apis-crypto-architecture-kit/js-apis-cryptoFramework.md doFinal",
+     "quote": "doFinal的结果可能为null，因此使用.data字段访问doFinal结果的具体数据前，请记得先判断结果是否为null，避免产生异常。",
+     "version": "docs f41b9345"
+    }
+   ]
+  },
+  {
+   "title": "移植带空值分支的加密工具时，请求组装单测补空值用例，用真实加密封装断言",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "安卓加密工具有 TextUtils.isEmpty(content) / content.isEmpty() 的前置返回，业务参数可能为空或缺省",
+     "wrong": "请求组装的单测（describe(...) / it(...) / expect(...).assertEqual(...)）只用假加密器验证字段顺序，没有业务参数为 '' 或缺省时调用真实加密封装的用例"
+    }
+   ],
+   "scope": "网络层请求组装和加密封装的单元测试",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "补空值和缺省值用例：业务参数为 '' 或缺省时，用真实加密封装断言结果与安卓相同（空串得 ''），不只用假加密器验证字段顺序",
+     "support": [
+      "case-951ecf2aad87b8f0fe96#recommendation:2"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "修复时随空值分支一起补了空值单测",
+     "meaning": "空值用例和封装改动一起提交",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-951ecf2aad87b8f0fe96#diagnosis"
+     ]
+    }
+   ],
+   "lookups": [],
+   "why": "假加密器不走真实分支，空值进 Cipher 抛异常的问题在单测里看不出来",
+   "keys": {
+    "read": [
+     "TextUtils.isEmpty",
+     "isEmpty",
+     "encrypt",
+     "Cipher"
+    ],
+    "product": [
+     "describe",
+     "expect",
+     "assertEqual",
+     "cryptoFramework",
+     "createCipher"
+    ]
+   },
+   "probe": null,
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法是测试用例的覆盖，不落在接口上",
+   "refs": []
+  },
+  {
+   "title": "目标端用 String(value ?? '') 归一化空值时，核对源端 toString() 后进哪个分支",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "安卓请求拦截对每个业务值调用加密工具，参数写成 value.toString()",
+     "wrong": "目标端请求中间件写 String(value ?? '') 把 null / undefined 统一成空串再送进加密封装，没核对源端同一个值进的是哪个分支"
+    }
+   ],
+   "scope": "网络层请求组装里，对业务参数做 null / undefined 归一化再加密时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "对每种缺值情形，核对源端这个值经过 value.toString() 后实际进入加密工具的哪个分支、得到什么输出，目标端的归一化和封装分支要得出同一个结果",
+     "support": [
+      "case-951ecf2aad87b8f0fe96#recommendation:3"
+     ]
+    }
+   ],
+   "values": [],
+   "lookups": [
+    {
+     "what": "源端缺值时送进加密工具的字符串是什么",
+     "where": "源工程请求拦截器里拼参数、调加密工具的那段 .kt / .java：看参数值的类型是否可空，缺值时是被跳过、给了空串还是别的默认值",
+     "how": "按源端实际得到的字符串决定：得到空串的走空串分支返回 ''；得到其他字符串的照样加密；目标端 String(value ?? '') 的结果要和它一致"
+    }
+   ],
+   "why": "归一化后的值和源端进的不是同一个分支时，请求体里的值和安卓不同，或在加密时抛异常",
+   "keys": {
+    "read": [
+     "toString",
+     "TextUtils.isEmpty",
+     "isEmpty",
+     "Interceptor",
+     "Cipher"
+    ],
+    "product": [
+     "String(value ?? '')",
+     "??",
+     "cryptoFramework",
+     "undefined",
+     "null"
+    ]
+   },
+   "probe": {
+    "pattern": "String\\(\\s*\\w+\\s*\\?\\?\\s*''\\s*\\)",
+    "note": "把 null / undefined 归一成空串；核对源端同一个值进加密工具的哪个分支"
+   },
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法是对源端分支的核对，不落在接口上",
+   "refs": []
+  }
+ ],
+ "left_out": [
+  {
+   "text": "网络客户端改 expectDataType: STRING 对齐 value.string() 的防御性改动",
+   "reason": "其他：卡里明确它与已观测故障无关，没有画偏差链"
+  }
+ ],
+ "corrections": [],
+ "gaps": [
+  "Kotlin 可空值调用 toString() 的结果（Any?.toString）本机只有编译产物，没查到原文"
+ ],
+ "conflicts": []
+}

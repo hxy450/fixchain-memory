@@ -1,0 +1,112 @@
+{
+ "id": "rule-dad65408043e",
+ "title": "源 API 以 false 表示被拒、目标只会 reject 时，先写单次适配器区分被拒与丢卡，重试都经它",
+ "product": "代码",
+ "triggers": [
+  {
+   "read": "源码 ret = authenticateSectorWithKeyA/B(...) 取 boolean，ret 为 false 时按偏好重试，只有 IOException、TagLostException 这类异常才立即返回 false",
+   "wrong": "目标的认证方法 try { await ….authenticateSector(...) } catch { return false }：任何 reject 都直接返回，「被拒后重试」的分支永远走不到"
+  }
+ ],
+ "scope": "安卓 MifareClassic 认证这类以返回值表示被拒、以异常表示丢卡的 API，迁到只以 Promise reject 报错的 MifareClassicTag 时",
+ "exceptions": [],
+ "how": [
+  {
+   "text": "写一个单次原语适配器：await authenticateSector(sectorIndex, key, isKeyA) resolve 返回 true；reject 且判为被拒返回 false；判为丢卡时 throw",
+   "support": [
+    "case-68b0d7a44f60b8170647#recommendation:1"
+   ]
+  },
+  {
+   "text": "所有带重试或返回码的上层方法（认证、读扇区、写块等）每轮都调这个适配器：得 false 按偏好进下一轮，捕到 throw 才立即失败；上层不再 catch 全部 reject 后直接返回",
+   "support": [
+    "case-68b0d7a44f60b8170647#recommendation:1",
+    "case-68b0d7a44f60b8170647#diagnosis"
+   ]
+  },
+  {
+   "text": "按规格判定用例走读：持续被拒在目标上表现为每轮 reject，确认代码确实进入第 2、3 轮，次数与用例一致",
+   "support": [
+    "case-68b0d7a44f60b8170647#recommendation:2"
+   ]
+  }
+ ],
+ "values": [
+  {
+   "value": "authenticateSector(sectorIndex: number, key: number[], isKeyA: boolean): Promise<void>",
+   "meaning": "目标的扇区认证没有 boolean 结果，被拒只能以 reject 出现",
+   "source": "鸿蒙 SDK 的 ets/api/tag/nfctech.d.ts，MifareClassicTag.authenticateSector",
+   "support": []
+  },
+  {
+   "value": "@throws BusinessError 201、401、3100201（The tag running state is abnormal in the service）、3100204（The tag I/O operation failed）",
+   "meaning": "声明列出的 reject 码，没有写哪个是密钥被拒",
+   "source": "鸿蒙 SDK 的 ets/api/tag/nfctech.d.ts，MifareClassicTag.authenticateSector",
+   "support": []
+  },
+  {
+   "value": "@return true on success, false on authentication failure；@throws TagLostException if the tag leaves the field",
+   "meaning": "源端被拒走返回值、丢卡走异常",
+   "source": "android.nfc.tech.MifareClassic#authenticateSectorWithKeyA",
+   "support": []
+  }
+ ],
+ "lookups": [],
+ "why": "上层把所有 reject 都当异常直接返回时，重试偏好在走这条路径的读写方法上全部失效",
+ "keys": {
+  "read": [
+   "authenticateSectorWithKeyA",
+   "authenticateSectorWithKeyB",
+   "MifareClassic",
+   "TagLostException",
+   "IOException",
+   "boolean"
+  ],
+  "product": [
+   "authenticateSector",
+   "MifareClassicTag",
+   "Promise<void>",
+   "BusinessError",
+   "catch",
+   "return false"
+  ]
+ },
+ "probe": {
+  "pattern": "await\\s+[\\w.]*authenticateSector\\(",
+  "note": "直接 await 认证接口；核对外层是否把任何 reject 都当失败直接返回、绕过了重试"
+ },
+ "unverified": [
+  "修复未上真机（NFC 不可达），按源码对照",
+  "卡里工程的 SDK 是 6.1.1(24)，本机按 API 23 核对"
+ ],
+ "alternatives_unverified": [],
+ "siblings_checked": "搜 authenticateSector(：nfctech.d.ts 里只有 MifareClassicTag 的 Promise 和 callback 两个重载；同文件另有 10 个返回 Promise<void> 的方法（writeSingleBlock 等），对应的安卓方法返回 void，不涉及被拒与异常的分流，没写进 values",
+ "refs": [
+  {
+   "what": "authenticateSector 的签名",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/api/tag/nfctech.d.ts MifareClassicTag.authenticateSector",
+   "quote": "authenticateSector(sectorIndex: number, key: number[], isKeyA: boolean): Promise<void>;",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  },
+  {
+   "what": "authenticateSector 声明的 reject 码",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/api/tag/nfctech.d.ts MifareClassicTag.authenticateSector",
+   "quote": "* @throws { BusinessError } 3100201 - The tag running state is abnormal in the service. * @throws { BusinessError } 3100204 - The tag I/O operation failed.",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  },
+  {
+   "what": "安卓认证以返回值表示被拒、以异常表示丢卡",
+   "kind": "android-sdk",
+   "where": "sources/android-36.1/android/nfc/tech/MifareClassic.java MifareClassic#authenticateSectorWithKeyA",
+   "quote": "* @return true on success, false on authentication failure * @throws TagLostException if the tag leaves the field",
+   "version": "android-36.1"
+  }
+ ],
+ "sources": [
+  "case-68b0d7a44f60b8170647"
+ ],
+ "general": false,
+ "status": "active"
+}

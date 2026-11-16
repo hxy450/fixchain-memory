@@ -1,0 +1,616 @@
+{
+ "case": "case-a293ed8cf3fa860f8330",
+ "rules": [
+  {
+   "title": "greenrobot EventBus 要同步按引用投递时自建进程内总线，不直接换成 emitter",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源码 `EventBus.getDefault().post(event)` 投递类实例事件，订阅方用 `onEvent` / `onEventMainThread`，订阅回调里还会再 post",
+     "wrong": "目标总线以 `emitter.emit` / `emitter.on` 作传输层承载类实例事件，头注称回调「在发布线程执行」；没有嵌套 post 队列和订阅表快照"
+    }
+   ],
+   "scope": "迁移 greenrobot EventBus 2.x 的事件总线，事件载荷是类实例、或调用方依赖 post 返回前回调已执行时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "先逐条核对投递契约：同步还是异步、按引用还是序列化拷贝、priority 与注册序、嵌套 post 是否排队",
+     "support": [
+      "case-a293ed8cf3fa860f8330#recommendation:1"
+     ]
+    },
+    {
+     "text": "需要同步按引用语义时自建进程内总线：订阅表按 priority 降序、同级按注册序；post 时对订阅表取快照逐个同步调用，载荷按引用传；正在投递时再 post 的进队列（isPosting），本轮结束后依次投递",
+     "support": [
+      "case-a293ed8cf3fa860f8330#recommendation:1",
+      "case-a293ed8cf3fa860f8330#diagnosis"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "Emitter 事件异步执行：发布后插入内部事件队列，队列串行执行时才调用订阅回调",
+     "meaning": "emit 返回时回调还没执行，不是同步调用",
+     "source": "itc-with-emitter.md，场景介绍、运作机制",
+     "support": []
+    },
+    {
+     "value": "EventData.data 支持 Array、ArrayBuffer、Boolean、DataView、Date、Error、Map、Number、Object、Primitive、RegExp、Set、String、TypedArray，最大 16M",
+     "meaning": "载荷按这些类型传递，不按引用传类实例（卡里观察到实例方法与 instanceof 失效）",
+     "source": "js-apis-emitter.md，EventData",
+     "support": []
+    },
+    {
+     "value": "function emit<T>(eventId: string, data?: GenericEventData<T>): void",
+     "meaning": "emitter 的泛型发布接口，同样走事件队列",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.events.emitter.d.ts，emitter.emit",
+     "support": []
+    },
+    {
+     "value": "重写为进程内同步按引用总线，priority 降序 / 注册序，带 isPosting 队列",
+     "meaning": "返修后保留的写法",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-a293ed8cf3fa860f8330#diagnosis"
+     ]
+    }
+   ],
+   "lookups": [],
+   "why": "emitter 异步投递并拷贝载荷，类实例事件丢原型、post 返回后才回调，依赖同步时序的逻辑会错",
+   "keys": {
+    "read": [
+     "EventBus",
+     "EventBus.getDefault",
+     "post",
+     "register",
+     "onEvent",
+     "onEventMainThread",
+     "de.greenrobot.event"
+    ],
+    "product": [
+     "emitter",
+     "emitter.emit",
+     "emitter.on",
+     "emitter.off",
+     "eventHub",
+     "GenericEventData",
+     "isPosting"
+    ]
+   },
+   "probe": {
+    "pattern": "emitter\\.(emit|on)\\s*(<[^>]*>)?\\s*\\(",
+    "note": "用 emitter 作事件总线；源端是 EventBus 且载荷是类实例或依赖同步时序时要改成自建同步总线"
+   },
+   "unverified": [
+    "EventBus 2.x 的同步投递、priority、嵌套 post 排队语义按卡写，本机没有库源码",
+    "卡里目标 SDK 是 6.1.1(24)，emitter 声明按本机 API 23 核实"
+   ],
+   "alternatives_unverified": [
+    "卡里建议的另一选项是用 eventHub（UIAbilityContext.eventHub）；返修实际用的是自建总线，eventHub 的投递语义没核"
+   ],
+   "siblings_checked": "无：做法是改用自建总线，不落在 emitter 的某个参数类型上",
+   "refs": [
+    {
+     "what": "Emitter 事件异步执行",
+     "kind": "oh-docs",
+     "where": "zh-cn/application-dev/basic-services/common-event/itc-with-emitter.md 场景介绍",
+     "quote": "Emitter用于同一进程内相同线程或不同线程间的事件处理，事件异步执行。",
+     "version": "docs f41b9345"
+    },
+    {
+     "what": "Emitter 维护内部事件队列串行执行",
+     "kind": "oh-docs",
+     "where": "zh-cn/application-dev/basic-services/common-event/itc-with-emitter.md 运作机制",
+     "quote": "当应用程序发布事件后，就会往队列里面插入一个事件。任务队列会串行执行队列里面的任务，执行任务时会调用该任务订阅者的回调方法进行事件处理。",
+     "version": "docs f41b9345"
+    },
+    {
+     "what": "EventData.data 支持的数据类型",
+     "kind": "oh-docs",
+     "where": "zh-cn/application-dev/reference/apis-basic-services-kit/js-apis-emitter.md EventData",
+     "quote": "发送事件时传递的数据，支持数据类型包括Array、ArrayBuffer、Boolean、DataView、Date、Error、Map、Number、Object、Primitive（除了symbol）、RegExp、Set、String、TypedArray，数据大小最大为16M。",
+     "version": "docs f41b9345"
+    },
+    {
+     "what": "emitter.emit 泛型签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.events.emitter.d.ts emitter.emit",
+     "quote": "function emit<T>(eventId: string, data?: GenericEventData<T>): void;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    }
+   ]
+  },
+  {
+   "title": "源码 register(this, priority) 时，目标总线订阅接口保留 priority 形参并在订阅点传入",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源码 `EventBus.getDefault().register(this, 1)` 这类带 priority 的注册",
+     "wrong": "目标总线的订阅 API（如包着 `emitter.on` 的 subscribe）没有 priority 形参，头注写 priority「对本工程订阅方无行为差异，不迁移」，订阅点无优先级可传"
+    }
+   ],
+   "scope": "迁移带订阅优先级的 EventBus 注册",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "订阅 API 带 priority 形参（不传为 0），投递时按 priority 降序、同级按注册序调用",
+     "support": [
+      "case-a293ed8cf3fa860f8330#recommendation:2",
+      "case-a293ed8cf3fa860f8330#diagnosis"
+     ]
+    },
+    {
+     "text": "源端带 priority 的订阅点照源值传入，不以「订阅方互不依赖顺序」的推断去掉它",
+     "support": [
+      "case-a293ed8cf3fa860f8330#recommendation:2"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "InnerEvent：The EventPriority settings do not take effect under event subscription",
+     "meaning": "emitter 的 EventPriority 只作用于发布，订阅侧没有优先级，承载不了 register 的 priority",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.events.emitter.d.ts，emitter.InnerEvent",
+     "support": []
+    },
+    {
+     "value": "总线按 priority 降序 / 注册序投递，订阅点补传源端优先级",
+     "meaning": "返修后保留的写法",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-a293ed8cf3fa860f8330#diagnosis"
+     ]
+    }
+   ],
+   "lookups": [],
+   "why": "去掉 priority 后订阅方的执行先后变了，依赖先后的处理会乱序",
+   "keys": {
+    "read": [
+     "EventBus.getDefault",
+     "register",
+     "priority",
+     "onEvent",
+     "onEventMainThread"
+    ],
+    "product": [
+     "emitter.on",
+     "EventPriority",
+     "priority",
+     "subscribe",
+     "InnerEvent"
+    ]
+   },
+   "probe": null,
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：priority 落在自建总线的订阅接口上，不是平台接口",
+   "refs": [
+    {
+     "what": "emitter 订阅时 EventPriority 不生效",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.events.emitter.d.ts emitter.InnerEvent",
+     "quote": "Describes an event to subscribe to or emit. The EventPriority settings do not take effect under event subscription.",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    }
+   ]
+  },
+  {
+   "title": "源端每次 new 的对话框，目标端每次调用新建 ComponentContent，只关闭自身",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "方法里每次 `new MaterialDialog.Builder(…)…build().show()`，对话框由局部变量持有",
+     "wrong": "服务里用单例字段持有 `ComponentContent`，每次新调用前先 dismiss 旧句柄，前一个弹窗被静默关闭、回调永不触发"
+    }
+   ],
+   "scope": "把每次调用都新建的源端对话框迁成 openCustomDialog 自定义弹窗时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "每次调用新建 new ComponentContent(uiContext, wrapBuilder(builder), args)，用 getPromptAction().openCustomDialog(content, options) 打开",
+     "support": [
+      "case-a293ed8cf3fa860f8330#recommendation:3",
+      "case-a293ed8cf3fa860f8330#diagnosis"
+     ]
+    },
+    {
+     "text": "关闭时只 closeCustomDialog(本次的 content)；不设服务级的弹窗字段，不在新调用前关旧弹窗",
+     "support": [
+      "case-a293ed8cf3fa860f8330#recommendation:3"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "constructor(uiContext: UIContext, builder: WrappedBuilder<[T]>, args: T)",
+     "meaning": "ComponentContent 的构造，每次调用新建一个",
+     "source": "鸿蒙 SDK 的 ets/api/arkui/ComponentContent.d.ts，ComponentContent.constructor",
+     "support": []
+    },
+    {
+     "value": "openCustomDialog<T extends Object>(dialogContent: ComponentContent<T>, options?: promptAction.BaseDialogOptions): Promise<void>",
+     "meaning": "打开以这个 content 为内容的弹窗",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.arkui.UIContext.d.ts，PromptAction.openCustomDialog",
+     "support": []
+    },
+    {
+     "value": "closeCustomDialog<T extends Object>(dialogContent: ComponentContent<T>): Promise<void>",
+     "meaning": "同族接口：按 content 关闭对应的那个弹窗",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.arkui.UIContext.d.ts，PromptAction.closeCustomDialog",
+     "support": []
+    },
+    {
+     "value": "updateCustomDialog<T extends Object>(dialogContent: ComponentContent<T>, options: promptAction.BaseDialogOptions): Promise<void>",
+     "meaning": "同族接口：按 content 更新对应弹窗的选项",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.arkui.UIContext.d.ts，PromptAction.updateCustomDialog",
+     "support": []
+    },
+    {
+     "value": "每次调用独立 ComponentContent，dismiss 只关自身",
+     "meaning": "返修后保留的写法",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-a293ed8cf3fa860f8330#diagnosis"
+     ]
+    }
+   ],
+   "lookups": [],
+   "why": "单例句柄加先关旧弹窗时，第二次调用会静默关掉前一个，前一个的回调永不触发",
+   "keys": {
+    "read": [
+     "MaterialDialog.Builder",
+     "build",
+     "show",
+     "AlertDialog.Builder",
+     "dismiss"
+    ],
+    "product": [
+     "ComponentContent",
+     "openCustomDialog",
+     "closeCustomDialog",
+     "getPromptAction",
+     "wrapBuilder",
+     "dismiss"
+    ]
+   },
+   "probe": null,
+   "unverified": [
+    "卡里目标 SDK 是 6.1.1(24)，签名按本机 API 23 核实"
+   ],
+   "alternatives_unverified": [],
+   "siblings_checked": "搜 dialogContent: ComponentContent<T>：UIContext 的 PromptAction 上有 openCustomDialog、openCustomDialogWithController、updateCustomDialog、closeCustomDialog 四个；open、close、update 写进 values",
+   "refs": [
+    {
+     "what": "ComponentContent 带参数的构造",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/arkui/ComponentContent.d.ts ComponentContent.constructor",
+     "quote": "constructor(uiContext: UIContext, builder: WrappedBuilder<[ T ]>, args: T);",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "openCustomDialog 签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.arkui.UIContext.d.ts PromptAction.openCustomDialog",
+     "quote": "openCustomDialog<T extends Object>(dialogContent: ComponentContent<T>, options?: promptAction.BaseDialogOptions): Promise<void>;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "closeCustomDialog 签名（同族）",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.arkui.UIContext.d.ts PromptAction.closeCustomDialog",
+     "quote": "closeCustomDialog<T extends Object>(dialogContent: ComponentContent<T>): Promise<void>;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "updateCustomDialog 签名（同族）",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.arkui.UIContext.d.ts PromptAction.updateCustomDialog",
+     "quote": "updateCustomDialog<T extends Object>(dialogContent: ComponentContent<T>, options: promptAction.BaseDialogOptions): Promise<void>;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    }
+   ]
+  },
+  {
+   "title": "源端在点击时实时读首选项的判定，目标端也在回调里现读，不在 aboutToAppear 缓存",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "点击监听里实时调用首选项的 `getString(key, null)`，按是否为 null 判定先走哪条分支",
+     "wrong": "`aboutToAppear` 里读一次存进 `@Local` 字段，点击回调直接用这个字段判定"
+    }
+   ],
+   "scope": "源端在事件回调里实时读取持久化状态做判定，迁到 ArkUI 页面时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "在点击回调里现读：preferences 实例 getSync(key, defValue)（或工程里封装的同一读取方法），按读到的值判定分支，不复用页面出现时的缓存",
+     "support": [
+      "case-a293ed8cf3fa860f8330#recommendation:4",
+      "case-a293ed8cf3fa860f8330#diagnosis"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "getSync(key: string, defValue: ValueType): ValueType",
+     "meaning": "同步读取首选项，可在回调里直接调用",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.data.preferences.d.ts，preferences.Preferences.getSync",
+     "support": []
+    },
+    {
+     "value": "get(key: string, defValue: ValueType): Promise<ValueType>",
+     "meaning": "同族接口：异步读取",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.data.preferences.d.ts，preferences.Preferences.get",
+     "support": []
+    },
+    {
+     "value": "每次点击实时读首选项再判定",
+     "meaning": "返修后保留的写法",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-a293ed8cf3fa860f8330#diagnosis"
+     ]
+    }
+   ],
+   "lookups": [],
+   "why": "页面停留期间状态被别处改了，缓存的判定过期，点击走错分支",
+   "keys": {
+    "read": [
+     "getString",
+     "SharedPreferences",
+     "setOnClickListener",
+     "onClick",
+     "Prefs"
+    ],
+    "product": [
+     "aboutToAppear",
+     "@Local",
+     "getSync",
+     "preferences",
+     "onClick"
+    ]
+   },
+   "probe": null,
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "搜 (key: string, defValue: ValueType)：Preferences 的 get、getSync 两个，都写进 values",
+   "refs": [
+    {
+     "what": "Preferences.getSync 签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.data.preferences.d.ts preferences.Preferences.getSync",
+     "quote": "getSync(key: string, defValue: ValueType): ValueType;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "Preferences.get 签名（同族）",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.data.preferences.d.ts preferences.Preferences.get",
+     "quote": "get(key: string, defValue: ValueType): Promise<ValueType>;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    }
+   ]
+  },
+  {
+   "title": "onPreferenceChange 返回 true 后再验密的开关，目标端先落值再验密，取消不回滚",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "`setOnPreferenceChangeListener` 里调验密弹窗，`onPreferenceChange` 返回 `true`，验密成功再 `setChecked(newValue)`",
+     "wrong": "目标开关先回滚视觉态（如 `revertSwitch`），注释写「确认通过后才 setChecked」「SUCCEED 才落值」，验密失败或取消时开关回弹"
+    }
+   ],
+   "scope": "迁移设置页里带验证回调的开关联动（Switch / Toggle）",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "Toggle 的 onChange 里先把新值写进状态并持久化，再打开验密弹窗",
+     "support": [
+      "case-a293ed8cf3fa860f8330#recommendation:5",
+      "case-a293ed8cf3fa860f8330#diagnosis"
+     ]
+    },
+    {
+     "text": "验密成功时再设一次同值；失败、取消不回滚",
+     "support": [
+      "case-a293ed8cf3fa860f8330#recommendation:5",
+      "case-a293ed8cf3fa860f8330#diagnosis"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "onPreferenceChange 在状态更新和持久化之前调用；返回 true 表示用新值更新 Preference 的状态",
+     "meaning": "返回 true 即新值立即生效并落盘，之后的验密只是补偿",
+     "source": "android.preference.Preference.OnPreferenceChangeListener#onPreferenceChange",
+     "support": []
+    },
+    {
+     "value": "return true 先生效落盘，SUCCEED 再 setChecked(同值)，失败、取消不回滚",
+     "meaning": "返修后保留的写法",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-a293ed8cf3fa860f8330#diagnosis"
+     ]
+    }
+   ],
+   "lookups": [],
+   "why": "改成先回滚、成功才落值后，取消验密时开关回弹，和源端新值立即生效的行为相反",
+   "keys": {
+    "read": [
+     "setOnPreferenceChangeListener",
+     "onPreferenceChange",
+     "SwitchPreference",
+     "setChecked",
+     "return true"
+    ],
+    "product": [
+     "Toggle",
+     "onChange",
+     "isOn",
+     "revertSwitch",
+     "SUCCEED",
+     "setBoolean"
+    ]
+   },
+   "probe": {
+    "pattern": "确认(通过)?后才\\s*setChecked|SUCCEED\\s*才落值",
+    "note": "注释说验密通过才落值；源端 onPreferenceChange 返回 true 时应先落值"
+   },
+   "unverified": [
+    "源端用的可能是 androidx.preference，平台源码按 android.preference.Preference 核实"
+   ],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法落在回调里的落值顺序上，不落在某个参数类型上",
+   "refs": [
+    {
+     "what": "onPreferenceChange 的调用时机",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/android/preference/Preference.java Preference.OnPreferenceChangeListener#onPreferenceChange",
+     "quote": "* Called when a Preference has been changed by the user. This is * called before the state of the Preference is about to be updated and * before the state is persisted.",
+     "version": "android-36.1"
+    },
+    {
+     "what": "返回 true 用新值更新状态",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/android/preference/Preference.java Preference.OnPreferenceChangeListener#onPreferenceChange",
+     "quote": "@return True to update the state of the Preference with the new value.",
+     "version": "android-36.1"
+    }
+   ]
+  },
+  {
+   "title": "源 Fragment 没有订阅的事件，目标设置组件不要额外订阅来即时刷新",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源 Fragment 全文没有 `onEvent` 订阅，只在 `onResume` 里重读首选项",
+     "wrong": "目标设置组件额外 `on` 了一个事件（如密码移除事件）来即时刷新开关状态"
+    }
+   ],
+   "scope": "迁移设置页 Fragment，刷新时机由源端生命周期决定时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "删除源端没有的事件订阅（连同成对的 off），刷新时机照源端的 onResume 重读",
+     "support": [
+      "case-a293ed8cf3fa860f8330#recommendation:5",
+      "case-a293ed8cf3fa860f8330#diagnosis"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "去掉额外的事件订阅",
+     "meaning": "返修后保留的写法",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-a293ed8cf3fa860f8330#diagnosis"
+     ]
+    }
+   ],
+   "lookups": [],
+   "why": "多出的订阅改变了刷新时机，和源端行为不一致",
+   "keys": {
+    "read": [
+     "PreferenceFragment",
+     "onResume",
+     "onEvent",
+     "EventBus",
+     "register"
+    ],
+    "product": [
+     "on",
+     "off",
+     "subscribe",
+     "aboutToAppear",
+     "onPageShow"
+    ]
+   },
+   "probe": null,
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法是删掉多出的订阅，不落在具体接口上",
+   "refs": []
+  },
+  {
+   "title": "规格描述带回调的联动流程时，写明每一步的落值时刻与失败分支",
+   "product": "规格",
+   "triggers": [
+    {
+     "read": "源码 onPreferenceChange 返回 true（新值立即生效），随后才调验密弹窗，成功再设同值",
+     "wrong": "验收条目写成「SUCCEED 才真正切换、验密失败后开关回弹原位」，与源码顺序相反；没写每一步的落值时刻和失败分支"
+    }
+   ],
+   "scope": "规格提取阶段描述带回调的开关、确认、验证联动流程的验收条目",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "验收条目按源顺序写每一步的落值时刻和失败分支，如「返回 true 即落值并持久化（立即生效）；验密是事后补偿；失败、取消不回滚」",
+     "support": [
+      "case-a293ed8cf3fa860f8330#recommendation:6"
+     ]
+    },
+    {
+     "text": "把源文件与方法位置和「立即生效 / 事后补偿」字样一起写进验收条目",
+     "support": [
+      "case-a293ed8cf3fa860f8330#recommendation:6"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "onPreferenceChange 返回 true 表示用新值更新 Preference 的状态，调用发生在持久化之前",
+     "meaning": "源端新值立即生效",
+     "source": "android.preference.Preference.OnPreferenceChangeListener#onPreferenceChange",
+     "support": []
+    }
+   ],
+   "lookups": [],
+   "why": "验收条目把时序写反时，按它实现或验收都会把开关做成先回滚、成功才切换",
+   "keys": {
+    "read": [
+     "onPreferenceChange",
+     "return true",
+     "setOnPreferenceChangeListener",
+     "setChecked"
+    ],
+    "product": [
+     "AC",
+     "验收条目",
+     "SUCCEED",
+     "回弹",
+     "立即生效",
+     "事后补偿"
+    ]
+   },
+   "probe": {
+    "pattern": "SUCCEED\\s*才|回弹原位",
+    "note": "验收条目写成验证成功才切换；要回源码核对是否返回 true 即生效"
+   },
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法落在规格写法上，不落在具体接口上",
+   "refs": [
+    {
+     "what": "返回 true 用新值更新状态",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/android/preference/Preference.java Preference.OnPreferenceChangeListener#onPreferenceChange",
+     "quote": "@return True to update the state of the Preference with the new value.",
+     "version": "android-36.1"
+    }
+   ]
+  }
+ ],
+ "left_out": [
+  {
+   "text": "事件常量与载荷补齐被裁剪的事件，属一比一标准推翻裁剪决策的新要求，卡里列为未决",
+   "reason": "其他：卡里判定不是生成偏差，没有做法"
+  }
+ ],
+ "corrections": [],
+ "gaps": [
+  "greenrobot EventBus 2.x 的投递语义本机只有编译产物，查不到原文，按卡写"
+ ],
+ "conflicts": []
+}

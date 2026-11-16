@@ -1,0 +1,137 @@
+{
+ "id": "rule-3b4356ffd6c5",
+ "title": "源端 SurfaceView 自有渲染线程时，规格按运行态写返回、切后台、旋转的结果",
+ "product": "规格",
+ "triggers": [
+  {
+   "read": "Thread 子类 run() 里 canvas = holder.lockCanvas() 后直接 onDraw(canvas) 或 canvas.drawColor，循环体不判空；SurfaceHolder.Callback 的 surfaceCreated 里直接 thread.start()，surfaceDestroyed 里置停止标志再 join",
+   "wrong": "规格或验收条目写「页面隐藏 / 销毁触发停帧、丢弃迟到回调」或「旋转重建 = 重开新局」，不分渲染线程在跑还是已结束"
+  }
+ ],
+ "scope": "规格提取阶段，把 SurfaceView 加自建渲染线程的页面映射为目标页面生命周期契约时",
+ "exceptions": [],
+ "how": [
+  {
+   "text": "先按源端运行态（渲染线程在跑 / 已结束、对话框是否显示）拆开，再分别写返回、切后台、旋转的结果，不写成平滑停帧",
+   "support": [
+    "case-d3f1bcc562a64e5f56f7#recommendation:3",
+    "case-d3f1bcc562a64e5f56f7#recommendation:1",
+    "case-d3f1bcc562a64e5f56f7#diagnosis"
+   ]
+  },
+  {
+   "text": "线程在跑时：surface 失效后 lockCanvas 返回 null，不判空的绘制空指针，进程崩溃。线程已结束后回前台：surfaceCreated 对已结束线程 start() 抛 IllegalThreadStateException，SurfaceView 捕获只记日志，绘制区变黑、对话框还在",
+   "support": [
+    "case-d3f1bcc562a64e5f56f7#recommendation:3",
+    "case-d3f1bcc562a64e5f56f7#diagnosis"
+   ]
+  },
+  {
+   "text": "configChanges 不含 orientation 时，线程已结束后旋转：旧对话框消失，按新窗口尺寸重开当前局；已结束后按返回：逐层关对话框再回上一页",
+   "support": [
+    "case-d3f1bcc562a64e5f56f7#recommendation:3",
+    "case-d3f1bcc562a64e5f56f7#recommendation:2",
+    "case-d3f1bcc562a64e5f56f7#diagnosis"
+   ]
+  }
+ ],
+ "values": [
+  {
+   "value": "lockCanvas 在 surface 尚未创建或无法编辑时返回 null",
+   "meaning": "窗口隐藏后循环拿到的是 null 画布",
+   "source": "android.view.SurfaceHolder#lockCanvas",
+   "support": []
+  },
+  {
+   "value": "一个 Thread 只能 start 一次，已结束的线程不能再启动，否则抛 IllegalThreadStateException",
+   "meaning": "回前台 surfaceCreated 再 start() 的结果",
+   "source": "java.lang.Thread#start",
+   "support": []
+  },
+  {
+   "value": "SurfaceView 调 surfaceCreated 等回调时 catch (Exception ex) 后只 Log.e(\"Exception configuring surface\")",
+   "meaning": "start() 抛的异常不会让进程崩溃，只是新 surface 留空",
+   "source": "android.view.SurfaceView#updateSurface",
+   "support": []
+  },
+  {
+   "value": "安卓实测：进行中按返回、按 Home 各 4/4 崩溃，进行中旋转崩溃，结束后旋转重开",
+   "meaning": "运行态分支的实测结果",
+   "source": "卡里修好并验证过",
+   "support": [
+    "case-d3f1bcc562a64e5f56f7#diagnosis"
+   ]
+  }
+ ],
+ "lookups": [
+  {
+   "what": "源端渲染循环和 surface 回调的写法",
+   "where": "源工程 Thread 子类的 run() 方法体、SurfaceHolder.Callback 的 surfaceCreated / surfaceDestroyed 方法体、AndroidManifest 里该 Activity 的 configChanges",
+   "how": "看 lockCanvas 后有没有判空、surfaceCreated 是否每次都 start 同一个线程对象、configChanges 是否含 orientation，按结果写各运行态的分支"
+  }
+ ],
+ "why": "写成平滑停帧或无条件重开后，源端崩溃、黑屏、对话框保留这些可观察结果在目标端全丢了",
+ "keys": {
+  "read": [
+   "SurfaceView",
+   "SurfaceHolder.Callback",
+   "lockCanvas",
+   "unlockCanvasAndPost",
+   "surfaceCreated",
+   "surfaceDestroyed",
+   "Thread",
+   "configChanges"
+  ],
+  "product": [
+   "停帧",
+   "帧循环",
+   "生命周期",
+   "验收条目",
+   "运行态",
+   "旋转重建",
+   "IllegalThreadStateException"
+  ]
+ },
+ "probe": {
+  "pattern": "(隐藏|销毁).{0,20}(停帧|停止循环|stop)|旋转.{0,10}重开",
+  "note": "规格把页面隐藏写成停帧、或把旋转写成重开；回源码核对渲染线程在跑时是否会因 lockCanvas 得 null 而崩溃"
+ },
+ "unverified": [],
+ "alternatives_unverified": [],
+ "siblings_checked": "无：做法落在规格的写法上，不落在具体接口",
+ "refs": [
+  {
+   "what": "lockCanvas 可能返回 null",
+   "kind": "android-sdk",
+   "where": "sources/android-36.1/android/view/SurfaceHolder.java SurfaceHolder#lockCanvas",
+   "quote": "A null is returned if the surface has * not been created or otherwise cannot be edited.",
+   "version": "android-36.1"
+  },
+  {
+   "what": "线程不能启动两次",
+   "kind": "android-sdk",
+   "where": "sources/android-36.1/java/lang/Thread.java Thread#start",
+   "quote": "It is never legal to start a thread more than once. * In particular, a thread may not be restarted once it has completed * execution.",
+   "version": "android-36.1"
+  },
+  {
+   "what": "start 已启动线程抛 IllegalThreadStateException",
+   "kind": "android-sdk",
+   "where": "sources/android-36.1/java/lang/Thread.java Thread#start",
+   "quote": "@throws     IllegalThreadStateException  if the thread was already started.",
+   "version": "android-36.1"
+  },
+  {
+   "what": "SurfaceView 捕获回调异常只记日志",
+   "kind": "android-sdk",
+   "where": "sources/android-36.1/android/view/SurfaceView.java SurfaceView#updateSurface",
+   "quote": "} catch (Exception ex) { Log.e(TAG, \"Exception configuring surface\", ex); }",
+   "version": "android-36.1"
+  }
+ ],
+ "sources": [
+  "case-d3f1bcc562a64e5f56f7"
+ ],
+ "general": false,
+ "status": "active"
+}

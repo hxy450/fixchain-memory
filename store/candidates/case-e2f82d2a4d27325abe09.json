@@ -1,0 +1,156 @@
+{
+ "case": "case-e2f82d2a4d27325abe09",
+ "rules": [
+  {
+   "title": "单线程写执行器改成 Promise 队列时，任务体内嵌套写调内部版本，不 await 同队列方法",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源端用 Executors.newSingleThreadExecutor() 串行执行写任务，提交方法按 Thread.currentThread().getName() 判断已在执行线程就 runnable.run() 内联、否则 submit；任务体内还会调用同类的公开写方法",
+     "wrong": "目标端执行器只有 tail = tail.then(task) 的链式 Promise，没有重入判断；入队的任务体内 await 同一队列的公开写方法；注释声称单线程事件循环下重入天然成立"
+    }
+   ],
+   "scope": "把源端单线程写执行器（带同线程重入内联分支）移植成 ArkTS 异步串行队列时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "为任务体内会被调用的公开写方法拆出不经队列的内部版本（源端已有的 *Synchronous 写法），公开方法只做入队并调用内部版本",
+     "support": [
+      "case-e2f82d2a4d27325abe09#recommendation:1",
+      "case-e2f82d2a4d27325abe09#diagnosis"
+     ]
+    },
+    {
+     "text": "入队的任务体内只调用内部版本，不 await 经队列的公开方法；对照源码里依赖重入分支的调用点逐一改",
+     "support": [
+      "case-e2f82d2a4d27325abe09#recommendation:1",
+      "case-e2f82d2a4d27325abe09#recommendation:2"
+     ]
+    },
+    {
+     "text": "写完逐个扫描入队任务体，找出对本类经队列方法的 await，作为最小检查",
+     "support": [
+      "case-e2f82d2a4d27325abe09#recommendation:2"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "newSingleThreadExecutor：任务保证顺序执行，任一时刻最多一个任务在跑",
+     "meaning": "源端串行语义；它的重入内联靠调用方自己判断线程，不是执行器自带",
+     "source": "java.util.concurrent.Executors#newSingleThreadExecutor",
+     "support": []
+    },
+    {
+     "value": "Promise 状态改变时回调加入微任务队列，在当前宏任务执行完成后执行",
+     "meaning": "嵌套任务入队后排在当前任务之后，当前任务 await 它就永远等不到",
+     "source": "async-concurrency-overview.md，Promise",
+     "support": []
+    },
+    {
+     "value": "任务体内 await 同队列公开方法时外层任务永不完成、后续写入全部冻结；改成调用内部版本后恢复",
+     "meaning": "验证过的写法；执行器本身仍是无重入判断的 Promise 链",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-e2f82d2a4d27325abe09#diagnosis"
+     ]
+    }
+   ],
+   "lookups": [
+    {
+     "what": "源端哪些调用点依赖重入分支",
+     "where": "源工程里写仓库类：提交到执行器的每个任务体（Runnable / lambda）",
+     "how": "找任务体里对本类其他经执行器提交的公开方法的调用；这些调用点在目标端都要改成内部版本"
+    }
+   ],
+   "why": "嵌套写被排到当前任务之后、当前任务又在等它，串行队列自锁死，之后所有写入都冻结",
+   "keys": {
+    "read": [
+     "Executors.newSingleThreadExecutor",
+     "ExecutorService",
+     "submit",
+     "Thread.currentThread",
+     "getName",
+     "runnable.run",
+     "Future"
+    ],
+    "product": [
+     "Promise",
+     "then",
+     "await",
+     "async",
+     "Synchronous",
+     "tail"
+    ]
+   },
+   "probe": null,
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法是队列的重入契约，不落在平台接口上",
+   "refs": [
+    {
+     "what": "单线程执行器的串行语义",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/java/util/concurrent/Executors.java Executors#newSingleThreadExecutor",
+     "quote": "Tasks are guaranteed to execute * sequentially, and no more than one task will be active at any * given time.",
+     "version": "android-36.1"
+    },
+    {
+     "what": "Promise 回调进微任务队列",
+     "kind": "oh-docs",
+     "where": "zh-cn/application-dev/arkts-utils/async-concurrency-overview.md Promise",
+     "quote": "当Promise状态改变时，回调函数会被加入微任务队列等待执行，依赖事件循环机制在宏任务执行完成后优先执行微任务，从而保证回调函数的异步调度。",
+     "version": "docs f41b9345"
+    }
+   ]
+  },
+  {
+   "title": "串行写执行契约的验收条目除提交顺序外，还要有任务内嵌套写能完成的一条",
+   "product": "规格",
+   "triggers": [
+    {
+     "read": "源端写执行器有「调用方已在执行线程则同步内联、不再排队」的重入分支",
+     "wrong": "规格的验收条目只写「并发提交 N 个写任务后结果等于某串行顺序」，没有覆盖重入分支：队列任务内调用另一个写方法、外层 Promise 能完成"
+    }
+   ],
+   "scope": "规格里给串行写执行器（写仓库、数据库写线程）定的验收条目",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "验收条目加一条：在队列任务内调用另一个写方法，外层 Promise 能完成，结果与源端内联执行一致",
+     "support": [
+      "case-e2f82d2a4d27325abe09#recommendation:3",
+      "case-e2f82d2a4d27325abe09#diagnosis"
+     ]
+    }
+   ],
+   "values": [],
+   "lookups": [],
+   "why": "只验提交顺序时串行性自查全部通过，任务内嵌套写造成的自锁死要到交付后才暴露",
+   "keys": {
+    "read": [
+     "Executors.newSingleThreadExecutor",
+     "submit",
+     "runnable.run",
+     "Thread.currentThread"
+    ],
+    "product": [
+     "验收条目",
+     "串行",
+     "提交顺序",
+     "重入",
+     "嵌套写"
+    ]
+   },
+   "probe": null,
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：验收条目，不落在具体接口上",
+   "refs": []
+  }
+ ],
+ "left_out": [],
+ "corrections": [],
+ "gaps": [],
+ "conflicts": []
+}

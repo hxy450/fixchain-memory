@@ -1,0 +1,216 @@
+{
+ "case": "case-dd1e7cc2d529146faabb",
+ "rules": [
+  {
+   "title": "onConfigurationUpdate 重放先比配置指纹，没变就返回，变了先落新指纹再重放",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源 Activity 没声明 android:configChanges，配置真实变化才整窗重建并重跑 attachBaseContext / onCreate；规格的重放签名带变化域（如 onConfigurationReplay(change: ConfigurationChange)）",
+     "wrong": "onConfigurationUpdate(newConfig) 每次回调都无条件执行重放清单，没有基线、没有字段比较"
+    },
+    {
+     "read": "重放项或启动链里会调用 ApplicationContext.setLanguage / i18n.System.setAppPreferredLanguage 重套持久化的应用语言",
+     "wrong": "重放内部调用 setLanguage / setAppPreferredLanguage，又没有变化判据或重入守卫，冷启动栈溢出"
+    }
+   ],
+   "scope": "把源端配置变化整窗重建的副作用，落成 UIAbility.onConfigurationUpdate 的显式重放时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "启动 attach 的第一句（在 setLanguage / setAppPreferredLanguage 之前）记录 context.config 指纹：语言按 Intl.Locale 归一到语言子标签，加 colorMode、direction、screenDensity、fontSizeScale、fontWeightScale",
+     "support": [
+      "case-dd1e7cc2d529146faabb#recommendation:2",
+      "case-dd1e7cc2d529146faabb#diagnosis"
+     ]
+    },
+    {
+     "text": "重放入口算新指纹：和基线相同就直接 return；不同就先把基线更新成新指纹，再执行重放各项（语言重套可以保留）",
+     "support": [
+      "case-dd1e7cc2d529146faabb#recommendation:2",
+      "case-dd1e7cc2d529146faabb#diagnosis"
+     ]
+    },
+    {
+     "text": "在系统回调里调用会改同一配置的接口（设置语言、深浅色等）前，先确认它会不会同步触发同一回调，再加变化判据或重入守卫",
+     "support": [
+      "case-dd1e7cc2d529146faabb#recommendation:3"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "onConfigurationUpdate(newConfig: Configuration): void",
+     "meaning": "配置更新回调",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.app.ability.Ability.d.ts，Ability.onConfigurationUpdate",
+     "support": []
+    },
+    {
+     "value": "language?: string；colorMode?: ConfigurationConstant.ColorMode；direction?: ConfigurationConstant.Direction；screenDensity?: ConfigurationConstant.ScreenDensity；fontSizeScale?: number；fontWeightScale?: number",
+     "meaning": "指纹要取的 Configuration 字段",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.app.ability.Configuration.d.ts，Configuration",
+     "support": []
+    },
+    {
+     "value": "setLanguage(language: string): void（只能在主线程调用）",
+     "meaning": "设置应用语言，会改应用配置",
+     "source": "鸿蒙 SDK 的 ets/api/application/ApplicationContext.d.ts，ApplicationContext.setLanguage",
+     "support": []
+    },
+    {
+     "value": "static setAppPreferredLanguage(language: string): void",
+     "meaning": "设置应用偏好语言，启动时按它加载资源",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.i18n.d.ts，i18n.System.setAppPreferredLanguage",
+     "support": []
+    },
+    {
+     "value": "设置应用语言后，不再支持订阅系统语言变化",
+     "meaning": "调过 setLanguage 后，回调里不会再因系统语言变化收到 language",
+     "source": "subscribe-system-environment-variable-changes.md，设置应用语言",
+     "support": []
+    },
+    {
+     "value": "setLanguage / setAppPreferredLanguage 即使值没变也会同步回调 onConfigurationUpdate；回调里的 language 写法可能和 context.config 不同（如 en 与 en-Latn-US）",
+     "meaning": "必须比较、比较前要归一语言、基线要先于重放更新",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-dd1e7cc2d529146faabb#diagnosis",
+      "case-dd1e7cc2d529146faabb#recommendation:1"
+     ]
+    },
+    {
+     "value": "加指纹后回灌的回调全部短路，两次冷启动的重放计数正常",
+     "meaning": "修好后的结果",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-dd1e7cc2d529146faabb#diagnosis"
+     ]
+    }
+   ],
+   "lookups": [],
+   "why": "不比较时重放里的语言重套回灌回调，无限递归致冷启动崩溃；基线更新晚于重放同样递归",
+   "keys": {
+    "read": [
+     "configChanges",
+     "attachBaseContext",
+     "createConfigurationContext",
+     "onCreate",
+     "ConfigurationChange",
+     "onConfigurationChanged"
+    ],
+    "product": [
+     "onConfigurationUpdate",
+     "Configuration",
+     "setLanguage",
+     "setAppPreferredLanguage",
+     "Intl.Locale",
+     "fontSizeScale",
+     "colorMode"
+    ]
+   },
+   "probe": {
+    "pattern": "onConfigurationUpdate\\s*\\(",
+    "note": "有配置更新回调；核对入口有没有先和基线比较，回调链里有没有调 setLanguage / setAppPreferredLanguage"
+   },
+   "unverified": [
+    "「设置语言会同步回调 onConfigurationUpdate」出自卡里的设备观察，声明和文档副本里没有对应原文"
+   ],
+   "alternatives_unverified": [],
+   "siblings_checked": "搜 onConfigurationUpdate(newConfig: Configuration)：除 Ability 外另有 AbilityStage、FormExtensionAbility 两个；做法落在回调入口的判据上，没写进 values",
+   "refs": [
+    {
+     "what": "Ability.onConfigurationUpdate 签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.app.ability.Ability.d.ts Ability.onConfigurationUpdate",
+     "quote": "onConfigurationUpdate(newConfig: Configuration): void;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "Configuration.language",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.app.ability.Configuration.d.ts Configuration.language",
+     "quote": "language?: string;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "Configuration.colorMode",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.app.ability.Configuration.d.ts Configuration.colorMode",
+     "quote": "colorMode?: ConfigurationConstant.ColorMode;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "Configuration.direction",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.app.ability.Configuration.d.ts Configuration.direction",
+     "quote": "direction?: ConfigurationConstant.Direction;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "Configuration.screenDensity",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.app.ability.Configuration.d.ts Configuration.screenDensity",
+     "quote": "screenDensity?: ConfigurationConstant.ScreenDensity;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "Configuration.fontSizeScale",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.app.ability.Configuration.d.ts Configuration.fontSizeScale",
+     "quote": "fontSizeScale?: number;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "Configuration.fontWeightScale",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.app.ability.Configuration.d.ts Configuration.fontWeightScale",
+     "quote": "fontWeightScale?: number;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "ApplicationContext.setLanguage",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/application/ApplicationContext.d.ts ApplicationContext.setLanguage",
+     "quote": "Sets the language for the application. * * <p>**NOTE**: * <br>It can be called only by the main thread. * </p>",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "setLanguage 签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/application/ApplicationContext.d.ts ApplicationContext.setLanguage",
+     "quote": "@since 21 */ setLanguage(language: string): void;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "i18n.System.setAppPreferredLanguage",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.i18n.d.ts System.setAppPreferredLanguage",
+     "quote": "static setAppPreferredLanguage(language: string): void;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "设置应用语言后不再订阅系统语言变化",
+     "kind": "oh-docs",
+     "where": "zh-cn/application-dev/application-models/subscribe-system-environment-variable-changes.md 设置应用语言",
+     "quote": "应用语言默认跟随系统语言变化。开发者可以使用[setLanguage](../reference/apis-ability-kit/js-apis-inner-application-applicationContext.md#applicationcontextsetlanguage11)设置应用语言。设置后，不再支持订阅系统语言变化。",
+     "version": "docs f41b9345"
+    }
+   ]
+  }
+ ],
+ "left_out": [
+  {
+   "text": "修订一条配置变化重放的经验，补上「onConfigurationUpdate 不等于配置真实变化」的前提与基线时机",
+   "reason": "针对经验库本身的建议"
+  },
+  {
+   "text": "那条经验召回时提醒丢了比较条件的分析",
+   "reason": "针对经验库本身的建议"
+  }
+ ],
+ "corrections": [],
+ "gaps": [
+  "应用自己调用 setLanguage / setAppPreferredLanguage 会同步回调 onConfigurationUpdate（值没变也会），本机声明和文档副本里没找到原文，按卡写"
+ ],
+ "conflicts": []
+}

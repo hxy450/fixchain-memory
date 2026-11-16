@@ -1,0 +1,127 @@
+{
+ "id": "rule-c2786cac601d",
+ "title": "DecimalFormat 或 HALF_EVEN 舍入转文本时，目标照 ICU 语义写，不用 Math.round",
+ "product": "代码",
+ "triggers": [
+  {
+   "read": "源码 android.icu.text.DecimalFormat(\"0.#\") / DecimalFormat(\"0.00\") 的 .format(...) 生成显示文本",
+   "wrong": "目标写成 Math.round(v * 10) / 10 加模板串、toFixed(2)：舍入成了 HALF_UP，小数点固定为 \".\""
+  },
+  {
+   "read": "源码 Float.toBigDecimal().setScale(scale, HALF_EVEN).toFloat()",
+   "wrong": "目标按 double 直接 Math.round(v * 10) / 10，没有 float32 取值和 HALF_EVEN"
+  }
+ ],
+ "scope": "把 Kotlin/Android 的数值转文本函数（DecimalFormat 模式串、BigDecimal 舍入）翻译成 ArkTS 共享工具或页面内函数时",
+ "exceptions": [],
+ "how": [
+  {
+   "text": "DecimalFormat 模式串照 ICU 语义实现：按模式的小数位数做 HALF_EVEN 舍入（\"0.#\" 至多 1 位且去尾零，\"0.00\" 固定 2 位），小数点和数字符号用默认区域的",
+   "support": [
+    "case-90117ca805576dda1534#recommendation:1",
+    "case-90117ca805576dda1534#diagnosis"
+   ]
+  },
+  {
+   "text": "Float.toBigDecimal().setScale(n, HALF_EVEN) 先用 Math.fround(v) 取 float32 值，在它的 Float.toString 十进制串上做 HALF_EVEN 舍入",
+   "support": [
+    "case-90117ca805576dda1534#recommendation:1",
+    "case-90117ca805576dda1534#diagnosis"
+   ]
+  },
+  {
+   "text": "自检用例：\"0.#\" 下 15.25→\"15.2\"，德语区域 12.5→\"12,5\"",
+   "support": [
+    "case-90117ca805576dda1534#recommendation:1"
+   ]
+  }
+ ],
+ "values": [
+  {
+   "value": "DecimalFormat 默认舍入模式是 HALF_EVEN（中点取偶）",
+   "meaning": "Math.round 是中点进位，结果不同",
+   "source": "android.icu.text.DecimalFormat#setRoundingMode",
+   "support": []
+  },
+  {
+   "value": "new DecimalFormat(pattern) 用默认区域的符号",
+   "meaning": "小数点随区域变化，德语区域是逗号",
+   "source": "android.icu.text.DecimalFormat#DecimalFormat(String)",
+   "support": []
+  },
+  {
+   "value": "Math.fround(x: number): number 返回最接近的单精度浮点值",
+   "meaning": "模拟 Kotlin Float 的 float32 取值",
+   "source": "鸿蒙 SDK 的 ets/build-tools/ets-loader/node_modules/typescript/lib/lib.es2015.core.d.ts，Math.fround",
+   "support": []
+  },
+  {
+   "value": "共享数值工具整体重写为 float32 语义、HALF_EVEN、区域小数点、Float.toString 模拟，roundToDecimals 按 BigDecimal 方式实现；页面删掉页内函数统一调用",
+   "meaning": "修好后的做法",
+   "source": "卡里修好并验证过",
+   "support": [
+    "case-90117ca805576dda1534#diagnosis"
+   ]
+  }
+ ],
+ "lookups": [],
+ "why": "Math.round / toFixed 是中点进位且小数点固定为点：15.25 显示成 15.3，非英语区域小数点也不对",
+ "keys": {
+  "read": [
+   "android.icu.text.DecimalFormat",
+   "DecimalFormat",
+   "toBigDecimal",
+   "setScale",
+   "HALF_EVEN",
+   "RoundingMode",
+   "format("
+  ],
+  "product": [
+   "Math.round",
+   "toFixed",
+   "Math.fround",
+   "HALF_EVEN",
+   "NumberFormat",
+   "roundingMode"
+  ]
+ },
+ "probe": {
+  "pattern": "Math\\.round\\([^)]*\\*\\s*(10|100)\\b",
+  "note": "按 Math.round(v*10)/10 一类做小数舍入；源端若是 DecimalFormat 或 BigDecimal HALF_EVEN，结果在中点处不同"
+ },
+ "unverified": [
+  "Float.toBigDecimal 以 Float.toString 的十进制串为基础出自卡，Kotlin 标准库源码本机没有"
+ ],
+ "alternatives_unverified": [
+  "new intl.NumberFormat(locale, { maximumFractionDigits, roundingMode: 'halfEven' })：声明里 roundingMode @since 18、默认 halfExpand（中点远离 0），卡里没验证；@ohos.intl 的部分类型已标 deprecated since 20、改用 Intl"
+ ],
+ "siblings_checked": "无：做法是按源 API 语义写格式化函数，目标不落在单一接口上",
+ "refs": [
+  {
+   "what": "ICU DecimalFormat 默认 HALF_EVEN",
+   "kind": "android-sdk",
+   "where": "sources/android-36.1/android/icu/text/DecimalFormat.java DecimalFormat#setRoundingMode",
+   "quote": "The default rounding mode is HALF_EVEN, which rounds decimals to their closest whole * number, and rounds to the closest even number if at the midpoint.",
+   "version": "android-36.1"
+  },
+  {
+   "what": "DecimalFormat(String) 用默认区域符号",
+   "kind": "android-sdk",
+   "where": "sources/android-36.1/android/icu/text/DecimalFormat.java DecimalFormat#DecimalFormat(String)",
+   "quote": "Creates a DecimalFormat based on the given pattern, using symbols for the default locale.",
+   "version": "android-36.1"
+  },
+  {
+   "what": "Math.fround 返回单精度值",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/build-tools/ets-loader/node_modules/typescript/lib/lib.es2015.core.d.ts Math.fround",
+   "quote": "Returns the nearest single precision float representation of a number. * @param x A numeric expression. */ fround(x: number): number;",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  }
+ ],
+ "sources": [
+  "case-90117ca805576dda1534"
+ ],
+ "general": false,
+ "status": "active"
+}

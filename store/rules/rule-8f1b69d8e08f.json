@@ -1,0 +1,179 @@
+{
+ "id": "rule-8f1b69d8e08f",
+ "title": "GestureDetector 的 onFling 迁到 onTouch 时复刻触发路径，不用总位移除以总时长",
+ "product": "代码",
+ "triggers": [
+  {
+   "read": "onTouch 只 return gestureDetector.onTouchEvent(event)，SimpleOnGestureListener.onFling 里按 velocityX / velocityY 和位移判方向",
+   "wrong": "目标 .onTouch 的 Up 里用起点到抬起的总位移除以总时长当速度、只要求 > 0 就判方向，没有触摸容差、长按、双击和最小/最大抛掷速度"
+  }
+ ],
+ "scope": "源端用 GestureDetector 识别滑动（onFling），目标在 ArkUI .onTouch 里自己判定滑动的代码",
+ "exceptions": [],
+ "how": [
+  {
+   "text": "把每个 onTouch 事件都交给一个复刻 GestureDetector 的检测器：Down 记起点并开始跟踪速度；移出 8dp 触摸容差前不算滑动；按满 400ms 进入长按；抬起时若是双击第二击、长按中或仍在容差内，都不回调 onFling",
+   "support": [
+    "case-a1849836a1bfff3c265c#diagnosis",
+    "case-a1849836a1bfff3c265c#recommendation:1"
+   ]
+  },
+  {
+   "text": "抬起时按抬起前的速度估计（卡里复刻 VelocityTracker 的 LSQ2，上限 8000dp/s），|vx| 或 |vy| 超过 50dp/s 才走源端 onFling 的方向矩阵；不用总位移/总时长的平均速度代替",
+   "support": [
+    "case-a1849836a1bfff3c265c#recommendation:2",
+    "case-a1849836a1bfff3c265c#diagnosis"
+   ]
+  }
+ ],
+ "values": [
+  {
+   "value": "抬起时依次判：双击第二击 → 长按中 → 仍在触摸容差内（onSingleTapUp）→ 否则 computeCurrentVelocity(1000, 最大抛掷速度) 后 |vy| 或 |vx| > 最小抛掷速度才调 onFling",
+   "meaning": "GestureDetector 在 ACTION_UP 上的分支顺序",
+   "source": "android.view.GestureDetector#onTouchEvent",
+   "support": []
+  },
+  {
+   "value": "config_viewMinFlingVelocity = 50dp，config_viewMaxFlingVelocity = 8000dp",
+   "meaning": "最小、最大抛掷速度（每秒）",
+   "source": "Android SDK 平台资源 data/res/values/config.xml，config_viewMinFlingVelocity、config_viewMaxFlingVelocity（按应用的 compileSdk 取对应平台）",
+   "support": []
+  },
+  {
+   "value": "config_viewConfigurationTouchSlop = 8dp",
+   "meaning": "触摸容差",
+   "source": "Android SDK 平台资源 data/res/values/config.xml，config_viewConfigurationTouchSlop（按应用的 compileSdk 取对应平台）；android.view.ViewConfiguration 的 TOUCH_SLOP",
+   "support": []
+  },
+  {
+   "value": "DEFAULT_LONG_PRESS_TIMEOUT = 400（ms），DOUBLE_TAP_TIMEOUT = 300（ms）",
+   "meaning": "长按时长、双击间隔",
+   "source": "android.view.ViewConfiguration 的 DEFAULT_LONG_PRESS_TIMEOUT、DOUBLE_TAP_TIMEOUT",
+   "support": []
+  },
+  {
+   "value": "onTouch 事件逐个交给复刻 8dp 容差、400ms 长按、双击、LSQ2 速度和最小/最大抛掷速度的检测器后，滑动按源端行为触发",
+   "meaning": "卡里最终保留的改法",
+   "source": "卡里修好并验证过",
+   "support": [
+    "case-a1849836a1bfff3c265c#diagnosis"
+   ]
+  }
+ ],
+ "lookups": [
+  {
+   "what": "源端是否关了长按或双击",
+   "where": "源工程里构造 GestureDetector 的 Java/Kotlin 代码，找 setIsLongpressEnabled、setOnDoubleTapListener 的调用",
+   "how": "setIsLongpressEnabled(false) 时检测器不做长按分支；setOnDoubleTapListener(null) 时不做双击分支；没调用就全做"
+  }
+ ],
+ "why": "用总位移/总时长且只要求速度 > 0 时，慢拖、长按后抬起、点按都会被当成滑动，和源端不一致",
+ "keys": {
+  "read": [
+   "GestureDetector",
+   "gestureDetector.onTouchEvent",
+   "SimpleOnGestureListener",
+   "onFling",
+   "velocityX",
+   "velocityY",
+   "VelocityTracker"
+  ],
+  "product": [
+   "onTouch",
+   "TouchType.Up",
+   "TouchType.Move",
+   "velocity",
+   "touchSlop",
+   "longPress",
+   "doubleTap",
+   "onFling"
+  ]
+ },
+ "probe": null,
+ "unverified": [
+  "设备的资源 overlay 可以改触摸容差和抛掷速度，这里写的是框架默认值",
+  "VelocityTracker 默认用 LSQ2 出自卡，本机只有 Java 源码，没核到原生实现"
+ ],
+ "alternatives_unverified": [
+  "SwipeGesture({ direction, speed })：speed 是最小滑动速度，默认 100vp/s，与安卓 50dp/s 不同，卡里没验证",
+  "PanGesture 的 onActionEnd 判滑动，卡里没验证"
+ ],
+ "siblings_checked": "无：做法是自写检测器复刻安卓 GestureDetector，不落在目标端某个参数类型上",
+ "refs": [
+  {
+   "what": "ACTION_UP 时算速度",
+   "kind": "android-sdk",
+   "where": "sources/android-36.1/android/view/GestureDetector.java GestureDetector#onTouchEvent",
+   "quote": "velocityTracker.computeCurrentVelocity(1000, mMaximumFlingVelocity); final float velocityY = velocityTracker.getYVelocity(pointerId); final float velocityX = velocityTracker.getXVelocity(pointerId);",
+   "version": "android-36.1"
+  },
+  {
+   "what": "onFling 的速度门",
+   "kind": "android-sdk",
+   "where": "sources/android-36.1/android/view/GestureDetector.java GestureDetector#onTouchEvent",
+   "quote": "if ((Math.abs(velocityY) > mMinimumFlingVelocity) || (Math.abs(velocityX) > mMinimumFlingVelocity)) { handled = mListener.onFling(mCurrentDownEvent, ev, velocityX, velocityY);",
+   "version": "android-36.1"
+  },
+  {
+   "what": "抬起时先判长按、容差内单击",
+   "kind": "android-sdk",
+   "where": "sources/android-36.1/android/view/GestureDetector.java GestureDetector#onTouchEvent",
+   "quote": "} else if (mInLongPress) { mHandler.removeMessages(TAP); mInLongPress = false; } else if (mAlwaysInTapRegion && !mIgnoreNextUpEvent) {",
+   "version": "android-36.1"
+  },
+  {
+   "what": "最小抛掷速度资源",
+   "kind": "android-sdk",
+   "where": "platforms/android-36/data/res/values/config.xml config_viewMinFlingVelocity",
+   "quote": "<dimen name=\"config_viewMinFlingVelocity\">50dp</dimen>",
+   "version": "android-36"
+  },
+  {
+   "what": "最大抛掷速度资源",
+   "kind": "android-sdk",
+   "where": "platforms/android-36/data/res/values/config.xml config_viewMaxFlingVelocity",
+   "quote": "<dimen name=\"config_viewMaxFlingVelocity\">8000dp</dimen>",
+   "version": "android-36"
+  },
+  {
+   "what": "触摸容差资源",
+   "kind": "android-sdk",
+   "where": "platforms/android-36/data/res/values/config.xml config_viewConfigurationTouchSlop",
+   "quote": "<dimen name=\"config_viewConfigurationTouchSlop\">8dp</dimen>",
+   "version": "android-36"
+  },
+  {
+   "what": "触摸容差常量",
+   "kind": "android-sdk",
+   "where": "sources/android-36.1/android/view/ViewConfiguration.java ViewConfiguration TOUCH_SLOP",
+   "quote": "private static final int TOUCH_SLOP = 8;",
+   "version": "android-36.1"
+  },
+  {
+   "what": "长按时长",
+   "kind": "android-sdk",
+   "where": "sources/android-36.1/android/view/ViewConfiguration.java ViewConfiguration DEFAULT_LONG_PRESS_TIMEOUT",
+   "quote": "public static final int DEFAULT_LONG_PRESS_TIMEOUT = 400;",
+   "version": "android-36.1"
+  },
+  {
+   "what": "双击间隔",
+   "kind": "android-sdk",
+   "where": "sources/android-36.1/android/view/ViewConfiguration.java ViewConfiguration DOUBLE_TAP_TIMEOUT",
+   "quote": "private static final int DOUBLE_TAP_TIMEOUT = 300;",
+   "version": "android-36.1"
+  },
+  {
+   "what": "SwipeGesture 的 speed 默认 100vp/s（替代写法，未验证）",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/component/gesture.d.ts SwipeGestureHandlerOptions.speed",
+   "quote": "Indicates minimum move speed. * The default value is 100vp/s.",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  }
+ ],
+ "sources": [
+  "case-a1849836a1bfff3c265c"
+ ],
+ "general": false,
+ "status": "active"
+}

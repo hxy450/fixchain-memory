@@ -1,0 +1,329 @@
+{
+ "case": "case-01a9d880ec486fbc834f",
+ "rules": [
+  {
+   "title": "矢量重绘替代被 setBounds 拉伸的位图时，圆角、字号、基线一起乘缩放比",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源端把圆角底 drawable 和文字一起画进固定尺寸的 `Bitmap`，动画期用 `Drawable.setBounds(...)` 把位图整体拉伸到新边界",
+     "wrong": "目标改成逐帧 `roundRect` + `fillText` 矢量绘制，只把字号乘了缩放比，`roundRect` 的圆角半径仍是常量"
+    }
+   ],
+   "scope": "用 ArkUI Canvas 逐帧矢量绘制，替代源端预烘焙、再用 setBounds 拉伸的位图缓存时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "缩放比 s = (右 − 左) / 烘焙尺寸，从当帧的绘制边界推出，不另传参数",
+     "support": [
+      "case-01a9d880ec486fbc834f#recommendation:1",
+      "case-01a9d880ec486fbc834f#diagnosis"
+     ]
+    },
+    {
+     "text": "先列出位图里烘焙的全部尺寸属性（圆角半径、字号、基线修正、描边宽等），统一乘 s：ctx.roundRect(x, y, w, h, 基准圆角 * s)，字号、基线同比缩放",
+     "support": [
+      "case-01a9d880ec486fbc834f#recommendation:1",
+      "case-01a9d880ec486fbc834f#diagnosis"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "roundRect(x: number, y: number, w: number, h: number, radii?: number | Array<number>): void，radii 默认 0",
+     "meaning": "画圆角矩形路径；第五个参数就是要乘 s 的圆角半径",
+     "source": "鸿蒙 SDK 的 ets/component/canvas.d.ts，CanvasPath.roundRect",
+     "support": []
+    },
+    {
+     "value": "fillText(text: string, x: number, y: number, maxWidth?: number): void",
+     "meaning": "画文字；字号在 ctx.font 里，和基线一起乘 s",
+     "source": "鸿蒙 SDK 的 ets/component/canvas.d.ts，CanvasRenderer.fillText",
+     "support": []
+    },
+    {
+     "value": "setBounds(int left, int top, int right, int bottom)",
+     "meaning": "源端拉伸位图的边界；位图里的圆角和文字随边界等比缩放",
+     "source": "android.graphics.drawable.Drawable#setBounds",
+     "support": []
+    },
+    {
+     "value": "由 (右 − 左) / 烘焙尺寸 推出缩放比，圆角 = 基准圆角 × 比例，字号和基线同比缩放后，出生和合并帧与源端一致",
+     "meaning": "改法已在返修时逐帧插桩对照",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-01a9d880ec486fbc834f#diagnosis"
+     ]
+    }
+   ],
+   "lookups": [],
+   "why": "只缩放文字时，出生（比例 0→1）和合并（比例 >1）帧的圆角和源端位图拉伸出来的不一样",
+   "keys": {
+    "read": [
+     "Bitmap",
+     "Canvas",
+     "setBounds",
+     "BitmapDrawable",
+     "drawable",
+     "createBitmap"
+    ],
+    "product": [
+     "CanvasRenderingContext2D",
+     "roundRect",
+     "fillText",
+     "font",
+     "scale",
+     "radii"
+    ]
+   },
+   "probe": null,
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "搜 roundRect(：canvas.d.ts 里只在 CanvasPath 声明一处，Path2D、CanvasRenderer（CanvasRenderingContext2D、OffscreenCanvasRenderingContext2D 的父类）继承它；另无同族接口",
+   "refs": [
+    {
+     "what": "roundRect 签名和 radii 默认值",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/component/canvas.d.ts CanvasPath.roundRect",
+     "quote": "@param { number | Array<number> } [radii] - A number or list specifying the radii of the circular arc to be used for the corners of the rectangle. * The default value is 0.",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "roundRect 签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/component/canvas.d.ts CanvasPath.roundRect",
+     "quote": "roundRect(x: number, y: number, w: number, h: number, radii?: number | Array<number>): void;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "fillText 签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/component/canvas.d.ts CanvasRenderer.fillText",
+     "quote": "fillText(text: string, x: number, y: number, maxWidth?: number): void;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "Drawable.setBounds 取 int",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/android/graphics/drawable/Drawable.java Drawable#setBounds",
+     "quote": "public void setBounds(int left, int top, int right, int bottom) {",
+     "version": "android-36.1"
+    }
+   ]
+  },
+  {
+   "title": "源端坐标有 (int) 强转时，目标用 Math.trunc 截断后再绘制，不用 Math.floor",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源端坐标表达式里有 `(int)` 强转，如 `setBounds((int)(...), ...)`、`int dX = (int)(...)`",
+     "wrong": "目标对应的边界或位移保留浮点直接绘制，或者用了 `Math.floor` / `Math.round`"
+    }
+   ],
+   "scope": "把安卓自绘 View 的绘制边界和位移（出生、合并缩放、移动动画等）迁到 ArkUI Canvas 时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "逐个对照源端坐标表达式里的 (int)，目标在同一位置写 Math.trunc(表达式)，截断后再交给绘制调用",
+     "support": [
+      "case-01a9d880ec486fbc834f#recommendation:2"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "Java 的 (int) 强转向零截断；合并扩张和反向位移时表达式会出现负数",
+     "meaning": "所以要用向零截断的 Math.trunc，负数时 Math.floor 会多减 1",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-01a9d880ec486fbc834f#recommendation:2",
+      "case-01a9d880ec486fbc834f#diagnosis"
+     ]
+    },
+    {
+     "value": "Math.trunc(x: number): number",
+     "meaning": "去掉小数部分，取整数部分（向零）",
+     "source": "鸿蒙 SDK 的 ets/build-tools/ets-loader/node_modules/typescript/lib/lib.es2015.core.d.ts，Math.trunc",
+     "support": []
+    },
+    {
+     "value": "Math.floor(x: number): number",
+     "meaning": "取不大于 x 的最大整数，负数时和截断结果不同",
+     "source": "鸿蒙 SDK 的 ets/build-tools/ets-loader/node_modules/typescript/lib/lib.es5.d.ts，Math.floor",
+     "support": []
+    },
+    {
+     "value": "setBounds(int left, int top, int right, int bottom)",
+     "meaning": "源端边界本身就是 int",
+     "source": "android.graphics.drawable.Drawable#setBounds",
+     "support": []
+    }
+   ],
+   "lookups": [],
+   "why": "保留浮点或用 floor 时，动画帧的边界和位移跟源端差一个像素以内的小数或整 1，逐帧对不上",
+   "keys": {
+    "read": [
+     "(int)",
+     "setBounds",
+     "int dX",
+     "int dY",
+     "onDraw",
+     "Canvas"
+    ],
+    "product": [
+     "Math.trunc",
+     "Math.floor",
+     "Math.round",
+     "roundRect",
+     "drawImage",
+     "fillText"
+    ]
+   },
+   "probe": {
+    "pattern": "Math\\.(floor|round)\\(",
+    "note": "绘制坐标若对应源端的 (int) 强转，改成 Math.trunc（负数时 floor 和截断不同）"
+   },
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法落在通用取整函数上，没有专门的参数类型可搜",
+   "refs": [
+    {
+     "what": "Math.trunc 取整数部分",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/build-tools/ets-loader/node_modules/typescript/lib/lib.es2015.core.d.ts Math.trunc",
+     "quote": "Returns the integral part of the a numeric expression, x, removing any fractional digits. * If x is already an integer, the result is x. * @param x A numeric expression. */ trunc(x: number): number;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "Math.floor 取不大于 x 的最大整数",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/build-tools/ets-loader/node_modules/typescript/lib/lib.es5.d.ts Math.floor",
+     "quote": "Returns the greatest integer less than or equal to its numeric argument. * @param x A numeric expression. */ floor(x: number): number;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "Drawable.setBounds 取 int",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/android/graphics/drawable/Drawable.java Drawable#setBounds",
+     "quote": "public void setBounds(int left, int top, int right, int bottom) {",
+     "version": "android-36.1"
+    }
+   ]
+  },
+  {
+   "title": "台账已批准离屏位图缓存时，沿用 OffscreenCanvas 预渲染加 drawImage 拉伸",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "决策台账或规格写着位图「以 `OffscreenCanvas` 预渲染缓存」（对应源端 `createBitmap` 预烘焙 + `setBounds` 拉伸）",
+     "wrong": "代码改走逐帧 `roundRect` + `fillText` 矢量绘制，注释却声明「行为等价」"
+    }
+   ],
+   "scope": "源端用预烘焙位图做动画缩放、而上游已批准离屏位图路线时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "沿用离屏位图：用 OffscreenCanvas(烘焙尺寸, 烘焙尺寸).getContext('2d') 画一次底和文字，transferToImageBitmap() 取 ImageBitmap；每帧 ctx.drawImage(bitmap, 左, 上, 右 − 左, 下 − 上) 按源端 setBounds 的边界拉伸",
+     "support": [
+      "case-01a9d880ec486fbc834f#recommendation:3"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "drawImage(image: ImageBitmap | PixelMap, dx: number, dy: number, dw: number, dh: number): void",
+     "meaning": "按 dw、dh 缩放绘制，位图里的圆角和文字随之等比缩放",
+     "source": "鸿蒙 SDK 的 ets/component/canvas.d.ts，CanvasRenderer.drawImage",
+     "support": []
+    },
+    {
+     "value": "constructor(width: number, height: number)",
+     "meaning": "OffscreenCanvas 的构造（另有带 unit: LengthMetricsUnit 的重载）",
+     "source": "鸿蒙 SDK 的 ets/component/canvas.d.ts，OffscreenCanvas.constructor",
+     "support": []
+    },
+    {
+     "value": "getContext(contextType: \"2d\", options?: RenderingContextSettings): OffscreenCanvasRenderingContext2D；transferToImageBitmap(): ImageBitmap",
+     "meaning": "取离屏 2D 上下文画好后转成 ImageBitmap",
+     "source": "鸿蒙 SDK 的 ets/component/canvas.d.ts，OffscreenCanvas.getContext、OffscreenCanvas.transferToImageBitmap",
+     "support": []
+    }
+   ],
+   "lookups": [],
+   "why": "自己改成矢量重绘时容易漏掉位图拉伸隐含的圆角缩放和 int 截断，离屏位图拉伸天然保留这些语义",
+   "keys": {
+    "read": [
+     "OffscreenCanvas",
+     "决策台账",
+     "预渲染缓存",
+     "createBitmap",
+     "setBounds",
+     "Bitmap"
+    ],
+    "product": [
+     "OffscreenCanvas",
+     "getContext",
+     "transferToImageBitmap",
+     "ImageBitmap",
+     "drawImage",
+     "roundRect",
+     "fillText"
+    ]
+   },
+   "probe": null,
+   "unverified": [
+    "离屏位图路线卡里没有上机验证，返修走的是矢量重绘加缩放和截断"
+   ],
+   "alternatives_unverified": [],
+   "siblings_checked": "搜 drawImage(image: ImageBitmap | PixelMap：canvas.d.ts 里在 CanvasRenderer 上，CanvasRenderingContext2D、OffscreenCanvasRenderingContext2D 都继承；transferToImageBitmap 在 OffscreenCanvasRenderingContext2D 和 OffscreenCanvas 上各一个",
+   "refs": [
+    {
+     "what": "drawImage 按 dw、dh 缩放",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/component/canvas.d.ts CanvasRenderer.drawImage",
+     "quote": "@param { number } dw - Specifies the drawing width of the image on the target canvas. The width of the drawn image will be scaled.",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "drawImage 签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/component/canvas.d.ts CanvasRenderer.drawImage",
+     "quote": "drawImage(image: ImageBitmap | PixelMap, dx: number, dy: number, dw: number, dh: number): void;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "OffscreenCanvas 构造",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/component/canvas.d.ts OffscreenCanvas.constructor",
+     "quote": "constructor(width: number, height: number);",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "OffscreenCanvas.getContext",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/component/canvas.d.ts OffscreenCanvas.getContext",
+     "quote": "getContext(contextType: \"2d\", options?: RenderingContextSettings): OffscreenCanvasRenderingContext2D;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "transferToImageBitmap",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/component/canvas.d.ts OffscreenCanvas.transferToImageBitmap",
+     "quote": "transferToImageBitmap(): ImageBitmap;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    }
+   ]
+  }
+ ],
+ "left_out": [
+  {
+   "text": "声明「行为等价」前，出生和合并各取一帧核对边界是否为整数、圆角是否等于基准圆角×比例",
+   "reason": "要上机或截图才能做"
+  }
+ ],
+ "corrections": [],
+ "gaps": [
+  "Java (int) 强转向零截断出自语言规范，本机 Android SDK 源码里没有找到原文，按卡写"
+ ],
+ "conflicts": []
+}

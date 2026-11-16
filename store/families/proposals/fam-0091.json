@@ -1,0 +1,312 @@
+{
+ "proposal": "fam-0091",
+ "round": 1,
+ "product": "代码",
+ "avg_similarity": 0.258,
+ "rules": [
+  {
+   "id": "rule-424fa275dd75",
+   "title": "运行配置只从环境变量读、缺省写死时，改用 BuildProfile 构建期字段作缺省",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源端成功码、渠道、客户端 id、项目 id 来自 assets 下的配置 json、flavor 常量或 buildConfigField",
+     "wrong": "目标代码里这些配置只从 `getEnvironmentVar` 读，读不到时落到源码里写死的缺省（空串密钥、与源端不同的渠道或 id），没有读 `BuildProfile` 字段"
+    }
+   ],
+   "keys": {
+    "read": [
+     "buildConfigField",
+     "BuildConfig",
+     "productFlavors",
+     "assets",
+     "getEnvironmentVar"
+    ],
+    "product": [
+     "getEnvironmentVar",
+     "BuildProfile",
+     "buildProfileFields",
+     "build-profile.json5",
+     "hvigor-config.json5",
+     "parameterFile",
+     "@param"
+    ]
+   }
+  },
+  {
+   "id": "rule-4b905aa96eb2",
+   "title": "决策要求构建期注入网络配置时，网络层在同一任务交付配置来源和响应解码器",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源端 gradle 里定义 API_HOST、签名材料和 AES_KEY，代码读 BuildConfig.API_HOST；决策台账要求签名/加密材料经构建 profile 或 gitignored 本地私有配置注入、由网络层集中读取",
+     "wrong": "网络层只把 baseUrl、signSecret、解码器做成配置类的构造参数（解码器默认 null），没有任何配置读取，也没有解码器实现，回执写「通过 … 注入」把接线推给装配者"
+    }
+   ],
+   "keys": {
+    "read": [
+     "BuildConfig",
+     "API_HOST",
+     "buildConfigField",
+     "buildTypes",
+     "local.properties",
+     "AES_KEY"
+    ],
+    "product": [
+     "hvigorfile.ts",
+     "local.properties",
+     ".gitignore",
+     "BuildProfile",
+     "createHttp",
+     "baseUrl"
+    ]
+   }
+  },
+  {
+   "id": "rule-527f237c3acf",
+   "title": "静态 HttpClient 的 baseUrl 为空时先报「网络层未初始化」，不把相对路径交给 http.request",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "",
+     "wrong": "静态 HttpClient 的 baseUrl 默认空串，请求时直接拼 baseUrl + path 交给 httpRequest.request()，没有判空"
+    }
+   ],
+   "keys": {
+    "read": [
+     "Retrofit",
+     "baseUrl",
+     "OkHttpClient",
+     "Retrofit.Builder",
+     "@Provides"
+    ],
+    "product": [
+     "HttpClient",
+     "baseUrl",
+     "http.createHttp",
+     "request",
+     "HttpRequestOptions",
+     "NETWORK",
+     "init()"
+    ]
+   }
+  },
+  {
+   "id": "rule-81153b1368a8",
+   "title": "规格写新旧接口双轨并存时，先确认是否不同 host，是就让客户端持两个 baseUrl 按规则选",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "规格写「双轨制并存（旧接口 + 新接口）」；源端取址分两个方法（旧接口、新接口各一个，按 BuildType 或环境工具选址）",
+     "wrong": "HTTP 客户端只有一个静态 baseUrl 和 init(baseUrl)，注释写「同一套 client 承载，Service 各自声明 path 前缀」"
+    }
+   ],
+   "keys": {
+    "read": [
+     "baseUrl",
+     "getBaseUrl",
+     "BuildConfig",
+     "BUILD_TYPE",
+     "双轨制",
+     "getEnv"
+    ],
+    "product": [
+     "baseUrl",
+     "newBaseUrl",
+     "init",
+     "HttpClient",
+     "startsWith",
+     "path"
+    ]
+   }
+  },
+  {
+   "id": "rule-b2ce4fa5a91d",
+   "title": "Retrofit 改成手工拼 URL 时，拼接函数统一处理 baseUrl 和 path 之间的斜杠",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "Retrofit 接口的 @GET / @POST 路径多数不带前导 /（少数带），靠 Retrofit 按 baseUrl 解析相对路径",
+     "wrong": "目标 HttpClient 写成 `${baseUrl}${path}` 直接拼接，而 path 没有前导 /、baseUrl 也没有尾部 /，拼出主机名和路径粘连的 URL"
+    },
+    {
+     "read": "参考模板的拼接是 `${HttpUtil.baseUrl}${url}`，示例 baseUrl 无尾斜杠、Service 路径带前导 /",
+     "wrong": "照搬了模板的直接拼接，path 却按 Retrofit 注解改写成不带前导 / 的形式"
+    }
+   ],
+   "keys": {
+    "read": [
+     "Retrofit",
+     "baseUrl",
+     "@GET",
+     "@POST",
+     "@Path",
+     "Retrofit.Builder"
+    ],
+    "product": [
+     "HttpClient",
+     "baseUrl",
+     "http.createHttp",
+     "request",
+     "${baseUrl}${path}",
+     "fullUrl",
+     "@kit.NetworkKit"
+    ]
+   }
+  },
+  {
+   "id": "rule-b68613cfa9fb",
+   "title": "装配根不用空字符串构造网络配置，接入构建期生成的配置，缺失就显式失败",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源端 gradle / BuildConfig 已有服务端地址和签名材料，决策要求私有注入",
+     "wrong": "装配根写 new …Config('', …, '') 这类以空 baseUrl、空签名密钥构造客户端、不传解码器，靠网络层的空配置守卫返回失败"
+    }
+   ],
+   "keys": {
+    "read": [
+     "BuildConfig",
+     "API_HOST",
+     "buildConfigField",
+     "Retrofit.Builder",
+     "baseUrl",
+     "OkHttpClient"
+    ],
+    "product": [
+     "baseUrl",
+     "new",
+     "Config",
+     "createHttp",
+     "local.properties",
+     "BuildProfile"
+    ]
+   }
+  },
+  {
+   "id": "rule-c6409b246278",
+   "title": "HTTP 封装的基址和接口路径逐字取自源端 BuildConfig 和 Retrofit 注解，不自拟",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源端网络模块里有 BuildConfig.BASE_URL（或构造 Retrofit 时的 baseUrl(...)），Service 接口方法上有 @POST(\"…\") / @GET(\"…\") 注解",
+     "wrong": "目标封装的 BASE_URL 是源码里搜不到的域名（用应用名拼的占位域名），页面里 post('/…') 的路径和源端注解里的路径不一致"
+    }
+   ],
+   "keys": {
+    "read": [
+     "BuildConfig.BASE_URL",
+     "buildConfigField",
+     "Retrofit",
+     "baseUrl",
+     "@POST",
+     "@GET",
+     "NetworkModule"
+    ],
+    "product": [
+     "BASE_URL",
+     "post(",
+     "get(",
+     "http.createHttp",
+     "request(",
+     "url"
+    ]
+   }
+  },
+  {
+   "id": "rule-d169306fb8dd",
+   "title": "规格和清单都没给 host 时，代码回源码查地址常量，查不到留待核标记，不写推测域名",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "规格和 API 清单只有 BASE_URL 这类键名、没有 host；派工要求地址从清单或源码提取",
+     "wrong": "网络配置里写出源工程里搜不到的推测域名（https://api.…、dev-api.…、staging-api.…）作为 BASE_URL，没有待核标记，回报里也没列"
+    }
+   ],
+   "keys": {
+    "read": [
+     "BASE_URL",
+     "BuildConfig",
+     "BUILD_TYPE",
+     "baseUrl",
+     "getEnv",
+     "base_urls"
+    ],
+    "product": [
+     "BASE_URL",
+     "baseUrl",
+     "https://",
+     "TODO",
+     "prod",
+     "staging"
+    ]
+   }
+  },
+  {
+   "id": "rule-de2f12ab32b2",
+   "title": "环境默认值照源端环境工具的分支映射到目标构建模式，各处引用同一个常量",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源端 getCurrentEnv 一类桥接返回环境工具的 getEnv()，环境工具按 BuildConfig.BUILD_TYPE 分支给默认值",
+     "wrong": "桥接、偏好封装、网络配置各写一份默认值 `'prod'`，环境词表 dev/staging/prod 取自脚手架 TODO 注释"
+    }
+   ],
+   "keys": {
+    "read": [
+     "getEnv",
+     "BuildConfig",
+     "BUILD_TYPE",
+     "buildTypes",
+     "MethodChannel",
+     "getCurrentEnv"
+    ],
+    "product": [
+     "getCurrentEnv",
+     "MethodChannel",
+     "CURRENT_ENV",
+     "prod",
+     "TODO",
+     "PreferenceKeys"
+    ]
+   }
+  },
+  {
+   "id": "rule-f05bdb5f24c0",
+   "title": "源端 baseUrl 由注入带上、目标改显式 init 时，在 EntryAbility.onCreate 调它",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源端 Retrofit.Builder().baseUrl(...) 在 Hilt 模块的 @Provides 方法里注入时带上，Application.onCreate 里没有网络初始化调用",
+     "wrong": "目标网络层的 baseUrl 默认空串、只在 init() 里赋值，但 EntryAbility.onCreate 里没有调用这个 init()，或者只在业务服务（如环境切换）里调用"
+    },
+    {
+     "read": "",
+     "wrong": "冷启动就发请求的流程（如闪屏静默游客登录）只做了 token 加载就发请求，EntryAbility.onCreate 里没有先完成网络 init()"
+    }
+   ],
+   "keys": {
+    "read": [
+     "Retrofit",
+     "Retrofit.Builder",
+     "baseUrl",
+     "@Provides",
+     "@Module",
+     "Hilt",
+     "Application",
+     "onCreate"
+    ],
+    "product": [
+     "EntryAbility",
+     "onCreate",
+     "UIAbility",
+     "init()",
+     "baseUrl",
+     "await",
+     "import",
+     "http.createHttp"
+    ]
+   }
+  }
+ ]
+}

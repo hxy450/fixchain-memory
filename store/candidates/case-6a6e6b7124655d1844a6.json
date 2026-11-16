@@ -1,0 +1,369 @@
+{
+ "case": "case-6a6e6b7124655d1844a6",
+ "rules": [
+  {
+   "title": "台账给日志上传定 HTTPS 或只传快照时，逐项写明与安卓明文策略和打包清单的差异",
+   "product": "规格",
+   "triggers": [
+    {
+     "read": "安卓 AndroidManifest 的 <application> 写了 android:usesCleartextTraffic=\"true\"（或 android:networkSecurityConfig）；上传函数先向服务端取预签名地址再 PUT，ZIP 里有日志目录全部留存文件、设备信息和 ObjectBox 各表导出",
+     "wrong": "决策台账或规格把上传定成「经 presign → HTTPS PUT」「只传快照、不上传完整数据库」这类收窄约束，却没写安卓清单的明文策略和上传函数的实际打包清单，也没把差异逐项标成待用户确认"
+    }
+   ],
+   "scope": "规格阶段为诊断或日志上传写协议约束和归档内容约束的那几项（决策台账、规格页、源码理解笔记）",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "规格里先照安卓写下两项事实：清单里 usesCleartextTraffic / networkSecurityConfig 的取值，上传函数实际打包的每个文件或目录（日志目录、设备信息、各表导出）",
+     "support": [
+      "case-6a6e6b7124655d1844a6#recommendation:1"
+     ]
+    },
+    {
+     "text": "要收窄为 HTTPS 或只传快照时，逐项写出与安卓的差异（协议、少传的文件），每项标为待用户确认，不以派生的安全隐私约束直接定稿",
+     "support": [
+      "case-6a6e6b7124655d1844a6#recommendation:1",
+      "case-6a6e6b7124655d1844a6#diagnosis"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "android:usesCleartextTraffic（format=\"boolean\"）",
+     "meaning": "为 true 表示应用可以走 HTTP 等明文通道；安卓端声明了它，上传地址就可能是 http",
+     "source": "Android SDK 平台资源 data/res/values/attrs_manifest.xml，usesCleartextTraffic（按应用的 compileSdk 取对应平台）",
+     "support": []
+    },
+    {
+     "value": "network_config.json 的 cleartextTrafficPermitted：明文 HTTP 是否允许，默认为 true",
+     "meaning": "鸿蒙端系统层默认不拦明文 HTTP，「必须 HTTPS」不是平台强加的约束",
+     "source": "http-request.md，明文HTTP访问权限配置说明",
+     "support": []
+    }
+   ],
+   "lookups": [
+    {
+     "what": "安卓端的明文策略",
+     "where": "源工程 AndroidManifest.xml 的 <application> 标签，以及 android:networkSecurityConfig 指向的 res/xml 文件",
+     "how": "读出 usesCleartextTraffic 的取值和 network-security-config 里按域名放行明文的条目，原样写进规格"
+    },
+    {
+     "what": "安卓上传函数的实际打包清单",
+     "where": "源工程里取预签名地址并 PUT 上传日志的那个函数及它调用的收集、压缩函数",
+     "how": "按调用顺序列出写入 ZIP 的每个文件或目录（是否递归、是否只取当天），逐项写进规格"
+    }
+   ],
+   "why": "派生的安全隐私约束直接定稿后，下游照约束实现，http 预签名地址被拒、归档缺日志和表导出，要二次修复",
+   "keys": {
+    "read": [
+     "android:usesCleartextTraffic",
+     "android:networkSecurityConfig",
+     "AndroidManifest.xml",
+     "presign",
+     "PUT",
+     "ObjectBox",
+     "ZIP"
+    ],
+    "product": [
+     "决策台账",
+     "HTTPS PUT",
+     "presign",
+     "take_snapshot",
+     "快照",
+     "不上传完整数据库",
+     "隐私约束",
+     "待用户确认"
+    ]
+   },
+   "probe": {
+    "pattern": "HTTPS\\s*PUT",
+    "note": "台账或规格把上传定为 HTTPS PUT；查是否写了安卓的 usesCleartextTraffic 和与安卓的差异项"
+   },
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法是规格里该写的事实和差异项，不落在具体接口上",
+   "refs": [
+    {
+     "what": "usesCleartextTraffic 的含义和格式",
+     "kind": "android-sdk",
+     "where": "platforms/android-36/data/res/values/attrs_manifest.xml usesCleartextTraffic",
+     "quote": "Declare that this application may use cleartext traffic, such as HTTP rather than HTTPS;",
+     "version": "android-36"
+    },
+    {
+     "what": "usesCleartextTraffic 是 boolean",
+     "kind": "android-sdk",
+     "where": "platforms/android-36/data/res/values/attrs_manifest.xml usesCleartextTraffic",
+     "quote": "<attr name=\"usesCleartextTraffic\" format=\"boolean\" />",
+     "version": "android-36"
+    },
+    {
+     "what": "鸿蒙 cleartextTrafficPermitted 默认允许明文",
+     "kind": "oh-docs",
+     "where": "zh-cn/application-dev/network/http-request.md 明文HTTP访问权限配置说明",
+     "quote": "明文HTTP是否允许。true表示允许，false表示不允许，默认为true。",
+     "version": "docs f41b9345"
+    }
+   ]
+  },
+  {
+   "title": "预签名上传地址可能是 http 时，网络层按端点放行明文，其余请求仍只接受 https",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "安卓清单写了 android:usesCleartextTraffic=\"true\"，上传地址由 presign 接口返回后原样 PUT",
+     "wrong": "目标网络层对 Raw 端点的绝对 URL 一律做 `https://` 前缀校验、不是就抛错，或者把返回的 http 地址自动改写成 https"
+    }
+   ],
+   "scope": "目标端自研网络层处理服务端下发的预签名地址或其他动态绝对 URL 时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "端点声明里加一个允许明文的开关（例如 allowCleartext: boolean），只给预签名上传的 PUT 端点打开；没打开的端点仍只接受 https 绝对地址",
+     "support": [
+      "case-6a6e6b7124655d1844a6#recommendation:2",
+      "case-6a6e6b7124655d1844a6#diagnosis"
+     ]
+    },
+    {
+     "text": "PUT 时原样使用 presign 返回的地址，不自动升级成 https；网关层和底层 URL 解析处的 https 判断要一起改，不留同类校验",
+     "support": [
+      "case-6a6e6b7124655d1844a6#diagnosis"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "端点白名单：仅预签名上传 PUT 允许 http，PUT 原样使用返回地址",
+     "meaning": "改成这样后 http 预签名地址能上传，其余请求仍是默认 HTTPS",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-6a6e6b7124655d1844a6#diagnosis"
+     ]
+    },
+    {
+     "value": "Network Kit 从 API version 18 开始默认支持明文 HTTP；API 20 起可在 network_config.json 的 component-config 里开关，默认为 true",
+     "meaning": "@ohos.net.http 本身不拦 http 地址，拦截来自应用自己的校验",
+     "source": "http-request.md，明文HTTP访问权限配置说明",
+     "support": []
+    },
+    {
+     "value": "错误码 2300997，Cleartext traffic not permitted.",
+     "meaning": "network_config.json 里把 cleartextTrafficPermitted 设成 false 时，系统层拦明文的报错",
+     "source": "errorcode-net-http.md，2300997 明文HTTP被拦截",
+     "support": []
+    }
+   ],
+   "lookups": [
+    {
+     "what": "目标工程有没有在系统层禁止明文",
+     "where": "目标工程 src/main/resources/base/profile/network_config.json 的 network-security-config",
+     "how": "base-config 或上传域名对应的 domain-config 里 cleartextTrafficPermitted 为 false 时，上传域名也要放开，否则报 2300997"
+    }
+   ],
+   "why": "一刀切要求 https 时，服务端返回的 http 预签名地址被拒，日志上传失败",
+   "keys": {
+    "read": [
+     "android:usesCleartextTraffic",
+     "android:networkSecurityConfig",
+     "presign",
+     "PUT",
+     "http://",
+     "OkHttp"
+    ],
+    "product": [
+     "https://",
+     "startsWith",
+     "absoluteUrl",
+     "allowCleartext",
+     "http.createHttp",
+     "RequestMethod.PUT",
+     "cleartextTrafficPermitted",
+     "network_config.json"
+    ]
+   },
+   "probe": {
+    "pattern": "startsWith\\(\\s*['\"]https://",
+    "note": "代码里对地址做 https 前缀校验；若用于服务端下发的预签名上传地址，要改成按端点放行"
+   },
+   "unverified": [],
+   "alternatives_unverified": [
+    "@ohos.net.networkSecurity 的 isCleartextPermittedByHostName(hostName) 可按域名查系统是否允许明文（@since 18），卡里没用"
+   ],
+   "siblings_checked": "无：做法落在应用自己的网络层端点声明，不落在具体平台接口上；另搜 isCleartextPermitted，@ohos.net.networkSecurity.d.ts 里有 isCleartextPermitted、isCleartextPermittedByHostName 两个，记进 alternatives_unverified",
+   "refs": [
+    {
+     "what": "Network Kit 默认支持明文 HTTP",
+     "kind": "oh-docs",
+     "where": "zh-cn/application-dev/network/http-request.md 明文HTTP访问权限配置说明",
+     "quote": "Network Kit从API version 18开始默认支持明文HTTP功能，不可配置。从API version 20开始支持配置开启或关闭明文HTTP功能。true表示支持，false表示不支持，默认为true。",
+     "version": "docs f41b9345"
+    },
+    {
+     "what": "配置文件的位置",
+     "kind": "oh-docs",
+     "where": "zh-cn/application-dev/network/http-request.md 明文HTTP访问权限配置说明",
+     "quote": "// src/main/resources/base/profile/network_config.json",
+     "version": "docs f41b9345"
+    },
+    {
+     "what": "2300997 明文被拦的原因",
+     "kind": "oh-docs",
+     "where": "zh-cn/application-dev/reference/apis-network-kit/errorcode-net-http.md 2300997 明文HTTP被拦截",
+     "quote": "Cleartext traffic not permitted.",
+     "version": "docs f41b9345"
+    },
+    {
+     "what": "按域名查明文是否允许（替代写法）",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.net.networkSecurity.d.ts networkSecurity.isCleartextPermittedByHostName",
+     "quote": "export function isCleartextPermittedByHostName(hostName: string): boolean;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    }
+   ]
+  },
+  {
+   "title": "增量审计判「保留现有实现」时，逐个核对 android_source_anchors 的流程，安全隐私取舍单列待审批",
+   "product": "计划与派工",
+   "triggers": [
+    {
+     "read": "feature 规格列出的 android_source_anchors 里有上传等完整流程的源文件；决策台账里有与安卓行为不一致的安全或隐私约束",
+     "wrong": "审计或差异报告写「均合理，应保留」「迁模块但不回退配置」，只比对了配置常量（如日志保留期），没有逐个 anchor 核对流程内容和明文策略，也没有把与安卓不一致的安全隐私取舍单列"
+    }
+   ],
+   "scope": "增量迁移审计决定沿用目标端已有实现时写的审计结论和差异报告",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "审计报告按 feature 的 android_source_anchors 逐个写核对结果：这个 anchor 里的流程（如上传打包内容、协议）在目标实现里有没有、是否一致",
+     "support": [
+      "case-6a6e6b7124655d1844a6#recommendation:3"
+     ]
+    },
+    {
+     "text": "与安卓不一致的隐私或安全取舍单独列一节，标为待审批，不并进「保留」的结论",
+     "support": [
+      "case-6a6e6b7124655d1844a6#recommendation:3"
+     ]
+    }
+   ],
+   "values": [],
+   "lookups": [],
+   "why": "只比对配置常量就判保留，遗留实现里背离安卓的上传内容和协议限制被原样搬进新模块",
+   "keys": {
+    "read": [
+     "android_source_anchors",
+     "决策台账",
+     "feature",
+     "usesCleartextTraffic",
+     "上传流程"
+    ],
+    "product": [
+     "保留现有实现",
+     "均合理",
+     "应保留",
+     "不回退配置",
+     "差异报告",
+     "增量审计",
+     "待审批"
+    ]
+   },
+   "probe": {
+    "pattern": "均合理|应保留|保留现有实现",
+    "note": "审计报告判了保留；查是否逐个核对了 android_source_anchors、是否单列了与安卓不一致的安全隐私取舍"
+   },
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法是审计报告里该写的核对项，不落在具体接口上",
+   "refs": []
+  },
+  {
+   "title": "诊断归档照安卓上传函数逐项对齐日志目录、设备信息和各表 TXT，不用快照或整库代替",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "安卓上传函数先写设备信息 TXT，把 ObjectBox 的各个 Box 逐表导出成 TXT，flush 后把日志目录递归压进 ZIP",
+     "wrong": "目标归档只放 BqLog 的 `take_snapshot()` 当日快照或一个诊断 JSON，或者用整库数据库文件代替分表 TXT，没有收集日志目录里的全部留存文件"
+    }
+   ],
+   "scope": "实现或修复诊断日志归档（打包后上传）时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "按安卓上传函数列出归档清单逐项实现：递归收集日志目录下全部留存日志文件（不是内存里的当日快照）、设备信息文件、按安卓的分组逐表导出 TXT",
+     "support": [
+      "case-6a6e6b7124655d1844a6#recommendation:4",
+      "case-6a6e6b7124655d1844a6#diagnosis"
+     ]
+    },
+    {
+     "text": "整库备份可以另外保留，但不能代替分表 TXT；快照也不能代替日志目录里的持久日志文件",
+     "support": [
+      "case-6a6e6b7124655d1844a6#recommendation:4",
+      "case-6a6e6b7124655d1844a6#diagnosis"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "递归收集日志目录全部留存文件，按安卓分组生成各表 TXT，并保留整库备份",
+     "meaning": "第二轮修复后的归档内容，覆盖了安卓上传的全部内容",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-6a6e6b7124655d1844a6#diagnosis"
+     ]
+    }
+   ],
+   "lookups": [
+    {
+     "what": "安卓归档里的文件清单",
+     "where": "源工程里日志上传函数调用的设备信息收集、逐表导出和压缩日志目录的那几个函数",
+     "how": "数出写入 ZIP 的文件个数和分组（每张表一个 TXT、日志目录是否递归、保留几天），目标归档逐项对上"
+    }
+   ],
+   "why": "只传当日快照或整库二进制时，服务端拿不到历史日志和可读的分表数据，排查不了问题",
+   "keys": {
+    "read": [
+     "ObjectBox",
+     "Box",
+     "ZIP",
+     "flush",
+     "XLog",
+     "presign",
+     "PUT"
+    ],
+    "product": [
+     "BqLog",
+     "take_snapshot",
+     "zlib",
+     "compressFile",
+     "fileIo",
+     "listFile",
+     "TXT",
+     "backup"
+    ]
+   },
+   "probe": {
+    "pattern": "take_snapshot\\s*\\(",
+    "note": "归档用了 BqLog 当日快照；查是否同时收集了日志目录里的全部留存文件"
+   },
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法是归档内容的清单，不落在具体接口上",
+   "refs": []
+  }
+ ],
+ "left_out": [
+  {
+   "text": "真机核对归档文件数与覆盖日期",
+   "reason": "要上机或截图才能做"
+  },
+  {
+   "text": "ledger 约束与安卓清单冲突时先向用户确认，不自行以替代物交付",
+   "reason": "没有产物里看得到的触发"
+  }
+ ],
+ "corrections": [],
+ "gaps": [],
+ "conflicts": []
+}

@@ -1,0 +1,256 @@
+{
+  "case": "case-1c1dc6394c428c959798",
+  "rules": [
+    {
+      "title": "同步调度的规格写清源端每次触发怎么执行；目标单飞合并时写明运行中请求要尾随补跑",
+      "product": "规格",
+      "triggers": [
+        {
+          "read": "源端每次同步触发都 scope.launch 新任务，在 Mutex.withLock 内先推送队列再拉取，不复用在途任务",
+          "wrong": "规格写「并发触发复用当前任务」「全量同步、定向刷新共用一个 active task」，没写运行中到达的请求会触发尾随补跑"
+        }
+      ],
+      "scope": "规格提取阶段，迁移数据同步调度、确定多次触发的并发语义时",
+      "exceptions": [],
+      "how": [
+        {
+          "text": "逐项写出源端每次触发如何执行：是否每次新建任务、是否在锁后排队、是否合并或丢弃",
+          "support": [
+            "case-1c1dc6394c428c959798#recommendation:1"
+          ]
+        },
+        {
+          "text": "目标采用单飞合并时，契约写明运行中到达的请求触发尾随补跑，保证触发前入队的本地变更在该轮拉取之前被推送",
+          "support": [
+            "case-1c1dc6394c428c959798#recommendation:1"
+          ]
+        },
+        {
+          "text": "已有规格与源码不一致时以源码为准，并回写规格",
+          "support": [
+            "case-1c1dc6394c428c959798#recommendation:1"
+          ]
+        }
+      ],
+      "values": [],
+      "lookups": [],
+      "why": "合并进在途任务后，越过推送阶段才入队的变更本轮不推送，随后的拉取把云端旧状态写回本地",
+      "keys": {
+        "read": [
+          "launch",
+          "Mutex",
+          "withLock",
+          "CoroutineScope",
+          "Job"
+        ],
+        "product": [
+          "并发触发复用当前任务",
+          "active task",
+          "尾随补跑",
+          "单飞",
+          "同步调度"
+        ]
+      },
+      "probe": {
+        "pattern": "复用(当前|在途)任务|共用一个\\s*active task",
+        "note": "规格把并发触发写成复用在途任务；对照源端是否逐次加锁排队，有没有写尾随补跑"
+      },
+      "unverified": [],
+      "alternatives_unverified": [],
+      "siblings_checked": "无：做法落在规格文档的并发语义上，不落在具体接口上",
+      "refs": []
+    },
+    {
+      "title": "规格描述同步失败语义时核对队列选取条件，源端不按状态过滤就写明 fail 项下轮重推",
+      "product": "规格",
+      "triggers": [
+        {
+          "read": "源端待推送队列的查询只按资源类型选取（只有 equal(…) 一个条件，再按 id 排序），不按同步状态过滤；失败只置 fail 不删除",
+          "wrong": "规格或源码审计写「业务失败标记 fail 后继续」「永久置 FAIL、没有自动恢复」，没说下一轮会重选 fail 项"
+        }
+      ],
+      "scope": "源码审计和规格阶段，描述同步队列的失败与重试语义时",
+      "exceptions": [],
+      "how": [
+        {
+          "text": "核对队列选取条件本身（按资源类型还是按同步状态），不只看置 fail 的分支；源端选取不过滤状态，就写明 fail 项在下一次同步自动重推、目标端选取同时取 pending 与 fail",
+          "support": [
+            "case-1c1dc6394c428c959798#recommendation:2"
+          ]
+        }
+      ],
+      "values": [],
+      "lookups": [],
+      "why": "把 fail 写成终态后，目标端只取 pending，失败的变更再也不推送",
+      "keys": {
+        "read": [
+          "equal",
+          "query",
+          "fail",
+          "pending",
+          "orderBy"
+        ],
+        "product": [
+          "失败语义",
+          "fail",
+          "pending",
+          "自动重推",
+          "没有自动恢复"
+        ]
+      },
+      "probe": {
+        "pattern": "没有自动恢复|永久置\\s*FAIL",
+        "note": "文档把失败项写成终态；核对源端队列选取是否按状态过滤"
+      },
+      "unverified": [],
+      "alternatives_unverified": [],
+      "siblings_checked": "无：做法落在规格文档的失败语义上，不落在具体接口上",
+      "refs": []
+    },
+    {
+      "title": "源端队列选取不过滤状态时，目标端待推送选取同时取 pending 与 fail",
+      "product": "代码",
+      "triggers": [
+        {
+          "read": "源端待推送队列的查询只有 equal(…) 按资源类型一个条件、不按同步状态过滤，失败项置 fail 后留在队列里",
+          "wrong": "目标端待推送阶段只查状态为 `'pending'` 的记录，fail 项不再被选中"
+        }
+      ],
+      "scope": "迁移带失败标记的同步推送队列时",
+      "exceptions": [],
+      "how": [
+        {
+          "text": "待推送选取同时取 pending 与 fail（返修在待推送阶段把 fail 并入），让失败项在下一次同步自动重推",
+          "support": [
+            "case-1c1dc6394c428c959798#recommendation:2",
+            "case-1c1dc6394c428c959798#diagnosis"
+          ]
+        }
+      ],
+      "values": [
+        {
+          "value": "待推送阶段同时取 pending 与 fail 后，失败项在下一次触发时被重推",
+          "meaning": "修好后的行为",
+          "source": "卡里修好并验证过",
+          "support": [
+            "case-1c1dc6394c428c959798#diagnosis"
+          ]
+        }
+      ],
+      "lookups": [],
+      "why": "只取 pending 时失败的变更永远留在本地，不再同步",
+      "keys": {
+        "read": [
+          "equal",
+          "query",
+          "orderBy",
+          "fail",
+          "pending"
+        ],
+        "product": [
+          "pending",
+          "fail",
+          "relationalStore",
+          "RdbPredicates",
+          "equalTo"
+        ]
+      },
+      "probe": {
+        "pattern": "\\(\\s*['\"]pending['\"]\\s*\\)",
+        "note": "推送只取 pending；对照源端队列选取是否按状态过滤"
+      },
+      "unverified": [],
+      "alternatives_unverified": [],
+      "siblings_checked": "无：做法落在查询条件上，不落在平台接口上",
+      "refs": []
+    },
+    {
+      "title": "串行化的同步服务不给全量同步加「返回在途 Promise」捷径，用请求版本号补跑尾随请求",
+      "product": "代码",
+      "triggers": [
+        {
+          "read": "源端每次同步触发 launch 新任务，在 Mutex.withLock 后排队执行，不合并在途任务",
+          "wrong": "目标端用 Promise 链 / 串行队列统一调度后，全量同步入口在有在途 Promise 时直接 `return await` 它，运行中新到的请求不再获得推送轮次"
+        }
+      ],
+      "scope": "目标端用单一同步服务和 Promise 串行队列统一调度全量同步、定向拉取与状态推送时",
+      "exceptions": [],
+      "how": [
+        {
+          "text": "去掉「返回在途 Promise」的捷径；需要合并时给全量同步记请求版本号，本轮结束时比较，有新请求就补跑一轮；修一个入口的「等待后 return」时同步排查其他入口的同类写法",
+          "support": [
+            "case-1c1dc6394c428c959798#recommendation:3",
+            "case-1c1dc6394c428c959798#diagnosis"
+          ]
+        },
+        {
+          "text": "前一轮失败而后面仍有请求时继续补跑，只在最后一个请求仍失败时发布失败",
+          "support": [
+            "case-1c1dc6394c428c959798#recommendation:3",
+            "case-1c1dc6394c428c959798#diagnosis"
+          ]
+        },
+        {
+          "text": "补测试：同步越过推送阶段、尚未结束时入队并再次触发，断言推送次数增加且 pending 为 0；fail 项在下一次触发时被重推",
+          "support": [
+            "case-1c1dc6394c428c959798#recommendation:4"
+          ]
+        }
+      ],
+      "values": [
+        {
+          "value": "全量同步记请求版本号、本轮结束时比较并补跑尾随请求，只在最后一次请求失败时发布失败",
+          "meaning": "返修的合并方式",
+          "source": "卡里修好并验证过",
+          "support": [
+            "case-1c1dc6394c428c959798#diagnosis"
+          ]
+        }
+      ],
+      "lookups": [],
+      "why": "合并进在途 Promise 后，越过推送阶段才入队的变更本轮不推送，拉取把云端旧状态写回，界面出现「已完成又回到未完成」",
+      "keys": {
+        "read": [
+          "launch",
+          "Mutex",
+          "withLock",
+          "CoroutineScope",
+          "Job"
+        ],
+        "product": [
+          "Promise",
+          "return await",
+          "then",
+          "async",
+          "await"
+        ]
+      },
+      "probe": {
+        "pattern": "!==\\s*null\\)\\s*return\\s+await\\s+this\\.\\w+",
+        "note": "入口在有在途 Promise 时直接返回它；看运行中到达的请求是否还能得到推送轮次"
+      },
+      "unverified": [],
+      "alternatives_unverified": [],
+      "siblings_checked": "无：做法落在调度逻辑上，不落在平台接口上",
+      "refs": []
+    }
+  ],
+  "left_out": [
+    {
+      "text": "拉取写库前用未同步的本地意图保护完成态，对应修复期用户提出的新要求",
+      "reason": "其他：修复期新增的要求，卡里不归因"
+    },
+    {
+      "text": "派给实现代理的任务和审阅消息正文看不到，是否转达了源端语义没核到",
+      "reason": "其他：卡里没核到，没有可依的结论"
+    }
+  ],
+  "corrections": [],
+  "gaps": [
+    "Kotlin 协程 launch、Mutex.withLock 的排队语义在 kotlinx.coroutines 库里，三类知识库来源里没有原文，按卡写",
+    "目标端 Promise 串行队列是 ArkTS/JS 语言语义，不在鸿蒙 SDK 声明和文档副本里，按卡写"
+  ],
+  "conflicts": [
+    "卡里记的 Android 审计终报把 fail 队列写成「永久置 FAIL、没有自动恢复」，与卡里核到的源码（选取不过滤状态、fail 下轮重推）相反；规矩按源码写"
+  ]
+}

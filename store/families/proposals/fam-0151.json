@@ -1,0 +1,225 @@
+{
+ "proposal": "fam-0151",
+ "round": 1,
+ "product": "代码",
+ "avg_similarity": 0.118,
+ "rules": [
+  {
+   "id": "rule-056de679b860",
+   "title": "源端每轮 new 循环线程时，目标每个实例对应一个循环对象，startLoop 不先清掉旧句柄",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源码初始化方法里 new 一个 Thread 子类赋给同一字段，停止只经这个字段",
+     "wrong": "目标用一个 static 句柄字段承载全局唯一循环，起新循环前先 clearInterval(旧句柄) 再 setInterval 新句柄；页面用两个布尔旗承载结算弹窗"
+    }
+   ],
+   "keys": {
+    "read": [
+     "Thread",
+     "isRunning",
+     "join",
+     "surfaceCreated",
+     "surfaceDestroyed",
+     "run()"
+    ],
+    "product": [
+     "setInterval",
+     "clearInterval",
+     "static",
+     "startLoop",
+     "stopLoop",
+     "displaySync",
+     "@Local"
+    ]
+   }
+  },
+  {
+   "id": "rule-5a04fb83b1db",
+   "title": "单线程写执行器改成 Promise 队列时，任务体内嵌套写调内部版本，不 await 同队列方法",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源端用 Executors.newSingleThreadExecutor() 串行执行写任务，提交方法按 Thread.currentThread().getName() 判断已在执行线程就 runnable.run() 内联、否则 submit；任务体内还会调用同类的公开写方法",
+     "wrong": "目标端执行器只有 tail = tail.then(task) 的链式 Promise，没有重入判断；入队的任务体内 await 同一队列的公开写方法；注释声称单线程事件循环下重入天然成立"
+    }
+   ],
+   "keys": {
+    "read": [
+     "Executors.newSingleThreadExecutor",
+     "ExecutorService",
+     "submit",
+     "Thread.currentThread",
+     "getName",
+     "runnable.run",
+     "Future"
+    ],
+    "product": [
+     "Promise",
+     "then",
+     "await",
+     "async",
+     "Synchronous",
+     "tail"
+    ]
+   }
+  },
+  {
+   "id": "rule-a5c87c586f92",
+   "title": "画布下放背景层前核对源自绘类，默认 Z 序 SurfaceView 不放背景 Image",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源自绘视图类 extends SurfaceView（或 GLSurfaceView），构造器只 getHolder().addCallback(this)，没有 setZOrderOnTop / setFormat，每帧 drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR)",
+     "wrong": "目标 Stack 底层放了 Image(…).objectFit(ImageFit.Fill) 背景层，上面是透明 Canvas，每帧 clearRect 后露出背景图"
+    }
+   ],
+   "keys": {
+    "read": [
+     "SurfaceView",
+     "GLSurfaceView",
+     "SurfaceHolder.Callback",
+     "getHolder",
+     "setZOrderOnTop",
+     "setFormat",
+     "PorterDuff.Mode.CLEAR",
+     "drawColor"
+    ],
+    "product": [
+     "Stack",
+     "Image",
+     "ImageFit.Fill",
+     "Canvas",
+     "clearRect",
+     "backgroundColor",
+     "Color.Black"
+    ]
+   }
+  },
+  {
+   "id": "rule-a95d33cfbe38",
+   "title": "源端渲染线程在页隐藏时会拿到空画布，目标在 onPageHide 让画布失效、onPageShow 重走创建",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "Thread 子类 run() 里 lockCanvas() 后直接绘制不判空；surfaceCreated 里直接 thread.start()；configChanges 不含 orientation",
+     "wrong": "目标只在 aboutToDisappear 里停掉帧循环（clearInterval）、丢弃迟到回调，没有 onPageHide 处理（切后台回来循环照跑）；方向变化时无条件关弹窗、重开"
+    }
+   ],
+   "keys": {
+    "read": [
+     "SurfaceView",
+     "lockCanvas",
+     "surfaceCreated",
+     "surfaceDestroyed",
+     "Thread",
+     "configChanges"
+    ],
+    "product": [
+     "onPageHide",
+     "onPageShow",
+     "aboutToDisappear",
+     "clearInterval",
+     "Canvas",
+     "display.on",
+     "setInterval"
+    ]
+   }
+  },
+  {
+   "id": "rule-ae40dd1c59ed",
+   "title": "源端帧循环跟 vsync、逻辑按帧计时，目标用 displaySync 驱动，不用 setInterval(16)",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源端游戏线程 while 循环里没有 Thread.sleep，每轮 SurfaceHolder.lockCanvas() → 更新 → onDraw → unlockCanvasAndPost；速度、周期按「每帧」计（px/帧、N 帧），没有 delta-time",
+     "wrong": "目标帧循环写成 setInterval(…, 16)，帧间隔常量写 16，注释写「16ms 等价节流」"
+    },
+    {
+     "read": "源端用 Choreographer.postFrameCallback 续帧，或 onDraw 尾部 invalidate() 自续帧，逻辑按帧计",
+     "wrong": "目标用 setInterval / setTimeout 驱动 update + render"
+    }
+   ],
+   "keys": {
+    "read": [
+     "SurfaceView",
+     "SurfaceHolder.lockCanvas",
+     "unlockCanvasAndPost",
+     "Thread.sleep",
+     "Choreographer.postFrameCallback",
+     "invalidate",
+     "SurfaceHolder.Callback",
+     "onDraw"
+    ],
+    "product": [
+     "setInterval",
+     "setTimeout",
+     "displaySync",
+     "setExpectedFrameRateRange",
+     "on('frame'",
+     "postFrameCallback",
+     "clearInterval",
+     "@kit.ArkGraphics2D"
+    ]
+   }
+  },
+  {
+   "id": "rule-b53fdb6f5d59",
+   "title": "源端 controller 就绪即 setPlayer 时，目标面就绪就挂视频面，不加 PLAYING 门",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "MediaController.buildAsync 成功回调里直接 playerView.setPlayer(mediaController)，没有播放状态判断",
+     "wrong": "绑定控制器、XComponent 面就绪、onShown 几处都以 getStatus() === PLAYING 作为挂视频面的前提，状态回调在 PLAYING 边沿不补挂"
+    }
+   ],
+   "keys": {
+    "read": [
+     "MediaController",
+     "buildAsync",
+     "setPlayer",
+     "PlayerView",
+     "SessionToken",
+     "surfaceCreated"
+    ],
+    "product": [
+     "XComponent",
+     "XComponentType.SURFACE",
+     "onLoad",
+     "getXComponentSurfaceId",
+     "surfaceId",
+     "AVPlayer",
+     "onShown"
+    ]
+   }
+  },
+  {
+   "id": "rule-edc87a49c35e",
+   "title": "源码重连循环只在连上后退出时，目标循环内不加取消出口，取消留到下一轮检点",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源码 while (!isConnected()) { sleep(500); connect(); }，循环内不检查取消，取消只在外层每一轮的检点生效",
+     "wrong": "目标的重连 while (!….isConnected()) 循环里加了 if (<取消标志>) return -1 这类出口"
+    }
+   ],
+   "keys": {
+    "read": [
+     "while",
+     "isConnected",
+     "connect",
+     "sleep",
+     "Thread.sleep",
+     "auto_reconnect"
+    ],
+    "product": [
+     "isConnected",
+     "connect",
+     "while",
+     "return -1",
+     "cancel"
+    ]
+   }
+  }
+ ]
+}

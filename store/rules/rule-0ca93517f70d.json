@@ -1,0 +1,150 @@
+{
+ "id": "rule-0ca93517f70d",
+ "title": "移植 View.invalidate 自续帧时，写成待决标志合并、postFrameCallback 只绘一次的唯一入口",
+ "product": "代码",
+ "triggers": [
+  {
+   "read": "自定义 View 的 onDraw 尾部在动画进行时调 invalidate() 再 tick() 自续帧，业务层也用 invalidate() 请求重绘",
+   "wrong": "目标渲染器另有同步直调 render() 的公开入口（方法体只有 this.render()），引擎桥、尺寸变化、onDraw 尾部各走各的路径；或者没有待决标志，同一帧的多次请求各排一次"
+  }
+ ],
+ "scope": "把安卓自定义 View 的 invalidate/onDraw 重绘迁成 ArkUI Canvas 全量重绘时，渲染器的重绘入口和帧调度",
+ "exceptions": [],
+ "how": [
+  {
+   "text": "渲染器只留一个 invalidate()：已有待决帧或已 stop 就直接返回；否则置待决标志，调 uiContext.postFrameCallback(cb)；cb.onFrame 里先清待决标志再 render()",
+   "support": [
+    "case-569a68ae79caad45dbb6#recommendation:1",
+    "case-569a68ae79caad45dbb6#recommendation:2",
+    "case-569a68ae79caad45dbb6#diagnosis"
+   ]
+  },
+  {
+   "text": "render() 设为 private，按 onDraw 原顺序在尾部写 invalidate(); tick()；引擎桥、尺寸变化和业务调用都改调 invalidate()，不再同步调 render()",
+   "support": [
+    "case-569a68ae79caad45dbb6#recommendation:1",
+    "case-569a68ae79caad45dbb6#diagnosis"
+   ]
+  },
+  {
+   "text": "UIContext 由页面用 getUIContext() 在构造渲染器时注入；页面销毁时调 stop() 置 stopped，之后到达的帧回调不再绘制",
+   "support": [
+    "case-569a68ae79caad45dbb6#diagnosis"
+   ]
+  }
+ ],
+ "values": [
+  {
+   "value": "postFrameCallback(frameCallback: FrameCallback): void",
+   "meaning": "UIContext 的方法，把回调排到下一帧执行一次",
+   "source": "鸿蒙 SDK 的 ets/api/@ohos.arkui.UIContext.d.ts，UIContext.postFrameCallback",
+   "support": []
+  },
+  {
+   "value": "abstract class FrameCallback { onFrame(frameTimeInNano: number): void; onIdle(timeLeftInNano: number): void }",
+   "meaning": "下一帧渲染时调 onFrame，参数是帧时间（纳秒）",
+   "source": "鸿蒙 SDK 的 ets/api/@ohos.arkui.UIContext.d.ts，FrameCallback.onFrame",
+   "support": []
+  },
+  {
+   "value": "postDelayedFrameCallback(frameCallback: FrameCallback, delayTime: number): void",
+   "meaning": "同族接口：延迟 delayTime 毫秒后的下一帧执行",
+   "source": "鸿蒙 SDK 的 ets/api/@ohos.arkui.UIContext.d.ts，UIContext.postDelayedFrameCallback",
+   "support": []
+  },
+  {
+   "value": "invalidate()：视图可见时 onDraw 会在之后某一帧被调用",
+   "meaning": "源端每次 invalidate 只请求之后的一次 onDraw，可合并",
+   "source": "android.view.View#invalidate",
+   "support": []
+  },
+  {
+   "value": "待决标志合并同帧请求、postFrameCallback 下一 vsync 绘制一次、stop() 丢弃待决帧",
+   "meaning": "返修后的帧循环写法，动画结束后不再重绘",
+   "source": "卡里修好并验证过",
+   "support": [
+    "case-569a68ae79caad45dbb6#diagnosis"
+   ]
+  }
+ ],
+ "lookups": [],
+ "why": "同步直绘和续帧两条路径语义不一，同帧请求不合并，依赖同步绘制的状态在改成异步后读到旧值",
+ "keys": {
+  "read": [
+   "invalidate",
+   "onDraw",
+   "postInvalidate",
+   "tick",
+   "onSizeChanged",
+   "View"
+  ],
+  "product": [
+   "postFrameCallback",
+   "FrameCallback",
+   "onFrame",
+   "getUIContext",
+   "UIContext",
+   "invalidate",
+   "render",
+   "Canvas"
+  ]
+ },
+ "probe": {
+  "pattern": "\\w+\\(\\)\\s*(?::\\s*void\\s*)?\\{\\s*this\\.render\\(\\)\\s*;?\\s*\\}",
+  "note": "有个方法的方法体只有同步 this.render()；若它是重绘请求入口，应改成经 invalidate() 排下一帧"
+ },
+ "unverified": [],
+ "alternatives_unverified": [
+  "@ohos.graphics.displaySync 的 displaySync.create() 得到的 DisplaySync 也能按帧回调，卡里没验证"
+ ],
+ "siblings_checked": "搜 (frameCallback: FrameCallback：@ohos.arkui.UIContext.d.ts 里 UIContext 有 postFrameCallback、postDelayedFrameCallback 两个，后者写进了 values",
+ "refs": [
+  {
+   "what": "postFrameCallback 的说明",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/api/@ohos.arkui.UIContext.d.ts UIContext.postFrameCallback",
+   "quote": "Post a frame callback to run on the next frame.",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  },
+  {
+   "what": "postFrameCallback 签名",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/api/@ohos.arkui.UIContext.d.ts UIContext.postFrameCallback",
+   "quote": "postFrameCallback(frameCallback: FrameCallback): void;",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  },
+  {
+   "what": "FrameCallback.onFrame",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/api/@ohos.arkui.UIContext.d.ts FrameCallback.onFrame",
+   "quote": "Call when a new display frame is being rendered.\n     *\n     * @param { number } frameTimeInNano - The frame time in nanoseconds.",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  },
+  {
+   "what": "FrameCallback 是抽象类",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/api/@ohos.arkui.UIContext.d.ts FrameCallback",
+   "quote": "export abstract class FrameCallback {",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  },
+  {
+   "what": "postDelayedFrameCallback（同族）",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/api/@ohos.arkui.UIContext.d.ts UIContext.postDelayedFrameCallback",
+   "quote": "postDelayedFrameCallback(frameCallback: FrameCallback, delayTime: number): void;",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  },
+  {
+   "what": "View.invalidate 只请求之后一次 onDraw",
+   "kind": "android-sdk",
+   "where": "sources/android-36.1/android/view/View.java View#invalidate",
+   "quote": "Invalidate the whole view. If the view is visible,\n     * {@link #onDraw(android.graphics.Canvas)} will be called at some point in\n     * the future.",
+   "version": "android-36.1"
+  }
+ ],
+ "sources": [
+  "case-569a68ae79caad45dbb6"
+ ],
+ "general": false,
+ "status": "active"
+}

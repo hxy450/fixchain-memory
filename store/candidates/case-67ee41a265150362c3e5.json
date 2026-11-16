@@ -1,0 +1,701 @@
+{
+ "case": "case-67ee41a265150362c3e5",
+ "rules": [
+  {
+   "title": "自研 TIFF/EXIF 序列化时值区偏移跨 IFD 依次推进，不让各 IFD 从同一偏移分配",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源端用 androidx.exifinterface 的 ExifInterface 按 tag 名 setAttribute / saveAttributes，目标端规格要求自研 TIFF/EXIF 段写回",
+     "wrong": "serialize 里 ifd0、exif、gps 都从同一个 dataOffset 调 assignData 再取最大值，三个 IFD 超过 4 字节的值写进同一区域互相覆盖"
+    }
+   ],
+   "scope": "自写 TIFF/EXIF 二进制序列化器替代 ExifInterface 时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "按「各 IFD 目录块 → 值区」布局，目录大小统一按 2 + 12 × 条目数 + 4 算，值区偏移跨 IFD 链式推进，不每个 IFD 都从同一 dataOffset 重新分配",
+     "support": [
+      "case-67ee41a265150362c3e5#recommendation:1",
+      "case-67ee41a265150362c3e5#diagnosis"
+     ]
+    },
+    {
+     "text": "写 parse(serialize(doc)) 往返单测：ifd0 / exif / gps 各放超过 4 字节的值，再放负的 SSHORT / SLONG / SRATIONAL 和含 NUL 的 UNDEFINED / UserComment，逐 tag 比对字节；规格标为 判:unit 的编解码项不只做语法自检",
+     "support": [
+      "case-67ee41a265150362c3e5#recommendation:1"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "改为值区链式推进、ifdSize 统一为 2+12n+4 后，各 IFD 的长值不再互相覆盖",
+     "meaning": "修复后的写法",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-67ee41a265150362c3e5#diagnosis"
+     ]
+    },
+    {
+     "value": "平台 ExifInterface 从 TIFF 头后 8 字节起，每个非空 IFD 占 2 + 条目数 × 12 + 4 + 该 IFD 超过 4 字节的值之和，位置依次累加",
+     "meaning": "源端库的布局：偏移跨 IFD 推进，值区不重叠",
+     "source": "android.media.ExifInterface#writeExifSegment",
+     "support": []
+    }
+   ],
+   "lookups": [],
+   "why": "各 IFD 从同一偏移分配时，长值互相覆盖，写出的 EXIF 读回来是错的",
+   "keys": {
+    "read": [
+     "ExifInterface",
+     "androidx.exifinterface",
+     "setAttribute",
+     "saveAttributes",
+     "TAG_GPS_LATITUDE"
+    ],
+    "product": [
+     "serialize",
+     "assignData",
+     "dataOffset",
+     "IFD",
+     "DataView",
+     "ArrayBuffer"
+    ]
+   },
+   "probe": null,
+   "unverified": [
+    "布局按 Android 平台 android.media.ExifInterface 核实；应用依赖的是 androidx.exifinterface，本机没有它的源码"
+   ],
+   "alternatives_unverified": [
+    "平台 ExifInterface 的布局是每个 IFD 目录块后紧跟它自己的值区、再接下一个 IFD；卡里修复用的是目录块后共用值区"
+   ],
+   "siblings_checked": "无：做法落在自写序列化器的偏移计算上，不落在 SDK 接口",
+   "refs": [
+    {
+     "what": "IFD 偏移依次累加",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/android/media/ExifInterface.java ExifInterface#writeExifSegment",
+     "quote": "ifdOffsets[ifdType] = position; position += 2 + mAttributes[ifdType].size() * 12 + 4 + ifdDataSizes[ifdType];",
+     "version": "android-36.1"
+    },
+    {
+     "what": "超过 4 字节的值进值区",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/android/media/ExifInterface.java ExifInterface#writeExifSegment",
+     "quote": "IFD group data area is assigned to save the entry // value which has a bigger size than 4 bytes.",
+     "version": "android-36.1"
+    }
+   ]
+  },
+  {
+   "title": "自研 EXIF 读写时有符号类型按有符号读写，ASCII 遇 NUL 截断，UNDEFINED 保留 NUL",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源端经 ExifInterface 读写 SSHORT / SLONG / SRATIONAL 类型的 tag，UserComment 前缀是 \"ASCII\\0\\0\\0\" 这类真实 NUL",
+     "wrong": "SSHORT / SLONG 用 getUint16 / getUint32 读，写入和有理数解析经 parseUint 把负值钳成 0；读 ASCII / UNDEFINED 时跳过所有 NUL 字节"
+    }
+   ],
+   "scope": "自写 TIFF/EXIF 读写器处理各数据类型时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "SSHORT / SLONG 用 DataView.getInt16 / getInt32 读、setInt16 / setInt32 写；SRATIONAL 的分子分母都按有符号解析；ASCII 遇第一个 NUL 截断；UNDEFINED 按字节原样保留（含 NUL）",
+     "support": [
+      "case-67ee41a265150362c3e5#diagnosis",
+      "case-67ee41a265150362c3e5#recommendation:1"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "IFD_FORMAT_UNDEFINED = 7、SSHORT = 8、SLONG = 9、SRATIONAL = 10；STRING（ASCII）= 2",
+     "meaning": "TIFF 数据类型号，后三个是有符号",
+     "source": "android.media.ExifInterface（IFD_FORMAT_* 常量）",
+     "support": []
+    },
+    {
+     "value": "getInt16(byteOffset: number, littleEndian?: boolean): number；setInt32(byteOffset: number, value: number, littleEndian?: boolean): void",
+     "meaning": "DataView 的有符号读写；getUint16 / getUint32 是无符号的",
+     "source": "鸿蒙 SDK 的 ets/build-tools/ets-loader/node_modules/typescript/lib/lib.es5.d.ts，DataView.getInt16、DataView.setInt32",
+     "support": []
+    },
+    {
+     "value": "改为 getInt16/32、setInt16/32、有符号有理数、ASCII 遇 NUL 截断后往返正确",
+     "meaning": "修复后的写法",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-67ee41a265150362c3e5#diagnosis"
+     ]
+    }
+   ],
+   "lookups": [],
+   "why": "负的海拔、曝光补偿等被读成大正数或写成 0，含 NUL 的 UserComment 前缀被破坏",
+   "keys": {
+    "read": [
+     "ExifInterface",
+     "TAG_USER_COMMENT",
+     "TAG_EXPOSURE_BIAS_VALUE",
+     "TAG_BRIGHTNESS_VALUE",
+     "SRATIONAL"
+    ],
+    "product": [
+     "getUint16",
+     "getUint32",
+     "getInt16",
+     "getInt32",
+     "setInt32",
+     "DataView",
+     "parseRational"
+    ]
+   },
+   "probe": {
+    "pattern": "SSHORT[\\s\\S]{0,80}getUint16|SLONG[\\s\\S]{0,80}getUint32",
+    "note": "有符号类型按无符号读了；SSHORT / SLONG 应用 getInt16 / getInt32"
+   },
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法落在 DataView 的通用读写方法上，没有专门的参数类型可搜",
+   "refs": [
+    {
+     "what": "有符号类型号",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/android/media/ExifInterface.java ExifInterface#IFD_FORMAT_SSHORT",
+     "quote": "private static final int IFD_FORMAT_SSHORT = 8; private static final int IFD_FORMAT_SLONG = 9; private static final int IFD_FORMAT_SRATIONAL = 10;",
+     "version": "android-36.1"
+    },
+    {
+     "what": "UNDEFINED 类型号",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/android/media/ExifInterface.java ExifInterface#IFD_FORMAT_UNDEFINED",
+     "quote": "private static final int IFD_FORMAT_UNDEFINED = 7;",
+     "version": "android-36.1"
+    },
+    {
+     "what": "STRING 类型号",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/android/media/ExifInterface.java ExifInterface#IFD_FORMAT_STRING",
+     "quote": "private static final int IFD_FORMAT_STRING = 2;",
+     "version": "android-36.1"
+    },
+    {
+     "what": "DataView.getInt16",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/build-tools/ets-loader/node_modules/typescript/lib/lib.es5.d.ts DataView.getInt16",
+     "quote": "getInt16(byteOffset: number, littleEndian?: boolean): number;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "DataView.setInt32",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/build-tools/ets-loader/node_modules/typescript/lib/lib.es5.d.ts DataView.setInt32",
+     "quote": "setInt32(byteOffset: number, value: number, littleEndian?: boolean): void;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    }
+   ]
+  },
+  {
+   "title": "用代码替代 ExifInterface 时 tag 号和字符串转换从库源码取，删除项不置 -1",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源码只用 ExifInterface.TAG_* 名，removeExifTags 删除 TAG_CFA_PATTERN、TAG_TRANSFER_FUNCTION、TAG_XMP、TAG_INTEROPERABILITY_INDEX",
+     "wrong": "tag 号凭记忆填（如 CFAPattern 写 0x828E、TransferFunction 写 0x0120），XMP、InteroperabilityIndex 置 -1，删除成了空操作"
+    },
+    {
+     "read": "源码把 TAG_GPS_TIMESTAMP 设成 'HH:mm:ss' 字符串，或调 exif.setGpsInfo(location)",
+     "wrong": "GPSTimeStamp 的 'HH:mm:ss' 交给通用有理数解析；setGpsInfo 用保存时刻 new Date() 写 GPS 时间，不写 GPSSpeed / GPSSpeedRef"
+    }
+   ],
+   "scope": "自写 EXIF 写入器替代 androidx ExifInterface 的 tag 表和 setAttribute / setGpsInfo 语义时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "tag 号从库源码的 tag 表取（见下方取值）；源端要删的 tag 给真实号或子 IFD（Interop IFD 经 0xA005 指针）并参与删除",
+     "support": [
+      "case-67ee41a265150362c3e5#recommendation:2",
+      "case-67ee41a265150362c3e5#diagnosis"
+     ]
+    },
+    {
+     "text": "GPSTimeStamp 的 'HH:mm:ss' 写成三个有理数 H/1,M/1,S/1；setGpsInfo 取定位自带的时间（location.timeStamp），速度按 m/s × 3.6 写成 km/h 并写 GPSSpeedRef = 'K'",
+     "support": [
+      "case-67ee41a265150362c3e5#recommendation:2",
+      "case-67ee41a265150362c3e5#diagnosis"
+     ]
+    },
+    {
+     "text": "库源码查不到的语义登记为待验证，不凭记忆补",
+     "support": [
+      "case-67ee41a265150362c3e5#recommendation:2"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "TAG_TRANSFER_FUNCTION = 301、TAG_XMP = 700、TAG_CFA_PATTERN = 41730、TAG_INTEROPERABILITY_IFD_POINTER = 40965、TAG_INTEROPERABILITY_INDEX = 1（Interop IFD）",
+     "meaning": "要删除的几项的真实 tag 号",
+     "source": "android.media.ExifInterface（EXIF_TAGS 各 IFD 的 ExifTag 表）",
+     "support": []
+    },
+    {
+     "value": "TAG_GPS_TIMESTAMP = 7（URATIONAL）、TAG_GPS_SPEED_REF = 12（STRING）、TAG_GPS_SPEED = 13（URATIONAL）",
+     "meaning": "GPS IFD 里时间和速度的 tag 号和类型",
+     "source": "android.media.ExifInterface（GPS IFD 的 ExifTag 表）",
+     "support": []
+    },
+    {
+     "value": "setAttribute 对 GPSTimeStamp 按 ^([0-9][0-9]):([0-9][0-9]):([0-9][0-9])$ 匹配，转成 \"h/1,m/1,s/1\"",
+     "meaning": "字符串到三个有理数的转换",
+     "source": "android.media.ExifInterface#setAttribute",
+     "support": []
+    },
+    {
+     "value": "setGpsInfo 写定位时间、速度 m/s × 3.6 写 km/h、GPSSpeedRef = 'K'",
+     "meaning": "库内语义（卡里从库源码查到并按此修复）",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-67ee41a265150362c3e5#diagnosis",
+      "case-67ee41a265150362c3e5#recommendation:2"
+     ]
+    }
+   ],
+   "lookups": [
+    {
+     "what": "应用依赖版本的 ExifInterface 语义",
+     "where": "源工程模块依赖里 androidx.exifinterface:exifinterface 的版本，对应版本库源码里的 ExifInterface 类",
+     "how": "按版本读 tag 表、setAttribute 的字符串转换和 setGpsInfo 写入的字段"
+    }
+   ],
+   "why": "凭记忆填的 tag 号写错位置，置 -1 的删除项不生效，GPS 时间和速度与源端不同",
+   "keys": {
+    "read": [
+     "ExifInterface.TAG_XMP",
+     "TAG_INTEROPERABILITY_INDEX",
+     "TAG_CFA_PATTERN",
+     "TAG_TRANSFER_FUNCTION",
+     "TAG_GPS_TIMESTAMP",
+     "setGpsInfo",
+     "Location"
+    ],
+    "product": [
+     "tag",
+     "0xA302",
+     "0x012D",
+     "0xA005",
+     "GPSSpeedRef",
+     "GPSTimeStamp",
+     "-1"
+    ]
+   },
+   "probe": {
+    "pattern": "0x828E|0x0120\\b",
+    "note": "CFAPattern / TransferFunction 的 tag 号写成了 0x828E / 0x0120；库里分别是 0xA302 和 0x012D"
+   },
+   "unverified": [
+    "tag 号按 Android 平台 android.media.ExifInterface 核实，应用依赖的是 androidx.exifinterface",
+    "setGpsInfo 的语义只在 androidx 版里有，本机没有源码，按卡写"
+   ],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法落在 tag 表和字符串转换上，不落在目标端接口",
+   "refs": [
+    {
+     "what": "TransferFunction 301",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/android/media/ExifInterface.java ExifInterface#EXIF_TAGS",
+     "quote": "new ExifTag(TAG_TRANSFER_FUNCTION, 301, IFD_FORMAT_USHORT),",
+     "version": "android-36.1"
+    },
+    {
+     "what": "XMP 700",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/android/media/ExifInterface.java ExifInterface#EXIF_TAGS",
+     "quote": "new ExifTag(TAG_XMP, 700, IFD_FORMAT_BYTE),",
+     "version": "android-36.1"
+    },
+    {
+     "what": "CFAPattern 41730",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/android/media/ExifInterface.java ExifInterface#EXIF_TAGS",
+     "quote": "new ExifTag(TAG_CFA_PATTERN, 41730, IFD_FORMAT_UNDEFINED),",
+     "version": "android-36.1"
+    },
+    {
+     "what": "Interop IFD 指针 40965",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/android/media/ExifInterface.java ExifInterface#EXIF_TAGS",
+     "quote": "new ExifTag(TAG_INTEROPERABILITY_IFD_POINTER, 40965, IFD_FORMAT_ULONG),",
+     "version": "android-36.1"
+    },
+    {
+     "what": "InteroperabilityIndex 1",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/android/media/ExifInterface.java ExifInterface#EXIF_TAGS",
+     "quote": "new ExifTag(TAG_INTEROPERABILITY_INDEX, 1, IFD_FORMAT_STRING)",
+     "version": "android-36.1"
+    },
+    {
+     "what": "GPSTimeStamp 7",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/android/media/ExifInterface.java ExifInterface#EXIF_TAGS",
+     "quote": "new ExifTag(TAG_GPS_TIMESTAMP, 7, IFD_FORMAT_URATIONAL),",
+     "version": "android-36.1"
+    },
+    {
+     "what": "GPSSpeedRef 12、GPSSpeed 13",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/android/media/ExifInterface.java ExifInterface#EXIF_TAGS",
+     "quote": "new ExifTag(TAG_GPS_SPEED_REF, 12, IFD_FORMAT_STRING), new ExifTag(TAG_GPS_SPEED, 13, IFD_FORMAT_URATIONAL),",
+     "version": "android-36.1"
+    },
+    {
+     "what": "GPSTimeStamp 的匹配式",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/android/media/ExifInterface.java ExifInterface#sGpsTimestampPattern",
+     "quote": "Pattern.compile(\"^([0-9][0-9]):([0-9][0-9]):([0-9][0-9])$\");",
+     "version": "android-36.1"
+    },
+    {
+     "what": "GPSTimeStamp 转三个有理数",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/android/media/ExifInterface.java ExifInterface#setAttribute",
+     "quote": "value = Integer.parseInt(m.group(1)) + \"/1,\" + Integer.parseInt(m.group(2)) + \"/1,\" + Integer.parseInt(m.group(3)) + \"/1\";",
+     "version": "android-36.1"
+    }
+   ]
+  },
+  {
+   "title": "写 EXIF 前按输出的实际编码选容器，不把 JPEG 的 APP1 拼接套在 PNG/WebP 上",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源码对 JPEG / PNG / WebP 输出都调 setExifFromData（注释「ExifInterface now supports WebP and PNG」）",
+     "wrong": "spliceExifTiff 不看实际编码，一律在开头两字节后插 APP1；位图路径产出的 PNG / WebP 也这样调用"
+    }
+   ],
+   "scope": "自写 EXIF 写入器给多种图像容器写元数据时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "按输出文件头判断编码：JPEG 写 APP1（0xFFE1，\"Exif\\0\\0\" 加 TIFF）；PNG 写带 CRC 的 eXIf 块；WebP 写 RIFF 的 EXIF 块，首块须为 VP8X 并置 EXIF 标志；截断或非法容器直接报错",
+     "support": [
+      "case-67ee41a265150362c3e5#recommendation:3",
+      "case-67ee41a265150362c3e5#diagnosis"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "MARKER_APP1 = 0xe1",
+     "meaning": "JPEG 的 EXIF 段标记",
+     "source": "android.media.ExifInterface#MARKER_APP1",
+     "support": []
+    },
+    {
+     "value": "PNG：EXIF 块在 IHDR 之后（已有则原位替换），CRC32 覆盖块类型和数据（跳过 4 字节长度）",
+     "meaning": "PNG 容器的写法",
+     "source": "android.media.ExifInterface#savePngAttributes",
+     "support": []
+    },
+    {
+     "value": "WebP：VP8X 为第一块、VP8X 里 EXIF 标志置 1、EXIF 块按规定顺序排在图像数据之后；原文件首块是 VP8 / VP8L 时要补 VP8X",
+     "meaning": "WebP 容器的写法",
+     "source": "android.media.ExifInterface#saveWebpAttributes",
+     "support": []
+    },
+    {
+     "value": "按 JPEG / PNG / WebP 分别写原生 EXIF、非法容器报错后，三种输出都带正确 EXIF",
+     "meaning": "修复后的写法",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-67ee41a265150362c3e5#diagnosis"
+     ]
+    }
+   ],
+   "lookups": [],
+   "why": "把 APP1 插进 PNG / WebP 会破坏文件结构，或者元数据根本读不到",
+   "keys": {
+    "read": [
+     "ExifInterface",
+     "Bitmap.CompressFormat.PNG",
+     "Bitmap.CompressFormat.WEBP",
+     "saveAttributes",
+     "image_format"
+    ],
+    "product": [
+     "APP1",
+     "eXIf",
+     "VP8X",
+     "RIFF",
+     "CRC32",
+     "ImagePacker",
+     "image/png"
+    ]
+   },
+   "probe": null,
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法落在容器格式上，不落在 SDK 接口",
+   "refs": [
+    {
+     "what": "APP1 标记",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/android/media/ExifInterface.java ExifInterface#MARKER_APP1",
+     "quote": "private static final byte MARKER_APP1 = (byte) 0xe1;",
+     "version": "android-36.1"
+    },
+    {
+     "what": "PNG EXIF 块位置",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/android/media/ExifInterface.java ExifInterface#savePngAttributes",
+     "quote": "1) if EXIF chunk did not exist in the original file, it will be stored right after the //      first chunk,",
+     "version": "android-36.1"
+    },
+    {
+     "what": "PNG EXIF 块 CRC",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/android/media/ExifInterface.java ExifInterface#savePngAttributes",
+     "quote": "CRC32 crc = new CRC32(); crc.update(exifBytes, 4 /* skip length bytes */, exifBytes.length - 4);",
+     "version": "android-36.1"
+    },
+    {
+     "what": "WebP 的 VP8X 规则",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/android/media/ExifInterface.java ExifInterface#saveWebpAttributes",
+     "quote": "//   1) \"VP8X\" chunk as the first chunk, //   2) flag for EXIF inside \"VP8X\" chunk set to 1, and",
+     "version": "android-36.1"
+    },
+    {
+     "what": "WebP 首块是 VP8/VP8L 时补 VP8X",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/android/media/ExifInterface.java ExifInterface#saveWebpAttributes",
+     "quote": "-> add \"VP8X\" before the \"VP8\"/\"VP8L\" chunk (with EXIF flag set to 1), and add new",
+     "version": "android-36.1"
+    }
+   ]
+  },
+  {
+   "title": "迁移 EXIF 写入的失败和早退语义时只兜源端实际 catch 的异常，没有早退就不加 return",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源 updateExif 声明 throws IOException，只 catch NoClassDefFoundError；setExifFromData 没有早退，源图没有 EXIF 也照常 setExif → modifyExif → removeExifTags",
+     "wrong": "目标 updateExif 用 catch (error) 吞掉全部异常并原样返回，注释称与源兜底同义；setExifFromData 在源图无 EXIF 时 return"
+    }
+   ],
+   "scope": "把源端带异常兜底和条件分支的元数据写入流程迁到 ArkTS 时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "只对源端实际 catch 的异常类型做等价兜底；源方法 throws IOException 的写入失败要上抛（如 throw new Error('failed to update image metadata')），不保存未处理的元数据",
+     "support": [
+      "case-67ee41a265150362c3e5#recommendation:4",
+      "case-67ee41a265150362c3e5#diagnosis"
+     ]
+    },
+    {
+     "text": "源端没有早退的路径照常执行：源图无 EXIF 时用一个空文档（如 ?? new ExifDocument()）继续，不新增 return",
+     "support": [
+      "case-67ee41a265150362c3e5#recommendation:4",
+      "case-67ee41a265150362c3e5#diagnosis"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "改为空文档继续、写入失败上抛后，源图无 EXIF 时也写入元数据，失败不再静默保存",
+     "meaning": "修复后的写法",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-67ee41a265150362c3e5#diagnosis"
+     ]
+    }
+   ],
+   "lookups": [
+    {
+     "what": "源端实际捕获的异常和早退点",
+     "where": "源工程写元数据的方法体：throws 声明、catch 子句的异常类型、方法开头的 return",
+     "how": "只把 catch 到的类型映射成兜底，其余照 throws 上抛；没有 return 的分支在目标端也不加"
+    }
+   ],
+   "why": "吞掉全部异常会把写入失败的图片当成成功保存，早退让本该写入的 EXIF 缺失",
+   "keys": {
+    "read": [
+     "throws IOException",
+     "NoClassDefFoundError",
+     "catch",
+     "ExifInterface",
+     "saveAttributes"
+    ],
+    "product": [
+     "catch (error)",
+     "try",
+     "return",
+     "throw",
+     "Error"
+    ]
+   },
+   "probe": {
+    "pattern": "catch\\s*\\(\\s*\\w+\\s*\\)\\s*\\{[^}]{0,120}return",
+    "note": "catch 后直接返回吞掉异常；核对源端是不是只捕获特定异常类型、其余要上抛"
+   },
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法落在异常处理结构上，不落在 SDK 接口",
+   "refs": []
+  },
+  {
+   "title": "用脚本把原始控制字符改成转义时逐层算反斜杠，落盘后逐字节核对",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "",
+     "wrong": "字符串常量里是 `'Exif\\\\u0000\\\\u0000'`、`'ASCII\\\\u0000\\\\u0000\\\\u0000'` 这类字面反斜杠加 u0000，不是 NUL 字节"
+    }
+   ],
+   "scope": "写入工具把代码里的 \\0 变成原始 NUL 后，用脚本替换成转义的时候",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "逐层计算反斜杠：Python bytes 字面量里的四个反斜杠落盘成两个；替换后用 repr 或逐字节检查目标文件，确认恰好是一个反斜杠加 u0000，不凭 print 输出推断",
+     "support": [
+      "case-67ee41a265150362c3e5#recommendation:5"
+     ]
+    },
+    {
+     "text": "也可以改用 String.fromCharCode(0) 或显式字节数组表示 NUL",
+     "support": [
+      "case-67ee41a265150362c3e5#recommendation:5"
+     ]
+    }
+   ],
+   "values": [],
+   "lookups": [],
+   "why": "多一层反斜杠时 'Exif' 头、ASCII 前缀和 0/1 字节都变成普通字符，写出的 EXIF 无法识别",
+   "keys": {
+    "read": [
+     "\\0",
+     "\\u0000",
+     "NUL",
+     "bytes"
+    ],
+    "product": [
+     "\\\\u0000",
+     "String.fromCharCode",
+     "Uint8Array",
+     "Exif"
+    ]
+   },
+   "probe": {
+    "pattern": "\\\\\\\\u000[0-9a-fA-F]",
+    "note": "源码里有两个反斜杠加 u000x，落盘的是字面反斜杠，不是控制字符"
+   },
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法落在字面量转义上，不落在接口",
+   "refs": []
+  },
+  {
+   "title": "规格决定自研替代库时，写清库覆盖的全部容器和要复刻的库内隐式语义",
+   "product": "规格",
+   "triggers": [
+    {
+     "read": "源端用 androidx ExifInterface 读写 EXIF，源码注释「ExifInterface now supports WebP and PNG」，调用 setGpsInfo(location)",
+     "wrong": "映射写「JPEG 段级读写；tag 名域 → 字符串值域不变」，没列 PNG / WebP 容器、数字 tag 号、字符串到二进制的转换和 setGpsInfo 写的字段；判据写「异常分支吞错继续」"
+    }
+   ],
+   "scope": "规格提取阶段决定用自研代码替代源端库时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "映射里写清库覆盖的全部容器（ExifInterface 支持 JPEG / PNG / WebP），列出要复刻的库内隐式语义及来源：数字 tag 号、字符串值的二进制转换、setGpsInfo 写入的字段",
+     "support": [
+      "case-67ee41a265150362c3e5#recommendation:6"
+     ]
+    },
+    {
+     "text": "判据里的「异常分支吞错继续」限定为源端实际捕获的异常类型",
+     "support": [
+      "case-67ee41a265150362c3e5#recommendation:6"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "平台 ExifInterface 有 savePngAttributes、saveWebpAttributes 两条写入路径",
+     "meaning": "库覆盖 PNG 和 WebP，不只 JPEG",
+     "source": "android.media.ExifInterface#savePngAttributes、android.media.ExifInterface#saveWebpAttributes",
+     "support": []
+    }
+   ],
+   "lookups": [
+    {
+     "what": "库的覆盖范围和隐式语义",
+     "where": "应用依赖版本的库源码（如 androidx.exifinterface 的 ExifInterface 类）",
+     "how": "列出它支持的容器、tag 表、setAttribute 的字符串转换和便捷方法（setGpsInfo 等）写入的字段，逐项写进映射"
+    }
+   ],
+   "why": "映射只写 JPEG 和字符串值域时，实现者不知道要处理多容器和库内转换，只能凭记忆补",
+   "keys": {
+    "read": [
+     "ExifInterface",
+     "androidx.exifinterface",
+     "setGpsInfo",
+     "setAttribute",
+     "saveAttributes"
+    ],
+    "product": [
+     "映射",
+     "JPEG 段级读写",
+     "自研",
+     "吞错继续",
+     "判据",
+     "tag"
+    ]
+   },
+   "probe": {
+    "pattern": "(JPEG 段级|吞错继续)",
+    "note": "规格把库覆盖范围写窄，或把兜底写成吞全部错误；按库实际覆盖和源端捕获的异常类型重写"
+   },
+   "unverified": [],
+   "alternatives_unverified": [
+    "鸿蒙 image.ImageSource.modifyImageProperties(records) 可按 PropertyKey 改 EXIF；卡里没验证它覆盖哪些容器和 tag"
+   ],
+   "siblings_checked": "无：做法落在规格的写法上，不落在目标端接口",
+   "refs": [
+    {
+     "what": "PNG 写入路径",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/android/media/ExifInterface.java ExifInterface#savePngAttributes",
+     "quote": "private void savePngAttributes(InputStream inputStream, OutputStream outputStream)",
+     "version": "android-36.1"
+    },
+    {
+     "what": "WebP 写入路径",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/android/media/ExifInterface.java ExifInterface#saveWebpAttributes",
+     "quote": "private void saveWebpAttributes(InputStream inputStream, OutputStream outputStream)",
+     "version": "android-36.1"
+    },
+    {
+     "what": "modifyImageProperties（替代写法）",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.multimedia.image.d.ts image.ImageSource.modifyImageProperties",
+     "quote": "modifyImageProperties(records: Record<PropertyKey, string | null>): Promise<void>;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    }
+   ]
+  }
+ ],
+ "left_out": [
+  {
+   "text": "去设备 EXIF 时源端靠后处理强制重编码位图，目标后处理没有这一分支（卡里没追这个接缝）",
+   "reason": "其他：卡里明确未归因、没有修好并验证过的做法"
+  }
+ ],
+ "corrections": [],
+ "gaps": [
+  "androidx.exifinterface 1.4.2 的源码本机没有，setGpsInfo 的定位时间、速度换算语义没查到原文，按卡写；tag 号和容器写法按平台 android.media.ExifInterface 核实"
+ ],
+ "conflicts": []
+}

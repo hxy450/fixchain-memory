@@ -1,0 +1,117 @@
+{
+ "id": "rule-7b25c974e628",
+ "title": "源端重载开头的 MediaPlayer.release() 只丢旧实例，目标封装类拆出只释放实例的方法，重载路径不调全清",
+ "product": "代码",
+ "triggers": [
+  {
+   "read": "源端重新装载的方法开头只有 MediaPlayer.release(); 字段 = null，随后照常 MediaPlayer.create(...)；宿主 Context 引用只在整体 release() 的全清末段置 null",
+   "wrong": "目标封装类只有一个 release()，里面同时作废令牌、释放播放器并把 context 置 null，重载路径也调这个 release()；或者 load() 自己已先释放旧实例，调用方又调一次全清的 release()"
+  }
+ ],
+ "scope": "把安卓播放器的释放调用映射到目标端自写的播放通道封装类（持有播放器实例、宿主 context、代数令牌）时",
+ "exceptions": [],
+ "how": [
+  {
+   "text": "封装类拆成两个方法：只释放实例的 releasePlayer(): void { this.token++; this.player?.release(); this.player = null }，和全清的 release(): void { this.releasePlayer(); this.context = null }（反注册事件也只放在全清里）",
+   "support": [
+    "case-6f949100d998a4784716#recommendation:1",
+    "case-6f949100d998a4784716#diagnosis"
+   ]
+  },
+  {
+   "text": "逐个源调用点判断：调用之后这个对象还要继续 create/load 的（重载开头），调只释放实例的方法；只有宿主销毁路径调全清的 release()",
+   "support": [
+    "case-6f949100d998a4784716#recommendation:1"
+   ]
+  },
+  {
+   "text": "load() 内已经包含释放旧实例这一步时，调用方不再另调释放方法重复这一步",
+   "support": [
+    "case-6f949100d998a4784716#recommendation:2"
+   ]
+  }
+ ],
+ "values": [
+  {
+   "value": "重载路径调了置空 context 的全清 release() 后，load 见 context 为空直接走失败回调，播放通道第一次装载就失败；改为重载调只释放实例的方法后恢复",
+   "meaning": "两个释放方法分开的依据",
+   "source": "卡里修好并验证过",
+   "support": [
+    "case-6f949100d998a4784716#diagnosis"
+   ]
+  },
+  {
+   "value": "public void release()：Releases resources associated with this MediaPlayer object",
+   "meaning": "源端 release() 只释放这个 MediaPlayer 实例的资源，不涉及宿主 Context",
+   "source": "android.media.MediaPlayer#release",
+   "support": []
+  },
+  {
+   "value": "release(): Promise<void>（除 released 外任何状态都能调）",
+   "meaning": "目标端释放单个 AVPlayer 实例，放在只释放实例的方法里",
+   "source": "鸿蒙 SDK 的 ets/api/@ohos.multimedia.media.d.ts，AVPlayer.release",
+   "support": []
+  },
+  {
+   "value": "function createAVPlayer(): Promise<AVPlayer>",
+   "meaning": "释放旧实例后重载时用它新建 AVPlayer",
+   "source": "鸿蒙 SDK 的 ets/api/@ohos.multimedia.media.d.ts，media.createAVPlayer",
+   "support": []
+  }
+ ],
+ "lookups": [],
+ "why": "重载步骤被映射成全清时，宿主 context 在第一次装载前就被清空，后续 load 静默失败，背景音乐永不装载",
+ "keys": {
+  "read": [
+   "MediaPlayer",
+   "release()",
+   "MediaPlayer.create",
+   "setLooping",
+   "seekTo",
+   "Context"
+  ],
+  "product": [
+   "AVPlayer",
+   "release()",
+   "this.player = null",
+   "context = null",
+   "createAVPlayer",
+   "token++"
+  ]
+ },
+ "probe": {
+  "pattern": "release\\(\\)\\s*(?::\\s*\\w+\\s*)?\\{[^}]*context\\s*=\\s*(?:null|undefined)",
+  "note": "封装类的 release() 里清空了宿主 context；再看重载路径是不是调了它，是的话改调只释放实例的方法"
+ },
+ "unverified": [],
+ "alternatives_unverified": [],
+ "siblings_checked": "无：做法是封装类自己的方法拆分，不落在平台接口的参数类型上；顺带看了 @ohos.multimedia.media.d.ts 里 release(): Promise<void> 共 7 处，分属不同媒体类",
+ "refs": [
+  {
+   "what": "安卓 MediaPlayer.release 只释放这个实例的资源",
+   "kind": "android-sdk",
+   "where": "sources/android-36.1/android/media/MediaPlayer.java MediaPlayer#release",
+   "quote": "Releases resources associated with this MediaPlayer object.",
+   "version": "android-36.1"
+  },
+  {
+   "what": "AVPlayer.release 的签名和可调状态",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/api/@ohos.multimedia.media.d.ts AVPlayer.release",
+   "quote": "Releases resources used for AVPlayer. This API can be called when the AVPlayer is in any state except released. * @returns { Promise<void> } A Promise instance used to return the operation result.",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  },
+  {
+   "what": "createAVPlayer 的签名",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/api/@ohos.multimedia.media.d.ts media.createAVPlayer",
+   "quote": "function createAVPlayer(): Promise<AVPlayer>;",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  }
+ ],
+ "sources": [
+  "case-6f949100d998a4784716"
+ ],
+ "general": false,
+ "status": "active"
+}

@@ -1,0 +1,282 @@
+{
+ "case": "case-d160173a312daca7fc69",
+ "rules": [
+  {
+   "title": "源端相机能力 getter 读打开期缓存时，目标在会话 commit 后快照一次，getter 只读内存",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源端打开相机时调一次 CameraManager#getCameraCharacteristics（或包它的能力枚举）存进字段，能力 getter 只返回这个字段",
+     "wrong": "目标的能力 getter 每次调用都执行 cameraManager.getSupportedOutputCapability(...) 和 session.isFocusModeSupported(...)、getExposureBiasRange() 等同步查询，只在注释里说有缓存"
+    },
+    {
+     "read": "UI 访问器、定时绘制（setInterval、onDraw 回调）或会话切换的代码里调用控制器的能力 getter",
+     "wrong": "被调用的 getter 实现里含 session.isFocusModeSupported(...) 或 cameraManager.getSupportedOutputCapability(...) 这类同步相机服务调用"
+    }
+   ],
+   "scope": "把安卓相机控制器里读打开期缓存的能力 getter 迁成 HarmonyOS 相机实现时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "在初次 photo 会话 await session.commitConfig() 之后，调一次 getSupportedOutputCapability 和会话上的各项能力查询，存成能力快照；公开 getter 只返回快照",
+     "support": [
+      "case-d160173a312daca7fc69#recommendation:1",
+      "case-d160173a312daca7fc69#recommendation:3"
+     ]
+    },
+    {
+     "text": "显示尺寸、zoom 这类派生值在内存里更新；快照未就绪时 throw 明确的错误，不返回部分结果",
+     "support": [
+      "case-d160173a312daca7fc69#recommendation:3",
+      "case-d160173a312daca7fc69#diagnosis"
+     ]
+    },
+    {
+     "text": "UI 绘制、定时器、访问器消费控制器值前，看 getter 里有没有 session. 或 manager. 的调用；有就改读快照或缓存",
+     "support": [
+      "case-d160173a312daca7fc69#recommendation:4"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "getSupportedOutputCapability(camera: CameraDevice, mode: SceneMode): CameraOutputCapability",
+     "meaning": "同步返回的能力查询（返回值不是 Promise）",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.multimedia.camera.d.ts，CameraManager.getSupportedOutputCapability",
+     "support": []
+    },
+    {
+     "value": "isFocusModeSupported(afMode: FocusMode): boolean；会话没配置时抛 7400103 Session not config",
+     "meaning": "会话上的能力查询是同步的，并依赖会话已 commit",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.multimedia.camera.d.ts，FocusQuery.isFocusModeSupported",
+     "support": []
+    },
+    {
+     "value": "getExposureBiasRange(): Array<number>；同样在会话没配置时抛 7400103",
+     "meaning": "同类的会话能力查询",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.multimedia.camera.d.ts，AutoExposureQuery.getExposureBiasRange",
+     "support": []
+    },
+    {
+     "value": "commitConfig(): Promise<void>",
+     "meaning": "会话配置提交，快照在它完成之后读",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.multimedia.camera.d.ts，Session.commitConfig",
+     "support": []
+    },
+    {
+     "value": "初次 photo 会话 commit 后读一次能力快照、派生值在内存派生、未就绪抛异常；关闭期间旧 UI 引用读取要兼容",
+     "meaning": "返修后的做法",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-d160173a312daca7fc69#diagnosis"
+     ]
+    }
+   ],
+   "lookups": [],
+   "why": "每次访问都走同步相机服务调用时，UI 访问和定时绘制反复跨进程，结果还随当时的会话状态变",
+   "keys": {
+    "read": [
+     "CameraManager",
+     "getCameraCharacteristics",
+     "CameraCharacteristics",
+     "CameraDevice",
+     "CameraCaptureSession",
+     "createCaptureSession"
+    ],
+    "product": [
+     "getSupportedOutputCapability",
+     "isFocusModeSupported",
+     "getExposureBiasRange",
+     "commitConfig",
+     "PhotoSession",
+     "CameraOutputCapability",
+     "session.",
+     "cameraManager"
+    ]
+   },
+   "probe": {
+    "pattern": "get\\w*\\([^)]*\\)\\s*(:\\s*[\\w<>\\[\\]|]+\\s*)?\\{[^}]*\\b(session|manager|cameraManager)\\??\\.",
+    "note": "getter 体里直接调了 session 或 manager；源端若读的是打开期缓存，应改成读快照"
+   },
+   "unverified": [
+    "卡里的上机行为出自 HarmonyOS 6.1.1(24)，本机按 API 23 的声明核实"
+   ],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法落在会话提交后读取的时机上，涉及多个各自不同的查询方法，没有共同的参数类型可搜；7400103 在 FocusQuery、AutoExposureQuery 等会话查询的声明里都有",
+   "refs": [
+    {
+     "what": "getSupportedOutputCapability 的签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.multimedia.camera.d.ts CameraManager.getSupportedOutputCapability",
+     "quote": "getSupportedOutputCapability(camera: CameraDevice, mode: SceneMode): CameraOutputCapability;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "isFocusModeSupported 同步，会话未配置抛 7400103",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.multimedia.camera.d.ts FocusQuery.isFocusModeSupported",
+     "quote": "* @throws { BusinessError } 7400103 - Session not config, only throw in session usage. * @syscap SystemCapability.Multimedia.Camera.Core * @atomicservice * @since 19 */ isFocusModeSupported(",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "getExposureBiasRange 同步，会话未配置抛 7400103",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.multimedia.camera.d.ts AutoExposureQuery.getExposureBiasRange",
+     "quote": "7400103 - Session not config, only throw in session usage. * @syscap SystemCapability.Multimedia.Camera.Core * @atomicservice * @since 19 */ getExposureBiasRange(): Array<number>;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "commitConfig 的签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.multimedia.camera.d.ts Session.commitConfig",
+     "quote": "Commit capture session config. * * @returns { Promise<void> } Promise used to return the result.",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    }
+   ]
+  },
+  {
+   "title": "capture result 字段由 onCaptureCompleted 写入时，目标订阅 ISO 和曝光事件写缓存",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源端 getter 返回的字段在 CameraCaptureSession.CaptureCallback#onCaptureCompleted 里从 TotalCaptureResult 的 CaptureResult.SENSOR_SENSITIVITY / SENSOR_EXPOSURE_TIME 写入",
+     "wrong": "目标 getter 写成 this.session?.getIso() 或 getExposureDuration() 即时同步查询，名字还叫 CaptureResult"
+    }
+   ],
+   "scope": "把安卓逐帧回调写入的 capture result 缓存字段（ISO、曝光时间等）迁成 HarmonyOS 相机实现时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "先打开源端赋值点确认值来自 onCaptureCompleted 逐帧回调，再在目标 SDK 里按事件找对应通道（ISO 用 onIsoInfoChange，曝光用 onExposureInfoChange），不只按 getter 名搜",
+     "support": [
+      "case-d160173a312daca7fc69#recommendation:2"
+     ]
+    },
+    {
+     "text": "会话启动后用 session.onIsoInfoChange((info) => { 缓存 = info.iso }) 和曝光事件写缓存；会话停止、替换、暂停时取消订阅并清空；getter 只读缓存",
+     "support": [
+      "case-d160173a312daca7fc69#diagnosis",
+      "case-d160173a312daca7fc69#recommendation:1"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "onIsoInfoChange(callback: Callback<IsoInfo>): void；offIsoInfoChange(callback?: Callback<IsoInfo>): void（@since 22）",
+     "meaning": "订阅和取消 ISO 变化事件",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.multimedia.camera.d.ts，VideoSession.onIsoInfoChange",
+     "support": []
+    },
+    {
+     "value": "interface IsoInfo { readonly iso?: number }",
+     "meaning": "事件里带的 ISO 值，可能缺省",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.multimedia.camera.d.ts，IsoInfo",
+     "support": []
+    },
+    {
+     "value": "onCaptureCompleted(CameraCaptureSession session, CaptureRequest request, TotalCaptureResult result)",
+     "meaning": "源端每次拍摄完整结束、结果元数据齐全时回调，字段是逐帧写入的缓存",
+     "source": "android.hardware.camera2.CameraCaptureSession.CaptureCallback#onCaptureCompleted",
+     "support": []
+    },
+    {
+     "value": "CaptureResult.SENSOR_SENSITIVITY：Key<Integer>（android.sensor.sensitivity）",
+     "meaning": "源端 ISO 的来源键",
+     "source": "android.hardware.camera2.CaptureResult#SENSOR_SENSITIVITY",
+     "support": []
+    },
+    {
+     "value": "订阅 onIsoInfoChange / onExposureInfoChange 写缓存，会话停止、替换、暂停清空，getter 只读缓存后，定时绘制不再卡主线程",
+     "meaning": "返修后的做法",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-d160173a312daca7fc69#diagnosis"
+     ]
+    }
+   ],
+   "lookups": [],
+   "why": "getter 改成同步相机查询后被定时绘制高频调用，主线程卡在等待 ISO 返回",
+   "keys": {
+    "read": [
+     "onCaptureCompleted",
+     "TotalCaptureResult",
+     "CaptureResult",
+     "SENSOR_SENSITIVITY",
+     "SENSOR_EXPOSURE_TIME",
+     "CaptureCallback",
+     "setRepeatingRequest"
+    ],
+    "product": [
+     "onIsoInfoChange",
+     "offIsoInfoChange",
+     "IsoInfo",
+     "onExposureInfoChange",
+     "getIso",
+     "getExposureDuration",
+     "session"
+    ]
+   },
+   "probe": {
+    "pattern": "session\\??\\.(getIso|getExposureDuration)\\(",
+    "note": "直接同步读 ISO 或曝光；源端若是 onCaptureCompleted 写的缓存字段，应改成事件订阅写缓存"
+   },
+   "unverified": [
+    "本机 API 23 的声明里只有 VideoSession 上的 onIsoInfoChange / offIsoInfoChange；卡里用的 onExposureInfoChange、getIso、getExposureDuration 及其在 photo 会话上的可用性出自 HarmonyOS 6.1.1(24)，本机没核到"
+   ],
+   "alternatives_unverified": [],
+   "siblings_checked": "搜 Callback<IsoInfo>：camera.d.ts 里只有 VideoSession 的 onIsoInfoChange、offIsoInfoChange；ExposureInfoChange 在本机 openharmony 和 hms 声明里都没有",
+   "refs": [
+    {
+     "what": "onIsoInfoChange 的签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.multimedia.camera.d.ts VideoSession.onIsoInfoChange",
+     "quote": "Subscribes ISO info change event callback. * * @param { Callback<IsoInfo> } callback - Callback used to get the ISO info change.",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "onIsoInfoChange / offIsoInfoChange 签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.multimedia.camera.d.ts VideoSession.offIsoInfoChange",
+     "quote": "onIsoInfoChange(callback: Callback<IsoInfo>): void;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "IsoInfo 的字段",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.multimedia.camera.d.ts IsoInfo",
+     "quote": "readonly iso?: number;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "onCaptureCompleted 在拍摄完整结束时回调",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/android/hardware/camera2/CameraCaptureSession.java CameraCaptureSession.CaptureCallback#onCaptureCompleted",
+     "quote": "This method is called when an image capture has fully completed and all the * result metadata is available.",
+     "version": "android-36.1"
+    },
+    {
+     "what": "CaptureResult.SENSOR_SENSITIVITY",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/android/hardware/camera2/CaptureResult.java CaptureResult#SENSOR_SENSITIVITY",
+     "quote": "public static final Key<Integer> SENSOR_SENSITIVITY = new Key<Integer>(\"android.sensor.sensitivity\", int.class);",
+     "version": "android-36.1"
+    }
+   ]
+  }
+ ],
+ "left_out": [
+  {
+   "text": "用计数 mock 断言多次 UI 访问不增加原生调用次数",
+   "reason": "其他：验证手段，不是产物里该有的写法"
+  },
+  {
+   "text": "卡里没核到：分工消息是否指定了 capture result 的取值方式",
+   "reason": "其他：卡里没核到的点，不是结论"
+  }
+ ],
+ "corrections": [],
+ "gaps": [
+  "onExposureInfoChange、getIso、getExposureDuration、getSupportedIsoRange 在本机 API 23 的 openharmony 和 hms 声明里都搜不到，没法核签名"
+ ],
+ "conflicts": []
+}

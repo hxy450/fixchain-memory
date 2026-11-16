@@ -1,0 +1,146 @@
+{
+  "case": "case-7cb7554a3696dcbc7647",
+  "rules": [
+    {
+      "title": "源 catch 承载 HTTP 失败而目标客户端永不 reject 时，先写 status!==200 分支",
+      "product": "代码",
+      "triggers": [
+        {
+          "read": "源端请求包在 try/catch（或 Promise/Observable 的错误回调）里，catch 中 `error instanceof HttpErrorResponse` 时取 error.error?.message 设错误并 return false，成功路径才改 hasMore/游标",
+          "wrong": "目标端请求返回后直接取 res.data 走成功路径，没有 res.status !== 200 分支，只留了一个 catch"
+        },
+        {
+          "read": "目标网络层客户端注明返回的 Promise 永不 reject，非 2xx 和传输异常归一成失败信封，调用方按 `envelope.status === 200` 判成功",
+          "wrong": "catch 上注释写着在契约下不可达、仅作防御；或同一服务里别的方法有 `res.status !== 200` 判定，分页/列表方法没有"
+        }
+      ],
+      "scope": "把源端靠异常分支处理请求失败的代码，翻译到以信封 status 表示失败、永不 reject 的 HTTP 客户端上时",
+      "exceptions": [],
+      "how": [
+        {
+          "text": "先列出哪些失败会进源 catch（如非 2xx 以 HttpErrorResponse 进入），再按目标契约把每种失败对到实际的失败信号",
+          "support": [
+            "case-7cb7554a3696dcbc7647#recommendation:1"
+          ]
+        },
+        {
+          "text": "在消费 res.data 之前写 if (res.status !== 200) { this.error = res.message 或兜底文案; return false }，不改 hasMore、游标和首拉完成标记",
+          "support": [
+            "case-7cb7554a3696dcbc7647#recommendation:1",
+            "case-7cb7554a3696dcbc7647#diagnosis"
+          ]
+        },
+        {
+          "text": "看到「此 catch 不可达」类注释时，核对源 catch 的语义已迁到这个分支；同一服务里的分页/列表方法逐个对齐已有的 status 判定",
+          "support": [
+            "case-7cb7554a3696dcbc7647#recommendation:2"
+          ]
+        }
+      ],
+      "values": [
+        {
+          "value": "if (res.status !== 200) { this.error = res.message（空则兜底文案）; return false }，hasMore 不动",
+          "meaning": "失败信封的处理写法，放在取 res.data 之前",
+          "source": "卡里修好并验证过",
+          "support": [
+            "case-7cb7554a3696dcbc7647#diagnosis"
+          ]
+        }
+      ],
+      "lookups": [
+        {
+          "what": "目标网络层把哪些失败以什么信号交回",
+          "where": "目标工程网络层客户端的文件头注释和返回类型",
+          "how": "读出非 2xx、传输异常、解析失败各自是 reject 还是失败信封、判成功的字段和值（例：注明永不 reject 时按 status === 200 判成功）"
+        },
+        {
+          "what": "源端 catch 会接到哪些失败",
+          "where": "源工程里这个请求所用 HTTP 客户端的调用处，catch 或错误回调里判断的错误类型",
+          "how": "列出每种失败（非 2xx、网络异常）进的是哪条分支、分支里设了什么状态、返回什么"
+        }
+      ],
+      "why": "失败信封被当成空页：不设错误、hasMore 被置 false、返回成功，界面显示「没有更多」而不是错误",
+      "keys": {
+        "read": [
+          "HttpErrorResponse",
+          "catch",
+          "catchError",
+          "error.error?.message",
+          "return false",
+          "hasMore",
+          "subscribe"
+        ],
+        "product": [
+          "res.status",
+          "status !== 200",
+          "res.data",
+          "res.message",
+          "hasMore",
+          "catch",
+          "envelope"
+        ]
+      },
+      "probe": {
+        "pattern": "(永不\\s*reject|never\\s+rejects?|不可达|unreachable)",
+        "note": "注释说 catch 在契约下不会走到；核对源 catch 的失败语义是否已迁到 status !== 200 分支"
+      },
+      "unverified": [
+        "源端是 Web 框架，非 2xx 以 HttpErrorResponse 进 catch 的行为没在知识库核实"
+      ],
+      "alternatives_unverified": [],
+      "siblings_checked": "无：做法落在应用自己的信封客户端契约上，不落在 SDK 接口",
+      "refs": []
+    },
+    {
+      "title": "分页加载的单元测试要注入失败信封，断言返回 false 且 hasMore、游标不变",
+      "product": "代码",
+      "triggers": [
+        {
+          "read": "源端分页方法失败时设错误、return false，成功路径才改 hasMore/游标",
+          "wrong": "测试里 mock 的 HttpClient 只返回 status 200 的信封，没有用例覆盖 status !== 200 时 loadMore 的返回值和状态"
+        }
+      ],
+      "scope": "目标端带 hasMore、游标等分页状态、走永不 reject 信封客户端的方法的自测",
+      "exceptions": [],
+      "how": [
+        {
+          "text": "注入一个失败信封（如 { status: 500, message: … }），断言方法返回 false、error 等于信封 message、hasMore 和游标保持调用前的值",
+          "support": [
+            "case-7cb7554a3696dcbc7647#recommendation:3"
+          ]
+        }
+      ],
+      "values": [],
+      "lookups": [],
+      "why": "只测成功页时，失败被当成空页的错误要到验收才暴露",
+      "keys": {
+        "read": [
+          "loadMore",
+          "hasMore",
+          "HttpErrorResponse",
+          "catch",
+          "return false"
+        ],
+        "product": [
+          "status: 500",
+          "res.status",
+          "hasMore",
+          "expect",
+          "assertEqual",
+          "mock"
+        ]
+      },
+      "probe": null,
+      "unverified": [],
+      "alternatives_unverified": [],
+      "siblings_checked": "无：做法落在测试用例的写法上，不落在 SDK 接口",
+      "refs": []
+    }
+  ],
+  "left_out": [],
+  "corrections": [],
+  "gaps": [
+    "源端 Angular HttpClient 非 2xx 以 HttpErrorResponse 进入 catch：源端不是安卓，三类来源里查不到原文"
+  ],
+  "conflicts": []
+}

@@ -1,0 +1,436 @@
+{
+ "case": "case-30dbf63ea8a03d315607",
+ "rules": [
+  {
+   "title": "源宿主用 NavHost 或接收 savedInstanceState 时，规格单列进程回收后重建分支",
+   "product": "规格",
+   "triggers": [
+    {
+     "read": "源宿主 Activity 的 onCreate(savedInstanceState) / super.onCreate(savedInstanceState)，或 Compose 的 rememberNavController() + NavHost(startDestination = …)；源码里没有显式的保存代码",
+     "wrong": "规格的宿主生命周期节只写「onCreate 初始化 → 冷启进入起始页」和前后台回切，没有「进程回收后重建 → 恢复页面栈与路由参数」的分支，也没有对应的平台差异决策"
+    }
+   ],
+   "scope": "规格提取阶段，为宿主 Activity 生命周期和导航容器写验收项时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "在生命周期或导航节单列「进程回收后重建」分支：写明要恢复哪些返回栈页面、各页的路由参数，以及计时等会话怎么接续",
+     "support": [
+      "case-30dbf63ea8a03d315607#recommendation:1",
+      "case-30dbf63ea8a03d315607#diagnosis"
+     ]
+    },
+    {
+     "text": "写明目标平台的对应决策（启用 UIAbility 备份恢复、Navigation 与 NavDestination 可恢复），不只写「冷启进入起始页」",
+     "support": [
+      "case-30dbf63ea8a03d315607#recommendation:1"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "启用 UIAbility 备份恢复后，应用在后台被系统关闭，下次启动时恢复先前的页面栈和 onSaveState 里保存的数据",
+     "meaning": "目标平台有对应机制，但要显式开启",
+     "source": "ability-recover-guideline.md，场景介绍",
+     "support": []
+    },
+    {
+     "value": "应用正常启动（startAbility 或点图标）时不触发恢复流程",
+     "meaning": "冷启分支和回收重建分支是两条，规格要分开写",
+     "source": "ability-recover-guideline.md，场景介绍",
+     "support": []
+    }
+   ],
+   "lookups": [],
+   "why": "规格只写冷启时，实现者不会开启恢复，进程被回收后用户回到起始页，返回栈和参数丢失",
+   "keys": {
+    "read": [
+     "savedInstanceState",
+     "onCreate",
+     "rememberNavController",
+     "NavHost",
+     "startDestination",
+     "Bundle"
+    ],
+    "product": [
+     "冷启",
+     "进程回收",
+     "重建",
+     "页面栈",
+     "路由参数",
+     "AC"
+    ]
+   },
+   "probe": null,
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法落在规格的分支怎么写上，不落在具体接口上",
+   "refs": [
+    {
+     "what": "备份恢复能恢复页面栈和保存的数据",
+     "kind": "oh-docs",
+     "where": "zh-cn/application-dev/application-models/ability-recover-guideline.md 场景介绍",
+     "quote": "则可以在应用退出后的下一次启动时恢复先前的状态和数据（包括应用的页面栈以及[onSaveState](../reference/apis-ability-kit/js-apis-app-ability-uiAbility.md#onsavestate)接口中保存的数据）",
+     "version": "docs f41b9345"
+    },
+    {
+     "what": "正常启动不触发恢复",
+     "kind": "oh-docs",
+     "where": "zh-cn/application-dev/application-models/ability-recover-guideline.md 场景介绍",
+     "quote": "应用正常启动（例如通过startAbility接口启动或点击图标启动）时，不触发[UIAbility](../reference/apis-ability-kit/js-apis-app-ability-uiAbility.md)恢复流程。",
+     "version": "docs f41b9345"
+    }
+   ]
+  },
+  {
+   "title": "要恢复页面栈时，UIAbility 开启备份恢复并在 APP_RECOVERY 时恢复窗口舞台",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "规格要求进程回收后恢复页面栈，或源宿主用 rememberNavController + NavHost / onCreate(savedInstanceState)",
+     "wrong": "EntryAbility 的 onCreate 里没有 this.context.setRestoreEnabled(true)；launchReason 为 APP_RECOVERY 时没有 restoreWindowStage，也没有 onWindowStageRestore，onWindowStageCreate 每次都直接 loadContent"
+    }
+   ],
+   "scope": "实现阶段装配 UIAbility，需要进程被系统回收后恢复页面栈时（setRestoreEnabled 声明 @since 14）",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "onCreate 里调用 this.context.setRestoreEnabled(true)，在 onForeground 之前",
+     "support": [
+      "case-30dbf63ea8a03d315607#recommendation:2",
+      "case-30dbf63ea8a03d315607#diagnosis"
+     ]
+    },
+    {
+     "text": "launchParam.launchReason === AbilityConstant.LaunchReason.APP_RECOVERY 时调用 this.context.restoreWindowStage(new LocalStorage())，并实现 onWindowStageRestore(windowStage)；只开 setRestoreEnabled 加 recoverable 不够",
+     "support": [
+      "case-30dbf63ea8a03d315607#recommendation:2",
+      "case-30dbf63ea8a03d315607#diagnosis"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "setRestoreEnabled(enabled: boolean): void",
+     "meaning": "UIAbilityContext 上设置是否启用后台回收后的恢复",
+     "source": "鸿蒙 SDK 的 ets/api/application/UIAbilityContext.d.ts，UIAbilityContext.setRestoreEnabled",
+     "support": []
+    },
+    {
+     "value": "setRestoreEnabled 要在应用初始化阶段（onForeground 之前）调用，比如 UIAbility 的 onCreate",
+     "meaning": "调用时机",
+     "source": "ability-recover-guideline.md，接口说明",
+     "support": []
+    },
+    {
+     "value": "AbilityConstant.LaunchReason.APP_RECOVERY = 4",
+     "meaning": "应用从故障中恢复时自动拉起的启动原因",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.app.ability.AbilityConstant.d.ts，LaunchReason.APP_RECOVERY",
+     "support": []
+    },
+    {
+     "value": "restoreWindowStage(localStorage: LocalStorage): void",
+     "meaning": "UIAbilityContext 上恢复窗口舞台数据",
+     "source": "鸿蒙 SDK 的 ets/api/application/UIAbilityContext.d.ts，UIAbilityContext.restoreWindowStage",
+     "support": []
+    },
+    {
+     "value": "onWindowStageRestore(windowStage: window.WindowStage): void",
+     "meaning": "UIAbility 上窗口舞台恢复时的回调",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.app.ability.UIAbility.d.ts，UIAbility.onWindowStageRestore",
+     "support": []
+    },
+    {
+     "value": "removeMissionAfterTerminate 为 true，或设备不支持任务保留（如 PC/2in1）时，备份恢复不生效",
+     "meaning": "机制的前提",
+     "source": "ability-recover-guideline.md，约束限制",
+     "support": []
+    },
+    {
+     "value": "只开 setRestoreEnabled 加 recoverable 时，APP_RECOVERY 拉起后仍不恢复；加上 restoreWindowStage(new LocalStorage()) 和 onWindowStageRestore 后恢复",
+     "meaning": "修好的做法",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-30dbf63ea8a03d315607#diagnosis"
+     ]
+    }
+   ],
+   "lookups": [],
+   "why": "不开启时，进程被系统回收后再进应用会回到起始页，返回栈和参数都丢失",
+   "keys": {
+    "read": [
+     "savedInstanceState",
+     "onCreate",
+     "rememberNavController",
+     "NavHost",
+     "onSaveInstanceState"
+    ],
+    "product": [
+     "setRestoreEnabled",
+     "APP_RECOVERY",
+     "launchReason",
+     "restoreWindowStage",
+     "onWindowStageRestore",
+     "LocalStorage",
+     "EntryAbility"
+    ]
+   },
+   "probe": null,
+   "unverified": [
+    "卡里环境是 6.1.1(24)，本机按 API 23 的声明核对"
+   ],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：setRestoreEnabled、restoreWindowStage 是 UIAbilityContext 的通用方法，没有专门的参数类型可搜",
+   "refs": [
+    {
+     "what": "setRestoreEnabled 的说明",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/application/UIAbilityContext.d.ts UIAbilityContext.setRestoreEnabled",
+     "quote": "Set whether restoration is enabled when the UIAbility is switched back from the background.",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "setRestoreEnabled 的签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/application/UIAbilityContext.d.ts UIAbilityContext.setRestoreEnabled",
+     "quote": "@atomicservice * @since 14 */ setRestoreEnabled(enabled: boolean): void;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "setRestoreEnabled 的调用时机",
+     "kind": "oh-docs",
+     "where": "zh-cn/application-dev/application-models/ability-recover-guideline.md 接口说明",
+     "quote": "接口需要在应用初始化阶段调用（[onForeground](../reference/apis-ability-kit/js-apis-app-ability-uiAbility.md#onforeground)前）",
+     "version": "docs f41b9345"
+    },
+    {
+     "what": "LaunchReason.APP_RECOVERY",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.app.ability.AbilityConstant.d.ts LaunchReason.APP_RECOVERY",
+     "quote": "The ability is automatically started when the application is restored from a fault.",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "APP_RECOVERY 的取值",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.app.ability.AbilityConstant.d.ts LaunchReason.APP_RECOVERY",
+     "quote": "@atomicservice * @since 11 */ APP_RECOVERY = 4,",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "restoreWindowStage 的签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/application/UIAbilityContext.d.ts UIAbilityContext.restoreWindowStage",
+     "quote": "restoreWindowStage(localStorage: LocalStorage): void;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "onWindowStageRestore 的签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.app.ability.UIAbility.d.ts UIAbility.onWindowStageRestore",
+     "quote": "onWindowStageRestore(windowStage: window.WindowStage): void;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "备份恢复依赖任务保留",
+     "kind": "oh-docs",
+     "where": "zh-cn/application-dev/application-models/ability-recover-guideline.md 约束限制",
+     "quote": "备份恢复机制依赖任务保留机制，如果应用设置[removeMissionAfterTerminate](../quick-start/module-configuration-file.md#abilities标签)为true，或者设备不支持任务保留（比如PC/2in1设备），则备份恢复机制不生效。",
+     "version": "docs f41b9345"
+    }
+   ]
+  },
+  {
+   "title": "要恢复页面栈时，Navigation 设 id 和 recoverable，每个 NavDestination 也设",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "规格要求进程回收后恢复页面栈，或源宿主用 rememberNavController + NavHost / onCreate(savedInstanceState)",
+     "wrong": "根 Navigation(pathStack) 上没有 .id(...) 和 .recoverable(true)；各页的 NavDestination() 上没有 .recoverable(true)"
+    }
+   ],
+   "scope": "实现阶段装配根 Navigation 和各页 NavDestination，需要进程回收后恢复路由栈时（recoverable 声明 @since 14）",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "根 Navigation 加通用属性 .id('…') 和 .recoverable(true)",
+     "support": [
+      "case-30dbf63ea8a03d315607#recommendation:2",
+      "case-30dbf63ea8a03d315607#diagnosis"
+     ]
+    },
+    {
+     "text": "每个 NavDestination 加 .recoverable(true)",
+     "support": [
+      "case-30dbf63ea8a03d315607#recommendation:2",
+      "case-30dbf63ea8a03d315607#diagnosis"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "recoverable(recoverable: Optional<boolean>): NavigationAttribute；默认 false，要先设 Navigation 的 id",
+     "meaning": "Navigation 在进程异常退出后重新冷启时恢复到退出时的路由栈",
+     "source": "鸿蒙 SDK 的 ets/component/navigation.d.ts，NavigationAttribute.recoverable",
+     "support": []
+    },
+    {
+     "value": "recoverable(recoverable: Optional<boolean>): NavDestinationAttribute；默认 false，要和 Navigation 的 recoverable 一起用",
+     "meaning": "同族接口：NavDestination 的可恢复",
+     "source": "鸿蒙 SDK 的 ets/component/nav_destination.d.ts，NavDestinationAttribute.recoverable",
+     "support": []
+    },
+    {
+     "value": "根 Navigation 加 id 与 recoverable(true)，各 NavDestination 在 hideTitleBar(true) 后加 recoverable(true)",
+     "meaning": "修好的做法（还需配合 UIAbility 的备份恢复）",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-30dbf63ea8a03d315607#diagnosis"
+     ]
+    }
+   ],
+   "lookups": [],
+   "why": "没设 id 和 recoverable 时，进程回收后 Navigation 只按冷启压入起始页，返回栈丢失",
+   "keys": {
+    "read": [
+     "rememberNavController",
+     "NavHost",
+     "composable",
+     "savedInstanceState",
+     "startDestination"
+    ],
+    "product": [
+     "Navigation",
+     "NavDestination",
+     "recoverable",
+     ".id(",
+     "NavPathStack",
+     "aboutToAppear"
+    ]
+   },
+   "probe": null,
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "搜 recoverable(recoverable: Optional<boolean>)：鸿蒙 SDK ets/component 下只有 NavigationAttribute、NavDestinationAttribute 两个，都写进了 values",
+   "refs": [
+    {
+     "what": "Navigation.recoverable 要先设 id",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/component/navigation.d.ts NavigationAttribute.recoverable",
+     "quote": "Set the Navigation can be restored after the application is terminated. * To enable this attribute, a navigation id must be set.",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "Navigation.recoverable 的签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/component/navigation.d.ts NavigationAttribute.recoverable",
+     "quote": "recoverable(recoverable: Optional<boolean>): NavigationAttribute;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "NavDestination.recoverable 要和 Navigation 一起用",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/component/nav_destination.d.ts NavDestinationAttribute.recoverable",
+     "quote": "<br>This API must be used together with * the recoverable API of **Navigation**.",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "NavDestination.recoverable 的签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/component/nav_destination.d.ts NavDestinationAttribute.recoverable",
+     "quote": "recoverable(recoverable: Optional<boolean>): NavDestinationAttribute;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    }
+   ]
+  },
+  {
+   "title": "可恢复页面的路由参数要可序列化，接收端按字段识别，不只靠 instanceof",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源端 NavHost 路由带参数，进程回收后参数由框架随返回栈恢复",
+     "wrong": "接收页用 `instanceof` 某个参数类判断 NavPathStack 传来的参数；开启 recoverable 后恢复出的参数是同形的普通对象，判断不成立"
+    }
+   ],
+   "scope": "NavDestination 设了 recoverable(true) 的页面接收路由参数时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "push 的参数只放可序列化的字段（数字、字符串、普通对象），不依赖类实例和回调",
+     "support": [
+      "case-30dbf63ea8a03d315607#recommendation:3"
+     ]
+    },
+    {
+     "text": "接收端按字段识别（如 typeof param.id === 'number'），不只用 instanceof 判断类实例",
+     "support": [
+      "case-30dbf63ea8a03d315607#recommendation:3",
+      "case-30dbf63ea8a03d315607#diagnosis"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "恢复过程中不可序列化的信息（不可序列化的参数、用户设置的 onPop 等）会被丢弃，无法恢复",
+     "meaning": "恢复出的参数只剩可序列化的字段",
+     "source": "ts-basic-components-navigation.md，recoverable",
+     "support": []
+    },
+    {
+     "value": "参数识别从 instanceof 改为按 id 字段识别后，恢复的页面能读到参数",
+     "meaning": "修好的做法",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-30dbf63ea8a03d315607#diagnosis"
+     ]
+    }
+   ],
+   "lookups": [],
+   "why": "恢复后参数不再是类实例，instanceof 判断失败，页面读不到参数",
+   "keys": {
+    "read": [
+     "NavHost",
+     "rememberNavController",
+     "navigate",
+     "savedInstanceState",
+     "route"
+    ],
+    "product": [
+     "instanceof",
+     "typeof",
+     "NavPathStack",
+     "pushPath",
+     "param",
+     "recoverable"
+    ]
+   },
+   "probe": {
+    "pattern": "\\binstanceof\\s+[A-Z]\\w*",
+    "note": "按类实例判断对象；若判断的是可恢复页面的路由参数，恢复后会失效，应按字段识别"
+   },
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法落在参数类型判断的写法上，不落在具体接口参数上",
+   "refs": [
+    {
+     "what": "不可序列化的参数会被丢弃",
+     "kind": "oh-docs",
+     "where": "zh-cn/application-dev/reference/apis-arkui/arkui-ts/ts-basic-components-navigation.md recoverable",
+     "quote": "恢复的过程中不可序列化的信息，例如不可序列化的参数与用户设置的onPop等，会被丢弃，无法恢复。",
+     "version": "docs f41b9345"
+    }
+   ]
+  }
+ ],
+ "left_out": [
+  {
+   "text": "验证：进入详情后 aa force-stop 再启动，确认 launchReason=APP_RECOVERY 时页面栈与参数都已还原",
+   "reason": "要上机或截图才能做"
+  }
+ ],
+ "corrections": [],
+ "gaps": [],
+ "conflicts": [
+  "文档说页面栈数据在 onWindowStageCreate 中恢复、只列 setRestoreEnabled 一个接口，声明把 restoreWindowStage / onWindowStageRestore 写成迁移场景用；卡里上机看到 APP_RECOVERY 拉起时还要调 restoreWindowStage 才恢复，按卡写"
+ ]
+}

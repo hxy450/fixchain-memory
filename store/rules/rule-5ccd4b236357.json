@@ -1,0 +1,152 @@
+{
+ "id": "rule-5ccd4b236357",
+ "title": "根页按 finish 返回时，先做 onDestroy 释放和复位，再 moveAbilityToBackground",
+ "product": "代码",
+ "triggers": [
+  {
+   "read": "源根 Activity 没有覆写 onBackPressed，onDestroy 里有 release() / close()",
+   "wrong": "NavDestination 的 onBackPressed 在栈深≤1 时只调 moveAbilityToBackground() 并 return true，onDestroy 的释放只挂在 aboutToDisappear 上"
+  },
+  {
+   "read": "",
+   "wrong": "栈底返回调的是 terminateSelf()"
+  }
+ ],
+ "scope": "目标用 Navigation + NavDestination 承载、根页在栈深≤1 时接管返回，源根 Activity 返回是 finish 语义",
+ "exceptions": [
+  {
+   "text": "参照设备实测返回后是移到后台（再启动为 HOT、原实例恢复）时，省略复位",
+   "support": [
+    "case-65b537ef55556598f2ee#recommendation:4"
+   ]
+  }
+ ],
+ "how": [
+  {
+   "text": "onBackPressed 里栈深≤1 时：先执行源 onDestroy 的释放（如释放背景音乐），把页面实例态复位到初值，记一个待重建标记；再调 UIAbilityContext 的 moveAbilityToBackground()，return true",
+   "support": [
+    "case-65b537ef55556598f2ee#recommendation:3",
+    "case-65b537ef55556598f2ee#diagnosis"
+   ]
+  },
+  {
+   "text": "NavDestination 的 onShown 里看到待重建标记，就重走源 onCreate 的初始化（新建音乐从头播放、刷新列表、恢复初始焦点）",
+   "support": [
+    "case-65b537ef55556598f2ee#recommendation:3"
+   ]
+  },
+  {
+   "text": "不用 terminateSelf()：它会结束鸿蒙进程，静态单例里的局面（续局）丢失",
+   "support": [
+    "case-65b537ef55556598f2ee#recommendation:3",
+    "case-65b537ef55556598f2ee#diagnosis"
+   ]
+  }
+ ],
+ "values": [
+  {
+   "value": "moveAbilityToBackground(): Promise<void>",
+   "meaning": "把当前 UIAbility 移到后台，进程保留",
+   "source": "鸿蒙 SDK 的 ets/api/application/UIAbilityContext.d.ts，UIAbilityContext.moveAbilityToBackground",
+   "support": []
+  },
+  {
+   "value": "terminateSelf(): Promise<void>",
+   "meaning": "销毁当前 UIAbility；卡里实测会结束进程、续局丢失",
+   "source": "鸿蒙 SDK 的 ets/api/application/UIAbilityContext.d.ts，UIAbilityContext.terminateSelf",
+   "support": []
+  },
+  {
+   "value": "onBackPressed(callback: () => boolean): NavDestinationAttribute",
+   "meaning": "NavDestination 接管返回，返回 true 表示已消费",
+   "source": "鸿蒙 SDK 的 ets/component/nav_destination.d.ts，NavDestinationAttribute.onBackPressed",
+   "support": []
+  },
+  {
+   "value": "onShown(callback: Callback<VisibilityChangeReason>): NavDestinationAttribute",
+   "meaning": "NavDestination 显示时回调，放重建初始化",
+   "source": "鸿蒙 SDK 的 ets/component/nav_destination.d.ts，NavDestinationAttribute.onShown",
+   "support": []
+  },
+  {
+   "value": "栈底返回先复位（释放菜单音乐、名字与等级复位、清焦点、记待重建）再 moveAbilityToBackground，下次 onShown 重建；terminateSelf 结束进程、续局丢失；aboutToDisappear 在退后台时不执行",
+   "meaning": "卡里返修的修法和观察",
+   "source": "卡里修好并验证过",
+   "support": [
+    "case-65b537ef55556598f2ee#diagnosis"
+   ]
+  }
+ ],
+ "lookups": [
+  {
+   "what": "源 onDestroy 释放了什么、哪些字段是实例态、onCreate 做了哪些初始化",
+   "where": "源工程里根 Activity 的 onDestroy、onCreate 和成员字段",
+   "how": "onDestroy 的每项释放进复位方法，onCreate 的初始化进重建方法，静态单例不动"
+  }
+ ],
+ "why": "只退后台不复位，onDestroy 的释放不执行、实例态不回初值；改用 terminateSelf 又会结束进程丢掉续局",
+ "keys": {
+  "read": [
+   "onBackPressed",
+   "onDestroy",
+   "onCreate",
+   "finish",
+   "release",
+   "close",
+   "static"
+  ],
+  "product": [
+   "NavDestination",
+   "onBackPressed",
+   "moveAbilityToBackground",
+   "terminateSelf",
+   "onShown",
+   "aboutToDisappear",
+   "UIAbilityContext"
+  ]
+ },
+ "probe": {
+  "pattern": "terminateSelf\\s*\\(",
+  "note": "栈底返回若用 terminateSelf 结束 Ability，会结束进程丢掉静态局面；源端 finish 语义应改为复位后 moveAbilityToBackground"
+ },
+ "unverified": [
+  "onShown 的签名照本机 API 23 声明（@since 21 改成 Callback<VisibilityChangeReason>），卡里的目标 SDK 也是 API 23"
+ ],
+ "alternatives_unverified": [],
+ "siblings_checked": "搜 moveAbilityToBackground(：鸿蒙 SDK ets/api 下只有 UIAbilityContext 一个；onBackPressed、onShown 是事件回调，无专门参数类型可搜",
+ "refs": [
+  {
+   "what": "moveAbilityToBackground 的签名",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/api/application/UIAbilityContext.d.ts UIAbilityContext.moveAbilityToBackground",
+   "quote": "* Move current ability to background. * * @returns { Promise<void> } Returns the result of moveAbilityToBackground.",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  },
+  {
+   "what": "terminateSelf 的签名",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/api/application/UIAbilityContext.d.ts UIAbilityContext.terminateSelf",
+   "quote": "terminateSelf(): Promise<void>;",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  },
+  {
+   "what": "NavDestination 的 onBackPressed",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/component/nav_destination.d.ts NavDestinationAttribute.onBackPressed",
+   "quote": "onBackPressed(callback: () => boolean): NavDestinationAttribute;",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  },
+  {
+   "what": "NavDestination 的 onShown",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/component/nav_destination.d.ts NavDestinationAttribute.onShown",
+   "quote": "onShown(callback: Callback<VisibilityChangeReason>): NavDestinationAttribute;",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  }
+ ],
+ "sources": [
+  "case-65b537ef55556598f2ee"
+ ],
+ "general": false,
+ "status": "active"
+}

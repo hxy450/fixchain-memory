@@ -1,0 +1,365 @@
+{
+ "case": "case-7456fcf259be55a8834b",
+ "rules": [
+  {
+   "title": "带 <b>/<a>/CDATA 的 strings.xml 串按 HTML 存进 string.json 并列清单",
+   "product": "资源",
+   "triggers": [
+    {
+     "read": "strings.xml 的 <string> 里内联 <b> / <i> / <u> / <a href> / <br>，或用 <![CDATA[ … ]]> 包 HTML",
+     "wrong": "string.json 里这些键的标记和 href 被丢掉成了纯文本，转换脚本用 ''.join(el.itertext()) 之类只取文本的写法；或 CDATA 键原样留着 HTML 却没人登记"
+    }
+   ],
+   "scope": "资源转换阶段把安卓 strings.xml 转成鸿蒙 string.json 时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "先列出含 <b>/<i>/<u>/<a>/<br>/CDATA 的键，值按 HTML 保存（字面的 < 和 & 转义），不用 itertext 或去标签的方式转换",
+     "support": [
+      "case-7456fcf259be55a8834b#recommendation:1",
+      "case-7456fcf259be55a8834b#diagnosis"
+     ]
+    },
+    {
+     "text": "交付一份带样式键清单，标出各键的消费方式：setMessage(resId) / android:text 走 Styled，getString + Html.fromHtml 走 Html，并注明是否设了 LinkMovementMethod",
+     "support": [
+      "case-7456fcf259be55a8834b#recommendation:1"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "Resources#getText 返回带样式信息的 CharSequence；Resources#getString 去掉样式信息",
+     "meaning": "按 resId 直接取文本的消费方会保留 <b>/<a> 样式，getString 则不保留，消费方式决定目标怎么渲染",
+     "source": "android.content.res.Resources#getText、android.content.res.Resources#getString",
+     "support": []
+    },
+    {
+     "value": "AlertDialog.Builder.setMessage(int) 用 getText(messageId) 取文",
+     "meaning": "setMessage(resId) 属于 Styled 通路",
+     "source": "android.app.AlertDialog.Builder#setMessage",
+     "support": []
+    },
+    {
+     "value": "带标记键按 HTML 保存进 string.json",
+     "meaning": "修好后链接和粗体信息都保留到目标端",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-7456fcf259be55a8834b#diagnosis"
+     ]
+    }
+   ],
+   "lookups": [
+    {
+     "what": "每个带样式键在源端怎么被消费",
+     "where": "源工程 Java / Kotlin 里引用该 R.string 的调用点和布局 XML 的 android:text",
+     "how": "setMessage(resId)、getText、android:text 记为 Styled；getString 再 Html.fromHtml / HtmlCompat.fromHtml 记为 Html；同一控件 setMovementMethod(LinkMovementMethod) 的记为链接可点"
+    }
+   ],
+   "why": "只取文本会静默丢掉链接和粗体，CDATA 键留下的 HTML 又会被当纯文本显示出标签",
+   "keys": {
+    "read": [
+     "<string",
+     "<b>",
+     "<a href",
+     "CDATA",
+     "Html.fromHtml",
+     "HtmlCompat.fromHtml",
+     "LinkMovementMethod",
+     "setMessage"
+    ],
+    "product": [
+     "string.json",
+     "itertext",
+     "value",
+     "<a href",
+     "<b>",
+     "CDATA"
+    ]
+   },
+   "probe": {
+    "pattern": "itertext\\(\\)",
+    "note": "转换脚本只取文本；带 <b>/<a> 的串会丢标记"
+   },
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法是资源值的保存方式，不落在鸿蒙接口上",
+   "refs": [
+    {
+     "what": "getText 带样式信息",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/android/content/res/Resources.java Resources#getText",
+     "quote": "@return CharSequence The string data associated with the resource, plus * possibly styled text information.",
+     "version": "android-36.1"
+    },
+    {
+     "what": "getString 去掉样式信息",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/android/content/res/Resources.java Resources#getString",
+     "quote": "Return the string value associated with a particular resource ID.  It * will be stripped of any styled text information.",
+     "version": "android-36.1"
+    },
+    {
+     "what": "setMessage(int) 用 getText",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/android/app/AlertDialog.java AlertDialog.Builder#setMessage",
+     "quote": "public Builder setMessage(@StringRes int messageId) { P.mMessage = P.mContext.getText(messageId);",
+     "version": "android-36.1"
+    }
+   ]
+  },
+  {
+   "title": "带样式文案用公共富文本组件解析成 Span、链接 Span 设 onClick，不用 Text($r(...)) 直出",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源端用 HtmlCompat.fromHtml / Html.fromHtml、setMessage(resId) 或 android:text 显示带 <b>/<a> 的串，并 setMovementMethod(LinkMovementMethod.getInstance())",
+     "wrong": "鸿蒙端对话框正文写 Text($r('app.string.…')) 或 Text(...) 直接显示，CDATA 文案露出标签原文、链接不可点；或正文链接 Span 只着色不响应点击，另在正文下加一行外链"
+    }
+   ],
+   "scope": "实现阶段渲染安卓带样式字符串（Styled 或 Html 通路）的对话框和页面正文时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "用一个公共富文本组件把 b/i/u/small/a/br 和实体解析成 Text 下的 Span，链接 Span 写 .onClick(() => 打开链接)，用 action 'ohos.want.action.viewData' 和链接 uri 的 Want 拉起",
+     "support": [
+      "case-7456fcf259be55a8834b#recommendation:2",
+      "case-7456fcf259be55a8834b#diagnosis"
+     ]
+    },
+    {
+     "text": "链接在正文内行内可点，不在正文外另起链接行",
+     "support": [
+      "case-7456fcf259be55a8834b#recommendation:2",
+      "case-7456fcf259be55a8834b#diagnosis"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "declare class BaseSpan<T> extends CommonMethod<T>",
+     "meaning": "Span 继承 CommonMethod，可以直接挂 onClick",
+     "source": "鸿蒙 SDK 的 ets/component/span.d.ts，BaseSpan",
+     "support": []
+    },
+    {
+     "value": "'ohos.want.action.viewData'",
+     "meaning": "查看数据的 Want action；旧模块里的常量 ACTION_VIEW_DATA 已标 @deprecated since 9，直接写字符串",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.ability.wantConstant.d.ts，wantConstant.Action.ACTION_VIEW_DATA",
+     "support": []
+    },
+    {
+     "value": "富文本组件分 Styled / Html 两路、链接可点，对话框正文改用它",
+     "meaning": "修好后标签不再露出、正文链接行内可点",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-7456fcf259be55a8834b#diagnosis"
+     ]
+    }
+   ],
+   "lookups": [],
+   "why": "直接用 Text 显示带标记的串，标签原文露出或样式丢失，链接点不了",
+   "keys": {
+    "read": [
+     "HtmlCompat.fromHtml",
+     "Html.fromHtml",
+     "setMessage",
+     "LinkMovementMethod",
+     "setMovementMethod",
+     "android:text",
+     "<a href"
+    ],
+    "product": [
+     "Text",
+     "Span",
+     "onClick",
+     "RichText",
+     "ohos.want.action.viewData",
+     "startAbility",
+     "$r"
+    ]
+   },
+   "probe": null,
+   "unverified": [
+    "卡里环境是 API 24（6.1.1），本机按 API 23 的声明核对"
+   ],
+   "alternatives_unverified": [
+    "RichText 组件或 StyledString 渲染 HTML（卡里没验证）"
+   ],
+   "siblings_checked": "无：做法落在通用的 onClick 和 Want 的 action 字符串上，没有专门参数类型可搜",
+   "refs": [
+    {
+     "what": "BaseSpan 继承 CommonMethod",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/component/span.d.ts BaseSpan",
+     "quote": "declare class BaseSpan<T> extends CommonMethod<T> {",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "查看数据的 action 字符串",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.ability.wantConstant.d.ts wantConstant.Action.ACTION_VIEW_DATA",
+     "quote": "Indicates the action of viewing data. * * @syscap SystemCapability.Ability.AbilityBase * @since 6 * @deprecated since 9 */ ACTION_VIEW_DATA = 'ohos.want.action.viewData',",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    }
+   ]
+  },
+  {
+   "title": "规格的平台差异决策只收敛它列明的出口，源码笔记不能扩成整段富文本或全部链接都不实现",
+   "product": "规格",
+   "triggers": [
+    {
+     "read": "规格的平台差异决策（PD）只列了某几个出口（如商店跳转、系统设置深链），同时要求正文链接可点",
+     "wrong": "源码笔记把这条决策扩大成「正文原样 Text 渲染；span 可点性不在本 Slice 恢复」，交回的 decision_gaps 里没有这项偏离"
+    }
+   ],
+   "scope": "实现者在源码笔记或决策台账里引用规格的平台差异决策、决定哪些行为降级时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "平台差异决策只作用于它列明的出口，其余行为照规格实现",
+     "support": [
+      "case-7456fcf259be55a8834b#recommendation:3",
+      "case-7456fcf259be55a8834b#diagnosis"
+     ]
+    },
+    {
+     "text": "确需降级时登记为显式偏离或占位，写进 decision_gaps，不写成已实现",
+     "support": [
+      "case-7456fcf259be55a8834b#recommendation:3"
+     ]
+    }
+   ],
+   "values": [],
+   "lookups": [],
+   "why": "把有限的出口决策扩成整段不实现，链接全部不可点却没人登记",
+   "keys": {
+    "read": [
+     "PD",
+     "平台差异",
+     "market://",
+     "AC",
+     "可点击链接"
+    ],
+    "product": [
+     "source-notes",
+     "decision_gaps",
+     "不在本 Slice 恢复",
+     "原样 Text 渲染",
+     "显式偏离",
+     "占位"
+    ]
+   },
+   "probe": {
+    "pattern": "不在本\\s*Slice\\s*恢复",
+    "note": "笔记里声明某行为不在本切片恢复；核对规格决策是否真的覆盖它、decision_gaps 是否登记"
+   },
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法是笔记和台账里该写的内容，不落在具体接口上",
+   "refs": []
+  },
+  {
+   "title": "派工不加规格映射行里没有的交互形态（如独立外链按钮）",
+   "product": "计划与派工",
+   "triggers": [
+    {
+     "read": "规格映射行写「Text + TextSpan（链接色 + .onClick 打开浏览器）或 RichText」，验收要求正文链接可点",
+     "wrong": "派工另给「或改用外链按钮」之类规格里没有的交互形态作余地"
+    }
+   ],
+   "scope": "编排派工阶段，给带链接富文本的切片写接线要求时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "派工只列规格映射行里的实现形态，不加规格没有的交互形态",
+     "support": [
+      "case-7456fcf259be55a8834b#recommendation:4",
+      "case-7456fcf259be55a8834b#diagnosis"
+     ]
+    }
+   ],
+   "values": [],
+   "lookups": [],
+   "why": "派工放出的余地被实现者拿来做成外链行，正文链接不可点、同一链接重复一行",
+   "keys": {
+    "read": [
+     "映射行",
+     "TextSpan",
+     "RichText",
+     "onClick",
+     "AC"
+    ],
+    "product": [
+     "派工",
+     "外链按钮",
+     "余地",
+     "接线",
+     "可点链接"
+    ]
+   },
+   "probe": {
+    "pattern": "外链按钮",
+    "note": "派工里出现外链按钮这类形态；核对规格映射行里有没有"
+   },
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法是派工里该写的内容，不落在具体接口上",
+   "refs": []
+  },
+  {
+   "title": "收尾判富文本链接一致时逐个对照源端 fromHtml / LinkMovementMethod 调用点查目标代码",
+   "product": "计划与派工",
+   "triggers": [
+    {
+     "read": "源端有多处 HtmlCompat.fromHtml / setMovementMethod(LinkMovementMethod) 调用点；前面环节转述「已页内自渲染解决」",
+     "wrong": "收尾的一致性结论写「通过」，依据是转述，没有逐个调用点对照目标代码"
+    }
+   ],
+   "scope": "组收尾或一致性检查阶段判定富文本和链接可点是否落实时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "逐个列出源码中 fromHtml / LinkMovementMethod 的调用点，在目标代码里找到对应的富文本渲染和链接 onClick 才判通过，不凭转述判",
+     "support": [
+      "case-7456fcf259be55a8834b#recommendation:4",
+      "case-7456fcf259be55a8834b#diagnosis"
+     ]
+    }
+   ],
+   "values": [],
+   "lookups": [],
+   "why": "凭转述判通过，纯 Text 渲染的对话框一直留到生成结束",
+   "keys": {
+    "read": [
+     "HtmlCompat.fromHtml",
+     "LinkMovementMethod",
+     "setMovementMethod",
+     "已页内自渲染",
+     "转述"
+    ],
+    "product": [
+     "一致性通过",
+     "收尾",
+     "调用点",
+     "onClick",
+     "Span"
+    ]
+   },
+   "probe": {
+    "pattern": "一致性通过",
+    "note": "收尾给了一致性通过的结论；看它是否逐个对照了源端调用点"
+   },
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法是收尾检查的内容，不落在具体接口上",
+   "refs": []
+  }
+ ],
+ "left_out": [],
+ "corrections": [],
+ "gaps": [
+  "鸿蒙 string.json 的值里保存 HTML 标记后的取值行为，三类来源里没查到说明"
+ ],
+ "conflicts": []
+}

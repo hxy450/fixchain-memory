@@ -1,0 +1,175 @@
+{
+ "id": "rule-52aa00293fb1",
+ "title": "ZipOutputStream 没调 setMethod 时，手写 ZIP 按 DEFLATED 加数据描述符",
+ "product": "代码",
+ "triggers": [
+  {
+   "read": "new ZipOutputStream(...) 后 putNextEntry 写条目，没有调用 setMethod 或 ZipEntry.setMethod",
+   "wrong": "因 zlib.zipFile / compressFile 控制不了条目名和时间而手写 ZIP 容器，条目写成 STORED（method 0，不压缩）"
+  }
+ ],
+ "scope": "源端用 ZipOutputStream 默认方式导出 ZIP、目标手写 ZIP 容器时",
+ "exceptions": [],
+ "how": [
+  {
+   "text": "每个条目用 zlib 压成原始 deflate 流：const z = zlib.createZipSync(); await z.deflateInit2(strm, level, zlib.CompressMethod.DEFLATED, -15, memLevel, strategy)（负的 windowBits 表示不带 zlib 头）",
+   "support": [
+    "case-ce5d3e2da2846b40767d#recommendation:4",
+    "case-ce5d3e2da2846b40767d#diagnosis"
+   ]
+  },
+  {
+   "text": "本地头 method 写 8，通用标志写 0x0808（数据描述符 + UTF-8 文件名），条目数据后写数据描述符（CRC-32、压缩后大小、原大小）",
+   "support": [
+    "case-ce5d3e2da2846b40767d#diagnosis"
+   ]
+  }
+ ],
+ "values": [
+  {
+   "value": "private int method = DEFLATED;",
+   "meaning": "ZipOutputStream 的默认压缩方式",
+   "source": "java.util.zip.ZipOutputStream#method",
+   "support": []
+  },
+  {
+   "value": "DEFLATED 条目没有预先给出大小和 CRC 时 e.flag = 8（数据描述符），文件名 UTF-8 时 e.flag |= USE_UTF8",
+   "meaning": "源端条目的通用标志，合起来是 0x0808",
+   "source": "java.util.zip.ZipOutputStream#putNextEntry",
+   "support": []
+  },
+  {
+   "value": "deflateInit2(strm: ZStream, level: CompressLevel, method: CompressMethod, windowBits: number, memLevel: MemLevel, strategy: CompressStrategy): Promise<ReturnStatus>",
+   "meaning": "Zip 对象的压缩初始化；windowBits 和 inflateInit2 同义，取 -8..-15 是原始 deflate",
+   "source": "鸿蒙 SDK 的 ets/api/@ohos.zlib.d.ts，Zip.deflateInit2；Zip.inflateInit2",
+   "support": []
+  },
+  {
+   "value": "CompressMethod.DEFLATED = 8",
+   "meaning": "唯一支持的压缩方式，也是本地头里 method 字段的值",
+   "source": "鸿蒙 SDK 的 ets/api/@ohos.zlib.d.ts，CompressMethod.DEFLATED",
+   "support": []
+  },
+  {
+   "value": "crc32(crc: number, buf: ArrayBuffer): Promise<number>",
+   "meaning": "Checksum 对象算数据描述符里的 CRC-32（zlib.createChecksumSync() 取得）",
+   "source": "鸿蒙 SDK 的 ets/api/@ohos.zlib.d.ts，Checksum.crc32",
+   "support": []
+  },
+  {
+   "value": "原始 deflate 流 + 数据描述符（标志 0x0808）",
+   "meaning": "修好后导出的 ZIP 和源端一样是压缩条目",
+   "source": "卡里修好并验证过",
+   "support": [
+    "case-ce5d3e2da2846b40767d#diagnosis"
+   ]
+  }
+ ],
+ "lookups": [],
+ "why": "改成 STORED 后导出包不压缩，体积和条目格式都和源端不同",
+ "keys": {
+  "read": [
+   "ZipOutputStream",
+   "putNextEntry",
+   "ZipEntry",
+   "setMethod",
+   "DEFLATED",
+   "closeEntry"
+  ],
+  "product": [
+   "zlib",
+   "createZipSync",
+   "deflateInit2",
+   "CompressMethod.DEFLATED",
+   "deflate",
+   "crc32",
+   "STORED"
+  ]
+ },
+ "probe": {
+  "pattern": "(?i)\\bSTORED\\b|method\\s*[:=]\\s*0\\b",
+  "note": "手写 ZIP 写了 STORED 条目；源端 ZipOutputStream 没调 setMethod 时应是 DEFLATED"
+ },
+ "unverified": [
+  "windowBits 取 -15 由声明推出（deflateInit2 的 windowBits 与 inflateInit2 同义，-8..-15 为原始 deflate），卡里只写了「原始 deflate 流」"
+ ],
+ "alternatives_unverified": [],
+ "siblings_checked": "搜 CompressMethod：@ohos.zlib.d.ts 里只有 Zip.deflateInit2 一个方法带它",
+ "refs": [
+  {
+   "what": "ZipOutputStream 默认 DEFLATED",
+   "kind": "android-sdk",
+   "where": "sources/android-36.1/java/util/zip/ZipOutputStream.java ZipOutputStream#method",
+   "quote": "private int method = DEFLATED;",
+   "version": "android-36.1"
+  },
+  {
+   "what": "DEFLATED 条目用数据描述符",
+   "kind": "android-sdk",
+   "where": "sources/android-36.1/java/util/zip/ZipOutputStream.java ZipOutputStream#putNextEntry",
+   "quote": "if (e.size  == -1 || e.csize == -1 || e.crc   == -1 || !e.csizeSet) { e.flag = 8; }",
+   "version": "android-36.1"
+  },
+  {
+   "what": "UTF-8 文件名标志",
+   "kind": "android-sdk",
+   "where": "sources/android-36.1/java/util/zip/ZipOutputStream.java ZipOutputStream#putNextEntry",
+   "quote": "if (zc.isUTF8()) e.flag |= USE_UTF8;",
+   "version": "android-36.1"
+  },
+  {
+   "what": "Zip.deflateInit2 签名",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/api/@ohos.zlib.d.ts Zip.deflateInit2",
+   "quote": "deflateInit2(strm: ZStream, level: CompressLevel, method: CompressMethod, windowBits: number, memLevel: MemLevel, strategy: CompressStrategy): Promise<ReturnStatus>;",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  },
+  {
+   "what": "deflateInit2 的 windowBits 与 inflateInit2 同义",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/api/@ohos.zlib.d.ts Zip.deflateInit2",
+   "quote": "@param { number } windowBits - Parameter is interpreted the same as it is for inflateInit2.",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  },
+  {
+   "what": "windowBits 取负值为原始 deflate",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/api/@ohos.zlib.d.ts Zip.inflateInit2",
+   "quote": "WindowBits can also be -8..-15 for raw inflate. In this case, -windowBits determines the window size.",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  },
+  {
+   "what": "CompressMethod.DEFLATED = 8",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/api/@ohos.zlib.d.ts CompressMethod.DEFLATED",
+   "quote": "The deflate compression method (the only one supported in this version).",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  },
+  {
+   "what": "CompressMethod.DEFLATED 的值",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/api/@ohos.zlib.d.ts CompressMethod.DEFLATED",
+   "quote": "DEFLATED = 8",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  },
+  {
+   "what": "createZipSync 取得 Zip 对象",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/api/@ohos.zlib.d.ts zlib.createZipSync",
+   "quote": "function createZipSync(): Zip;",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  },
+  {
+   "what": "Checksum.crc32 签名",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/api/@ohos.zlib.d.ts Checksum.crc32",
+   "quote": "crc32(crc: number, buf: ArrayBuffer): Promise<number>;",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  }
+ ],
+ "sources": [
+  "case-ce5d3e2da2846b40767d"
+ ],
+ "general": false,
+ "status": "active"
+}

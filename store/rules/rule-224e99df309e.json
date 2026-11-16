@@ -1,0 +1,125 @@
+{
+ "id": "rule-224e99df309e",
+ "title": "greenrobot EventBus 要同步按引用投递时自建进程内总线，不直接换成 emitter",
+ "product": "代码",
+ "triggers": [
+  {
+   "read": "源码 `EventBus.getDefault().post(event)` 投递类实例事件，订阅方用 `onEvent` / `onEventMainThread`，订阅回调里还会再 post",
+   "wrong": "目标总线以 `emitter.emit` / `emitter.on` 作传输层承载类实例事件，头注称回调「在发布线程执行」；没有嵌套 post 队列和订阅表快照"
+  }
+ ],
+ "scope": "迁移 greenrobot EventBus 2.x 的事件总线，事件载荷是类实例、或调用方依赖 post 返回前回调已执行时",
+ "exceptions": [],
+ "how": [
+  {
+   "text": "先逐条核对投递契约：同步还是异步、按引用还是序列化拷贝、priority 与注册序、嵌套 post 是否排队",
+   "support": [
+    "case-a293ed8cf3fa860f8330#recommendation:1"
+   ]
+  },
+  {
+   "text": "需要同步按引用语义时自建进程内总线：订阅表按 priority 降序、同级按注册序；post 时对订阅表取快照逐个同步调用，载荷按引用传；正在投递时再 post 的进队列（isPosting），本轮结束后依次投递",
+   "support": [
+    "case-a293ed8cf3fa860f8330#recommendation:1",
+    "case-a293ed8cf3fa860f8330#diagnosis"
+   ]
+  }
+ ],
+ "values": [
+  {
+   "value": "Emitter 事件异步执行：发布后插入内部事件队列，队列串行执行时才调用订阅回调",
+   "meaning": "emit 返回时回调还没执行，不是同步调用",
+   "source": "itc-with-emitter.md，场景介绍、运作机制",
+   "support": []
+  },
+  {
+   "value": "EventData.data 支持 Array、ArrayBuffer、Boolean、DataView、Date、Error、Map、Number、Object、Primitive、RegExp、Set、String、TypedArray，最大 16M",
+   "meaning": "载荷按这些类型传递，不按引用传类实例（卡里观察到实例方法与 instanceof 失效）",
+   "source": "js-apis-emitter.md，EventData",
+   "support": []
+  },
+  {
+   "value": "function emit<T>(eventId: string, data?: GenericEventData<T>): void",
+   "meaning": "emitter 的泛型发布接口，同样走事件队列",
+   "source": "鸿蒙 SDK 的 ets/api/@ohos.events.emitter.d.ts，emitter.emit",
+   "support": []
+  },
+  {
+   "value": "重写为进程内同步按引用总线，priority 降序 / 注册序，带 isPosting 队列",
+   "meaning": "返修后保留的写法",
+   "source": "卡里修好并验证过",
+   "support": [
+    "case-a293ed8cf3fa860f8330#diagnosis"
+   ]
+  }
+ ],
+ "lookups": [],
+ "why": "emitter 异步投递并拷贝载荷，类实例事件丢原型、post 返回后才回调，依赖同步时序的逻辑会错",
+ "keys": {
+  "read": [
+   "EventBus",
+   "EventBus.getDefault",
+   "post",
+   "register",
+   "onEvent",
+   "onEventMainThread",
+   "de.greenrobot.event"
+  ],
+  "product": [
+   "emitter",
+   "emitter.emit",
+   "emitter.on",
+   "emitter.off",
+   "eventHub",
+   "GenericEventData",
+   "isPosting"
+  ]
+ },
+ "probe": {
+  "pattern": "emitter\\.(emit|on)\\s*(<[^>]*>)?\\s*\\(",
+  "note": "用 emitter 作事件总线；源端是 EventBus 且载荷是类实例或依赖同步时序时要改成自建同步总线"
+ },
+ "unverified": [
+  "EventBus 2.x 的同步投递、priority、嵌套 post 排队语义按卡写，本机没有库源码",
+  "卡里目标 SDK 是 6.1.1(24)，emitter 声明按本机 API 23 核实"
+ ],
+ "alternatives_unverified": [
+  "卡里建议的另一选项是用 eventHub（UIAbilityContext.eventHub）；返修实际用的是自建总线，eventHub 的投递语义没核"
+ ],
+ "siblings_checked": "无：做法是改用自建总线，不落在 emitter 的某个参数类型上",
+ "refs": [
+  {
+   "what": "Emitter 事件异步执行",
+   "kind": "oh-docs",
+   "where": "zh-cn/application-dev/basic-services/common-event/itc-with-emitter.md 场景介绍",
+   "quote": "Emitter用于同一进程内相同线程或不同线程间的事件处理，事件异步执行。",
+   "version": "docs f41b9345"
+  },
+  {
+   "what": "Emitter 维护内部事件队列串行执行",
+   "kind": "oh-docs",
+   "where": "zh-cn/application-dev/basic-services/common-event/itc-with-emitter.md 运作机制",
+   "quote": "当应用程序发布事件后，就会往队列里面插入一个事件。任务队列会串行执行队列里面的任务，执行任务时会调用该任务订阅者的回调方法进行事件处理。",
+   "version": "docs f41b9345"
+  },
+  {
+   "what": "EventData.data 支持的数据类型",
+   "kind": "oh-docs",
+   "where": "zh-cn/application-dev/reference/apis-basic-services-kit/js-apis-emitter.md EventData",
+   "quote": "发送事件时传递的数据，支持数据类型包括Array、ArrayBuffer、Boolean、DataView、Date、Error、Map、Number、Object、Primitive（除了symbol）、RegExp、Set、String、TypedArray，数据大小最大为16M。",
+   "version": "docs f41b9345"
+  },
+  {
+   "what": "emitter.emit 泛型签名",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/api/@ohos.events.emitter.d.ts emitter.emit",
+   "quote": "function emit<T>(eventId: string, data?: GenericEventData<T>): void;",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  }
+ ],
+ "sources": [
+  "case-a293ed8cf3fa860f8330"
+ ],
+ "general": false,
+ "status": "active"
+}

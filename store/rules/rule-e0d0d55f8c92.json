@@ -1,0 +1,126 @@
+{
+ "id": "rule-e0d0d55f8c92",
+ "title": "photoAvailable 的 byteBuffer 要异步消费时，先 slice(0) 复制再释放 Photo",
+ "product": "代码",
+ "triggers": [
+  {
+   "read": "源端 onImageAvailable 里先把 JPEG 复制成 byte[] 再 image.close()；目标的保存服务把字节排进后台队列异步保存",
+   "wrong": "photoAvailable 回调里 getComponent 之后立即 photo.release()，再把同一个 component.byteBuffer 交给异步保存，中间没有复制"
+  }
+ ],
+ "scope": "拍照回调取出的 JPEG 字节在回调返回后才被消费时",
+ "exceptions": [],
+ "how": [
+  {
+   "text": "await photo.main.getComponent(image.ComponentType.JPEG) 后先 const bytes = component.byteBuffer.slice(0) 复制，再在 finally 里 photo.release()，把复制出的 bytes 交给保存队列",
+   "support": [
+    "case-b49b06a3f59e5828d836#recommendation:1",
+    "case-b49b06a3f59e5828d836#diagnosis"
+   ]
+  },
+  {
+   "text": "不复制时，把 release 放到字节消费完成后的 finally 里；不能先释放再用同一个 ArrayBuffer",
+   "support": [
+    "case-b49b06a3f59e5828d836#recommendation:1"
+   ]
+  }
+ ],
+ "values": [
+  {
+   "value": "interface Photo { main: image.Image; release(): Promise<void> }",
+   "meaning": "Photo 持有主图，release 释放 Photo 对象",
+   "source": "鸿蒙 SDK 的 ets/api/@ohos.multimedia.camera.d.ts，camera.Photo",
+   "support": []
+  },
+  {
+   "value": "getComponent(componentType: ComponentType): Promise<Component>",
+   "meaning": "从 image.Image 取指定分量",
+   "source": "鸿蒙 SDK 的 ets/api/@ohos.multimedia.image.d.ts，Image.getComponent",
+   "support": []
+  },
+  {
+   "value": "readonly byteBuffer: ArrayBuffer",
+   "meaning": "Component 的分量数据，是 Photo 所持原生图像的缓冲",
+   "source": "鸿蒙 SDK 的 ets/api/@ohos.multimedia.image.d.ts，Component.byteBuffer",
+   "support": []
+  },
+  {
+   "value": "close() 之后再读写先前 getBuffer 得到的 ByteBuffer 行为未定义",
+   "meaning": "源端先复制再 close 的原因",
+   "source": "android.media.Image#close",
+   "support": []
+  },
+  {
+   "value": "await getComponent → byteBuffer.slice(0) → finally 中 release",
+   "meaning": "返修后的写法",
+   "source": "卡里修好并验证过",
+   "support": [
+    "case-b49b06a3f59e5828d836#diagnosis"
+   ]
+  }
+ ],
+ "lookups": [],
+ "why": "先释放 Photo 再用它的缓冲，后台保存时读到的是已释放的原生内存",
+ "keys": {
+  "read": [
+   "onImageAvailable",
+   "ImageReader",
+   "acquireNextImage",
+   "getPlanes",
+   "getBuffer",
+   "image.close",
+   "ImageFormat.JPEG"
+  ],
+  "product": [
+   "photoAvailable",
+   "PhotoOutput",
+   "getComponent",
+   "byteBuffer",
+   "ComponentType.JPEG",
+   "release",
+   "slice"
+  ]
+ },
+ "probe": null,
+ "unverified": [
+  "SDK 声明没写 byteBuffer 在 Photo.release 之后的有效期",
+  "卡里环境是 API 24（HarmonyOS 6.1.1），本机声明是 API 23"
+ ],
+ "alternatives_unverified": [],
+ "siblings_checked": "搜 readonly byteBuffer: ArrayBuffer：@ohos.multimedia.image.d.ts 里另有 ImageBufferData 一处，与拍照回调无关，没写进 values",
+ "refs": [
+  {
+   "what": "Photo.main",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/api/@ohos.multimedia.camera.d.ts camera.Photo",
+   "quote": "main: image.Image; /** * Release Photo object.",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  },
+  {
+   "what": "Image.getComponent",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/api/@ohos.multimedia.image.d.ts Image.getComponent",
+   "quote": "getComponent(componentType: ComponentType): Promise<Component>;",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  },
+  {
+   "what": "Component.byteBuffer",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/api/@ohos.multimedia.image.d.ts Component.byteBuffer",
+   "quote": "readonly byteBuffer: ArrayBuffer;",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  },
+  {
+   "what": "Image.close 之后缓冲行为未定义",
+   "kind": "android-sdk",
+   "where": "sources/android-36.1/android/media/Image.java Image#close",
+   "quote": "attempting to read from * or write to {@link ByteBuffer ByteBuffers} returned by an earlier * {@link Plane#getBuffer} call will have undefined behavior.",
+   "version": "android-36.1"
+  }
+ ],
+ "sources": [
+  "case-b49b06a3f59e5828d836"
+ ],
+ "general": false,
+ "status": "active"
+}

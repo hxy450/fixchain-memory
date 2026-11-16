@@ -1,0 +1,216 @@
+{
+ "proposal": "fam-0598",
+ "round": 3,
+ "product": "代码",
+ "avg_similarity": 0.415,
+ "rules": [
+  {
+   "id": "rule-39f91a2db14f",
+   "title": "setResult+finish() 移植成一次 terminateSelfWithResult，带回结果码和 uri",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源码响应 MediaStore.ACTION_IMAGE_CAPTURE / ACTION_VIDEO_CAPTURE，结束时 setResult(RESULT_OK 或 RESULT_CANCELED, data) 再 finish()",
+     "wrong": "目标结果函数的成功和失败分支都只调 this.context.terminateSelf()，注释说调用方会读回 want，结果码和 uri 没进 AbilityResult"
+    }
+   ],
+   "keys": {
+    "read": [
+     "setResult",
+     "finish()",
+     "RESULT_OK",
+     "RESULT_CANCELED",
+     "ACTION_IMAGE_CAPTURE",
+     "ACTION_VIDEO_CAPTURE"
+    ],
+    "product": [
+     "terminateSelfWithResult",
+     "terminateSelf",
+     "AbilityResult",
+     "resultCode",
+     "want",
+     "uri"
+    ]
+   }
+  },
+  {
+   "id": "rule-60c40ce7b440",
+   "title": "意图带 EXTRA_OUTPUT 时，录像器打开调用方 uri 写入、按 URI 方式完成，不删调用方资产",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源码录像意图读 MediaStore.EXTRA_OUTPUT、EXTRA_VIDEO_QUALITY、EXTRA_DURATION_LIMIT、EXTRA_SIZE_LIMIT；规格写「URI（第三方 intent 指定输出）→ setResult 回传」",
+     "wrong": "目标录像落盘固定 photoAccessHelper.createAsset 拿 fd，完成回调固定按媒体库方式，意图参数和调用方 uri 从没传到录像器"
+    }
+   ],
+   "keys": {
+    "read": [
+     "EXTRA_OUTPUT",
+     "EXTRA_VIDEO_QUALITY",
+     "EXTRA_DURATION_LIMIT",
+     "EXTRA_SIZE_LIMIT",
+     "ACTION_VIDEO_CAPTURE",
+     "MediaStore"
+    ],
+    "product": [
+     "photoAccessHelper.createAsset",
+     "fileIo.openSync",
+     "OpenMode.TRUNC",
+     "AVRecorder",
+     "want.parameters",
+     "uri"
+    ]
+   }
+  },
+  {
+   "id": "rule-7edf9a65478f",
+   "title": "意图要 inline-data 位图而 want 带不了时，按 RESULT_CANCELED 结束，不报成功",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源码 ACTION_IMAGE_CAPTURE 没带 EXTRA_OUTPUT 时把小图 Bitmap 放进返回 Intent 的 data extra（inline-data）",
+     "wrong": "目标注释写「terminateSelf 无 setResult 数据通道 → 平台缺口」，没有数据仍以成功结束，把请求报成成功"
+    }
+   ],
+   "keys": {
+    "read": [
+     "ACTION_IMAGE_CAPTURE",
+     "EXTRA_OUTPUT",
+     "Bitmap",
+     "putExtra",
+     "setResult",
+     "RESULT_OK"
+    ],
+    "product": [
+     "terminateSelfWithResult",
+     "resultCode",
+     "PixelMap",
+     "release",
+     "平台缺口"
+    ]
+   }
+  },
+  {
+   "id": "rule-83e2796934af",
+   "title": "源端多处 setResult / finish，目标合并成唯一出口，空 uri 回 RESULT_CANCELED",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源码同一流程里有多处 setResult(...) + finish()（如录像停止时先在广播函数里回传一次，停止回调末尾再按结果回传一次）",
+     "wrong": "目标把每处都接到一次性的终止回调上，terminateSelfWithResult 被调两次；uri 为空时先以成功结束"
+    }
+   ],
+   "keys": {
+    "read": [
+     "setResult",
+     "finish()",
+     "RESULT_OK",
+     "RESULT_CANCELED",
+     "ACTION_VIDEO_CAPTURE",
+     "stopVideo"
+    ],
+    "product": [
+     "terminateSelfWithResult",
+     "resultCode",
+     "uri",
+     "callback",
+     "once"
+    ]
+   }
+  },
+  {
+   "id": "rule-852211d70951",
+   "title": "意图带 EXTRA_OUTPUT 的保存分支，写入完成后也要走结果出口，并先等保存完成再结束",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源码意图拍照保存到调用方 uri 后 setResult(RESULT_OK) 并 finish()，意图里带 MediaStore.EXTRA_OUTPUT",
+     "wrong": "目标的 uri 分支只 fileIo.writeSync 写进 uri 并记成功，没有 terminateSelfWithResult 出口；只有无 uri 的分支接了结果回调"
+    }
+   ],
+   "keys": {
+    "read": [
+     "EXTRA_OUTPUT",
+     "setResult",
+     "RESULT_OK",
+     "finish()",
+     "ACTION_IMAGE_CAPTURE",
+     "openOutputStream"
+    ],
+    "product": [
+     "terminateSelfWithResult",
+     "await",
+     "uri",
+     "resultCode",
+     "writeSync"
+    ]
+   }
+  }
+ ],
+ "existing_families": [
+  {
+   "topic": "media",
+   "topic_name": "音视频与媒体选取",
+   "dir": "system-picker-save-button",
+   "name": "系统选择器和相册保存控件",
+   "line": "读到源端用 Intent（ACTION_OPEN_DOCUMENT、EXTRA_ALLOW_MULTIPLE）、自建相册页或 MediaStore 选取和保存图片、音频、文件，产物里是 PhotoViewPicker、AudioViewPicker、DocumentViewPicker、photoAccessHelper 和 SaveButton 的写法",
+   "similarity": 0.064
+  },
+  {
+   "topic": "navigation/params",
+   "topic_name": "页面和组件的入参",
+   "dir": "intent-extras-route-params",
+   "name": "Intent extra 迁成路由参数",
+   "line": "读到发起页 startActivity 前的 putExtra、启动器类构造器预置的 extras、接收端的 get…Extra / Fragment.newInstance 和按来源 extra 分支；产物里 pushPathByName / router.pushUrl 的参数对象、NavDestination 的参数类和 onReady 里对 pathInfo.param 的读取",
+   "similarity": 0.059
+  },
+  {
+   "topic": "state",
+   "topic_name": "状态与数据流",
+   "dir": "event-bus-refresh",
+   "name": "EventBus 事件的订阅、发布和返回刷新",
+   "line": "读到源端 EventBus 的 @Subscribe / onEventMainThread 回调、EventBus.getDefault().post(...)、registerForActivityResult 和 setResult 后 finish；产物里只在 aboutToAppear 刷新一次、子页成功后直接 pop 不发事件、同一次成功两处改栈，或 emit 传 {} 字面量",
+   "similarity": 0.043
+  },
+  {
+   "topic": "graphics/canvas",
+   "topic_name": "自绘画布",
+   "dir": "bitmap-decode-prescale",
+   "name": "构造期解码和预缩放的位图",
+   "line": "读到源端在 View 构造器或 onCreate 里同步 BitmapFactory.decodeResource、按屏宽算出的尺寸 Bitmap.createScaledBitmap 预缩放，再 drawBitmap 原尺寸绘制；产物里每帧 drawImage 缩放、没按密度解码、位图在几何计算前用模块级守护只装一次，或改成 async 启动加输入门控",
+   "similarity": 0.04
+  },
+  {
+   "topic": "navigation/external",
+   "topic_name": "外部入口与深链",
+   "dir": "external-want",
+   "name": "拉起浏览器和系统设置的 Want",
+   "line": "读到源端 new Intent(Intent.ACTION_VIEW, Uri.parse(url))、Settings.ACTION_APPLICATION_DETAILS_SETTINGS 一类 Intent 交给外部应用打开；产物里 startAbility 的 Want 的 action、entities、bundleName / abilityName",
+   "similarity": 0.038
+  },
+  {
+   "topic": "navigation/external",
+   "topic_name": "外部入口与深链",
+   "dir": "task-stack-restore",
+   "name": "TaskStackBuilder 父栈和路由栈的恢复与再次拉起",
+   "line": "源端 TaskStackBuilder.addNextIntentWithParentStack、android:parentActivityName、LAUNCHER 跳板 Activity 的 FLAG_ACTIVITY_CLEAR_TOP，对应目标 NavPathStack 的入栈和整栈恢复、EntryAbility 的 onCreate(launchParam) 与 onNewWant",
+   "similarity": 0.036
+  },
+  {
+   "topic": "media",
+   "topic_name": "音视频与媒体选取",
+   "dir": "video-local-src",
+   "name": "Video 的 src 里的本地文件地址",
+   "line": "读到源端把本地缓存文件路径经 Intent 交给 VideoView.setVideoPath 或播放器 setUrl，交回的代码把缓存、预载接口的输出或路由参数原样传进 Video({ src: … })",
+   "similarity": 0.035
+  },
+  {
+   "topic": "logic/numeric",
+   "topic_name": "数值运算",
+   "dir": "model-field-unit",
+   "name": "两端模型同名数值字段的单位",
+   "line": "读到源端 Builder().setDuration(x) 一类链式构造逐字段直传数值，目标端来源模型和目标模型对同名数值字段注明不同单位（ms / 秒）；产物里 new 目标模型(…, src.字段, …) 原样传值，没有 / 1000 或 * 1000 换算",
+   "similarity": 0.032
+  }
+ ]
+}

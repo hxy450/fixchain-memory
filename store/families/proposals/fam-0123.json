@@ -1,0 +1,189 @@
+{
+ "proposal": "fam-0123",
+ "round": 1,
+ "product": "代码",
+ "avg_similarity": 0.343,
+ "rules": [
+  {
+   "id": "rule-3551876827dd",
+   "title": "Room @Database 带版本和迁移链时，RdbStore 设 store.version 并写升级分支",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源端 @Database(entities = …, version = N)，Room.databaseBuilder(...).addMigrations(...) / AutoMigration，再加 .fallbackToDestructiveMigration()；或规格写 explicit versioned migration、retain source schema history",
+     "wrong": "目标 relationalStore.getRdbStore 之后只执行无版本的 CREATE TABLE IF NOT EXISTS，没有读写 store.version，也没有旧版本的升级分支"
+    }
+   ],
+   "keys": {
+    "read": [
+     "@Database",
+     "version",
+     "Room.databaseBuilder",
+     "addMigrations",
+     "Migration",
+     "AutoMigration",
+     "fallbackToDestructiveMigration",
+     "migrate"
+    ],
+    "product": [
+     "relationalStore",
+     "getRdbStore",
+     "RdbStore",
+     "store.version",
+     "executeSql",
+     "CREATE TABLE IF NOT EXISTS",
+     "beginTransaction"
+    ]
+   }
+  },
+  {
+   "id": "rule-620aa036bbea",
+   "title": "异步装配时先发布路由所需的服务，数据库等慢初始化放在其后",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "",
+     "wrong": "装配函数先 await 数据库 init(...) 再写入启动、鉴权、网络这类路由所需服务的槽位"
+    }
+   ],
+   "keys": {
+    "read": [
+     "Application.onCreate",
+     "Room",
+     "databaseBuilder",
+     "Retrofit"
+    ],
+    "product": [
+     "await",
+     "init(",
+     "relationalStore",
+     "getRdbStore",
+     "Promise"
+    ]
+   }
+  },
+  {
+   "id": "rule-6e84c8e1ecad",
+   "title": "源端在 Room onCreate 里播种时，目标把播种放进建表分支的同一事务，不用表为空判断",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源端 RoomDatabase.Callback 的 onCreate(db) 里插入预置数据（首次建库才播种）",
+     "wrong": "目标端初始化时每次打开都查 SELECT COUNT(*)，结果为 0 就调用播种函数"
+    }
+   ],
+   "keys": {
+    "read": [
+     "RoomDatabase.Callback",
+     "onCreate",
+     "addCallback",
+     "Room.databaseBuilder",
+     "@Database",
+     "SupportSQLiteDatabase"
+    ],
+    "product": [
+     "relationalStore",
+     "RdbStore",
+     "COUNT(*)",
+     "beginTransaction",
+     "commit",
+     "executeSql",
+     "CREATE TABLE"
+    ]
+   }
+  },
+  {
+   "id": "rule-7c27f082e418",
+   "title": "把 Room 实体手写成 relationalStore 建表 SQL 时，表名和列名一律加双引号",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源端 Room @Entity 里 @ColumnInfo(name = …) 的列名是 to、order、group、index、default、key 这类 SQL 关键字，或 Room 导出 schema 的 createSql 里标识符带反引号",
+     "wrong": "交给 executeSql 的 CREATE TABLE 字符串里标识符裸写，如 `to TEXT,`；注释还称列名与 Room @Entity 一致"
+    }
+   ],
+   "keys": {
+    "read": [
+     "@Entity",
+     "@ColumnInfo",
+     "@Database",
+     "createSql",
+     "TABLE_NAME",
+     "Room"
+    ],
+    "product": [
+     "CREATE TABLE",
+     "executeSql",
+     "relationalStore",
+     "RdbStore",
+     "CREATE INDEX",
+     "RdbPredicates"
+    ]
+   }
+  },
+  {
+   "id": "rule-8e50ca2e4a49",
+   "title": "建表 SQL 照 Room 最终 schema 的 createSql 写、不加 DEFAULT，库名照源端",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源工程有 Room 导出的 schemas/<Database 全名>/<version>.json，或 Room.databaseBuilder(context, X::class.java, \"name.db\")",
+     "wrong": "目标建表语句给可空列加了源 schema 没有的 DEFAULT、改了 NOT NULL，或 StoreConfig 的 name 和源端库名不一样"
+    }
+   ],
+   "keys": {
+    "read": [
+     "Room.databaseBuilder",
+     "@Entity",
+     "@ColumnInfo",
+     "exportSchema",
+     "schemas",
+     "createSql",
+     "notNull"
+    ],
+    "product": [
+     "StoreConfig",
+     "name",
+     "CREATE TABLE",
+     "DEFAULT",
+     "NOT NULL",
+     "relationalStore"
+    ]
+   }
+  },
+  {
+   "id": "rule-a6d03fc95a54",
+   "title": "源端 Room 有 ADD COLUMN 迁移时，基线建表只写 v1 的列，后加的列只由迁移添加",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "@Database(version = N) 大于 1，Migration(1, 2) 等的 migrate 里执行 ALTER TABLE … ADD COLUMN 或 CREATE TABLE；@Entity 实体类只给出最终版本的表结构",
+     "wrong": "store.version === 0 分支的基线 CREATE TABLE 按最终实体写进了某列，后面的升级分支又对同表同列 ALTER TABLE … ADD COLUMN，全新库依次执行两者，报 duplicate column"
+    }
+   ],
+   "keys": {
+    "read": [
+     "@Database",
+     "Migration",
+     "migrate",
+     "ALTER TABLE",
+     "ADD COLUMN",
+     "@Entity",
+     "@ColumnInfo",
+     "addMigrations",
+     "Room.databaseBuilder"
+    ],
+    "product": [
+     "relationalStore",
+     "RdbStore",
+     "store.version",
+     "executeSql",
+     "execute",
+     "CREATE TABLE",
+     "ALTER TABLE",
+     "getRdbStore"
+    ]
+   }
+  }
+ ]
+}

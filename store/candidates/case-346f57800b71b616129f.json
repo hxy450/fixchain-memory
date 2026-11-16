@@ -1,0 +1,368 @@
+{
+ "case": "case-346f57800b71b616129f",
+ "rules": [
+  {
+   "title": "同步读设置改成 async load 时，initialize 用 try/catch，失败复位已初始化标志",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源端用 SharedPreferences 的 getString / getInt 带默认值同步读设置（Compose 在 remember 里读）；目标端的偏好封装是 async，内部返回 preferences.getPreferences(...) 的 Promise，未就绪时 throw",
+     "wrong": "initialize() 里先写 `this.initialized = true` 再 await 加载，没有 try/catch；加载 reject 时标志不复位，之后再调用直接返回"
+    }
+   ],
+   "scope": "把源端同步读取的设置改成目标端异步加载，并用一次性守卫标志保证只初始化一次的 ViewModel",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "initialize() 写成 try { await 加载; 之后的出题、保存等 } catch (e) { 复位已初始化/进行中标志; throw new Error(...) }，把错误交回调用方",
+     "support": [
+      "case-346f57800b71b616129f#recommendation:1",
+      "case-346f57800b71b616129f#diagnosis"
+     ]
+    },
+    {
+     "text": "只初始化一次的守卫：要么成功后才置 true，要么在 catch 里复位；不要在 await 之前置 true 又不在失败时复位",
+     "support": [
+      "case-346f57800b71b616129f#recommendation:1"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "function getPreferences(context: Context, name: string): Promise<Preferences>",
+     "meaning": "取偏好实例是异步的，声明里可抛 BusinessError 401（参数错误）和 15500000（内部错误），所以加载链会 reject",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.data.preferences.d.ts，preferences.getPreferences",
+     "support": []
+    },
+    {
+     "value": "get(key: string, defValue: ValueType): Promise<ValueType>",
+     "meaning": "读键也是异步的，缺键返回 defValue，同样可抛 15500000",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.data.preferences.d.ts，Preferences.get",
+     "support": []
+    },
+    {
+     "value": "String getString(String key, @Nullable String defValue)；int getInt(String key, int defValue)",
+     "meaning": "源端是同步读取、缺键返回默认值，没有失败分支；目标端的失败路径是改成异步后新增的",
+     "source": "android.content.SharedPreferences#getString、android.content.SharedPreferences#getInt",
+     "support": []
+    },
+    {
+     "value": "try/catch 包住加载、延时、出题与保存，失败时复位 initialized=false 并抛出错误",
+     "meaning": "按此改后页面可重试",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-346f57800b71b616129f#diagnosis"
+     ]
+    },
+    {
+     "value": "function getPreferences(context: Context, options: Options): Promise<Preferences>",
+     "meaning": "同族接口：按 Options 取偏好实例，同样返回 Promise",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.data.preferences.d.ts，preferences.getPreferences",
+     "support": []
+    }
+   ],
+   "lookups": [],
+   "why": "守卫在 await 前置位又不复位，加载失败后再也无法重新初始化，页面卡在加载态",
+   "keys": {
+    "read": [
+     "SharedPreferences",
+     "getString",
+     "getInt",
+     "remember",
+     "LaunchedEffect",
+     "getPreferences",
+     "Promise"
+    ],
+    "product": [
+     "initialize",
+     "async",
+     "await",
+     "try",
+     "catch",
+     "initialized",
+     "getPreferences",
+     "Promise"
+    ]
+   },
+   "probe": {
+    "pattern": "this\\.initialized\\s*=\\s*true",
+    "note": "守卫在这里置位；若在 await 加载之前且没有 catch 复位，加载失败后无法重试"
+   },
+   "unverified": [],
+   "alternatives_unverified": [
+    "getPreferencesSync(context: Context, options: Options): Preferences 与 Preferences.getSync(key, defValue) 可同步读取、保留源端无加载态的行为，卡里没验证"
+   ],
+   "siblings_checked": "搜 Promise<Preferences>：@ohos.data.preferences.d.ts 里 getPreferences 有 (context, name) 和 (context, options) 两个重载，另一个写进了 values",
+   "refs": [
+    {
+     "what": "getPreferences 返回 Promise",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.data.preferences.d.ts preferences.getPreferences",
+     "quote": "function getPreferences(context: Context, name: string): Promise<Preferences>;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "getPreferences 可抛内部错误",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.data.preferences.d.ts preferences.getPreferences",
+     "quote": "@throws { BusinessError } 15500000 - Inner error. * @syscap SystemCapability.DistributedDataManager.Preferences.Core * @crossplatform * @atomicservice * @since 11 */ function getPreferences(",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "Preferences.get 的签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.data.preferences.d.ts Preferences.get",
+     "quote": "get(key: string, defValue: ValueType): Promise<ValueType>;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "SharedPreferences.getString 同步返回默认值",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/android/content/SharedPreferences.java SharedPreferences#getString",
+     "quote": "String getString(String key, @Nullable String defValue);",
+     "version": "android-36.1"
+    },
+    {
+     "what": "SharedPreferences.getInt 同步返回默认值",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/android/content/SharedPreferences.java SharedPreferences#getInt",
+     "quote": "int getInt(String key, int defValue);",
+     "version": "android-36.1"
+    },
+    {
+     "what": "getPreferences 的 Options 重载（同族）",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.data.preferences.d.ts preferences.getPreferences",
+     "quote": "function getPreferences(context: Context, options: Options): Promise<Preferences>;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    }
+   ]
+  },
+  {
+   "title": "加载门用 LoadingProgress 切换时，initialize().then 必须配 catch 并离开加载态",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "目标端 ViewModel 的 initialize() 返回 Promise，加载链可能 reject（偏好封装里有 throw 或异步读取）",
+     "wrong": "页面在 aboutToAppear 里写 initialize().then(...) 没有 .catch，build 里用已加载标志在正式内容和 LoadingProgress() 之间切换，没有失败分支"
+    }
+   ],
+   "scope": "页面用“已加载”标志在 LoadingProgress 和正式内容之间切换、加载由异步 initialize() 完成时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "写成 initialize().then(() => { 置已加载 }).catch(() => { 复位首次出题等一次性守卫; 置失败标志 })",
+     "support": [
+      "case-346f57800b71b616129f#recommendation:2",
+      "case-346f57800b71b616129f#diagnosis"
+     ]
+    },
+    {
+     "text": "build 里加失败分支：if (已加载) 正式内容 else if (失败) 错误文案和“重试”按钮（重走同一初始化入口） else LoadingProgress()；或按源端行为用默认设置继续，让页面可用；新文案加进 string.json",
+     "support": [
+      "case-346f57800b71b616129f#recommendation:2",
+      "case-346f57800b71b616129f#diagnosis"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "aboutToAppear?(): void",
+     "meaning": "生命周期回调是同步的，不能 await；里面调的 Promise 要自己接 then 和 catch",
+     "source": "鸿蒙 SDK 的 ets/component/common.d.ts，BaseCustomComponent.aboutToAppear",
+     "support": []
+    },
+    {
+     "value": "失败标志 + 错误文案 + 重试按钮重走初始化，catch 中复位一次性守卫",
+     "meaning": "按此改后 reject 时页面离开加载态并可重试",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-346f57800b71b616129f#diagnosis"
+     ]
+    }
+   ],
+   "lookups": [],
+   "why": "只写成功出口时，initialize() 一旦 reject 页面就一直转圈，也没有办法重试",
+   "keys": {
+    "read": [
+     "initialize",
+     "Promise",
+     "async",
+     "throw",
+     "getPreferences"
+    ],
+    "product": [
+     "aboutToAppear",
+     "initialize().then",
+     ".catch",
+     "LoadingProgress",
+     "Loaded",
+     "Button",
+     "string.json"
+    ]
+   },
+   "probe": {
+    "pattern": "\\.(initialize|load)\\(\\)\\s*\\.then\\(",
+    "note": "初始化或加载的 Promise 用了 then；后面没有 .catch 时，失败会让加载门一直停在 LoadingProgress"
+   },
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法落在 Promise 的 then/catch 和页面条件渲染上，没有专门参数类型可搜",
+   "refs": [
+    {
+     "what": "aboutToAppear 的签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/component/common.d.ts BaseCustomComponent.aboutToAppear",
+     "quote": "aboutToAppear?(): void;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "aboutToAppear 在 build 前调用",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/component/common.d.ts BaseCustomComponent.aboutToAppear",
+     "quote": "Invoked after a new instance of the custom component is created * and before its build() function is executed. You can change state variables in aboutToAppear.",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    }
+   ]
+  },
+  {
+   "title": "源端同步读设置、目标端改异步时，源码笔记写异常分支、差异记进 Spec Gap List",
+   "product": "规格",
+   "triggers": [
+    {
+     "read": "安卓源端在首帧前用 SharedPreferences.getString / getInt 带默认值同步读设置，界面没有加载态和失败态；目标端的偏好读取是 async",
+     "wrong": "source-notes 的 presenter 摘要没有“异常分支”一项；Spec Gap List 没记“源端同步读取、目标端异步且可能失败”这一差异"
+    }
+   ],
+   "scope": "源码理解阶段写 source-notes 和 Spec Gap List，源端同步读取在目标端要改成异步时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "presenter 摘要补“异常分支”，列出目标端改成异步后新增的加载失败路径",
+     "support": [
+      "case-346f57800b71b616129f#recommendation:3"
+     ]
+    },
+    {
+     "text": "Spec Gap List 记一条平台差异“源端同步读取、目标端异步加载”，至少写明两项：加载期间的交互（完成前阻止交互或不呈现内容）和加载失败的出口（错误与重试，或用默认设置继续）",
+     "support": [
+      "case-346f57800b71b616129f#recommendation:3",
+      "case-346f57800b71b616129f#recommendation:2"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "String getString(String key, @Nullable String defValue)",
+     "meaning": "源端同步读取，缺键返回默认值",
+     "source": "android.content.SharedPreferences#getString",
+     "support": []
+    },
+    {
+     "value": "function getPreferences(context: Context, name: string): Promise<Preferences>",
+     "meaning": "目标端取偏好实例返回 Promise，可 reject",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.data.preferences.d.ts，preferences.getPreferences",
+     "support": []
+    }
+   ],
+   "lookups": [],
+   "why": "笔记和差异清单里没有失败分支，下游实现只写成功出口，加载失败时页面卡住",
+   "keys": {
+    "read": [
+     "SharedPreferences",
+     "getString",
+     "getInt",
+     "remember",
+     "LaunchedEffect",
+     "getPreferences"
+    ],
+    "product": [
+     "source-notes",
+     "presenter",
+     "异常分支",
+     "Spec Gap List",
+     "加载失败",
+     "异步"
+    ]
+   },
+   "probe": null,
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法是规格文档里该写的项，不落在具体接口上",
+   "refs": [
+    {
+     "what": "SharedPreferences.getString 同步返回默认值",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/android/content/SharedPreferences.java SharedPreferences#getString",
+     "quote": "String getString(String key, @Nullable String defValue);",
+     "version": "android-36.1"
+    },
+    {
+     "what": "getPreferences 返回 Promise",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.data.preferences.d.ts preferences.getPreferences",
+     "quote": "function getPreferences(context: Context, name: string): Promise<Preferences>;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    }
+   ]
+  },
+  {
+   "title": "巡检或评审建议载入完成前阻止交互时，同时写明加载失败的出口",
+   "product": "计划与派工",
+   "triggers": [
+    {
+     "read": "",
+     "wrong": "巡检或评审条目写“设置载入并同步页面状态前阻止交互，或载入完成后才呈现可交互内容”，没写加载失败时页面怎么离开加载态"
+    }
+   ],
+   "scope": "巡检、评审给修复者的条目里要求加加载门时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "条目里补一句失败出口：加载失败时显示错误与重试入口，或按源端行为用默认设置继续；并要求初始化调用处理 reject",
+     "support": [
+      "case-346f57800b71b616129f#recommendation:4",
+      "case-346f57800b71b616129f#recommendation:2"
+     ]
+    }
+   ],
+   "values": [],
+   "lookups": [],
+   "why": "条目只写成功时的门，修复者就只加成功分支，失败时页面一直停在加载态",
+   "keys": {
+    "read": [
+     "巡检",
+     "评审",
+     "阻止交互",
+     "载入完成",
+     "加载门"
+    ],
+    "product": [
+     "阻止交互",
+     "载入完成后",
+     "加载失败",
+     "重试",
+     "LoadingProgress"
+    ]
+   },
+   "probe": null,
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法是修复条目里该写的一句，不落在具体接口上",
+   "refs": []
+  }
+ ],
+ "left_out": [
+  {
+   "text": "加载派工指定的 skill 时逐份读、看到截断提示就重读，读全前不写进 loaded_skills",
+   "reason": "没有产物里看得到的触发"
+  },
+  {
+   "text": "临时让偏好封装的 store() 抛错，验证页面能离开加载态",
+   "reason": "要上机或截图才能做"
+  }
+ ],
+ "corrections": [],
+ "gaps": [],
+ "conflicts": []
+}

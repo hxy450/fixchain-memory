@@ -1,0 +1,398 @@
+{
+ "case": "case-ea77ad96a8fa0f09fbc8",
+ "rules": [
+  {
+   "title": "后台计时降级只降执行载体，回前台的跨步推进、需输入停顿和完成判定写进替代路径和 AC",
+   "product": "规格",
+   "triggers": [
+    {
+     "read": "源端 WorkManager `Worker` 在后台跨步推进计时：一步到时递归启动下一步、需用户输入的步发通知后停住、末步发完成通知，用 `SystemClock.elapsedRealtime()` 计偏移",
+     "wrong": "规格的降级替代路径和 AC 只锚定 {当前步, 剩余时长, 锚点时间}，回前台「从剩余时长续跑」，没规定后台时长越过当前步时如何跨步、停在需输入步、判完成"
+    }
+   ],
+   "scope": "规格提取阶段，为源端持久化后台计时任务写平台差异替代方案、降级决策和差异 AC 时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "把源后台任务拆成「执行载体」和「可观察语义」：只降级平台确实不支持的载体（后台持续 tick）；回前台的跨步推进、需输入步停顿、完成判定写成按锚点 + 步骤表纯计算复现，写进替代路径和 AC",
+     "support": [
+      "case-ea77ad96a8fa0f09fbc8#recommendation:1"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "按 Worker 语义从锚点生成计时段、需输入等待段和完成段",
+     "meaning": "修复后的回前台重算方式",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-ea77ad96a8fa0f09fbc8#diagnosis"
+     ]
+    }
+   ],
+   "lookups": [],
+   "why": "把「后台不能 tick」扩大成删减语义后，回前台只在当前步内续跑，跨步、停顿和完成都丢了",
+   "keys": {
+    "read": [
+     "Worker",
+     "WorkManager",
+     "CoroutineWorker",
+     "elapsedRealtime",
+     "setForeground",
+     "Notification"
+    ],
+    "product": [
+     "降级",
+     "替代路径",
+     "HARD-DIV",
+     "锚点",
+     "remainingMs",
+     "差异AC"
+    ]
+   },
+   "probe": null,
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法是规格的写法，不落在具体接口上",
+   "refs": []
+  },
+  {
+   "title": "规格判定平台没有对等能力前先查 SDK 声明；elapsedRealtime 对应 getUptime(STARTUP)",
+   "product": "规格",
+   "triggers": [
+    {
+     "read": "源端用 `SystemClock.elapsedRealtime()` 计算后台偏移",
+     "wrong": "规格把它映射为墙钟（Date.now()），并写「平台未开放跨休眠单调时钟」一类边界，没有引 SDK 声明作依据；或写成运行期验证项「若平台提供」"
+    }
+   ],
+   "scope": "规格阶段写平台差异、断言「目标平台无对等能力」时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "判定前当场查项目 SDK 的 d.ts，记下 API 名和 @since 并对照 compatibleSdkVersion：elapsedRealtime 写成 systemDateTime.getUptime(systemDateTime.TimeType.STARTUP)",
+     "support": [
+      "case-ea77ad96a8fa0f09fbc8#recommendation:2",
+      "case-ea77ad96a8fa0f09fbc8#diagnosis"
+     ]
+    },
+    {
+     "text": "查不到时写成待查疑点，不写成已知边界",
+     "support": [
+      "case-ea77ad96a8fa0f09fbc8#recommendation:2"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "function getUptime(timeType: TimeType, isNanoseconds?: boolean): number",
+     "meaning": "取系统启动以来的时长，默认毫秒；声明里最早一段注释是 @since 10",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.systemDateTime.d.ts，systemDateTime.getUptime",
+     "support": []
+    },
+    {
+     "value": "TimeType.STARTUP = 0：启动以来时长，含深度睡眠；TimeType.ACTIVE = 1：不含深度睡眠",
+     "meaning": "对应 elapsedRealtime 的是 STARTUP",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.systemDateTime.d.ts，systemDateTime.TimeType",
+     "support": []
+    },
+    {
+     "value": "elapsedRealtime()：返回开机以来的毫秒数，含睡眠时间",
+     "meaning": "源端的单调时钟语义",
+     "source": "android.os.SystemClock#elapsedRealtime",
+     "support": []
+    },
+    {
+     "value": "锚点改为 systemDateTime.getUptime(STARTUP)",
+     "meaning": "修复后的做法",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-ea77ad96a8fa0f09fbc8#diagnosis"
+     ]
+    }
+   ],
+   "lookups": [
+    {
+     "what": "目标工程允许用的最低 API",
+     "where": "目标工程 build-profile.json5 的 compatibleSdkVersion",
+     "how": "和声明里该 API 最早的 @since 比，不低于才可直接用"
+    }
+   ],
+   "why": "未查证就判无对等，单调时钟被换成墙钟，改系统时间或跨休眠时计时漂移",
+   "keys": {
+    "read": [
+     "SystemClock.elapsedRealtime",
+     "elapsedRealtimeNanos",
+     "SystemClock",
+     "uptimeMillis"
+    ],
+    "product": [
+     "systemDateTime.getUptime",
+     "TimeType.STARTUP",
+     "Date.now",
+     "单调时钟",
+     "平台无对等",
+     "@since"
+    ]
+   },
+   "probe": {
+    "pattern": "未开放.{0,12}单调时钟|无.{0,6}单调时钟",
+    "note": "规格断言平台没有单调时钟；核对是否引了 SDK 声明，systemDateTime.getUptime(TimeType.STARTUP) 就是含睡眠的单调时钟"
+   },
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "搜 TimeType：systemDateTime 里只有 getUptime 带它，写进 values",
+   "refs": [
+    {
+     "what": "getUptime 签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.systemDateTime.d.ts systemDateTime.getUptime",
+     "quote": "function getUptime(timeType: TimeType, isNanoseconds?: boolean): number;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "getUptime 最早 @since 10",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.systemDateTime.d.ts systemDateTime.getUptime",
+     "quote": "@returns { number } The timestamp returned of getUpTime. * @syscap SystemCapability.MiscServices.Time * @since 10 */",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "TimeType.STARTUP 含深度睡眠",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.systemDateTime.d.ts systemDateTime.TimeType.STARTUP",
+     "quote": "Indicates the time elapsed since the system was booted, including deep sleep time. * * @syscap SystemCapability.MiscServices.Time * @crossplatform * @since 18 */ STARTUP = 0,",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "TimeType.ACTIVE 不含深度睡眠",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.systemDateTime.d.ts systemDateTime.TimeType.ACTIVE",
+     "quote": "Indicates the time elapsed since the system was booted, not including deep sleep time.",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "elapsedRealtime 含睡眠",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/android/os/SystemClock.java SystemClock#elapsedRealtime",
+     "quote": "Returns milliseconds since boot, including time spent in sleep.",
+     "version": "android-36.1"
+    }
+   ]
+  },
+  {
+   "title": "源后台任务持久化、回前台读任务状态时，规格要求会话落盘并在进程重建后恢复",
+   "product": "规格",
+   "triggers": [
+    {
+     "read": "源端任务由 WorkManager 持久化，回前台用 `getWorkInfosForUniqueWorkLiveData(...)` 按任务名读取进度",
+     "wrong": "规格的会话状态只放 AppStorageV2 单一键，没写落盘，也没交代进程重建后怎么恢复；对接点同步读进程内全局态，不按任务标识查询"
+    }
+   ],
+   "scope": "规格阶段为持久化后台任务写状态管理和对接点时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "规格要求会话记录落盘（如 preferences）并在进程重建后恢复；AppStorageV2 只在进程内存活，不作唯一载体",
+     "support": [
+      "case-ea77ad96a8fa0f09fbc8#recommendation:3"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "AppStorageV2 只在内存里保存；PersistenceV2 保存到磁盘",
+     "meaning": "进程被回收后 AppStorageV2 的会话就没了",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.arkui.StateManagement.d.ts，AppStorageV2、PersistenceV2",
+     "support": []
+    },
+    {
+     "value": "function getPreferencesSync(context: Context, options: Options): Preferences；putSync(key: string, value: ValueType): void；flush(): Promise<void>",
+     "meaning": "preferences 落盘的取实例、写值、刷盘",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.data.preferences.d.ts，preferences.getPreferencesSync、Preferences.putSync、Preferences.flush",
+     "support": []
+    },
+    {
+     "value": "会话记录经 preferences 持久化，进程重建后恢复；回前台按任务标识异步查询进度",
+     "meaning": "修复后的做法",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-ea77ad96a8fa0f09fbc8#diagnosis"
+     ]
+    }
+   ],
+   "lookups": [],
+   "why": "会话只在内存里，进程被回收后回前台拿不到计时进度",
+   "keys": {
+    "read": [
+     "WorkManager",
+     "getWorkInfosForUniqueWorkLiveData",
+     "WorkInfo",
+     "enqueueUniqueWork",
+     "ON_RESUME"
+    ],
+    "product": [
+     "AppStorageV2",
+     "PersistenceV2",
+     "preferences",
+     "落盘",
+     "进程重建",
+     "会话"
+    ]
+   },
+   "probe": null,
+   "unverified": [],
+   "alternatives_unverified": [
+    "PersistenceV2 自动落盘也能满足持久化，卡里修复用的是 preferences"
+   ],
+   "siblings_checked": "无：做法是规格的写法；preferences 的 put / flush 是通用存取方法",
+   "refs": [
+    {
+     "what": "AppStorageV2 只在内存",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.arkui.StateManagement.d.ts AppStorageV2",
+     "quote": "AppStorageV2 is for UI state of app-wide access, has same life cycle as the app, * and saves database content only in memory.",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "PersistenceV2 存磁盘",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.arkui.StateManagement.d.ts PersistenceV2",
+     "quote": "PersistenceV2 is for UI state of app-wide access, available on app re-start, * and saves database content in disk.",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "getPreferencesSync",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.data.preferences.d.ts preferences.getPreferencesSync",
+     "quote": "function getPreferencesSync(context: Context, options: Options): Preferences;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "Preferences.putSync",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.data.preferences.d.ts Preferences.putSync",
+     "quote": "putSync(key: string, value: ValueType): void;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "Preferences.flush",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.data.preferences.d.ts Preferences.flush",
+     "quote": "flush(): Promise<void>;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    }
+   ]
+  },
+  {
+   "title": "降级差异 AC 的验证场景覆盖后台越过当前步、跨多步、停在需输入步和已完成",
+   "product": "规格",
+   "triggers": [
+    {
+     "read": "源端后台任务会跨步推进（到时启动下一步、需输入步停住、末步完成）",
+     "wrong": "降级差异 AC 只测几秒到 30 秒的单步内恢复"
+    }
+   ],
+   "scope": "规格阶段写后台降级的差异 AC 时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "AC 的验证场景至少包括：后台时长超过当前步剩余时间、跨多步、停在需输入步、已完成，各写期望的回前台状态",
+     "support": [
+      "case-ea77ad96a8fa0f09fbc8#recommendation:4"
+     ]
+    }
+   ],
+   "values": [],
+   "lookups": [],
+   "why": "只测单步内恢复时，跨步推进缺失也能通过验收",
+   "keys": {
+    "read": [
+     "Worker",
+     "doWork",
+     "elapsedRealtime",
+     "需输入"
+    ],
+    "product": [
+     "AC",
+     "验证场景",
+     "跨步",
+     "单步",
+     "回前台",
+     "降级"
+    ]
+   },
+   "probe": null,
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法是验收条目的写法，不落在具体接口上",
+   "refs": []
+  },
+  {
+   "title": "实现时发现规格降级未覆盖源端行为、又能纯计算复现时，按源语义实现或登记疑点",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源 Worker 在后台跨多步推进，规格降级只写了单步续跑",
+     "wrong": "实现以「规格已接受降级」为由只做单步：剩余时长 ≤ 0 就返回完成，只在当前步内插值，用 `Date.now()` 作锚点"
+    }
+   ],
+   "scope": "实现阶段读源码发现规格的降级决策没有覆盖某个可观察行为时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "先核对降级理由是否真的排除这个行为；能由锚点 + 步骤表纯计算复现的，按源语义实现（从锚点推算跨步、需输入步停住、完成），或登记规格疑点，不默认取最小降级",
+     "support": [
+      "case-ea77ad96a8fa0f09fbc8#recommendation:5",
+      "case-ea77ad96a8fa0f09fbc8#diagnosis"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "按 Worker 语义从锚点生成计时/需输入等待/完成段，锚点用 systemDateTime.getUptime(STARTUP)",
+     "meaning": "修复后的实现",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-ea77ad96a8fa0f09fbc8#diagnosis"
+     ]
+    }
+   ],
+   "lookups": [],
+   "why": "默认取最小降级时，源端用户看得到的跨步推进在目标端消失",
+   "keys": {
+    "read": [
+     "Worker",
+     "doWork",
+     "elapsedRealtime",
+     "WorkManager"
+    ],
+    "product": [
+     "Date.now",
+     "systemDateTime.getUptime",
+     "remainingMs",
+     "锚点",
+     "规格疑点"
+    ]
+   },
+   "probe": {
+    "pattern": "Date\\.now\\(\\)",
+    "note": "用墙钟计时；源端是 elapsedRealtime 时应改用 systemDateTime.getUptime(TimeType.STARTUP)"
+   },
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法是取舍原则，不落在具体接口上",
+   "refs": []
+  }
+ ],
+ "left_out": [
+  {
+   "text": "主线在预授权下未查证就批准降级决策、把单调时钟写成运行期验证项的经过",
+   "reason": "只对出事应用成立"
+  }
+ ],
+ "corrections": [],
+ "gaps": [],
+ "conflicts": [
+  "卡里写修复者查 d.ts 得 getUptime 为 @since 18；本机声明里 getUptime 最早一段注释是 @since 10（@since 18 那段加了 @crossplatform），不影响做法"
+ ]
+}

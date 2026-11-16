@@ -1,0 +1,224 @@
+{
+ "id": "rule-b1406e042ef9",
+ "title": "解析 X.509 RSA 公钥时，createAsyKeyGenerator 只写 'RSA'+位数，不加 |PKCS1",
+ "product": "代码",
+ "triggers": [
+  {
+   "read": "Java 端 KeyFactory.getInstance(\"RSA\") + X509EncodedKeySpec 解析 BEGIN PUBLIC KEY 公钥，Cipher.getInstance(\"RSA/ECB/OAEPWithSHA-256AndMGF1Padding\") 加密",
+   "wrong": "写成 createAsyKeyGenerator('RSA1024|PKCS1') 这类：规格串带 |PKCS1 等后缀，或位数和实际公钥不符；真机报 create c generator fail"
+  }
+ ],
+ "scope": "把安卓 Java 的 RSA 公钥解析和 RSA-OAEP 加密迁成 ArkTS cryptoFramework 时",
+ "exceptions": [],
+ "how": [
+  {
+   "text": "生成器写 cryptoFramework.createAsyKeyGenerator('RSA' + 实际公钥位数)，如 'RSA2048'（素数个数默认 2，|PRIMES_2 可省）；不附加 PKCS1、X509 等编码后缀",
+   "support": [
+    "case-c5fdc6640404c3d6440e#recommendation:1"
+   ]
+  },
+  {
+   "text": "“BEGIN PUBLIC KEY” 的 X.509 PEM 直接交给 generator.convertPemKeySync(pem, null)，用返回 KeyPair 的 pubKey 做加密",
+   "support": [
+    "case-c5fdc6640404c3d6440e#recommendation:1"
+   ]
+  },
+  {
+   "text": "填充和摘要写进 createCipher：RSA/ECB/OAEPWithSHA-256AndMGF1Padding（MGF1 也是 SHA-256）写成 createCipher('RSA2048|PKCS1_OAEP|SHA256|MGF1_SHA256')；PKCS1 这类填充名只写在 createCipher 里",
+   "support": [
+    "case-c5fdc6640404c3d6440e#recommendation:1",
+    "case-c5fdc6640404c3d6440e#diagnosis"
+   ]
+  }
+ ],
+ "values": [
+  {
+   "value": "function createAsyKeyGenerator(algName: string): AsyKeyGenerator",
+   "meaning": "非对称密钥生成器的工厂函数，algName 多个参数用 | 拼接",
+   "source": "鸿蒙 SDK 的 ets/api/@ohos.security.cryptoFramework.d.ts，cryptoFramework.createAsyKeyGenerator",
+   "support": []
+  },
+  {
+   "value": "RSA 生成器的字符串参数 = RSA密钥类型 | 素数个数，如 RSA2048|PRIMES_2；默认素数为 2，PRIMES_2 可省略",
+   "meaning": "生成器规格串里只有密钥类型和素数个数，没有编码或填充项",
+   "source": "crypto-asym-key-generation-conversion-spec.md，RSA / 使用字符串参数生成",
+   "support": []
+  },
+  {
+   "value": "convertPemKeySync(pubKey: string | null, priKey: string | null): KeyPair",
+   "meaning": "把 PEM 字符串转成 KeyPair；只转公钥时 priKey 传 null（@since 12）",
+   "source": "鸿蒙 SDK 的 ets/api/@ohos.security.cryptoFramework.d.ts，AsyKeyGenerator.convertPemKeySync",
+   "support": []
+  },
+  {
+   "value": "convertPemKey 的公钥需满足 X.509 规范、PKCS#1 规范、PEM 编码格式",
+   "meaning": "“BEGIN PUBLIC KEY” 的 X.509 SPKI PEM 可以直接转换，不需要在生成器上标编码",
+   "source": "crypto-convert-string-data-to-asym-key-pair.md，说明",
+   "support": []
+  },
+  {
+   "value": "function createCipher(transformation: string): Cipher",
+   "meaning": "加解密实例的工厂函数，填充和摘要写在 transformation 里，用 | 拼接",
+   "source": "鸿蒙 SDK 的 ets/api/@ohos.security.cryptoFramework.d.ts，cryptoFramework.createCipher",
+   "support": []
+  },
+  {
+   "value": "RSA2048|PKCS1_OAEP|SHA256|MGF1_SHA256",
+   "meaning": "RSA2048、PKCS1_OAEP 填充、摘要 SHA256、掩码摘要 MGF1_SHA256 的加解密规格串",
+   "source": "crypto-asym-encrypt-decrypt-spec.md，填充模式为PKCS1_OAEP",
+   "support": []
+  },
+  {
+   "value": "RSA/ECB/OAEPWithSHA-256AndMGF1Padding 由 OpenSSLCipherRSA$OAEP$SHA256 实现，OAEP 摘要和 MGF1 摘要默认都取 SHA-256（oaepMd = mgf1Md = defaultMd）",
+   "meaning": "源端没传 OAEPParameterSpec 时，目标端摘要和掩码摘要都写 SHA256 / MGF1_SHA256",
+   "source": "com.android.org.conscrypt.OpenSSLProvider；com.android.org.conscrypt.OpenSSLCipherRSA$OAEP#OAEP",
+   "support": []
+  },
+  {
+   "value": "生成器写成 'RSA1024|PKCS1' 或 'RSA2048|PKCS1' 时真机报 create c generator fail；改成 'RSA2048' 后 X.509 PEM 转换和加密正常",
+   "meaning": "去掉 |PKCS1 后缀、位数按实际公钥写，是验证过的写法",
+   "source": "卡里修好并验证过",
+   "support": [
+    "case-c5fdc6640404c3d6440e#diagnosis"
+   ]
+  }
+ ],
+ "lookups": [
+  {
+   "what": "服务端公钥的位数",
+   "where": "源端代码里生成或约定这把密钥处写明的长度（KeyPairGenerator.initialize 的参数、接口说明），或实际取回的 PEM",
+   "how": "写成 'RSA' + 位数；只拿到 PEM 时，可在目标端转换后用 pubKey.getAsyKeySpec(cryptoFramework.AsyKeySpecItem.RSA_N_BN) 取模数，按模数的二进制位数取位数"
+  },
+  {
+   "what": "OAEP 的摘要和 MGF1 摘要",
+   "where": "源端 Java 里 Cipher.init 传入的 OAEPParameterSpec（含 MGF1ParameterSpec），没有就看 Cipher.getInstance 的变换名",
+   "how": "OAEPParameterSpec 的摘要名对应 SHA256 等，MGF1ParameterSpec.SHA256 对应 MGF1_SHA256；没传 OAEPParameterSpec 时两者都取变换名里的摘要"
+  }
+ ],
+ "why": "生成器规格串不合法时真机创建失败，公钥解析不出来，加密传输不可用",
+ "keys": {
+  "read": [
+   "X509EncodedKeySpec",
+   "KeyFactory",
+   "BEGIN PUBLIC KEY",
+   "RSA/ECB/OAEPWithSHA-256AndMGF1Padding",
+   "OAEPParameterSpec",
+   "MGF1ParameterSpec",
+   "Cipher.getInstance",
+   "PEM"
+  ],
+  "product": [
+   "createAsyKeyGenerator",
+   "convertPemKeySync",
+   "convertPemKey",
+   "RSA2048",
+   "PKCS1",
+   "PKCS1_OAEP",
+   "MGF1_SHA256",
+   "createCipher",
+   "cryptoFramework",
+   "AsyKeyGenerator"
+  ]
+ },
+ "probe": {
+  "pattern": "createAsyKeyGenerator\\(\\s*['\"`]RSA\\d*\\|(?!PRIMES_\\d)",
+  "note": "RSA 生成器规格串里带了素数个数以外的后缀（如 |PKCS1），应只写 'RSA' + 位数"
+ },
+ "unverified": [
+  "'|PKCS1' 被拒的精确原因没有另行验证，只知道真机报 create c generator fail、去掉后通过",
+  "文档说用于密钥转换时得到的密钥规格跟密钥数据一致；生成器位数和公钥不一致但不带后缀时会不会失败，卡里没验证"
+ ],
+ "alternatives_unverified": [],
+ "siblings_checked": "搜 function create…(algName: string / transformation: string)：cryptoFramework 里同样用 | 拼规格串的工厂函数另有 createSymKeyGenerator、createMac、createMd、createCipher、createSign、createVerify、createKeyAgreement、createKdf 8 个；和本做法相关的 createCipher 写进 values",
+ "refs": [
+  {
+   "what": "createAsyKeyGenerator 的签名",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/api/@ohos.security.cryptoFramework.d.ts cryptoFramework.createAsyKeyGenerator",
+   "quote": "function createAsyKeyGenerator(algName: string): AsyKeyGenerator;",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  },
+  {
+   "what": "algName 多个参数用 | 拼接",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/api/@ohos.security.cryptoFramework.d.ts cryptoFramework.createAsyKeyGenerator",
+   "quote": "* @param { string } algName - indicates the algorithm name. Multiple parameters need to be concatenated by \"|\".",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  },
+  {
+   "what": "RSA 生成器字符串参数的组成",
+   "kind": "oh-docs",
+   "where": "zh-cn/application-dev/security/CryptoArchitectureKit/crypto-asym-key-generation-conversion-spec.md RSA / 使用字符串参数生成",
+   "quote": "具体的“字符串参数”由“RSA密钥类型”和“素数个数”使用符号“|”拼接而成，用于在创建非对称密钥生成器时，指定密钥规格。",
+   "version": "docs f41b9345"
+  },
+  {
+   "what": "PRIMES_2 可省略",
+   "kind": "oh-docs",
+   "where": "zh-cn/application-dev/security/CryptoArchitectureKit/crypto-asym-key-generation-conversion-spec.md RSA / 使用字符串参数生成",
+   "quote": "生成RSA非对称密钥时，默认素数为2，PRIMES_2参数可省略。",
+   "version": "docs f41b9345"
+  },
+  {
+   "what": "用于密钥转换时密钥规格跟密钥数据一致",
+   "kind": "oh-docs",
+   "where": "zh-cn/application-dev/security/CryptoArchitectureKit/crypto-asym-key-generation-conversion-spec.md RSA / 使用字符串参数生成",
+   "quote": "创建RSA非对称密钥生成器时，若用于随机生成密钥，生成的RSA密钥规格与创建时指定的密钥规格一致；若用于密钥转换，生成的RSA密钥规格与转换时指定的密钥数据规格一致。",
+   "version": "docs f41b9345"
+  },
+  {
+   "what": "convertPemKeySync 的签名",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/api/@ohos.security.cryptoFramework.d.ts AsyKeyGenerator.convertPemKeySync",
+   "quote": "convertPemKeySync(pubKey: string | null, priKey: string | null): KeyPair;",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  },
+  {
+   "what": "convertPemKey 接受的公钥格式",
+   "kind": "oh-docs",
+   "where": "zh-cn/application-dev/security/CryptoArchitectureKit/crypto-convert-string-data-to-asym-key-pair.md 说明",
+   "quote": "公钥需满足X.509规范、PKCS\\#1规范、PEM编码格式。",
+   "version": "docs f41b9345"
+  },
+  {
+   "what": "createCipher 的签名",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/api/@ohos.security.cryptoFramework.d.ts cryptoFramework.createCipher",
+   "quote": "function createCipher(transformation: string): Cipher;",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  },
+  {
+   "what": "OAEP 规格串的写法",
+   "kind": "oh-docs",
+   "where": "zh-cn/application-dev/security/CryptoArchitectureKit/crypto-asym-encrypt-decrypt-spec.md 填充模式为PKCS1_OAEP",
+   "quote": "当需要非对称密钥类型为RSA2048、填充模式为PKCS1_OAEP、摘要算法为SHA256、掩码摘要为MGF1_SHA256的RSA密钥，其字符串参数为\"RSA2048|PKCS1_OAEP|SHA256|MGF1_SHA256\"。",
+   "version": "docs f41b9345"
+  },
+  {
+   "what": "安卓 OAEPWithSHA-256AndMGF1Padding 的实现类",
+   "kind": "android-sdk",
+   "where": "sources/android-36.1/com/android/org/conscrypt/OpenSSLProvider.java OpenSSLProvider",
+   "quote": "putRSACipherImplClass( \"RSA/ECB/OAEPWithSHA-256AndMGF1Padding\", \"OpenSSLCipherRSA$OAEP$SHA256\");",
+   "version": "android-36.1"
+  },
+  {
+   "what": "OAEP 摘要和 MGF1 摘要默认相同",
+   "kind": "android-sdk",
+   "where": "sources/android-36.1/com/android/org/conscrypt/OpenSSLCipherRSA.java OpenSSLCipherRSA$OAEP#OAEP",
+   "quote": "oaepMd = mgf1Md = defaultMd;",
+   "version": "android-36.1"
+  },
+  {
+   "what": "SHA256 子类用 SHA-256 作默认摘要",
+   "kind": "android-sdk",
+   "where": "sources/android-36.1/com/android/org/conscrypt/OpenSSLCipherRSA.java OpenSSLCipherRSA$OAEP$SHA256",
+   "quote": "public static final class SHA256 extends OAEP { public SHA256() { super(EvpMdRef.SHA256.EVP_MD, EvpMdRef.SHA256.SIZE_BYTES);",
+   "version": "android-36.1"
+  }
+ ],
+ "sources": [
+  "case-c5fdc6640404c3d6440e"
+ ],
+ "general": false,
+ "status": "active"
+}

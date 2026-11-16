@@ -1,0 +1,204 @@
+{
+ "id": "rule-355789dc4f73",
+ "title": "源端用 org.json 的 getString 取字段时，目标解析器遇 JSON null 不抛错，只在缺键时失败",
+ "product": "代码",
+ "triggers": [
+  {
+   "read": "源码用 getString(\"key\") 读字段，实际数据（rawfile、备份 JSON）里该字段有 \"key\": null 或数字",
+   "wrong": "目标用 `as string` 直取字段，保留真 null（显示成空行）；或写成非字符串即抛错的守卫"
+  },
+  {
+   "read": "源端解析函数用 JSONObject.getString(\"key\") 取字段，对应 Kotlin 数据类的字段声明为非空 String",
+   "wrong": "目标手写解析器对这个字段做必填校验：`typeof v !== 'string'`（包括 JSON null）就 throw，一条记录失败整份解析失败"
+  }
+ ],
+ "scope": "把源端 org.json 反序列化迁成 ArkTS 手写解析器，读资源 JSON 或备份 JSON、为字段定必填和空值规则时",
+ "exceptions": [],
+ "how": [
+  {
+   "text": "按源端取值 API 定空值规则，读取走 org.json 等价写法：getString 遇 JSON null 不抛错、数字转字符串，只有缺键才失败；getInt 截断；getJSONArray 缺键或非数组抛错。Kotlin / DTO 字段非空不等于 JSON 值不会是 null",
+   "support": [
+    "case-7e6984a7fa6d5845737b#recommendation:5",
+    "case-7e6984a7fa6d5845737b#recommendation:4",
+    "case-7e6984a7fa6d5845737b#recommendation:1",
+    "case-ffdccd8c954d99b4c6d6#recommendation:1",
+    "case-ffdccd8c954d99b4c6d6#diagnosis"
+   ]
+  },
+  {
+   "text": "JSON null 的落值两张卡说法不同：读成字符串 \"null\"（与源端显示一致），或读成 string | null 再 `?? ''` 兜底；见未核实",
+   "support": [
+    "case-7e6984a7fa6d5845737b#diagnosis",
+    "case-ffdccd8c954d99b4c6d6#recommendation:1"
+   ]
+  },
+  {
+   "text": "写解析器前对实际数据逐字段统计 null、数字、缺键、非字符串的条数，有 null 的字段不写成必填，并核对「条数等于数组长度」这类验收在真实数据上成立",
+   "support": [
+    "case-ffdccd8c954d99b4c6d6#recommendation:2",
+    "case-7e6984a7fa6d5845737b#recommendation:5"
+   ]
+  }
+ ],
+ "values": [
+  {
+   "value": "getString(name)：先 get(name)，再 JSON.toString(object)，结果为 null 才抛 typeMismatch；值存在就按需强转",
+   "meaning": "getString 只在缺键或值转不成字符串时抛错",
+   "source": "org.json.JSONObject#getString；org.json.JSON#toString",
+   "support": []
+  },
+  {
+   "value": "get(name) 在没有这个键时 throw new JSONException(\"No value for \" + name)",
+   "meaning": "缺键是源端真正会失败的情形",
+   "source": "org.json.JSONObject#get",
+   "support": []
+  },
+  {
+   "value": "JSON null 解析为 JSONObject.NULL，它的 toString() 返回 \"null\"",
+   "meaning": "源端 getString 读 JSON null 得到字符串 \"null\"，不抛错",
+   "source": "org.json.JSONTokener#readLiteral；org.json.JSONObject#NULL",
+   "support": []
+  },
+  {
+   "value": "getInt 对 Number 取 intValue()",
+   "meaning": "小数被截断",
+   "source": "org.json.JSON#toInteger",
+   "support": []
+  },
+  {
+   "value": "getJSONArray 缺键或非数组抛 JSONException",
+   "meaning": "不读成空数组",
+   "source": "org.json.JSONObject#getJSONArray",
+   "support": []
+  },
+  {
+   "value": "JSON null 描述用 getString 等价写法转成 \"null\" 后，显示与源端一致（源端显示 \"null\"）",
+   "meaning": "一张卡修复后的写法",
+   "source": "卡里修好并验证过",
+   "support": [
+    "case-7e6984a7fa6d5845737b#diagnosis"
+   ]
+  },
+  {
+   "value": "字段改成可空读取再 ?? '' 后，含 null 的条目能解析，列表正常渲染",
+   "meaning": "另一张卡修复后的写法",
+   "source": "卡里修好并验证过",
+   "support": [
+    "case-ffdccd8c954d99b4c6d6#diagnosis"
+   ]
+  }
+ ],
+ "lookups": [
+  {
+   "what": "实际数据里每个字段有没有 null、数字、缺键或非字符串",
+   "where": "目标工程 rawfile 里迁过来的 JSON，或源工程 assets / res/raw 里的同一份（含备份 JSON）",
+   "how": "对每条记录逐个键统计 null、缺键、类型不是 string 的条数（可按键名搜 \": null 和不带引号的数字值）；条数不为 0 的字段不写成必填，按 getString 的语义强转"
+  }
+ ],
+ "why": "as string 直取让 JSON null 显示成空行；按非空声明定成必填时，一条 null 就让整份解析抛错、页面只显示加载失败",
+ "keys": {
+  "read": [
+   "org.json",
+   "JSONObject",
+   "getString",
+   "getInt",
+   "getJSONArray",
+   "JSONArray",
+   "getJSONObject",
+   "optString",
+   "data class"
+  ],
+  "product": [
+   "as string",
+   "JSON.parse",
+   "fromJson",
+   "typeof",
+   "throw",
+   "null",
+   "string | null",
+   "rawfile",
+   "getRawFileContent",
+   "getRawFileContentSync"
+  ]
+ },
+ "probe": {
+  "pattern": "typeof\\s+[\\w.\\[\\]'\"]+\\s*!==\\s*['\"]string['\"]",
+  "note": "解析器对非 string 值有判断；看为 null 时是否抛错，源端 getString 对 JSON null 不抛错"
+ },
+ "unverified": [
+  "JSON null 的落值有分歧：case-7e6984a7fa6d5845737b 读成字符串 \"null\"，修好后与源端显示一致；case-ffdccd8c954d99b4c6d6 读成 string | null 再 ?? '' 兜底，修好后列表正常渲染。源端 org.json 对 JSON null 得到的是字符串 \"null\"，两种兜底显示不完全相同"
+ ],
+ "alternatives_unverified": [],
+ "siblings_checked": "无：做法落在源端 org.json 取值方法的语义和目标手写解析，没有鸿蒙接口参数可搜",
+ "refs": [
+  {
+   "what": "getString 强转、缺键才抛",
+   "kind": "android-sdk",
+   "where": "sources/android-36.1/org/json/JSONObject.java JSONObject#getString",
+   "quote": "coercing it if * necessary, or throws if no such mapping exists.",
+   "version": "android-36.1"
+  },
+  {
+   "what": "getString 的实现",
+   "kind": "android-sdk",
+   "where": "sources/android-36.1/org/json/JSONObject.java JSONObject#getString",
+   "quote": "getString(@NonNull String name) throws JSONException { Object object = get(name); String result = JSON.toString(object); if (result == null) { throw JSON.typeMismatch(name, object, \"String\");",
+   "version": "android-36.1"
+  },
+  {
+   "what": "JSON.toString 对非 null 值调 String.valueOf",
+   "kind": "android-sdk",
+   "where": "sources/android-36.1/org/json/JSON.java JSON#toString",
+   "quote": "static String toString(Object value) { if (value instanceof String) { return (String) value; } else if (value != null) { return String.valueOf(value); } return null; }",
+   "version": "android-36.1"
+  },
+  {
+   "what": "缺键时 get 抛错",
+   "kind": "android-sdk",
+   "where": "sources/android-36.1/org/json/JSONObject.java JSONObject#get",
+   "quote": "Object result = nameValuePairs.get(name); if (result == null) { throw new JSONException(\"No value for \" + name); }",
+   "version": "android-36.1"
+  },
+  {
+   "what": "JSON null 解析成 JSONObject.NULL",
+   "kind": "android-sdk",
+   "where": "sources/android-36.1/org/json/JSONTokener.java JSONTokener#readLiteral",
+   "quote": "} else if (\"null\".equalsIgnoreCase(literal)) { return JSONObject.NULL;",
+   "version": "android-36.1"
+  },
+  {
+   "what": "NULL 的 toString",
+   "kind": "android-sdk",
+   "where": "sources/android-36.1/org/json/JSONObject.java JSONObject#NULL",
+   "quote": "Its {@link #toString} * method returns \"null\".",
+   "version": "android-36.1"
+  },
+  {
+   "what": "JSONObject.NULL 的 toString 是 \"null\"",
+   "kind": "android-sdk",
+   "where": "sources/android-36.1/org/json/JSONObject.java JSONObject#NULL",
+   "quote": "@Override public String toString() { return \"null\"; }",
+   "version": "android-36.1"
+  },
+  {
+   "what": "getInt 截断",
+   "kind": "android-sdk",
+   "where": "sources/android-36.1/org/json/JSON.java JSON#toInteger",
+   "quote": "return ((Number) value).intValue();",
+   "version": "android-36.1"
+  },
+  {
+   "what": "getJSONArray 抛错",
+   "kind": "android-sdk",
+   "where": "sources/android-36.1/org/json/JSONObject.java JSONObject#getJSONArray",
+   "quote": "@throws JSONException if the mapping doesn't exist or is not a {@code *     JSONArray}.",
+   "version": "android-36.1"
+  }
+ ],
+ "sources": [
+  "case-7e6984a7fa6d5845737b",
+  "case-ffdccd8c954d99b4c6d6"
+ ],
+ "general": false,
+ "status": "disputed"
+}

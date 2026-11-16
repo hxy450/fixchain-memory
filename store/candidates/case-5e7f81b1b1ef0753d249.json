@@ -1,0 +1,628 @@
+{
+ "case": "case-5e7f81b1b1ef0753d249",
+ "rules": [
+  {
+   "title": "实体继承二进制依赖里的基类时，规格逐项写基类契约，查不到的标「未知」",
+   "product": "规格",
+   "triggers": [
+    {
+     "read": "源实体 `class X extends` 一个来自 Maven/JitPack 二进制依赖的基类，主工程里没有基类源码",
+     "wrong": "规格字段表和序列化契约只写「主仓无源码」，基类的字段类型、无参构造缺省值、equals/isChanged/toString、JSON 键序与类型既没有给出契约，也没有标「未知」，后面靠可见的子类代码推断"
+    }
+   ],
+   "scope": "规格提取阶段，为继承外部库基类的实体写字段表与序列化契约时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "先取得该库再写：从 Gradle 缓存（或 Maven/JitPack 下载、公开源码）拿到对应版本的 jar，用 `javap -c -p` 或源码核对基类的字段类型、无参构造缺省值、equals/toString、JSON 序列化",
+     "support": [
+      "case-5e7f81b1b1ef0753d249#recommendation:1",
+      "case-5e7f81b1b1ef0753d249#diagnosis"
+     ]
+    },
+    {
+     "text": "取不到时在规格里对这些项逐项写「未知」，不写成只有「主仓无源码」一句",
+     "support": [
+      "case-5e7f81b1b1ef0753d249#recommendation:1"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "返修时用 javap 读基类字节码，才查实 Double 语义、Gson 键序、Boolean 写法、equals/isChanged/toString",
+     "meaning": "这些契约从子类源码里看不出来，要读基类本身",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-5e7f81b1b1ef0753d249#diagnosis"
+     ]
+    }
+   ],
+   "lookups": [
+    {
+     "what": "基类所在库的坐标和版本，以及它的 jar",
+     "where": "源工程 Gradle 构建脚本 dependencies 里的坐标；Gradle 缓存 modules-2/files-2.1 下按 group/artifact/version 找 jar",
+     "how": "解开 jar，对基类跑 `javap -c -p`，读字段声明、构造器里的赋值、equals/hashCode/toString 的实现"
+    }
+   ],
+   "why": "基类契约没写也没标未知时，实现者按可见代码猜，字段类型、缺省值、相等判断和 JSON 形态整批失真",
+   "keys": {
+    "read": [
+     "extends",
+     "implementation",
+     "jitpack",
+     "maven",
+     "javap",
+     "jar",
+     "Parcelable"
+    ],
+    "product": [
+     "主仓无源码",
+     "未知",
+     "字段表",
+     "缺省值",
+     "equals",
+     "toString",
+     "序列化契约"
+    ]
+   },
+   "probe": {
+    "pattern": "主仓无(Base\\w*)?源码|无源码",
+    "note": "规格里写了基类无源码；看同一处有没有给出基类契约或逐项标「未知」"
+   },
+   "unverified": [
+    "规格阶段那份 jar 是否已经在本机 Gradle 缓存里、能否离线取到"
+   ],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法是规格里怎么写基类契约，不落在具体接口上",
+   "refs": []
+  },
+  {
+   "title": "源字段已有 Double/Long 真值时，规格不因 String 重载或 Parcel 写法改成 string",
+   "product": "规格",
+   "triggers": [
+    {
+     "read": "参考文档或 getter 给出字段是 `Double` / `Long`，同时有 `setX(String)` 重载，或 Parcel 里写 `String.valueOf(getX())`、读 `setX(in.readString())`",
+     "wrong": "规格字段表把存储类型写成 string，或写「setter 同时接受 String 与数值」并建议目标用 `string | null` 存储；String 入口的解析规则没有写"
+    }
+   ],
+   "scope": "规格提取阶段为实体字段定类型、可空性时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "字段表的存储类型照真值写（Double → `number | null`，装箱可空）",
+     "support": [
+      "case-5e7f81b1b1ef0753d249#recommendation:2"
+     ]
+    },
+    {
+     "text": "String 入口另写一条访问器契约：按源码解析成数值（如 Double.parseDouble），解析失败 → null",
+     "support": [
+      "case-5e7f81b1b1ef0753d249#recommendation:2",
+      "case-5e7f81b1b1ef0753d249#diagnosis"
+     ]
+    }
+   ],
+   "values": [],
+   "lookups": [],
+   "why": "存储类型改成字符串后，空串和非法文本进了模型和数据库，数值比较、NULL 判断都跟源端不一样",
+   "keys": {
+    "read": [
+     "Double",
+     "Long",
+     "String.valueOf",
+     "readString",
+     "writeToParcel",
+     "parseDouble"
+    ],
+    "product": [
+     "字段表",
+     "存储类型",
+     "string | null",
+     "number | null",
+     "访问器",
+     "setter"
+    ]
+   },
+   "probe": null,
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法是规格字段表的类型写法，不落在具体接口上",
+   "refs": []
+  },
+  {
+   "title": "源端 Double 字段在模型和落库绑定上保持数值语义，空串或不可解析绑 NULL",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "Java 实体的 getter 返回 `Double`，另有 `setX(String)` 重载",
+     "wrong": "ArkTS 模型把字段写成 `string | null`，只有数值读取的访问器，没有 String 入口「解析失败 → null」的语义"
+    },
+    {
+     "read": "数据层用 `values.put(KEY, note.getX())` 以 Double 绑定 REAL 列",
+     "wrong": "`ValuesBucket` 里直接绑模型的字符串字段，空串以 TEXT `''` 落库而不是 NULL"
+    }
+   ],
+   "scope": "Java 实体里的 Double/装箱数值字段迁成 ArkTS 模型和 relationalStore 读写时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "模型给 String 入口写访问器：按 Double 解析，失败 → null；数值出口返回 `number | null`；若保留文本存储，文本统一成 Java Double.toString 的形态",
+     "support": [
+      "case-5e7f81b1b1ef0753d249#diagnosis",
+      "case-5e7f81b1b1ef0753d249#recommendation:2"
+     ]
+    },
+    {
+     "text": "落库绑定走数值访问器：`bucket[col] = 数值或 null`，空串、不可解析的文本绑 null，不绑字符串",
+     "support": [
+      "case-5e7f81b1b1ef0753d249#recommendation:5",
+      "case-5e7f81b1b1ef0753d249#diagnosis"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "type ValueType = null | number | string | boolean | Uint8Array | Asset | Assets | Float32Array | bigint",
+     "meaning": "ValuesBucket 每个键可绑的值；数值列绑 number，空值绑 null",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.data.relationalStore.d.ts，relationalStore.ValueType",
+     "support": []
+    },
+    {
+     "value": "type ValuesBucket = Record<string, ValueType>",
+     "meaning": "insert/update 用的键值对",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.data.relationalStore.d.ts，relationalStore.ValuesBucket",
+     "support": []
+    },
+    {
+     "value": "空串以 TEXT '' 落库时，`col != 0` 一类的查询会把它当成有值",
+     "meaning": "绑字符串的后果；改绑数值、空串绑 NULL 后修好",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-5e7f81b1b1ef0753d249#diagnosis"
+     ]
+    }
+   ],
+   "lookups": [
+    {
+     "what": "String 入口的解析规则和文本形态",
+     "where": "源工程里该字段的 setter（含基类，基类在二进制依赖里时用 javap 读）",
+     "how": "看 String 重载里调用的解析方法和异常分支（如 parseDouble 捕获 NumberFormatException 后置 null）"
+    }
+   ],
+   "why": "字段存成字符串时空串落成 TEXT ''，按数值判断的查询和比较结果跟源端不同",
+   "keys": {
+    "read": [
+     "Double",
+     "doubleValue",
+     "values.put",
+     "ContentValues",
+     "parseDouble",
+     "NumberFormatException"
+    ],
+    "product": [
+     "ValuesBucket",
+     "relationalStore",
+     "number | null",
+     "string | null",
+     "insert",
+     "update"
+    ]
+   },
+   "probe": null,
+   "unverified": [
+    "卡里的行为出自 HarmonyOS 6.1.1(24)，核对声明用的是本机 API 23"
+   ],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法落在模型字段类型和 ValuesBucket 绑定的取值上，ValueType 是通用值类型，不另列同族接口",
+   "refs": [
+    {
+     "what": "ValueType 的组成",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.data.relationalStore.d.ts relationalStore.ValueType",
+     "quote": "type ValueType = null | number | string | boolean | Uint8Array | Asset | Assets | Float32Array | bigint;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "ValuesBucket 的定义",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.data.relationalStore.d.ts relationalStore.ValuesBucket",
+     "quote": "type ValuesBucket = Record<string, ValueType>;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    }
+   ]
+  },
+  {
+   "title": "规格表写了构造缺省值（如当前毫秒）时，模型构造器照写，不改成 null 留给落库补",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "规格字段表的缺省列写了构造缺省值（如 id 缺省「当前毫秒」），Java 无参构造只有 `super()`",
+     "wrong": "ArkTS 模型写成 `id: number | null = null`，注释把缺省解释成落库侧补值"
+    }
+   ],
+   "scope": "按规格字段表实现模型字段的缺省值时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "规格表的缺省值就是构造时的缺省值：缺省「当前毫秒」写成构造器里 `Date.now()`",
+     "support": [
+      "case-5e7f81b1b1ef0753d249#recommendation:3",
+      "case-5e7f81b1b1ef0753d249#diagnosis"
+     ]
+    },
+    {
+     "text": "要改成由仓储层补值，先回源码（含基类字节码）确认无参构造不赋值，并在注释里写出处",
+     "support": [
+      "case-5e7f81b1b1ef0753d249#recommendation:3"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "基类无参构造即取构造时刻毫秒，目标构造器缺省改为 Date.now()",
+     "meaning": "子类只写 super() 时，缺省值在基类构造里",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-5e7f81b1b1ef0753d249#diagnosis"
+     ]
+    }
+   ],
+   "lookups": [],
+   "why": "缺省值留成 null 时，新建对象在落库前没有主键，按 id 判断、比较的逻辑都和源端不同",
+   "keys": {
+    "read": [
+     "super()",
+     "System.currentTimeMillis",
+     "Calendar.getInstance",
+     "getTimeInMillis",
+     "缺省",
+     "当前毫秒"
+    ],
+    "product": [
+     "Date.now()",
+     "constructor",
+     "number | null",
+     "= null",
+     "id"
+    ]
+   },
+   "probe": {
+    "pattern": "\\bid\\s*:\\s*number\\s*\\|\\s*null\\s*=\\s*null",
+    "note": "模型主键缺省为 null；对照规格表的缺省列，写了构造缺省值的应在构造器里赋值"
+   },
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法是模型构造器的缺省值，不落在具体接口上",
+   "refs": []
+  },
+  {
+   "title": "Java 构造路径显式传 null 的引用字段，目标模型保留 T | null，不用 '' 兼表",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "Java 构造器或委托调用 `this(…, null, …)` 对某个 String 字段显式传 `null`，另有路径传真实值",
+     "wrong": "ArkTS 模型把字段写成非空 `string = ''`，工厂方法传 `''`，null 与空串从此混同"
+    }
+   ],
+   "scope": "Java 实体的引用类型字段迁成 ArkTS 模型字段时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "按源构造器和调用点区分：有路径显式传 null 的字段写成 `string | null`（或另加 `T | null` 的原值字段），工厂方法照传 null",
+     "support": [
+      "case-5e7f81b1b1ef0753d249#recommendation:4",
+      "case-5e7f81b1b1ef0753d249#diagnosis"
+     ]
+    },
+    {
+     "text": "落库写 NULL、JSON 省略键都按这个原值判定，不按 '' 判定",
+     "support": [
+      "case-5e7f81b1b1ef0753d249#recommendation:4"
+     ]
+    }
+   ],
+   "values": [],
+   "lookups": [],
+   "why": "以 '' 兼表 null 时，数据库一律写 ''、JSON 一律省略，原本可区分的两类记录无法区分",
+   "keys": {
+    "read": [
+     "this(",
+     "null",
+     "String",
+     "constructor",
+     "Uri"
+    ],
+    "product": [
+     "string | null",
+     "= ''",
+     "null",
+     "ValuesBucket",
+     "toJson"
+    ]
+   },
+   "probe": {
+    "pattern": ":\\s*string\\s*=\\s*''",
+    "note": "非空字符串字段缺省为空串；对照源构造器，有路径显式传 null 的要改成 string | null"
+   },
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法是模型字段的可空性，不落在具体接口上",
+   "refs": []
+  },
+  {
+   "title": "源端 Cursor.getString 读 REAL 列时，迁到 ResultSet 按 %g 复刻文本",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源码用 `cursor.getString(i)` 读回 REAL（浮点）列，再交给 String 入口解析",
+     "wrong": "目标端 relationalStore 里同样用 `rs.getString(idx)` 读 REAL 列，得到全精度文本，和 Android 的文本不同"
+    }
+   ],
+   "scope": "把 SQLite Cursor 读取转成 relationalStore ResultSet 读取、且源端对数值列取文本时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "读回前用 `rs.getColumnTypeSync(idx)` 判列类型：为 `relationalStore.ColumnType.REAL` 时取 `rs.getDouble(idx)`，按 C printf 的 `%g`（6 位有效数字）格式化成文本，再交给源端同样的解析",
+     "support": [
+      "case-5e7f81b1b1ef0753d249#recommendation:5",
+      "case-5e7f81b1b1ef0753d249#diagnosis"
+     ]
+    },
+    {
+     "text": "INTEGER 列取文本时同样按源平台的规则（十进制 `%lld`）复刻，不把 getString 一对一搬过去",
+     "support": [
+      "case-5e7f81b1b1ef0753d249#recommendation:5"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "FIELD_TYPE_FLOAT 列的 getString 结果按 printf 的 %g 格式化；FIELD_TYPE_INTEGER 按 %lld",
+     "meaning": "Android 端 REAL 列取文本只有 6 位有效数字",
+     "source": "android.database.CursorWindow#getString",
+     "support": []
+    },
+    {
+     "value": "getColumnTypeSync(columnIdentifier: number | string): ColumnType",
+     "meaning": "取当前行某列的类型，@since 18（出自声明）",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.data.relationalStore.d.ts，ResultSet.getColumnTypeSync",
+     "support": []
+    },
+    {
+     "value": "ColumnType.REAL = 2（另有 NULL = 0、INTEGER = 1、TEXT = 3）",
+     "meaning": "列类型枚举",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.data.relationalStore.d.ts，relationalStore.ColumnType",
+     "support": []
+    },
+    {
+     "value": "getDouble(columnIndex: number): number",
+     "meaning": "按数值取 REAL 列，再自行格式化",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.data.relationalStore.d.ts，ResultSet.getDouble",
+     "support": []
+    },
+    {
+     "value": "ResultSet.getString 读 REAL 列得到全精度文本，和 Android 的 %g 文本不同",
+     "meaning": "不能一对一替换 cursor.getString",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-5e7f81b1b1ef0753d249#diagnosis"
+     ]
+    },
+    {
+     "value": "getColumnType(columnIdentifier: number | string): Promise<ColumnType>（LiteResultSet）",
+     "meaning": "同族接口：LiteResultSet 的取列类型",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.data.relationalStore.d.ts，LiteResultSet.getColumnType",
+     "support": []
+    }
+   ],
+   "lookups": [],
+   "why": "直接 getString 时目标读回的文本精度比源端高，解析出的数值、显示和比较结果都和 Android 不同",
+   "keys": {
+    "read": [
+     "Cursor",
+     "getString",
+     "REAL",
+     "CursorWindow",
+     "SQLiteOpenHelper",
+     "rawQuery"
+    ],
+    "product": [
+     "ResultSet",
+     "getString",
+     "getDouble",
+     "getColumnTypeSync",
+     "ColumnType.REAL",
+     "relationalStore"
+    ]
+   },
+   "probe": null,
+   "unverified": [
+    "卡里的行为出自 HarmonyOS 6.1.1(24)，核对声明用的是本机 API 23",
+    "%g 的指数形式切换规则卡里没写，按 C 标准实现时要另核"
+   ],
+   "alternatives_unverified": [],
+   "siblings_checked": "搜 ColumnType：relationalStore.d.ts 里 ResultSet、LiteResultSet 两个类的 getColumnType / getColumnTypeSync 带它，LiteResultSet 写进 values",
+   "refs": [
+    {
+     "what": "CursorWindow.getString 对 FLOAT 用 %g",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/android/database/CursorWindow.java CursorWindow#getString",
+     "quote": "is a string representation of the floating-point value in decimal, obtained by * formatting the value with the <code>printf</code> family of functions using * format specifier <code>%g</code>.</li>",
+     "version": "android-36.1"
+    },
+    {
+     "what": "CursorWindow.getString 对 INTEGER 用 %lld",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/android/database/CursorWindow.java CursorWindow#getString",
+     "quote": "is a string representation of the integer in decimal, obtained by formatting the * value with the <code>printf</code> family of functions using * format specifier <code>%lld</code>.</li>",
+     "version": "android-36.1"
+    },
+    {
+     "what": "ResultSet.getColumnTypeSync 签名与版本",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.data.relationalStore.d.ts ResultSet.getColumnTypeSync",
+     "quote": "* @since 18 */ getColumnTypeSync(columnIdentifier: number | string): ColumnType;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "ColumnType.REAL",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.data.relationalStore.d.ts relationalStore.ColumnType",
+     "quote": "The value in the column is a floating point number. * * @syscap SystemCapability.DistributedDataManager.RelationalStore.Core * @crossplatform * @since 18 */ REAL = 2,",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "ResultSet.getDouble 签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.data.relationalStore.d.ts ResultSet.getDouble",
+     "quote": "getDouble(columnIndex: number): number;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "LiteResultSet.getColumnType（同族）",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.data.relationalStore.d.ts LiteResultSet.getColumnType",
+     "quote": "getColumnType(columnIdentifier: number | string): Promise<ColumnType>;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    }
+   ]
+  },
+  {
+   "title": "源端用 Gson 反射写备份 JSON 时，toJson 按 Gson 的键序、布尔写法和 null 省略写出",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源端备份或互通 JSON 走 `Gson` 反射序列化（`new Gson().toJson(obj)`），规格或参考里的 JSON 示例标着 `[推断]`",
+     "wrong": "手写的 `toJson` 照抄推断示例：Boolean 字段写成 0/1 数值、null 值写出键、键序不按字段声明顺序，或用 `JSON.stringify` 加全局 `replace` 凑 htmlSafe 转义"
+    }
+   ],
+   "scope": "源端用 Gson 反射序列化、目标端手写 toJson/fromJson 互通同一份 JSON 时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "先核对真实序列化器再写：键按字段声明顺序，Boolean 写 true/false，null 值省略键，字符串按 Gson 的 htmlSafe 规则转义",
+     "support": [
+      "case-5e7f81b1b1ef0753d249#recommendation:6",
+      "case-5e7f81b1b1ef0753d249#diagnosis"
+     ]
+    },
+    {
+     "text": "需要特殊字符转义时逐字符写出（等价于 Gson 的写出器），不用 JSON.stringify 后全局 replace",
+     "support": [
+      "case-5e7f81b1b1ef0753d249#recommendation:6",
+      "case-5e7f81b1b1ef0753d249#diagnosis"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "Gson 反射：字段名序、Boolean 为 true/false、null 省略、htmlSafe 转义",
+     "meaning": "手写 toJson 要对齐的四项",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-5e7f81b1b1ef0753d249#recommendation:6",
+      "case-5e7f81b1b1ef0753d249#diagnosis"
+     ]
+    }
+   ],
+   "lookups": [
+    {
+     "what": "Gson 的版本和 JsonWriter 的转义表",
+     "where": "源工程 Gradle 构建脚本里 com.google.code.gson:gson 的版本；Gradle 缓存里对应版本的 jar",
+     "how": "对 com.google.gson.stream.JsonWriter 跑 `javap -c -p`，读 htmlSafe 时替换的字符表"
+    }
+   ],
+   "why": "照推断示例写出的 JSON 与 Android 端写盘结果不一致，备份互导时字段类型错、键多出或转义不同",
+   "keys": {
+    "read": [
+     "Gson",
+     "toJson",
+     "fromJson",
+     "GsonBuilder",
+     "JsonWriter",
+     "[推断]"
+    ],
+    "product": [
+     "toJson",
+     "fromJson",
+     "JSON.stringify",
+     "replace",
+     "true",
+     "false"
+    ]
+   },
+   "probe": null,
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：Gson 是源端库的行为，不落在鸿蒙 SDK 的接口参数上",
+   "refs": []
+  },
+  {
+   "title": "正则字面量里要匹配 U+2028/U+2029 时写 \\u2028 转义，不放原字符",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "",
+     "wrong": "ArkTS 的正则字面量 `/…/`（如 `.replace(/…/g, …)`）里直接放了 U+2028 或 U+2029 原字符"
+    }
+   ],
+   "scope": "ArkTS/TS 代码里写正则字面量处理行分隔符、段分隔符时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "写成转义 `/\\u2028/g`、`/\\u2029/g`；做 Gson 等价转义时改成逐字符写出，不在正则里放原字符",
+     "support": [
+      "case-5e7f81b1b1ef0753d249#recommendation:6",
+      "case-5e7f81b1b1ef0753d249#diagnosis"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "TS 正则字面量禁止行终止符，放入 U+2028/U+2029 原字符时编译错误",
+     "meaning": "原字符写进正则字面量过不了编译，且编辑工具难以匹配含原字符的行",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-5e7f81b1b1ef0753d249#diagnosis"
+     ]
+    }
+   ],
+   "lookups": [],
+   "why": "正则字面量里有行终止符原字符时编译失败",
+   "keys": {
+    "read": [
+     "JsonWriter",
+     "htmlSafe",
+     "\\u2028",
+     "\\u2029"
+    ],
+    "product": [
+     "replace",
+     "RegExp",
+     "\\u2028",
+     "\\u2029"
+    ]
+   },
+   "probe": {
+    "pattern": "[\\u2028\\u2029]",
+    "note": "源码文件里出现了 U+2028/U+2029 原字符；在正则字面量里会编译失败，改成 \\u2028 / \\u2029 转义"
+   },
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法落在 TS 正则字面量的语法上，不落在具体接口上",
+   "refs": []
+  }
+ ],
+ "left_out": [
+  {
+   "text": "派工已指出依赖 jar 在 Gradle 缓存、可 javap 查真值时，子代理应先去查而不是凭记忆写",
+   "reason": "没有产物里看得到的触发"
+  }
+ ],
+ "corrections": [],
+ "gaps": [
+  "Gson 的键序、null 省略、htmlSafe 转义表属于依赖库代码，本机 Gradle 缓存只有 gson 的 jar、没有源码，按卡写",
+  "relationalStore ResultSet.getString 对 REAL 列给出全精度文本，声明里没写，按卡写"
+ ],
+ "conflicts": []
+}

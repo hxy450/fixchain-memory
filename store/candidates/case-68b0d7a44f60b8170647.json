@@ -1,0 +1,368 @@
+{
+ "case": "case-68b0d7a44f60b8170647",
+ "rules": [
+  {
+   "title": "源 API 以 false 表示被拒、目标只会 reject 时，先写单次适配器区分被拒与丢卡，重试都经它",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源码 ret = authenticateSectorWithKeyA/B(...) 取 boolean，ret 为 false 时按偏好重试，只有 IOException、TagLostException 这类异常才立即返回 false",
+     "wrong": "目标的认证方法 try { await ….authenticateSector(...) } catch { return false }：任何 reject 都直接返回，「被拒后重试」的分支永远走不到"
+    }
+   ],
+   "scope": "安卓 MifareClassic 认证这类以返回值表示被拒、以异常表示丢卡的 API，迁到只以 Promise reject 报错的 MifareClassicTag 时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "写一个单次原语适配器：await authenticateSector(sectorIndex, key, isKeyA) resolve 返回 true；reject 且判为被拒返回 false；判为丢卡时 throw",
+     "support": [
+      "case-68b0d7a44f60b8170647#recommendation:1"
+     ]
+    },
+    {
+     "text": "所有带重试或返回码的上层方法（认证、读扇区、写块等）每轮都调这个适配器：得 false 按偏好进下一轮，捕到 throw 才立即失败；上层不再 catch 全部 reject 后直接返回",
+     "support": [
+      "case-68b0d7a44f60b8170647#recommendation:1",
+      "case-68b0d7a44f60b8170647#diagnosis"
+     ]
+    },
+    {
+     "text": "按规格判定用例走读：持续被拒在目标上表现为每轮 reject，确认代码确实进入第 2、3 轮，次数与用例一致",
+     "support": [
+      "case-68b0d7a44f60b8170647#recommendation:2"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "authenticateSector(sectorIndex: number, key: number[], isKeyA: boolean): Promise<void>",
+     "meaning": "目标的扇区认证没有 boolean 结果，被拒只能以 reject 出现",
+     "source": "鸿蒙 SDK 的 ets/api/tag/nfctech.d.ts，MifareClassicTag.authenticateSector",
+     "support": []
+    },
+    {
+     "value": "@throws BusinessError 201、401、3100201（The tag running state is abnormal in the service）、3100204（The tag I/O operation failed）",
+     "meaning": "声明列出的 reject 码，没有写哪个是密钥被拒",
+     "source": "鸿蒙 SDK 的 ets/api/tag/nfctech.d.ts，MifareClassicTag.authenticateSector",
+     "support": []
+    },
+    {
+     "value": "@return true on success, false on authentication failure；@throws TagLostException if the tag leaves the field",
+     "meaning": "源端被拒走返回值、丢卡走异常",
+     "source": "android.nfc.tech.MifareClassic#authenticateSectorWithKeyA",
+     "support": []
+    }
+   ],
+   "lookups": [],
+   "why": "上层把所有 reject 都当异常直接返回时，重试偏好在走这条路径的读写方法上全部失效",
+   "keys": {
+    "read": [
+     "authenticateSectorWithKeyA",
+     "authenticateSectorWithKeyB",
+     "MifareClassic",
+     "TagLostException",
+     "IOException",
+     "boolean"
+    ],
+    "product": [
+     "authenticateSector",
+     "MifareClassicTag",
+     "Promise<void>",
+     "BusinessError",
+     "catch",
+     "return false"
+    ]
+   },
+   "probe": {
+    "pattern": "await\\s+[\\w.]*authenticateSector\\(",
+    "note": "直接 await 认证接口；核对外层是否把任何 reject 都当失败直接返回、绕过了重试"
+   },
+   "unverified": [
+    "修复未上真机（NFC 不可达），按源码对照",
+    "卡里工程的 SDK 是 6.1.1(24)，本机按 API 23 核对"
+   ],
+   "alternatives_unverified": [],
+   "siblings_checked": "搜 authenticateSector(：nfctech.d.ts 里只有 MifareClassicTag 的 Promise 和 callback 两个重载；同文件另有 10 个返回 Promise<void> 的方法（writeSingleBlock 等），对应的安卓方法返回 void，不涉及被拒与异常的分流，没写进 values",
+   "refs": [
+    {
+     "what": "authenticateSector 的签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/tag/nfctech.d.ts MifareClassicTag.authenticateSector",
+     "quote": "authenticateSector(sectorIndex: number, key: number[], isKeyA: boolean): Promise<void>;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "authenticateSector 声明的 reject 码",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/tag/nfctech.d.ts MifareClassicTag.authenticateSector",
+     "quote": "* @throws { BusinessError } 3100201 - The tag running state is abnormal in the service. * @throws { BusinessError } 3100204 - The tag I/O operation failed.",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "安卓认证以返回值表示被拒、以异常表示丢卡",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/android/nfc/tech/MifareClassic.java MifareClassic#authenticateSectorWithKeyA",
+     "quote": "* @return true on success, false on authentication failure * @throws TagLostException if the tag leaves the field",
+     "version": "android-36.1"
+    }
+   ]
+  },
+  {
+   "title": "靠 d.ts 没说明语义的错误码分流被拒与丢卡时，加 isConnected() 在场复核并登记真机待验",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "目标 d.ts 里 authenticateSector 只列 BusinessError 201/401/3100201/3100204，没说哪个码是密钥被拒、哪个是丢卡",
+     "wrong": "适配器只按单个 err.code（3100201 或 3100204）判被拒或丢卡，没有 isConnected() 这类在场复核，码值假设也没进真机待验项"
+    }
+   ],
+   "scope": "用 MifareClassicTag 等 NFC 标签接口的 reject 码区分被拒与丢卡时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "被拒与丢卡不只靠单个码分流：reject 后调 isConnected() 复核在场（或配合重连），不在场才按丢卡 throw，在场按被拒返回 false",
+     "support": [
+      "case-68b0d7a44f60b8170647#recommendation:3"
+     ]
+    },
+    {
+     "text": "把所用码值的假设（哪个码当被拒、哪个当丢卡）写进真机待验项",
+     "support": [
+      "case-68b0d7a44f60b8170647#recommendation:3"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "isConnected(): boolean",
+     "meaning": "TagSession 的在场判定，MifareClassicTag 继承它（@since 12）",
+     "source": "鸿蒙 SDK 的 ets/api/tag/tagSession.d.ts，TagSession.isConnected",
+     "support": []
+    },
+    {
+     "value": "3100201 的可能原因同时列了「Tag操作前，已经处在断开状态」和「Tag芯片返回错误状态或响应超时」",
+     "meaning": "同一个码既可能是丢卡也可能是卡片拒绝，单靠它分不开",
+     "source": "errorcode-nfc.md，3100201 NFC服务读写Tag错误",
+     "support": []
+    },
+    {
+     "value": "3100204 可能原因：NFC Tag不支持所执行的读写操作",
+     "meaning": "文档没把它写成丢卡",
+     "source": "errorcode-nfc.md，3100204 NFC芯片I/O异常",
+     "support": []
+    }
+   ],
+   "lookups": [],
+   "why": "码值语义没确认时只靠一个码分流，被拒和丢卡会互相误判，重试和丢卡处理都可能走错",
+   "keys": {
+    "read": [
+     "authenticateSector",
+     "BusinessError",
+     "3100201",
+     "3100204",
+     "TagLostException",
+     "IOException"
+    ],
+    "product": [
+     "err.code",
+     "3100201",
+     "3100204",
+     "isConnected",
+     "真机待验",
+     "TagLostError"
+    ]
+   },
+   "probe": {
+    "pattern": "code\\s*===?\\s*310020[14]",
+    "note": "按单个 NFC 错误码分流；核对是否另有 isConnected() 在场复核、码值假设是否登记真机待验"
+   },
+   "unverified": [
+    "没有真机材料能确认密钥错误和拔卡时 authenticateSector 分别返回哪个码"
+   ],
+   "alternatives_unverified": [
+    "文档另有 3100205（The tag leaves the field，NFC标签已经离场），但本机 d.ts 的 authenticateSector 没列这个码"
+   ],
+   "siblings_checked": "无：做法落在错误码分流和通用的 isConnected()，没有专门参数类型可搜",
+   "refs": [
+    {
+     "what": "TagSession.isConnected",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/tag/tagSession.d.ts TagSession.isConnected",
+     "quote": "* @syscap SystemCapability.Communication.NFC.Tag * @atomicservice * @since 12 */ isConnected(): boolean;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "3100201 的可能原因",
+     "kind": "oh-docs",
+     "where": "zh-cn/application-dev/reference/apis-connectivity-kit/errorcode-nfc.md 3100201 NFC服务读写Tag错误",
+     "quote": "3. Tag操作前，已经处在断开状态。 4. Tag芯片返回错误状态或响应超时。",
+     "version": "docs f41b9345"
+    },
+    {
+     "what": "3100204 的可能原因",
+     "kind": "oh-docs",
+     "where": "zh-cn/application-dev/reference/apis-connectivity-kit/errorcode-nfc.md 3100204 NFC芯片I/O异常",
+     "quote": "NFC Tag I/O操作失败。 **可能原因** NFC Tag不支持所执行的读写操作。",
+     "version": "docs f41b9345"
+    },
+    {
+     "what": "3100205 标签离场（文档有，d.ts 未列）",
+     "kind": "oh-docs",
+     "where": "zh-cn/application-dev/reference/apis-connectivity-kit/errorcode-nfc.md 3100205 NFC标签状态异常",
+     "quote": "The tag leaves the field.",
+     "version": "docs f41b9345"
+    }
+   ]
+  },
+  {
+   "title": "规格描述源码重连循环时保留源码退出条件，新增取消出口要登记为显式偏离并同步 AC",
+   "product": "规格",
+   "triggers": [
+    {
+     "read": "源码重连循环 while (!isConnected()) { sleep(500); connect(); }，循环内不检查取消",
+     "wrong": "规格附录写「页面销毁必须能终止该循环」「以取消标志为唯一出口」，主规格 AC 却写「循环 connect 直到成功」，决策台账里没有这条偏离"
+    }
+   ],
+   "scope": "规格提取阶段描述源码里的等待、重连循环及其退出条件时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "规格照写源码循环的退出条件，例如「只在重新连上后退出，循环内不响应取消，取消在下一轮检点生效」",
+     "support": [
+      "case-68b0d7a44f60b8170647#recommendation:4"
+     ]
+    },
+    {
+     "text": "确需按平台理由新增取消或超时出口时，在决策台账写一条显式偏离（源码行为、新行为、理由），并同步改对应 AC；不在附录里直接写成实现要求",
+     "support": [
+      "case-68b0d7a44f60b8170647#recommendation:4"
+     ]
+    }
+   ],
+   "values": [],
+   "lookups": [],
+   "why": "附录私加的出口会被实现者照写进代码，改变源码的重连行为，且台账和 AC 都对不上",
+   "keys": {
+    "read": [
+     "while",
+     "isConnected",
+     "connect",
+     "sleep",
+     "auto_reconnect",
+     "cancel"
+    ],
+    "product": [
+     "决策台账",
+     "偏离",
+     "AC",
+     "addendum",
+     "取消标志",
+     "唯一出口",
+     "直到成功"
+    ]
+   },
+   "probe": {
+    "pattern": "唯一出口|必须能终止",
+    "note": "规格给循环加了出口要求；核对源码循环有没有这个出口、台账里是否登记了偏离"
+   },
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：规格里的写法，不落在接口上",
+   "refs": []
+  },
+  {
+   "title": "源码重连循环只在连上后退出时，目标循环内不加取消出口，取消留到下一轮检点",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源码 while (!isConnected()) { sleep(500); connect(); }，循环内不检查取消，取消只在外层每一轮的检点生效",
+     "wrong": "目标的重连 while (!….isConnected()) 循环里加了 if (<取消标志>) return -1 这类出口"
+    }
+   ],
+   "scope": "把安卓 NFC 引擎里的自动重连等待循环迁到 TagSession 接口时",
+   "exceptions": [
+    {
+     "text": "决策台账已把新增的取消或超时出口登记为显式偏离、对应 AC 也已同步改过的",
+     "support": [
+      "case-68b0d7a44f60b8170647#recommendation:4"
+     ]
+    }
+   ],
+   "how": [
+    {
+     "text": "重连循环照源码只在 isConnected() 为真时退出，循环体内是等待加 connect()；取消在外层下一轮检点再响应，不在循环内 return",
+     "support": [
+      "case-68b0d7a44f60b8170647#diagnosis"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "isConnected(): boolean",
+     "meaning": "循环的退出判定",
+     "source": "鸿蒙 SDK 的 ets/api/tag/tagSession.d.ts，TagSession.isConnected",
+     "support": []
+    },
+    {
+     "value": "connect(): void",
+     "meaning": "同步连接，失败以 BusinessError 3100201 等抛出",
+     "source": "鸿蒙 SDK 的 ets/api/tag/tagSession.d.ts，TagSession.connect",
+     "support": []
+    }
+   ],
+   "lookups": [],
+   "why": "循环内私加出口会让源码里一直等到重连的流程中途放弃，行为和源端不同",
+   "keys": {
+    "read": [
+     "while",
+     "isConnected",
+     "connect",
+     "sleep",
+     "Thread.sleep",
+     "auto_reconnect"
+    ],
+    "product": [
+     "isConnected",
+     "connect",
+     "while",
+     "return -1",
+     "cancel"
+    ]
+   },
+   "probe": {
+    "pattern": "while\\s*\\(\\s*!.*isConnected\\(\\)[^{]*\\{[^}]*\\breturn\\b",
+    "note": "重连等待循环里有 return 出口；核对源码循环是否只在连上后退出"
+   },
+   "unverified": [
+    "修复未上真机（NFC 不可达），按源码对照"
+   ],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法落在循环退出条件和通用的 isConnected()/connect()，没有专门参数类型可搜",
+   "refs": [
+    {
+     "what": "TagSession.isConnected",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/tag/tagSession.d.ts TagSession.isConnected",
+     "quote": "* @syscap SystemCapability.Communication.NFC.Tag * @atomicservice * @since 12 */ isConnected(): boolean;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "TagSession.connect",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/tag/tagSession.d.ts TagSession.connect",
+     "quote": "* @throws { BusinessError } 3100201 - The tag running state is abnormal in the service. * @syscap SystemCapability.Communication.NFC.Tag * @atomicservice * @since 12 */ connect(): void;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    }
+   ]
+  }
+ ],
+ "left_out": [
+  {
+   "text": "生成末期自检只核了一个方法、没回看所有调用路径",
+   "reason": "没有产物里看得到的触发"
+  }
+ ],
+ "corrections": [],
+ "gaps": [],
+ "conflicts": []
+}

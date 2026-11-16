@@ -1,0 +1,141 @@
+{
+ "id": "rule-c94aea280e58",
+ "title": "拆 AppStorageV2 共享 VM 改各页 new 时，跨页状态改用 @Param+@Monitor 下传",
+ "product": "代码",
+ "triggers": [
+  {
+   "read": "被拆的 ViewModel 经 AppStorageV2.connect 同一个 key 由各页 getInstance() 共用；其中的 @Trace 状态字段由某一页的动作写入，其他页只读（含查询时隐式读取）",
+   "wrong": "各调用处把 getInstance() 机械替换成 new 出来的 ViewModel 实例，读取页没有新增对应的 @Param + @Monitor，也没有订阅事件；写入动作只改了写入页自己的私有实例"
+  }
+ ],
+ "scope": "把跨页面共享的 ViewModel 单例（AppStorageV2 等全局存储）改成页面级实例的重构",
+ "exceptions": [],
+ "how": [
+  {
+   "text": "对 VM 里每个跨页面状态字段，先列出写入它的动作和全部读取页",
+   "support": [
+    "case-8f714106a538afa3c22a#recommendation:1"
+   ]
+  },
+  {
+   "text": "每个读取页改成显式输入：在 @ComponentV2 组件里声明该字段的 @Param，由父页传入，并用 @Monitor('该字段') 在变化时重新查询；或者订阅一个带类型的事件",
+   "support": [
+    "case-8f714106a538afa3c22a#recommendation:1",
+    "case-8f714106a538afa3c22a#diagnosis"
+   ]
+  },
+  {
+   "text": "原先写共享实例的一方（如侧栏选择弹层）删掉对自己私有 VM 的查询和写入，改成保存成功后回调通知父页，由父页更新下传的值；只刷新私有实例、无人显示的 VM 调用一并删掉",
+   "support": [
+    "case-8f714106a538afa3c22a#diagnosis"
+   ]
+  }
+ ],
+ "values": [
+  {
+   "value": "static connect<T extends object>(type: TypeConstructorWithArgs<T>, keyOrDefaultCreator?: string | StorageDefaultCreator<T>, defaultCreator?: StorageDefaultCreator<T>): T | undefined",
+   "meaning": "同一个 key 已有值时返回已有对象，所以各页 connect 同一 key 拿到的是同一个实例，这就是被拆掉的隐式通道",
+   "source": "鸿蒙 SDK 的 ets/api/@ohos.arkui.StateManagement.d.ts，AppStorageV2.connect",
+   "support": []
+  },
+  {
+   "value": "@Param：由父到子单向同步，组件内不能本地修改；数据源是 @Local 或 @Param 时变化会同步给子组件",
+   "meaning": "读取页用 @Param 接收父页的状态，改动要由父页的数据源发起",
+   "source": "arkts-new-param.md，装饰器说明、变量传递",
+   "support": []
+  },
+  {
+   "value": "declare type MonitorDecorator = (value: string, ...args: string[]) => MethodDecorator",
+   "meaning": "@Monitor 的参数是要监听的属性路径，可写多个",
+   "source": "鸿蒙 SDK 的 ets/component/common.d.ts，MonitorDecorator",
+   "support": []
+  },
+  {
+   "value": "@Monitor 只能监听被 @Local、@Param、@Provider、@Consumer、@Computed 装饰的变量",
+   "meaning": "读取页要先把字段声明成 @Param，@Monitor 才能收到变化",
+   "source": "arkts-new-monitor.md，监听变化",
+   "support": []
+  }
+ ],
+ "lookups": [],
+ "why": "页面各持私有实例后，写入方只改了自己的实例，其他页的筛选状态停在初始化值，切换后不刷新或混入别的数据",
+ "keys": {
+  "read": [
+   "AppStorageV2",
+   "AppStorageV2.connect",
+   "getInstance",
+   "@ObservedV2",
+   "@Trace",
+   "ViewModel",
+   "单例"
+  ],
+  "product": [
+   "@Param",
+   "@Monitor",
+   "@ComponentV2",
+   "@Require",
+   "IMonitor",
+   "ViewModel()",
+   "page-scope"
+  ]
+ },
+ "probe": {
+  "pattern": "new\\s+\\w*ViewModel\\s*\\(\\s*\\)",
+  "note": "页面里 new 了一个 ViewModel；它原来若经 AppStorageV2 共享，核对跨页状态字段是否另有 @Param + @Monitor 或事件通道"
+ },
+ "unverified": [],
+ "alternatives_unverified": [
+  "写入方用 @Event 装饰的回调通知父页更新数据源（文档 arkts-new-event.md），卡里只写了「通知父页」，没写用哪种机制",
+  "@SyncMonitor（API 23 起，同步回调）替代 @Monitor"
+ ],
+ "siblings_checked": "搜 MonitorDecorator：common.d.ts 里另有 SyncMonitor 一个（API 23，同步版），卡里没验证，记进 alternatives_unverified",
+ "refs": [
+  {
+   "what": "AppStorageV2.connect 同一 key 返回已有值",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/api/@ohos.arkui.StateManagement.d.ts AppStorageV2.connect",
+   "quote": "If the value for the given key is already available, return the value.",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  },
+  {
+   "what": "AppStorageV2.connect 的签名",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/api/@ohos.arkui.StateManagement.d.ts AppStorageV2.connect",
+   "quote": "static connect<T extends object>(type: TypeConstructorWithArgs<T>, keyOrDefaultCreator?: string | StorageDefaultCreator<T>, defaultCreator?: StorageDefaultCreator<T>): T | undefined;",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  },
+  {
+   "what": "@Param 由父到子单向同步",
+   "kind": "oh-docs",
+   "where": "zh-cn/application-dev/ui/state-management/arkts-new-param.md 装饰器说明",
+   "quote": "| 同步类型           | 由父到子单向同步。",
+   "version": "docs f41b9345"
+  },
+  {
+   "what": "@Param 与父组件数据源同步",
+   "kind": "oh-docs",
+   "where": "zh-cn/application-dev/ui/state-management/arkts-new-param.md 变量传递",
+   "quote": "\\@Param可以和父组件传入的状态变量数据源（即\\@Local或\\@Param装饰的变量）进行同步，当数据源发生变化时，会将修改同步给子组件的\\@Param。",
+   "version": "docs f41b9345"
+  },
+  {
+   "what": "MonitorDecorator 的类型",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/component/common.d.ts MonitorDecorator",
+   "quote": "declare type MonitorDecorator = (value: string, ...args: string[]) => MethodDecorator;",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  },
+  {
+   "what": "@Monitor 能监听哪些变量",
+   "kind": "oh-docs",
+   "where": "zh-cn/application-dev/ui/state-management/arkts-new-monitor.md 在\\@ComponentV2装饰的自定义组件中使用\\@Monitor",
+   "quote": "\\@Monitor监听的变量需要被\\@Local、\\@Param、\\@Provider、\\@Consumer、\\@Computed装饰，未被状态变量装饰器装饰的变量在变化时无法被监听。",
+   "version": "docs f41b9345"
+  }
+ ],
+ "sources": [
+  "case-8f714106a538afa3c22a"
+ ],
+ "general": false,
+ "status": "active"
+}

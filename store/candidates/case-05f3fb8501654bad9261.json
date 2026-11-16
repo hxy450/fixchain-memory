@@ -1,0 +1,403 @@
+{
+ "case": "case-05f3fb8501654bad9261",
+ "rules": [
+  {
+   "title": "源端壳内 hide+add+addToBackStack 压栈的子页，目标在壳状态里维护子回退栈",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源端单 Activity 壳在内容区用 FragmentTransaction 的 hide(当前) + add(子 Fragment) + addToBackStack(...) 压栈加载子页，子页期间底部导航和迷你播放条仍在，工具栏随回退栈深度切换上箭头，带导航 tag 时同步底部导航选中；规格 AC 用「标:」点名壳路由的子页加载方法",
+     "wrong": "子页写成 pushPathByName 推到壳外的 NavDestination；返回首分支写 navPathStack.size() > 1 交系统弹栈；壳状态里没有子回退栈字段，壳路由只有清栈切页入口"
+    }
+   ],
+   "scope": "目标端同时有 Navigation + NavDestination 路由和壳内容槽（按 tag 切换），迁移源端单 Activity 内容区压栈子页时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "壳状态里加子回退栈：入栈项记上一页的 tag 和参数，另记当前子页参数、上箭头是否显示、底部导航选中 tag；壳路由提供「压栈加载子页」「弹出子页」两个入口，清栈切页入口同时清空子栈",
+     "support": [
+      "case-05f3fb8501654bad9261#recommendation:2",
+      "case-05f3fb8501654bad9261#diagnosis"
+     ]
+    },
+    {
+     "text": "返回键和工具栏上箭头先弹子栈，子栈空了再走默认页 / 抽屉 / 退出分支；上箭头按栈深切换；压栈时带了导航 tag 就覆盖底部导航选中",
+     "support": [
+      "case-05f3fb8501654bad9261#recommendation:2"
+     ]
+    },
+    {
+     "text": "规格里每条「标:」指向的目标方法逐条落地或登记缺口；先判定子页期间底栏、迷你播放条是否仍可见，仍可见的子页由壳内容区按 tag 承载，不用 Navigation 路由栈替代",
+     "support": [
+      "case-05f3fb8501654bad9261#recommendation:1"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "addToBackStack(@Nullable String name)：提交后事务被记住，出栈时反向执行",
+     "meaning": "源端子页压在内容区回退栈里，返回时恢复上一页",
+     "source": "android.app.FragmentTransaction#addToBackStack",
+     "support": []
+    },
+    {
+     "value": "hide(Fragment fragment)：只隐藏已加到容器里的 Fragment 的视图",
+     "meaning": "源端上一页保活不销毁，壳的其余部分（底栏、迷你条）不动",
+     "source": "android.app.FragmentTransaction#hide",
+     "support": []
+    },
+    {
+     "value": "壳状态加子回退栈、当前子页参数、上箭头和选中 tag；壳路由加压栈加载、弹出入口，清栈入口清子栈；壳以保活层渲染回退栈和嵌入子页",
+     "meaning": "返修后的壳结构",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-05f3fb8501654bad9261#diagnosis"
+     ]
+    }
+   ],
+   "lookups": [
+    {
+     "what": "子页期间哪些壳元素仍可见",
+     "where": "源工程壳 Activity 的布局 XML（内容区容器之外的底部导航、播放条等）和压栈加载方法里有没有隐藏它们",
+     "how": "加载子页时没隐藏的元素，在目标子页期间也保持显示"
+    }
+   ],
+   "why": "改用 Navigation 路由栈后子页离开壳，底栏和迷你条消失，返回和上箭头语义也和源端不同",
+   "keys": {
+    "read": [
+     "FragmentTransaction",
+     "addToBackStack",
+     "hide",
+     "popBackStack",
+     "getBackStackEntryCount",
+     "BottomNavigationView",
+     "Fragment"
+    ],
+    "product": [
+     "pushPathByName",
+     "NavPathStack",
+     "NavDestination",
+     "size()",
+     "onBackPressed",
+     "子回退栈"
+    ]
+   },
+   "probe": {
+    "pattern": "navPathStack\\.size\\(\\)\\s*>\\s*1",
+    "note": "返回分支按 Navigation 路由栈深判断；若源端是壳内容区回退栈，应先弹壳的子栈"
+   },
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法落在应用自己的壳状态和路由上，不落在平台接口参数上",
+   "refs": [
+    {
+     "what": "addToBackStack 的语义",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/android/app/FragmentTransaction.java FragmentTransaction#addToBackStack",
+     "quote": "Add this transaction to the back stack.  This means that the transaction\n     * will be remembered after it is committed, and will reverse its operation\n     * when later popped off the stack.",
+     "version": "android-36.1"
+    },
+    {
+     "what": "hide 的语义",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/android/app/FragmentTransaction.java FragmentTransaction#hide",
+     "quote": "Hides an existing fragment.  This is only relevant for fragments whose\n     * views have been added to a container, as this will cause the view to\n     * be hidden.",
+     "version": "android-36.1"
+    }
+   ]
+  },
+  {
+   "title": "调用点按源端 API 区分清栈切页与壳内压栈，不把压栈子页写成清栈切页",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源端调用点有的走清栈加载（替换内容区并保存最后页），有的走压栈加载（addToBackStack、不持久化），如区段「更多」、搜索、单集详情",
+     "wrong": "压栈的调用点在目标写成清栈切页（并保存最后页 tag），或写成 pushPathByName 推出壳外"
+    }
+   ],
+   "scope": "接线阶段把源端各调用点映射到目标壳路由入口时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "逐个调用点看源端调的是哪个加载方法：清栈的接壳路由的清栈入口（持久化最后页），压栈的接压栈加载子页入口（不持久化）",
+     "support": [
+      "case-05f3fb8501654bad9261#recommendation:3",
+      "case-05f3fb8501654bad9261#diagnosis"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "「更多」和搜索调用点改为压栈加载子页入口后，返回回到原区段",
+     "meaning": "返修后的调用点映射",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-05f3fb8501654bad9261#diagnosis"
+     ]
+    }
+   ],
+   "lookups": [],
+   "why": "压栈子页写成清栈切页时返回不回原页，最后页还被持久化成子页",
+   "keys": {
+    "read": [
+     "addToBackStack",
+     "FragmentTransaction",
+     "replace",
+     "onMoreClick",
+     "SharedPreferences",
+     "Fragment"
+    ],
+    "product": [
+     "pushPathByName",
+     "清栈",
+     "压栈",
+     "持久化",
+     "NavPathStack",
+     "NavDestination"
+    ]
+   },
+   "probe": null,
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法落在应用自己的壳路由入口上",
+   "refs": []
+  },
+  {
+   "title": "meta 标 sub_component 且源端壳内压栈打开的页面，规格不推荐 NavDestination 全屏页",
+   "product": "规格",
+   "triggers": [
+    {
+     "read": "meta.page_type=sub_component；源码用 hide + add + addToBackStack 在宿主 Activity 内容区打开这个 Fragment",
+     "wrong": "页面规格备注推荐「实现为 NavDestination 全屏页」，转换表写 NavDestination 标题栏；或 handback 宣称这些子页将实现为 NavDestination"
+    }
+   ],
+   "scope": "规格提取阶段写子 Fragment 页面的页面形态和转换表时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "页面形态写成：「可嵌入组件（@Param 传参），由宿主壳内容区按 tag 承载，返回走壳的子栈弹出」；不拿已有页面的先例覆盖 meta 和源码加载方式",
+     "support": [
+      "case-05f3fb8501654bad9261#recommendation:4"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "@Param 表示组件从外部传入的状态，初始化自定义组件时从外部传入",
+     "meaning": "嵌入组件的参数写法",
+     "source": "arkts-new-param.md，概述",
+     "support": []
+    }
+   ],
+   "lookups": [],
+   "why": "规格推荐 NavDestination 时转换者照写成路由页，推入后离开壳，底栏和迷你条消失",
+   "keys": {
+    "read": [
+     "sub_component",
+     "page_type",
+     "addToBackStack",
+     "Fragment",
+     "宿主",
+     "popBackStack"
+    ],
+    "product": [
+     "NavDestination",
+     "全屏页",
+     "页面形态",
+     "转换表",
+     "@Param",
+     "嵌入组件"
+    ]
+   },
+   "probe": {
+    "pattern": "NavDestination\\s*全屏页",
+    "note": "规格推荐 NavDestination 全屏页；核对 meta.page_type 和源码加载方式是不是壳内子页"
+   },
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：规格类规矩，做法是规格里该写的页面形态",
+   "refs": [
+    {
+     "what": "@Param 的含义",
+     "kind": "oh-docs",
+     "where": "zh-cn/application-dev/ui/state-management/arkts-new-param.md 概述",
+     "quote": "\\@Param表示组件从外部传入的状态，使得父子组件之间的数据能够进行同步：",
+     "version": "docs f41b9345"
+    }
+   ]
+  },
+  {
+   "title": "sub_component 子页转成 @Param 嵌入组件，由壳内容区承载，不包 NavDestination",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "meta.page_type=sub_component，规格写「Fragment，宿主 Activity」「Toolbar 返回 = popBackStack 返回上级」，源码经 addToBackStack 压栈打开",
+     "wrong": "页面写成 NavDestination(){…} 包裹、@Consumer 取 navPathStack、返回时 pop()，并在 pageMap 或路由表里注册了它"
+    }
+   ],
+   "scope": "页面转换阶段转换源端壳内压栈打开的子 Fragment 时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "写成普通的 @ComponentV2 组件，参数用 @Param 传入，不包 NavDestination；返回调壳路由的弹出子页入口",
+     "support": [
+      "case-05f3fb8501654bad9261#recommendation:4",
+      "case-05f3fb8501654bad9261#diagnosis"
+     ]
+    },
+    {
+     "text": "从 pageMap / 路由表里去掉它的路由，由壳内容区按 tag 渲染这个组件",
+     "support": [
+      "case-05f3fb8501654bad9261#diagnosis"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "@Param 装饰的变量在初始化自定义组件时从外部传入；没有本地初始值时必须外部传入（配 @Require）",
+     "meaning": "嵌入组件的参数写法",
+     "source": "arkts-new-param.md，概述；装饰器说明",
+     "support": []
+    },
+    {
+     "value": "子页改为 @Param 嵌入组件，壳内容区按 tag 承载，返回走壳的弹出子页，pageMap 去掉对应路由",
+     "meaning": "返修后的页面形态",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-05f3fb8501654bad9261#diagnosis"
+     ]
+    }
+   ],
+   "lookups": [],
+   "why": "包成 NavDestination 推入后页面离开壳，底栏和迷你条消失，返回走路由栈而不是壳的子栈",
+   "keys": {
+    "read": [
+     "sub_component",
+     "page_type",
+     "addToBackStack",
+     "popBackStack",
+     "Fragment",
+     "Toolbar"
+    ],
+    "product": [
+     "NavDestination",
+     "@Consumer",
+     "@Param",
+     "@ComponentV2",
+     "pageMap",
+     "pop"
+    ]
+   },
+   "probe": {
+    "pattern": "NavDestination\\s*\\(\\s*\\)",
+    "note": "页面包了 NavDestination；若 meta 是 sub_component 且源端壳内压栈打开，应改成 @Param 嵌入组件"
+   },
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法是组件形态，不落在接口参数上",
+   "refs": [
+    {
+     "what": "@Param 从外部传入",
+     "kind": "oh-docs",
+     "where": "zh-cn/application-dev/ui/state-management/arkts-new-param.md 概述",
+     "quote": "被\\@Param装饰的变量能够在初始化自定义组件时从外部传入，当数据源也是状态变量时，数据源的修改会同步给\\@Param。",
+     "version": "docs f41b9345"
+    },
+    {
+     "what": "无本地初始值时要配 @Require",
+     "kind": "oh-docs",
+     "where": "zh-cn/application-dev/ui/state-management/arkts-new-param.md 装饰器说明",
+     "quote": "允许本地初始化，若不在本地初始化，则需要和[\\@Require](./arkts-require.md)装饰器一起使用，要求必须从外部传入初始化。",
+     "version": "docs f41b9345"
+    }
+   ]
+  },
+  {
+   "title": "映射启动器打开页面时，核对构造器写入的默认 extras 与读取端默认值再选清栈或压栈",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源端用启动器类打开页面：构造器里就 putExtra 写入清栈标志（如 clear_back_stack=false），调用处只链式加了要打开的对象再 start()",
+     "wrong": "目标把这类调用接成清栈切页（并持久化最后页）；或按目标侧清栈字段的默认值、注释选了分支，与源端构造器 `putExtra` 写入的值相反"
+    }
+   ],
+   "scope": "接线阶段把源端启动器（构造器预置 extras 的 Intent 封装）映射到目标壳路由时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "查源启动器构造器写入的 extras 和接收端 getBooleanExtra 的默认值，按实际值选分支：清栈标志为 false 就接壳内压栈加载子页的入口",
+     "support": [
+      "case-05f3fb8501654bad9261#recommendation:5",
+      "case-05f3fb8501654bad9261#diagnosis"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "getBooleanExtra(String name, boolean defaultValue)：返回之前 putExtra() 放入的值，没有才返回 defaultValue",
+     "meaning": "构造器已写入的值优先于读取端默认值",
+     "source": "android.content.Intent#getBooleanExtra",
+     "support": []
+    },
+    {
+     "value": "打开对象的调用改为壳的压栈加载入口",
+     "meaning": "返修后的映射",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-05f3fb8501654bad9261#diagnosis"
+     ]
+    }
+   ],
+   "lookups": [
+    {
+     "what": "启动器构造器写入的默认 extras",
+     "where": "源工程里这个启动器类的构造器（putExtra 调用）和接收 Activity 里对应的 getBooleanExtra",
+     "how": "读出构造器写入的值；没写入时才看读取端的默认值"
+    }
+   ],
+   "why": "只看目标侧默认值或注释会选反分支，压栈子页被接成清栈切页",
+   "keys": {
+    "read": [
+     "Intent",
+     "putExtra",
+     "getBooleanExtra",
+     "startActivity",
+     "getIntent",
+     "start()"
+    ],
+    "product": [
+     "清栈",
+     "压栈",
+     "默认值",
+     "pushPathByName",
+     "NavPathStack",
+     "路由"
+    ]
+   },
+   "probe": null,
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法是核对源端取值，落在应用自己的壳路由上",
+   "refs": [
+    {
+     "what": "getBooleanExtra 的默认值语义",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/android/content/Intent.java Intent#getBooleanExtra",
+     "quote": "@return the value of an item previously added with putExtra(),\n     * or the default value if none was found.",
+     "version": "android-36.1"
+    }
+   ]
+  }
+ ],
+ "left_out": [
+  {
+   "text": "registry 提示与规格冲突时以规格 AC 为准并回写 registry",
+   "reason": "没有产物里看得到的触发"
+  }
+ ],
+ "corrections": [],
+ "gaps": [
+  "卡里源端用的是 androidx.fragment 的 FragmentTransaction，本机只有编译产物；语义按平台 android.app.FragmentTransaction 的同名方法注释核对"
+ ],
+ "conflicts": []
+}

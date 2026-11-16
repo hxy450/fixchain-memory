@@ -1,0 +1,267 @@
+{
+  "case": "case-aac91310ef7e70c88957",
+  "rules": [
+    {
+      "title": "onCreate 里 setContent 的组合副作用晚于 onCreate 后续语句，规格按运行顺序写读写先后",
+      "product": "规格",
+      "triggers": [
+        {
+          "read": "Activity.onCreate 里 setContent { … } 挂 Compose 内容，组合内 LifecycleEventEffect(Lifecycle.Event.ON_CREATE)、LaunchedEffect 或 DisposableEffect 读某个状态，setContent 之后 onCreate 还有写同一状态的语句（如启动计数自增）",
+          "wrong": "规格按源码行号写成「先判后自增」「首启读到 0」，首启边界样例和「时序照搬」验收也按行序推出"
+        }
+      ],
+      "scope": "规格提取阶段确定源端 onCreate 语句与 setContent 内 Compose 组合副作用的读写先后时",
+      "exceptions": [],
+      "how": [
+        {
+          "text": "规格里写明：组合内的 LifecycleEventEffect(ON_CREATE)、LaunchedEffect、DisposableEffect 在 onCreate 返回、内容首次组合时才执行（ON_CREATE 由观察者注册时补发），晚于 onCreate 里 setContent 之后的全部语句，读到的是这些语句写过之后的值",
+          "support": [
+            "case-aac91310ef7e70c88957#recommendation:1",
+            "case-aac91310ef7e70c88957#diagnosis"
+          ]
+        },
+        {
+          "text": "读写先后、首启边界样例（第几次启动命中）和「时序照搬」验收都按这一运行顺序写，不按源码行号推断",
+          "support": [
+            "case-aac91310ef7e70c88957#recommendation:1"
+          ]
+        }
+      ],
+      "values": [
+        {
+          "value": "组合内 LifecycleEventEffect(ON_CREATE) 的判定读到 onCreate 尾部自增后的计数：按 n % 9 == 0 判定时冷启第 9、18 次弹出，首启不弹",
+          "meaning": "两端实测一致的运行顺序",
+          "source": "卡里修好并验证过",
+          "support": [
+            "case-aac91310ef7e70c88957#diagnosis"
+          ]
+        }
+      ],
+      "lookups": [],
+      "why": "按行序把组合副作用当成先于 onCreate 尾部语句，规格写出「先判后增」，下游照此排出与源端相反的读写次序",
+      "keys": {
+        "read": [
+          "setContent",
+          "LifecycleEventEffect",
+          "Lifecycle.Event.ON_CREATE",
+          "LaunchedEffect",
+          "DisposableEffect",
+          "onCreate",
+          "ComponentActivity"
+        ],
+        "product": [
+          "先判后自增",
+          "时序照搬",
+          "首启",
+          "验收",
+          "ON_CREATE",
+          "onCreate",
+          "读写先后"
+        ]
+      },
+      "probe": {
+        "pattern": "先判后(自增|增|写)",
+        "note": "规格把组合内判定写在 onCreate 尾部写入之前；核对源端判定是不是在 setContent 的组合副作用里"
+      },
+      "unverified": [],
+      "alternatives_unverified": [],
+      "siblings_checked": "无：规格类做法，落在 Compose 副作用的执行时机，不落在鸿蒙接口上",
+      "refs": []
+    },
+    {
+      "title": "重放源端重建效果时，先执行 onCreate 体内的写语句，再触发组合副作用对应的判定",
+      "product": "代码",
+      "triggers": [
+        {
+          "read": "源 Activity onCreate 先 setContent（组合内 LifecycleEventEffect(ON_CREATE) 读状态做判定），之后才写同一状态（如计数自增）",
+          "wrong": "配置变化重放里先同步 emit 事件让订阅方重新判定、后执行自增，注释写「源序 setContent 判定先于自增」"
+        }
+      ],
+      "scope": "目标端显式排列首启或配置变化重放里、对应源端 onCreate 与组合副作用的读写次序时",
+      "exceptions": [],
+      "how": [
+        {
+          "text": "重放按实际执行时机排：先执行对应 onCreate 体内的写语句（如计数自增），再同步发出触发判定的事件（对应组合内 ON_CREATE 副作用）",
+          "support": [
+            "case-aac91310ef7e70c88957#recommendation:3",
+            "case-aac91310ef7e70c88957#diagnosis"
+          ]
+        },
+        {
+          "text": "订阅方的注释写「读到自增后的计数」，不写行序依据",
+          "support": [
+            "case-aac91310ef7e70c88957#recommendation:3"
+          ]
+        }
+      ],
+      "values": [
+        {
+          "value": "重放改为先自增、后 emit 判定事件后，连续转屏只在计数到达 9 的倍数时弹出，与源端一致",
+          "meaning": "修好后的次序",
+          "source": "卡里修好并验证过",
+          "support": [
+            "case-aac91310ef7e70c88957#diagnosis"
+          ]
+        }
+      ],
+      "lookups": [],
+      "why": "先判后增时目标端读到的是自增前的值，命中点比源端晚一次（源端在到达倍数时弹，目标在离开时弹）",
+      "keys": {
+        "read": [
+          "onCreate",
+          "setContent",
+          "LifecycleEventEffect",
+          "ON_CREATE",
+          "onConfigurationChanged",
+          "recreate"
+        ],
+        "product": [
+          "emit",
+          "onConfigurationUpdate",
+          "aboutToAppear",
+          "loadContent",
+          "subscribe"
+        ]
+      },
+      "probe": null,
+      "unverified": [
+        "冷启路径上目标端 loadContent 回调与页面 aboutToAppear 的实际先后卡里没核实"
+      ],
+      "alternatives_unverified": [],
+      "siblings_checked": "无：做法是重放步骤的次序，不落在具体接口上",
+      "refs": []
+    },
+    {
+      "title": "注释只凭源码行号论证先后时，读被引用的源组件核对触发时机，冲突写进 decision_gaps",
+      "product": "代码",
+      "triggers": [
+        {
+          "read": "上游契约注释要求「自增须挂在判定之后」，依据只有源码行号，被引用的判定其实在 Composable 的 LifecycleEventEffect 里",
+          "wrong": "新写的注释用源码行号论证先后（「源序 :N 判定先于 :M 自增」这类），沿用了上游次序却没写进 decision_gaps"
+        }
+      ],
+      "scope": "实现阶段沿用上游代码契约注释里的先后要求时",
+      "exceptions": [],
+      "how": [
+        {
+          "text": "先后只有行号依据时，打开被引用的源组件核对触发时机（如 LifecycleEventEffect(ON_CREATE) 在 onCreate 返回后首次组合时才执行）",
+          "support": [
+            "case-aac91310ef7e70c88957#recommendation:4",
+            "case-aac91310ef7e70c88957#recommendation:1"
+          ]
+        },
+        {
+          "text": "与源码实际时机冲突时写进 decision_gaps，不在注释里补行号依据",
+          "support": [
+            "case-aac91310ef7e70c88957#recommendation:4"
+          ]
+        }
+      ],
+      "values": [],
+      "lookups": [],
+      "why": "行号顺序不等于执行顺序，带行号依据的错误次序会被后来的写者当成红线保留",
+      "keys": {
+        "read": [
+          "LifecycleEventEffect",
+          "Composable",
+          "setContent",
+          "onCreate",
+          "ON_CREATE"
+        ],
+        "product": [
+          "decision_gaps",
+          "emit",
+          "源序",
+          "先于",
+          "契约"
+        ]
+      },
+      "probe": {
+        "pattern": "源序\\s*:\\d+",
+        "note": "注释用源码行号论证先后，核对被引用组件的实际触发时机"
+      },
+      "unverified": [],
+      "alternatives_unverified": [],
+      "siblings_checked": "无：做法是注释依据的核对，不落在具体接口上",
+      "refs": []
+    },
+    {
+      "title": "派工提示不写未核实的「源端缺陷照搬」结论，写成待核问题并给源码锚点",
+      "product": "计划与派工",
+      "triggers": [
+        {
+          "read": "源码里判定在 setContent 的组合副作用里、写入在 onCreate 尾部，按行序看像是首启就会命中",
+          "wrong": "派工提示或规格写「注意首启也命中——照源码」这类源端行为结论，没标待核、没给源码锚点，也没对照参考文档的用例"
+        }
+      ],
+      "scope": "规格提取与派工阶段，要提醒源端边界行为（看似缺陷、要照搬）时",
+      "exceptions": [],
+      "how": [
+        {
+          "text": "要提醒边界时写成待核问题，给出源码锚点（判定所在组件、写入所在语句），不写结论",
+          "support": [
+            "case-aac91310ef7e70c88957#recommendation:2"
+          ]
+        },
+        {
+          "text": "把结论写成「源端看似缺陷、照搬」之前，先和参考设计文档的用例交叉核对",
+          "support": [
+            "case-aac91310ef7e70c88957#recommendation:2",
+            "case-aac91310ef7e70c88957#diagnosis"
+          ]
+        }
+      ],
+      "values": [],
+      "lookups": [],
+      "why": "未核实的源端行为写进派工，规格作者会把它当成已证实的事实写进验收",
+      "keys": {
+        "read": [
+          "setContent",
+          "LifecycleEventEffect",
+          "onCreate",
+          "参考文档",
+          "设计文档"
+        ],
+        "product": [
+          "照源码",
+          "照搬",
+          "首启",
+          "待核",
+          "派工",
+          "源码锚点"
+        ]
+      },
+      "probe": {
+        "pattern": "照源码|照搬",
+        "note": "派工或规格把某个源端行为写成照搬结论；看是否核实过、是否写成待核问题"
+      },
+      "unverified": [],
+      "alternatives_unverified": [],
+      "siblings_checked": "无：派工类做法，不落在具体接口上",
+      "refs": []
+    }
+  ],
+  "left_out": [
+    {
+      "text": "冷启与连续转屏分别记录计数与弹层时机做验证",
+      "reason": "要上机或截图才能做"
+    },
+    {
+      "text": "在源设备冷启动计数核对弹出次序",
+      "reason": "要上机或截图才能做"
+    },
+    {
+      "text": "修订某条经验，补上组合副作用在重建时序里的位置",
+      "reason": "针对经验库本身的建议"
+    },
+    {
+      "text": "某条经验召回时提醒把行序推断写成触发事实",
+      "reason": "针对经验库本身的建议"
+    }
+  ],
+  "corrections": [],
+  "gaps": [
+    "LifecycleEventEffect、LaunchedEffect 在首次组合时执行、观察者注册时补发 ON_CREATE 属于 androidx.lifecycle 和 Compose 库代码，本机只有编译产物，按卡写"
+  ],
+  "conflicts": []
+}

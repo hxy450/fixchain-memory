@@ -1,0 +1,393 @@
+{
+ "case": "case-613cce143fdc193142d7",
+ "rules": [
+  {
+   "title": "决策要求构建期注入网络配置时，网络层在同一任务交付配置来源和响应解码器",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源端 gradle 里定义 API_HOST、签名材料和 AES_KEY，代码读 BuildConfig.API_HOST；决策台账要求签名/加密材料经构建 profile 或 gitignored 本地私有配置注入、由网络层集中读取",
+     "wrong": "网络层只把 baseUrl、signSecret、解码器做成配置类的构造参数（解码器默认 null），没有任何配置读取，也没有解码器实现，回执写「通过 … 注入」把接线推给装配者"
+    }
+   ],
+   "scope": "网络基础设施实现阶段，决策要求配置在构建期从私有来源注入、由网络层集中读取时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "同一任务内交付配置来源：构建期从环境变量或被 .gitignore 忽略的本地私有配置（如 local.properties）生成配置模块，缺键时构建失败",
+     "support": [
+      "case-613cce143fdc193142d7#recommendation:1",
+      "case-613cce143fdc193142d7#diagnosis"
+     ]
+    },
+    {
+     "text": "同时交付和源端等价的响应解码器，配置类默认就接上它，不留 null 给装配者",
+     "support": [
+      "case-613cce143fdc193142d7#recommendation:1"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "构建期从环境变量或 gitignored local.properties 生成私有配置模块，装配根以其中的地址、签名密钥和 AES 解码器构造配置后，真机登录恢复",
+     "meaning": "修好后的配置来源",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-613cce143fdc193142d7#diagnosis"
+     ]
+    }
+   ],
+   "lookups": [
+    {
+     "what": "源端有哪些构建期注入的网络配置",
+     "where": "源工程模块级 Gradle 构建脚本里的 buildConfigField 和 buildTypes 的 debug/release 分支，以及代码里对 BuildConfig 字段的引用",
+     "how": "逐个列出字段名和它在 debug/release 下的取值来源，在目标端的配置模块里各给一个同名常量"
+    }
+   ],
+   "why": "只留可注入参数时没人接线，装配根拿不到配置，所有自有后端请求在发包前就被拦截",
+   "keys": {
+    "read": [
+     "BuildConfig",
+     "API_HOST",
+     "buildConfigField",
+     "buildTypes",
+     "local.properties",
+     "AES_KEY"
+    ],
+    "product": [
+     "hvigorfile.ts",
+     "local.properties",
+     ".gitignore",
+     "BuildProfile",
+     "createHttp",
+     "baseUrl"
+    ]
+   },
+   "probe": null,
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法是交付的范围，不落在具体接口上",
+   "refs": []
+  },
+  {
+   "title": "迁移 release 响应解密时照源端算法、key/IV 和编码写解码器，release 不透传密文",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源端在 Gson 解析前（如拦截器 beforeResponse 里）对响应做 Base64 解码再 Cipher.getInstance(\"AES/CBC/PKCS5Padding\") 解密，key 与 IV 来自 BuildConfig，debug/release 分支不同",
+     "wrong": "目标没有解码器，或解码器为 null 时把响应原样交给 JSON.parse，release 下密文直接进解析"
+    }
+   ],
+   "scope": "迁移源端对网络响应的解密（AES/CBC 加 Base64）时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "util.Base64Helper 的 decodeSync 解 Base64 → createSymKeyGenerator('AES128') 用 key 字节 convertKey → createCipher('AES128|CBC|PKCS5') → init(cryptoFramework.CryptoMode.DECRYPT_MODE, key, { algName: 'IvParamsSpec', iv: { data: <IV 字节> } }) → doFinal；密钥位数照源端 key 长度，debug/release 分支照源端",
+     "support": [
+      "case-613cce143fdc193142d7#recommendation:2"
+     ]
+    },
+    {
+     "text": "用合成向量测试解码器（已知明文按源端算法加密后再解回）；release 下解码器缺失不能默认透传",
+     "support": [
+      "case-613cce143fdc193142d7#recommendation:2"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "createCipher(transformation: string): Cipher；CBC 支持 [128|192|256] 位密钥和 NoPadding、PKCS5、PKCS7 填充",
+     "meaning": "按「算法+位数|模式|填充」拼字符串，如 'AES128|CBC|PKCS5'",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.security.cryptoFramework.d.ts，cryptoFramework.createCipher；crypto-sym-encrypt-decrypt-spec.md，AES",
+     "support": []
+    },
+    {
+     "value": "算法库里 PKCS5 和 PKCS7 都按分组大小填充，AES 填充至 16 字节",
+     "meaning": "源端 PKCS5Padding 用 PKCS5 或 PKCS7 结果相同",
+     "source": "crypto-sym-encrypt-decrypt-spec.md，AES",
+     "support": []
+    },
+    {
+     "value": "IvParamsSpec 的 iv：AES 的 CBC、CTR、OFB、CFB 模式是 16 字节",
+     "meaning": "源端 key 兼作 IV 时，IV 取同样的 16 字节",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.security.cryptoFramework.d.ts，IvParamsSpec.iv",
+     "support": []
+    },
+    {
+     "value": "init(opMode: CryptoMode, key: Key, params: ParamsSpec | null): Promise<void>；DECRYPT_MODE = 1；doFinal(data: DataBlob | null): Promise<DataBlob>",
+     "meaning": "解密的初始化和收尾",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.security.cryptoFramework.d.ts，Cipher.init、CryptoMode.DECRYPT_MODE、Cipher.doFinal",
+     "support": []
+    },
+    {
+     "value": "convertKey(key: DataBlob): Promise<SymKey>",
+     "meaning": "把 key 字节转成对称密钥",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.security.cryptoFramework.d.ts，SymKeyGenerator.convertKey",
+     "support": []
+    },
+    {
+     "value": "decodeSync(src: Uint8Array | string, options?: Type): Uint8Array",
+     "meaning": "Base64 解码",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.util.d.ts，Base64Helper.decodeSync",
+     "support": []
+    }
+   ],
+   "lookups": [
+    {
+     "what": "解密的 key、IV、编码和分支",
+     "where": "源端解密工具类里 SecretKeySpec、IvParameterSpec 的构造参数和 Cipher.getInstance 的字符串，以及模块级 Gradle 构建脚本 buildTypes 里 AES_KEY 等 buildConfigField",
+     "how": "照抄算法串和 key/IV 的来源（是否 key 兼作 IV、字符编码），只在源端解密的那个分支里解密"
+    }
+   ],
+   "why": "release 响应不解密就进 JSON 解析，所有接口解析失败",
+   "keys": {
+    "read": [
+     "Cipher.getInstance",
+     "AES/CBC/PKCS5Padding",
+     "SecretKeySpec",
+     "IvParameterSpec",
+     "Base64.decode",
+     "BuildConfig",
+     "Gson"
+    ],
+    "product": [
+     "cryptoFramework",
+     "createCipher",
+     "createSymKeyGenerator",
+     "convertKey",
+     "IvParamsSpec",
+     "DECRYPT_MODE",
+     "doFinal",
+     "Base64Helper"
+    ]
+   },
+   "probe": null,
+   "unverified": [
+    "卡里修复后对合法 JSON 的响应透传（服务端也会回明文），release 下哪些响应加密要看源端分支"
+   ],
+   "alternatives_unverified": [],
+   "siblings_checked": "搜 (transformation: string)：cryptoFramework.createCipher 一个",
+   "refs": [
+    {
+     "what": "createCipher 的签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.security.cryptoFramework.d.ts cryptoFramework.createCipher",
+     "quote": "function createCipher(transformation: string): Cipher;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "CBC 支持的位数和填充",
+     "kind": "oh-docs",
+     "where": "zh-cn/application-dev/security/CryptoArchitectureKit/crypto-sym-encrypt-decrypt-spec.md AES",
+     "quote": "| CBC | [128\\|192\\|256] | [NoPadding\\|PKCS5\\|PKCS7] | 9+ |",
+     "version": "docs f41b9345"
+    },
+    {
+     "what": "PKCS5 和 PKCS7 都按分组大小填充",
+     "kind": "oh-docs",
+     "where": "zh-cn/application-dev/security/CryptoArchitectureKit/crypto-sym-encrypt-decrypt-spec.md AES",
+     "quote": "由于需要填充至分组大小，所以实际算法库中的PKCS5和PKCS7都是以分组大小作为填充长度的，即AES加密填充至16字节。",
+     "version": "docs f41b9345"
+    },
+    {
+     "what": "AES CBC 的 IV 是 16 字节",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.security.cryptoFramework.d.ts IvParamsSpec.iv",
+     "quote": "IV for encryption or decryption. * Options: * - AES CBC, CTR, OFB, or CFB mode: 16-byte IV",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "Cipher.init 的签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.security.cryptoFramework.d.ts Cipher.init",
+     "quote": "init(opMode: CryptoMode, key: Key, params: ParamsSpec | null): Promise<void>;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "CryptoMode.DECRYPT_MODE",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.security.cryptoFramework.d.ts CryptoMode.DECRYPT_MODE",
+     "quote": "DECRYPT_MODE = 1",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "Cipher.doFinal 的签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.security.cryptoFramework.d.ts Cipher.doFinal",
+     "quote": "doFinal(data: DataBlob | null): Promise<DataBlob>;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "convertKey 的签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.security.cryptoFramework.d.ts SymKeyGenerator.convertKey",
+     "quote": "convertKey(key: DataBlob): Promise<SymKey>;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "Base64Helper.decodeSync 的签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.util.d.ts Base64Helper.decodeSync",
+     "quote": "decodeSync(src: Uint8Array | string, options?: Type): Uint8Array;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    }
+   ]
+  },
+  {
+   "title": "装配根不用空字符串构造网络配置，接入构建期生成的配置，缺失就显式失败",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源端 gradle / BuildConfig 已有服务端地址和签名材料，决策要求私有注入",
+     "wrong": "装配根写 new …Config('', …, '') 这类以空 baseUrl、空签名密钥构造客户端、不传解码器，靠网络层的空配置守卫返回失败"
+    }
+   ],
+   "scope": "装配根（应用启动时组装网络客户端的地方）注入网络配置时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "装配前先查配置来源：源端已有地址与材料、决策要求私有注入时，用构建期生成的配置模块里的常量构造客户端并传入解码器；缺键让构建或启动显式失败并登记阻断项，不用空字符串占位",
+     "support": [
+      "case-613cce143fdc193142d7#recommendation:3"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "装配根改用构建期生成的地址、签名密钥常量和 AES 解码器构造配置后，真机登录不再报网络配置不可用",
+     "meaning": "修好后的写法",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-613cce143fdc193142d7#diagnosis"
+     ]
+    }
+   ],
+   "lookups": [],
+   "why": "以空字符串构造客户端时，所有自有后端请求在发包前就被本地拦截",
+   "keys": {
+    "read": [
+     "BuildConfig",
+     "API_HOST",
+     "buildConfigField",
+     "Retrofit.Builder",
+     "baseUrl",
+     "OkHttpClient"
+    ],
+    "product": [
+     "baseUrl",
+     "new",
+     "Config",
+     "createHttp",
+     "local.properties",
+     "BuildProfile"
+    ]
+   },
+   "probe": {
+    "pattern": "new\\s+\\w*Config\\(\\s*''",
+    "note": "装配根用空字符串构造配置；核对源端是否已有地址与材料、是否应接构建期配置"
+   },
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法是配置的来源，不落在具体接口上",
+   "refs": []
+  },
+  {
+   "title": "「未提供测试环境/账号」只影响联调，不能写成装配空配置、请求一律失败的依据",
+   "product": "规格",
+   "triggers": [
+    {
+     "read": "决策台账写「未提供测试 base_url / 测试账号」并限定作用域（不得外延为把请求失败当成功），另有「密钥不进源码、构建期私有注入」",
+     "wrong": "契约文档写「仓库未保存测试 Base URL 或签名材料；配置缺失时网络返回明确失败」，把这两条当成装配空配置的依据"
+    }
+   ],
+   "scope": "写基础设施契约、引用决策台账里带作用域限定的条目时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "契约里分开写：无测试环境/测试账号只影响联调和设备级 PASS；生产配置来源存在（源端 gradle / BuildConfig）仍须接线；带作用域限定的决策照原作用域引用，不外延为允许请求永久失败",
+     "support": [
+      "case-613cce143fdc193142d7#recommendation:4"
+     ]
+    }
+   ],
+   "values": [],
+   "lookups": [],
+   "why": "把「没有测试环境」读成「不用接配置」时，契约给空配置背书，生产请求全部失败",
+   "keys": {
+    "read": [
+     "决策台账",
+     "未提供测试",
+     "测试账号",
+     "作用域",
+     "密钥不进源码",
+     "私有配置注入"
+    ],
+    "product": [
+     "契约",
+     "配置缺失",
+     "明确失败",
+     "空配置",
+     "base_url",
+     "BLOCKER"
+    ]
+   },
+   "probe": {
+    "pattern": "配置缺失时[^\\n]{0,12}失败",
+    "note": "契约把配置缺失时失败当成约定；核对源端是否有生产配置来源、该决策的作用域"
+   },
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法是契约里决策的引用范围，不落在具体接口上",
+   "refs": []
+  },
+  {
+   "title": "处理巡检 BLOCKER 时派发失败要重试，关闭前逐项核对每个 BLOCKER 已落地",
+   "product": "计划与派工",
+   "triggers": [
+    {
+     "read": "巡检报告列出多个 `BLOCKER` 项和修复方向",
+     "wrong": "修复派工因线程上限等原因失败后没有重派；收口时只修了同批次顺手的几项，报告里其余 `BLOCKER` 没有对应的修复或核对记录"
+    }
+   ],
+   "scope": "编排者处理巡检报告、派发修复并收口时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "派发失败（如 agent thread limit reached）就重试或就地修复；关闭前把报告里的每个 BLOCKER 列成清单，逐项写明修复位置，或仍未处理的原因",
+     "support": [
+      "case-613cce143fdc193142d7#recommendation:5"
+     ]
+    }
+   ],
+   "values": [],
+   "lookups": [],
+   "why": "派发失败后不重派、只修顺手项时，最要紧的阻断项一直留到交付",
+   "keys": {
+    "read": [
+     "BLOCKER",
+     "巡检报告",
+     "修复方向",
+     "thread limit",
+     "派发失败"
+    ],
+    "product": [
+     "BLOCKER",
+     "收口",
+     "核对清单",
+     "重派",
+     "已落地",
+     "修复派工"
+    ]
+   },
+   "probe": null,
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法是编排流程里的核对项，不落在具体接口上",
+   "refs": []
+  }
+ ],
+ "left_out": [],
+ "corrections": [],
+ "gaps": [],
+ "conflicts": []
+}

@@ -1,0 +1,219 @@
+{
+ "id": "rule-865ae2712fd3",
+ "title": "普通 RDB 库的多语句事务用 beginTransaction 系列，不用 beginTrans",
+ "product": "代码",
+ "triggers": [
+  {
+   "read": "relationalStore.getRdbStore 的 StoreConfig 里没有 vector: true；参考给的是 beginTransaction() 或 createTransaction()",
+   "wrong": "代码用 beginTrans() 取事务 ID，再 execute(sql, txId, args)、commit(txId)、rollback(txId)"
+  },
+  {
+   "read": "Room 的 @Transaction 方法、RoomDatabase.runInTransaction / withTransaction",
+   "wrong": "公共事务辅助写成 await store.beginTrans() 再 commit(txId) / rollback(txId)，运行时抛 801"
+  }
+ ],
+ "scope": "@kit.ArkData relationalStore 普通（非向量）库上要多条语句一起成败的写入，含 Room 事务迁成的公共事务辅助",
+ "exceptions": [],
+ "how": [
+  {
+   "text": "写成 store.beginTransaction() → 逐条 await store.execute(sql, args) → store.commit()，异常时 store.rollBack() 再原样抛出；API 14 起也可用 await store.createTransaction() 返回的 tx 的 execute / commit() / rollback()",
+   "support": [
+    "case-8402e3a379e2a8d7f434#recommendation:1",
+    "case-3226636c565e0d7df08b#recommendation:1",
+    "case-3226636c565e0d7df08b#diagnosis"
+   ]
+  },
+  {
+   "text": "带 txId 的 beginTrans / execute(sql, txId, args) / commit(txId) / rollback(txId) 只留给 StoreConfig 设了 vector: true 的向量库",
+   "support": [
+    "case-8402e3a379e2a8d7f434#recommendation:2",
+    "case-8402e3a379e2a8d7f434#diagnosis"
+   ]
+  }
+ ],
+ "values": [
+  {
+   "value": "beginTransaction(): void；commit(): void；rollBack(): void",
+   "meaning": "RdbStore 上不带事务 ID 的一套事务接口，不嵌套、不跨进程或线程；公共封装被嵌套调用时要自己判断是否已在事务里",
+   "source": "鸿蒙 SDK 的 ets/api/@ohos.data.relationalStore.d.ts，RdbStore.beginTransaction / RdbStore.commit / RdbStore.rollBack；arkts-apis-data-relationalStore-RdbStore.md，beginTransaction",
+   "support": []
+  },
+  {
+   "value": "createTransaction(options?: TransactionOptions): Promise<Transaction>（@since 14）",
+   "meaning": "创建并开始一个 Transaction 对象，用它的 execute、commit()、rollback()；不同事务对象互相隔离",
+   "source": "鸿蒙 SDK 的 ets/api/@ohos.data.relationalStore.d.ts，RdbStore.createTransaction",
+   "support": []
+  },
+  {
+   "value": "beginTrans(): Promise<number>，声明抛 801 - Capability not supported；文档写明该接口仅支持向量数据库（StoreConfig 配置 vector 为 true）",
+   "meaning": "普通库上调用会失败",
+   "source": "鸿蒙 SDK 的 ets/api/@ohos.data.relationalStore.d.ts，RdbStore.beginTrans；arkts-apis-data-relationalStore-RdbStore.md，beginTrans<sup>12+</sup>",
+   "support": []
+  },
+  {
+   "value": "execute(sql: string, txId: number, args?: Array<ValueType>): Promise<ValueType>；commit(txId: number): Promise<void>；rollback(txId: number): Promise<void>",
+   "meaning": "同族接口：带 txId 的三个，文档都写明仅支持向量数据库",
+   "source": "鸿蒙 SDK 的 ets/api/@ohos.data.relationalStore.d.ts，RdbStore.execute / RdbStore.commit / RdbStore.rollback；arkts-apis-data-relationalStore-RdbStore.md，execute<sup>12+</sup>、commit<sup>12+</sup>、rollback<sup>12+</sup>",
+   "support": []
+  },
+  {
+   "value": "vector?: boolean（@since 18）",
+   "meaning": "StoreConfig 里指定是否向量库，没写就是普通库",
+   "source": "鸿蒙 SDK 的 ets/api/@ohos.data.relationalStore.d.ts，StoreConfig.vector",
+   "support": []
+  },
+  {
+   "value": "普通库上 beginTrans() 真机返回 801，写入全部失败",
+   "meaning": "出错时观察到的行为",
+   "source": "卡里修好并验证过",
+   "support": [
+    "case-8402e3a379e2a8d7f434#diagnosis"
+   ]
+  },
+  {
+   "value": "经 beginTrans 的事务封装在单元测试里一调用就抛 801；改成同步 beginTransaction / commit / rollBack 后通过",
+   "meaning": "验证过的写法",
+   "source": "卡里修好并验证过",
+   "support": [
+    "case-3226636c565e0d7df08b#diagnosis"
+   ]
+  }
+ ],
+ "lookups": [
+  {
+   "what": "这个库是不是向量库",
+   "where": "目标工程里调 relationalStore.getRdbStore 的那个文件，传入的 StoreConfig 对象",
+   "how": "有 vector: true 的是向量库，才可以用带 txId 的接口；没写或为 false 是普通库"
+  }
+ ],
+ "why": "@since 只说明接口出现的版本，beginTrans 一套在普通库上抛 801，写入全部失败",
+ "keys": {
+  "read": [
+   "relationalStore",
+   "getRdbStore",
+   "StoreConfig",
+   "beginTransaction",
+   "rollBack",
+   "createTransaction",
+   "@kit.ArkData",
+   "@Transaction",
+   "runInTransaction",
+   "withTransaction",
+   "RoomDatabase",
+   "@Dao"
+  ],
+  "product": [
+   "beginTrans",
+   "txId",
+   "commit",
+   "rollback",
+   "rollBack",
+   "beginTransaction",
+   "createTransaction",
+   "vector",
+   "RdbStore"
+  ]
+ },
+ "probe": {
+  "pattern": "\\.(beginTrans\\(|commit\\(\\s*\\w+\\s*\\)|rollback\\(\\s*\\w+\\s*\\))",
+  "note": "用了带事务 ID 的接口；StoreConfig 没有 vector: true 时要换成 beginTransaction/commit/rollBack 或 createTransaction"
+ },
+ "unverified": [
+  "createTransaction() 的写法出自参考，卡里没有上机验证；beginTransaction / commit / rollBack 由 case-3226636c565e0d7df08b 在单元测试里验证过",
+  "case-3226636c565e0d7df08b 的工程目标 API 26，本机声明是 API 23"
+ ],
+ "alternatives_unverified": [],
+ "siblings_checked": "搜 txId: number：鸿蒙 SDK ets/api 下只有 @ohos.data.relationalStore.d.ts 的 RdbStore 带它，共 3 个（execute、commit、rollback），都写进 values；搜 Capability not supported the sql：另有 RdbStore.executeSql 三个重载、RdbStore.execute 两个重载、Transaction.execute / executeSync 也带 801",
+ "refs": [
+  {
+   "what": "beginTransaction 签名",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/api/@ohos.data.relationalStore.d.ts RdbStore.beginTransaction",
+   "quote": "beginTransaction(): void;",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  },
+  {
+   "what": "同步 commit 的签名",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/api/@ohos.data.relationalStore.d.ts RdbStore.commit",
+   "quote": "* @FaAndStageModel * @crossplatform * @since 12 */ commit(): void;",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  },
+  {
+   "what": "rollBack 签名",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/api/@ohos.data.relationalStore.d.ts RdbStore.rollBack",
+   "quote": "rollBack(): void;",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  },
+  {
+   "what": "beginTransaction 不允许嵌套",
+   "kind": "oh-docs",
+   "where": "zh-cn/application-dev/reference/apis-arkdata/arkts-apis-data-relationalStore-RdbStore.md beginTransaction",
+   "quote": "此接口不允许嵌套事务，且不支持在多进程或多线程中使用。",
+   "version": "docs f41b9345"
+  },
+  {
+   "what": "createTransaction 签名与版本",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/api/@ohos.data.relationalStore.d.ts RdbStore.createTransaction",
+   "quote": "* @since 14 */ createTransaction(options?: TransactionOptions): Promise<Transaction>;",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  },
+  {
+   "what": "createTransaction 返回的事务对象互相隔离",
+   "kind": "oh-docs",
+   "where": "zh-cn/application-dev/reference/apis-arkdata/arkts-apis-data-relationalStore-RdbStore.md createTransaction",
+   "quote": "与[beginTransaction](#begintransaction)的区别在于：createTransaction接口会返回一个事务对象，不同事务对象之间是隔离的。",
+   "version": "docs f41b9345"
+  },
+  {
+   "what": "beginTrans 声明 801",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/api/@ohos.data.relationalStore.d.ts RdbStore.beginTrans",
+   "quote": "The RdbStore verification failed. * @throws { BusinessError } 801 - Capability not supported the sql(attach,begin,commit,rollback etc.). * @throws { BusinessError } 14800000 - Inner error.",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  },
+  {
+   "what": "beginTrans 仅支持向量数据库",
+   "kind": "oh-docs",
+   "where": "zh-cn/application-dev/reference/apis-arkdata/arkts-apis-data-relationalStore-RdbStore.md beginTrans<sup>12+</sup>",
+   "quote": "该接口会返回事务ID，[execute](#execute12-1)可以指定不同事务ID达到事务隔离目的。 该接口仅支持向量数据库（在[StoreConfig](arkts-apis-data-relationalStore-i.md#storeconfig)中配置vector为true）使用。",
+   "version": "docs f41b9345"
+  },
+  {
+   "what": "带 txId 的 execute、commit、rollback 签名（同族）",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/api/@ohos.data.relationalStore.d.ts RdbStore.execute",
+   "quote": "execute(sql: string, txId: number, args?: Array<ValueType>): Promise<ValueType>;",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  },
+  {
+   "what": "commit(txId) 签名（同族）",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/api/@ohos.data.relationalStore.d.ts RdbStore.commit",
+   "quote": "commit(txId: number): Promise<void>;",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  },
+  {
+   "what": "rollback(txId) 签名（同族）",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/api/@ohos.data.relationalStore.d.ts RdbStore.rollback",
+   "quote": "rollback(txId: number): Promise<void>;",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  },
+  {
+   "what": "StoreConfig.vector",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/api/@ohos.data.relationalStore.d.ts StoreConfig.vector",
+   "quote": "Specifies whether the vector type is supported. * * @type { ?boolean } * @syscap SystemCapability.DistributedDataManager.RelationalStore.Core * @since 18 */ vector?: boolean;",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  }
+ ],
+ "sources": [
+  "case-3226636c565e0d7df08b",
+  "case-8402e3a379e2a8d7f434"
+ ],
+ "general": false,
+ "status": "active"
+}

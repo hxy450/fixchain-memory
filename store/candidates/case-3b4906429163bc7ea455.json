@@ -1,0 +1,145 @@
+{
+  "case": "case-3b4906429163bc7ea455",
+  "rules": [
+    {
+      "title": "源端对非空状态做 == null 判断时，规格记成永不触发的死分支，不译成首启或未初始化",
+      "product": "规格",
+      "triggers": [
+        {
+          "read": "Compose 显示条件里对状态变量写 == null / != null，而该变量由 collectAsState(initial = false) 收集，Flow 的 getter 映射成 preferences[KEY] == true 或带 ?: 默认值",
+          "wrong": "规格把这个条件写成「首次进入」「设置未初始化（…== null）」时触发弹窗或权限请求"
+        }
+      ],
+      "scope": "规格提取阶段把源端显示条件里的 null 判断翻成页面触发条件时",
+      "exceptions": [],
+      "how": [
+        {
+          "text": "先核该变量的声明类型和来源：collectAsState 的 initial 值、Flow getter 的映射（== true 或 ?: 默认值）；是非空类型的，写成「恒 false（或恒 true）的死分支，源端可观察行为 = 从不触发」",
+          "support": ["case-3b4906429163bc7ea455#recommendation:1", "case-3b4906429163bc7ea455#diagnosis"]
+        }
+      ],
+      "values": [
+        {
+          "value": "collectAsState(initial = false) 收集 preferences[KEY] == true 映射出的 Flow<Boolean> 时，变量 == null 恒为 false，对应弹窗在源端从不出现",
+          "meaning": "按非空类型判定分支不可达",
+          "source": "卡里修好并验证过",
+          "support": ["case-3b4906429163bc7ea455#diagnosis"]
+        }
+      ],
+      "lookups": [
+        {
+          "what": "状态变量是不是可空类型",
+          "where": "源工程里该变量的 collectAsState / collectAsStateWithLifecycle 调用（看 initial），以及它收集的 Flow 的 getter（DataStore 读取处的 map 表达式）",
+          "how": "initial 非空且 getter 用 == true 或 ?: 默认值映射的，类型是非空 Boolean，== null 判断恒为 false"
+        }
+      ],
+      "why": "把类型上不可达的 null 比较译成可达触发，下游会实现源端从不出现的弹窗或权限请求",
+      "keys": {
+        "read": ["collectAsState", "initial", "== null", "Flow", "DataStore", "preferences", "LaunchedEffect"],
+        "product": ["首次进入", "未初始化", "== null", "死分支", "从不触发", "对话框目录", "触发条件"]
+      },
+      "probe": {
+        "pattern": "(首次|首启|未初始化|从未写入)[^\\n]{0,40}==\\s*null",
+        "note": "规格把 null 判断写成首启触发；要核源端变量类型，非空的记为死分支"
+      },
+      "unverified": [],
+      "alternatives_unverified": [],
+      "siblings_checked": "无：做法是读源端类型的方法，不落在鸿蒙接口上",
+      "refs": []
+    },
+    {
+      "title": "偏好默认值按 DataStore getter 的映射写，不从一个 null 判断推出三态偏好键",
+      "product": "规格",
+      "triggers": [
+        {
+          "read": "DataStore getter 写成 preferences[KEY] == true（或 ?: 默认值），返回非空 Boolean",
+          "wrong": "偏好表把该键默认值写成「null（未初始化，区分首启）」，或同一份规格里既写「Boolean 默认 false」又写「== null 表示未写入」，契约里出现 boolean | null 的参数"
+        }
+      ],
+      "scope": "规格或跨栈基线里写偏好键类型和默认值时",
+      "exceptions": [],
+      "how": [
+        {
+          "text": "默认值照 getter 的实际映射写（== true 映射即默认 false）；规格里出现「默认 false」和「== null 表示未写入」这类矛盾时回源码裁决，不新增三态键或 hasKey 语义",
+          "support": ["case-3b4906429163bc7ea455#recommendation:2"]
+        }
+      ],
+      "values": [],
+      "lookups": [
+        {
+          "what": "偏好键的默认值",
+          "where": "源工程里该键的 DataStore getter（data.map { preferences[KEY] … } 一类表达式）",
+          "how": "== true 映射 → 默认 false；?: 后的值就是默认值；只有直接返回 preferences[KEY] 时才是可空"
+        }
+      ],
+      "why": "从条件表达式反推出的三态契约会传进各功能规格和实现，生出源端没有的首启分支",
+      "keys": {
+        "read": ["DataStore", "preferences", "== true", "Flow<Boolean>", "map", "?:"],
+        "product": ["偏好表", "默认值", "null", "未初始化", "三态", "boolean | null", "hasKey"]
+      },
+      "probe": {
+        "pattern": "null[（(]未初始化",
+        "note": "偏好默认值写成 null（未初始化）；要按 getter 映射核实"
+      },
+      "unverified": [],
+      "alternatives_unverified": [],
+      "siblings_checked": "无：做法是规格里默认值的写法，不落在鸿蒙接口上",
+      "refs": []
+    },
+    {
+      "title": "按规格新增弹窗或权限请求前核对源端分支可达，三态条件和源码非空类型冲突时照源端行为",
+      "product": "代码",
+      "triggers": [
+        {
+          "read": "规格要求「无权限且设置未初始化」时弹窗，服务契约的参数是 boolean | null；源端该变量由 collectAsState(initial = false) 收集、非空",
+          "wrong": "页面新增 @Local 状态 boolean | null，aboutToAppear 里读三态偏好后以 === null 为条件弹出对话框或请求权限，或新建只服务这一分支的协调服务"
+        }
+      ],
+      "scope": "实现者按规格新增弹窗、权限请求或协调服务，而触发条件来自源端 null 判断时",
+      "exceptions": [],
+      "how": [
+        {
+          "text": "动手前对照源码确认这个分支在源端可达；变量是非空类型、条件恒 false 的，按源端可观察行为复刻：不加这个弹窗或请求，权限请求只留在源端真正请求的地方",
+          "support": ["case-3b4906429163bc7ea455#recommendation:3", "case-3b4906429163bc7ea455#diagnosis"]
+        },
+        {
+          "text": "把规格三态条件和源码非空类型的冲突回报规格",
+          "support": ["case-3b4906429163bc7ea455#recommendation:3"]
+        }
+      ],
+      "values": [
+        {
+          "value": "去掉详情页的该弹窗分支、删除成为孤儿的协调服务后，行为和源端一致（权限请求只在设置开关里）",
+          "meaning": "修好的写法",
+          "source": "卡里修好并验证过",
+          "support": ["case-3b4906429163bc7ea455#diagnosis"]
+        }
+      ],
+      "lookups": [],
+      "why": "照规格实现不可达分支，会在首次进入时弹出源端从不出现的权限对话框",
+      "keys": {
+        "read": ["collectAsState", "initial", "== null", "DataStore", "Flow", "LaunchedEffect"],
+        "product": ["boolean | null", "=== null", "@Local", "aboutToAppear", "requestPermissionsFromUser", "CustomDialog"]
+      },
+      "probe": {
+        "pattern": "===\\s*null",
+        "note": "按 null 判断触发逻辑；对照源端变量类型，非空的是死分支，不该实现"
+      },
+      "unverified": [],
+      "alternatives_unverified": [],
+      "siblings_checked": "无：做法是判断分支可达与否，不落在鸿蒙接口上",
+      "refs": []
+    }
+  ],
+  "left_out": [
+    {
+      "text": "UI 快照作者没打开 getter 就推断「设置从未写入」，卡里只用来说明片段来源",
+      "reason": "其他：卡里没核到的归因细节，不是做法"
+    }
+  ],
+  "corrections": [],
+  "gaps": [
+    "collectAsState 的 initial 和 DataStore preferences[KEY] 的可空性：Compose 与 DataStore 库本机只有编译产物，查不到原文，按卡写"
+  ],
+  "conflicts": []
+}

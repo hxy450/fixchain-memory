@@ -1,0 +1,254 @@
+{
+ "case": "case-ece3192169e927e18aa5",
+ "rules": [
+  {
+   "title": "源端用 TaskStackBuilder 带父栈跳转时，规格按 Manifest 父链写出完整栈和返回落点",
+   "product": "规格",
+   "triggers": [
+    {
+     "read": "源码 TaskStackBuilder.create(this).addNextIntentWithParentStack(intent).startActivities()，Manifest 为目标写了 android:parentActivityName 或 PARENT_ACTIVITY meta-data",
+     "wrong": "规格的实现映射写「pushPathByName 带回栈（Main 为根天然栈底）」，验收写「返回落回来源页」，副作用表没写清栈和按父链重建"
+    }
+   ],
+   "scope": "规格提取阶段，把源端父栈跳转（尤其是被多个页面继承的基类方法）映射到 NavPathStack 并写返回验收时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "按 Manifest 父链写出跳转后的完整栈和返回落点（如 [父页, 目标]，返回到父页），实现映射写「NavPathStack.clear → 按父链依次 pushPathByName 父页 → pushPathByName 目标」",
+     "support": [
+      "case-ece3192169e927e18aa5#recommendation:1"
+     ]
+    },
+    {
+     "text": "把某页规格里的映射行复用到被多个宿主页调用的基类方法前，先核对它成立的前提（「根页天然在栈底」只在来源页就是根页时成立）",
+     "support": [
+      "case-ece3192169e927e18aa5#recommendation:2"
+     ]
+    },
+    {
+     "text": "判据用从非根页发起的样例：非根页 → 抽屉 → 目标 → 返回，应回到父页",
+     "support": [
+      "case-ece3192169e927e18aa5#recommendation:2"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "addNextIntentWithParentStack 把目标在 Manifest 里声明的父链一并加入合成的任务栈",
+     "meaning": "跳转后的栈由目标的父链决定，与来源页无关",
+     "source": "android.app.TaskStackBuilder#addNextIntentWithParentStack",
+     "support": []
+    },
+    {
+     "value": "栈底那个 Intent 加 FLAG_ACTIVITY_NEW_TASK | FLAG_ACTIVITY_CLEAR_TASK | FLAG_ACTIVITY_TASK_ON_HOME",
+     "meaning": "startActivities 会清掉当前任务，不是在当前栈上压栈",
+     "source": "android.app.TaskStackBuilder#getIntents",
+     "support": []
+    }
+   ],
+   "lookups": [
+    {
+     "what": "每个目标的父链",
+     "where": "源工程 AndroidManifest.xml 里目标 <activity> 的 android:parentActivityName，或 <meta-data android:name=\"android.support.PARENT_ACTIVITY\">",
+     "how": "从目标沿父链一路往上读到没有父为止，倒过来就是跳转后的栈"
+    }
+   ],
+   "why": "写成在当前栈上压栈后，从非根页跳转再返回会落回来源页，而源端回到父页",
+   "keys": {
+    "read": [
+     "TaskStackBuilder",
+     "addNextIntentWithParentStack",
+     "startActivities",
+     "android:parentActivityName",
+     "PARENT_ACTIVITY",
+     "AndroidManifest"
+    ],
+    "product": [
+     "NavPathStack",
+     "pushPathByName",
+     "clear",
+     "返回落回来源页",
+     "带回栈",
+     "天然栈底"
+    ]
+   },
+   "probe": {
+    "pattern": "返回(均)?落回来源页|天然(在)?栈底",
+    "note": "规格把父栈跳转写成压栈；源端若是 TaskStackBuilder，返回应落到父链上的页面"
+   },
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法是规格里的栈和判据写法，接口见代码类规矩",
+   "refs": [
+    {
+     "what": "addNextIntentWithParentStack 加入父链",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/android/app/TaskStackBuilder.java TaskStackBuilder#addNextIntentWithParentStack",
+     "quote": "Add a new Intent with the resolved chain of parents for the target activity to * the task stack.",
+     "version": "android-36.1"
+    },
+    {
+     "what": "栈底 Intent 清任务",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/android/app/TaskStackBuilder.java TaskStackBuilder#getIntents",
+     "quote": "intents[0] = new Intent(mIntents.get(0)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK | Intent.FLAG_ACTIVITY_TASK_ON_HOME);",
+     "version": "android-36.1"
+    }
+   ]
+  },
+  {
+   "title": "TaskStackBuilder 父栈跳转，代码写成 clear 后按父链依次 pushPathByName",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源码 TaskStackBuilder.create(this).addNextIntentWithParentStack(intent).startActivities()，Manifest 有 android:parentActivityName；或规格把它映射成单次 pushPathByName",
+     "wrong": "目标只写 navPathStack.pushPathByName(name, param, false)，注释写「带父栈入栈」「返回落回来源页」"
+    }
+   ],
+   "scope": "目标端用单个 Navigation + NavPathStack，父栈跳转可能从栈底以外的任意宿主页发起时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "写成 navPathStack.clear(false) → 按父链依次 navPathStack.pushPathByName(<父页>, <参数>, false) → navPathStack.pushPathByName(<目标>, <参数>, false)",
+     "support": [
+      "case-ece3192169e927e18aa5#diagnosis",
+      "case-ece3192169e927e18aa5#recommendation:1"
+     ]
+    },
+    {
+     "text": "规格映射成单次 push 时对照源码与 Manifest 核对返回落点，冲突就按源端语义实现并标注差异；自检：非根页 → 抽屉 → 目标 → 返回应先回父页，再返回才退到后台",
+     "support": [
+      "case-ece3192169e927e18aa5#recommendation:3"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "clear(animated?: boolean): void，animated 默认 true",
+     "meaning": "清空导航栈；重建时传 false 不播转场",
+     "source": "鸿蒙 SDK 的 ets/component/navigation.d.ts，NavPathStack.clear",
+     "support": []
+    },
+    {
+     "value": "pushPathByName(name: string, param: unknown, animated?: boolean): void，animated 默认 true",
+     "meaning": "按名字压入 NavDestination",
+     "source": "鸿蒙 SDK 的 ets/component/navigation.d.ts，NavPathStack.pushPathByName",
+     "support": []
+    },
+    {
+     "value": "修好后改为 clear(false) → push 父页 → push 目标（均 animated=false），设备上返回落到父页",
+     "meaning": "修好后的做法",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-ece3192169e927e18aa5#diagnosis"
+     ]
+    },
+    {
+     "value": "栈底那个 Intent 加 FLAG_ACTIVITY_NEW_TASK | FLAG_ACTIVITY_CLEAR_TASK | FLAG_ACTIVITY_TASK_ON_HOME",
+     "meaning": "源端会清掉当前任务",
+     "source": "android.app.TaskStackBuilder#getIntents",
+     "support": []
+    },
+    {
+     "value": "pushPath(info: NavPathInfo, animated?: boolean): void",
+     "meaning": "同族接口：按 NavPathInfo 压栈",
+     "source": "鸿蒙 SDK 的 ets/component/navigation.d.ts，NavPathStack.pushPath",
+     "support": []
+    },
+    {
+     "value": "replacePathByName(name: string, param: Object, animated?: boolean): void",
+     "meaning": "同族接口：替换栈顶",
+     "source": "鸿蒙 SDK 的 ets/component/navigation.d.ts，NavPathStack.replacePathByName",
+     "support": []
+    }
+   ],
+   "lookups": [
+    {
+     "what": "父链上的每个页面在目标端是不是 NavDestination",
+     "where": "目标工程里 Navigation 所在页面和路由表（route_map 或 navDestination 注册处）",
+     "how": "父页若注册为 NavDestination 就要 push；若是 Navigation 的根内容（不在 NavPathStack 里），clear 后直接 push 目标"
+    }
+   ],
+   "why": "只压一页时从非根页跳转后返回落回来源页，源端则回到父页",
+   "keys": {
+    "read": [
+     "TaskStackBuilder",
+     "addNextIntentWithParentStack",
+     "startActivities",
+     "android:parentActivityName",
+     "NavUtils",
+     "onBackPressed"
+    ],
+    "product": [
+     "NavPathStack",
+     "pushPathByName",
+     "clear(",
+     "pushPath",
+     "Navigation",
+     "NavDestination"
+    ]
+   },
+   "probe": null,
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "搜 NavPathStack 里带 animated?: boolean 的方法：pushPath、pushPathByName、replacePathByName、popToName、clear 等十余个重载；pushPath 和 replacePathByName 写进了 values",
+   "refs": [
+    {
+     "what": "NavPathStack.clear",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/component/navigation.d.ts NavPathStack.clear",
+     "quote": "Clears the navigation stack. * * @param { boolean } [animated] - Whether to support the transition animation. * <br>Default value: **true**.",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "clear 签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/component/navigation.d.ts NavPathStack.clear",
+     "quote": "clear(animated?: boolean): void;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "pushPathByName 签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/component/navigation.d.ts NavPathStack.pushPathByName",
+     "quote": "pushPathByName(name: string, param: unknown, animated?: boolean): void;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "栈底 Intent 清任务",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/android/app/TaskStackBuilder.java TaskStackBuilder#getIntents",
+     "quote": "intents[0] = new Intent(mIntents.get(0)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK | Intent.FLAG_ACTIVITY_TASK_ON_HOME);",
+     "version": "android-36.1"
+    },
+    {
+     "what": "pushPath（同族）",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/component/navigation.d.ts NavPathStack.pushPath",
+     "quote": "pushPath(info: NavPathInfo, animated?: boolean): void;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "replacePathByName（同族）",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/component/navigation.d.ts NavPathStack.replacePathByName",
+     "quote": "replacePathByName(name: string, param: Object, animated?: boolean): void;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    }
+   ]
+  }
+ ],
+ "left_out": [
+  {
+   "text": "设备上用 dumpsys 核对两端的栈",
+   "reason": "要上机或截图才能做"
+  },
+  {
+   "text": "注入的经验里没有涉及该栈语义的条目",
+   "reason": "针对经验库本身的建议"
+  }
+ ],
+ "corrections": [],
+ "gaps": [],
+ "conflicts": []
+}

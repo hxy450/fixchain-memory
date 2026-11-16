@@ -1,0 +1,377 @@
+{
+ "case": "case-b2793695ef65617c820a",
+ "rules": [
+  {
+   "title": "源端在 Room onCreate 里播种时，目标把播种放进建表分支的同一事务，不用表为空判断",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源端 RoomDatabase.Callback 的 onCreate(db) 里插入预置数据（首次建库才播种）",
+     "wrong": "目标端初始化时每次打开都查 SELECT COUNT(*)，结果为 0 就调用播种函数"
+    }
+   ],
+   "scope": "源端只在首次建库时播种预置数据，目标端用 relationalStore 的 RdbStore 自行建表和播种时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "播种放进建表分支（表都还不存在、要执行 CREATE TABLE 的那一支）的同一事务：beginTransaction() → executeSql(CREATE TABLE …) → insert 种子 → commit()",
+     "support": [
+      "case-b2793695ef65617c820a#recommendation:1",
+      "case-b2793695ef65617c820a#diagnosis"
+     ]
+    },
+    {
+     "text": "不用「表为空」（COUNT(*) === 0）判断代替「首次创建」",
+     "support": [
+      "case-b2793695ef65617c820a#recommendation:1"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "播种移进「两表都不存在」的建表事务里，删光数据后重开不再重播种",
+     "meaning": "首建播种的修法",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-b2793695ef65617c820a#diagnosis"
+     ]
+    },
+    {
+     "value": "beginTransaction(): void；commit(): void",
+     "meaning": "RdbStore 的事务开始和提交",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.data.relationalStore.d.ts，RdbStore.beginTransaction、RdbStore.commit",
+     "support": []
+    },
+    {
+     "value": "executeSql(sql: string, bindArgs?: Array<ValueType>): Promise<void>",
+     "meaning": "执行 CREATE TABLE 等语句",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.data.relationalStore.d.ts，RdbStore.executeSql",
+     "support": []
+    }
+   ],
+   "lookups": [],
+   "why": "按表为空判断会在用户删光数据后重开时再次播种，删掉的预置项又回来",
+   "keys": {
+    "read": [
+     "RoomDatabase.Callback",
+     "onCreate",
+     "addCallback",
+     "Room.databaseBuilder",
+     "@Database",
+     "SupportSQLiteDatabase"
+    ],
+    "product": [
+     "relationalStore",
+     "RdbStore",
+     "COUNT(*)",
+     "beginTransaction",
+     "commit",
+     "executeSql",
+     "CREATE TABLE"
+    ]
+   },
+   "probe": {
+    "pattern": "COUNT\\(\\*\\)",
+    "note": "初始化里查行数；若用它决定是否播种，应改成只在建表分支里播种"
+   },
+   "unverified": [
+    "卡里的行为出自 HarmonyOS 6.0.1(21)，本机按 API 23 的声明核对"
+   ],
+   "alternatives_unverified": [
+    "用 RdbStore.version（初值 0，设置时须为大于 0 的整数）标记首次建库",
+    "用 createTransaction(options?: TransactionOptions): Promise<Transaction> 代替 beginTransaction/commit"
+   ],
+   "siblings_checked": "无：做法落在播种时机上，事务接口没有专门参数类型可搜",
+   "refs": [
+    {
+     "what": "beginTransaction",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.data.relationalStore.d.ts RdbStore.beginTransaction",
+     "quote": "beginTransaction(): void;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "commit",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.data.relationalStore.d.ts RdbStore.commit",
+     "quote": "commit(): void;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "executeSql",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.data.relationalStore.d.ts RdbStore.executeSql",
+     "quote": "executeSql(sql: string, bindArgs?: Array<ValueType>): Promise<void>;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    }
+   ]
+  },
+  {
+   "title": "种子带固定主键时首建写入该 id，补充路径按 copy(id = 0) 插新行，两条路径分开构造",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源端种子数据的 Room 实体构造里显式传 id = <常量>（固定主键）；手动补充或复制路径用 copy(id = 0) 插入",
+     "wrong": "首建播种的 ValuesBucket 不写 id、由自增主键重新编号；或补充路径复用首建的构造函数也写入固定 id"
+    }
+   ],
+   "scope": "目标端用 relationalStore 插入源端带固定主键的预置数据，以及补充、复制预置项时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "首建播种的 ValuesBucket 写入源端的固定 id（'id': seed.id）",
+     "support": [
+      "case-b2793695ef65617c820a#recommendation:2",
+      "case-b2793695ef65617c820a#diagnosis"
+     ]
+    },
+    {
+     "text": "补充或复制路径照源端 copy(id = 0) 插新行：ValuesBucket 不带 id，交给自增主键",
+     "support": [
+      "case-b2793695ef65617c820a#recommendation:2",
+      "case-b2793695ef65617c820a#diagnosis"
+     ]
+    },
+    {
+     "text": "两条路径各自构造 ValuesBucket；改共享的构造函数前先查它的全部调用方",
+     "support": [
+      "case-b2793695ef65617c820a#recommendation:2"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "insert(table: string, values: ValuesBucket): Promise<number>",
+     "meaning": "插入一行，成功返回行 ID，失败返回 -1",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.data.relationalStore.d.ts，RdbStore.insert",
+     "support": []
+    },
+    {
+     "value": "首建用带 id 的一套 bucket，补充用不带 id 的新副本",
+     "meaning": "两条路径分开后，列表顺序与源端一致、补充不撞主键",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-b2793695ef65617c820a#diagnosis"
+     ]
+    }
+   ],
+   "lookups": [
+    {
+     "what": "源端种子的固定主键值",
+     "where": "源工程里预置数据的定义（Room 实体构造里显式传的 id 常量）",
+     "how": "逐个读出 id，首建播种时原样写进 ValuesBucket"
+    }
+   ],
+   "why": "不写固定 id 时自增主键按插入顺序重新编号，按 id 排的列表顺序和关联数据错位；补充也写固定 id 会撞主键",
+   "keys": {
+    "read": [
+     "@PrimaryKey",
+     "autoGenerate",
+     "copy(id = 0)",
+     "@Entity",
+     "@Insert"
+    ],
+    "product": [
+     "ValuesBucket",
+     "insert",
+     "relationalStore",
+     "'id'",
+     "AUTOINCREMENT",
+     "RdbStore"
+    ]
+   },
+   "probe": null,
+   "unverified": [
+    "卡里的行为出自 HarmonyOS 6.0.1(21)，本机按 API 23 的声明核对"
+   ],
+   "alternatives_unverified": [],
+   "siblings_checked": "搜 insert(table: string, values: ValuesBucket：relationalStore 里另有 RdbStore.insert 的回调和带 ConflictResolution 的 3 个重载、Transaction 接口的 insert 1 个；做法不依赖重载，只写了 RdbStore.insert",
+   "refs": [
+    {
+     "what": "RdbStore.insert 签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.data.relationalStore.d.ts RdbStore.insert",
+     "quote": "insert(table: string, values: ValuesBucket): Promise<number>;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "insert 的返回值",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.data.relationalStore.d.ts RdbStore.insert",
+     "quote": "@returns { Promise<number> } The row ID if the operation is successful. return -1 otherwise.",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    }
+   ]
+  },
+  {
+   "title": "AC 里列表范围和过滤条件照所引源码写，并带上参考文档的反例",
+   "product": "规格",
+   "triggers": [
+    {
+     "read": "源端对话框用 items(<全部预置项>) 列出全部，保存时 copy(id = 0) 插入；参考规格写「数据库为空且非首次建库→空白列表」",
+     "wrong": "AC 写成「只列当前数据库里没有的项」并标了源码出处，服务接口多出 missingDefaults() 一类过滤；或 AC 没写「非首次建库、数据库为空时保持空列表」"
+    }
+   ],
+   "scope": "规格提取阶段写列表、对话框的验收条目，条目标了源码出处时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "列表范围和过滤条件照源码写：源码列出全部就写列出全部，不加「只列缺失项」",
+     "support": [
+      "case-b2793695ef65617c820a#recommendation:3"
+     ]
+    },
+    {
+     "text": "参考文档里的反例写进 AC，如「数据库为空且非首次建库时保持空列表」",
+     "support": [
+      "case-b2793695ef65617c820a#recommendation:3"
+     ]
+    }
+   ],
+   "values": [],
+   "lookups": [
+    {
+     "what": "AC 所引的源码语义",
+     "where": "AC 标的源码出处那一段（列表的 items(…) 数据源和保存时的插入写法）",
+     "how": "读出列的是哪个集合、有没有过滤，照写进 AC"
+    }
+   ],
+   "why": "规格把「列出全部」写成「只列缺失项」时，实现者照规格写过滤，行为偏离源端",
+   "keys": {
+    "read": [
+     "items(",
+     "LazyColumn",
+     "copy(id = 0)",
+     "AlertDialog",
+     "参考规格",
+     "空白列表"
+    ],
+    "product": [
+     "AC",
+     "验收",
+     "absent from current database",
+     "missing",
+     "只列",
+     "出处"
+    ]
+   },
+   "probe": {
+    "pattern": "absent from|only .* (missing|absent)|只列.*(缺失|不存在)",
+    "note": "AC 里写了「只列缺失项」类过滤；核对所引源码是不是列出全部"
+   },
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：规格类，做法落在 AC 的写法上，不落在接口",
+   "refs": []
+  },
+  {
+   "title": "AC 与已读源码语义冲突时按源码实现，并在迁移报告登记规格差异",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "规格 AC 要求只列缺失项，而已读源码用 items(<全部预置项>) 列出全部",
+     "wrong": "实现按 AC 用名称集合 filter 剔除已存在项，没有与源码对照，也没登记差异"
+    }
+   ],
+   "scope": "页面实现阶段落实列表、对话框类 AC，手里同时有源码时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "按源码语义实现（始终列出全部默认项），不照 AC 写 filter",
+     "support": [
+      "case-b2793695ef65617c820a#recommendation:4",
+      "case-b2793695ef65617c820a#diagnosis"
+     ]
+    },
+    {
+     "text": "在迁移报告里登记这条规格差异：AC 原文、源码语义、实现取了哪一边",
+     "support": [
+      "case-b2793695ef65617c820a#recommendation:4"
+     ]
+    }
+   ],
+   "values": [],
+   "lookups": [],
+   "why": "照 AC 实现会把规格的偏差带进代码，补充对话框少列项",
+   "keys": {
+    "read": [
+     "items(",
+     "LazyColumn",
+     "AC",
+     "copy(id = 0)",
+     "remember"
+    ],
+    "product": [
+     "filter(",
+     "ForEach",
+     "includes(",
+     "has(",
+     "Set<string>"
+    ]
+   },
+   "probe": null,
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法落在实现与规格的对照上，不落在接口",
+   "refs": []
+  },
+  {
+   "title": "源端选择状态在对话框内 remember 时，目标打开对话框时重置选择",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源端对话框 Composable 内用 remember 保存选择状态（每次打开都是新状态）",
+     "wrong": "目标端选择状态放在页面级 @State / @Local，打开对话框时不清空上次的选择"
+    }
+   ],
+   "scope": "源端在对话框内部持有临时选择、目标端把这份状态放在页面上时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "打开对话框时把选择状态重置为初值",
+     "support": [
+      "case-b2793695ef65617c820a#diagnosis"
+     ]
+    }
+   ],
+   "values": [],
+   "lookups": [],
+   "why": "不重置时再次打开对话框带着上次的勾选，保存时重复插入",
+   "keys": {
+    "read": [
+     "remember",
+     "mutableStateOf",
+     "AlertDialog",
+     "Dialog"
+    ],
+    "product": [
+     "@State",
+     "@Local",
+     "CustomDialogController",
+     "open()",
+     "selected"
+    ]
+   },
+   "probe": null,
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法落在状态的生命周期上，不落在接口",
+   "refs": []
+  }
+ ],
+ "left_out": [
+  {
+   "text": "自查：删光全部数据再重开，列表应保持为空",
+   "reason": "要上机或截图才能做"
+  },
+  {
+   "text": "写 AC 前按所引源码行号实读对应段落，参考文档读取被截断时按章节重读",
+   "reason": "没有产物里看得到的触发"
+  }
+ ],
+ "corrections": [],
+ "gaps": [
+  "Room 的 copy(id = 0) 按自增生成新主键：依赖库代码，本机没有源码，按卡写"
+ ],
+ "conflicts": []
+}

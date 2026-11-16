@@ -1,0 +1,249 @@
+{
+ "group": "p2-0029",
+ "merged": [
+  {
+   "members": [
+    "rule-d7384bd9cbd7",
+    "case-6b58da0df30e3479800e#1"
+   ],
+   "reason": "触发相同（源 Activity 有带 VIEW 和 <data scheme/host> 的深链 intent-filter，目标 UIAbility 的 skills 只有 home 一项、没有带 viewData 和 uris 的 skill，代码里却在解析 want.uri），做法相同（另建独立 skill，按源端每个 scheme+host 写 uris，和 want.uri 解析同一步交付）；以已有规矩为底，补进新卡的来源、path/pathPattern 的对应和对照检查",
+   "rule": {
+    "title": "深链 intent-filter 要映射成 module.json5 的 skills，不只解析 want.uri",
+    "product": "资源",
+    "triggers": [
+     {
+      "read": "Activity 的 <intent-filter> 带 VIEW 和 <data android:scheme/android:host/android:pathPrefix>",
+      "wrong": "该 UIAbility 的 skills 只有 entity.system.home 那一项，没有带 viewData 和 uris 的 skill，代码里却在解析 want.uri"
+     },
+     {
+      "read": "源码里有 `scheme://host` 形式的自定义 scheme 深链常量",
+      "wrong": "入口 UIAbility 的 skills 只有 entity.system.home，没有 uris"
+     }
+    ],
+    "scope": "安卓外部深链（https/http 或自定义 scheme）迁成 UIAbility 时，module.json5 里它的 skills",
+    "exceptions": [],
+    "how": [
+     {
+      "text": "skills 里另建一个 skill（不并进 entity.system.home 那项）：\"actions\": [\"ohos.want.action.viewData\"]，\"entities\": [\"entity.system.browsable\"]，\"uris\": [...]",
+      "support": [
+       "case-6bc0c044e9bb2281aa01#recommendation:1",
+       "case-6bc0c044e9bb2281aa01#diagnosis",
+       "case-ff125779dc6d250b6a4a#diagnosis",
+       "case-6b58da0df30e3479800e#recommendation:1",
+       "case-6b58da0df30e3479800e#diagnosis"
+      ]
+     },
+     {
+      "text": "源端每个 scheme+host 组合写一条 uris：{\"scheme\": <android:scheme>, \"host\": <android:host>, \"pathStartWith\": <android:pathPrefix>}，https、http 各一条",
+      "support": [
+       "case-6bc0c044e9bb2281aa01#recommendation:1",
+       "case-6bc0c044e9bb2281aa01#diagnosis",
+       "case-ff125779dc6d250b6a4a#diagnosis",
+       "case-6b58da0df30e3479800e#recommendation:1",
+       "case-6b58da0df30e3479800e#diagnosis"
+      ]
+     },
+     {
+      "text": "和 onCreate/onNewWant 读 want.uri 的解析同一步完成，写完逐条对照源端每个 intent-filter 有没有匹配的 uris",
+      "support": [
+       "case-6bc0c044e9bb2281aa01#recommendation:1",
+       "case-ff125779dc6d250b6a4a#recommendation:2",
+       "case-ff125779dc6d250b6a4a#diagnosis",
+       "case-6b58da0df30e3479800e#recommendation:1",
+       "case-6b58da0df30e3479800e#recommendation:3"
+      ]
+     }
+    ],
+    "values": [
+     {
+      "value": "{\"actions\": [\"ohos.want.action.viewData\"], \"entities\": [\"entity.system.browsable\"], \"uris\": [{\"scheme\": \"https\", \"host\": <host>, \"pathStartWith\": \"/\"}, {\"scheme\": \"http\", \"host\": <host>, \"pathStartWith\": \"/\"}]}",
+      "meaning": "源端 VIEW + DEFAULT + BROWSABLE、scheme https/http、pathPrefix \"/\" 的 intent-filter 对应的 skill；补上后外部链接才路由到该 Ability",
+      "source": "卡里修好并验证过",
+      "support": [
+       "case-6bc0c044e9bb2281aa01#diagnosis"
+      ]
+     },
+     {
+      "value": "补上 actions viewData + uris {scheme, host} 的独立 skill（含源端自定义 scheme://host）后，外部深链能拉起并路由，修复保留",
+      "meaning": "注册 scheme 是自定义 scheme 深链能拉起入口的前提",
+      "source": "卡里修好并验证过",
+      "support": [
+       "case-ff125779dc6d250b6a4a#diagnosis",
+       "case-6b58da0df30e3479800e#diagnosis"
+      ]
+     },
+     {
+      "value": "默认的入口 skill（entity.system.home / ohos.want.action.home）里不能配跳转链接，要另建独立的 skill 对象；多个跳转场景各建一个",
+      "meaning": "深链那一项要新增，不要把 viewData、browsable、uris 塞进 home 那一项",
+      "source": "deep-linking-startup.md，配置module.json5文件",
+      "support": []
+     },
+     {
+      "value": "\"actions\": [\"ohos.want.action.viewData\"]",
+      "meaning": "深链 skill 的 actions 不能为空，为空会匹配失败",
+      "source": "deep-linking-startup.md，配置module.json5文件",
+      "support": []
+     },
+     {
+      "value": "uris 的 scheme 必填（只配 type 时除外），host 只在配了 scheme 时生效；port、path | pathStartWith | pathRegex（三选一：全匹配、前缀、正则）只有 scheme 和 host 都配置时才生效",
+      "meaning": "源端 data 的 scheme、host、port、path、pathPrefix 分别写到 scheme、host、port、path、pathStartWith；android:pathPattern 是简单通配符，转 pathRegex 时要改写成正则",
+      "source": "module-configuration-file.md，skills标签（uris标签说明）；Android SDK 平台资源 data/res/values/attrs_manifest.xml，AndroidManifestData 的 path / pathPrefix / pathPattern（按应用的 compileSdk 取对应平台）",
+      "support": []
+     },
+     {
+      "value": "uris 里的字符串标签不支持 $string 资源索引",
+      "meaning": "scheme、host、pathStartWith 写字面量",
+      "source": "module-configuration-file.md，skills标签（表8 uris标签说明）",
+      "support": []
+     },
+     {
+      "value": "actions 含 \"ohos.want.action.viewData\"、entities 含 \"entity.system.browsable\"、uris 含 scheme 为 https 且 host 为域名的元素",
+      "meaning": "文档对网址类链接接收方的 skills 要求，和 https 深链那张卡的写法一致",
+      "source": "app-linking-startup.md，声明应用关联的网站域名",
+      "support": []
+     },
+     {
+      "value": "Deep Linking 的 scheme 可以自定义，但不能以 ohos 开头，不建议用 https、http、file 等系统保留值",
+      "meaning": "自拟 scheme 时的限制，保留 scheme 可能拉起系统默认应用；https 域名链接按上一条 App Linking 的写法",
+      "source": "deep-linking-startup.md，配置module.json5文件",
+      "support": []
+     }
+    ],
+    "lookups": [
+     {
+      "what": "要注册的 scheme、host、端口和路径",
+      "where": "源工程 AndroidManifest.xml 里该 Activity 下深链 <intent-filter> 的 <data> 元素；源码里 scheme://host 形式的深链 base URI 常量",
+      "how": "每个 scheme 和 host 的组合写成一条 uris，android:pathPrefix 的值原样写进 pathStartWith；android:port、android:path / pathPattern 也逐条读出写到对应字段"
+     }
+    ],
+    "why": "没有 uris 时隐式 Want 匹配不到这个 Ability，外部链接拉不起应用",
+    "keys": {
+     "read": [
+      "intent-filter",
+      "android.intent.action.VIEW",
+      "android.intent.category.BROWSABLE",
+      "android.intent.category.DEFAULT",
+      "<data",
+      "android:scheme",
+      "android:host",
+      "android:pathPrefix",
+      "android:autoVerify"
+     ],
+     "product": [
+      "module.json5",
+      "skills",
+      "actions",
+      "entities",
+      "uris",
+      "scheme",
+      "ohos.want.action.viewData",
+      "entity.system.browsable",
+      "entity.system.home",
+      "pathStartWith",
+      "want.uri",
+      "onNewWant"
+     ]
+    },
+    "probe": null,
+    "unverified": [
+     "case-6bc0c044e9bb2281aa01 的行为出自 HarmonyOS 6.0.1(21)，case-6b58da0df30e3479800e 的出自 target SDK 26.0.0，本机按 API 23 的声明和 docs f41b9345 核对",
+     "case-ff125779dc6d250b6a4a 只写了补 uris，没写是否单独成一个 skill 对象、actions 和 entities 怎么写；case-6b58da0df30e3479800e 写了独立 skill 和 viewData，没写 entities；这几点出自文档和 https 深链那张卡"
+    ],
+    "alternatives_unverified": [
+     "源端 android:autoVerify=\"true\"（App Links）时，文档的 App Linking 写法在这一项上再加 \"domainVerify\": true，并在域名的 /.well-known/applinking.json 关联应用；这几张卡都没写也没验证"
+    ],
+    "siblings_checked": "无：做法落在 module.json5 的 skills 配置字段上，不是带专门参数类型的 SDK 接口",
+    "refs": [
+     {
+      "what": "默认入口 skill 里不能配跳转链接，要另建 skill 对象",
+      "kind": "oh-docs",
+      "where": "zh-cn/application-dev/application-models/deep-linking-startup.md 配置module.json5文件",
+      "quote": "skills标签下默认包含一个skill对象，用于标识应用入口。应用跳转链接不能在该skill对象中配置，需要创建独立的skill对象。",
+      "version": "docs f41b9345"
+     },
+     {
+      "what": "actions 不能为空",
+      "kind": "oh-docs",
+      "where": "zh-cn/application-dev/application-models/deep-linking-startup.md 配置module.json5文件",
+      "quote": "// actions不能为空，actions为空会造成目标方匹配失败。 \"ohos.want.action.viewData\"",
+      "version": "docs f41b9345"
+     },
+     {
+      "what": "scheme 的限制",
+      "kind": "oh-docs",
+      "where": "zh-cn/application-dev/application-models/deep-linking-startup.md 配置module.json5文件",
+      "quote": "Deep Linking中的scheme可以自定义，但不能以\"ohos\"开头，也不建议使用\"https\"、\"http\"、\"file\"",
+      "version": "docs f41b9345"
+     },
+     {
+      "what": "pathStartWith 是前缀匹配，path 类标签要 scheme 和 host 都配置才生效",
+      "kind": "oh-docs",
+      "where": "zh-cn/application-dev/quick-start/module-configuration-file.md skills标签",
+      "quote": "pathStartWith标识URI与want中的路径部分允许前缀匹配，pathRegex标识URI与want中的路径部分允许正则匹配。该标签只有当scheme和host都配置时才生效。",
+      "version": "docs f41b9345"
+     },
+     {
+      "what": "uris 的 path、pathStartWith、pathRegex 三选一",
+      "kind": "oh-docs",
+      "where": "zh-cn/application-dev/quick-start/module-configuration-file.md skills标签",
+      "quote": "path、pathStartWith和pathRegex配置时三选一。path标识URI与want中的路径部分全匹配，pathStartWith标识URI与want中的路径部分允许前缀匹配",
+      "version": "docs f41b9345"
+     },
+     {
+      "what": "host 依赖 scheme",
+      "kind": "oh-docs",
+      "where": "zh-cn/application-dev/quick-start/module-configuration-file.md skills标签",
+      "quote": "| host | 标识URI的主机地址部分，该标签只有当scheme配置时才生效。",
+      "version": "docs f41b9345"
+     },
+     {
+      "what": "scheme 必填",
+      "kind": "oh-docs",
+      "where": "zh-cn/application-dev/quick-start/module-configuration-file.md skills标签",
+      "quote": "uris中仅配置type时可以缺省，缺省值为空，否则不可缺省。",
+      "version": "docs f41b9345"
+     },
+     {
+      "what": "uris 的字符串标签不支持 $string",
+      "kind": "oh-docs",
+      "where": "zh-cn/application-dev/quick-start/module-configuration-file.md skills标签",
+      "quote": "以下字符串类型的标签不支持使用资源索引的方式（$string）配置。",
+      "version": "docs f41b9345"
+     },
+     {
+      "what": "网址类链接的 skills 要求 viewData、browsable 和 https uris",
+      "kind": "oh-docs",
+      "where": "zh-cn/application-dev/application-models/app-linking-startup.md 声明应用关联的网站域名",
+      "quote": "* \"actions\"列表中包含\"ohos.want.action.viewData\"。\n* \"entities\"列表中包含\"entity.system.browsable\"。\n* \"uris\"列表中包含\"scheme\"为\"https\"且\"host\"为域名地址的元素。",
+      "version": "docs f41b9345"
+     },
+     {
+      "what": "Android data 的 pathPrefix 是前缀匹配",
+      "kind": "android-sdk",
+      "where": "platforms/android-36/data/res/values/attrs_manifest.xml AndroidManifestData pathPrefix",
+      "quote": "IntentFilter.addDataPath()} with {@link android.os.PatternMatcher#PATTERN_PREFIX}. --> <attr name=\"pathPrefix\" />",
+      "version": "android-36"
+     },
+     {
+      "what": "Android data 的 pathPattern 是简单通配符",
+      "kind": "android-sdk",
+      "where": "platforms/android-36/data/res/values/attrs_manifest.xml AndroidManifestData pathPattern",
+      "quote": "Specify a URI path that matches a simple pattern, as per {@link android.content.IntentFilter#addDataPath IntentFilter.addDataPath()} with {@link android.os.PatternMatcher#PATTERN_SIMPLE_GLOB}.",
+      "version": "android-36"
+     }
+    ],
+    "status": "active"
+   }
+  }
+ ],
+ "kept": [
+  {
+   "member": "rule-9125f594a852",
+   "reason": "写错的样子不同：它管的是 skills 已有 uris 但多注册了源端没有的 scheme、漏掉 http，不是整项 skill 缺失"
+  },
+  {
+   "member": "rule-943c5f24056c",
+   "reason": "写错的样子不同：它管的是带 autoVerify 的 browsable skill 缺 \"domainVerify\": true，不是缺 uris 的 skill"
+  }
+ ]
+}

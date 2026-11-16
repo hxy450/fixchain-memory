@@ -1,0 +1,349 @@
+{
+ "case": "case-e6ec1491a065e800a4f8",
+ "rules": [
+  {
+   "title": "RdbStore 要返回受影响行数时用 update/delete 的返回值，不另查 SELECT changes()",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源端 Room @Query 的 UPDATE / DELETE 方法返回 Int，或目标 DAO 签名承诺返回 Promise<number> 受影响行数",
+     "wrong": "写成 store.executeSql(...) 后另起 store.querySql('SELECT changes() AS value') 读行数，或 return 一个这样实现的共享 helper"
+    },
+    {
+     "read": "下游读到的共享 helper 是 executeSql 加 querySql('SELECT changes()')",
+     "wrong": "下游 DAO / Repository 直接 return 这个 helper 的结果当行数"
+    },
+    {
+     "read": "",
+     "wrong": "交回报告的风险里写 helper「依赖 RdbStore 单连接语义，可能不准」，代码没改"
+    }
+   ],
+   "scope": "数据层用 relationalStore 写 UPDATE / DELETE 并要返回受影响行数时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "UPDATE 写成 return await store.update(valuesBucket, new relationalStore.RdbPredicates(表名).equalTo(列, 值))，DELETE 写成 return await store.delete(predicates)，直接用它们返回的 number",
+     "support": [
+      "case-e6ec1491a065e800a4f8#recommendation:1",
+      "case-e6ec1491a065e800a4f8#diagnosis"
+     ]
+    },
+    {
+     "text": "共享 helper 的返回值依赖 SELECT changes() 这类连接级状态时，交付前换成 update / delete 的实现，或让 helper 不再承诺返回行数；下游复用前先看它的返回值从哪来",
+     "support": [
+      "case-e6ec1491a065e800a4f8#recommendation:3",
+      "case-e6ec1491a065e800a4f8#recommendation:5"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "update(values: ValuesBucket, predicates: RdbPredicates): Promise<number>",
+     "meaning": "RdbStore 的更新，Promise 返回受影响的行数",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.data.relationalStore.d.ts，RdbStore.update；arkts-apis-data-relationalStore-RdbStore.md，update",
+     "support": []
+    },
+    {
+     "value": "delete(predicates: RdbPredicates): Promise<number>",
+     "meaning": "RdbStore 的删除，Promise 返回受影响的行数",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.data.relationalStore.d.ts，RdbStore.delete；arkts-apis-data-relationalStore-RdbStore.md，delete",
+     "support": []
+    },
+    {
+     "value": "executeSql(sql: string, bindArgs?: Array<ValueType>): Promise<void>",
+     "meaning": "RdbStore 执行 SQL，不返回行数",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.data.relationalStore.d.ts，RdbStore.executeSql",
+     "support": []
+    },
+    {
+     "value": "updateSync(values: ValuesBucket, predicates: RdbPredicates, conflict?: ConflictResolution): number",
+     "meaning": "同族接口：RdbStore 的同步更新，返回受影响的行数",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.data.relationalStore.d.ts，RdbStore.updateSync",
+     "support": []
+    },
+    {
+     "value": "deleteSync(predicates: RdbPredicates): number",
+     "meaning": "同族接口：RdbStore 的同步删除，返回受影响的行数",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.data.relationalStore.d.ts，RdbStore.deleteSync",
+     "support": []
+    },
+    {
+     "value": "update(values: ValuesBucket, predicates: RdbPredicates, conflict?: ConflictResolution): Promise<number>",
+     "meaning": "同族接口：Transaction 里的更新，在事务内写时用",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.data.relationalStore.d.ts，Transaction.update",
+     "support": []
+    },
+    {
+     "value": "改用 RdbPredicates + store.update / store.delete 的返回值后，断言行数的用例通过",
+     "meaning": "原先数据已写入、返回值却是 0",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-e6ec1491a065e800a4f8#diagnosis"
+     ]
+    }
+   ],
+   "lookups": [],
+   "why": "changes() 读的是连接级状态，executeSql 和 querySql 落在不同连接时返回 0，数据写进去了行数却是 0",
+   "keys": {
+    "read": [
+     "@Query",
+     "UPDATE",
+     "DELETE",
+     "Int",
+     "Room",
+     "@Dao",
+     "executeSql",
+     "changes()"
+    ],
+    "product": [
+     "executeSql",
+     "querySql",
+     "SELECT changes()",
+     "store.update",
+     "store.delete",
+     "RdbPredicates",
+     "Promise<number>",
+     "relationalStore"
+    ]
+   },
+   "probe": {
+    "pattern": "(?i)SELECT\\s+changes\\s*\\(\\s*\\)",
+    "note": "用 SELECT changes() 取受影响行数；应改用 store.update / store.delete 的返回值"
+   },
+   "unverified": [
+    "「executeSql 和 querySql 落在不同连接」是生成者和修复者的判断，卡里没有 RdbStore 内部实现的证据；能确认的是改用 update / delete 返回值后用例通过"
+   ],
+   "alternatives_unverified": [
+    "RdbStore.execute(sql: string, args?: Array<ValueType>): Promise<ValueType>：文档说支持增删改、返回类型由执行的 SQL 决定，卡里没验证它对 UPDATE 返回什么",
+    "RdbStore.updateWithReturning / deleteWithReturning（文档标 API 23+）"
+   ],
+   "siblings_checked": "搜 predicates: RdbPredicates)：RdbStore 有 update 4 个重载、updateSync、delete 2 个重载、deleteSync，Transaction 有 update、updateSync、delete、deleteSync；RdbStore.updateSync、deleteSync 和 Transaction.update 写进 values",
+   "refs": [
+    {
+     "what": "RdbStore.update 的 Promise 签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.data.relationalStore.d.ts RdbStore.update",
+     "quote": "update(values: ValuesBucket, predicates: RdbPredicates): Promise<number>;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "update 返回受影响的行数",
+     "kind": "oh-docs",
+     "where": "zh-cn/application-dev/reference/apis-arkdata/arkts-apis-data-relationalStore-RdbStore.md update",
+     "quote": "| Promise&lt;number&gt; | 指定的Promise回调方法。返回受影响的行数。 |",
+     "version": "docs f41b9345"
+    },
+    {
+     "what": "RdbStore.delete 的 Promise 签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.data.relationalStore.d.ts RdbStore.delete",
+     "quote": "delete(predicates: RdbPredicates): Promise<number>;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "delete 返回受影响的行数",
+     "kind": "oh-docs",
+     "where": "zh-cn/application-dev/reference/apis-arkdata/arkts-apis-data-relationalStore-RdbStore.md delete",
+     "quote": "| Promise&lt;number&gt; | Promise对象。返回受影响的行数量。 |",
+     "version": "docs f41b9345"
+    },
+    {
+     "what": "executeSql 返回 Promise<void>",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.data.relationalStore.d.ts RdbStore.executeSql",
+     "quote": "executeSql(sql: string, bindArgs?: Array<ValueType>): Promise<void>;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "RdbStore.updateSync（同族）",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.data.relationalStore.d.ts RdbStore.updateSync",
+     "quote": "updateSync(values: ValuesBucket, predicates: RdbPredicates, conflict?: ConflictResolution): number;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "RdbStore.deleteSync（同族）",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.data.relationalStore.d.ts RdbStore.deleteSync",
+     "quote": "deleteSync(predicates: RdbPredicates): number;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "Transaction.update（同族）",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.data.relationalStore.d.ts Transaction.update",
+     "quote": "update(values: ValuesBucket, predicates: RdbPredicates, conflict?: ConflictResolution): Promise<number>;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "execute 支持增删改、返回类型由 SQL 决定（替代写法，未验证）",
+     "kind": "oh-docs",
+     "where": "zh-cn/application-dev/reference/apis-arkdata/arkts-apis-data-relationalStore-RdbStore.md execute",
+     "quote": "该接口支持执行增删改操作，支持执行PRAGMA语法的sql，支持对表的操作（建表、删表、修改表），返回结果类型由执行具体sql的结果决定。",
+     "version": "docs f41b9345"
+    }
+   ]
+  },
+  {
+   "title": "带 COALESCE 或子查询的 UPDATE 要返回行数时，先按同一 WHERE 计数再更新",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源端 Room @Query 的 UPDATE 带 COALESCE(...) 等表达式或 WHERE id IN (子查询)，写不成 ValuesBucket，方法返回 Int",
+     "wrong": "整条 SQL 交给 executeSql，再用 SELECT changes() 或依赖它的 helper 取行数"
+    }
+   ],
+   "scope": "数据层实现阶段，SQL 不能直接写成 ValuesBucket + RdbPredicates、又要返回受影响行数的 UPDATE",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "先用同一 WHERE 查出目标 id 或 count(*)（store.querySql('SELECT count(*) … WHERE …', args) 或查 id 列表），再用 RdbPredicates（如 .in(列, ids)）调 store.update 并返回数量",
+     "support": [
+      "case-e6ec1491a065e800a4f8#recommendation:2",
+      "case-e6ec1491a065e800a4f8#diagnosis"
+     ]
+    },
+    {
+     "text": "要保留原值的（COALESCE 这类），先读出原值，再按读到的值组 ValuesBucket 写回",
+     "support": [
+      "case-e6ec1491a065e800a4f8#recommendation:2",
+      "case-e6ec1491a065e800a4f8#diagnosis"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "querySql(sql: string, bindArgs?: Array<ValueType>): Promise<ResultSet>",
+     "meaning": "RdbStore 执行查询，用来按同一 WHERE 计数或取 id",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.data.relationalStore.d.ts，RdbStore.querySql",
+     "support": []
+    },
+    {
+     "value": "in(field: string, value: Array<ValueType>): RdbPredicates",
+     "meaning": "RdbPredicates 的 IN 条件，把查到的 id 列表交给 update",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.data.relationalStore.d.ts，RdbPredicates.in",
+     "support": []
+    },
+    {
+     "value": "constructor(name: string)",
+     "meaning": "RdbPredicates 的构造，name 是表名",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.data.relationalStore.d.ts，RdbPredicates.constructor",
+     "support": []
+    },
+    {
+     "value": "先按同一 WHERE 做 count(*) 再 UPDATE 并返回匹配行数；需要 COALESCE 语义的先读原值再 update",
+     "meaning": "修好后行数正确、原值保留语义不变",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-e6ec1491a065e800a4f8#diagnosis"
+     ]
+    }
+   ],
+   "lookups": [],
+   "why": "把行数交给连接级的 changes()，跨连接时返回 0",
+   "keys": {
+    "read": [
+     "@Query",
+     "UPDATE",
+     "COALESCE",
+     "IN",
+     "Int",
+     "Room"
+    ],
+    "product": [
+     "querySql",
+     "count(*)",
+     "RdbPredicates",
+     "store.update",
+     "ValuesBucket",
+     "executeSql"
+    ]
+   },
+   "probe": {
+    "pattern": "executeSql\\([^)]*(?:COALESCE|IN\\s*\\()",
+    "note": "带 COALESCE 或子查询的 UPDATE 交给了 executeSql；看行数是从哪取的"
+   },
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "搜 value: Array<ValueType>): RdbPredicates：RdbPredicates 另有 notIn 一个，未写进 values",
+   "refs": [
+    {
+     "what": "querySql 的 Promise 签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.data.relationalStore.d.ts RdbStore.querySql",
+     "quote": "querySql(sql: string, bindArgs?: Array<ValueType>): Promise<ResultSet>;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "RdbPredicates.in 的签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.data.relationalStore.d.ts RdbPredicates.in",
+     "quote": "in(field: string, value: Array<ValueType>): RdbPredicates;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "RdbPredicates 的构造",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.data.relationalStore.d.ts RdbPredicates.constructor",
+     "quote": "constructor(name: string);",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    }
+   ]
+  },
+  {
+   "title": "Base 回执说共享 helper 返回值可能不准时，下游复用前要求核实或替换，并在基础契约注明限制",
+   "product": "计划与派工",
+   "triggers": [
+    {
+     "read": "Base 阶段交回的回执风险里写共享 helper 的返回值「依赖单连接 / 串行执行语义，可能不准」",
+     "wrong": "调度只记 Base 完成就派发收尾和下游 feature，派工里没有要求核实或替换这个 helper，基础契约里也没写它的限制"
+    }
+   ],
+   "scope": "调度或收尾阶段收到基础层回执、下游 feature 会复用其中共享 helper 时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "下游 feature 复用前，派工要求核实或替换这个 helper（如取行数的 helper 改用 store.update / store.delete 的返回值）",
+     "support": [
+      "case-e6ec1491a065e800a4f8#recommendation:4"
+     ]
+    },
+    {
+     "text": "在基础契约里注明该 helper 的限制（哪个返回值不可靠、该用什么代替）",
+     "support": [
+      "case-e6ec1491a065e800a4f8#recommendation:4"
+     ]
+    }
+   ],
+   "values": [],
+   "lookups": [],
+   "why": "风险只留在回执里，下游照常复用，缺陷扩散到更多 DAO 和 Repository",
+   "keys": {
+    "read": [
+     "回执",
+     "风险",
+     "可能不准",
+     "共享 helper",
+     "单连接"
+    ],
+    "product": [
+     "基础契约",
+     "派工",
+     "限制",
+     "核实",
+     "替换",
+     "helper"
+    ]
+   },
+   "probe": null,
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法是派工和基础契约里该写的内容，不落在具体接口上",
+   "refs": []
+  }
+ ],
+ "left_out": [],
+ "corrections": [],
+ "gaps": [],
+ "conflicts": []
+}

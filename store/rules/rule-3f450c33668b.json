@@ -1,0 +1,198 @@
+{
+ "id": "rule-3f450c33668b",
+ "title": "源端预缩放后原尺寸绘制时，目标按密度解码再 scaleSync，drawImage 不传 dw/dh",
+ "product": "代码",
+ "triggers": [
+  {
+   "read": "BitmapFactory.decodeResource 解码单一密度目录的位图，Bitmap.createScaledBitmap(raw, w, h, filter) 预缩放，drawBitmap(bmp, x, y, null) 原尺寸绘制",
+   "wrong": "原图解码一次后每帧 ctx.drawImage(img, x, y, w, h) 绘制期缩放，没有密度解码，也没指定最近邻"
+  }
+ ],
+ "scope": "渲染实现阶段把源端预缩放位图移植到 ArkUI Canvas 时",
+ "exceptions": [],
+ "how": [
+  {
+   "text": "用 image.DecodingOptions.desiredSize 做密度解码：宽高 = (int)(资源像素 × 设备 dpi / 目录 dpi + 0.5)，设备 dpi 取 display.getDefaultDisplaySync().densityPixels × 160，目录 dpi 按源 res/drawable-<桶> 取",
+   "support": [
+    "case-e00d2f72aa6dfc37826b#recommendation:2",
+    "case-e00d2f72aa6dfc37826b#diagnosis"
+   ]
+  },
+  {
+   "text": "再 pixelMap.scaleSync(目标宽 / 当前宽, 目标高 / 当前高, level) 缩到目标尺寸：filter=false 用 image.AntiAliasingLevel.NONE，true 用 LOW",
+   "support": [
+    "case-e00d2f72aa6dfc37826b#recommendation:2",
+    "case-e00d2f72aa6dfc37826b#diagnosis"
+   ]
+  },
+  {
+   "text": "绘制写 ctx.drawImage(pixelMap, x, y)，不传 dw/dh",
+   "support": [
+    "case-e00d2f72aa6dfc37826b#recommendation:2",
+    "case-e00d2f72aa6dfc37826b#diagnosis"
+   ]
+  }
+ ],
+ "values": [
+  {
+   "value": "desiredSize?: Size，(0, 0) 表示按原图尺寸解码",
+   "meaning": "DecodingOptions 里定解码输出尺寸",
+   "source": "鸿蒙 SDK 的 ets/api/@ohos.multimedia.image.d.ts，DecodingOptions.desiredSize",
+   "support": []
+  },
+  {
+   "value": "scaleSync(x: number, y: number, level: AntiAliasingLevel): void，x、y 是宽高的缩放倍数",
+   "meaning": "PixelMap 原地缩放",
+   "source": "鸿蒙 SDK 的 ets/api/@ohos.multimedia.image.d.ts，PixelMap.scaleSync",
+   "support": []
+  },
+  {
+   "value": "AntiAliasingLevel.NONE = 0（最近邻）、LOW = 1（双线性）",
+   "meaning": "对应 createScaledBitmap 的 filter=false / true",
+   "source": "鸿蒙 SDK 的 ets/api/@ohos.multimedia.image.d.ts，AntiAliasingLevel",
+   "support": []
+  },
+  {
+   "value": "createScaledBitmap 的 filter 为 true 用双线性，为 false 用最近邻",
+   "meaning": "源端 filter 的语义",
+   "source": "android.graphics.Bitmap#createScaledBitmap",
+   "support": []
+  },
+  {
+   "value": "DENSITY_LOW = 120、DENSITY_MEDIUM = 160、DENSITY_HIGH = 240、DENSITY_XHIGH = 320、DENSITY_XXHIGH = 480",
+   "meaning": "ldpi / mdpi / hdpi / xhdpi / xxhdpi 目录对应的 dpi",
+   "source": "android.util.DisplayMetrics#DENSITY_LOW 等常量",
+   "support": []
+  },
+  {
+   "value": "densityPixels: number，物理像素与逻辑像素的缩放系数，低分辨率屏为 1.0",
+   "meaning": "乘 160 得设备 dpi",
+   "source": "鸿蒙 SDK 的 ets/api/@ohos.display.d.ts，Display.densityPixels",
+   "support": []
+  },
+  {
+   "value": "先按 (像素 × dpi + 60) / 120 解码，再 scaleSync(…, AntiAliasingLevel.NONE) 缩到目标尺寸、1:1 绘制，锯齿和源端一致",
+   "meaning": "修好后的写法（ldpi 资源）",
+   "source": "卡里修好并验证过",
+   "support": [
+    "case-e00d2f72aa6dfc37826b#diagnosis"
+   ]
+  },
+  {
+   "value": "createScaledPixelMapSync(x: number, y: number, level?: AntiAliasingLevel): PixelMap",
+   "meaning": "同族接口：按倍数缩放并返回新的 PixelMap",
+   "source": "鸿蒙 SDK 的 ets/api/@ohos.multimedia.image.d.ts，PixelMap.createScaledPixelMapSync",
+   "support": []
+  }
+ ],
+ "lookups": [
+  {
+   "what": "资源所在密度目录和原图像素",
+   "where": "源工程 res/drawable-<密度桶>/ 下按资源名找，读 PNG 的实际宽高",
+   "how": "桶名按 DisplayMetrics 常量换成 dpi，代进解码尺寸公式"
+  }
+ ],
+ "why": "绘制期缩放走画布默认的平滑插值，且省掉密度解码，成像变成柔边，和源端最近邻的锯齿不同",
+ "keys": {
+  "read": [
+   "BitmapFactory.decodeResource",
+   "Bitmap.createScaledBitmap",
+   "drawBitmap",
+   "drawable-ldpi",
+   "densityDpi",
+   "filter"
+  ],
+  "product": [
+   "PixelMap",
+   "DecodingOptions",
+   "desiredSize",
+   "scaleSync",
+   "AntiAliasingLevel.NONE",
+   "drawImage",
+   "densityPixels",
+   "getDefaultDisplaySync"
+  ]
+ },
+ "probe": {
+  "pattern": "\\.drawImage\\(\\s*[^,()]+(\\s*,\\s*[^,()]+){4}\\s*\\)",
+  "note": "drawImage 带了 dw/dh 做绘制期缩放；源端是预缩放加原尺寸绘制时要改成先 scaleSync 再 1:1 绘制"
+ },
+ "unverified": [
+  "解码尺寸的 +0.5 取整出自建议，Android 端的取整在原生代码里，本机没核到"
+ ],
+ "alternatives_unverified": [
+  "设备 dpi 直接取 Display.densityDPI，卡里没验证",
+  "imageSmoothingEnabled = false 后绘制期缩放，卡里没验证"
+ ],
+ "siblings_checked": "搜 level: AntiAliasingLevel / level?: AntiAliasingLevel：@ohos.multimedia.image.d.ts 里除 scaleSync 外另有 scale、createScaledPixelMap、createScaledPixelMapSync、createCroppedAndScaledPixelMap、createCroppedAndScaledPixelMapSync 5 个；createScaledPixelMapSync 写进 values",
+ "refs": [
+  {
+   "what": "DecodingOptions.desiredSize",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/api/@ohos.multimedia.image.d.ts DecodingOptions.desiredSize",
+   "quote": "Width and height of the image pixel map. The value (0, 0) indicates that the pixels are decoded * based on the original image size.",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  },
+  {
+   "what": "PixelMap.scaleSync 的签名",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/api/@ohos.multimedia.image.d.ts PixelMap.scaleSync",
+   "quote": "scaleSync(x: number, y: number, level: AntiAliasingLevel): void;",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  },
+  {
+   "what": "scaleSync 的 x、y 是缩放值",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/api/@ohos.multimedia.image.d.ts PixelMap.scaleSync",
+   "quote": "Image zoom in width and height with anti-aliasing. * * @param { number } x The zoom value of width.",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  },
+  {
+   "what": "AntiAliasingLevel.NONE 是最近邻",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/api/@ohos.multimedia.image.d.ts AntiAliasingLevel.NONE",
+   "quote": "Nearest-neighbor interpolation algorithm. * * @syscap SystemCapability.Multimedia.Image.Core * @atomicservice * @since 14 */ NONE = 0,",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  },
+  {
+   "what": "AntiAliasingLevel.LOW 是双线性",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/api/@ohos.multimedia.image.d.ts AntiAliasingLevel.LOW",
+   "quote": "Bilinear interpolation algorithm. * * @syscap SystemCapability.Multimedia.Image.Core * @atomicservice * @since 14 */ LOW = 1,",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  },
+  {
+   "what": "createScaledBitmap 的 filter 语义",
+   "kind": "android-sdk",
+   "where": "sources/android-36.1/android/graphics/Bitmap.java Bitmap#createScaledBitmap",
+   "quote": "If this is false then nearest-neighbor scaling is used instead which * will have worse image quality but is faster.",
+   "version": "android-36.1"
+  },
+  {
+   "what": "DisplayMetrics 的密度常量",
+   "kind": "android-sdk",
+   "where": "sources/android-36.1/android/util/DisplayMetrics.java DisplayMetrics#DENSITY_LOW",
+   "quote": "public static final int DENSITY_LOW = 120;",
+   "version": "android-36.1"
+  },
+  {
+   "what": "Display.densityPixels",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/api/@ohos.display.d.ts Display.densityPixels",
+   "quote": "Display density, in pixels. which is the scaling coefficient between physical pixels and logical pixels. The value for a low-resolution display is 1.0.",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  },
+  {
+   "what": "createScaledPixelMapSync（同族）",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/api/@ohos.multimedia.image.d.ts PixelMap.createScaledPixelMapSync",
+   "quote": "createScaledPixelMapSync(x: number, y: number, level?: AntiAliasingLevel): PixelMap;",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  }
+ ],
+ "sources": [
+  "case-e00d2f72aa6dfc37826b"
+ ],
+ "general": false,
+ "status": "active"
+}

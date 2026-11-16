@@ -1,0 +1,498 @@
+{
+ "case": "case-fb9e44071c44d06a6c71",
+ "rules": [
+  {
+   "title": "源偏好在 Application.onCreate 同步构建时，派工验收要求同步 API 预热，不写异步写队列",
+   "product": "计划与派工",
+   "triggers": [
+    {
+     "read": "源 Application.onCreate 里先同步初始化 SharedPreferences（或 EasyPrefs 等封装），再做其他初始化，此后各处直接读",
+     "wrong": "派工验收标准写「异步初始化容错」「context 未就绪时缓存写队列」，并称这是对齐源端初始化语义"
+    }
+   ],
+   "scope": "派工者为偏好存储封装写任务说明和验收标准时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "验收写成「EntryAbility.onCreate 里用 preferences.getPreferencesSync 预热；读用 getSync，写用 putSync / deleteSync / clearSync，写后 flush」",
+     "support": [
+      "case-fb9e44071c44d06a6c71#recommendation:1"
+     ]
+    },
+    {
+     "text": "按源端真实时序描述：偏好在 Application.onCreate 同步构建、读阻塞到载入完成；不把写队列、异步容错写成对齐语义",
+     "support": [
+      "case-fb9e44071c44d06a6c71#recommendation:1"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "SharedPreferencesImpl 的各个 get 方法先 awaitLoadedLocked()，未载入完就等待",
+     "meaning": "源端读偏好会阻塞到文件载入完成，不会读到载入前的默认值",
+     "source": "android.app.SharedPreferencesImpl#awaitLoadedLocked、#getString",
+     "support": []
+    },
+    {
+     "value": "function getPreferencesSync(context: Context, options: Options): Preferences",
+     "meaning": "同步取得 Preferences 实例，实例载入文件全部数据并驻留内存",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.data.preferences.d.ts，preferences.getPreferencesSync",
+     "support": []
+    }
+   ],
+   "lookups": [],
+   "why": "派工把同步时序写成异步加写队列，实现者照做后就绪前读到默认值、写入顺序错乱",
+   "keys": {
+    "read": [
+     "Application.onCreate",
+     "SharedPreferences",
+     "getSharedPreferences",
+     "PreferenceManager.getDefaultSharedPreferences",
+     "EasyPrefs",
+     "initSharedPreferences"
+    ],
+    "product": [
+     "验收标准",
+     "派工",
+     "异步初始化",
+     "写队列",
+     "getPreferencesSync",
+     "EntryAbility",
+     "flush"
+    ]
+   },
+   "probe": {
+    "pattern": "写队列|异步初始化容错|pendingWrites",
+    "note": "派工或实现里出现写队列 / 异步初始化容错；源端偏好若是同步构建，应改成同步 API 预热"
+   },
+   "unverified": [
+    "卡里修好时的目标 SDK 是 6.1.1(24)，本机核实声明用的是 API 23"
+   ],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法落在派工的写法上，接口只作说明",
+   "refs": [
+    {
+     "what": "SharedPreferences 读前等待载入",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/android/app/SharedPreferencesImpl.java SharedPreferencesImpl#awaitLoadedLocked",
+     "quote": "while (!mLoaded) { try { mLock.wait(); } catch (InterruptedException unused) { } }",
+     "version": "android-36.1"
+    },
+    {
+     "what": "getString 先等待载入",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/android/app/SharedPreferencesImpl.java SharedPreferencesImpl#getString",
+     "quote": "public String getString(String key, @Nullable String defValue) { synchronized (mLock) { awaitLoadedLocked();",
+     "version": "android-36.1"
+    },
+    {
+     "what": "getPreferencesSync 签名和说明",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.data.preferences.d.ts preferences.getPreferencesSync",
+     "quote": "function getPreferencesSync(context: Context, options: Options): Preferences;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "getPreferencesSync 载入全部数据驻留内存",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.data.preferences.d.ts preferences.getPreferencesSync",
+     "quote": "* This interface is executed synchronously. * <p>The {@link references} instance loads all data of the preferences file and * resides in the memory.",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    }
+   ]
+  },
+  {
+   "title": "源端偏好同步构建时，封装用 getPreferencesSync 和 *Sync 提交，不做异步载入加写队列",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源 SharedPreferences 在 Application.onCreate 同步构建，此后各处直接 getBoolean / getString 读",
+     "wrong": "封装用 preferences.getPreferences(...) 异步载入加内存缓存和 pending 写队列，注释写「读取前不阻塞」，就绪前读返回调用方默认值，put / delete / clear 各自异步排队"
+    }
+   ],
+   "scope": "把 SharedPreferences 迁成 @ohos.data.preferences 的偏好封装时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "EntryAbility.onCreate 里 preferences.getPreferencesSync(context, { name: <文件名> }) 装载，需要内存镜像时用 getAllSync()",
+     "support": [
+      "case-fb9e44071c44d06a6c71#recommendation:2",
+      "case-fb9e44071c44d06a6c71#diagnosis"
+     ]
+    },
+    {
+     "text": "内存提交用 putSync / deleteSync / clearSync 保证顺序，落盘再异步 flush()",
+     "support": [
+      "case-fb9e44071c44d06a6c71#recommendation:2",
+      "case-fb9e44071c44d06a6c71#diagnosis"
+     ]
+    },
+    {
+     "text": "若仍用异步 getPreferences，必须写明就绪前读的行为并与源端一致，否则改用同步装载",
+     "support": [
+      "case-fb9e44071c44d06a6c71#recommendation:2"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "function getPreferencesSync(context: Context, options: Options): Preferences",
+     "meaning": "同步取得实例，载入文件全部数据并驻留内存",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.data.preferences.d.ts，preferences.getPreferencesSync",
+     "support": []
+    },
+    {
+     "value": "getSync(key: string, defValue: ValueType): ValueType",
+     "meaning": "同步读，找不到或类型不符时返回 defValue",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.data.preferences.d.ts，Preferences.getSync",
+     "support": []
+    },
+    {
+     "value": "putSync(key: string, value: ValueType): void；deleteSync(key: string): void；clearSync(): void",
+     "meaning": "同族接口：同步写内存，要落盘再调 flush",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.data.preferences.d.ts，Preferences.putSync、deleteSync、clearSync",
+     "support": []
+    },
+    {
+     "value": "getAllSync(): Object",
+     "meaning": "同族接口：同步取全部键值",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.data.preferences.d.ts，Preferences.getAllSync",
+     "support": []
+    },
+    {
+     "value": "flush(): Promise<void>",
+     "meaning": "异步把内存里的 Preferences 写到文件",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.data.preferences.d.ts，Preferences.flush",
+     "support": []
+    },
+    {
+     "value": "装载改 getPreferencesSync + getAllSync，内存提交改 putSync / deleteSync / clearSync",
+     "meaning": "修好后的写法",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-fb9e44071c44d06a6c71#diagnosis"
+     ]
+    }
+   ],
+   "lookups": [],
+   "why": "异步载入加写队列时就绪前读到默认值，回放队列时还可能丢掉新写入",
+   "keys": {
+    "read": [
+     "SharedPreferences",
+     "getSharedPreferences",
+     "Application.onCreate",
+     "getBoolean",
+     "edit",
+     "apply",
+     "commit"
+    ],
+    "product": [
+     "getPreferencesSync",
+     "getPreferences",
+     "getSync",
+     "putSync",
+     "deleteSync",
+     "clearSync",
+     "getAllSync",
+     "flush",
+     "pendingWrites"
+    ]
+   },
+   "probe": {
+    "pattern": "preferences\\.getPreferences\\(",
+    "note": "用了异步 getPreferences；源端若是同步构建，检查就绪前的读写行为，或改用 getPreferencesSync"
+   },
+   "unverified": [
+    "卡里修好时的目标 SDK 是 6.1.1(24)，本机核实声明用的是 API 23"
+   ],
+   "alternatives_unverified": [],
+   "siblings_checked": "搜 Preferences 里以 Sync 结尾的方法：getSync、getAllSync、hasSync、putSync、deleteSync、clearSync 等，照做用到的写进 values",
+   "refs": [
+    {
+     "what": "getPreferencesSync 签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.data.preferences.d.ts preferences.getPreferencesSync",
+     "quote": "function getPreferencesSync(context: Context, options: Options): Preferences;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "getSync 签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.data.preferences.d.ts Preferences.getSync",
+     "quote": "getSync(key: string, defValue: ValueType): ValueType;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "getSync 同步读，值为 null 或类型不符时返回默认值",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.data.preferences.d.ts Preferences.getSync",
+     "quote": "Obtains the value of a preferences in the ValueType format. This interface is executed synchronously. * <p>If the value is {@code null} or not in the ValueType format, the default value is returned.",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "deleteSync 同步执行、要 flush 才落盘",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.data.preferences.d.ts Preferences.deleteSync",
+     "quote": "Deletes the preferences with a specified key from the {@link Preferences} object. This interface is * executed synchronously. <p>You can call the {@link #flush} method to save the {@link Preferences}",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "clearSync 同步执行、要 flush 才落盘",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.data.preferences.d.ts Preferences.clearSync",
+     "quote": "Clears all preferences from the {@link Preferences} object. This interface is executed synchronously. * <p>You can call the {@link #flush} method to save the {@link Preferences} object to the file.",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "getAllSync 同步取全部键值",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.data.preferences.d.ts Preferences.getAllSync",
+     "quote": "Obtains all the keys and values of a preferences in an object.  This interface * is executed synchronously.",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "putSync 同步执行、要 flush 才落盘",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.data.preferences.d.ts Preferences.putSync",
+     "quote": "This interface is executed synchronously. * <p>You can call the {@link #flush} method to save the {@link Preferences} object to the * file.",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "putSync 签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.data.preferences.d.ts Preferences.putSync",
+     "quote": "putSync(key: string, value: ValueType): void;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "deleteSync 签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.data.preferences.d.ts Preferences.deleteSync",
+     "quote": "deleteSync(key: string): void;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "clearSync 签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.data.preferences.d.ts Preferences.clearSync",
+     "quote": "clearSync(): void;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "getAllSync 签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.data.preferences.d.ts Preferences.getAllSync",
+     "quote": "getAllSync(): Object;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "flush 异步落盘",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.data.preferences.d.ts Preferences.flush",
+     "quote": "Asynchronously saves the {@link Preferences} object to the file. * * @returns { Promise<void> } A promise object.",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    }
+   ]
+  },
+  {
+   "title": "同一偏好键在不同读点缺省值不同时，各读点保留自己的显式缺省值，不收敛成单一默认",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源码同一偏好键在不同读点用不同缺省值（如一处 getBoolean(key, false)、另一处 getBoolean(key, true)），或键表写「读点不一致 / 该读点特判」",
+     "wrong": "键常量注释只留一个默认值，封装只提供以该默认值读取的单一访问器（如只有 getSync(<键>, false)）"
+    }
+   ],
+   "scope": "迁移偏好键常量、访问器和各页面读点时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "每个特判读点保留调用方显式缺省值，如 prefs.getSync(<键>, true)，或提供按读点命名的访问器",
+     "support": [
+      "case-fb9e44071c44d06a6c71#recommendation:3"
+     ]
+    },
+    {
+     "text": "键常量注释里列出这个键的所有读点及各自缺省值",
+     "support": [
+      "case-fb9e44071c44d06a6c71#recommendation:3"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "getSync(key: string, defValue: ValueType): ValueType",
+     "meaning": "缺省值由每次调用传入，键不存在时返回调用方给的 defValue",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.data.preferences.d.ts，Preferences.getSync",
+     "support": []
+    }
+   ],
+   "lookups": [
+    {
+     "what": "这个键在源端的全部读点和各自缺省值",
+     "where": "源工程里 grep 该键常量或键名字符串，看每处 getBoolean / getString / getInt 的第二个参数",
+     "how": "逐处记下读点所在的方法和缺省值，缺省值不同的读点分别保留"
+    }
+   ],
+   "why": "按单一默认改写后，键未设置时某些界面（如菜单显隐）的初始状态和源端相反",
+   "keys": {
+    "read": [
+     "getBoolean",
+     "getString",
+     "getInt",
+     "SharedPreferences",
+     "读点不一致",
+     "特判"
+    ],
+    "product": [
+     "getSync",
+     "键常量",
+     "默认",
+     "访问器"
+    ]
+   },
+   "probe": null,
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法是保留每次调用的 defValue，不落在专门的参数类型上",
+   "refs": [
+    {
+     "what": "getSync 找不到时返回 defValue",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.data.preferences.d.ts Preferences.getSync",
+     "quote": "@returns { ValueType } The value matching the specified key if it is found; * returns the default value otherwise.",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "getSync 签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.data.preferences.d.ts Preferences.getSync",
+     "quote": "getSync(key: string, defValue: ValueType): ValueType;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    }
+   ]
+  },
+  {
+   "title": "关闭某模式时要求移除偏好键的，目标用 deleteSync，不写成 putSync(键, false)",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "规格或源码写明关闭某模式时移除该键（SharedPreferences.Editor.remove）",
+     "wrong": "目标关闭分支写 putSync(<键>, false)，键仍然存在"
+    }
+   ],
+   "scope": "源端关闭某模式时移除偏好键的那个分支",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "关闭分支写 prefs.deleteSync(<键>) 再 flush()，让各读点自己的缺省值生效",
+     "support": [
+      "case-fb9e44071c44d06a6c71#diagnosis"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "deleteSync(key: string): void",
+     "meaning": "同步删除键",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.data.preferences.d.ts，Preferences.deleteSync",
+     "support": []
+    }
+   ],
+   "lookups": [],
+   "why": "写成 false 后键存在，读点的缺省值不再生效，和移除键的源端行为不同",
+   "keys": {
+    "read": [
+     "remove",
+     "SharedPreferences.Editor",
+     "edit",
+     "apply",
+     "AC"
+    ],
+    "product": [
+     "deleteSync",
+     "putSync",
+     "flush",
+     "false",
+     "Preferences"
+    ]
+   },
+   "probe": null,
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法落在 deleteSync 这一个方法上，参数是 string",
+   "refs": [
+    {
+     "what": "deleteSync 签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.data.preferences.d.ts Preferences.deleteSync",
+     "quote": "deleteSync(key: string): void;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "deleteSync 同步删除指定键",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.data.preferences.d.ts Preferences.deleteSync",
+     "quote": "Deletes the preferences with a specified key from the {@link Preferences} object. This interface is * executed synchronously.",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    }
+   ]
+  },
+  {
+   "title": "改某个偏好读点的缺省值前回到该读点的源码行核对，不按 spec 摘要或键常量的单一默认改",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "spec 摘要或键常量注释给这个偏好键只写一个默认值（如 `(boolean, false)`），页面已有的读点按另一个缺省值读（如 getSync(<键>, true)）",
+     "wrong": "原本 getSync(<键>, true) 的读点被改成按 false 读，注释引键常量或 spec 摘要里的单一默认"
+    }
+   ],
+   "scope": "页面实现者修改偏好读点的缺省值时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "改某读点的缺省值前，回到该读点的源码行核对，不以 spec 摘要或键常量注释里的单一默认为准",
+     "support": [
+      "case-fb9e44071c44d06a6c71#recommendation:4"
+     ]
+    }
+   ],
+   "values": [],
+   "lookups": [],
+   "why": "按单一默认改写后，键未设置时这个读点（如菜单显隐）的初始状态和源端相反",
+   "keys": {
+    "read": [
+     "getBoolean",
+     "getString",
+     "getInt",
+     "状态管理",
+     "默认"
+    ],
+    "product": [
+     "getSync",
+     "@Local",
+     "aboutToAppear",
+     "默认"
+    ]
+   },
+   "probe": null,
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法是回源码核对读点的缺省值，不落在接口上",
+   "refs": []
+  }
+ ],
+ "left_out": [
+  {
+   "text": "设置页首显持久化 XML defaultValue、详情页不读某键的消费侧缺失",
+   "reason": "其他：卡里没追到生成来源，没有对应建议"
+  },
+  {
+   "text": "spec「状态管理」节把键压缩成单一默认的写入者未追查",
+   "reason": "其他：卡里没核到"
+  }
+ ],
+ "corrections": [],
+ "gaps": [],
+ "conflicts": []
+}

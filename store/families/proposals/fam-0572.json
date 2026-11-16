@@ -1,0 +1,338 @@
+{
+ "proposal": "fam-0572",
+ "round": 3,
+ "product": "代码",
+ "avg_similarity": 0.194,
+ "rules": [
+  {
+   "id": "rule-06a9aca44c88",
+   "title": "Canvas 自绘中由位图固有尺寸参与的 px 量，先按目录 dpi 换算到设备 dpi",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源端 getIntrinsicWidth() / getIntrinsicHeight() 进格宽、边界余量、触点换算除数等 px 公式",
+     "wrong": "目标直接取迁移位图的解码像素 getImageInfoSync().size.width 作格尺寸，注释写「解码=原样像素、无密度重采样」"
+    }
+   ],
+   "keys": {
+    "read": [
+     "getIntrinsicWidth",
+     "getIntrinsicHeight",
+     "getDrawable",
+     "BitmapDrawable",
+     "setBounds",
+     "drawable-xxxhdpi"
+    ],
+    "product": [
+     "getImageInfoSync",
+     "size.width",
+     "vp2px",
+     "PixelMap",
+     "LengthMetricsUnit.PX",
+     "Math.trunc"
+    ]
+   }
+  },
+  {
+   "id": "rule-0f5f360c99ab",
+   "title": "判定图标资源未迁移前，查 base 和各密度限定目录并按源端实际 drawable 名核对",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源端 setImageResource(R.drawable.…) 或布局 XML 的 android:src 指向某个 drawable",
+     "wrong": "代码注释写「某资产未迁移」，回落到别的图标（$r('app.media.…') 换成普通态图标），判断依据只是看了 resources/base/media"
+    }
+   ],
+   "keys": {
+    "read": [
+     "setImageResource",
+     "R.drawable",
+     "android:src",
+     "drawable-xxxhdpi",
+     "ImageButton"
+    ],
+    "product": [
+     "$r('app.media.",
+     "base/media",
+     "xxxldpi",
+     "未迁移",
+     "Image"
+    ]
+   }
+  },
+  {
+   "id": "rule-1900b3d139af",
+   "title": "给状态驱动图标的按钮写回归时，断言改状态后重渲染的图标和文案，并覆盖双向切换",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "安卓源码在状态变化后调用 setImageResource 或刷新图标的方法重设按钮图标",
+     "wrong": "回归测试只断言控件布局坐标，或只用正则确认源码里有点击处理方法，没有「改状态后再取 Image 资源和 accessibilityText」的断言"
+    }
+   ],
+   "keys": {
+    "read": [
+     "setImageResource",
+     "ImageButton",
+     "ImageView",
+     "setContentDescription"
+    ],
+    "product": [
+     "describe",
+     "it(",
+     "expect",
+     "Image",
+     "accessibilityText",
+     "@Builder"
+    ]
+   }
+  },
+  {
+   "id": "rule-740aa175bfa3",
+   "title": "源端给位图做 tint 着色时，目标用 Image.colorFilter，不用 fillColor",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "Compose Image(painter = painterResource(R.drawable.…), colorFilter = ColorFilter.tint(color))，drawable 是 png / jpg / webp 位图",
+     "wrong": "目标 Image 上写 .fillColor(颜色)，图源仍是同一张位图"
+    },
+    {
+     "read": "ImageView 带 android:tint / app:tint，或代码里 setColorFilter(color)，src 是 png / jpg / webp 位图",
+     "wrong": "目标 Image 上写 .fillColor(颜色)，图源仍是同一张位图"
+    }
+   ],
+   "keys": {
+    "read": [
+     "ColorFilter.tint",
+     "colorFilter",
+     "android:tint",
+     "app:tint",
+     "setColorFilter",
+     "ImageView",
+     "painterResource",
+     "BlendMode.SrcIn"
+    ],
+    "product": [
+     "fillColor",
+     "colorFilter",
+     "createBlendModeColorFilter",
+     "BlendMode.SRC_IN",
+     "drawing.ColorFilter",
+     "common2D.Color",
+     "@kit.ArkGraphics2D",
+     "Image"
+    ]
+   }
+  },
+  {
+   "id": "rule-7bdeaa1439c4",
+   "title": "只响应点击长按的 ImageButton 转成 Image 时，每个 Image 写 .draggable(false)",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "ImageButton，或挂了 setOnClickListener / setOnLongClickListener 的 ImageView（快门、图库缩略、屏上图标等），源端没有任何拖放逻辑",
+     "wrong": "Image(...) 直接挂 .onClick，或放在挂 onClick / LongPressGesture 的 Stack、Button 里，修饰链上没有 .draggable(false)"
+    }
+   ],
+   "keys": {
+    "read": [
+     "ImageButton",
+     "ImageView",
+     "setOnClickListener",
+     "setOnLongClickListener",
+     "setImageResource",
+     "android:src"
+    ],
+    "product": [
+     "Image",
+     "draggable",
+     ".draggable(false)",
+     "onClick",
+     "LongPressGesture",
+     "Stack",
+     "objectFit"
+    ]
+   }
+  },
+  {
+   "id": "rule-8336139b7d2b",
+   "title": "@Builder 接收随状态变化的图标或文案时，改传 () => Resource 回调或在内部读状态，不按值传",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "安卓源码在模式切换、暂停等状态变化后调用 setImageResource 或刷新图标的方法，重设按钮的图标或描述",
+     "wrong": "@Builder 形参写成 resource: Resource、label: Resource，调用处传入读 this 上状态的三元表达式（cond ? $r('app.media.a') : $r('app.media.b')）求值后的结果，状态变了按钮仍停在首次渲染的图标和文案"
+    }
+   ],
+   "keys": {
+    "read": [
+     "setImageResource",
+     "ImageButton",
+     "ImageView",
+     "setContentDescription",
+     "contentDescription"
+    ],
+    "product": [
+     "@Builder",
+     "Resource",
+     "() => Resource",
+     "Image",
+     "accessibilityText",
+     "$r(",
+     "makeBinding"
+    ]
+   }
+  },
+  {
+   "id": "rule-8eaedb734192",
+   "title": "规格或壳注释点名的按钮要在 build 里实际渲染并按门控显隐，不只实现 handler",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "派工的 cross_slice_edits 要求接通录像中拍照快照；壳页 handler 注释点名源端 ImageButton 控件，并带 FWD-REF 登记",
+     "wrong": "只写了 handler 函数和能力门控，build() 里录制控件组没有调用它的 Button"
+    }
+   ],
+   "keys": {
+    "read": [
+     "ImageButton",
+     "android:onClick",
+     "setOnClickListener",
+     "FWD-REF",
+     "cross_slice_edits"
+    ],
+    "product": [
+     "build",
+     "Button",
+     "onClick",
+     "Image",
+     "if",
+     "visibility"
+    ]
+   }
+  },
+  {
+   "id": "rule-9331142eacff",
+   "title": "layout_weight 定高的 ImageView 带大 padding，不直接放到 Image 上",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "ImageView 的 android:layout_height=\"0dp\" 加 android:layout_weight，同时带 android:padding（上下之和可能超过分得的槽高，横屏时尤其）",
+     "wrong": "写成 Image(...).layoutWeight(...).padding(...)，把源端 padding 直接放在 Image 上"
+    }
+   ],
+   "keys": {
+    "read": [
+     "ImageView",
+     "android:layout_weight",
+     "android:layout_height",
+     "android:padding",
+     "0dp",
+     "LinearLayout",
+     "fitCenter"
+    ],
+    "product": [
+     "Image",
+     "layoutWeight",
+     "padding",
+     "Stack",
+     "onSizeChange",
+     "rotate"
+    ]
+   }
+  },
+  {
+   "id": "rule-dc03e6ee68f3",
+   "title": "按钮层的渲染分支对照源布局控件清单，数据缺省时的默认入口也要渲染",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源布局 XML 里按钮层的全部控件（各自的 android:id）；目标布局状态的摆位表",
+     "wrong": "按钮层少了摆位表里某些键的渲染分支，或入口只在缩略图 PixelMap 存在时才渲染，没有数据时不显示"
+    }
+   ],
+   "keys": {
+    "read": [
+     "android:id",
+     "ImageButton",
+     "RelativeLayout",
+     "android:src"
+    ],
+    "product": [
+     "ForEach",
+     "if",
+     "PixelMap",
+     "Image",
+     "Button",
+     "@Builder"
+    ]
+   }
+  }
+ ],
+ "existing_families": [
+  {
+   "topic": "input/controls",
+   "topic_name": "选择、开关与进度控件",
+   "dir": "icon-buttons-toggles",
+   "name": "ImageButton 一类图标按钮和开关的状态切换与获焦",
+   "line": "读到源端 ImageButton / ImageView 按状态 setImageResource、setTextColor 切换图标和文字颜色（按选中数、播放暂停、各开关自己的状态），或布局里的 <ImageButton> / <Button>；产物里 Image 的资源怎么选（两个独立 if）、开关行共用 @Builder 传 boolean 值参、复用开关组件的 @Event 回调、Image(...).onClick 没有 .focusable(true)",
+   "similarity": 0.106
+  },
+  {
+   "topic": "graphics/bitmap",
+   "topic_name": "位图、图标与快照",
+   "dir": "media-reference",
+   "name": "源布局引用的 @drawable 位图资源",
+   "line": "读到源端 android:src、android:background、drawableStart、setImageResource 引用 @drawable/… 位图；产物里少了对应的 Image，换成名字不同的近似图标、SymbolGlyph($r('sys.symbol.…'))、Text('›') 字形或纯色，给替代图加 fillColor，或以 base/media 里没有为由判缺失",
+   "similarity": 0.084
+  },
+  {
+   "topic": "layout",
+   "topic_name": "布局与尺寸",
+   "dir": "layout-structure",
+   "name": "源布局里的图文结构",
+   "line": "读到源布局 XML 由 ImageView 加 TextView 的菜单行、带标题条背景和插图的卡片、固定高度标题栏、TabLayout 等组件组成；产物里只剩 Text、缺 Image、卡片数少，或保留了源布局里没有的区块只调尺寸",
+   "similarity": 0.079
+  },
+  {
+   "topic": "theme",
+   "topic_name": "主题、颜色与样式",
+   "dir": "theme-attr-color",
+   "name": "引用主题属性 ?attr 的颜色",
+   "line": "读到源端颜色写成 ?attr/…（vector 的 android:fillColor、Toolbar 背景、图标的 colorControlNormal）或取主题的 windowBackground，交回的代码给 Image 的 fillColor、backgroundColor、fontColor 绑了颜色键或没绑",
+   "similarity": 0.078
+  },
+  {
+   "topic": "graphics/bitmap",
+   "topic_name": "位图、图标与快照",
+   "dir": "bitmap-intrinsic-size",
+   "name": "没写固定尺寸的密度目录位图",
+   "line": "读到 ImageView / ImageButton 宽高是 wrap_content，或 TextView 的 drawableLeft / drawableStart 挂位图，图在 drawable-xhdpi 这类密度目录里；产物里 Image 没写宽高、写 16、32 之类经验值，照抄相邻控件或别页模板，或固定正方形再叠 padding",
+   "similarity": 0.075
+  },
+  {
+   "topic": "input/click",
+   "topic_name": "点击",
+   "dir": "databinding-click",
+   "name": "数据绑定布局里的点击绑定",
+   "line": "读到 <layout><data><variable> 的数据绑定布局，控件上写 android:onClick=\"@{…}\" 或按 ViewModel 状态切换 android:src，交回的代码在对应组件上写了（或没写）.onClick",
+   "similarity": 0.073
+  },
+  {
+   "topic": "layout/size",
+   "topic_name": "宽高与边距",
+   "dir": "dp-vp-unit",
+   "name": "dp 尺寸在目标端的单位",
+   "line": "读到源端以 dp 给出的尺寸（布局 XML 的 1dp、vector drawable 的 android:width / height）或在 dp 列宽内折行的 TextView；产物里写成 'px' 字符串、按密度除过的数，或对本按 vp 解析的宽度又做了 vp2px",
+   "similarity": 0.072
+  },
+  {
+   "topic": "graphics/background",
+   "topic_name": "背景、渐变与描边",
+   "dir": "gradient-drawable",
+   "name": "drawable 里的 <gradient> 渐变（窗口背景、ImageView 着色）",
+   "line": "读过的源码里主题的 windowBackground 或 ImageView 的 android:src 是带 <gradient android:startColor / endColor> 的 drawable，可能再用 app:tint 着色；交回的写成单色 backgroundColor、新加的单色颜色键，或用 Image(...).fillColor 给渐变 SVG 着色",
+   "similarity": 0.069
+  }
+ ]
+}

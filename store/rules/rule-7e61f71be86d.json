@@ -1,0 +1,133 @@
+{
+ "id": "rule-7e61f71be86d",
+ "title": "SQLiteOpenHelper 子类迁成 RdbStore 时按 store.version 分派建表、升级、降级报错",
+ "product": "代码",
+ "triggers": [
+  {
+   "read": "源端类 extends SQLiteOpenHelper，构造里 super(context, name, factory, VERSION)，重写 onCreate / onUpgrade",
+   "wrong": "目标端 getRdbStore 打开后直接调建表，或写成 store.version >= VERSION 就 return、否则建表并写 version；没有 version === 0 建表、小于 VERSION 走 onUpgrade、大于 VERSION 抛错的分派"
+  },
+  {
+   "read": "规格或决策台账写「升级路径不迁移」「onCreate 即唯一入口」",
+   "wrong": "目标端把 onUpgrade 分派骨架连同 store.version 写回一起删掉，只剩建表"
+  }
+ ],
+ "scope": "安卓 SQLiteOpenHelper 子类的打开与建表逻辑迁成 @ohos.data.relationalStore 的 RdbStore 时",
+ "exceptions": [],
+ "how": [
+  {
+   "text": "打开后读 const v = store.version：v === 0 执行 onCreate（建表脚本）；0 < v < VERSION 执行 onUpgrade(store, v, VERSION)；v > VERSION 直接 throw（对应 onDowngrade 默认报错）；v 不等于 VERSION 时分派完写 store.version = VERSION。VERSION 取源端传给 super(...) 的第 4 个参数",
+   "support": [
+    "case-bbb6bcf0a09493406de9#recommendation:1",
+    "case-bbb6bcf0a09493406de9#diagnosis"
+   ]
+  },
+  {
+   "text": "规格写「升级路径不迁移」时只免去 onUpgrade 的函数体，分派骨架、降级报错和 store.version 写回照样保留",
+   "support": [
+    "case-bbb6bcf0a09493406de9#recommendation:1"
+   ]
+  }
+ ],
+ "values": [
+  {
+   "value": "version: number",
+   "meaning": "RdbStore 的版本属性，可读可写；写入的值必须是大于 0 的整数",
+   "source": "鸿蒙 SDK 的 ets/api/@ohos.data.relationalStore.d.ts，RdbStore.version",
+   "support": []
+  },
+  {
+   "value": "新建的数据库 version 为 0",
+   "meaning": "v === 0 就是首次创建，对应源端 onCreate",
+   "source": "data-persistence-by-rdb-store.md，开发步骤",
+   "support": []
+  },
+  {
+   "value": "version == 0 → onCreate(db)；version > mNewVersion → onDowngrade；否则 onUpgrade(db, version, mNewVersion)；之后 db.setVersion(mNewVersion)",
+   "meaning": "源端基类在 version 不等于构造传入的版本时做的分派",
+   "source": "android.database.sqlite.SQLiteOpenHelper#getDatabaseLocked",
+   "support": []
+  },
+  {
+   "value": "onDowngrade 默认 throw new SQLiteException(\"Can't downgrade database from version \" + oldVersion + \" to \" + newVersion)",
+   "meaning": "子类没重写 onDowngrade 时，库版本高于代码版本就报错，目标端对应写 throw",
+   "source": "android.database.sqlite.SQLiteOpenHelper#onDowngrade",
+   "support": []
+  }
+ ],
+ "lookups": [
+  {
+   "what": "VERSION 的值和 onUpgrade 里各版本区间要执行的脚本",
+   "where": "源工程里继承 SQLiteOpenHelper 的类：构造里 super(...) 的第 4 个参数、onUpgrade 按 oldVersion 的分支；assets 或 res/raw 下的升级 SQL 文件",
+   "how": "VERSION 原样写成目标端常量；onUpgrade 的各分支按 oldVersion 区间搬成目标端 onUpgrade 里的分支"
+  }
+ ],
+ "why": "缺分派时旧版本库不升级、更高版本库不报错，库结构和 version 跟源端对不上",
+ "keys": {
+  "read": [
+   "SQLiteOpenHelper",
+   "onCreate",
+   "onUpgrade",
+   "onDowngrade",
+   "getWritableDatabase",
+   "getReadableDatabase",
+   "setVersion",
+   "升级路径不迁移"
+  ],
+  "product": [
+   "relationalStore",
+   "getRdbStore",
+   "RdbStore",
+   "store.version",
+   "onUpgrade",
+   "onCreate"
+  ]
+ },
+ "probe": {
+  "pattern": "\\.version\\s*>=\\s*\\w+",
+  "note": "写成 version >= VERSION 就 return 的短路，多半缺了升级和降级的分派"
+ },
+ "unverified": [
+  "卡里的行为出自 HarmonyOS 6.1.1(24)，本机核实用的是 API 23 的声明"
+ ],
+ "alternatives_unverified": [
+  "安卓源码把分派和 setVersion 包在 db.beginTransaction 里；目标端是否同样包进 createTransaction，卡里没验证",
+  "文档示例用 transaction.execute('PRAGMA user_version') 在事务内读写版本，卡里没验证"
+ ],
+ "siblings_checked": "无：做法落在 RdbStore.version 这一个属性和分派逻辑上，没有专门的参数类型或枚举可搜",
+ "refs": [
+  {
+   "what": "RdbStore.version 可读写、必须大于 0",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/api/@ohos.data.relationalStore.d.ts RdbStore.version",
+   "quote": "Set RdbStore version. The version number must be an integer greater than 0. * Obtains the RdbStore version.",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  },
+  {
+   "what": "新建库的默认版本为 0",
+   "kind": "oh-docs",
+   "where": "zh-cn/application-dev/database/data-persistence-by-rdb-store.md 开发步骤",
+   "quote": "// 当数据库创建时，数据库默认版本为0",
+   "version": "docs f41b9345"
+  },
+  {
+   "what": "SQLiteOpenHelper 的版本分派",
+   "kind": "android-sdk",
+   "where": "sources/android-36.1/android/database/sqlite/SQLiteOpenHelper.java SQLiteOpenHelper#getDatabaseLocked",
+   "quote": "if (version == 0) { onCreate(db); } else { if (version > mNewVersion) { onDowngrade(db, version, mNewVersion); } else { onUpgrade(db, version, mNewVersion); } } db.setVersion(mNewVersion);",
+   "version": "android-36.1"
+  },
+  {
+   "what": "onDowngrade 默认抛错",
+   "kind": "android-sdk",
+   "where": "sources/android-36.1/android/database/sqlite/SQLiteOpenHelper.java SQLiteOpenHelper#onDowngrade",
+   "quote": "throw new SQLiteException(\"Can't downgrade database from version \" + oldVersion + \" to \" + newVersion);",
+   "version": "android-36.1"
+  }
+ ],
+ "sources": [
+  "case-bbb6bcf0a09493406de9"
+ ],
+ "general": false,
+ "status": "active"
+}

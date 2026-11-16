@@ -1,0 +1,253 @@
+{
+ "case": "case-44a53125e4f44a862c80",
+ "rules": [
+  {
+   "title": "翻译 equals 或脏检查方法时，按源对象全部持久字段逐一列对照，不从调用点推断",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源端用 equals(...) 或另一个「有没有改过」的比较方法决定是否写库、是否刷新修改时间",
+     "wrong": "目标的脏检查函数或 equals 只比较标题、正文这类「用户可见」字段，漏了地址、creation / lastModification 时间戳、归档回收锁定这类标志位或分类；或者几个标志位只在另一个比较函数里补"
+    }
+   ],
+   "scope": "把源端实体类的 equals / 脏检查方法翻译成目标实现时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "打开源方法的定义，按源对象的全部持久字段逐一列对照表（含地址、创建和修改时间、各标志位、附件列表），目标逐项比较，一个比较函数覆盖全部字段",
+     "support": [
+      "case-44a53125e4f44a862c80#recommendation:2",
+      "case-44a53125e4f44a862c80#diagnosis"
+     ]
+    }
+   ],
+   "values": [],
+   "lookups": [
+    {
+     "what": "源端 equals / 脏检查方法实际比较的字段集",
+     "where": "源工程里这个实体类及其父类的定义；父类来自依赖库时，看 Gradle 缓存 modules-2/files-2.1/<group>/<artifact>/<version>/ 下的 jar 或 -sources.jar",
+     "how": "读方法体里逐个比较的字段；只有字节码时反编译后读，逐个列进对照表"
+    }
+   ],
+   "why": "只比部分字段时，改了地址或标志位不会写库，或者该刷新修改时间时没刷新",
+   "keys": {
+    "read": [
+     "equals",
+     "hashCode",
+     "extends",
+     "Objects.equals",
+     "TextUtils.equals"
+    ],
+    "product": [
+     "equals",
+     "脏检查",
+     "lastModification",
+     "creation",
+     "对照表"
+    ]
+   },
+   "probe": null,
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法落在源对象的字段对照上，不落在具体接口上",
+   "refs": []
+  },
+  {
+   "title": "源方法定义在依赖库里取不到源码时，实现处标 FWD-REF 并登记缺口，不按验收条文反推",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源类 extends 依赖库里的父类，被调用的方法在源码树里找不到 .java 定义",
+     "wrong": "目标自写了近似实现，源码理解笔记写「差异风险低」或「按 AC 行为反推」，实现处没有 `FWD-REF` 标记、决策台账里也没有这条缺口"
+    }
+   ],
+   "scope": "被翻译的源方法定义在二进制依赖（commons 一类的库）里、主仓没有它的源码时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "先到 Gradle 缓存里找这个依赖的 jar 或 -sources.jar，反编译或读源码，核实方法体后照它实现",
+     "support": [
+      "case-44a53125e4f44a862c80#recommendation:1"
+     ]
+    },
+    {
+     "text": "取不到时在实现处标 `FWD-REF`，并把它登记成决策缺口；不按规格的验收条文反推字段集，也不标「风险低」",
+     "support": [
+      "case-44a53125e4f44a862c80#recommendation:1"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "依赖库父类的 equals / 脏检查方法反编译后可得完整的比较字段集，返修照它实现",
+     "meaning": "依赖库的字节码能查到真实定义，不必反推",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-44a53125e4f44a862c80#diagnosis"
+     ]
+    }
+   ],
+   "lookups": [
+    {
+     "what": "这个依赖的坐标和版本",
+     "where": "源工程模块 Gradle 构建脚本里的 dependencies 块，以及 Gradle 缓存 modules-2/files-2.1/<group>/<artifact>/<version>/",
+     "how": "按坐标找到 jar 或 -sources.jar，在里面按类名找父类"
+    }
+   ],
+   "why": "按验收条文反推的近似实现会漏字段，又因为标了风险低而没人回头核",
+   "keys": {
+    "read": [
+     "extends",
+     "import",
+     "dependencies",
+     "implementation",
+     "jar",
+     "sources.jar"
+    ],
+    "product": [
+     "FWD-REF",
+     "决策缺口",
+     "风险低",
+     "反推",
+     "源码理解笔记",
+     "决策台账"
+    ]
+   },
+   "probe": {
+    "pattern": "风险低|按.{0,6}反推",
+    "note": "笔记或注释里写了风险低或反推；核对对应的源方法是否其实能从依赖库取到，取不到的要标 FWD-REF"
+   },
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法落在取源码和登记缺口上，不落在具体接口上",
+   "refs": []
+  },
+  {
+   "title": "源端把同一个 List 引用交给另一对象再就地 remove 时，目标保持同一引用，不用 slice 拷贝",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源端把一个 getter 返回的 List 直接传给另一个对象的 setter（没有 new ArrayList<>(...)），后续任务对这个 List 调 contains / remove 就地修改",
+     "wrong": "目标写成 .slice() 或 [...list] 拷贝后再赋值，或对拷贝出来的副本 splice，源端共享引用、就地删除的数据流被切断"
+    }
+   ],
+   "scope": "源端在对象之间共享集合引用、后续代码依赖就地修改结果时",
+   "exceptions": [
+    {
+     "text": "源端显式 new ArrayList<>(...) 拷贝的，目标才拷贝",
+     "support": [
+      "case-44a53125e4f44a862c80#recommendation:3"
+     ]
+    }
+   ],
+   "how": [
+    {
+     "text": "目标直接赋同一个数组引用（a.list = b.list），后续删除用 splice 作用在这个数组本身上",
+     "support": [
+      "case-44a53125e4f44a862c80#recommendation:3",
+      "case-44a53125e4f44a862c80#diagnosis"
+     ]
+    },
+    {
+     "text": "写完后逐个核对目标里的 .slice() 和 [...x]，每个都要对应源端的一次真实拷贝",
+     "support": [
+      "case-44a53125e4f44a862c80#recommendation:3"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "slice(start?: number, end?: number): T[]",
+     "meaning": "返回数组一段的拷贝，不改原数组",
+     "source": "鸿蒙 SDK 的 ets/build-tools/ets-loader/node_modules/typescript/lib/lib.es5.d.ts，Array.slice",
+     "support": []
+    },
+    {
+     "value": "splice(start: number, deleteCount?: number): T[]",
+     "meaning": "在原数组上删除元素，返回删掉的元素",
+     "source": "鸿蒙 SDK 的 ets/build-tools/ets-loader/node_modules/typescript/lib/lib.es5.d.ts，Array.splice",
+     "support": []
+    },
+    {
+     "value": "public ArrayList(Collection<? extends E> c)",
+     "meaning": "源端的拷贝构造：新建一个含相同元素的列表；只有见到它（或类似的拷贝）时目标才拷贝",
+     "source": "java.util.ArrayList#ArrayList(Collection)",
+     "support": []
+    }
+   ],
+   "lookups": [],
+   "why": "目标拷贝后，就地移除保留项不再作用于保存时读到的那个列表，差集算错，该留的附件被删或该删的留着",
+   "keys": {
+    "read": [
+     "new ArrayList",
+     "ArrayList",
+     "List",
+     "remove",
+     "contains",
+     "Iterator.remove"
+    ],
+    "product": [
+     ".slice()",
+     "slice",
+     "splice",
+     "...",
+     "Array",
+     "indexOf"
+    ]
+   },
+   "probe": {
+    "pattern": "\\.slice\\(\\s*\\)|\\[\\s*\\.\\.\\.[A-Za-z_$][\\w$.]*\\s*\\]",
+    "note": "目标拷贝了数组；核对源端对应处是否真的 new ArrayList 拷贝，不是就改回同一引用"
+   },
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法落在数组的通用方法 slice / splice 上，没有专门参数类型可搜",
+   "refs": [
+    {
+     "what": "Array.slice 返回拷贝",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/build-tools/ets-loader/node_modules/typescript/lib/lib.es5.d.ts Array.slice",
+     "quote": "Returns a copy of a section of an array.",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "Array.slice 的签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/build-tools/ets-loader/node_modules/typescript/lib/lib.es5.d.ts Array.slice",
+     "quote": "If end is undefined, then the slice extends to the end of the array. */ slice(start?: number, end?: number): T[];",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "Array.splice 在原数组上删除",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/build-tools/ets-loader/node_modules/typescript/lib/lib.es5.d.ts Array.splice",
+     "quote": "Removes elements from an array and, if necessary, inserts new elements in their place, returning the deleted elements.",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "Array.splice 的签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/build-tools/ets-loader/node_modules/typescript/lib/lib.es5.d.ts Array.splice",
+     "quote": "splice(start: number, deleteCount?: number): T[];",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "ArrayList 的拷贝构造",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/java/util/ArrayList.java ArrayList#ArrayList(Collection)",
+     "quote": "Constructs a list containing the elements of the specified * collection, in the order they are returned by the collection's * iterator.",
+     "version": "android-36.1"
+    }
+   ]
+  }
+ ],
+ "left_out": [
+  {
+   "text": "卡里没核到：迁移期派工或 skill 是否明示依赖库源码不可得时怎么处理",
+   "reason": "其他：卡里没核到的点，不是结论"
+  }
+ ],
+ "corrections": [],
+ "gaps": [],
+ "conflicts": []
+}

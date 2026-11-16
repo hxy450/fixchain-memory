@@ -1,0 +1,143 @@
+{
+ "id": "rule-d1fb4bf986a2",
+ "title": "同步读设置改成 async load 时，initialize 用 try/catch，失败复位已初始化标志",
+ "product": "代码",
+ "triggers": [
+  {
+   "read": "源端用 SharedPreferences 的 getString / getInt 带默认值同步读设置（Compose 在 remember 里读）；目标端的偏好封装是 async，内部返回 preferences.getPreferences(...) 的 Promise，未就绪时 throw",
+   "wrong": "initialize() 里先写 `this.initialized = true` 再 await 加载，没有 try/catch；加载 reject 时标志不复位，之后再调用直接返回"
+  }
+ ],
+ "scope": "把源端同步读取的设置改成目标端异步加载，并用一次性守卫标志保证只初始化一次的 ViewModel",
+ "exceptions": [],
+ "how": [
+  {
+   "text": "initialize() 写成 try { await 加载; 之后的出题、保存等 } catch (e) { 复位已初始化/进行中标志; throw new Error(...) }，把错误交回调用方",
+   "support": [
+    "case-346f57800b71b616129f#recommendation:1",
+    "case-346f57800b71b616129f#diagnosis"
+   ]
+  },
+  {
+   "text": "只初始化一次的守卫：要么成功后才置 true，要么在 catch 里复位；不要在 await 之前置 true 又不在失败时复位",
+   "support": [
+    "case-346f57800b71b616129f#recommendation:1"
+   ]
+  }
+ ],
+ "values": [
+  {
+   "value": "function getPreferences(context: Context, name: string): Promise<Preferences>",
+   "meaning": "取偏好实例是异步的，声明里可抛 BusinessError 401（参数错误）和 15500000（内部错误），所以加载链会 reject",
+   "source": "鸿蒙 SDK 的 ets/api/@ohos.data.preferences.d.ts，preferences.getPreferences",
+   "support": []
+  },
+  {
+   "value": "get(key: string, defValue: ValueType): Promise<ValueType>",
+   "meaning": "读键也是异步的，缺键返回 defValue，同样可抛 15500000",
+   "source": "鸿蒙 SDK 的 ets/api/@ohos.data.preferences.d.ts，Preferences.get",
+   "support": []
+  },
+  {
+   "value": "String getString(String key, @Nullable String defValue)；int getInt(String key, int defValue)",
+   "meaning": "源端是同步读取、缺键返回默认值，没有失败分支；目标端的失败路径是改成异步后新增的",
+   "source": "android.content.SharedPreferences#getString、android.content.SharedPreferences#getInt",
+   "support": []
+  },
+  {
+   "value": "try/catch 包住加载、延时、出题与保存，失败时复位 initialized=false 并抛出错误",
+   "meaning": "按此改后页面可重试",
+   "source": "卡里修好并验证过",
+   "support": [
+    "case-346f57800b71b616129f#diagnosis"
+   ]
+  },
+  {
+   "value": "function getPreferences(context: Context, options: Options): Promise<Preferences>",
+   "meaning": "同族接口：按 Options 取偏好实例，同样返回 Promise",
+   "source": "鸿蒙 SDK 的 ets/api/@ohos.data.preferences.d.ts，preferences.getPreferences",
+   "support": []
+  }
+ ],
+ "lookups": [],
+ "why": "守卫在 await 前置位又不复位，加载失败后再也无法重新初始化，页面卡在加载态",
+ "keys": {
+  "read": [
+   "SharedPreferences",
+   "getString",
+   "getInt",
+   "remember",
+   "LaunchedEffect",
+   "getPreferences",
+   "Promise"
+  ],
+  "product": [
+   "initialize",
+   "async",
+   "await",
+   "try",
+   "catch",
+   "initialized",
+   "getPreferences",
+   "Promise"
+  ]
+ },
+ "probe": {
+  "pattern": "this\\.initialized\\s*=\\s*true",
+  "note": "守卫在这里置位；若在 await 加载之前且没有 catch 复位，加载失败后无法重试"
+ },
+ "unverified": [],
+ "alternatives_unverified": [
+  "getPreferencesSync(context: Context, options: Options): Preferences 与 Preferences.getSync(key, defValue) 可同步读取、保留源端无加载态的行为，卡里没验证"
+ ],
+ "siblings_checked": "搜 Promise<Preferences>：@ohos.data.preferences.d.ts 里 getPreferences 有 (context, name) 和 (context, options) 两个重载，另一个写进了 values",
+ "refs": [
+  {
+   "what": "getPreferences 返回 Promise",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/api/@ohos.data.preferences.d.ts preferences.getPreferences",
+   "quote": "function getPreferences(context: Context, name: string): Promise<Preferences>;",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  },
+  {
+   "what": "getPreferences 可抛内部错误",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/api/@ohos.data.preferences.d.ts preferences.getPreferences",
+   "quote": "@throws { BusinessError } 15500000 - Inner error. * @syscap SystemCapability.DistributedDataManager.Preferences.Core * @crossplatform * @atomicservice * @since 11 */ function getPreferences(",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  },
+  {
+   "what": "Preferences.get 的签名",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/api/@ohos.data.preferences.d.ts Preferences.get",
+   "quote": "get(key: string, defValue: ValueType): Promise<ValueType>;",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  },
+  {
+   "what": "SharedPreferences.getString 同步返回默认值",
+   "kind": "android-sdk",
+   "where": "sources/android-36.1/android/content/SharedPreferences.java SharedPreferences#getString",
+   "quote": "String getString(String key, @Nullable String defValue);",
+   "version": "android-36.1"
+  },
+  {
+   "what": "SharedPreferences.getInt 同步返回默认值",
+   "kind": "android-sdk",
+   "where": "sources/android-36.1/android/content/SharedPreferences.java SharedPreferences#getInt",
+   "quote": "int getInt(String key, int defValue);",
+   "version": "android-36.1"
+  },
+  {
+   "what": "getPreferences 的 Options 重载（同族）",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/api/@ohos.data.preferences.d.ts preferences.getPreferences",
+   "quote": "function getPreferences(context: Context, options: Options): Promise<Preferences>;",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  }
+ ],
+ "sources": [
+  "case-346f57800b71b616129f"
+ ],
+ "general": false,
+ "status": "active"
+}

@@ -1,0 +1,243 @@
+{
+ "case": "case-0d11a441733b96377fb4",
+ "rules": [
+  {
+   "title": "源端字段在后台线程里写、调用方随后又同步写时，规格按实际生效顺序推导可观察结果",
+   "product": "规格",
+   "triggers": [
+    {
+     "read": "源端方法在 new Thread、Handler.post 或异步回调里成功后写某个字段，调用方发起它之后紧接着在主线程同步写同一字段",
+     "wrong": "规格按代码书写顺序写可观察结果（如「先跳回该项并清零，否则退出」），验收也按这个顺序写，没考虑后台写落在调用方后续语句之后"
+    }
+   ],
+   "scope": "规格提取阶段，翻译源端后台线程或 post 回调里写入的状态和相关验收时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "凡在 Thread、Handler.post 或异步回调里写的字段，先查调用方发起后是否还同步写同一字段；有的话最终值是后台写的那个，按这个生效顺序推导可观察结果再写验收",
+     "support": [
+      "case-0d11a441733b96377fb4#recommendation:1",
+      "case-0d11a441733b96377fb4#diagnosis"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "Handler.post：把 Runnable 加进消息队列，在 handler 所在线程上执行",
+     "meaning": "post 的回调在调用方当前这段代码跑完之后才执行，回调里的写晚于调用方后续的同步写",
+     "source": "android.os.Handler#post",
+     "support": []
+    },
+    {
+     "value": "后台线程里的写总晚于主线程随后的置 0，返回键在两项之间来回切换",
+     "meaning": "源端的实际可观察行为",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-0d11a441733b96377fb4#diagnosis"
+     ]
+    }
+   ],
+   "lookups": [
+    {
+     "what": "异步体里写了哪些字段、调用方随后有没有再写",
+     "where": "源工程里这个方法的函数体（new Thread / Handler.post / 回调里的赋值），以及所有调用处发起调用后的语句",
+     "how": "同一字段两处都写的，记下后台那次在后，最终值取后台写的值"
+    }
+   ],
+   "why": "按书写顺序推导会把源端的实际行为（如在两项之间来回）写成另一种行为，下游照规格实现就和源端不一样",
+   "keys": {
+    "read": [
+     "new Thread",
+     "Thread",
+     "Handler.post",
+     "post",
+     "runOnUiThread",
+     "Runnable",
+     "onBackPressed"
+    ],
+    "product": [
+     "AC",
+     "验收",
+     "races",
+     "可观察结果",
+     "生效顺序",
+     "异步加载"
+    ]
+   },
+   "probe": null,
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：规格类做法，不落在具体接口上",
+   "refs": [
+    {
+     "what": "Handler.post 把 Runnable 放进消息队列",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/android/os/Handler.java Handler#post",
+     "quote": "Causes the Runnable r to be added to the message queue. * The runnable will be run on the thread to which this handler is * attached.",
+     "version": "android-36.1"
+    }
+   ]
+  },
+  {
+   "title": "源端后台工作映射成目标同步调用时，契约列出异步体与调用方都写的字段，写明调用方的写挪到前面",
+   "product": "规格",
+   "triggers": [
+    {
+     "read": "源端方法在后台线程成功后写字段，调用方发起后又同步写同一字段",
+     "wrong": "实现映射把这个方法定为事件循环内同步顺序执行，称单线程「天然消除」源端竞争，没列出两处都写的字段，也没写调用方的写要挪到同步调用之前"
+    }
+   ],
+   "scope": "规格的实现映射或契约里，把源端后台线程工作改成目标同步调用的那一项",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "契约里列出异步体内写入、且调用方发起后还会再写的字段，写明：目标端把调用方的那次写挪到同步调用之前，保持源端的最终值",
+     "support": [
+      "case-0d11a441733b96377fb4#recommendation:2"
+     ]
+    }
+   ],
+   "values": [],
+   "lookups": [],
+   "why": "同步化后两次写的先后翻转，调用方后写的值覆盖了原本最终生效的后台写，可观察结果改变",
+   "keys": {
+    "read": [
+     "new Thread",
+     "Handler.post",
+     "Runnable",
+     "callback"
+    ],
+    "product": [
+     "races",
+     "天然消除",
+     "同步执行",
+     "实现映射",
+     "契约"
+    ]
+   },
+   "probe": {
+    "pattern": "天然消除",
+    "note": "规格声称同步化消除了源端竞争；核对有没有字段在异步体和调用方两处都写"
+   },
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：规格类做法，不落在具体接口上",
+   "refs": []
+  },
+  {
+   "title": "源端异步写被同步化后，调用方先取出旧值并写清零，再调用同步方法",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源端调用方先调一个在 new Thread 里成功后才写某字段的方法，紧接着在主线程把同一字段置 0",
+     "wrong": "目标的处理（如 onBackPress 里）照源端书写顺序先调已同步化的方法、再把字段置 0，同步方法里的写被随后的清零覆盖"
+    }
+   ],
+   "scope": "目标端把源端后台线程工作改成同步执行、调用方又会写同一字段时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "改成 const target = this.field; this.field = 0; this.method(target)：调用方的写挪到同步调用之前，同步方法成功时写入的值作为最终值保留",
+     "support": [
+      "case-0d11a441733b96377fb4#diagnosis",
+      "case-0d11a441733b96377fb4#recommendation:2"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "先取出 target 并清零，再调用同步方法，由成功分支写回旧值",
+     "meaning": "修复后返回行为逐次和源端一致",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-0d11a441733b96377fb4#diagnosis"
+     ]
+    }
+   ],
+   "lookups": [],
+   "why": "照抄书写顺序时同步方法里的写先发生、随后被清零覆盖，字段恒为 0，返回行为和源端不同",
+   "keys": {
+    "read": [
+     "new Thread",
+     "Thread",
+     "Handler.post",
+     "Runnable",
+     "onBackPressed"
+    ],
+    "product": [
+     "onBackPress",
+     "onBackPressed",
+     "this.",
+     "const"
+    ]
+   },
+   "probe": null,
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法落在赋值顺序上，不涉及具体接口",
+   "refs": []
+  },
+  {
+   "title": "返回、撤销、重试这类可重复操作的验收，连续写第 1、2、3 次的结果和不同起点",
+   "product": "规格",
+   "triggers": [
+    {
+     "read": "源端返回、撤销、重试的处理里有后台线程写入参与",
+     "wrong": "验收只断言第一次操作的结果（如「返回回到上一项，再返回退出」），没有逐次写第 1、2、3 次，也没区分重试后、切换后这类起点"
+    }
+   ],
+   "scope": "规格里返回、撤销、重试等可重复操作的验收条目",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "连续走第 1、2、3 次并逐次写出结果，分别从重试后、切换后两种起点写；源端有后台写参与时，按设备上实测的序列定验收",
+     "support": [
+      "case-0d11a441733b96377fb4#recommendation:3"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "切换后连续返回在两项之间交替，重试后返回停在本项",
+     "meaning": "修复时设备实测出的源端序列（形如这样的逐次结果才能写成验收）",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-0d11a441733b96377fb4#diagnosis"
+     ]
+    }
+   ],
+   "lookups": [],
+   "why": "只断言第一次，按错误顺序推出的二段行为也能通过，来回切换这类后续行为没人核对",
+   "keys": {
+    "read": [
+     "onBackPressed",
+     "Retry",
+     "undo",
+     "Thread"
+    ],
+    "product": [
+     "AC",
+     "验收",
+     "第 2 次",
+     "第 3 次",
+     "重试后",
+     "返回"
+    ]
+   },
+   "probe": null,
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：规格类做法，不落在具体接口上",
+   "refs": []
+  }
+ ],
+ "left_out": [
+  {
+   "text": "建议 4：出事页面返回处理的具体改法和逐次验收序列",
+   "reason": "只对出事应用成立"
+  }
+ ],
+ "corrections": [],
+ "gaps": [],
+ "conflicts": []
+}

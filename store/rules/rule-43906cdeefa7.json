@@ -1,0 +1,143 @@
+{
+ "id": "rule-43906cdeefa7",
+ "title": "应用层定时器替代 setMaxDuration 时，按不含暂停的已录时长计，暂停清表、恢复按余量重排",
+ "product": "代码",
+ "triggers": [
+  {
+   "read": "源端 MediaRecorder.setMaxDuration(上限 − 已累计时长)，pause 只把已录区间累加进累计时长",
+   "wrong": "启动后设一次性 setTimeout(上限毫秒数) 触发到达上限，暂停、恢复时既不清除也不重排；或删掉 AVRecorderConfig.maxDuration 只留这个墙钟定时器"
+  }
+ ],
+ "scope": "用应用层定时器承接录制器原生时长上限、且录制可以暂停时",
+ "exceptions": [],
+ "how": [
+  {
+   "text": "暂停时 clearTimeout；恢复时按「上限 − 已录时长」重新 setTimeout；已录时长只累计 start/resume 到 pause/stop 之间的区间",
+   "support": [
+    "case-be892688a05d8782271e#recommendation:1",
+    "case-be892688a05d8782271e#diagnosis"
+   ]
+  },
+  {
+   "text": "pause/resume 加防重入标志，暂停或恢复进行中时不再重排定时器",
+   "support": [
+    "case-be892688a05d8782271e#diagnosis"
+   ]
+  },
+  {
+   "text": "写单测核对「暂停 5s 不消耗 1s 上限」",
+   "support": [
+    "case-be892688a05d8782271e#recommendation:1"
+   ]
+  }
+ ],
+ "values": [
+  {
+   "value": "setMaxDuration(int max_duration_ms)：单位毫秒；到达后 OnInfoListener 收到 MEDIA_RECORDER_INFO_MAX_DURATION_REACHED，录制被停止",
+   "meaning": "源端由录制器自己计时并停止",
+   "source": "android.media.MediaRecorder#setMaxDuration",
+   "support": []
+  },
+  {
+   "value": "maxDuration?: number：单位秒，到达后自动停止，经 stateChange 通知 AVRecorderState = 'stopped'、StateChangeReason = BACKGROUND（@since 18）",
+   "meaning": "目标录制器的原生时长上限，单位和源端不同",
+   "source": "鸿蒙 SDK 的 ets/api/@ohos.multimedia.media.d.ts，AVRecorderConfig.maxDuration",
+   "support": []
+  },
+  {
+   "value": "pause(): Promise<void>；resume(): Promise<void>",
+   "meaning": "AVRecorder 的暂停、恢复是异步的，清表和重排挂在这两处",
+   "source": "鸿蒙 SDK 的 ets/api/@ohos.multimedia.media.d.ts，AVRecorder.pause / AVRecorder.resume",
+   "support": []
+  },
+  {
+   "value": "暂停时清除计时、恢复后按「上限 − 已录时长」重排、pause/resume 防重入后，时长上限按已录时长生效",
+   "meaning": "修好的写法",
+   "source": "卡里修好并验证过",
+   "support": [
+    "case-be892688a05d8782271e#diagnosis"
+   ]
+  }
+ ],
+ "lookups": [],
+ "why": "按墙钟计时的一次性定时器把暂停区间也算进上限，暂停一会就提前停录",
+ "keys": {
+  "read": [
+   "MediaRecorder",
+   "setMaxDuration",
+   "pause",
+   "resume",
+   "MEDIA_RECORDER_INFO_MAX_DURATION_REACHED",
+   "OnInfoListener"
+  ],
+  "product": [
+   "setTimeout",
+   "clearTimeout",
+   "AVRecorder",
+   "AVRecorderConfig",
+   "maxDuration",
+   "pause",
+   "resume"
+  ]
+ },
+ "probe": {
+  "pattern": "setTimeout\\([^\\n]*(?:[Mm]ax[A-Za-z]*Duration|[Dd]uration[A-Za-z]*Ms)",
+  "note": "按时长上限设了定时器；同一处要有暂停时 clearTimeout、恢复时按余量重排"
+ },
+ "unverified": [
+  "卡里的行为出自鸿蒙 SDK API 24，本机核对用 API 23"
+ ],
+ "alternatives_unverified": [
+  "直接用 AVRecorderConfig.maxDuration（单位秒）由录制器原生计时；卡里没核它是否排除暂停区间"
+ ],
+ "siblings_checked": "无：做法落在 setTimeout / clearTimeout 这类通用定时方法上，没有专门参数类型可搜",
+ "refs": [
+  {
+   "what": "setMaxDuration 单位毫秒，到达后通知并停止",
+   "kind": "android-sdk",
+   "where": "sources/android-36.1/android/media/MediaRecorder.java MediaRecorder#setMaxDuration",
+   "quote": "Sets the maximum duration (in ms) of the recording session.",
+   "version": "android-36.1"
+  },
+  {
+   "what": "到达时长上限后通知 OnInfoListener 并停止",
+   "kind": "android-sdk",
+   "where": "sources/android-36.1/android/media/MediaRecorder.java MediaRecorder#setMaxDuration",
+   "quote": "with a \"what\" code of {@link #MEDIA_RECORDER_INFO_MAX_DURATION_REACHED} * and recording will be stopped.",
+   "version": "android-36.1"
+  },
+  {
+   "what": "AVRecorderConfig.maxDuration 单位秒、到达后自动停止",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/api/@ohos.multimedia.media.d.ts AVRecorderConfig.maxDuration",
+   "quote": "Maximum recording duration, in seconds. The value range is [1, 2^31-1].",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  },
+  {
+   "what": "maxDuration 到达后经 stateChange 通知 stopped",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/api/@ohos.multimedia.media.d.ts AVRecorderConfig.maxDuration",
+   "quote": "it stops automatically and notifies via the **stateChange** callback that the recording has stopped: * AVRecorderState = 'stopped', StateChangeReason = BACKGROUND. * @type { ?number }",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  },
+  {
+   "what": "AVRecorder.pause 签名",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/api/@ohos.multimedia.media.d.ts AVRecorder.pause",
+   "quote": "console.error('Failed to pause AVRecorder and catch error is ' + err.message); * }); */ pause(): Promise<void>;",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  },
+  {
+   "what": "AVRecorder.resume 签名",
+   "kind": "harmony-dts",
+   "where": "openharmony/ets/api/@ohos.multimedia.media.d.ts AVRecorder.resume",
+   "quote": "avRecorder.resume().then(() => { *   console.info('Succeeded in resuming AVRecorder'); * }).catch((err: BusinessError) => {",
+   "version": "API 23（HarmonyOS 6.1.0）"
+  }
+ ],
+ "sources": [
+  "case-be892688a05d8782271e"
+ ],
+ "general": false,
+ "status": "active"
+}

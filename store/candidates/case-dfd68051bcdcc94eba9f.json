@@ -1,0 +1,787 @@
+{
+ "case": "case-dfd68051bcdcc94eba9f",
+ "rules": [
+  {
+   "title": "源端播放器用到缓冲态、缓冲位或共享实例时，规格把 AVPlayer+XComponent 写成唯一路线",
+   "product": "规格",
+   "triggers": [
+    {
+     "read": "ExoPlayer / media3 的 Player.Listener 区分 STATE_BUFFERING / STATE_READY，轮询 bufferedPosition，Lifecycle ON_PAUSE / ON_RESUME 暂停恢复，feed 多卡共享一个 ExoPlayer",
+     "wrong": "转换决策写「ExoPlayer + PlayerView → Video 组件（或 AVPlayer + XComponent）」，理由写「Video 组件自带播放/缓冲状态回调」，三态由 onPrepared / onError / onLoading 驱动"
+    }
+   ],
+   "scope": "规格提取阶段为视频查看器、feed 内嵌视频确定播放器路线时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "写决策前列出源端实际用到的播放器能力（BUFFERING / READY 状态、bufferedPosition、多卡共享实例、前后台暂停恢复），逐项核对候选组件的公开 API",
+     "support": [
+      "case-dfd68051bcdcc94eba9f#recommendation:1"
+     ]
+    },
+    {
+     "text": "需要缓冲事件、缓冲位或共享实例时，决策只写 AVPlayer + XComponent 一条路线，不写「Video 组件（或 AVPlayer）」，也不写未经核实的「Video 组件自带缓冲回调」",
+     "support": [
+      "case-dfd68051bcdcc94eba9f#recommendation:1"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "VideoAttribute 的事件只有 onStart、onPause、onFinish、onFullscreenChange、onPrepared、onSeeking、onSeeked、onUpdate、onError、onStop",
+     "meaning": "Video 组件没有缓冲事件，也拿不到缓冲位置",
+     "source": "鸿蒙 SDK 的 ets/component/video.d.ts，VideoAttribute",
+     "support": []
+    },
+    {
+     "value": "on(type: 'bufferingUpdate', callback: OnBufferingUpdateHandler): void",
+     "meaning": "AVPlayer 有缓冲事件（网络播放场景）",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.multimedia.media.d.ts，AVPlayer.on('bufferingUpdate')",
+     "support": []
+    }
+   ],
+   "lookups": [],
+   "why": "规格把 Video 列为首选，实现照选后没有缓冲态和缓冲位，共享播放也做不出",
+   "keys": {
+    "read": [
+     "ExoPlayer",
+     "PlayerView",
+     "Player.Listener",
+     "STATE_BUFFERING",
+     "bufferedPosition",
+     "Lifecycle",
+     "ON_PAUSE"
+    ],
+    "product": [
+     "转换决策",
+     "Video 组件",
+     "AVPlayer",
+     "XComponent",
+     "bufferingUpdate",
+     "缓冲回调"
+    ]
+   },
+   "probe": {
+    "pattern": "Video\\s*组件（或\\s*AVPlayer|Video\\s*组件自带[^。\\n]*缓冲",
+    "note": "规格把 Video 组件列为可选或声称它有缓冲回调；源端用到缓冲态或缓冲位时应只写 AVPlayer + XComponent"
+   },
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法是规格里的路线选择，不落在某个接口的参数类型上",
+   "refs": [
+    {
+     "what": "Video 的 onPrepared",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/component/video.d.ts VideoAttribute.onPrepared",
+     "quote": "onPrepared(callback: Callback<PreparedInfo>): VideoAttribute;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "Video 的 onUpdate",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/component/video.d.ts VideoAttribute.onUpdate",
+     "quote": "onUpdate(callback: Callback<PlaybackInfo>): VideoAttribute;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "AVPlayer 的 bufferingUpdate",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.multimedia.media.d.ts AVPlayer.on",
+     "quote": "on(type: 'bufferingUpdate', callback: OnBufferingUpdateHandler): void;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    }
+   ]
+  },
+  {
+   "title": "源端依赖缓冲态或缓冲位时用 AVPlayer+XComponent，接 bufferingUpdate",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "派工或决策台账写「视频播放用 AVPlayer」，源端 STATE_BUFFERING → LOADING、bufferedPosition.coerceAtLeast(currentPosition)",
+     "wrong": "写成 Video({ src, controller })：onPrepared 后直接 SUCCESS，没有 BUFFERING 态，bufferedMs = currentMs"
+    }
+   ],
+   "scope": "实现视频页或 feed 内嵌播放、源端依赖缓冲态、缓冲位时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "播放器用 media.createAVPlayer()，画面用 XComponent({ type: XComponentType.SURFACE, controller })，onLoad 后把 controller.getXComponentSurfaceId() 赋给 player.surfaceId",
+     "support": [
+      "case-dfd68051bcdcc94eba9f#recommendation:2"
+     ]
+    },
+    {
+     "text": "player.on('bufferingUpdate', (type, value) => …)：BUFFERING_START 映射 LOADING、BUFFERING_END 映射 SUCCESS；CACHED_DURATION 的 value 加 player.currentTime 得缓冲位",
+     "support": [
+      "case-dfd68051bcdcc94eba9f#recommendation:2",
+      "case-dfd68051bcdcc94eba9f#diagnosis"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "function createAVPlayer(): Promise<AVPlayer>",
+     "meaning": "创建 AVPlayer",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.multimedia.media.d.ts，media.createAVPlayer",
+     "support": []
+    },
+    {
+     "value": "on(type: 'bufferingUpdate', callback: OnBufferingUpdateHandler): void；OnBufferingUpdateHandler = (infoType: BufferingInfoType, value: number) => void",
+     "meaning": "缓冲事件，只在网络播放场景支持",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.multimedia.media.d.ts，AVPlayer.on('bufferingUpdate')",
+     "support": []
+    },
+    {
+     "value": "BufferingInfoType：BUFFERING_START = 1、BUFFERING_END = 2、BUFFERING_PERCENT = 3、CACHED_DURATION = 4（毫秒）",
+     "meaning": "缓冲事件的类型",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.multimedia.media.d.ts，BufferingInfoType",
+     "support": []
+    },
+    {
+     "value": "readonly currentTime: number（毫秒，-1 为无效值）",
+     "meaning": "当前播放位置，和 CACHED_DURATION 相加得缓冲位",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.multimedia.media.d.ts，AVPlayer.currentTime",
+     "support": []
+    },
+    {
+     "value": "surfaceId?: string",
+     "meaning": "AVPlayer 渲染画面的窗口 id，取自 XComponent",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.multimedia.media.d.ts，AVPlayer.surfaceId",
+     "support": []
+    },
+    {
+     "value": "XComponentType.SURFACE；getXComponentSurfaceId(): string",
+     "meaning": "XComponent 的 Surface 类型和取 surfaceId 的方法",
+     "source": "鸿蒙 SDK 的 ets/component/enums.d.ts，XComponentType.SURFACE；ets/component/xcomponent.d.ts，XComponentController.getXComponentSurfaceId",
+     "support": []
+    }
+   ],
+   "lookups": [],
+   "why": "Video 组件没有缓冲事件和缓冲位，缓冲态、缓冲轨道的 AC 做不出来",
+   "keys": {
+    "read": [
+     "ExoPlayer",
+     "STATE_BUFFERING",
+     "STATE_READY",
+     "bufferedPosition",
+     "coerceAtLeast",
+     "Player.Listener"
+    ],
+    "product": [
+     "AVPlayer",
+     "createAVPlayer",
+     "bufferingUpdate",
+     "BufferingInfoType",
+     "CACHED_DURATION",
+     "XComponent",
+     "surfaceId",
+     "Video"
+    ]
+   },
+   "probe": {
+    "pattern": "\\bVideo\\(\\s*\\{",
+    "note": "用了 Video 组件；源端依赖缓冲态或缓冲位、派工写 AVPlayer 时应改用 AVPlayer + XComponent"
+   },
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "搜 'bufferingUpdate'：@ohos.multimedia.media.d.ts 里 AVPlayer 之外还有已废弃的 AudioPlayer、VideoPlayer 两个接口带它，不写进 values",
+   "refs": [
+    {
+     "what": "createAVPlayer 签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.multimedia.media.d.ts media.createAVPlayer",
+     "quote": "function createAVPlayer(): Promise<AVPlayer>;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "bufferingUpdate 只在网络播放支持",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.multimedia.media.d.ts AVPlayer.on",
+     "quote": "Subscribes to audio and video buffer changes. This subscription is supported only in network * playback scenarios.",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "bufferingUpdate 签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.multimedia.media.d.ts AVPlayer.on",
+     "quote": "on(type: 'bufferingUpdate', callback: OnBufferingUpdateHandler): void;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "OnBufferingUpdateHandler",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.multimedia.media.d.ts OnBufferingUpdateHandler",
+     "quote": "type OnBufferingUpdateHandler = (infoType: BufferingInfoType, value: number) => void;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "BufferingInfoType 起止值",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.multimedia.media.d.ts BufferingInfoType",
+     "quote": "BUFFERING_START = 1,",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "BUFFERING_END",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.multimedia.media.d.ts BufferingInfoType.BUFFERING_END",
+     "quote": "BUFFERING_END = 2,",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "CACHED_DURATION 单位毫秒",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.multimedia.media.d.ts BufferingInfoType.CACHED_DURATION",
+     "quote": "cached duration in milliseconds * @syscap SystemCapability.Multimedia.Media.Core * @crossplatform * @atomicservice * @since 12 */ CACHED_DURATION = 4",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "currentTime 单位毫秒",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.multimedia.media.d.ts AVPlayer.currentTime",
+     "quote": "Current playback position, in ms. It can be used as a query parameter when the AVPlayer is in the prepared,",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "surfaceId",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.multimedia.media.d.ts AVPlayer.surfaceId",
+     "quote": "surfaceId?: string;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "XComponentType.SURFACE",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/component/enums.d.ts XComponentType.SURFACE",
+     "quote": "Surface type. The default type is used. * * @syscap SystemCapability.ArkUI.ArkUI.Full * @crossplatform * @atomicservice * @since 12 */ SURFACE,",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "getXComponentSurfaceId",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/component/xcomponent.d.ts XComponentController.getXComponentSurfaceId",
+     "quote": "getXComponentSurfaceId(): string;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    }
+   ]
+  },
+  {
+   "title": "占位登记带明确升级条件且条件已成立时，升级实现并改造先前页面，不登记为 retained",
+   "product": "计划与派工",
+   "triggers": [
+    {
+     "read": "派工里 `UNC` 占位的处置规则带升级条件（如「AVPlayer 缓冲回调可用则升级真实实现」），执行者已确认该能力可用",
+     "wrong": "决议或登记写成「`UNC` … retained：先前页面为既定架构，本 slice 不推翻」，可实现的 AC 继续保留为占位"
+    }
+   ],
+   "scope": "写 source-notes、决策记录和占位登记，处置带升级条件的 uncertain 占位时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "核对占位登记里的升级条件；条件成立就把该项登记为升级，写明本次改造的范围包括先前用同一占位写法的页面，不以「不推翻先前架构」为由保留 retained",
+     "support": [
+      "case-dfd68051bcdcc94eba9f#recommendation:3"
+     ]
+    }
+   ],
+   "values": [],
+   "lookups": [],
+   "why": "条件已成立仍保留占位，可实现的 AC 一直缺失，后续续作者照 retained 决议原样保留",
+   "keys": {
+    "read": [
+     "UNC",
+     "升级条件",
+     "uncertain",
+     "派工",
+     "决策台账"
+    ],
+    "product": [
+     "UNC",
+     "retained",
+     "不推翻",
+     "source-notes",
+     "占位登记"
+    ]
+   },
+   "probe": {
+    "pattern": "UNC[-\\w]*[^\\n]{0,40}retained|retained[^\\n]{0,40}不推翻",
+    "note": "占位被决议为 retained；核对它的升级条件是否已经成立"
+   },
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法是登记和决议的写法，不落在接口上",
+   "refs": []
+  },
+  {
+   "title": "多张 feed 卡共享一个 ExoPlayer 时，全局持一个 AVPlayer 会话按卡换绑 surface",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "多张 feed 卡共享一个 ExoPlayer：全局状态里 @Synchronized 懒创建的播放器单例，带 release，无可见项时 stop()",
+     "wrong": "全局状态里没有播放器句柄，共享实例换成「仅活跃卡挂一个 Video 节点」，无可见项时只置 activeId = null，靠卸载代替 stop"
+    }
+   ],
+   "scope": "feed 内嵌视频、多卡复用同一播放器的实现",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "全局状态里保留一个 AVPlayer 会话，暴露 getOrCreate() / release()；当前活跃卡把自己 XComponent 的 surfaceId 绑定到会话（按 owner 绑定、解绑），切卡时只换 surface，不新建播放器",
+     "support": [
+      "case-dfd68051bcdcc94eba9f#recommendation:4",
+      "case-dfd68051bcdcc94eba9f#diagnosis"
+     ]
+    },
+    {
+     "text": "无可见卡时调用会话的 stop()，对应源端的 exoPlayer.stop()",
+     "support": [
+      "case-dfd68051bcdcc94eba9f#diagnosis"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "surfaceId 可在 initialized 状态设置，在 prepared、playing、paused、completed、stopped 状态可再次设置，之后画面在新窗口播放",
+     "meaning": "同一个 AVPlayer 切卡时换绑 surface 即可",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.multimedia.media.d.ts，AVPlayer.surfaceId",
+     "support": []
+    },
+    {
+     "value": "全局会话按 owner 绑定，getOrCreate / release",
+     "meaning": "修好后切卡不重建解码器、不丢播放状态",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-dfd68051bcdcc94eba9f#diagnosis"
+     ]
+    }
+   ],
+   "lookups": [],
+   "why": "每张卡各挂一个 Video 时，切卡就新建解码器，播放状态丢失",
+   "keys": {
+    "read": [
+     "ExoPlayer",
+     "ExoPlayer.Builder",
+     "@Synchronized",
+     "release",
+     "stop",
+     "REPEAT_MODE_ONE"
+    ],
+    "product": [
+     "AVPlayer",
+     "surfaceId",
+     "XComponent",
+     "getOrCreate",
+     "release",
+     "Video"
+    ]
+   },
+   "probe": null,
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法是会话结构，落在 surfaceId 这个属性上，没有专门参数类型可搜",
+   "refs": [
+    {
+     "what": "surfaceId 可在多个状态下重设",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.multimedia.media.d.ts AVPlayer.surfaceId",
+     "quote": "It can be set again when the AVPlayer is in the prepared, playing, paused, * completed, or stopped state, in the prerequisite that the video window ID has been set in the initialized state.",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    }
+   ]
+  },
+  {
+   "title": "滚动中算可见比例时用 onVisibleAreaChange，不用 onAreaChange",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "Compose Modifier.onGloballyPositioned { it.boundsInWindow() … } 在滚动中算可见高度（如 visibleHeight > height * 0.5f）",
+     "wrong": "可见性挂在 .onAreaChange((old, new) => …) 上，用 globalPosition.y 加屏幕高算相交高度"
+    }
+   ],
+   "scope": "列表滚动中按可见比例切换自动播放、曝光等逻辑的实现",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "改用 .onVisibleAreaChange([0, 0.5, 1], (isExpanding, currentRatio) => …) 取可见比例；选离顶最近的卡前，实时查各卡窗口位置（如 componentUtils.getRectangleById(id)）",
+     "support": [
+      "case-dfd68051bcdcc94eba9f#recommendation:5",
+      "case-dfd68051bcdcc94eba9f#diagnosis"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "onVisibleAreaChange(ratios: Array<number>, event: VisibleAreaChangeCallback): T；VisibleAreaChangeCallback = (isExpanding: boolean, currentRatio: number) => void",
+     "meaning": "按阈值回调组件可见面积占比",
+     "source": "鸿蒙 SDK 的 ets/component/common.d.ts，CommonMethod.onVisibleAreaChange",
+     "support": []
+    },
+    {
+     "value": "onAreaChange 仅响应由布局变化导致的组件大小、位置变化",
+     "meaning": "列表滚动不是布局变化，滚动中不会触发",
+     "source": "ts-universal-component-area-change-event.md，onAreaChange",
+     "support": []
+    },
+    {
+     "value": "getRectangleById(id: string): componentUtils.ComponentInfo",
+     "meaning": "UIContext 的 ComponentUtils 实时取组件的坐标和大小（模块级 componentUtils.getRectangleById 自 API 18 起废弃，改用这个）",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.arkui.UIContext.d.ts，ComponentUtils.getRectangleById",
+     "support": []
+    },
+    {
+     "value": "onVisibleAreaChange(ratios: Array<number>, event: VisibleAreaChangeCallback, measureFromViewport: boolean): T",
+     "meaning": "同族接口：带 measureFromViewport 的重载",
+     "source": "鸿蒙 SDK 的 ets/component/common.d.ts，CommonMethod.onVisibleAreaChange",
+     "support": []
+    },
+    {
+     "value": "onVisibleAreaApproximateChange(options: VisibleAreaEventOptions, event: VisibleAreaChangeCallback | undefined): T",
+     "meaning": "同族接口：可设回调间隔的可见面积变化",
+     "source": "鸿蒙 SDK 的 ets/component/common.d.ts，CommonMethod.onVisibleAreaApproximateChange",
+     "support": []
+    }
+   ],
+   "lookups": [],
+   "why": "onAreaChange 在列表滚动时不触发，滚动中最近可见项不切换",
+   "keys": {
+    "read": [
+     "onGloballyPositioned",
+     "boundsInWindow",
+     "LazyColumn",
+     "Modifier",
+     "LayoutCoordinates"
+    ],
+    "product": [
+     "onVisibleAreaChange",
+     "onAreaChange",
+     "globalPosition",
+     "getRectangleById",
+     "componentUtils",
+     "VisibleAreaChangeCallback"
+    ]
+   },
+   "probe": {
+    "pattern": "\\.onAreaChange\\(",
+    "note": "用 onAreaChange 监听位置；若用于滚动中的可见性，改用 onVisibleAreaChange"
+   },
+   "unverified": [
+    "onAreaChange 滚动时不触发依据返修报告的判定，卡里没有真机对照记录"
+   ],
+   "alternatives_unverified": [],
+   "siblings_checked": "搜 VisibleAreaChangeCallback：鸿蒙 SDK ets/component 下 CommonMethod 有 onVisibleAreaChange 两个重载和 onVisibleAreaApproximateChange，另两个写进 values",
+   "refs": [
+    {
+     "what": "onVisibleAreaChange 签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/component/common.d.ts CommonMethod.onVisibleAreaChange",
+     "quote": "onVisibleAreaChange(ratios: Array<number>, event: VisibleAreaChangeCallback): T;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "VisibleAreaChangeCallback",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/component/common.d.ts VisibleAreaChangeCallback",
+     "quote": "declare type VisibleAreaChangeCallback = (isExpanding: boolean, currentRatio: number) => void;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "onAreaChange 只响应布局变化",
+     "kind": "oh-docs",
+     "where": "zh-cn/application-dev/reference/apis-arkui/arkui-ts/ts-universal-component-area-change-event.md onAreaChange",
+     "quote": "组件区域变化时触发该回调。仅会响应由布局变化所导致的组件大小、位置发生变化时的回调。",
+     "version": "docs f41b9345"
+    },
+    {
+     "what": "UIContext ComponentUtils.getRectangleById",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.arkui.UIContext.d.ts ComponentUtils.getRectangleById",
+     "quote": "getRectangleById(id: string): componentUtils.ComponentInfo;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "模块级 getRectangleById 已废弃",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.arkui.componentUtils.d.ts componentUtils.getRectangleById",
+     "quote": "@deprecated since 18 * @useinstead ohos.arkui.UIContext.ComponentUtils#getRectangleById */ function getRectangleById(id: string): ComponentInfo;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "onVisibleAreaChange 带 measureFromViewport 的重载（同族）",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/component/common.d.ts CommonMethod.onVisibleAreaChange",
+     "quote": "onVisibleAreaChange(ratios: Array<number>, event: VisibleAreaChangeCallback, measureFromViewport: boolean): T;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "onVisibleAreaApproximateChange（同族）",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/component/common.d.ts CommonMethod.onVisibleAreaApproximateChange",
+     "quote": "onVisibleAreaApproximateChange(options: VisibleAreaEventOptions, event: VisibleAreaChangeCallback | undefined): T;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    }
+   ]
+  },
+  {
+   "title": "Lifecycle ON_PAUSE/ON_RESUME 暂停恢复，目标同时接应用前后台和页面显隐两类回调",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源端观察 Lifecycle.Event.ON_PAUSE / ON_RESUME 暂停、恢复播放",
+     "wrong": "只接了 NavDestination 的 onHidden / onShown（或 onPageHide / onPageShow），应用切后台时不暂停"
+    }
+   ],
+   "scope": "源端按 Activity / Fragment 生命周期暂停恢复播放或其他前台任务的迁移",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "同时接两类：ApplicationContext 的 on('applicationStateChange', { onApplicationForeground, onApplicationBackground }) 管应用前后台；NavDestination 的 onHidden / onShown 或 uiObserver.on('navDestinationSwitch', …) 管页面被覆盖",
+     "support": [
+      "case-dfd68051bcdcc94eba9f#recommendation:6",
+      "case-dfd68051bcdcc94eba9f#diagnosis"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "on(type: 'applicationStateChange', callback: ApplicationStateChangeCallback): void（ApplicationContext，声明里 @since 18）",
+     "meaning": "注册应用前后台切换回调",
+     "source": "鸿蒙 SDK 的 ets/api/application/ApplicationContext.d.ts，ApplicationContext.on('applicationStateChange')",
+     "support": []
+    },
+    {
+     "value": "onApplicationForeground(): void；onApplicationBackground(): void",
+     "meaning": "ApplicationStateChangeCallback 的两个回调",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.app.ability.ApplicationStateChangeCallback.d.ts，ApplicationStateChangeCallback",
+     "support": []
+    },
+    {
+     "value": "onShown(callback: Callback<VisibilityChangeReason>): NavDestinationAttribute；onHidden(callback: Callback<VisibilityChangeReason>): NavDestinationAttribute",
+     "meaning": "页面显示、隐藏回调",
+     "source": "鸿蒙 SDK 的 ets/component/nav_destination.d.ts，NavDestinationAttribute.onShown / onHidden",
+     "support": []
+    },
+    {
+     "value": "on(type: 'navDestinationSwitch', context: UIAbilityContext | UIContext, callback: Callback<NavDestinationSwitchInfo>): void",
+     "meaning": "监听 NavDestination 切换",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.arkui.observer.d.ts，uiObserver.on('navDestinationSwitch')",
+     "support": []
+    }
+   ],
+   "lookups": [],
+   "why": "只接页面显隐时，应用切后台不触发暂停，视频在后台继续播放",
+   "keys": {
+    "read": [
+     "Lifecycle",
+     "ON_PAUSE",
+     "ON_RESUME",
+     "LifecycleEventObserver",
+     "DisposableEffect",
+     "LocalLifecycleOwner"
+    ],
+    "product": [
+     "applicationStateChange",
+     "onApplicationBackground",
+     "onApplicationForeground",
+     "onHidden",
+     "onShown",
+     "navDestinationSwitch"
+    ]
+   },
+   "probe": null,
+   "unverified": [
+    "NavDestination onHidden 不覆盖应用切后台依据返修报告的判定，卡里没有真机对照记录"
+   ],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法落在事件名（applicationStateChange、navDestinationSwitch）上，没有专门参数类型可搜",
+   "refs": [
+    {
+     "what": "applicationStateChange 注册",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/application/ApplicationContext.d.ts ApplicationContext.on",
+     "quote": "on(type: 'applicationStateChange', callback: ApplicationStateChangeCallback): void;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "ApplicationStateChangeCallback 的前台回调",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.app.ability.ApplicationStateChangeCallback.d.ts ApplicationStateChangeCallback.onApplicationForeground",
+     "quote": "onApplicationForeground(): void;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "ApplicationStateChangeCallback 的后台回调",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.app.ability.ApplicationStateChangeCallback.d.ts ApplicationStateChangeCallback.onApplicationBackground",
+     "quote": "onApplicationBackground(): void;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "NavDestination onShown",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/component/nav_destination.d.ts NavDestinationAttribute.onShown",
+     "quote": "onShown(callback: Callback<VisibilityChangeReason>): NavDestinationAttribute;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "NavDestination onHidden",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/component/nav_destination.d.ts NavDestinationAttribute.onHidden",
+     "quote": "onHidden(callback: Callback<VisibilityChangeReason>): NavDestinationAttribute;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "uiObserver navDestinationSwitch",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.arkui.observer.d.ts uiObserver.on",
+     "quote": "export function on(type: 'navDestinationSwitch', context: UIAbilityContext | UIContext, callback: Callback<NavDestinationSwitchInfo>): void;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    }
+   ]
+  },
+  {
+   "title": "直译 Kotlin 的可空调用和 decodeFromString 时，JSON.parse 结果按源端可空性契约校验",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "Kotlin 对 JSON 来源字段写 x?.f()（如 post.url?.toHttps()），字段为 null 时不调用",
+     "wrong": "译成 x !== undefined ? f(x) : null，JSON 里显式为 null 的字段会进 f 崩溃"
+    },
+    {
+     "read": "kotlinx.serialization 的 Json.decodeFromString<T>(…)，@Serializable 类里有非空字段，失败经 runCatching 收敛",
+     "wrong": "写成 JSON.parse(body) as T 后直接读字段，不校验必填字段和类型"
+    }
+   ],
+   "scope": "把 Kotlin 对 JSON 数据的可空调用和强类型解码直译到 ArkTS 时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "可空字段按 undefined 和 null 都可能出现处理：x !== undefined && x !== null 时才调用",
+     "support": [
+      "case-dfd68051bcdcc94eba9f#recommendation:7"
+     ]
+    },
+    {
+     "text": "decodeFromString 的非空字段在 JSON.parse 后逐项校验存在且类型正确，不通过就按解析失败处理（走源端 runCatching 的失败分支）",
+     "support": [
+      "case-dfd68051bcdcc94eba9f#recommendation:7",
+      "case-dfd68051bcdcc94eba9f#diagnosis"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "补 null 守卫、补必填字段校验函数",
+     "meaning": "修好后 JSON null 不再崩溃，缺字段按失败处理",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-dfd68051bcdcc94eba9f#diagnosis"
+     ]
+    }
+   ],
+   "lookups": [
+    {
+     "what": "哪些字段非空、类型是什么",
+     "where": "源工程里对应的 @Serializable data class 声明",
+     "how": "没有 ? 且没有默认值的属性是必填，按它的 Kotlin 类型写校验"
+    }
+   ],
+   "why": "只判 undefined 时 JSON null 会进后续调用崩溃；不校验时坏数据被当成成功",
+   "keys": {
+    "read": [
+     "?.",
+     "decodeFromString",
+     "@Serializable",
+     "runCatching",
+     "kotlinx.serialization",
+     "Json"
+    ],
+    "product": [
+     "JSON.parse",
+     "!== undefined",
+     "!== null",
+     "as",
+     "typeof",
+     "null"
+    ]
+   },
+   "probe": {
+    "pattern": "!==\\s*undefined\\s*\\?",
+    "note": "只判 undefined 的三元；JSON 来源字段还要判 null"
+   },
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法落在语言内置的 JSON.parse 和判空上，没有专门参数类型可搜",
+   "refs": []
+  },
+  {
+   "title": "Kotlin toIntOrNull 直译时用 /^[+-]?\\d+$/ 加 Int 范围检查，不写 /^-?\\d+$/",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "Kotlin 对字符串调用 toIntOrNull()（如 findContent(...)?.toIntOrNull()）",
+     "wrong": "注释写「toIntOrNull 等价」，实现是 /^-?\\d+$/ 匹配后 parseInt：不接受 + 号，也不检查 Int 范围"
+    }
+   ],
+   "scope": "把 Kotlin 的 toIntOrNull 直译到 ArkTS 时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "用 /^[+-]?\\d+$/ 匹配，parseInt 后检查在 Int 范围内（-2147483648 到 2147483647），不匹配或越界返回 null",
+     "support": [
+      "case-dfd68051bcdcc94eba9f#recommendation:7",
+      "case-dfd68051bcdcc94eba9f#diagnosis"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "toIntOrNull 接受可选的 + / - 号，超出 Int 范围返回 null",
+     "meaning": "直译要保留这两点",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-dfd68051bcdcc94eba9f#diagnosis"
+     ]
+    }
+   ],
+   "lookups": [],
+   "why": "不接受 + 号、不查范围时，源端能解析或会返回 null 的输入在目标结果不同",
+   "keys": {
+    "read": [
+     "toIntOrNull",
+     "toInt",
+     "toLongOrNull",
+     "Int",
+     "String"
+    ],
+    "product": [
+     "parseInt",
+     "RegExp",
+     "Number.isSafeInteger",
+     "null",
+     "2147483647"
+    ]
+   },
+   "probe": {
+    "pattern": "/\\^-\\?\\\\d\\+\\$/",
+    "note": "整数正则不含 + 号；若是直译 toIntOrNull，改成 [+-]? 并加 Int 范围检查"
+   },
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法落在正则和 parseInt 上，没有专门参数类型可搜",
+   "refs": []
+  }
+ ],
+ "left_out": [
+  {
+   "text": "建议 5 里「实现后按 AC 的滚动场景（A/B 可见 → A 出视口 → B 出视口）自查」",
+   "reason": "要上机或截图才能做"
+  }
+ ],
+ "corrections": [],
+ "gaps": [
+  "Kotlin 标准库 toIntOrNull 的符号与范围行为、kotlinx decodeFromString 的非空字段契约，本机没有源码原文，按卡写",
+  "Int 范围 -2147483648 到 2147483647 出自 Kotlin Int，本机没有查到原文"
+ ],
+ "conflicts": [
+  "卡建议 5 写「如 componentUtils.getRectangleById」；声明里这个模块级函数自 API 18 起废弃，改用 UIContext 的 ComponentUtils.getRectangleById；不改做法，values 里写了替代"
+ ]
+}

@@ -1,0 +1,222 @@
+{
+ "case": "case-6f949100d998a4784716",
+ "rules": [
+  {
+   "title": "源端重载开头的 MediaPlayer.release() 只丢旧实例，目标封装类拆出只释放实例的方法，重载路径不调全清",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源端重新装载的方法开头只有 MediaPlayer.release(); 字段 = null，随后照常 MediaPlayer.create(...)；宿主 Context 引用只在整体 release() 的全清末段置 null",
+     "wrong": "目标封装类只有一个 release()，里面同时作废令牌、释放播放器并把 context 置 null，重载路径也调这个 release()；或者 load() 自己已先释放旧实例，调用方又调一次全清的 release()"
+    }
+   ],
+   "scope": "把安卓播放器的释放调用映射到目标端自写的播放通道封装类（持有播放器实例、宿主 context、代数令牌）时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "封装类拆成两个方法：只释放实例的 releasePlayer(): void { this.token++; this.player?.release(); this.player = null }，和全清的 release(): void { this.releasePlayer(); this.context = null }（反注册事件也只放在全清里）",
+     "support": [
+      "case-6f949100d998a4784716#recommendation:1",
+      "case-6f949100d998a4784716#diagnosis"
+     ]
+    },
+    {
+     "text": "逐个源调用点判断：调用之后这个对象还要继续 create/load 的（重载开头），调只释放实例的方法；只有宿主销毁路径调全清的 release()",
+     "support": [
+      "case-6f949100d998a4784716#recommendation:1"
+     ]
+    },
+    {
+     "text": "load() 内已经包含释放旧实例这一步时，调用方不再另调释放方法重复这一步",
+     "support": [
+      "case-6f949100d998a4784716#recommendation:2"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "重载路径调了置空 context 的全清 release() 后，load 见 context 为空直接走失败回调，播放通道第一次装载就失败；改为重载调只释放实例的方法后恢复",
+     "meaning": "两个释放方法分开的依据",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-6f949100d998a4784716#diagnosis"
+     ]
+    },
+    {
+     "value": "public void release()：Releases resources associated with this MediaPlayer object",
+     "meaning": "源端 release() 只释放这个 MediaPlayer 实例的资源，不涉及宿主 Context",
+     "source": "android.media.MediaPlayer#release",
+     "support": []
+    },
+    {
+     "value": "release(): Promise<void>（除 released 外任何状态都能调）",
+     "meaning": "目标端释放单个 AVPlayer 实例，放在只释放实例的方法里",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.multimedia.media.d.ts，AVPlayer.release",
+     "support": []
+    },
+    {
+     "value": "function createAVPlayer(): Promise<AVPlayer>",
+     "meaning": "释放旧实例后重载时用它新建 AVPlayer",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.multimedia.media.d.ts，media.createAVPlayer",
+     "support": []
+    }
+   ],
+   "lookups": [],
+   "why": "重载步骤被映射成全清时，宿主 context 在第一次装载前就被清空，后续 load 静默失败，背景音乐永不装载",
+   "keys": {
+    "read": [
+     "MediaPlayer",
+     "release()",
+     "MediaPlayer.create",
+     "setLooping",
+     "seekTo",
+     "Context"
+    ],
+    "product": [
+     "AVPlayer",
+     "release()",
+     "this.player = null",
+     "context = null",
+     "createAVPlayer",
+     "token++"
+    ]
+   },
+   "probe": {
+    "pattern": "release\\(\\)\\s*(?::\\s*\\w+\\s*)?\\{[^}]*context\\s*=\\s*(?:null|undefined)",
+    "note": "封装类的 release() 里清空了宿主 context；再看重载路径是不是调了它，是的话改调只释放实例的方法"
+   },
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法是封装类自己的方法拆分，不落在平台接口的参数类型上；顺带看了 @ohos.multimedia.media.d.ts 里 release(): Promise<void> 共 7 处，分属不同媒体类",
+   "refs": [
+    {
+     "what": "安卓 MediaPlayer.release 只释放这个实例的资源",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/android/media/MediaPlayer.java MediaPlayer#release",
+     "quote": "Releases resources associated with this MediaPlayer object.",
+     "version": "android-36.1"
+    },
+    {
+     "what": "AVPlayer.release 的签名和可调状态",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.multimedia.media.d.ts AVPlayer.release",
+     "quote": "Releases resources used for AVPlayer. This API can be called when the AVPlayer is in any state except released. * @returns { Promise<void> } A Promise instance used to return the operation result.",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "createAVPlayer 的签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.multimedia.media.d.ts media.createAVPlayer",
+     "quote": "function createAVPlayer(): Promise<AVPlayer>;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    }
+   ]
+  },
+  {
+   "title": "播放通道因 context 为空短路时，分支里先写 hilog.warn 再回调失败",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "",
+     "wrong": "封装类的 load 等方法里 if (ctx === null) 之类的短路分支直接回调失败或 return，没有 hilog.warn 或 hilog.error"
+    }
+   ],
+   "scope": "目标端封装的音频播放通道（音乐、音效）里，因宿主已释放、context 为空而提前返回的分支",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "短路分支里先写 hilog.warn(DOMAIN, TAG, 'context released, skip load') 再走失败回调，和同一文件里其他通道已有的 'context released' 日志写法一致",
+     "support": [
+      "case-6f949100d998a4784716#recommendation:3"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "function warn(domain: number, tag: string, format: string, ...args: any[]): void",
+     "meaning": "警告级日志",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.hilog.d.ts，hilog.warn",
+     "support": []
+    },
+    {
+     "value": "domain 是 0x0–0xFFFF 的十六进制整数，超出范围不打印；tag 不超过 32 字节，超出截断",
+     "meaning": "DOMAIN、TAG 两个参数的限制",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.hilog.d.ts，hilog.warn",
+     "support": []
+    },
+    {
+     "value": "function error(domain: number, tag: string, format: string, ...args: any[]): void",
+     "meaning": "同族接口：错误级日志，参数相同",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.hilog.d.ts，hilog.error",
+     "support": []
+    }
+   ],
+   "lookups": [],
+   "why": "短路分支不记日志时，本应可用的通道静默失败，只能靠设备音频流排查",
+   "keys": {
+    "read": [
+     "MediaPlayer",
+     "SoundPool",
+     "release()",
+     "Context",
+     "Log.w"
+    ],
+    "product": [
+     "hilog.warn",
+     "hilog.error",
+     "return",
+     "context === null",
+     "ctx === null",
+     "context released"
+    ]
+   },
+   "probe": null,
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "搜 (domain: number, tag: string, format: string：@ohos.hilog.d.ts 里有 debug、info、warn、error、fatal 五个，error 写进 values",
+   "refs": [
+    {
+     "what": "hilog.warn 的签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.hilog.d.ts hilog.warn",
+     "quote": "function warn(domain: number, tag: string, format: string, ...args: any[]): void;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "domain 的范围",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.hilog.d.ts hilog.warn",
+     "quote": "Indicates the service domain, which is a hexadecimal integer ranging from 0x0 to 0xFFFF * if the value exceeds the range, logs cannot be printed.",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "tag 的长度限制",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.hilog.d.ts hilog.warn",
+     "quote": "@param { string } tag Identifies the log tag, length cannot exceed 32 bytes, the excess part will be truncated.",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "hilog.error 的签名（同族）",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.hilog.d.ts hilog.error",
+     "quote": "function error(domain: number, tag: string, format: string, ...args: any[]): void;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    }
+   ]
+  }
+ ],
+ "left_out": [
+  {
+   "text": "写完通道类后沿首次播放路径走一遍，确认释放步之后 load 依赖的 context、factory、handlers 仍非空",
+   "reason": "没有产物里看得到的触发"
+  },
+  {
+   "text": "音乐和音效经 url=fd:// 传 HAP 内资源段以 401 失败、改用 fdSrc",
+   "reason": "其他：卡里注明这是另一处问题，这张卡没有调查和验证"
+  }
+ ],
+ "corrections": [],
+ "gaps": [],
+ "conflicts": []
+}

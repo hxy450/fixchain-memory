@@ -1,0 +1,143 @@
+{
+  "case": "case-02008ba6db4e6a0ddfa2",
+  "rules": [
+    {
+      "title": "替代源端 WorkInfo 聚合时，作业结束写成 COMPLETED 留在状态表里，不删 key",
+      "product": "代码",
+      "triggers": [
+        {
+          "read": "源端宿主观察 WorkManager 的 WorkInfo 列表（LiveData），把作业状态映射成 url→状态 表并 postSticky 粘性广播；查询面专门排除完成态，订阅方遍历事件里的全部 url 再过滤",
+          "wrong": "目标下载服务的作业收尾写成 map.delete(url) 后再发事件；查询方法在判断 COMPLETED，但全文件没有写入 COMPLETED 的地方"
+        }
+      ],
+      "scope": "目标端没有 WorkManager 等价框架、由服务自己维护作业状态表并直接发事件，订阅方按 url 是否在事件里过滤时",
+      "exceptions": [],
+      "how": [
+        {
+          "text": "作业结束时写 map.set(url, { state: COMPLETED, progress: -1 }) 再发事件，不删 key；状态映射照源端聚合：RUNNING→RUNNING，ENQUEUED / BLOCKED→QUEUED，其余→COMPLETED",
+          "support": [
+            "case-02008ba6db4e6a0ddfa2#recommendation:1",
+            "case-02008ba6db4e6a0ddfa2#diagnosis"
+          ]
+        },
+        {
+          "text": "写完逐个核对状态域：QUEUED、RUNNING、COMPLETED 各有写入点；查询方法检查的状态在文件里找不到写入，就是收尾写法偏了",
+          "support": [
+            "case-02008ba6db4e6a0ddfa2#recommendation:2"
+          ]
+        },
+        {
+          "text": "按订阅方的过滤方式（如按 url 是否在事件载荷的 key 里）核对最后一次事件：完成时这个 url 仍在载荷里",
+          "support": [
+            "case-02008ba6db4e6a0ddfa2#recommendation:3"
+          ]
+        }
+      ],
+      "values": [
+        {
+          "value": "结束作业以完成态保留在表里；改成 set(url, COMPLETED, -1) 后再广播，详情页在下载完成后刷新",
+          "meaning": "修好后的收尾写法",
+          "source": "卡里修好并验证过",
+          "support": [
+            "case-02008ba6db4e6a0ddfa2#diagnosis"
+          ]
+        },
+        {
+          "value": "删 key 后完成那次事件不含该 url，按 url 在不在载荷里过滤的订阅方丢弃事件，页面停在 RUNNING",
+          "meaning": "删 key 的后果",
+          "source": "卡里修好并验证过",
+          "support": [
+            "case-02008ba6db4e6a0ddfa2#diagnosis"
+          ]
+        }
+      ],
+      "lookups": [
+        {
+          "what": "源端的状态映射",
+          "where": "源工程里观察 WorkManager 的宿主（Activity）源文件，按 WorkManager 的 LiveData observe 回调和 WorkInfo.State 的分支找",
+          "how": "每个 WorkInfo.State 映射到哪个状态常量就照写；结束态（SUCCEEDED、FAILED、CANCELLED）写成哪个就保留哪个"
+        }
+      ],
+      "why": "删 key 后完成态无人产出，订阅方收不到完成那次刷新，查询也分不清「完成」和「没有这项」",
+      "keys": {
+        "read": [
+          "WorkManager",
+          "WorkInfo",
+          "WorkInfo.State",
+          "LiveData",
+          "postSticky",
+          "observe",
+          "Observer"
+        ],
+        "product": [
+          "delete(",
+          "set(",
+          "COMPLETED",
+          "QUEUED",
+          "RUNNING",
+          "emit",
+          "Map"
+        ]
+      },
+      "probe": {
+        "pattern": "\\.delete\\([^)]*[Uu]rl[^)]*\\)",
+        "note": "作业收尾按 url 从状态表删除；若订阅方靠 url 在不在事件里过滤，应改成写 COMPLETED 留在表里"
+      },
+      "unverified": [],
+      "alternatives_unverified": [],
+      "siblings_checked": "无：做法落在服务自建的状态表上，不落在平台接口上",
+      "refs": []
+    },
+    {
+      "title": "源端聚合器的职责移交给另一切片时，映射验收条款写进承接切片的派工",
+      "product": "计划与派工",
+      "triggers": [
+        {
+          "read": "源端由宿主 Activity 观察 WorkManager 聚合状态并广播，目标里这一职责移交给另一切片的服务；状态映射规则写在壳层的某条 AC 里",
+          "wrong": "承接切片的派工和 slice 文件里没有引用那条映射 AC，只在移出方的源码笔记里写了「聚合发布侧交给 Slice N」"
+        }
+      ],
+      "scope": "规格或计划阶段，把源端聚合器（WorkManager 观察、LiveData 汇总等）的职责从一个切片移交给另一个切片时",
+      "exceptions": [],
+      "how": [
+        {
+          "text": "把对应的映射验收条款（作业状态→目标状态的映射 AC 编号和原文）写进承接切片的 spec 引用或派工池，不只记在移出方的笔记里",
+          "support": [
+            "case-02008ba6db4e6a0ddfa2#recommendation:4"
+          ]
+        }
+      ],
+      "values": [],
+      "lookups": [],
+      "why": "承接方拿不到映射规则时，会按自己的理解写收尾，终态容易被写成删除",
+      "keys": {
+        "read": [
+          "WorkManager",
+          "LiveData",
+          "postSticky",
+          "聚合",
+          "AC"
+        ],
+        "product": [
+          "派工",
+          "slice",
+          "spec 引用",
+          "派工池",
+          "AC",
+          "移交"
+        ]
+      },
+      "probe": null,
+      "unverified": [],
+      "alternatives_unverified": [],
+      "siblings_checked": "无：做法落在派工的写法上，不落在具体接口上",
+      "refs": []
+    }
+  ],
+  "left_out": [],
+  "corrections": [],
+  "gaps": [
+    "androidx.work 的 WorkInfo.State 取值（ENQUEUED、RUNNING、SUCCEEDED、FAILED、BLOCKED、CANCELLED）本机 Gradle 缓存只有 aar 编译产物，没有源码原文，按卡写"
+  ],
+  "conflicts": []
+}

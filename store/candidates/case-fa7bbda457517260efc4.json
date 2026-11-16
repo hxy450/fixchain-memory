@@ -1,0 +1,313 @@
+{
+ "case": "case-fa7bbda457517260efc4",
+ "rules": [
+  {
+   "title": "多路请求聚合写 TTL 缓存时，全失败不写新时间戳，命中同时校验载荷非空",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "安卓源码按刷新时间加 TTL 判定缓存，用 viewModelScope.async 并发两路请求、各路可单独失败；规格验收条目写「成功后写入缓存」「不把空模型等同网络成功」",
+     "wrong": "代码在 Promise.allSettled 的结果全是 `rejected`（或各路载荷全为 null）时仍以 Date.now() 写入载荷为空的缓存记录；缓存命中只比较保存时间与 TTL"
+    },
+    {
+     "read": "安卓源码在请求全部失败的分支也用空对象和当前时间写 SharedPreferences 缓存，而规格验收条目或决策台账写成功后才写入、网络失败读有效缓存",
+     "wrong": "代码照搬源码在全失败分支写入新 Date.now() 时间戳加空载荷，交回的报告里没写与源码的差异"
+    }
+   ],
+   "scope": "迁移带 TTL 的多路并发请求缓存（各路结果合成一条缓存记录）的数据层时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "用 Promise.allSettled 聚合各路；写缓存前先判断至少一路 status === 'fulfilled' 且载荷非空。全部失败时不写新时间戳：有未过期且载荷非空的旧缓存就返回旧缓存，否则抛出（或向页面暴露）分支错误",
+     "support": [
+      "case-fa7bbda457517260efc4#recommendation:1",
+      "case-fa7bbda457517260efc4#diagnosis"
+     ]
+    },
+    {
+     "text": "缓存命中条件写成「保存时间在 TTL 内」且「至少一路载荷非空」同时成立，只看时间戳不算命中",
+     "support": [
+      "case-fa7bbda457517260efc4#recommendation:1",
+      "case-fa7bbda457517260efc4#diagnosis"
+     ]
+    },
+    {
+     "text": "安卓源码失败也写空缓存、而规格验收条目或决策台账要求成功后写入时，按规格和台账实现，并在交回的报告里写明与源码的这处差异，不以忠实复刻为由静默照搬",
+     "support": [
+      "case-fa7bbda457517260efc4#recommendation:2",
+      "case-fa7bbda457517260efc4#diagnosis"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "allSettled<T>(values: Iterable<T | PromiseLike<T>>): Promise<PromiseSettledResult<Awaited<T>>[]>",
+     "meaning": "PromiseConstructor.allSettled：各路不论成败都回来，结果数组与入参一一对应",
+     "source": "鸿蒙 SDK 的 ets/build-tools/ets-loader/node_modules/typescript/lib/lib.es2020.promise.d.ts，PromiseConstructor.allSettled",
+     "support": []
+    },
+    {
+     "value": "PromiseFulfilledResult<T> { status: \"fulfilled\"; value: T }；PromiseRejectedResult { status: \"rejected\"; reason: any }",
+     "meaning": "每一路结果的两种形状：按 status 区分，成功取 value，失败取 reason",
+     "source": "鸿蒙 SDK 的 ets/build-tools/ets-loader/node_modules/typescript/lib/lib.es2020.promise.d.ts，PromiseSettledResult",
+     "support": []
+    }
+   ],
+   "lookups": [],
+   "why": "一次全失败被当成 TTL 内的有效缓存，之后冷启动直接返回空结果、不再请求",
+   "keys": {
+    "read": [
+     "viewModelScope",
+     "async",
+     "await",
+     "SharedPreferences",
+     "launch",
+     "TTL"
+    ],
+    "product": [
+     "Promise.allSettled",
+     "PromiseSettledResult",
+     "fulfilled",
+     "rejected",
+     "Date.now",
+     "preferences",
+     "TTL"
+    ]
+   },
+   "probe": {
+    "pattern": "allSettled\\(",
+    "note": "用 allSettled 聚合多路请求；看写缓存前有没有「至少一路 fulfilled 且非空」的判断，命中条件有没有校验载荷"
+   },
+   "unverified": [
+    "改后的缓存命中条件在冷启动场景下是否单独上机复测过，卡里只写了单飞修复后的复测"
+   ],
+   "alternatives_unverified": [],
+   "siblings_checked": "搜 PromiseSettledResult：只在 SDK 自带的 TypeScript 库 lib.es2020.promise.d.ts 里，由 PromiseConstructor.allSettled 的两个重载使用；鸿蒙 SDK ets/api、ets/component 下没有接口带它",
+   "refs": [
+    {
+     "what": "Promise.allSettled 的签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/build-tools/ets-loader/node_modules/typescript/lib/lib.es2020.promise.d.ts PromiseConstructor.allSettled",
+     "quote": "allSettled<T>(values: Iterable<T | PromiseLike<T>>): Promise<PromiseSettledResult<Awaited<T>>[]>;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "成功一路的结果形状",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/build-tools/ets-loader/node_modules/typescript/lib/lib.es2020.promise.d.ts PromiseFulfilledResult",
+     "quote": "interface PromiseFulfilledResult<T> { status: \"fulfilled\"; value: T; }",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "失败一路的结果形状",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/build-tools/ets-loader/node_modules/typescript/lib/lib.es2020.promise.d.ts PromiseRejectedResult",
+     "quote": "interface PromiseRejectedResult { status: \"rejected\"; reason: any; }",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "PromiseSettledResult 是两者之一",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/build-tools/ets-loader/node_modules/typescript/lib/lib.es2020.promise.d.ts PromiseSettledResult",
+     "quote": "type PromiseSettledResult<T> = PromiseFulfilledResult<T> | PromiseRejectedResult;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    }
+   ]
+  },
+  {
+   "title": "共享单例 ViewModel 按规格的业务键只丢旧键迟到响应，不让新调用一律取消上一请求",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "规格状态段写「以某个业务键（如城市 id）作 generation key，旧键的迟到响应不得覆盖新页面」；安卓源码每次用 viewModelScope.launch / async 发一组请求，后到的调用不取消在途的前一组",
+     "wrong": "单例里的加载方法对任何新调用都先 cancel() 上一请求，generation 计数全局递增，不分键"
+    }
+   ],
+   "scope": "迁成多个页面或入口共享的单例 ViewModel / Service，且规格写了按键丢弃迟到响应时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "请求发出时记下它的业务键和该键的代次；响应回来时只在当前键已切走（旧键迟到）时丢弃，不对每次新调用都 cancel() 上一请求",
+     "support": [
+      "case-fa7bbda457517260efc4#recommendation:3"
+     ]
+    },
+    {
+     "text": "同键的重复调用合并：已有同键在途请求时直接返回那一个在途的 Promise，不新发也不取消它",
+     "support": [
+      "case-fa7bbda457517260efc4#recommendation:3"
+     ]
+    }
+   ],
+   "values": [],
+   "lookups": [],
+   "why": "页面上几个加载入口打到同一个单例时互相取消，日志里出现 cancelled 和随后一组失败，页面拿不到数据",
+   "keys": {
+    "read": [
+     "ViewModel",
+     "viewModelScope",
+     "launch",
+     "async",
+     "generation"
+    ],
+    "product": [
+     "cancel()",
+     "generation",
+     "Promise",
+     "then",
+     "async"
+    ]
+   },
+   "probe": {
+    "pattern": "\\.cancel\\(\\s*\\)",
+    "note": "加载方法里先 cancel() 上一请求；若是共享单例且规格要求按键丢弃迟到响应，应改成只丢旧键响应、同键复用在途请求"
+   },
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法落在应用自己的请求状态机上，不落在具体接口上",
+   "refs": []
+  },
+  {
+   "title": "页面有 aboutToAppear 与 Refresh.onRefreshing 等多个加载入口时，调单例加载前加单飞",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "",
+     "wrong": "页面在 aboutToAppear 里调加载，又以 Refresh({ refreshing: true }) 为初值并在 .onRefreshing 里调加载（或 @Monitor 回调里再调），调用单例加载方法前没有在途标志或在途复用"
+    },
+    {
+     "read": "",
+     "wrong": "下拉刷新回调里先调一次强制加载、再在 .then( 里调一次加载，同一次刷新发出两组请求"
+    }
+   ],
+   "scope": "ArkUI 页面把多个生命周期或事件入口接到同一个单例加载方法上时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "列出页面所有会调加载的入口：aboutToAppear、Refresh 的 refreshing 初值与 .onRefreshing、@Monitor 回调等",
+     "support": [
+      "case-fa7bbda457517260efc4#recommendation:4"
+     ]
+    },
+    {
+     "text": "调单例加载方法前加单飞：用一个在途标志（或保存在途的 Promise），在途时直接返回或复用，不再发起；在 finally 里清掉标志",
+     "support": [
+      "case-fa7bbda457517260efc4#recommendation:4",
+      "case-fa7bbda457517260efc4#diagnosis"
+     ]
+    },
+    {
+     "text": "下拉刷新回调只调一次加载方法并带强制刷新参数，不串联两次加载",
+     "support": [
+      "case-fa7bbda457517260efc4#diagnosis"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "refreshing: boolean",
+     "meaning": "RefreshOptions.refreshing：组件当前是否处于刷新中，支持 $$ 双向绑定；文档写默认值 false",
+     "source": "鸿蒙 SDK 的 ets/component/refresh.d.ts，RefreshOptions.refreshing；ts-container-refresh.md，RefreshOptions对象说明",
+     "support": []
+    },
+    {
+     "value": "onRefreshing(callback: () => void): RefreshAttribute",
+     "meaning": "进入刷新状态时触发的回调",
+     "source": "鸿蒙 SDK 的 ets/component/refresh.d.ts，RefreshAttribute.onRefreshing",
+     "support": []
+    },
+    {
+     "value": "页面加单飞、刷新回调只调一次加载后，冷启动只剩一组请求",
+     "meaning": "改后的效果",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-fa7bbda457517260efc4#diagnosis"
+     ]
+    }
+   ],
+   "lookups": [],
+   "why": "冷启动时两个入口各调一次加载，单例里后一次取消前一次，日志里出现 cancelled 和随后一组失败",
+   "keys": {
+    "read": [
+     "aboutToAppear",
+     "Refresh",
+     "onRefreshing",
+     "refreshing",
+     "@Monitor",
+     "ViewModel"
+    ],
+    "product": [
+     "aboutToAppear",
+     "Refresh",
+     "onRefreshing",
+     "refreshing",
+     "@Monitor",
+     "finally"
+    ]
+   },
+   "probe": {
+    "pattern": "\\.onRefreshing\\(",
+    "note": "页面挂了下拉刷新回调；同页 aboutToAppear 也调加载时，看调用单例加载前有没有单飞"
+   },
+   "unverified": [
+    "refreshing 初值为 true 时 ArkUI 是否会触发 onRefreshing：声明和文档只写「进入刷新状态时触发」，卡里也没有直接确认，只推断最可能是它"
+   ],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：onRefreshing 是事件回调，没有专门的参数类型可搜",
+   "refs": [
+    {
+     "what": "RefreshOptions.refreshing 的含义",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/component/refresh.d.ts RefreshOptions.refreshing",
+     "quote": "Whether the current component is being refreshed. * This parameter supports $$ for two-way binding of variables. * * @type { boolean } * @syscap SystemCapability.ArkUI.ArkUI.Full * @FaAndStageModel",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "onRefreshing 的签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/component/refresh.d.ts RefreshAttribute.onRefreshing",
+     "quote": "onRefreshing(callback: () => void): RefreshAttribute;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "onRefreshing 进入刷新状态时触发",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/component/refresh.d.ts RefreshAttribute.onRefreshing",
+     "quote": "Called when the refresh state is entered.",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "refreshing 默认值 false",
+     "kind": "oh-docs",
+     "where": "zh-cn/application-dev/reference/apis-arkui/arkui-ts/ts-container-refresh.md RefreshOptions对象说明",
+     "quote": "组件当前是否处于刷新中状态。true表示处于刷新中状态，false表示未处于刷新中状态。<br/>默认值：false",
+     "version": "docs f41b9345"
+    },
+    {
+     "what": "文档对 onRefreshing 的说明",
+     "kind": "oh-docs",
+     "where": "zh-cn/application-dev/reference/apis-arkui/arkui-ts/ts-container-refresh.md onRefreshing",
+     "quote": "onRefreshing(callback: () => void) 进入刷新状态时触发回调。",
+     "version": "docs f41b9345"
+    }
+   ]
+  }
+ ],
+ "left_out": [
+  {
+   "text": "最小检查：模拟两路都失败后再调一次，第二次必须重新请求；核对冷启动时实际触发加载的次数",
+   "reason": "要上机或截图才能做"
+  },
+  {
+   "text": "Windows PowerShell 5.1 读 UTF-8 规格要显式 -Encoding UTF8，回执乱码时重读，不凭 ASCII 片段实现验收条款",
+   "reason": "没有产物里看得到的触发"
+  }
+ ],
+ "corrections": [],
+ "gaps": [
+  "安卓端 viewModelScope 上新 launch / async 不会取消前一组请求，出自 androidx.lifecycle 库代码，本机只有编译产物，按卡写"
+ ],
+ "conflicts": [
+  "卡内：修复者称改法与安卓「请求成功才更新」一致，但安卓源码两路都失败时也写空缓存；卡的诊断判定真正违反的是规格验收条目和决策台账，规矩按诊断写"
+ ]
+}

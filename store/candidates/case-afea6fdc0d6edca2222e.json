@@ -1,0 +1,419 @@
+{
+ "case": "case-afea6fdc0d6edca2222e",
+ "rules": [
+  {
+   "title": "源端无权限或无坐标仍按城市查询时，目标数据层照分支保留城市查询，不用 return [] 短路",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源端附近检索按当前城市建查询（如 PoiSearchV2.Query 带城市编码），只在有定位权限且有坐标时才附加 SearchBound 半径",
+     "wrong": "目标 Repository 的附近查询开头写坐标未知就 `return []`，只剩按坐标搜索，按城市查询的分支没了"
+    }
+   ],
+   "scope": "迁移依赖定位的附近、周边列表的数据层，源端在不同权限、坐标状态下走不同查询时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "把源端附近查询按「有权限且有坐标 / 无权限 / 坐标未知 / 定位失败」逐分支列出实际行为，逐一映射到目标 Repository：有坐标按坐标加半径（按距离排序），无权限或坐标未知照源端按当前城市查询",
+     "support": [
+      "case-afea6fdc0d6edca2222e#recommendation:1",
+      "case-afea6fdc0d6edca2222e#diagnosis"
+     ]
+    },
+    {
+     "text": "不在查询入口用「坐标未知」把整条查询短路成空数组",
+     "support": [
+      "case-afea6fdc0d6edca2222e#recommendation:1"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "有坐标按距离排序、无坐标按城市查询",
+     "meaning": "修好后的数据层分支",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-afea6fdc0d6edca2222e#diagnosis"
+     ]
+    }
+   ],
+   "lookups": [
+    {
+     "what": "源端附近查询在各权限、坐标状态下实际走哪种查询",
+     "where": "源工程里发起附近检索的 Fragment / Activity 源码，按建查询对象（如 PoiSearchV2.Query）和附加 SearchBound 的条件找",
+     "how": "把附加半径的 if 条件和不附加时用的城市参数逐分支抄成表，再对到目标 Repository 的分支"
+    }
+   ],
+   "why": "坐标未知时直接返回空数组，丢掉源端按城市查询的结果，页面误显示附近没有内容",
+   "keys": {
+    "read": [
+     "PoiSearchV2",
+     "PoiSearchV2.Query",
+     "SearchBound",
+     "cityCode",
+     "checkSelfPermission",
+     "ACCESS_FINE_LOCATION"
+    ],
+    "product": [
+     "return []",
+     "Repository",
+     "isKnown",
+     "location",
+     "search"
+    ]
+   },
+   "probe": {
+    "pattern": "if\\s*\\(\\s*!\\s*[\\w.]*[kK]nown\\w*\\s*\\)\\s*\\{?\\s*return\\s*\\[\\s*\\]",
+    "note": "坐标未知时直接返回空数组；查源端这一分支是不是还按城市查询"
+   },
+   "unverified": [
+    "有坐标时目标端按坐标检索的返回质量"
+   ],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法落在数据层的分支结构上，不落在具体接口上",
+   "refs": []
+  },
+  {
+   "title": "数据层的 return [] 只代表有效查询成功返回空，坐标未知、未授权、定位失败用 Result 联合单独返回",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "规格或决策台账写着「失败保持显式错误与最近成功数据、不伪造空成功」、选定显式 `Result` 联合类型，或要求未知坐标标 `known=false`、定位拒绝与失败分为不同分支",
+     "wrong": "数据层在坐标未知、未授权或定位失败时 `return []`，调用方把它当作成功的空列表"
+    }
+   ],
+   "scope": "目标端数据层（Repository、Service）里依赖定位或权限的查询的返回值",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "逐个检查 `return []`：只有查询条件有效且服务成功返回空时才返回空态",
+     "support": [
+      "case-afea6fdc0d6edca2222e#recommendation:2"
+     ]
+    },
+    {
+     "text": "坐标未知、未授权、定位失败以 Result 联合或状态枚举单独返回（结果区分 Content / Empty / Partial / Error 这几种），并和「不伪造空成功」这类决策逐条对照",
+     "support": [
+      "case-afea6fdc0d6edca2222e#recommendation:2",
+      "case-afea6fdc0d6edca2222e#diagnosis"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "返回区分 Content / Empty / Partial / Error 的结果",
+     "meaning": "修好后的数据层结果契约，Empty 只给有效查询成功返回空",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-afea6fdc0d6edca2222e#diagnosis"
+     ]
+    }
+   ],
+   "lookups": [],
+   "why": "无坐标、未授权和失败被当成成功的空列表，页面显示空态，掩盖了真实原因",
+   "keys": {
+    "read": [
+     "Result",
+     "known",
+     "PermissionDenied",
+     "Failed",
+     "location"
+    ],
+    "product": [
+     "return []",
+     "Result",
+     "Content",
+     "Empty",
+     "Error",
+     "Repository"
+    ]
+   },
+   "probe": {
+    "pattern": "return\\s*\\[\\s*\\]",
+    "note": "数据层返回空数组；逐个看是否只在查询条件有效且服务成功返回空时出现"
+   },
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法落在返回值的类型设计上，不落在具体接口上",
+   "refs": []
+  },
+  {
+   "title": "附近列表的 ViewModel 状态要分出定位不可用、失败、真空数据和有内容，空态文案只绑真空数据",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "",
+     "wrong": "ViewModel 对外只有 `isLoading` / `errorMessage` / `items` 几个字段，没有定位不可用的状态；页面用 `items.length === 0` 出「附近无内容」的空态"
+    }
+   ],
+   "scope": "目标端依赖定位的列表页的 ViewModel 状态和页面空态分支",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "ViewModel 对外暴露的附近状态写成联合类型或枚举，至少区分定位不可用、加载失败、真空数据（有效查询成功返回空）和有内容",
+     "support": [
+      "case-afea6fdc0d6edca2222e#recommendation:3"
+     ]
+    },
+    {
+     "text": "页面改为消费这个状态；「附近无内容」这类空态文案只绑定真空数据那一态，其他各态各有文案",
+     "support": [
+      "case-afea6fdc0d6edca2222e#recommendation:3",
+      "case-afea6fdc0d6edca2222e#diagnosis"
+     ]
+    }
+   ],
+   "values": [],
+   "lookups": [],
+   "why": "只有列表和错误串时，缺定位被显示成「附近无内容」",
+   "keys": {
+    "read": [
+     "isGranted",
+     "Location",
+     "PermissionDenied",
+     "Failed"
+    ],
+    "product": [
+     "isLoading",
+     "errorMessage",
+     "items",
+     "items.length",
+     "ViewModel",
+     "@State"
+    ]
+   },
+   "probe": {
+    "pattern": "items\\.length\\s*===?\\s*0",
+    "note": "页面按列表长度为 0 出空态；查定位不可用、加载失败时会不会也落进这个分支"
+   },
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法落在状态建模上，不落在具体接口上",
+   "refs": []
+  },
+  {
+   "title": "源端入口无定位权限时转别的页，目标入口照样设门槛，不让无坐标状态以空列表进附近页",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源端入口的 setOnClickListener 里先判定位权限，无权限时转去选城页面，不进附近列表",
+     "wrong": "目标入口的 onClick 里直接跳附近页，没有判定位权限或坐标是否可用"
+    }
+   ],
+   "scope": "迁移进入依赖定位的页面的入口（首页卡片、按钮）时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "核对源端入口门槛，目标入口照写：没有定位权限（或没有可用坐标）时走源端同一去向，或者带着定位不可用的状态进页面，不以空列表进附近页",
+     "support": [
+      "case-afea6fdc0d6edca2222e#recommendation:4"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "checkAccessTokenSync(tokenID: number, permissionName: Permissions): GrantStatus",
+     "meaning": "AtManager 上同步查当前应用是否已获某项权限，返回 GrantStatus",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.abilityAccessCtrl.d.ts，AtManager.checkAccessTokenSync",
+     "support": []
+    },
+    {
+     "value": "GrantStatus.PERMISSION_GRANTED = 0、GrantStatus.PERMISSION_DENIED = -1",
+     "meaning": "权限查询结果的两个取值",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.abilityAccessCtrl.d.ts，GrantStatus",
+     "support": []
+    },
+    {
+     "value": "'ohos.permission.APPROXIMATELY_LOCATION'",
+     "meaning": "模糊定位权限名，是 Permissions 的取值之一",
+     "source": "鸿蒙 SDK 的 ets/api/permissions.d.ts，Permissions",
+     "support": []
+    },
+    {
+     "value": "checkAccessToken(tokenID: number, permissionName: Permissions): Promise<GrantStatus>",
+     "meaning": "同族接口：AtManager 的异步版本",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.abilityAccessCtrl.d.ts，AtManager.checkAccessToken",
+     "support": []
+    },
+    {
+     "value": "getSelfPermissionStatus(permissionName: Permissions): PermissionStatus",
+     "meaning": "同族接口：AtManager 上查当前应用的权限状态，声明 @since 20",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.abilityAccessCtrl.d.ts，AtManager.getSelfPermissionStatus",
+     "support": []
+    }
+   ],
+   "lookups": [
+    {
+     "what": "源端入口在无定位权限时去哪",
+     "where": "源工程里入口控件的 setOnClickListener 回调，按权限判断后的 startActivity / 导航调用找",
+     "how": "读出无权限分支跳转的目标页，目标入口的无权限分支跳同一类页面"
+    }
+   ],
+   "why": "门槛被去掉后，无坐标的状态以空列表进附近页，显示成附近没有内容",
+   "keys": {
+    "read": [
+     "setOnClickListener",
+     "startActivity",
+     "checkSelfPermission",
+     "ACCESS_FINE_LOCATION",
+     "ACCESS_COARSE_LOCATION"
+    ],
+    "product": [
+     "onClick",
+     "router",
+     "pushPath",
+     "checkAccessTokenSync",
+     "APPROXIMATELY_LOCATION",
+     "GrantStatus"
+    ]
+   },
+   "probe": null,
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "搜 permissionName: Permissions：@ohos.abilityAccessCtrl.d.ts 里 AtManager 上有 verifyAccessToken、verifyAccessTokenSync、checkAccessToken、checkAccessTokenSync、getSelfPermissionStatus 五个；checkAccessToken、getSelfPermissionStatus 写进了 values",
+   "refs": [
+    {
+     "what": "checkAccessTokenSync 的签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.abilityAccessCtrl.d.ts AtManager.checkAccessTokenSync",
+     "quote": "checkAccessTokenSync(tokenID: number, permissionName: Permissions): GrantStatus;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "checkAccessToken 的签名（同族）",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.abilityAccessCtrl.d.ts AtManager.checkAccessToken",
+     "quote": "checkAccessToken(tokenID: number, permissionName: Permissions): Promise<GrantStatus>;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "GrantStatus.PERMISSION_DENIED",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.abilityAccessCtrl.d.ts GrantStatus.PERMISSION_DENIED",
+     "quote": "access_token permission check fail * * @syscap SystemCapability.Security.AccessToken * @crossplatform * @atomicservice * @since 11 */ PERMISSION_DENIED = -1,",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "GrantStatus.PERMISSION_GRANTED",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.abilityAccessCtrl.d.ts GrantStatus.PERMISSION_GRANTED",
+     "quote": "access_token permission check success * * @syscap SystemCapability.Security.AccessToken * @crossplatform * @atomicservice * @since 11 */ PERMISSION_GRANTED = 0",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "模糊定位权限名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/permissions.d.ts Permissions",
+     "quote": "| 'ohos.permission.APPROXIMATELY_LOCATION'",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "getSelfPermissionStatus 的签名和版本（同族）",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.abilityAccessCtrl.d.ts AtManager.getSelfPermissionStatus",
+     "quote": "* @atomicservice * @since 20 */ getSelfPermissionStatus(permissionName: Permissions): PermissionStatus;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    }
+   ]
+  },
+  {
+   "title": "页面状态分派时已有内容优先于刷新错误，错误用提示条，加载用局部指示，不加全屏遮罩",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "",
+     "wrong": "页面里 `if (this.errorMessage.length > 0)` 优先、整块替换已有列表，或在 Refresh 外叠一层 `if (this.isLoading)` 的全屏遮罩，遮住其他分区"
+    }
+   ],
+   "scope": "目标端列表页在刷新、失败时的显示分支，决策要求失败时保留最近成功数据的",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "有保留的最近成功列表时先显示列表（地图页连同 Marker），刷新错误用列表上方的提示条显示并带重试，不整块替换内容",
+     "support": [
+      "case-afea6fdc0d6edca2222e#recommendation:5",
+      "case-afea6fdc0d6edca2222e#diagnosis"
+     ]
+    },
+    {
+     "text": "刷新中的加载用局部指示（如 Refresh({ refreshing: … }) 自带的刷新指示），去掉遮住其他分区的全屏遮罩",
+     "support": [
+      "case-afea6fdc0d6edca2222e#recommendation:5",
+      "case-afea6fdc0d6edca2222e#diagnosis"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "Refresh(value: RefreshOptions)，RefreshOptions.refreshing: boolean",
+     "meaning": "Refresh 是否处于刷新中，支持 $$ 双向绑定；刷新中由组件自己显示指示",
+     "source": "鸿蒙 SDK 的 ets/component/refresh.d.ts，RefreshInterface、RefreshOptions.refreshing",
+     "support": []
+    }
+   ],
+   "lookups": [],
+   "why": "错误分支或全屏遮罩把已保留的旧数据和其他分区遮住，违背失败时保留最近成功数据",
+   "keys": {
+    "read": [
+     "SwipeRefreshLayout",
+     "setRefreshing",
+     "ProgressBar",
+     "Snackbar"
+    ],
+    "product": [
+     "errorMessage",
+     "isLoading",
+     "Refresh",
+     "refreshing",
+     "Stack",
+     "if (this.isLoading)"
+    ]
+   },
+   "probe": {
+    "pattern": "if\\s*\\(\\s*this\\.\\w*[eE]rror\\w*(?:\\.length\\s*>\\s*0)?\\s*\\)",
+    "note": "页面先判错误分支；查 else 里是不是才显示已有列表"
+   },
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法落在页面分支的先后上；Refresh 的 refreshing 只出现在 RefreshOptions 里",
+   "refs": [
+    {
+     "what": "RefreshOptions.refreshing",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/component/refresh.d.ts RefreshOptions.refreshing",
+     "quote": "* @FaAndStageModel * @crossplatform * @atomicservice * @since 11 */ refreshing: boolean;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "refreshing 表示是否在刷新中，支持 $$ 双向绑定",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/component/refresh.d.ts RefreshOptions.refreshing",
+     "quote": "Whether the current component is being refreshed. * This parameter supports $$ for two-way binding of variables.",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "Refresh 的构造",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/component/refresh.d.ts RefreshInterface",
+     "quote": "(value: RefreshOptions): RefreshAttribute;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    }
+   ]
+  }
+ ],
+ "left_out": [
+  {
+   "text": "修复期新增的权限申请、永久拒绝、定位关闭等状态 UI，以及改走第三方地图 POI 检索",
+   "reason": "只对出事应用成立"
+  },
+  {
+   "text": "修复中新生的首页底部尾距问题",
+   "reason": "其他：卡里注明是修复中新生的问题，不是本次生成偏差"
+  }
+ ],
+ "corrections": [],
+ "gaps": [
+  "源端第三方 POI 检索库（PoiSearchV2、SearchBound）的行为本机没有源码，按卡写"
+ ],
+ "conflicts": []
+}

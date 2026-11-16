@@ -1,0 +1,174 @@
+{
+ "id": "rule-5ddf92e8bb63",
+ "title": "源端按 HashSet/HashMap 遍历顺序产出结果时，目标用 Java 桶序复刻，不用插入序",
+ "product": "代码",
+ "triggers": [
+  {
+   "read": "Java 源码 `HashSet<String>` / `HashSet<Integer>` / HashMap 收集后经 keySet()、toArray()、new ArrayList<>(set) 遍历，决定写入、尝试或输出顺序",
+   "wrong": "ArkTS 用 new Set / new Map / Array.from(set) / indexOf 去重保持插入序，注释写「HashSet 无序 → 确定性输出」"
+  }
+ ],
+ "scope": "源端哈希集合的遍历顺序会落到文件内容、写入顺序、尝试顺序或清单顺序上时",
+ "exceptions": [],
+ "how": [
+  {
+   "text": "按 Java 规则算序：hash = h ^ (h >>> 16)，h 是 String.hashCode（31 进制累加、32 位 int 回绕，可写 h = (Math.imul(31, h) + s.charCodeAt(i)) | 0）或 Integer.hashCode（值本身）；桶下标 (n - 1) & hash",
+   "support": [
+    "case-119e8f2945fd9ff1c0c4#recommendation:2",
+    "case-119e8f2945fd9ff1c0c4#diagnosis"
+   ]
+  },
+  {
+   "text": "容量 n 从 16 起，元素数超过 n × 0.75 时翻倍重排；遍历按桶下标从小到大、同桶按放入先后，用这个顺序替代 Set/Map 插入序",
+   "support": [
+    "case-119e8f2945fd9ff1c0c4#recommendation:2"
+   ]
+  }
+ ],
+ "values": [
+  {
+   "value": "hash(key) = (h = key.hashCode()) ^ (h >>> 16)，null 键为 0",
+   "meaning": "扰动后的哈希",
+   "source": "java.util.HashMap#hash",
+   "support": []
+  },
+  {
+   "value": "tab[i = (n - 1) & hash]",
+   "meaning": "桶下标，n 是当前容量",
+   "source": "java.util.HashMap#putVal",
+   "support": []
+  },
+  {
+   "value": "DEFAULT_INITIAL_CAPACITY = 1 << 4（16），DEFAULT_LOAD_FACTOR = 0.75f，++size > threshold 时 resize",
+   "meaning": "默认容量、负载因子和扩容时机",
+   "source": "java.util.HashMap#DEFAULT_INITIAL_CAPACITY、HashMap#putVal",
+   "support": []
+  },
+  {
+   "value": "new HashSet() 背后是默认容量 16、负载因子 0.75 的 HashMap",
+   "meaning": "HashSet 的顺序按 HashMap 算",
+   "source": "java.util.HashSet#HashSet()",
+   "support": []
+  },
+  {
+   "value": "String.hashCode = s[0]*31^(n-1) + s[1]*31^(n-2) + … + s[n-1]，int 运算",
+   "meaning": "字符串键的哈希，按 32 位 int 溢出回绕",
+   "source": "java.lang.String#hashCode",
+   "support": []
+  },
+  {
+   "value": "Integer.hashCode(int value) 返回 value",
+   "meaning": "整数键的哈希就是值本身",
+   "source": "java.lang.Integer#hashCode",
+   "support": []
+  },
+  {
+   "value": "do {} while (index < t.length && (next = t[index++]) == null)",
+   "meaning": "迭代器按 table 下标从小到大找下一个非空桶",
+   "source": "java.util.HashMap.HashIterator",
+   "support": []
+  }
+ ],
+ "lookups": [],
+ "why": "用插入序替代时输出文件、写入顺序或问题清单顺序与源端不同",
+ "keys": {
+  "read": [
+   "HashSet",
+   "HashMap",
+   "keySet",
+   "toArray",
+   "new ArrayList<>",
+   "hashCode",
+   "iterator"
+  ],
+  "product": [
+   "new Set",
+   "new Map",
+   "Array.from",
+   "indexOf",
+   "Math.imul",
+   "hashCode",
+   ">>> 16"
+  ]
+ },
+ "probe": {
+  "pattern": "Array\\.from\\(\\s*\\w+\\s*\\)|new Set<",
+  "note": "用了 Set 的插入序；若这个集合由源端 HashSet/HashMap 转来且顺序可观察，改成桶序"
+ },
+ "unverified": [
+  "卡里没给桶序工具的具体实现，计算步骤按框架源码写",
+  "同桶元素达到 TREEIFY_THRESHOLD（8）转成树后的遍历序未核实"
+ ],
+ "alternatives_unverified": [],
+ "siblings_checked": "无：做法落在 Java 集合的语义上，不落在鸿蒙 SDK 的接口参数上",
+ "refs": [
+  {
+   "what": "HashMap 的扰动哈希",
+   "kind": "android-sdk",
+   "where": "sources/android-36.1/java/util/HashMap.java HashMap#hash",
+   "quote": "return (key == null) ? 0 : (h = key.hashCode()) ^ (h >>> 16);",
+   "version": "android-36.1"
+  },
+  {
+   "what": "桶下标",
+   "kind": "android-sdk",
+   "where": "sources/android-36.1/java/util/HashMap.java HashMap#putVal",
+   "quote": "if ((p = tab[i = (n - 1) & hash]) == null)",
+   "version": "android-36.1"
+  },
+  {
+   "what": "默认容量",
+   "kind": "android-sdk",
+   "where": "sources/android-36.1/java/util/HashMap.java HashMap#DEFAULT_INITIAL_CAPACITY",
+   "quote": "static final int DEFAULT_INITIAL_CAPACITY = 1 << 4; // aka 16",
+   "version": "android-36.1"
+  },
+  {
+   "what": "默认负载因子",
+   "kind": "android-sdk",
+   "where": "sources/android-36.1/java/util/HashMap.java HashMap#DEFAULT_LOAD_FACTOR",
+   "quote": "static final float DEFAULT_LOAD_FACTOR = 0.75f;",
+   "version": "android-36.1"
+  },
+  {
+   "what": "扩容时机",
+   "kind": "android-sdk",
+   "where": "sources/android-36.1/java/util/HashMap.java HashMap#putVal",
+   "quote": "if (++size > threshold)",
+   "version": "android-36.1"
+  },
+  {
+   "what": "HashSet 的默认容量和负载因子",
+   "kind": "android-sdk",
+   "where": "sources/android-36.1/java/util/HashSet.java HashSet#HashSet()",
+   "quote": "Constructs a new, empty set; the backing {@code HashMap} instance has * default initial capacity (16) and load factor (0.75).",
+   "version": "android-36.1"
+  },
+  {
+   "what": "String.hashCode 的公式",
+   "kind": "android-sdk",
+   "where": "sources/android-36.1/java/lang/String.java String#hashCode",
+   "quote": "s[0]*31^(n-1) + s[1]*31^(n-2) + ... + s[n-1] * </pre></blockquote> * using {@code int} arithmetic",
+   "version": "android-36.1"
+  },
+  {
+   "what": "Integer.hashCode 返回值本身",
+   "kind": "android-sdk",
+   "where": "sources/android-36.1/java/lang/Integer.java Integer#hashCode",
+   "quote": "public static int hashCode(int value) { return value; }",
+   "version": "android-36.1"
+  },
+  {
+   "what": "迭代器按桶下标前进",
+   "kind": "android-sdk",
+   "where": "sources/android-36.1/java/util/HashMap.java HashMap.HashIterator",
+   "quote": "do {} while (index < t.length && (next = t[index++]) == null);",
+   "version": "android-36.1"
+  }
+ ],
+ "sources": [
+  "case-119e8f2945fd9ff1c0c4"
+ ],
+ "general": false,
+ "status": "active"
+}

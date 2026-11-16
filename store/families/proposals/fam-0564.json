@@ -1,0 +1,290 @@
+{
+ "proposal": "fam-0564",
+ "round": 3,
+ "product": "代码",
+ "avg_similarity": 0.179,
+ "rules": [
+  {
+   "id": "rule-08298c6ba10b",
+   "title": "调用带 @permission 的接口而本切片不管 module.json5 时，登记 deferred-work",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "",
+     "wrong": "代码调用 sensor.on(sensor.SensorId.ACCELEROMETER / GYROSCOPE, …) 或 MediaAssetChangeRequest.deleteAssets，module.json5 requestPermissions 里没有对应权限，本切片的交回里也没登记 deferred-work / 移交项"
+    }
+   ],
+   "keys": {
+    "read": [
+     "SensorManager",
+     "registerListener",
+     "MediaStore",
+     "contentResolver.delete",
+     "Sensor.TYPE_ACCELEROMETER"
+    ],
+    "product": [
+     "sensor.on",
+     "SensorId.ACCELEROMETER",
+     "SensorId.GYROSCOPE",
+     "deleteAssets",
+     "MediaAssetChangeRequest",
+     "deferred-work",
+     "@permission"
+    ]
+   }
+  },
+  {
+   "id": "rule-1346e18fd8f1",
+   "title": "整库 getAssets 前先核 READ_IMAGEVIDEO，查询失败不清空缩略图，画廊入口用自存 URI",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源端用 MediaStore 查询最近媒体给画廊按钮取缩略图",
+     "wrong": "photoAccessHelper.getAssets 整库查询前没有权限检查；查询失败就 resolve(null) 并把画廊缩略图置空；没有记录应用自己保存的 URI"
+    }
+   ],
+   "keys": {
+    "read": [
+     "MediaStore",
+     "ContentResolver.query",
+     "loadThumbnail",
+     "MediaStore.Images.Media",
+     "Uri"
+    ],
+    "product": [
+     "photoAccessHelper",
+     "getAssets",
+     "checkAccessTokenSync",
+     "READ_IMAGEVIDEO",
+     "GrantStatus",
+     "preferences",
+     "resolve(null)"
+    ]
+   }
+  },
+  {
+   "id": "rule-45a4f89d8a8b",
+   "title": "deleteAssets 前先确认图库写权限，await 结果，201 与其他失败分别提示",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源端删除自有 MediaStore 条目（contentResolver.delete），失败静默、count > 0 才提示",
+     "wrong": "目标直接调用 MediaAssetChangeRequest.deleteAssets，没有 WRITE_IMAGEVIDEO 的授权检查或请求，没有 await 结果，失败只记日志，删除前就清理了最近媒体"
+    }
+   ],
+   "keys": {
+    "read": [
+     "MediaStore",
+     "contentResolver.delete",
+     "Toast",
+     "count"
+    ],
+    "product": [
+     "deleteAssets",
+     "MediaAssetChangeRequest",
+     "checkAccessToken",
+     "requestPermissionsFromUser",
+     "ohos.permission.WRITE_IMAGEVIDEO",
+     "201",
+     "BusinessError"
+    ]
+   }
+  },
+  {
+   "id": "rule-a0f6f2bca1f5",
+   "title": "deleteAssets 被拒绝时把用户取消单列为静默结果，不把 201 一律当权限不足",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "目标删除走 photoAccessHelper.MediaAssetChangeRequest.deleteAssets（先校验 WRITE_IMAGEVIDEO、再弹系统删除确认框）；源端删除失败只记日志不提示；已有测试把 `rejected or cancelled` 删除定为不提示",
+     "wrong": "catch 里把 err.code === 201 一律映射成「无权删除」提示、其余拒绝映射成删除失败提示，用户在确认框点取消也弹提示或清掉媒体记录"
+    }
+   ],
+   "keys": {
+    "read": [
+     "MediaStore",
+     "ContentResolver",
+     "delete",
+     "Log",
+     "rejected or cancelled",
+     "WRITE_IMAGEVIDEO"
+    ],
+    "product": [
+     "photoAccessHelper",
+     "MediaAssetChangeRequest",
+     "deleteAssets",
+     "BusinessError",
+     "err.code",
+     "201",
+     "user deny",
+     "catch"
+    ]
+   }
+  },
+  {
+   "id": "rule-cb1f5fc0b5de",
+   "title": "Uri.parse().path、Base64.decode(DEFAULT)、getType 照 AOSP 逐分支移植",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源码 Uri.parse(path).path 取路径后再判前缀",
+     "wrong": "目标对原始串直接 replace(/\\/+/g, '/') 后判 startsWith('/data')，file:///data/… 被放行"
+    },
+    {
+     "read": "源码 Base64.decode(value, Base64.DEFAULT)",
+     "wrong": "目标手写宽松的 Base64 解码：只跳过 \\n \\r \\t 和空格，其它字符 throw new Error(...)，'=' 只按个数校验"
+    },
+    {
+     "read": "源码 ContentResolver.getType(uri)，为 null 才回退 MimeTypeMap",
+     "wrong": "目标用 Record<string, string> 静态扩展名表，未知扩展名返回 '' 并一路透传"
+    }
+   ],
+   "keys": {
+    "read": [
+     "Uri.parse",
+     "getPath",
+     "Base64.decode",
+     "Base64.DEFAULT",
+     "ContentResolver.getType",
+     "MimeTypeMap"
+    ],
+    "product": [
+     "startsWith(",
+     "decodeURIComponent",
+     "base64",
+     "application/octet-stream",
+     "mime",
+     "等价"
+    ]
+   }
+  },
+  {
+   "id": "rule-d83c34ad7ff8",
+   "title": "相机照片走 photoAssetAvailable + saveCameraPhoto，不用 createAsset",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源端拍照后经 `MediaStore` insert（`IS_PENDING` 两段写）保存照片；规格只写「photoAccessHelper PhotoAsset 创建/提交」",
+     "wrong": "目标用 `photoAvailable` 取字节，再经 `createAssetRequest` / `createAsset` 两段写进媒体库，无受限权限授权时报 201"
+    }
+   ],
+   "keys": {
+    "read": [
+     "MediaStore",
+     "IS_PENDING",
+     "ContentResolver.insert",
+     "takePicture",
+     "onPictureTaken",
+     "photoAccessHelper"
+    ],
+    "product": [
+     "photoAssetAvailable",
+     "photoAvailable",
+     "saveCameraPhoto",
+     "MediaAssetChangeRequest",
+     "createAssetRequest",
+     "createAsset",
+     "applyChanges",
+     "requestImageData",
+     "discardCameraPhoto",
+     "201"
+    ]
+   }
+  },
+  {
+   "id": "rule-ef9fca324bfe",
+   "title": "删除取消的测试替身用设备实测的 201 + 'user deny'，取消和失败分开断言",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "已有回归测试里 `rejected or cancelled` 删除用例断言不提示、保留当前缩略图和持久目标",
+     "wrong": "测试把取消假定成 `14000011` 之类没核实的码并期望失败提示，或者把 `rejected or cancelled` 用例的期望从无提示改成失败提示"
+    }
+   ],
+   "keys": {
+    "read": [
+     "rejected or cancelled",
+     "toasts",
+     "deleteAssets",
+     "test",
+     "assert"
+    ],
+    "product": [
+     "deleteAssets",
+     "reject",
+     "201",
+     "user deny",
+     "14000011",
+     "toasts",
+     "mock"
+    ]
+   }
+  }
+ ],
+ "existing_families": [
+  {
+   "topic": "system/permission",
+   "topic_name": "权限",
+   "dir": "permission-denied-branch",
+   "name": "权限拒绝、服务关闭或无坐标时的失败分支",
+   "line": "读过的源码里权限拒绝、定位服务关闭、无坐标时仍有反馈、错误提示或按城市的另一条查询；交回的仓库方法开头 return [] 短路，或 UI 只写了成功分支、errorMessage 没展示",
+   "similarity": 0.083
+  },
+  {
+   "topic": "system/permission",
+   "topic_name": "权限",
+   "dir": "media-storage-permission",
+   "name": "媒体与存储类权限的权限名和声明",
+   "line": "读过的源码里申请 READ_MEDIA_AUDIO、READ_EXTERNAL_STORAGE 或 Dart 的 Permission.storage；交回的 requestPermissionsFromUser 申请的权限名和后续调用的接口对不上、module.json5 没声明，或 OHOS 上仍被安卓专用的权限门控拦住",
+   "similarity": 0.073
+  },
+  {
+   "topic": "system",
+   "topic_name": "系统能力与设备",
+   "dir": "cipher-util-branches",
+   "name": "源端 Cipher 加解密工具的空值和失败分支",
+   "line": "读到源端用 Cipher.getInstance 的加解密工具（空串前置返回、catch 里返回原文、按构建类型解密响应），产物里是目标 cryptoFramework 加解密封装和请求、响应中间件里对应的分支",
+   "similarity": 0.055
+  },
+  {
+   "topic": "media",
+   "topic_name": "音视频与媒体选取",
+   "dir": "system-picker-save-button",
+   "name": "系统选择器和相册保存控件",
+   "line": "读到源端用 Intent（ACTION_OPEN_DOCUMENT、EXTRA_ALLOW_MULTIPLE）、自建相册页或 MediaStore 选取和保存图片、音频、文件，产物里是 PhotoViewPicker、AudioViewPicker、DocumentViewPicker、photoAccessHelper 和 SaveButton 的写法",
+   "similarity": 0.054
+  },
+  {
+   "topic": "media",
+   "topic_name": "音视频与媒体选取",
+   "dir": "flutter-asset-picker-compat",
+   "name": "Flutter 选图插件的兼容层（AssetPicker.pickAssets / AssetEntity）",
+   "line": "读到 Flutter 业务调 wechat_assets_picker 的 AssetPicker.pickAssets、拿 AssetEntity 的宽高和原图做处理，产物里是 OHOS 下替代插件的本地兼容层（走系统选择器、填 AssetEntity 宽高、交出前缩放）",
+   "similarity": 0.046
+  },
+  {
+   "topic": "dialog/toast",
+   "topic_name": "吐司与提示条",
+   "dir": "toast-feedback",
+   "name": "Toast 提示和结果反馈的形式",
+   "line": "读到源端用 Toast.makeText（LENGTH_SHORT / LONG）、AlertDialog 的去设置引导给校验失败、权限拒绝、写入成功等结果反馈；产物里时长写死、文案少了加工、改成页内错误行或整页错误态、失败一律 showToast，或该弹引导的地方仍弹源端 Toast",
+   "similarity": 0.044
+  },
+  {
+   "topic": "input/click",
+   "topic_name": "点击",
+   "dir": "click-action-gate",
+   "name": "点击动作前的确认弹窗和条件门控",
+   "line": "读到源端点击或批量动作执行前的 if 门控（地区、用户类型、基类标志）和有没有 AlertDialog 确认；产物里无条件 await 接口后静默 return，或照先例页拷入了确认弹窗和门控",
+   "similarity": 0.038
+  },
+  {
+   "topic": "arkts/build",
+   "topic_name": "构建与模块",
+   "dir": "har-buildprofile-import",
+   "name": "HAR 模块里的 BuildProfile 和跨模块导入",
+   "line": "读到或产物里 HAR 模块的 .ets 有 import { DEBUG } from 'BuildProfile'、if (DEBUG && …) 门控、跨模块的 import 路径，或宿主入口调用下沉到 HAR 的服务 initialize()",
+   "similarity": 0.037
+  }
+ ]
+}

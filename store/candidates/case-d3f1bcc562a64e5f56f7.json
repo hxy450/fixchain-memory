@@ -1,0 +1,428 @@
+{
+ "case": "case-d3f1bcc562a64e5f56f7",
+ "rules": [
+  {
+   "title": "源端 SurfaceView 自有渲染线程时，规格按运行态写返回、切后台、旋转的结果",
+   "product": "规格",
+   "triggers": [
+    {
+     "read": "Thread 子类 run() 里 canvas = holder.lockCanvas() 后直接 onDraw(canvas) 或 canvas.drawColor，循环体不判空；SurfaceHolder.Callback 的 surfaceCreated 里直接 thread.start()，surfaceDestroyed 里置停止标志再 join",
+     "wrong": "规格或验收条目写「页面隐藏 / 销毁触发停帧、丢弃迟到回调」或「旋转重建 = 重开新局」，不分渲染线程在跑还是已结束"
+    }
+   ],
+   "scope": "规格提取阶段，把 SurfaceView 加自建渲染线程的页面映射为目标页面生命周期契约时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "先按源端运行态（渲染线程在跑 / 已结束、对话框是否显示）拆开，再分别写返回、切后台、旋转的结果，不写成平滑停帧",
+     "support": [
+      "case-d3f1bcc562a64e5f56f7#recommendation:3",
+      "case-d3f1bcc562a64e5f56f7#recommendation:1",
+      "case-d3f1bcc562a64e5f56f7#diagnosis"
+     ]
+    },
+    {
+     "text": "线程在跑时：surface 失效后 lockCanvas 返回 null，不判空的绘制空指针，进程崩溃。线程已结束后回前台：surfaceCreated 对已结束线程 start() 抛 IllegalThreadStateException，SurfaceView 捕获只记日志，绘制区变黑、对话框还在",
+     "support": [
+      "case-d3f1bcc562a64e5f56f7#recommendation:3",
+      "case-d3f1bcc562a64e5f56f7#diagnosis"
+     ]
+    },
+    {
+     "text": "configChanges 不含 orientation 时，线程已结束后旋转：旧对话框消失，按新窗口尺寸重开当前局；已结束后按返回：逐层关对话框再回上一页",
+     "support": [
+      "case-d3f1bcc562a64e5f56f7#recommendation:3",
+      "case-d3f1bcc562a64e5f56f7#recommendation:2",
+      "case-d3f1bcc562a64e5f56f7#diagnosis"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "lockCanvas 在 surface 尚未创建或无法编辑时返回 null",
+     "meaning": "窗口隐藏后循环拿到的是 null 画布",
+     "source": "android.view.SurfaceHolder#lockCanvas",
+     "support": []
+    },
+    {
+     "value": "一个 Thread 只能 start 一次，已结束的线程不能再启动，否则抛 IllegalThreadStateException",
+     "meaning": "回前台 surfaceCreated 再 start() 的结果",
+     "source": "java.lang.Thread#start",
+     "support": []
+    },
+    {
+     "value": "SurfaceView 调 surfaceCreated 等回调时 catch (Exception ex) 后只 Log.e(\"Exception configuring surface\")",
+     "meaning": "start() 抛的异常不会让进程崩溃，只是新 surface 留空",
+     "source": "android.view.SurfaceView#updateSurface",
+     "support": []
+    },
+    {
+     "value": "安卓实测：进行中按返回、按 Home 各 4/4 崩溃，进行中旋转崩溃，结束后旋转重开",
+     "meaning": "运行态分支的实测结果",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-d3f1bcc562a64e5f56f7#diagnosis"
+     ]
+    }
+   ],
+   "lookups": [
+    {
+     "what": "源端渲染循环和 surface 回调的写法",
+     "where": "源工程 Thread 子类的 run() 方法体、SurfaceHolder.Callback 的 surfaceCreated / surfaceDestroyed 方法体、AndroidManifest 里该 Activity 的 configChanges",
+     "how": "看 lockCanvas 后有没有判空、surfaceCreated 是否每次都 start 同一个线程对象、configChanges 是否含 orientation，按结果写各运行态的分支"
+    }
+   ],
+   "why": "写成平滑停帧或无条件重开后，源端崩溃、黑屏、对话框保留这些可观察结果在目标端全丢了",
+   "keys": {
+    "read": [
+     "SurfaceView",
+     "SurfaceHolder.Callback",
+     "lockCanvas",
+     "unlockCanvasAndPost",
+     "surfaceCreated",
+     "surfaceDestroyed",
+     "Thread",
+     "configChanges"
+    ],
+    "product": [
+     "停帧",
+     "帧循环",
+     "生命周期",
+     "验收条目",
+     "运行态",
+     "旋转重建",
+     "IllegalThreadStateException"
+    ]
+   },
+   "probe": {
+    "pattern": "(隐藏|销毁).{0,20}(停帧|停止循环|stop)|旋转.{0,10}重开",
+    "note": "规格把页面隐藏写成停帧、或把旋转写成重开；回源码核对渲染线程在跑时是否会因 lockCanvas 得 null 而崩溃"
+   },
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法落在规格的写法上，不落在具体接口",
+   "refs": [
+    {
+     "what": "lockCanvas 可能返回 null",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/android/view/SurfaceHolder.java SurfaceHolder#lockCanvas",
+     "quote": "A null is returned if the surface has * not been created or otherwise cannot be edited.",
+     "version": "android-36.1"
+    },
+    {
+     "what": "线程不能启动两次",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/java/lang/Thread.java Thread#start",
+     "quote": "It is never legal to start a thread more than once. * In particular, a thread may not be restarted once it has completed * execution.",
+     "version": "android-36.1"
+    },
+    {
+     "what": "start 已启动线程抛 IllegalThreadStateException",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/java/lang/Thread.java Thread#start",
+     "quote": "@throws     IllegalThreadStateException  if the thread was already started.",
+     "version": "android-36.1"
+    },
+    {
+     "what": "SurfaceView 捕获回调异常只记日志",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/android/view/SurfaceView.java SurfaceView#updateSurface",
+     "quote": "} catch (Exception ex) { Log.e(TAG, \"Exception configuring surface\", ex); }",
+     "version": "android-36.1"
+    }
+   ]
+  },
+  {
+   "title": "configChanges 不含 orientation 时，规格列出旋转重建后回到布局初值的可见状态",
+   "product": "规格",
+   "triggers": [
+    {
+     "read": "AndroidManifest 的 <activity> android:configChanges 不含 orientation（如只写 screenSize）；点击监听里用 setBackgroundResource / setImageResource 改视图，没进 onSaveInstanceState",
+     "wrong": "页面规格只把这类状态写成页内状态和「返回重入后保持」，没有「旋转后回到布局初值」的条目"
+    }
+   ],
+   "scope": "规格提取阶段写页面规格，源端 Activity 旋转会重建时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "读 manifest 里每个 Activity 的 configChanges；不含 orientation 就把旋转写成 Activity 重建，并逐页列出重建后消失的可见状态：代码设置、没存进 onSaveInstanceState 的视图属性回到布局初值",
+     "support": [
+      "case-d3f1bcc562a64e5f56f7#recommendation:3",
+      "case-d3f1bcc562a64e5f56f7#recommendation:2",
+      "case-d3f1bcc562a64e5f56f7#diagnosis"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "configChanges 列出的是 Activity 自己处理的配置变化；没列的变化发生时 Activity 重启",
+     "meaning": "不含 orientation 就是旋转重建",
+     "source": "Android SDK 平台资源 data/res/values/attrs_manifest.xml，configChanges（按应用的 compileSdk 取对应平台）",
+     "support": []
+    },
+    {
+     "value": "configChanges 的 orientation = 0x0080（用户旋转设备）、screenSize = 0x0400（可用屏幕尺寸变化，横竖屏切换时也变）",
+     "meaning": "只写 screenSize 不能挡住旋转重建",
+     "source": "Android SDK 平台资源 data/res/values/attrs_manifest.xml，configChanges 的 orientation、screenSize（按应用的 compileSdk 取对应平台）",
+     "support": []
+    },
+    {
+     "value": "配置变化默认让当前 Activity 走 onPause、onStop、onDestroy 销毁",
+     "meaning": "重建时旧实例的视图状态不保留",
+     "source": "android.app.Activity（类注释 Configuration Changes 一节）",
+     "support": []
+    }
+   ],
+   "lookups": [
+    {
+     "what": "哪些可见状态是代码设置、重建后会丢的",
+     "where": "源工程 Activity 里的点击监听和回调，找 setBackgroundResource、setImageResource、setText 之类调用；再看 onSaveInstanceState / onRestoreInstanceState 有没有存它",
+     "how": "没存的就写进「旋转重建后回到布局初值」"
+    }
+   ],
+   "why": "规格只写保持时，目标端旋转后状态照旧保留，和源端重建后复位不一致",
+   "keys": {
+    "read": [
+     "AndroidManifest.xml",
+     "android:configChanges",
+     "screenSize",
+     "orientation",
+     "setBackgroundResource",
+     "setImageResource",
+     "onSaveInstanceState"
+    ],
+    "product": [
+     "旋转",
+     "重建",
+     "布局初值",
+     "页内状态",
+     "返回重入",
+     "验收条目"
+    ]
+   },
+   "probe": null,
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法落在规格的写法上，不落在具体接口",
+   "refs": [
+    {
+     "what": "configChanges 未列出时 Activity 重启",
+     "kind": "android-sdk",
+     "where": "platforms/android-36/data/res/values/attrs_manifest.xml configChanges",
+     "quote": "Specify one or more configuration changes that the activity will handle itself.  If not specified, the activity will be restarted if any of these configuration changes happen in the system.",
+     "version": "android-36"
+    },
+    {
+     "what": "orientation 标志",
+     "kind": "android-sdk",
+     "where": "platforms/android-36/data/res/values/attrs_manifest.xml configChanges orientation",
+     "quote": "The screen orientation has changed, that is the user has rotated the device. --> <flag name=\"orientation\" value=\"0x0080\" />",
+     "version": "android-36"
+    },
+    {
+     "what": "screenSize 标志",
+     "kind": "android-sdk",
+     "where": "platforms/android-36/data/res/values/attrs_manifest.xml configChanges screenSize",
+     "quote": "so will change when the user switches between landscape and portrait. --> <flag name=\"screenSize\" value=\"0x0400\" />",
+     "version": "android-36"
+    },
+    {
+     "what": "配置变化默认销毁 Activity",
+     "kind": "android-sdk",
+     "where": "sources/android-36.1/android/app/Activity.java Activity",
+     "quote": "Unless you specify otherwise, a configuration change (such as a change * in screen orientation, language, input devices, etc.) will cause your * current activity to be <em>destroyed</em>",
+     "version": "android-36.1"
+    }
+   ]
+  },
+  {
+   "title": "源端渲染线程在页隐藏时会拿到空画布，目标在 onPageHide 让画布失效、onPageShow 重走创建",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "Thread 子类 run() 里 lockCanvas() 后直接绘制不判空；surfaceCreated 里直接 thread.start()；configChanges 不含 orientation",
+     "wrong": "目标只在 aboutToDisappear 里停掉帧循环（clearInterval）、丢弃迟到回调，没有 onPageHide 处理（切后台回来循环照跑）；方向变化时无条件关弹窗、重开"
+    }
+   ],
+   "scope": "SurfaceView 加自建渲染线程的游戏或动画页迁成 ArkUI 页面加 Canvas 帧回调，目标页面隐藏、旋转时不重建时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "onPageHide 里让画布失效并通知仍在跑的循环，下一次迭代拿到空画布，走源端同样的结果；onPageShow 里清画布后重走源端 surfaceCreated 的逻辑，异常只记日志",
+     "support": [
+      "case-d3f1bcc562a64e5f56f7#recommendation:4",
+      "case-d3f1bcc562a64e5f56f7#diagnosis"
+     ]
+    },
+    {
+     "text": "窗口方向变化时分支：循环在跑就走画布失效；已结束就清掉对话框，按新几何重建视图（新位图、新循环）",
+     "support": [
+      "case-d3f1bcc562a64e5f56f7#recommendation:4",
+      "case-d3f1bcc562a64e5f56f7#diagnosis"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "onPageHide 走画布失效、onPageShow 清画布再走 surfaceCreated、方向变化按循环是否在跑分支后，与安卓实测结果一致",
+     "meaning": "修复后保留的写法，对应源端崩溃与重建的可观察结果，不是额外防护",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-d3f1bcc562a64e5f56f7#diagnosis"
+     ]
+    },
+    {
+     "value": "onPageShow?(): void / onPageHide?(): void：页面每次显示 / 隐藏时调用，含切前台 / 切后台；只对 @Entry 装饰的组件生效",
+     "meaning": "切后台、回前台的挂点",
+     "source": "鸿蒙 SDK 的 ets/component/common.d.ts，CustomComponent.onPageShow、CustomComponent.onPageHide",
+     "support": []
+    },
+    {
+     "value": "on(type: 'add' | 'remove' | 'change', callback: Callback<number>): void",
+     "meaning": "display 的变化监听，可在 change 里比较 rotation 判断方向变化",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.display.d.ts，display.on",
+     "support": []
+    }
+   ],
+   "lookups": [],
+   "why": "只在销毁时停帧，切后台回来循环照跑、旋转无条件重开，和源端崩溃或黑屏的结果对不上",
+   "keys": {
+    "read": [
+     "SurfaceView",
+     "lockCanvas",
+     "surfaceCreated",
+     "surfaceDestroyed",
+     "Thread",
+     "configChanges"
+    ],
+    "product": [
+     "onPageHide",
+     "onPageShow",
+     "aboutToDisappear",
+     "clearInterval",
+     "Canvas",
+     "display.on",
+     "setInterval"
+    ]
+   },
+   "probe": null,
+   "unverified": [
+    "目标页若是 NavDestination 而非 @Entry 页面，onPageShow / onPageHide 不触发，要换成 NavDestination 的显示隐藏回调；卡里是 @Entry 页面"
+   ],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法落在页面生命周期回调和事件名上，没有专门的参数类型可搜",
+   "refs": [
+    {
+     "what": "onPageShow 的含义和范围",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/component/common.d.ts CustomComponent.onPageShow",
+     "quote": "Invoked each time the page is displayed, for example, during page redirection. * When the application is switched to the foreground. * It works only for the custom components decorated by **@Entry**.",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "onPageHide 的含义",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/component/common.d.ts CustomComponent.onPageHide",
+     "quote": "Invoked each time the page is hidden, for example, during page redirection. * When the application is switched to the background.",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "display.on 的签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.display.d.ts display.on",
+     "quote": "function on(type: 'add' | 'remove' | 'change', callback: Callback<number>): void;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    }
+   ]
+  },
+  {
+   "title": "源端旋转会重建且视图状态由代码设置时，目标在方向变化时把它复位到初值",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "AndroidManifest 的 android:configChanges 不含 orientation；点击监听里 setBackgroundResource(...) 改视图，没存进 onSaveInstanceState",
+     "wrong": "目标把它写成页内 @State，旋转后保持不变"
+    }
+   ],
+   "scope": "源 Activity 旋转会重建、目标页面旋转不重建时，代码设置的可见状态",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "监听窗口方向变化（如 display.on('change') 里比较 rotation），方向变了就把这类状态复位到布局初值",
+     "support": [
+      "case-d3f1bcc562a64e5f56f7#recommendation:4",
+      "case-d3f1bcc562a64e5f56f7#diagnosis"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "监听窗口区方向变化、清掉代码设置的状态后，与源端旋转后复位一致",
+     "meaning": "修复后的写法",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-d3f1bcc562a64e5f56f7#diagnosis"
+     ]
+    },
+    {
+     "value": "configChanges 未列出的配置变化发生时 Activity 重启；orientation = 0x0080",
+     "meaning": "源端旋转即重建",
+     "source": "Android SDK 平台资源 data/res/values/attrs_manifest.xml，configChanges（按应用的 compileSdk 取对应平台）",
+     "support": []
+    }
+   ],
+   "lookups": [],
+   "why": "目标页旋转不重建，不主动复位时状态一直保留，和源端旋转后回到初值不一致",
+   "keys": {
+    "read": [
+     "android:configChanges",
+     "screenSize",
+     "orientation",
+     "setBackgroundResource",
+     "setImageResource",
+     "onSaveInstanceState"
+    ],
+    "product": [
+     "@State",
+     "display.on",
+     "rotation",
+     "onAreaChange",
+     "windowSizeChange"
+    ]
+   },
+   "probe": null,
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法落在事件监听和状态复位上，没有专门的参数类型可搜",
+   "refs": [
+    {
+     "what": "configChanges 未列出时 Activity 重启",
+     "kind": "android-sdk",
+     "where": "platforms/android-36/data/res/values/attrs_manifest.xml configChanges",
+     "quote": "If not specified, the activity will be restarted if any of these configuration changes happen in the system.",
+     "version": "android-36"
+    },
+    {
+     "what": "orientation 标志",
+     "kind": "android-sdk",
+     "where": "platforms/android-36/data/res/values/attrs_manifest.xml configChanges orientation",
+     "quote": "<flag name=\"orientation\" value=\"0x0080\" />",
+     "version": "android-36"
+    }
+   ]
+  }
+ ],
+ "left_out": [
+  {
+   "text": "修订两条已有经验（补适用边界、判断信号、按运行态拆分的做法）",
+   "reason": "针对经验库本身的建议"
+  },
+  {
+   "text": "建议 3、4 里具体到某一局、某个按钮和源码行号的取值",
+   "reason": "只对出事应用成立"
+  }
+ ],
+ "corrections": [],
+ "gaps": [],
+ "conflicts": []
+}

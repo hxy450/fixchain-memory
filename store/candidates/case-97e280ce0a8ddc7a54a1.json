@@ -1,0 +1,234 @@
+{
+ "case": "case-97e280ce0a8ddc7a54a1",
+ "rules": [
+  {
+   "title": "数据层钩子替代源端无条件加解密时，注入放进 EntryAbility.onCreate，不挂单例 getInstance",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "安卓 DAO 的读写方法里无条件直接调用加解密（写入时 encrypt(...)、读出时 decrypt(...)），源端没有「未注入」状态；目标 DAO 由基座留了钩子 setter，默认值是恒等/空实现",
+     "wrong": "钩子的 setter 注入写在某个业务单例 getInstance() 的首次构造分支里，EntryAbility.onCreate 里没有这次注入"
+    },
+    {
+     "read": "",
+     "wrong": "收尾装配时 EntryAbility.onCreate 装配了各项 init 移交，注入点却仍只挂在某业务单例的 getInstance() 上，依据只是 DAO 里「已兑现、注入点 = ….getInstance()」的注释"
+    }
+   ],
+   "scope": "源端数据层每次读写都无条件做加解密等横切处理、目标端改由基座 DAO 的 setter 注入钩子且未注入时为恒等/空默认实现时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "注入放进应用启动序列：EntryAbility.onCreate 里数据库 init 之后、任何读写和页面分发之前，直接调用 DAO 的钩子 setter，或显式取用一次负责注入的单例（调用它的 getInstance()）",
+     "support": [
+      "case-97e280ce0a8ddc7a54a1#recommendation:1",
+      "case-97e280ce0a8ddc7a54a1#recommendation:3",
+      "case-97e280ce0a8ddc7a54a1#diagnosis"
+     ]
+    },
+    {
+     "text": "不把注入挂在只有部分路径才会取用的业务单例首次构造上（如只有开了启动锁才走的验密流程）；对每个 setter 注入点核对它的调用方在冷启路径上是否必经",
+     "support": [
+      "case-97e280ce0a8ddc7a54a1#recommendation:1",
+      "case-97e280ce0a8ddc7a54a1#recommendation:3"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void",
+     "meaning": "UIAbility 冷启动时进入的初始化回调，同步返回，不支持异步回调；EntryAbility 继承 UIAbility",
+     "source": "鸿蒙 SDK 的 ets/api/@ohos.app.ability.UIAbility.d.ts，UIAbility.onCreate",
+     "support": []
+    },
+    {
+     "value": "EntryAbility.onCreate 在数据库 init 之后、页面分发之前加一次注入入口的取用",
+     "meaning": "修好的位置；冷启后列表读出为明文，保存不再二次加密",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-97e280ce0a8ddc7a54a1#diagnosis"
+     ]
+    }
+   ],
+   "lookups": [
+    {
+     "what": "冷启路径上最早的一次数据库读写在哪",
+     "where": "目标工程里 UIAbility 子类的 onCreate / onWindowStageCreate，以及首页组件 aboutToAppear 里调用 DAO 读方法的位置",
+     "how": "注入调用必须排在其中最早的一处之前；只在某个条件分支里才会执行的位置不算"
+    }
+   ],
+   "why": "未设密码等不经过该单例的冷启路径上钩子一直是恒等默认，读出的密文被当明文显示，再保存即二次加密",
+   "keys": {
+    "read": [
+     "encrypt",
+     "decrypt",
+     "DAO",
+     "getInstance",
+     "FWD-REF",
+     "注入槽"
+    ],
+    "product": [
+     "EntryAbility",
+     "onCreate",
+     "UIAbility",
+     "getInstance",
+     "setter",
+     "Hook",
+     "已兑现",
+     "注入点"
+    ]
+   },
+   "probe": {
+    "pattern": "注入点\\s*[=＝:：][^\\n]*getInstance",
+    "note": "注入点声明落在某个单例的 getInstance()；要核对冷启路径是否必经它，否则应在 EntryAbility.onCreate 里注入"
+   },
+   "unverified": [
+    "卡里环境是 HarmonyOS 6.1.1(24)，onCreate 的签名和说明按本机 API 23 核实"
+   ],
+   "alternatives_unverified": [
+    "放在 AbilityStage.onCreate 里注入（比 UIAbility.onCreate 更早），卡里没验证"
+   ],
+   "siblings_checked": "无：做法落在启动回调里的调用位置，不落在专门的参数类型或枚举上",
+   "refs": [
+    {
+     "what": "UIAbility.onCreate 的签名",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.app.ability.UIAbility.d.ts UIAbility.onCreate",
+     "quote": "onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void;",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    },
+    {
+     "what": "onCreate 是冷启动时的初始化回调",
+     "kind": "harmony-dts",
+     "where": "openharmony/ets/api/@ohos.app.ability.UIAbility.d.ts UIAbility.onCreate",
+     "quote": "Called to initialize the service logic when a UIAbility instance in the completely closed state is created. * In other words, a UIAbility instance enters this lifecycle callback from a cold start.",
+     "version": "API 23（HarmonyOS 6.1.0）"
+    }
+   ]
+  },
+  {
+   "title": "关闭 FWD-REF 注入槽而注入落在别处运行时机时，补带断言的 HANDOFF，不只写已兑现注释",
+   "product": "计划与派工",
+   "triggers": [
+    {
+     "read": "基座契约列出的 `FWD-REF`（resolve_by=…）注入槽，以及同类启动期接线已有的 HANDOFF 写法（owner 是 EntryAbility.onCreate）",
+     "wrong": "`FWD-REF` 标记被删掉，换成「已兑现：注入点 = ….getInstance()」一类注释，没有留下 owner 指向启动序列、带 verify=grep:… 机械断言的 HANDOFF"
+    }
+   ],
+   "scope": "关闭基座留下的 FWD-REF 或注入槽、而注入实际要在另一个文件（应用启动序列）的运行时机发生时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "按流水线 _common.md §2.1b 的格式补一条 HANDOFF：owner=EntryAbility.onCreate，what=调用注入入口（单例的 getInstance 或 DAO 的钩子 setter），verify=grep:能机械核对这次调用存在的式子",
+     "support": [
+      "case-97e280ce0a8ddc7a54a1#recommendation:2"
+     ]
+    },
+    {
+     "text": "不要只把 marker 换成「已兑现、注入点在 X」的注释；收尾装配按 HANDOFF 逐项装配，「已兑现」注释不是核对的终点",
+     "support": [
+      "case-97e280ce0a8ddc7a54a1#recommendation:2",
+      "case-97e280ce0a8ddc7a54a1#recommendation:3"
+     ]
+    }
+   ],
+   "values": [],
+   "lookups": [],
+   "why": "后续收尾者只看到 marker 清零和「已兑现」注释，启动装配时不会补这次注入，冷启路径上钩子一直缺位",
+   "keys": {
+    "read": [
+     "FWD-REF",
+     "resolve_by",
+     "HANDOFF",
+     "注入槽",
+     "base-contracts",
+     "owner"
+    ],
+    "product": [
+     "HANDOFF",
+     "owner=EntryAbility.onCreate",
+     "verify=grep",
+     "FWD-REF",
+     "已兑现",
+     "注入点"
+    ]
+   },
+   "probe": {
+    "pattern": "已兑现[^\\n]*注入点",
+    "note": "注入槽被注释为已兑现；看移交登记里有没有 owner 指向启动序列、带 verify 断言的 HANDOFF"
+   },
+   "unverified": [
+    "没核到派工说明或执行技能是否明文规定了这类注入槽的位置"
+   ],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法落在流水线的移交记号上，不落在接口上",
+   "refs": []
+  },
+  {
+   "title": "钩子默认是恒等实现时，依赖 DAO 加解密的备份导出导入任务开始前先确保钩子已注入",
+   "product": "代码",
+   "triggers": [
+    {
+     "read": "源端导出时对 DAO 读出的明文记录再 encrypt(...)、导入时先 decrypt(...) 再交给 DAO 写回；目标 DAO 的钩子默认值是恒等/空实现",
+     "wrong": "目标端导出/导入任务直接调 DAO 的读写方法，开始前没有确保钩子已注入（没有先行调用注入入口，也没有在未注入时 `throw`）"
+    }
+   ],
+   "scope": "基座给数据层钩子配了恒等/空默认实现、而备份导出导入等调用方依赖 DAO 读出时已解密、写回时会加密时",
+   "exceptions": [],
+   "how": [
+    {
+     "text": "这类任务开头先确保钩子已注入（未注入就先调用注入入口），再读写 DAO",
+     "support": [
+      "case-97e280ce0a8ddc7a54a1#recommendation:4",
+      "case-97e280ce0a8ddc7a54a1#diagnosis"
+     ]
+    },
+    {
+     "text": "确保不了时让任务显式失败（抛错），不在恒等默认下继续读写",
+     "support": [
+      "case-97e280ce0a8ddc7a54a1#recommendation:4"
+     ]
+    }
+   ],
+   "values": [
+    {
+     "value": "备份服务在导出/导入任务开始前先确保钩子注入",
+     "meaning": "修好的写法，和启动期注入并存",
+     "source": "卡里修好并验证过",
+     "support": [
+      "case-97e280ce0a8ddc7a54a1#diagnosis"
+     ]
+    }
+   ],
+   "lookups": [],
+   "why": "钩子缺位时导出把已是密文的数据再加密一次，导入把解密后的明文原样落库，数据静默损坏",
+   "keys": {
+    "read": [
+     "encrypt",
+     "decrypt",
+     "export",
+     "import",
+     "backup",
+     "DAO"
+    ],
+    "product": [
+     "ensure",
+     "Hook",
+     "setter",
+     "getInstance",
+     "throw",
+     "encrypt",
+     "decrypt"
+    ]
+   },
+   "probe": null,
+   "unverified": [],
+   "alternatives_unverified": [],
+   "siblings_checked": "无：做法落在调用顺序上，不落在接口上",
+   "refs": []
+  }
+ ],
+ "left_out": [],
+ "corrections": [],
+ "gaps": [],
+ "conflicts": []
+}
