@@ -1,0 +1,146 @@
+{
+ "id": "lesson-c3bd9c8b2f24c209a659",
+ "sdk": {
+  "harmony": "HarmonyOS 6.1.0（API 23，openharmony ets 6.1.0.105；文档副本含到 API 26 的内容，超出 SDK 的已注明）",
+  "android": "平台资源 android-34；框架源码 android-36.1；androidx Compose 1.10.3（foundation、ui、ui-unit、ui-graphics，按字节码核）"
+ },
+ "changes": [
+  {
+   "where": "做法第 2 步",
+   "before": "目录 dpi 按 res/drawable-<桶> 名，ldpi 120、mdpi 160、hdpi 240、xhdpi 320、xxhdpi 480",
+   "after": "目录 dpi 按 res/drawable-<桶> 名，ldpi 120、mdpi 160、hdpi 240、xhdpi 320、xxhdpi 480（无限定的 drawable 按 160；drawable-nodpi 不做密度缩放，按原像素解码；源端自设 Options.inDensity/inTargetDensity 或 inScaled=false 时以源端为准）",
+   "basis": "android.graphics.BitmapFactory#decodeResourceStream（DENSITY_DEFAULT 记为 160，DENSITY_NONE 不设 inDensity）、#setDensityFromOptions",
+   "type": "加条件"
+  }
+ ],
+ "entries": [
+  {
+   "step": "原因",
+   "fact": "decodeResource → decodeResourceStream：Options 没另设 inDensity/inTargetDensity 时，inDensity 取资源所在目录的密度（无限定目录为 160），inTargetDensity 取 res.getDisplayMetrics().densityDpi；inScaled 默认 true，结果按 设备dpi/目录dpi 缩放",
+   "source": "android.graphics.BitmapFactory#decodeResourceStream；android.graphics.BitmapFactory.Options#inScaled",
+   "kind": "安卓平台",
+   "origin": "沿用并复核"
+  },
+  {
+   "step": "原因",
+   "fact": "Bitmap.createScaledBitmap(src, w, h, filter)：filter=true 用双线性，false 用最近邻（内部 Matrix + createBitmap(…, filter)）",
+   "source": "android.graphics.Bitmap#createScaledBitmap",
+   "kind": "安卓平台",
+   "origin": "沿用并复核"
+  },
+  {
+   "step": "原因",
+   "fact": "CanvasRenderer.imageSmoothingEnabled: boolean 默认 true（绘制期缩放走平滑插值），imageSmoothingQuality 默认 'low'",
+   "source": "鸿蒙 SDK 的 ets/component/canvas.d.ts，CanvasRenderer.imageSmoothingEnabled、CanvasRenderer.imageSmoothingQuality",
+   "kind": "鸿蒙接口",
+   "origin": "沿用并复核",
+   "code": "全局可用，不用导入（CanvasRenderingContext2D 实例属性）：this.context.imageSmoothingEnabled = false\nthis.context.imageSmoothingQuality: ImageSmoothingQuality，取值 'low' | 'medium' | 'high'"
+  },
+  {
+   "step": "做法第 2 步",
+   "fact": "安卓目录 dpi：ldpi 120、mdpi 160、hdpi 240、xhdpi 320、xxhdpi 480、xxxhdpi 640",
+   "source": "android.util.DisplayMetrics#DENSITY_LOW 等常量",
+   "kind": "安卓平台",
+   "origin": "沿用并复核"
+  },
+  {
+   "step": "做法第 2 步",
+   "fact": "Display.densityPixels（物理像素与逻辑像素的缩放系数，低分屏为 1.0）、Display.densityDPI（每英寸像素，@since 12），由 display.getDefaultDisplaySync() 取得",
+   "source": "鸿蒙 SDK 的 ets/api/@ohos.display.d.ts，Display.densityPixels、Display.densityDPI、display.getDefaultDisplaySync",
+   "kind": "鸿蒙接口",
+   "origin": "沿用并复核",
+   "code": "import { display } from '@kit.ArkUI'\nconst d: display.Display = display.getDefaultDisplaySync()  // d.densityPixels、d.densityDPI；d.width、d.height 为 px"
+  },
+  {
+   "step": "做法第 2 步",
+   "fact": "源 PNG 字节：resourceManager.getMediaContentSync(resId: number, density?: number): Uint8Array（density 0 或缺省按当前系统 dpi 选目录）；image.createImageSource(buf: ArrayBuffer): ImageSource（@since 12）",
+   "source": "鸿蒙 SDK 的 ets/api/@ohos.resourceManager.d.ts，ResourceManager.getMediaContentSync；ets/api/@ohos.multimedia.image.d.ts，image.createImageSource",
+   "kind": "鸿蒙接口",
+   "origin": "新查",
+   "code": "import { image } from '@kit.ImageKit'\nconst ctx = this.getUIContext().getHostContext()  // Context | undefined，先判空\nconst bytes: Uint8Array = ctx!.resourceManager.getMediaContentSync($r('app.media.x').id)\nconst src: image.ImageSource = image.createImageSource(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength))"
+  },
+  {
+   "step": "做法第 2 步",
+   "fact": "DecodingOptions.desiredSize?: Size（{ width, height }，@since 12），(0, 0) 表示按原图尺寸解码；ImageSource.createPixelMapSync(options?) 同步解码，失败返回 undefined",
+   "source": "鸿蒙 SDK 的 ets/api/@ohos.multimedia.image.d.ts，DecodingOptions.desiredSize、ImageSource.createPixelMapSync",
+   "kind": "鸿蒙接口",
+   "origin": "沿用并复核",
+   "code": "const pm: image.PixelMap = src.createPixelMapSync({ desiredSize: { width: w, height: h } })\n// 参数类型 image.DecodingOptions；image.Size { width: number; height: number }"
+  },
+  {
+   "step": "做法第 2 步",
+   "fact": "PixelMap.scaleSync(x: number, y: number, level: AntiAliasingLevel): void（@since 12），x、y 是宽、高的缩放倍数，原地缩放；createScaledPixelMapSync(x, y, level?) 返回新 PixelMap（@since 18）",
+   "source": "鸿蒙 SDK 的 ets/api/@ohos.multimedia.image.d.ts，PixelMap.scaleSync、PixelMap.createScaledPixelMapSync",
+   "kind": "鸿蒙接口",
+   "origin": "沿用并复核",
+   "code": "pm.scaleSync(sx, sy, image.AntiAliasingLevel.NONE)  // 原地缩放\nconst info: image.ImageInfo = pm.getImageInfoSync()  // info.size.width / info.size.height，API 12"
+  },
+  {
+   "step": "做法第 2 步",
+   "fact": "image.AntiAliasingLevel：NONE = 0 最近邻、LOW = 1 双线性、MEDIUM = 2 双线性加 mipmap、HIGH = 3 三次插值",
+   "source": "鸿蒙 SDK 的 ets/api/@ohos.multimedia.image.d.ts，image.AntiAliasingLevel",
+   "kind": "鸿蒙接口",
+   "origin": "沿用并复核",
+   "code": "import { image } from '@kit.ImageKit'\nimage.AntiAliasingLevel.NONE / LOW / MEDIUM / HIGH"
+  },
+  {
+   "step": "做法第 2 步",
+   "fact": "drawImage(image: ImageBitmap | PixelMap, dx, dy) 不带宽高；带 dw/dh 的重载把图拉伸或压缩到绘制区；dx、dy、dw、dh 默认单位 vp（上下文默认 LengthMetricsUnit.DEFAULT，可构造时传 PX）",
+   "source": "鸿蒙 SDK 的 ets/component/canvas.d.ts，CanvasRenderer.drawImage、CanvasRenderingContext2D.constructor；文档 ts-canvasrenderingcontext2d.md，drawImage",
+   "kind": "鸿蒙接口",
+   "origin": "新查",
+   "code": "全局可用，不用导入：new CanvasRenderingContext2D(settings?: RenderingContextSettings, unit?: LengthMetricsUnit)；new RenderingContextSettings(antialias?: boolean)\nimport { LengthMetricsUnit } from '@kit.ArkUI'  // 成员 DEFAULT = 0、PX = 1\nCanvas(this.context).onReady(() => { this.context.drawImage(pm, x, y) })"
+  },
+  {
+   "step": "做法第 2 步",
+   "fact": "设备上 PixelMap.scaleSync(…, AntiAliasingLevel.NONE) 缩小后边缘呈最近邻的阶梯锯齿；imageSmoothingEnabled 为默认 true 时，drawImage 带目标宽高的绘制期缩放是平滑柔边",
+   "source": "卡里上机实测",
+   "kind": "卡里验证",
+   "origin": "沿用并复核",
+   "code": "pm.scaleSync(sx, sy, image.AntiAliasingLevel.NONE)\nthis.context.drawImage(pm, dx, dy, dw, dh)  // 带目标宽高的重载"
+  },
+  {
+   "step": "适用情境",
+   "fact": "decodeResource 的密度缩放有成立条件：资源在无限定的 drawable 目录时目录密度按 160；在 drawable-nodpi（TypedValue.DENSITY_NONE）时 inDensity 不设、不做密度缩放，按资源原像素解码；调用方自己设了 Options.inDensity / inTargetDensity，或 inScaled = false 时以调用方为准；缩放后位图的 density 记为 inTargetDensity（设备 dpi）。Options 没另设时 inPreferredConfig 为 ARGB_8888、inMutable 为 false",
+   "source": "android.graphics.BitmapFactory#decodeResourceStream、#setDensityFromOptions；android.graphics.BitmapFactory.Options#inPreferredConfig、#inMutable、#inScaled",
+   "kind": "安卓平台",
+   "origin": "第五版新查"
+  },
+  {
+   "step": "原因",
+   "fact": "Canvas.drawBitmap(bitmap, left, top, paint) 在位图与画布 density 不同时会自动换算缩放；软件绘制路径里 ViewRootImpl 把画布 density 设成设备 dpi，而按密度解码出的位图 density 也是设备 dpi，所以 onDraw 里按位图像素 1:1 绘制。硬件加速画布把画布与位图的 density 交给原生代码处理，本机没有原生源码",
+   "source": "android.graphics.Canvas#drawBitmap；android.view.ViewRootImpl#drawSoftware；android.graphics.BaseRecordingCanvas#drawBitmap",
+   "kind": "安卓平台",
+   "origin": "第五版新查"
+  },
+  {
+   "step": "做法第 2 步",
+   "fact": "image.DecodingOptions 的全部字段与缺省值：index 0（第几帧）、sampleSize 1（当前只能取 1）、rotate 0（度）、editable false（不可编辑时 writePixels 等二次编辑会失败）、desiredSize 缺省为原始尺寸（比例不一致时拉伸到指定尺寸）、desiredRegion 缺省整图、desiredPixelFormat 缺省 RGBA_8888（只可设 RGBA_8888、BGRA_8888、RGB_565，带透明通道的图不支持 RGB_565）、fitDensity（API 9，单位 ppi，缺省 0）、desiredColorSpace（API 11）、desiredDynamicRange（API 12，缺省 SDR）、cropAndScaleStrategy（API 18，同时给 desiredRegion 与 desiredSize 时决定先裁还是先缩，推荐 CROP_FIRST）",
+   "source": "鸿蒙 SDK 的 ets/api/@ohos.multimedia.image.d.ts，DecodingOptions.index、DecodingOptions.sampleSize、DecodingOptions.rotate、DecodingOptions.editable、DecodingOptions.desiredRegion、DecodingOptions.desiredPixelFormat、DecodingOptions.fitDensity、DecodingOptions.desiredColorSpace、DecodingOptions.desiredDynamicRange、DecodingOptions.cropAndScaleStrategy；文档 arkts-apis-image-i.md，DecodingOptions",
+   "kind": "鸿蒙接口",
+   "origin": "第五版新查",
+   "code": "import { image } from '@kit.ImageKit'\ninterface DecodingOptions { index?: number; sampleSize?: number; rotate?: number; editable?: boolean; desiredSize?: Size; desiredRegion?: Region; desiredPixelFormat?: PixelMapFormat; fitDensity?: number; desiredColorSpace?: colorSpaceManager.ColorSpaceManager; desiredDynamicRange?: DecodingDynamicRange; cropAndScaleStrategy?: CropAndScaleStrategy }\nconst opts: image.DecodingOptions = { desiredSize: { width: w, height: h }, desiredPixelFormat: image.PixelMapFormat.RGBA_8888, editable: true }"
+  },
+  {
+   "step": "做法第 2 步",
+   "fact": "解码与缩放的异步、同步对应版本：ImageSource.createPixelMap(options?) 返回 Promise<PixelMap>，createPixelMapSync(options?) 同步；PixelMap.scale(x, y, level) 返回 Promise<void>、scaleSync(x, y, level) 同步（都是 API 12，原地缩放）；不带 level 的 scale(x, y) / scaleSync(x, y) 分别是 API 9 / 12；createScaledPixelMap(x, y, level?) 与 createScaledPixelMapSync 是 API 18，返回不可编辑的新 PixelMap；缩放倍数 = 缩放后宽高 / 缩放前宽高，取负数会翻转；用完调 release(): Promise<void>（PixelMap、ImageSource 都有）。文档里的 applyScale / applyScaleSync 是 26.0.0 起的，API 23 SDK 没有",
+   "source": "鸿蒙 SDK 的 ets/api/@ohos.multimedia.image.d.ts，ImageSource.createPixelMap、ImageSource.createPixelMapSync、PixelMap.scale、PixelMap.scaleSync、PixelMap.createScaledPixelMap、PixelMap.release；文档 arkts-apis-image-PixelMap.md，scale、createScaledPixelMap、applyScaleSync",
+   "kind": "鸿蒙接口",
+   "origin": "第五版新查",
+   "code": "import { image } from '@kit.ImageKit'\nconst pm: image.PixelMap = await src.createPixelMap({ desiredSize: { width: w, height: h } })  // Promise<PixelMap>\nawait pm.scale(sx, sy, image.AntiAliasingLevel.NONE)  // scale(x: number, y: number, level: AntiAliasingLevel): Promise<void>\nconst out: image.PixelMap = await pm.createScaledPixelMap(sx, sy, image.AntiAliasingLevel.LOW)  // API 18，不可编辑\nawait src.release()；await pm.release()"
+  },
+  {
+   "step": "做法第 2 步",
+   "fact": "drawImage 有三个重载：(image, dx, dy) 原尺寸绘制；(image, dx, dy, dw, dh) 缩放到目标区；(image, sx, sy, sw, sh, dx, dy, dw, dh) 先取源矩形再缩放；image 可为 ImageBitmap 或 PixelMap",
+   "source": "鸿蒙 SDK 的 ets/component/canvas.d.ts，CanvasRenderer.drawImage；文档 ts-canvasrenderingcontext2d.md，drawImage",
+   "kind": "鸿蒙接口",
+   "origin": "第五版新查",
+   "code": "全局可用，不用导入（CanvasRenderingContext2D 继承 CanvasRenderer）\ndrawImage(image: ImageBitmap | PixelMap, dx: number, dy: number): void\ndrawImage(image: ImageBitmap | PixelMap, dx: number, dy: number, dw: number, dh: number): void\ndrawImage(image: ImageBitmap | PixelMap, sx: number, sy: number, sw: number, sh: number, dx: number, dy: number, dw: number, dh: number): void"
+  }
+ ],
+ "device_todo": [
+  "默认 vp 单位的画布上，drawImage(pixelMap, dx, dy) 不传宽高时 PixelMap 按物理像素 1:1 还是按 vp 放大（densityPixels ≠ 1 的设备上画一个已知像素宽的 PixelMap 截图量）",
+  "安卓 BitmapFactory.decodeResource 对不整除尺寸的取整是否为 (int)(px×设备dpi/目录dpi+0.5)（原生代码，本机无源码；同类的 Java 路径 ImageDecoder#computeDensity 用的是这个式子）"
+ ],
+ "dropped_notes": 2
+}
