@@ -1,6 +1,6 @@
 # 源端禁用态只靠代码换背景、文字色固定时，不用 ArkUI .enabled(false)（会对整个组件降透明）：显式切换背景与投影，用 hitTestBehavior(HitTestMode.None) 或回调内判态拦截点击
 
-ID：`lesson-99080bd3bfc1bcbb9c5f` · 版本：1
+ID：`lesson-99080bd3bfc1bcbb9c5f` · 版本：2
 
 [本主题](index.md)
 
@@ -23,7 +23,7 @@ Android 的 setEnabled 只改状态，颜色由 drawable 与 textColor 选择器
 ## 做法
 
 1. 先查源端禁用外观的来源：背景 drawable、textColor 有无 state_enabled 分支，按钮 stateListAnimator 在禁用时是否归零。只来自代码换背景时，规格写“禁用 = 换背景 + 不响应点击”，判据写禁用态取色等于源背景值、文字为源色。
-2. 实现时不写 .enabled(false)：背景按启停态切换，禁用时投影置空，用 hitTestBehavior(HitTestMode.None) 拦截点击（或在回调内判态直接返回）。
+2. 实现时不写 .enabled(false)：背景按启停态切换，禁用时投影置空，用 hitTestBehavior(HitTestMode.None) 拦截点击（或在回调内判态直接返回；None 只让本组件不参与触摸测试，不阻塞 Stack 里的下层兄弟和祖先，下层兄弟或祖先带点击处理、或设备接了键盘手柄时，用回调内判态）。
 
 来源支持：1 张卡 · 1 次迁移 · 1 个应用
 

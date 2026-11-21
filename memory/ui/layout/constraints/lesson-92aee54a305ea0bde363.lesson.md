@@ -1,6 +1,6 @@
 # Stack 中内容尺寸的子项按 alignContent 定位：子项自身的 .align() 不改变它在父容器中的位置，需要的对齐用满尺寸容器或显式 position
 
-ID：`lesson-92aee54a305ea0bde363` · 版本：9
+ID：`lesson-92aee54a305ea0bde363` · 版本：10
 
 [本主题](index.md)
 
@@ -14,7 +14,7 @@ ID：`lesson-92aee54a305ea0bde363` · 版本：9
 
 ## 原因
 
-Stack 按 alignContent 放置未撑满的子节点；Text 的 .align() 只对齐文字在自身框内的位置，内容高的 Text 在 TopStart 的 Stack 里仍落在左上角，ArkUI Alignment 也没有 Compose 的 CenterStart。来源中巡检修复者为裁剪图片把 Row 改成 TopStart 的 Stack，删去 Text 的满高后改写 .align(Alignment.CenterStart) 并自称已居中；编译修复把它改成 Alignment.Start，随后又被删除，分类卡文字一直贴左上。另一应用的成员头像角标照此写成子项 .align(BottomEnd)，角标仍在左上；该片段后来被抽进共享组件继续沿用，直到改成 position 才贴到右下。
+Stack 按 alignContent（或 Stack 自身的 align，二者后设置的生效）放置未撑满的子节点，子项设了 layoutGravity（API 20 起，只对 Stack 的直接子组件生效）时才按子项自己的对齐；Text 的 .align() 只对齐文字在自身框内的位置，内容高的 Text 在 TopStart 的 Stack 里仍落在左上角，ArkUI Alignment 也没有 Compose 的 CenterStart。来源中巡检修复者为裁剪图片把 Row 改成 TopStart 的 Stack，删去 Text 的满高后改写 .align(Alignment.CenterStart) 并自称已居中；编译修复把它改成 Alignment.Start，随后又被删除，分类卡文字一直贴左上。另一应用的成员头像角标照此写成子项 .align(BottomEnd)，角标仍在左上；该片段后来被抽进共享组件继续沿用，直到改成 position 才贴到右下。
 
 ## 做法
 
