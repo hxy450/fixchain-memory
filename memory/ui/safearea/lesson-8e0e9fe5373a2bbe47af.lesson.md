@@ -1,6 +1,6 @@
 # 页面级安全区订阅从承载页面的主窗口取窗口对象：复用工程主窗口入口或入口 Ability 已维护的避让状态，不用 window.getLastWindow
 
-ID：`lesson-8e0e9fe5373a2bbe47af` · 版本：2
+ID：`lesson-8e0e9fe5373a2bbe47af` · 版本：3
 
 [本主题](index.md)
 
@@ -14,7 +14,7 @@ ArkUI 页面需自行订阅避让区或读取避让值；工程已在 EntryAbili
 
 ## 原因
 
-getLastWindow 返回应用最近的窗口，不保证是承载页面的主窗口；子窗或浮窗与主窗口位置尺寸不一致时避让区为空（window.d.ts 有此说明），页面拿到 0 避让值，顶部按钮落进状态栏、点不到。来源中写者已收到“复用 EntryAbility 主窗口安全区”的巡检要求，注释也称“订阅与 EntryAbility 相同的窗口事件”，实际却用 getLastWindow；该写法在出现分享或调试子窗后暴露。
+getLastWindow 返回应用最近的窗口，不保证是承载页面的主窗口；子窗口与主窗口位置尺寸不一致时避让区为空，全局悬浮窗、模态窗未调用 setSystemAvoidAreaEnabled 时避让区恒为空（窗口接口文档 getWindowAvoidArea 一节有此说明，声明文件没有写子窗口这一条），页面拿到 0 避让值，顶部按钮落进状态栏、点不到。来源中写者已收到“复用 EntryAbility 主窗口安全区”的巡检要求，注释也称“订阅与 EntryAbility 相同的窗口事件”，实际却用 getLastWindow；该写法在出现分享或调试子窗后暴露。
 
 ## 做法
 

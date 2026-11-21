@@ -60,7 +60,7 @@
 - [用页内覆层承载 Activity 级 Dialog 时挂在覆盖整窗的宿主根，按钮行先按源取值定高再让分隔线撑满（平台 AlertDialog 的按钮条取平台样式或实测，不默认 48vp）](lesson-0a26e0cfc44a183d3a02.lesson.md)
   - 时机：界面实现阶段，按项目已采用的页内覆层写法（条件渲染的全幅遮罩 + 卡片）改写 Android Dialog，确定覆层挂载层级与卡片、按钮行的高度约束时
   - 情境：源弹窗由 Activity 创建（如 Fragment 中 new XxxDialog(getActivity(), ...)），样式继承 Theme.Dialog、windowIsFloating=true，布局是固定宽、wrap_content 高的卡片，按钮行内有 layout_height=match_parent 的竖分隔 View；触发按钮位于 Tabs 子页或嵌套组件内。 也包括按钮由 AlertDialog.Builder 的 setPositive/Negative/NeutralButton 生成、源布局里没有按钮行，按钮条外观来自主题的平台对话框样式。
-  - 例外：改用 openCustomDialog、bindSheet 等系统弹窗 API 时，全窗遮罩由系统窗口负责，按真弹窗写法处理
+  - 例外：改用 openCustomDialog、bindSheet 等系统弹窗 API 时，遮罩由框架负责（openCustomDialog 默认挂在应用窗口根节点、蒙层盖整窗；levelMode 设为 EMBEDDED 时挂在页面内、蒙层按父节点约束显示；isModal 为 false 或 bindSheet 为跟手样式时默认无蒙层），按真弹窗写法处理
 - [锚定弹出的下拉（PopupWindow showAsDropDown 自定义下拉、框架 ActionBar 的溢出面板）按源样式与源主题锚定方式还原（Material 溢出面板盖住标题栏），遮罩与面板放同一承载层：不换成原生 Select、系统 Menu 或整页筛选视图](lesson-666a746081ba1e447322.lesson.md)
   - 时机：界面实现阶段，为筛选栏、排序栏等下拉选项选择 ArkUI 弹出容器、呈现位置与菜单样式时；为工具栏溢出菜单（showAsAction=never 或未上栏的项）选择承载方式、锚定位置与外观时；把页内浮层（锚定面板与点外关闭层）搬进共享标题栏等组件时
   - 情境：源端点击筛选项后用 PopupWindow 加载自定义布局（固定宽度、固定行高、箭头图、勾选图标），以 showAsDropDown 锚定在触发器或置顶筛选栏下方原位展开；同页可能另有整屏的“更多筛选”面板；目标有现成的 Select 组件或已写好的整页筛选组件可用。 也包括源 Activity 用框架 ActionBar（Theme.Holo，或 values-v21 的 Theme.Material*），溢出菜单项由平台主题绘制的 ListPopupWindow 面板承载，源码里没有面板样式；目标准备用 ArkUI Menu/bindMenu，任务要求逐屏一致。 也包括溢出面板由共享标题栏组件绘制（组件节点内或 .overlay()），点外关闭的全幅捕获层按组件契约留给宿主页，声明在标题栏之后的兄弟层里。 也包括溢出项带 &lt;menu/&gt; 子菜单（如排序），目标把它做成独立单选面板。

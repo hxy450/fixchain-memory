@@ -18,7 +18,7 @@ Navigation/@Entry宿主与页面注册（含根 Navigation 默认标题栏与工
   - 时机：界面实现阶段，把源端模态抽屉（Compose ModalNavigationDrawer、DrawerLayout）映射为 ArkUI SideBarContainer 并编写其属性链时；规格提取阶段写抽屉转换决策时
   - 情境：源端抽屉只经页内导航图标回调（openDrawer、汉堡键）或边缘手势打开，内容之上没有常驻的切换按钮；目标用 SideBarContainer（常见 Overlay 类型）包住 Navigation 等内容宿主，被包裹页面在左上角有返回键或菜单键。
   - 例外：源端确有常驻在内容之上的抽屉切换按钮时，保留内置按钮，并按源端位置与图标设置 controlButton 样式
-- [main_pages.json 只登记经 router 进入的 @Entry 页：被 Tabs/父页导入的子组件与 @CustomDialog 不登记，10905402 与 @Entry+export 警告先判定角色](lesson-c4a6eaaf6a22c0b8823f.lesson.md)
+- [main_pages.json 只登记经 router 进入或由 loadContent 按路径加载的 @Entry 页：被 Tabs/父页导入的子组件与 @CustomDialog 不登记，10905402 与 @Entry+export 警告先判定角色](lesson-c4a6eaaf6a22c0b8823f.lesson.md)
   - 时机：入口装配阶段写 main_pages.json 路由登记时；编译修复遇到“登记页面须有且仅有一个 @Entry”（10905402）或“export struct with @Entry”警告时
   - 情境：源端单 Activity 以底部导航承载多个 Fragment，另有 DialogFragment 与经导航跳转的二级页；目标主页面用 Tabs/TabContent import 并实例化页面 struct，弹窗写成 @CustomDialog，这些文件都放在 pages/ 目录；工程用 main_pages.json 登记路由页。
 - [一进入就无条件跳转并 finish 的 Activity 是路由跳板：目标按同样条件直达实际页面，不把它的布局做成可见页](lesson-0b72c197ea20fbe6f277.lesson.md)

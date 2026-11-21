@@ -1,6 +1,6 @@
-# main_pages.json 只登记经 router 进入的 @Entry 页：被 Tabs/父页导入的子组件与 @CustomDialog 不登记，10905402 与 @Entry+export 警告先判定角色
+# main_pages.json 只登记经 router 进入或由 loadContent 按路径加载的 @Entry 页：被 Tabs/父页导入的子组件与 @CustomDialog 不登记，10905402 与 @Entry+export 警告先判定角色
 
-ID：`lesson-c4a6eaaf6a22c0b8823f` · 版本：2
+ID：`lesson-c4a6eaaf6a22c0b8823f` · 版本：3
 
 [本主题](index.md)
 
@@ -18,7 +18,7 @@ main_pages 的每个登记项都被当成路由页，必须恰有一个 @Entry�
 
 ## 做法
 
-1. 写 main_pages 前逐文件判定角色：被其他 .ets import 并在 Tabs 或父组件中实例化的 struct 是子组件（@Component export，不登记）；经 router.pushUrl 进入的才是路由页（@Entry、不 export、登记）；@CustomDialog 由宿主页弹出，不登记。
+1. 写 main_pages 前逐文件判定角色：被其他 .ets import 并在 Tabs 或父组件中实例化的 struct 是子组件（@Component export，不登记）；经 router.pushUrl 进入、或由 windowStage.loadContent / window.setUIContent 按路径加载的才是路由页（@Entry、不 export、登记）；@CustomDialog 由宿主页弹出，不登记。
 2. 遇到 10905402 时，以 main_pages 实际 src 列表逐项检查：该文件被导入作子组件或是弹窗，就移除登记；确为路由页才补 @Entry，并去掉 export、确认没有导入方。若出于既有约束保留某弹窗的登记，就同时保证它恰有一个 @Entry，登记与装饰器一起改。
 3. 同一内容既做 Tab 又要单独路由时，抽出 export 的 @Component 供 Tab 使用，另写 @Entry 外壳页包装它；不要用占位 builder 顶替原页面内容。
 

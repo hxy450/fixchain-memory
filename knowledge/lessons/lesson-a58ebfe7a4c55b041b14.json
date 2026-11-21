@@ -1,0 +1,83 @@
+{
+  "lesson": "lesson-a58ebfe7a4c55b041b14",
+  "changes": [
+    {
+      "where": "做法第 6 步",
+      "before": "在某轴为 wrap_content 时，该轴尺寸只由非 match_parent 子项决定（竖向 LinearLayout 取这些子项的最大宽加各自 margin，再加父 padding），match_parent 子项随后按该尺寸以 EXACTLY 重测",
+      "after": "在交叉轴（竖向的宽、横向的高）为 wrap_content 时，该轴尺寸只由非 match_parent 子项决定（竖向 LinearLayout 取这些子项的最大宽加各自 margin，match_parent 子项只计 margin，再加父 padding，且不小于 minWidth；子项全是 match_parent 时才取它们测得的最大宽），match_parent 子项随后按该尺寸以 EXACTLY 重测；主轴方向不按此算，match_parent 子项照常计入总长度",
+      "basis": "android.widget.LinearLayout#measureVertical（matchWidthLocally、alternativeMaxWidth、allFillParent、getSuggestedMinimumWidth）、#forceUniformWidth、#measureHorizontal 的同类逻辑（android-36.1 源码）",
+      "type": "缺条件"
+    },
+    {
+      "where": "做法第 6 步",
+      "before": "自定义 View 的偏好长度只在 AT_MOST/UNSPECIFIED 下生效",
+      "after": "自定义 View 的偏好长度只在 AT_MOST/UNSPECIFIED 下生效（指覆写了 onMeasure、按 resolveSize 一类方式取偏好的 View；没覆写 onMeasure 的 View 走 getDefaultSize，AT_MOST 下直接取父给的上限）",
+      "basis": "android.view.View#onMeasure 与 #getDefaultSize（AT_MOST、EXACTLY 取 specSize，UNSPECIFIED 取 size）",
+      "type": "缺条件"
+    },
+    {
+      "where": "例外与边界",
+      "before": "（框架 AlertDialog 为屏宽 95% 减左右各 16dp）",
+      "after": "（Holo、Material 系与 AppCompat 的 AlertDialog 默认窗口宽 wrap_content，最小宽取当前屏宽的竖屏 95%、横屏 65%（large 屏 80%/55%，xlarge 屏 72%/45%），内容更宽时随内容；可见卡片再减去窗口背景的左右内缩：Material 与 AppCompat 各 16dp，Holo 各 8dp）",
+      "basis": "com.android.internal.policy.DecorView#onMeasure（AT_MOST 时按 isPortrait 取 windowMinWidthMinor 或 windowMinWidthMajor，比例乘 screenWidthDp）；平台资源 dialog_min_width_minor/major（values、values-large、values-xlarge，android-30、36、37.0 一致），Theme.Holo.Dialog.BaseAlert 与 Theme.Material.Dialog.BaseAlert 设置该最小宽（旧式 Theme.Dialog.Alert 不设）；dialog_background_material 的 16dp inset，dialog_full_holo_dark 9-patch 的内容边距与不透明边各 8dp；appcompat 1.1.0、1.8.0 的 android:windowMinWidthMajor/Minor 取 abc_dialog_min_width_major/minor 与 abc_dialog_material_background 的 16dp inset",
+      "type": "缺条件"
+    }
+  ],
+  "entries": [
+    {
+      "step": "原因",
+      "fact": "ArkUI 组件的 width/height 用百分比时，按最近一个设了固定尺寸的祖先节点的尺寸计算，不按直接父节点由内容撑出的尺寸；所以在不定尺寸的父级里写 '100%'，取到的是更上层定了尺寸的节点的宽高。",
+      "scope": "依据是尺寸设置文档的说明。对 width、height 的百分比成立。不成立：直接父节点自身设了数值宽高，或已被外层约束定死时，百分比按直接父节点解析；bindSheet 用 SheetSize.FIT_CONTENT 时文档另写明 builder 根节点高度不能用百分比（弹层高度反过来依赖内容）。",
+      "source": "鸿蒙文档 ts-universal-attributes-size.md，说明；ts-universal-attributes-sheet-transition.md，SheetSize.FIT_CONTENT",
+      "kind": "鸿蒙接口",
+      "origin": "第七版新查"
+    },
+    {
+      "step": "做法第 5 步",
+      "fact": "ArkUI 的 .border() 边框宽度和 padding 一样计入布局：不设宽高时盒子尺寸是内容加 padding 加边框宽度，设了宽高时边框占用盒内空间、内容区相应缩小；.outline() 外描边画在组件外侧，不影响布局，也不占组件尺寸。",
+      "scope": "依据：OpenHarmony arkui_ace_engine 标签 OpenHarmony-v6.0-Release 的 LayoutProperty::CreatePaddingAndBorder（布局把 padding 与 borderWidth 合并处理）与 Flex 布局算法（Row/Column 定了交叉轴尺寸时内容区 = 尺寸 − padding − 边框）；outline 依据是外描边文档说明。不成立：个别组件的 pattern 声明边框不占位（实现中 BorderUnoccupied 返回 true）时边框不计入。",
+      "source": "OpenHarmony arkui_ace_engine 标签 OpenHarmony-v6.0-Release 的 frameworks/core/components_ng/layout/layout_property.cpp，LayoutProperty::CreatePaddingAndBorder；frameworks/core/components_ng/pattern/flex/flex_layout_algorithm.cpp，SecondaryMeasureByProperty；鸿蒙文档 ts-universal-attributes-outline.md",
+      "kind": "鸿蒙接口",
+      "origin": "第七版新查"
+    },
+    {
+      "step": "适用情境",
+      "fact": "Compose 的 Modifier.border 只是绘制修饰，不改变被修饰元素的测量尺寸（1.0.0 为 composed 加 drawWithCache，1.12.0 的 BorderModifierNode 是 DelegatingNode 加 SemanticsModifierNode，不是布局节点）；BoxScope.matchParentSize() 的子项不参与决定 Box 尺寸，等其余子项定出 Box 尺寸后按该尺寸测量，而 fillMaxSize() 会参与，让 Box 撑满可用空间。",
+      "scope": "androidx.compose.foundation 与 foundation-layout 1.0.0、1.12.0 源码一致。matchParentSize 是 BoxScope 的扩展，只对 Box 的直接子项有效。不成立：border 写在已用 size/padding 定尺寸的盒子上时尺寸由那些修饰决定，与 border 无关；Box 外的 fillMaxSize 按所在父级约束取最大值，父级在某轴的约束无界（如 verticalScroll 内的高度）时该轴不撑满。",
+      "source": "androidx.compose.foundation:foundation 1.0.0、foundation-android 1.12.0 源码包，Border.kt 的 Modifier.border 与 BorderModifierNode；androidx.compose.foundation:foundation-layout 1.0.0、foundation-layout-android 1.12.0 源码包，Box.kt 的 BoxScope.matchParentSize 与 Box 测量策略、Size.kt 的 fillMaxSize（hasBoundedWidth、hasBoundedHeight 判断）",
+      "kind": "依赖库",
+      "origin": "第七版新查"
+    },
+    {
+      "step": "做法第 6 步",
+      "fact": "LinearLayout 交叉轴（竖向时的宽、横向时的高）的 MeasureSpec 不是 EXACTLY 时，该轴尺寸取非 match_parent 子项测得的最大值（各含 margin），match_parent 子项只贡献 margin，再加父 padding、不小于最小建议尺寸，最后不超过父给的 AT_MOST 上限；只有子项全为 match_parent 时才取它们测得的最大值；随后 match_parent 子项按算出的尺寸以 EXACTLY 重测。主轴方向的 match_parent 子项照常测量并计入总长度（父的主轴为 AT_MOST 或 EXACTLY 时按剩余空间测）。",
+      "scope": "android-36.1 源码；GONE 子项不参与。不成立：父级给的交叉轴是 EXACTLY（layout 写了数值，或 match_parent 且父级已定尺寸）时直接用父给的尺寸；带 layout_weight 的子项另有重测流程。",
+      "source": "android.widget.LinearLayout#measureVertical、#measureHorizontal、#forceUniformWidth、#forceUniformHeight；android.view.View#resolveSizeAndState；android.view.ViewGroup#getChildMeasureSpec",
+      "kind": "安卓平台",
+      "origin": "第七版新查"
+    },
+    {
+      "step": "做法第 3 步",
+      "fact": "ListView、GridView 测量条目时，条目 LayoutParams 的高为正数才以 EXACTLY 测，match_parent 与 wrap_content 都按 UNSPECIFIED 测，即条目高只由内容决定；Adapter.getView 里用 inflate(layout, null) 时根节点的 layout_height 不会进入 LayoutParams，列表改用默认的 MATCH_PARENT 宽、WRAP_CONTENT 高。",
+      "scope": "android-36.1 源码；只对 AbsListView 系（ListView、GridView）成立。不成立：inflate(layout, parent, false) 时 XML 根节点的 layout_height 生效；getView 里 setLayoutParams 设了数值高时按该值 EXACTLY；RecyclerView 由 LayoutManager.getChildMeasureSpec 决定，不在此列。",
+      "source": "android.widget.ListView#measureScrapChild、#setupChild；android.widget.GridView#onMeasure、#setupChild；android.widget.AbsListView#generateDefaultLayoutParams；android.view.LayoutInflater#inflate",
+      "kind": "安卓平台",
+      "origin": "第七版新查"
+    },
+    {
+      "step": "做法第 6 步",
+      "fact": "alignSelf 只对 Row、Column、Flex、DynamicLayout 的直接子组件和 GridRow 中的 GridCol 生效，父容器是 Stack、ListItem、RelativeContainer 等其他容器时写了不起作用；ItemAlign.Stretch 在 Row/Column 中不论子组件是否设了交叉轴尺寸都拉伸到容器的交叉轴尺寸，Flex 设了换行时拉伸到当前行最长的那个。",
+      "scope": "依据是 Flex 布局属性文档与 ItemAlign 文档说明。容器未设交叉轴尺寸时，被拉伸到的尺寸由子组件测量结果决定（OpenHarmony arkui_ace_engine 标签 OpenHarmony-v6.0-Release 的 Flex 布局算法取子组件交叉轴尺寸的最大值），所以未定高的 Row 里被拉伸的子项随最高的子项走。不成立：容器设了交叉轴尺寸时按该尺寸减 padding 拉伸。",
+      "source": "鸿蒙文档 ts-universal-attributes-flex-layout.md，alignSelf 与说明；ts-appendix-enums.md，ItemAlign；OpenHarmony arkui_ace_engine 标签 OpenHarmony-v6.0-Release 的 frameworks/core/components_ng/pattern/flex/flex_layout_algorithm.cpp，SecondaryMeasureByProperty",
+      "kind": "鸿蒙接口",
+      "origin": "第七版新查"
+    }
+  ],
+  "device_todo": [],
+  "dropped_notes": 0,
+  "note": "",
+  "sdk": {
+    "harmony": "HarmonyOS 6.1.0（API 23，SDK 6.1.0.105）；实现对照 OpenHarmony arkui_ace_engine 标签 OpenHarmony-v6.0-Release",
+    "android": "Android SDK 源码 android-36.1；Android SDK 平台资源 android-30、android-36、android-37.0；appcompat 1.1.0、1.8.0；androidx.compose.foundation:foundation 1.0.0、foundation-android 1.12.0；foundation-layout 1.0.0、foundation-layout-android 1.12.0（均为 Maven 源码包）"
+  }
+}

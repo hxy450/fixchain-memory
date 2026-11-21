@@ -1,6 +1,6 @@
 # catch 中继续抛出时先把异常收窄为 Error，不直接 throw catch 变量
 
-ID：`lesson-dbfae443e671c568e14e` · 版本：1
+ID：`lesson-dbfae443e671c568e14e` · 版本：2
 
 [本主题](index.md)
 
@@ -22,7 +22,7 @@ ArkTS 只允许 throw Error 及其子类，catch 变量类型未定，原样 `th
 
 ## 做法
 
-1. 需要 rethrow 时写成 `throw error instanceof Error ? error : new Error(String(error))`，或抛出带原因说明的新 Error。
+1. 需要 rethrow 时写成 `throw error instanceof Error ? error : new Error(String(error))`，或抛出带原因说明的新 Error。catch 到的是 Kit 以普通对象拒绝的 BusinessError（如 @ohos.net.http 的失败）时，String(error) 只得到“[object Object]”，新 Error 的消息里写入它的 code 与 message。
 2. 编译门之后落地、又不能自行编译的修改，写完用 rg 查 `throw [A-Za-z_]+;` 这类直接抛变量的语句，并对照 hmos-fix-build-errors 错误表里的 ArkTS 严格模式条目自查。
 
 来源支持：1 张卡 · 1 次迁移 · 1 个应用

@@ -1,6 +1,6 @@
 # 用页内覆层承载 Activity 级 Dialog 时挂在覆盖整窗的宿主根，按钮行先按源取值定高再让分隔线撑满（平台 AlertDialog 的按钮条取平台样式或实测，不默认 48vp）
 
-ID：`lesson-0a26e0cfc44a183d3a02` · 版本：2
+ID：`lesson-0a26e0cfc44a183d3a02` · 版本：3
 
 [本主题](index.md)
 
@@ -14,7 +14,7 @@ ID：`lesson-0a26e0cfc44a183d3a02` · 版本：2
 
 ## 例外与边界
 
-- 改用 openCustomDialog、bindSheet 等系统弹窗 API 时，全窗遮罩由系统窗口负责，按真弹窗写法处理
+- 改用 openCustomDialog、bindSheet 等系统弹窗 API 时，遮罩由框架负责（openCustomDialog 默认挂在应用窗口根节点、蒙层盖整窗；levelMode 设为 EMBEDDED 时挂在页面内、蒙层按父节点约束显示；isModal 为 false 或 bindSheet 为跟手样式时默认无蒙层），按真弹窗写法处理
 
 ## 原因
 
@@ -23,7 +23,7 @@ ID：`lesson-0a26e0cfc44a183d3a02` · 版本：2
 ## 做法
 
 1. 源弹窗属于 Activity 窗口时，覆层挂在覆盖整个窗口的宿主根容器（如主页根 Stack），不挂在触发按钮所在的子组件；子组件通过共享状态或回调请求宿主显示和关闭，返回键拦截也放在宿主。
-2. 转换按钮行里 match_parent 高的分隔 View 时，先给所在 Row 确定高度：应用布局里的按钮取源按钮实测或由 padding 与字号计算；平台 AlertDialog 的按钮条取平台样式或源端实测（如 Holo 按钮条约 53.33dp，上方另有分隔线），取不到标待核，不默认 48vp。再让分隔线 Stretch 或取 100%；不让未定高 Row 中的 Stretch 子项决定卡片高度。
+2. 转换按钮行里 match_parent 高的分隔 View 时，先给所在 Row 确定高度：应用布局里的按钮取源按钮实测或由 padding 与字号计算；平台 AlertDialog 的按钮条取平台样式或源端实测（如 Holo 按钮条实测约 53.33dp，上方另有分隔线；平台样式只给按钮最小高 alert_dialog_button_bar_height：48dip，可用屏高 ≥720dp 时 54dip，Material 与 AppCompat 按钮条另有上下各 4dp 内边距），取不到标待核，不默认 48vp。再让分隔线 Stretch 或取 100%；不让未定高 Row 中的 Stretch 子项决定卡片高度。
 
 ## 可选检查
 

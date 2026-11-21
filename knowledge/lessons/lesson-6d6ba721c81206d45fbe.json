@@ -1,0 +1,78 @@
+{
+  "lesson": "lesson-6d6ba721c81206d45fbe",
+  "changes": [
+    {
+      "where": "适用情境",
+      "before": "帧时钟随宿主 ON_STOP 暂停；",
+      "after": "Compose 的帧时钟随宿主 ON_STOP 暂停、ON_START 恢复（只到 ON_PAUSE 时不暂停）；ValueAnimator 不随生命周期暂停，只有无限重复的 Animator 自 Android 13 起在应用窗口全部不可见一段时间后（Android 13 为 10s，14 起 1s）被暂停，恢复时扣除暂停时长、不追平后台时间；",
+      "basis": "androidx.compose.ui:ui 1.0.0、1.12.0 的 WindowRecomposer.android.kt（ON_STOP 暂停、ON_START 恢复、ON_PAUSE 不处理）；android.animation.AnimationHandler 的 mPauser（只暂停 DURATION_INFINITE 的 Animator，AOSP android-13.0.0_r1 起有，android-12.1.0_r1 没有）、android.animation.Animator#sBackgroundPauseDelay（android-13.0.0_r1、_r83 为 10000，android-14.0.0_r1 起 1000）与 ValueAnimator#doAnimationFrame（恢复时 mStartTime 加上暂停时长）",
+      "type": "缺条件"
+    },
+    {
+      "where": "做法第 1 步",
+      "before": "未写插值时取框架默认：Compose tween 为 FastOutSlowInEasing，",
+      "after": "未写插值时取框架默认：Compose tween 为 FastOutSlowInEasing（Animatable.animateTo 不传 animationSpec 时是弹簧 spring，没有固定时长，不按本式算），",
+      "basis": "androidx.compose.animation:animation-core 1.0.0、1.12.0 的 Animatable#animateTo（animationSpec 默认 defaultSpringSpec）",
+      "type": "缺条件"
+    }
+  ],
+  "entries": [
+    {
+      "step": "做法第 1 步",
+      "fact": "Compose 的 tween() 不传参数时 durationMillis 为 300（AnimationConstants.DefaultDurationMillis），easing 为 FastOutSlowInEasing，即 CubicBezierEasing(0.4f, 0.0f, 0.2f, 1.0f)；Animatable.animateTo 不传 animationSpec 时用的是弹簧 defaultSpringSpec，不是 tween，没有固定时长。",
+      "scope": "androidx.compose.animation:animation-core 1.0.0 与 1.12.0 源码一致；只对 tween()/TweenSpec 与 Animatable.animateTo 的默认参数成立。不成立：源端显式传了 durationMillis、easing 或 animationSpec 时按源端；animate*AsState、updateTransition 等其他入口的默认规格本条未核，不按本条推。",
+      "source": "androidx.compose.animation:animation-core 1.0.0、1.12.0 源码包，AnimationSpec.kt 的 tween 与 AnimationConstants.DefaultDurationMillis，Easing.kt 的 FastOutSlowInEasing，Animatable.kt 的 animateTo",
+      "kind": "依赖库",
+      "origin": "第七版新查"
+    },
+    {
+      "step": "原因",
+      "fact": "Compose 里经 Animatable.animateTo 推进的动画每帧按 playTime = frameTimeNanos − startTimeNanos 取进度（1.12.0 再除以 durationScale，durationScale 为 0 时直接取结束），不逐帧累加、不钳制单帧间隔；WindowRecomposer 的帧时钟在宿主 Lifecycle 到 ON_STOP 时暂停、ON_START 时恢复，ON_PAUSE、ON_RESUME 不处理，所以回前台后的首帧按真实流逝时间一步追上。",
+      "scope": "androidx.compose.animation:animation-core 与 androidx.compose.ui:ui 1.0.0、1.12.0 源码；生命周期取窗口内容根（android.R.id.content 的直接子视图）上的 ViewTreeLifecycleOwner，通常是宿主 Activity（对话框窗口为该对话框），Fragment 里的 ComposeView 也随 Activity 而不是 Fragment 的生命周期暂停与恢复。不成立：页面只被对话框式或透明 Activity 盖住（只走到 ON_PAUSE）时帧时钟不被暂停；1.0.0 没有除以 durationScale 这一步。",
+      "source": "androidx.compose.animation:animation-core 1.0.0、1.12.0 源码包，SuspendAnimation.kt 的 doAnimationFrameWithScale 与 Animatable.kt 的 runAnimation；androidx.compose.ui:ui 1.0.0、ui-android 1.12.0 源码包，WindowRecomposer.android.kt 的 View.contentChild、View.windowRecomposer 与生命周期观察（1.0.0 的 createLifecycleAwareViewTreeRecomposer 在 ON_STOP 暂停 PausableMonotonicFrameClock，1.12.0 的 createLifecycleAwareWindowRecomposer 在 ON_STOP 调 Recomposer#pauseCompositionFrameClock）",
+      "kind": "依赖库",
+      "origin": "第七版新查"
+    },
+    {
+      "step": "做法第 1 步",
+      "fact": "android.animation.ValueAnimator（含 ObjectAnimator）未设插值器时用 AccelerateDecelerateInterpolator，即 (float)(Math.cos((input + 1) * Math.PI) / 2.0f) + 0.5f；未设时长时为 300ms；setInterpolator(null) 改为 LinearInterpolator；每帧进度 = (当前帧时间 − mStartTime) / (时长 × 系统动画时长缩放)，缩放使有效时长为 0 时进度直接取 1。",
+      "scope": "android-36.1 源码；缩放取系统的动画程序时长缩放设置（开发者选项可改），默认 1。不成立：View.animate() 的 ViewPropertyAnimator、补间动画 android.view.animation.Animation、AnimatorSet 统一设置插值器的情形本条未核；XML 动画写了 android:interpolator 或代码设了插值器时按所设。",
+      "source": "android.animation.ValueAnimator#sDefaultInterpolator、#mDuration、#setInterpolator、#animateBasedOnTime、#getScaledDuration；android.view.animation.AccelerateDecelerateInterpolator#getInterpolation",
+      "kind": "安卓平台",
+      "origin": "第七版新查"
+    },
+    {
+      "step": "适用情境",
+      "fact": "Android 13 起，应用的窗口全部不可见后，AnimationHandler 延迟一段时间（Android 13 为 10000ms，Android 14 起为 1000ms）把总时长为无限（repeatCount 为 INFINITE）的 Animator 暂停，窗口重新可见时恢复；ValueAnimator 恢复时把起始时间后移暂停的时长，进度从暂停处接着走，不追平后台经过的时间；有限时长的 Animator 不受这一机制影响，仍按当前帧时间减起始时间计算进度。",
+      "scope": "AOSP android-13.0.0_r1 与 android-36.1 的 AnimationHandler 有此逻辑，android-12.1.0_r1 没有；延迟取 Animator 的 sBackgroundPauseDelay，android-13.0.0_r1、android-13.0.0_r83 为 10000，android-14.0.0_r1 起为 1000；受系统属性 framework.pause_bg_animations.enabled（默认 true）控制，可见性由 ViewRootImpl 上报。不成立：Android 12L 及更早；窗口不可见的时间短于延迟时不暂停；有限时长动画在后台是否继续收到帧回调由系统调度决定，本条不涉及。",
+      "source": "android.animation.AnimationHandler#requestAnimatorsEnabled 与 mPauser、#isPauseBgAnimationsEnabledInSystemProperties；android.animation.Animator#sBackgroundPauseDelay、#getBackgroundPauseDelay；android.animation.ValueAnimator#doAnimationFrame；AOSP platform/frameworks/base 标签 android-12.1.0_r1、android-13.0.0_r1 的 core/java/android/animation/AnimationHandler.java，标签 android-13.0.0_r1、android-13.0.0_r83、android-14.0.0_r1 的 core/java/android/animation/Animator.java",
+      "kind": "安卓平台",
+      "origin": "第七版新查"
+    },
+    {
+      "step": "做法第 3 步",
+      "fact": "鸿蒙 Curve.EaseInOut 为 CubicBezier(0.42, 0.0, 0.58, 1.0)，Curve.FastOutSlowIn 为 CubicBezier(0.4, 0.0, 0.2, 1.0)，与 Compose FastOutSlowInEasing 的控制点相同；animateTo 的 AnimateParam 不设 curve 时取 Curve.EaseInOut，不设 duration 时为 1000ms；这些贝塞尔曲线都不等于安卓 AccelerateDecelerateInterpolator 的余弦曲线。",
+      "scope": "依据：Curve 枚举文档、显式动画文档的 AnimateParam 默认值；控制点与 OpenHarmony arkui_ace_engine 标签 OpenHarmony-v6.0-Release 的 frameworks/core/animation/curves.cpp 的 Curves::EASE_IN_OUT、Curves::FAST_OUT_SLOW_IN 一致。不成立：curve 传字符串或 ICurve（如 curves.cubicBezierCurve、curves.customCurve）时按所传；curve 用 springMotion、responsiveSpringMotion、interpolatingSpring 时 duration 不生效（文档）；ArkTS 卡片上 duration 另有上限（文档）。",
+      "source": "鸿蒙文档 ts-appendix-enums.md，Curve；ts-explicit-animation.md，AnimateParam；OpenHarmony arkui_ace_engine 标签 OpenHarmony-v6.0-Release 的 frameworks/core/animation/curves.cpp",
+      "kind": "鸿蒙接口",
+      "origin": "第七版新查"
+    },
+    {
+      "step": "做法第 2 步",
+      "fact": "displaySync 的 frame 回调参数 IntervalInfo.timestamp（当前帧到达时间）与 targetTimestamp（下一帧预期时间）单位是纳秒；UIContext.postFrameCallback 注册的 FrameCallback.onFrame(frameTimeInNano) 只在下一帧渲染时调用一次，要逐帧推进须在 onFrame 里再次 post；postDelayedFrameCallback 的 delayTime 单位是毫秒。",
+      "scope": "依据：displaySync 文档的 IntervalInfo 说明、@ohos.arkui.UIContext.d.ts 的 FrameCallback#onFrame 与 postDelayedFrameCallback 注释、UIContext 文档 postFrameCallback 小节。与 Date.now()、setInterval 的毫秒单位不同；两种帧时间的时间起点文档未写明，不能和 Date.now() 的值直接相减。",
+      "source": "鸿蒙文档 js-apis-graphics-displaySync.md，IntervalInfo；鸿蒙 SDK 的 ets/api/@ohos.arkui.UIContext.d.ts，FrameCallback#onFrame、UIContext#postDelayedFrameCallback；鸿蒙文档 arkts-apis-uicontext-uicontext.md，postFrameCallback",
+      "kind": "鸿蒙接口",
+      "origin": "第七版新查"
+    }
+  ],
+  "device_todo": [
+    "displaySync 的 frame 回调与 postFrameCallback 在应用退后台、回前台时是否停发与恢复，回前台首帧 timestamp 是否反映后台经过的真实时间（声明和文档都没写）"
+  ],
+  "dropped_notes": 0,
+  "note": "",
+  "sdk": {
+    "harmony": "HarmonyOS 6.1.0（API 23，SDK 6.1.0.105）；实现对照 OpenHarmony arkui_ace_engine 标签 OpenHarmony-v6.0-Release",
+    "android": "Android SDK 源码 android-36.1；AOSP frameworks/base 标签 android-12.1.0_r1、android-13.0.0_r1（AnimationHandler）；androidx.compose.animation:animation-core 1.0.0、1.12.0；androidx.compose.ui:ui 1.0.0、ui-android 1.12.0（均为 Maven 源码包）"
+  }
+}

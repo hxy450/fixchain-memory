@@ -1,6 +1,6 @@
 # 由内容定尺寸的父级（列表行、wrap_content 头部、FIT_CONTENT 半模态）里不写 width/height('100%')：描边背景画在节点自身，行内撑满用 Stretch；源端描边不改尺寸时注意 .border() 计入测量（定尺寸遮罩中的居中弹卡不在此列，宽度按源窗口规则）
 
-ID：`lesson-a58ebfe7a4c55b041b14` · 版本：9
+ID：`lesson-a58ebfe7a4c55b041b14` · 版本：10
 
 [本主题](index.md)
 
@@ -15,7 +15,7 @@ ID：`lesson-a58ebfe7a4c55b041b14` · 版本：9
 ## 例外与边界
 
 - 父节点有确定的宽高（显式数值，或已被外层约束定死）时，百分比层按该尺寸解析，可以使用；为满足这一条而给行或格子补的高度取源端该项的实际测量结果，不用 aspectRatio、固定 vp 或 layoutWeight 凑
-- 页面根 Stack 等定尺寸遮罩里的居中弹窗卡片：父级已定尺寸，宽度按源端窗口规则写（框架 AlertDialog 为屏宽 95% 减左右各 16dp），不适用本条，也不从本条取固定 vp 估值
+- 页面根 Stack 等定尺寸遮罩里的居中弹窗卡片：父级已定尺寸，宽度按源端窗口规则写（Holo、Material 系与 AppCompat 的 AlertDialog 默认窗口宽 wrap_content，最小宽取当前屏宽的竖屏 95%、横屏 65%（large 屏 80%/55%，xlarge 屏 72%/45%），内容更宽时随内容；可见卡片再减去窗口背景的左右内缩：Material 与 AppCompat 各 16dp，Holo 各 8dp），不适用本条，也不从本条取固定 vp 估值
 
 ## 原因
 
@@ -28,7 +28,7 @@ ArkUI 的百分比尺寸在由内容定尺寸的父级里会向上取到最近�
 3. 写完 grep width('100%') 与 height('100%')，逐处确认父级有确定尺寸。 需要给行或格子补高度时按源端该行的测量取值：源条目在 GridView/ListView 里时，行高＝条目内容按 UNSPECIFIED 测得的高（wrap_content 图片为密度放大后的固有高）加条目 padding，写在 GridItem/ListItem 上；去 Adapter.getView 的 setLayoutParams 与 padding、条目布局 XML 的 layout_height、内含图片的密度目录与像素尺寸里查。
 4. 行或卡片的铺满背景改用 .background(builder) 画在容器自身，或用列表项自带的滑动操作（ListItem.swipeAction）。
 5. 源端描边只绘制、不改尺寸时，先写明目标盒尺寸由谁决定：能拿到调用方尺寸就把宽高提升到带描边的节点上；尺寸只能由内容决定时，改用按 onSizeChange 回读的数值宽高叠一层 position({ x: 0, y: 0 }) + hitTestBehavior(HitTestMode.None) 的描边层（首帧会缺描边），规格验收写明“描边不改变盒尺寸”。
-6. 行内交叉轴撑满（如行首竖条、拖拽柄随行高）用 alignSelf(ItemAlign.Stretch) 或明确尺寸；头部背景或遮罩层按源可见区域给显式高度（如工具栏高加头部块），或把背景画在容器自身。源 LinearLayout（含 wrap_content 的 PopupWindow 内容）在某轴为 wrap_content 时，该轴尺寸只由非 match_parent 子项决定（竖向 LinearLayout 取这些子项的最大宽加各自 margin，再加父 padding），match_parent 子项随后按该尺寸以 EXACTLY 重测；需要算出数值（弹层宽、自绘子项的测量宽）时按这个顺序，不让 match_parent 子项的偏好尺寸参与父级定宽，自定义 View 的偏好长度只在 AT_MOST/UNSPECIFIED 下生效。
+6. 行内交叉轴撑满（如行首竖条、拖拽柄随行高）用 alignSelf(ItemAlign.Stretch) 或明确尺寸；头部背景或遮罩层按源可见区域给显式高度（如工具栏高加头部块），或把背景画在容器自身。源 LinearLayout（含 wrap_content 的 PopupWindow 内容）在交叉轴（竖向的宽、横向的高）为 wrap_content 时，该轴尺寸只由非 match_parent 子项决定（竖向 LinearLayout 取这些子项的最大宽加各自 margin，match_parent 子项只计 margin，再加父 padding，且不小于 minWidth；子项全是 match_parent 时才取它们测得的最大宽），match_parent 子项随后按该尺寸以 EXACTLY 重测；主轴方向不按此算，match_parent 子项照常计入总长度；需要算出数值（弹层宽、自绘子项的测量宽）时按这个顺序，不让 match_parent 子项的偏好尺寸参与父级定宽，自定义 View 的偏好长度只在 AT_MOST/UNSPECIFIED 下生效（指覆写了 onMeasure、按 resolveSize 一类方式取偏好的 View；没覆写 onMeasure 的 View 走 getDefaultSize，AT_MOST 下直接取父给的上限）。
 7. 半模态内容根的 Scroll/Column 不写 height('100%')，由弹层上限约束高度；不写 100% 不等于能滚动：内容 Scroll 还要设非 None 的 edgeEffect，才能在 FIT_CONTENT 弹层里超高后拖动（见 lesson-df1f691759f84ba9e688 第 3 步）。
 8. 被嵌子组件按源布局根节点与各状态容器的 layout_height 映射：wrap_content 不写 height('100%')，空态居中用内容高度或 constraintSize 最小高度；宿主向无高度槽位嵌入组件前，读被嵌组件 build() 根与各状态分支的高度修饰，有百分比高度就先改组件或在槽位按源端尺寸给显式高度，再核对首屏后续区块仍可见。
 
