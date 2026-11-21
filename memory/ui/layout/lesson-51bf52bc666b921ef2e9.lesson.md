@@ -1,6 +1,6 @@
 # values-sw<N>dp(-land) 覆盖按设备屏幕短边 min(宽,高) 判定再叠加方向，不译成 mediaquery min-width
 
-ID：`lesson-51bf52bc666b921ef2e9` · 版本：2
+ID：`lesson-51bf52bc666b921ef2e9` · 版本：3
 
 [本主题](index.md)
 
@@ -18,7 +18,7 @@ ID：`lesson-51bf52bc666b921ef2e9` · 版本：2
 
 ## 原因
 
-sw<N>dp 比较的是设备屏幕短边（smallestScreenWidthDp），与方向无关：手机横屏时当前宽可以超过平板阈值，短边却远小于它。ArkUI mediaquery 的 min-width/width 比较当前窗口宽，把“最小宽度≥N”对译成 (min-width: Nvp) 会让手机横屏也命中平板覆盖值。规格的中文“最小宽度”与媒体特性 min-width 同名，容易被直接对译。
+sw<N>dp 比较的是 smallestScreenWidthDp：两种方向下应用可用宽高的最小值（targetSdk<35 时扣除系统栏等窗口 insets，≥35 时按整窗），约等于设备屏幕短边，与方向无关：手机横屏时当前宽可以超过平板阈值，短边却远小于它。ArkUI mediaquery 的 min-width/width 比较当前窗口宽，把“最小宽度≥N”对译成 (min-width: Nvp) 会让手机横屏也命中平板覆盖值。规格的中文“最小宽度”与媒体特性 min-width 同名，容易被直接对译。
 
 ## 做法
 

@@ -1,6 +1,6 @@
 # 图标按资源固有 dp 显示、触摸盒放在外层：centerInside、wrap_content 或未设尺寸的图片不设成盒子尺寸再 Contain，同一 Image 上后写的槽位宽高会覆盖图标尺寸
 
-ID：`lesson-bdc493f5950835f9bfcc` · 版本：10
+ID：`lesson-bdc493f5950835f9bfcc` · 版本：11
 
 [本主题](index.md)
 
@@ -22,7 +22,7 @@ centerInside 只缩不放，小于盒子的图标按固有尺寸居中；Contain
 
 ## 做法
 
-1. 查图标资源所在的密度目录，按像素换算固有 dp（xhdpi 为 px/2）；外层保留源触摸盒并居中，内层 Image 设固有 dp，不要把 Image 设成盒子尺寸再用 Contain。
+1. 先定参照设备选中哪一份资源：同名资源分在多个限定词目录时按限定词优先级逐个淘汰，最小宽度排在屏幕方向、密度之前；sw<N>dp 只在 N ≤ 设备最小宽度时匹配，多份匹配取 N 最大的（如最小宽度 411dp 的设备在 sw360dp、sw600dp 两份里选 sw360dp），land/port 等其余限定词同样先定；不拿已拷进目标工程的那份代替。再按选中目录的密度限定换算固有 dp：xhdpi 为 px/2；没有密度限定（drawable/、drawable-sw<N>dp/ 等）按 mdpi（160），即 px 数就是 dp 数；drawable-nodpi 不随密度缩放，按物理像素显示，目标写 'Npx' 或 this.getUIContext().px2vp(N)，不写成 N vp；外层保留源触摸盒并居中，内层 Image 设固有 dp，不要把 Image 设成盒子尺寸再用 Contain。
 2. 映射表写 centerInside → Contain 时，先判断图标是否小于盒子：小于就按固有尺寸显示，只有大于盒子才缩小。
 3. wrap_content 或 drawableLeft 图标同样取资源固有 dp；输入里没有资源尺寸时先读取图片尺寸，不用经验值占位；源端图片另带 padding 时，按固有比例定宽高后再加 padding，不用固定正方形框再叠 padding 压缩可视图形。仓内同族页面已有的图标尺寸本身也是迁移产物，不能代替对源资源的换算。
 4. 资源是 vector drawable 转来的 SVG 时，固有尺寸取源 drawable 的 android:width/height（dp），不再除密度；源端按 Fit 显示、可能随父宽缩小时写 width('100%') + constraintSize({ maxWidth: 固有宽 }) + aspectRatio(固有宽/固有高)。

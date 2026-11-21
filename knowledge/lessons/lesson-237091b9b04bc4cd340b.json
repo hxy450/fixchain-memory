@@ -1,0 +1,69 @@
+{
+  "lesson": "lesson-237091b9b04bc4cd340b",
+  "sdk": {
+    "harmony": "HarmonyOS 6.1.0（API 23，SDK 6.1.0.105）",
+    "android": "Android SDK 源码 android-36.1"
+  },
+  "changes": [
+    {
+      "where": "原因",
+      "before": "TextDecoder 默认丢掉 BOM，Java 读取器把它当普通字符",
+      "after": "util.TextDecoder 默认（ignoreBOM 为 false）结果保留 BOM、设 ignoreBOM: true 才去掉，Java 读取器把它当普通字符",
+      "basis": "条目 2：鸿蒙文档 js-apis-util.md 写明 ignoreBOM 缺省 false 时解码结果包含 BOM，示例 ignoreBOM: true 时 EF BB BF 61 62 63 解出 \"abc\"",
+      "type": "说错"
+    }
+  ],
+  "entries": [
+    {
+      "step": "做法第 2 步",
+      "fact": "Java 的 String.split(regex) 参数是正则（\".\"、\"|\"、\\s+ 都按正则解释）；limit 为 0（单参数版本）时去掉结果末尾的全部空串，开头的零宽匹配不产生前导空串、开头的正宽度匹配会产生一个前导空串。JS 的 split 传字符串时按字面字符串切分。",
+      "scope": "对象：java.lang.String#split(String) 与 split(String, 0)。条件：分隔符含正则元字符，或文本以分隔符结尾（如以换行结尾的文件内容）。不成立的情形：split(regex, 负数) 时不去掉末尾空串。",
+      "source": "java.lang.String#split(String,int)、#split(String)；鸿蒙 SDK 内置 TypeScript 库 lib.es5.d.ts，String#split",
+      "kind": "安卓平台",
+      "origin": "第七版新查"
+    },
+    {
+      "step": "原因",
+      "fact": "鸿蒙 util.TextDecoder 的 ignoreBOM 缺省为 false，文档写明此时解码结果包含 BOM；设为 true 才去掉 BOM（文档示例 0xEF 0xBB 0xBF 0x61 0x62 0x63 在 ignoreBOM: true 下 decodeToString 得到 \"abc\"），而官方文档里的 TextDecoder 示例多数写了 ignoreBOM: true。",
+      "scope": "对象：util.TextDecoder.create(encoding, options) 及其 decodeToString。条件：要像 Java FileReader/InputStreamReader 那样保留 U+FEFF。不成立的情形：照抄文档示例写了 ignoreBOM: true 时 BOM 被去掉。",
+      "source": "鸿蒙文档 js-apis-util.md，TextDecoderOptions、TextDecoder 属性、decodeToString 示例；鸿蒙 SDK 的 ets/api/@ohos.util.d.ts，TextDecoderOptions.ignoreBOM",
+      "kind": "鸿蒙接口",
+      "origin": "第七版新查"
+    },
+    {
+      "step": "做法第 3 步",
+      "fact": "java.util.Formatter 的 %.Nf 在 double 的十进制数字串（与 Double.toString 同一算法 FloatingDecimal）上按 HALF_UP 舍入到 N 位；float 参数先拓宽成 double 再走同一路径（Formatter 的 print(float) 直接转成 double），所以舍入依据的是 (double)f 的数字串而不是 Float.toString(f)：例如 1.005f 按 %.2f 得 \"1.00\"（Float.toString 为 \"1.005\"，(double)f 的数字串为 1.0049999952316284），0.45f 按 %.1f 得 \"0.4\"。String.format(format, args) 用 Locale.getDefault(Locale.Category.FORMAT)，小数点和数字字符都取该区域的十进制符号（decimalSeparator、zeroDigit）。",
+      "scope": "对象：String.format / Formatter 的 'f' 转换。条件：源端没有显式传 Locale。不成立的情形：String.format(Locale.US, …) 一类显式区域时按该区域输出。",
+      "source": "java.util.Formatter 类注释（'f' 转换、本地化算法）、Formatter() 构造器、Formatter.FormatSpecifier#print(float,Locale) 与 #print(StringBuilder,double,Locale,Flags,char,int,boolean)；jdk.internal.math.FormattedFloatingDecimal#valueOf；java.lang.String#format(String,Object...)",
+      "kind": "安卓平台",
+      "origin": "第七版新查"
+    },
+    {
+      "step": "做法第 4 步",
+      "fact": "new SimpleDateFormat(pattern, locale) 在构造时调用 Calendar.getInstance(locale)，取的是构造当时的 TimeZone.getDefault()（android-36.1 的实现里 locale 带 -u-tz- 扩展时改用该时区）；之后不调用 setTimeZone，format 都按这个时区输出本地字段。",
+      "scope": "对象：SimpleDateFormat(String, Locale)、Calendar.getInstance(Locale)、Calendar.getInstance()。条件：源端没有调用 setTimeZone。不成立的情形：源端 setTimeZone(TimeZone.getTimeZone(\"UTC\")) 后按 UTC 输出。",
+      "source": "java.text.SimpleDateFormat#SimpleDateFormat(String,Locale)、#initializeCalendar；java.util.Calendar#getInstance(Locale)、#defaultTimeZone",
+      "kind": "安卓平台",
+      "origin": "第七版新查"
+    },
+    {
+      "step": "做法第 3 步",
+      "fact": "Android 的 Calendar.getInstance(locale) 固定返回 GregorianCalendar（不按 locale 选佛历、和历），firstDayOfWeek 与 minimalDaysInFirstWeek 随 locale 变化；鸿蒙 i18n.getCalendar(locale, type) 的 type 缺省取“区域默认的历法”，getFirstDayOfWeek 返回 1 代表周日、7 代表周六。",
+      "scope": "对象：用 i18n.getCalendar 复刻 Calendar.getInstance(locale) 的周规则和年份字段。条件：没有传 type。不成立的情形：显式传 type 为 'gregory' 时两端都按公历。另：i18n.System.getFirstDayOfWeek()（API 18+）返回 WeekDay 枚举，周一为 1、周日为 7，与 Calendar.getFirstDayOfWeek 的 1=周日、7=周六编码不同，两者不能混用。",
+      "source": "java.util.Calendar#createCalendar（Android-changed: only support GregorianCalendar）、firstDayOfWeek 与 minimalDaysInFirstWeek 字段注释；鸿蒙文档 js-apis-i18n.md，i18n.getCalendar、getFirstDayOfWeek、getMinimalDaysInFirstWeek",
+      "kind": "鸿蒙接口",
+      "origin": "第七版新查"
+    },
+    {
+      "step": "做法第 4 步",
+      "fact": "鸿蒙 i18n.getTimeZone(zoneID?) 不传 zoneID 时取系统时区；TimeZone.getOffset(date?) 返回该时刻的偏移，单位毫秒，处于夏令时时为原始偏移加夏令时偏移，date 单位毫秒、缺省为当前系统时间；getRawOffset() 只返回原始偏移（毫秒，不含夏令时）。",
+      "scope": "对象：@ohos.i18n 的 TimeZone。条件：复刻未 setTimeZone 的 formatter，或复刻“格式化固定 epoch 探测偏移”。不成立的情形：getOffset 不传 date 时按当前时间计算，不等于目标时刻的偏移；应用调用过 TimeZone.setAppDefaultTimeZoneById（26.0.0 起）时，getTimeZone() 不传 zoneID 仍按文档取系统时区，而未指定时区的日期时间格式化改用应用默认时区，要与之一致须用 TimeZone.getAppDefaultTimeZone()。",
+      "source": "鸿蒙文档 js-apis-i18n.md，i18n.getTimeZone、TimeZone.getOffset、TimeZone.getRawOffset",
+      "kind": "鸿蒙接口",
+      "origin": "第七版新查"
+    }
+  ],
+  "device_todo": [],
+  "dropped_notes": 0,
+  "note": ""
+}

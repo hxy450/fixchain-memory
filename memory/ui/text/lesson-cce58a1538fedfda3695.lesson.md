@@ -1,6 +1,6 @@
-# 源端 textAllCaps（含 Button 与 AlertDialog 按钮样式默认的全大写）必须显示为全大写，按资源原样不是可接受的降级：取资源字符串后按当前 locale toLocaleUpperCase（Resource 参数先 getStringSync），封装成共享 allCaps 复用；textCase(UpperCase) 只转拉丁字母，不用它代替
+# 源端 textAllCaps（含 Material、AppCompat、MaterialComponents 主题下 Button 与 AlertDialog 按钮样式默认的全大写；Holo 与 Material3 主题的按钮默认不全大写）必须显示为全大写，按资源原样不是可接受的降级：取资源字符串后按当前 locale toLocaleUpperCase（Resource 参数先 getStringSync），封装成共享 allCaps 复用；textCase(UpperCase) 只转拉丁字母，不用它代替
 
-ID：`lesson-cce58a1538fedfda3695` · 版本：2
+ID：`lesson-cce58a1538fedfda3695` · 版本：3
 
 [本主题](index.md)
 

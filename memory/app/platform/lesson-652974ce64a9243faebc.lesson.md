@@ -1,6 +1,6 @@
 # 写目标权限清单时按每个已映射系统 API 在 SDK d.ts 中的 @permission 汇总，不因 Android 端无需运行时权限就断言 requestPermissions 为空
 
-ID：`lesson-652974ce64a9243faebc` · 版本：4
+ID：`lesson-652974ce64a9243faebc` · 版本：5
 
 [本主题](index.md)
 
@@ -18,7 +18,7 @@ ID：`lesson-652974ce64a9243faebc` · 版本：4
 
 ## 做法
 
-1. 每映射一个系统 API，就查它在 SDK d.ts 中的 @permission，把汇总结果写进权限契约与 module.json5，并为需要用户授权的权限安排运行期申请（如读剪贴板前申请 READ_PASTEBOARD）。
+1. 每映射一个系统 API，就查它在 SDK d.ts 中的 @permission，把汇总结果写进权限契约与 module.json5，并为需要用户授权的权限安排运行期申请（如读剪贴板前申请 READ_PASTEBOARD；它是 system_basic 级的受限开放权限，还要 ACL 授权，没有时改用粘贴控件 PasteButton 读取，粘贴控件无需申请该权限）。
 2. 汇总清单以工程中实际调用的受权限 API 为准：检索 sensor.on、deleteAssets、createAsset 等调用点与 requestPermissions 逐项对照（例：订阅加速度计、陀螺仪需 ohos.permission.ACCELEROMETER/GYROSCOPE，MediaAssetChangeRequest 写删需 ohos.permission.WRITE_IMAGEVIDEO）。读接口声明时取完整 JSDoc，不用过滤注释的 grep 丢掉 @permission 与 @throws 201；切片移交的权限需求与规格的“不需要”冲突时，以 d.ts 或 skill 文档核实后裁决，不以规格措辞否决有依据的移交；user_grant 权限同时补运行期请求与 reason 字符串；受限开放权限（如 WRITE_IMAGEVIDEO、READ_IMAGEVIDEO）还需签名配置中的受限权限授权，工程没有该授权时改走不需要它的路线（相机系统资产保存、showAssetsCreationDialog、picker），不把声明当作已获得。
 3. 查到 @permission 后，在 SDK 的 toolchains/lib/PermissionDefinitions.json（按文件名检索时不区分大小写）读该权限的 grantMode 与 availableLevel 再定写法：system_grant 且 normal 只需在 module.json5 声明、安装即授予；user_grant 另加运行期申请与 reason；availableLevel 为 system_basic 及以上才涉及 ACL 或签名授权，不凭记忆判级别（例：setWindowPrivacyMode 需 ohos.permission.PRIVACY_WINDOW，HarmonyOS 6.1.0(23) SDK 中为 system_grant、normal）。规格或已批决策写了“requestPermissions 为空/不声明任何权限”而所调 API 带 @permission 时，带 d.ts 行号与已核级别交决策方改判后写入；写全空的静态验收前，按规格列出的系统能力面逐个核 @permission，任何一个带权限就不写全空断言。
 
