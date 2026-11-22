@@ -35,7 +35,19 @@
 | `rendered/<主题>/lesson-<id>.md` | 渲染好的样子（交给模型的那一段），给人看；由 `render.py` 生成 |
 | `render.py` | 把 `memory/` 里的正文和知识文件渲染成交给模型的那一段 |
 | `check.py` | 检查知识文件（字段、条数、本机路径、应用名、改句是否已在正文里） |
-| `RULES.md` | 配知识的规则（第七版） |
+| `RULES.md` | 新写的知识照哪份规则（指到 `skill/`） |
+| `RULES-v7.md` | 第七版规则的原文（留档，读和维护按它写的旧文件时用） |
+| `skill/` | 配知识的 skill：流程、规则、工具脚本、任务书（见下一节） |
+
+## 怎么写新的知识
+
+照 `skill/` 做。`skill/SKILL.md` 是流程，有两个入口：① 新卡归并出新经验或改了旧经验之后，接在归并的 apply、lint 之后、export 之前，给这些经验配知识；② 给库里现有的经验按使用频次分批补知识。两个入口共用同一套步骤：同步 OpenHarmony 文档 master → 读正文 → 收候选 → 逐条核实并补查 → 统一写法 → 清理 → 检查 → 渲染 → 安卓平台和依赖库两类条目加全部正文改句交给另一个人专门复核 → 每批抽查。
+
+- `skill/references/`：规则（`rules.md`）、去哪查和出处版本（`sources.md`）、文件格式（`knowledge-format.md`）、例子（`examples.md`）、工具用法和已知限制（`tools.md`）。
+- `skill/scripts/`：写的人用的脚本（同步文档、收候选、查文档整节、查安卓资源和依赖库、查鸿蒙声明、换文档链接、检查、渲染）。其中 `check.py` 带核对本机出处的选项；本目录的 `check.py`、`render.py` 是仓库一侧的检查和渲染，不核本机出处。两个 `render.py` 对新格式文件的输出逐字节相同。
+- `skill/briefs/`：任务书模板——写新卡归并后的经验（`write-new-cards.md`）、给现有经验补知识（`write-backfill.md`）、专门复核（`review.md`）、每批抽查（`audit.md`）。
+
+照 skill 写出的是下面「格式」里的新格式文件，放进 `lessons/`。
 
 ## 格式
 
