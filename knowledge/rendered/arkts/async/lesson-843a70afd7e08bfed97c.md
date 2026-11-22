@@ -14,16 +14,18 @@ ViewModel 实现阶段，编排页面初始化方法中异步存储/SDK 绑定�
 
 ## 做法
 
-1. 把源端同步设置的输入类状态（关键词、输入框文本、清除按钮可见性）放在第一个 await 之前赋值；异步步骤只加载数据，不在续体里回写用户可编辑字段。 先看源端初始化是否在构造器或 onCreate 里同步做完、之后才接收输入：是的话目标在生命周期回调（如 aboutToAppear）里按源顺序同步执行，SDK 同时有 Promise 与 Sync 变体时用 Sync 变体（写前在同一 interface 的 d.ts 里查，如 ImageSource.createPixelMapSync、resourceManager.getMediaContentSync、WindowStage.getMainWindowSync），不引入异步窗口，也不加“初始化完成前忽略输入”的门控。源端本来会抛出的异常（规格照搬的崩溃），从抛出函数到生命周期入口都不加 try/catch、Promise.catch，也不放进不被等待的 async 包装。
+1. 把源端同步设置的输入类状态（关键词、输入框文本、清除按钮可见性）放在第一个 await 之前赋值；异步步骤只加载数据，不在续体里回写用户可编辑字段。 先看源端初始化是否在构造器或 onCreate 里同步做完、之后才接收输入：是的话目标在生命周期回调（如 aboutToAppear）里按源顺序同步执行，SDK 同时有 Promise 与 Sync 变体时用 Sync 变体（写前在同一 interface 的 d.ts 里查，如 ImageSource.createPixelMapSync、resourceManager.getMediaContentSync、WindowStage.getMainWindowSync），不引入异步窗口，也不加“初始化完成前忽略输入”的门控。源端本来会抛出的异常（规格照搬的崩溃），从抛出函数到生命周期入口都不加 try/catch、Promise.catch，也不放进不被等待的 async 包装；工程也不注册 errorManager 的 'error' 观测器（注册后 JS_CRASH 由观测器接住，应用不退出）。
 2. 确需在续体赋值时，先确认字段仍是进入时的值再写。
 
 来源支持：2 张卡 · 2 次迁移 · 2 个应用
 
-已核实的平台事实（核实时用的是 HarmonyOS 6.1.0（API 23，openharmony ets 6.1.0.105；文档副本含到 API 26 的内容，超出 SDK 的已注明）；安卓 平台资源 android-34；框架源码 android-36.1；androidx Compose 1.10.3（foundation、ui、ui-unit、ui-graphics，按字节码核）。和具体应用无关，直接用，不用再查；其中的默认值只在应用自己的主题、样式、清单和代码没有另设时成立，应用有没有另设要到应用里看）：
-- 〔做法第 1 步〕aboutToAppear?(): void 在组件实例创建后、build() 执行前同步调用，返回 void，框架不等待其中的 Promise；在其中改的状态变量在 build() 时生效
-- 〔原因〕async 函数内抛出且没被捕获的异常不产生 JS Crash、进程不退出，表现为 unhandledRejection；未捕获的同步异常才导致 JS Crash 进程退出
-- 〔原因〕aboutToAppear 里同步抛出、沿途没有捕获的异常会让进程退出：hilog 记 “about to exit due to”，调用栈从抛出处指回 aboutToAppear
-- 〔做法第 1 步〕ImageSource.createPixelMapSync(options?: DecodingOptions): PixelMap（@since 12，失败返回 undefined），与 Promise 版 createPixelMap(options?) 并列
-- 〔做法第 1 步〕ResourceManager.getMediaContentSync(resId: number, density?: number): Uint8Array（@since 11）；Resource 参数的重载自 API 20 废弃
-- 〔做法第 1 步〕WindowStage.getMainWindowSync(): Window（@since 11）与 getMainWindow(): Promise<Window> 并列；window.getLastWindow 只有 callback 和 Promise 两种形式
-- 〔做法第 1 步〕display.getDefaultDisplaySync(): Display（@since 11）同步取屏幕宽高与密度
+已核实的平台事实（核实时用的是 HarmonyOS 6.1.0（API 23，SDK 6.1.0.105）；OpenHarmony 文档 master 2026-11-21（提交 e42bd18a）；安卓 不涉及。和具体应用无关，直接用，不用再查；其中的默认值只在应用自己的主题、样式、清单和代码没有另设时成立，应用有没有另设要到应用里看）：
+- 〔做法第 1 步〕aboutToAppear 在创建自定义组件新实例后、执行 build() 之前调用，声明为 aboutToAppear?(): void；在其中同步改的状态变量在随后的 build() 里生效
+- 〔做法第 1 步〕ImageSource.createPixelMapSync(options?) 自 API 12 起提供，同步解码并返回 PixelMap，解码失败返回 undefined；同一接口里的 createPixelMap(options?) 返回 Promise<PixelMap>
+- 〔做法第 1 步〕ResourceManager.getMediaContentSync(resId, density?) 自 API 10 起提供，同步返回媒体资源内容 Uint8Array
+- 〔做法第 1 步〕WindowStage.getMainWindowSync() 自 API 9 起提供，同步返回主窗口；window.getLastWindow(ctx) 只有 callback 和 Promise 两种形式
+- 〔做法第 1 步〕display.getDefaultDisplaySync() 自 API 9 起提供，同步返回应用所在屏幕的 Display
+- 〔原因 / 做法第 1 步〕ArkTS 里抛出的错误沿调用栈向上传递，直到被最近的 try-catch 捕获；始终没有被捕获时程序终止
+- 〔做法第 1 步〕errorManager.on('error', observer) 注册错误观测器后，应用产生的 JS_CRASH 由观测器捕获，此时应用不退出
+- 〔原因 / 做法第 1 步〕目标 SDK 为 API 23 的设备上：工程没有注册 errorManager 的 'error' 观测器、aboutToAppear 里同步执行且整条链上没有 try/catch 的初始化抛出 TypeError 时，进程退出，hilog 的崩溃栈从抛出函数指回 aboutToAppear
+- 〔原因〕目标 SDK 为 API 23 的设备上：aboutToAppear 不等待地调用 async 启动函数、函数体包在只写 hilog 的 try/catch 里时，其中抛出的 TypeError 被吞掉，经 JSON.stringify 记下的错误只剩「{}」；之后的 ready 标志一直没有置位，画面只有背景，触摸被门控全部丢弃

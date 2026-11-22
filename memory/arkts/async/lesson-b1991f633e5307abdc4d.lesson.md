@@ -1,6 +1,6 @@
 # 源端阻塞到完成才返回的 void 方法（排空队列、关闭设备、停录）改为 Promise 签名并逐层 await，销毁、重启、重开排在完成之后
 
-ID：`lesson-b1991f633e5307abdc4d` · 版本：1
+ID：`lesson-b1991f633e5307abdc4d` · 版本：2
 
 [本主题](index.md)
 
@@ -23,7 +23,7 @@ void 签名承载不了等待：调用方只能 fire-and-forget（void promise�
 ## 做法
 
 1. 规格接口表与 seam 类型把这类方法写成 Promise<void>（回调类型定为 () => Promise<void>，当前只是桩也如此），验收写明调用方需 await；实现与接线时从被等待的方法到每一层调用方都 await，完成态（如 CLOSING→CLOSED）、完成回调、销毁、重启与重开写在 await 之后。
-2. 不能 await 的生命周期回调只发起一个 async 序列（如 void this.vm.destroySequence()），引擎销毁放在该序列的 await 之后，页面不再另行同步销毁；成对的挂接与拆卸 hook 都返回 Promise。
+2. 不能 await 的生命周期回调只发起一个 async 序列（如 void this.vm.destroySequence()），引擎销毁放在该序列的 await 之后，页面不再另行同步销毁；这个序列在组件析构之后才跑完，await 之后的步骤不改本组件的状态变量、不再弹窗；成对的挂接与拆卸 hook 都返回 Promise。
 3. 为异步窗口写明请求语义：关闭进行中到来的打开记为待重开，关闭完成后执行；重复停止返回同一个共享的停止任务；启动链每个 await 之后检查是否已请求停止，已请求则不再启动。
 
 来源支持：2 张卡 · 迁移数未记录 · 应用数未记录

@@ -18,16 +18,16 @@ sw<N>dp 比较的是 smallestScreenWidthDp：两种方向下应用可用宽高�
 
 ## 做法
 
-1. 按短边判定：从 display.getDefaultDisplaySync() 取宽高（px 换成 vp），取较小者与阈值 N 比较，再按限定目录与当前方向组合（-land 即横屏且短边≥N）；方向或窗口变化时重算。不用 mediaquery 的 min-width/width 代替短边条件。
+1. 按短边判定：从 display.getDefaultDisplaySync() 取宽高（px 换成 vp），取较小者与阈值 N 比较，再按限定目录与当前方向组合（-land 即横屏且短边≥N，横屏包括 Display.orientation 为 LANDSCAPE 和 LANDSCAPE_INVERTED 两种）；方向或窗口变化时重算（display.on('change') 在显示方向改变时回调）。不用 mediaquery 的 min-width/width 代替短边条件。
 2. 规格登记 sw 覆盖时写明判定量是设备短边、与方向无关，再写方向条件，并给出手机横屏不命中的样例；不只写“最小宽度”。
 
 来源支持：1 张卡 · 1 次迁移 · 1 个应用
 
-已核实的平台事实（核实时用的是 API 23（HarmonyOS 6.1.0，SDK ets 6.1.0.105）；文档用 2026-05 的 OpenHarmony 中文文档副本；安卓 平台资源 android-34；源码 android-36.1。和具体应用无关，直接用，不用再查；其中的默认值只在应用自己的主题、样式、清单和代码没有另设时成立，应用有没有另设要到应用里看）：
-- 〔原因 / 做法第 1 步〕Configuration#smallestScreenWidthDp 对应 sw<N>dp 限定词，是竖屏与横屏两种方向下 screenWidthDp、screenHeightDp 的最小值，与当前方向无关
-- 〔例外与边界〕Configuration#screenWidthDp 对应 w<N>dp（可用宽）限定词，随横竖屏变化；targetSdk < 35 时不含窗口 insets，targetSdk ≥ 35 等于 WindowMetrics 宽度
-- 〔原因〕configChanges 的 smallestScreenSize 表示不论方向的尺寸，只在物理屏尺寸变化（如换到外接显示器）时才变；横竖切换只改变 screenSize
-- 〔做法第 1 步〕display.getDefaultDisplaySync(): Display；Display.width、height 为屏幕宽高（px、整数）；densityPixels 为物理与逻辑像素的缩放系数，vp = px / densityPixels（或 UIContext.px2vp）
-- 〔做法第 1 步〕mediaquery 的 width、min-width、max-width 比较的是应用页面可绘制区域的宽度；orientation 取 portrait 或 landscape
-- 〔做法第 1 步〕方向或尺寸变化时重算：display.on('change', callback: Callback<number>)（如方向改变）或 Window.on('windowSizeChange', callback: Callback<Size>)
-- 〔适用情境〕鸿蒙资源限定词只有移动国家码和移动网络码、语言、文字、国家或地区、横竖屏（vertical/horizontal）、设备类型、颜色模式、屏幕密度，没有屏幕宽度维度
+已核实的平台事实（核实时用的是 HarmonyOS 6.1.0（API 23，SDK 6.1.0.105）；OpenHarmony 文档 master 2026-11-21（提交 e42bd18a）；安卓 android-36.1 的源码（android.content.res.Configuration）。和具体应用无关，直接用，不用再查；其中的默认值只在应用自己的主题、样式、清单和代码没有另设时成立，应用有没有另设要到应用里看）：
+- 〔原因 / 做法第 1 步〕Configuration.smallestScreenWidthDp 是应用正常运行时在竖屏、横屏两种方向下 screenWidthDp 和 screenHeightDp 的最小值，对应 sw<N>dp（smallest width）资源限定符，与当前方向无关
+- 〔原因〕Configuration.screenWidthDp、screenHeightDp 随应用 targetSdk 不同：targetSdk 为 35（VANILLA_ICE_CREAM）及以上时等于 WindowMetrics（含窗口 insets），按 dp 四舍五入；低于 35 时不含状态栏、导航栏等窗口 insets，应用用 setDecorFitsSystemWindows(false) 画到系统栏下也照样扣掉；多窗口下是应用窗口的可用区域，嵌入的 Activity 取各自 Activity 的尺寸
+- 〔做法第 1 步〕display.getDefaultDisplaySync()（API 9 起）同步返回应用所在屏幕的 Display；Display.width、Display.height 是显示设备的屏幕宽高，单位 px，整数
+- 〔做法第 1 步〕Display.densityPixels 是物理像素与逻辑像素之间的缩放系数（取值范围 [0.5, 4.0]），px 除以它得到 vp
+- 〔原因 / 做法第 1 步〕mediaquery 的 width、min-width 比较的是应用页面可绘制区域的宽度，不是屏幕短边；比较数值型媒体特征时支持 vp 和 px，不写单位时按 px
+- 〔做法第 1 步〕Display.orientation（API 10 起）的 Orientation 取值为 PORTRAIT 0、LANDSCAPE 1、PORTRAIT_INVERTED 2、LANDSCAPE_INVERTED 3，横屏对应 LANDSCAPE 和 LANDSCAPE_INVERTED 两个值
+- 〔做法第 1 步〕display.on('change', callback) 监听显示设备变化，文档举的例子包括显示器方向改变，回调参数是屏幕 ID

@@ -19,8 +19,9 @@
 
 来源支持：2 张卡 · 2 次迁移 · 2 个应用
 
-已核实的平台事实（核实时用的是 HarmonyOS 6.1.0（API 23，SDK 6.1.0.105）；安卓 不涉及。和具体应用无关，直接用，不用再查；其中的默认值只在应用自己的主题、样式、清单和代码没有另设时成立，应用有没有另设要到应用里看）：
-- 〔做法第 1 步〕hilog 从 '@kit.PerformanceAnalysisKit' 导入：import { hilog } from '@kit.PerformanceAnalysisKit'（该 kit 再导出 @ohos.hilog）
-- 〔做法第 1 步〕hilog.error(domain: number, tag: string, format: string, ...args: any[]): void；debug/info/warn/fatal 参数相同。domain 为 0x0–0xFFFF 的十六进制整数，超出范围不打印；tag 超长截断（d.ts 写不超过 32 字节，开发指南写最多 31 字节）
-- 〔做法第 1 步〕format 里每个参数写成 %{private flag}specifier：不写标识符默认 private，输出 <private>；%{public}s 才明文显示
-- 〔做法第 1 步〕格式说明符：d/i 打印 number、bigint；s 打印 string、undefined、boolean、null；o/O 打印 object（API 20 起）；Error 对象不在 s 支持的类型里
+已核实的平台事实（核实时用的是 HarmonyOS 6.1.0（API 23，SDK 6.1.0.105）；OpenHarmony 文档 master 2026-11-21（提交 e42bd18a）；安卓 不涉及。和具体应用无关，直接用，不用再查；其中的默认值只在应用自己的主题、样式、清单和代码没有另设时成立，应用有没有另设要到应用里看）：
+- 〔原因〕console.error(message: string, ...arguments: any[]) 是 ArkTS 里全局可用的接口（API 7 起），写在 .ets 里编译不报错
+- 〔做法第 1 步〕hilog 从 @kit.PerformanceAnalysisKit 导出（import { hilog } from '@kit.PerformanceAnalysisKit'），错误级日志的签名是 hilog.error(domain: number, tag: string, format: string, ...args: any[]): void
+- 〔做法第 1 步〕hilog 的格式参数写成 %{private flag}specifier：不写隐私标识时按 private 处理，输出为 <private>；写 public 才明文显示参数
+- 〔做法第 1 步〕hilog 格式说明符 s 只支持 string、undefined、bool、null；d/i 支持 number、bigint；o/O 打印 object 自 API 20 起；Error 这类对象要先转成字符串再用 %{public}s
+- 〔做法第 1 步〕hilog 的 domain 取值 0x0000–0xFFFF，超出范围不打印；tag 文档写最多 31 字节、超出截断、不建议用中文（声明注释写不超过 32 字节），以文档为准

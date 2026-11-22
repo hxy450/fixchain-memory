@@ -1,103 +1,123 @@
 {
  "id": "lesson-4da9eabca745b3b2be91",
  "sdk": {
-  "harmony": "HarmonyOS 6.1.0（API 23，openharmony ets 6.1.0.105；文档副本含到 API 26 的内容，超出 SDK 的已注明）",
-  "android": "平台资源 android-34；框架源码 android-36.1；androidx Compose 1.10.3（foundation、ui、ui-unit、ui-graphics，按字节码核）"
+  "verified_on": "2026-11-21",
+  "docs_commit": "e42bd18a89ff75e48e3effdf3d58748376c2caec",
+  "docs_date": "2026-11-21",
+  "harmony": "HarmonyOS 6.1.0（API 23，SDK 6.1.0.105）",
+  "android": "android-36.1 的源码；android-36 的平台资源"
  },
- "changes": [],
+ "changes": [
+  {
+   "where": "做法第 3 步",
+   "before": "目标在页面隐藏时让画布失效并通知仍在跑的循环",
+   "after": "目标在页面隐藏时（@Entry 页面用 onPageHide、onPageShow，Navigation 子页面用 NavDestination 的 onHidden、onShown）让画布失效并通知仍在跑的循环",
+   "basis": "https://gitcode.com/openharmony/docs/blob/master/zh-cn/application-dev/reference/apis-arkui/arkui-ts/ts-custom-component-lifecycle.md，onPageShow、onPageHide；https://gitcode.com/openharmony/docs/blob/master/zh-cn/application-dev/ui/arkts-navigation-navdestination.md，页面生命周期",
+   "type": "写成明确做法"
+  }
+ ],
  "entries": [
   {
-   "step": "原因",
-   "fact": "SurfaceHolder.lockCanvas()：surface 尚未创建或不能编辑时返回 null",
-   "source": "android.view.SurfaceHolder#lockCanvas",
+   "step": "原因 / 做法第 1 步",
+   "fact": "源端每局 new 一个循环线程、重开前不停旧实例时，安卓设备上两个循环同时运行，结算弹窗随存活循环持续叠加（实测叠到 600 个以上）",
+   "source": "卡里上机实测（case-5b4026f2fabf83812ff2，安卓设备上先进下一关再点底下弹窗的重开）",
+   "kind": "卡里验证",
+   "origin": "新查"
+  },
+  {
+   "step": "原因 / 做法第 2 步",
+   "fact": "60Hz 模拟器上 setInterval(16) 驱动的帧循环实际约 39 帧/秒；同场景下安卓无 sleep 的 lockCanvas 循环约 60 帧/秒",
+   "source": "卡里上机实测（case-4a352d41e71bd8f199f0，两端计帧）",
+   "kind": "卡里验证",
+   "origin": "沿用并复核"
+  },
+  {
+   "step": "原因 / 做法第 2 步",
+   "fact": "setTimeout、setInterval 不是精准定时器，实际延迟可能与预期有误差；回调放进任务队列，等当前代码执行完、下一次事件循环才执行，页面忙时会更晚；应用切到后台时到期定时器不触发，回到前台后按序触发",
+   "source": "https://gitcode.com/openharmony/docs/blob/master/zh-cn/application-dev/reference/common/js-apis-timer.md，setInterval、超时延迟、定时器冻结",
+   "kind": "鸿蒙接口",
+   "origin": "新查"
+  },
+  {
+   "step": "做法第 2 步",
+   "fact": "@ohos.graphics.displaySync（API 11 起）：displaySync.create() 新建实例；setExpectedFrameRateRange({ min, max, expected }) 设期望帧率范围，单位帧/秒，取值 [0, 设备最大帧率] 且 min ≤ expected ≤ max，超出有效范围抛 401；on('frame', callback) 注册帧回调，callback 收到 IntervalInfo（timestamp、targetTimestamp，纳秒）；start() 后每帧回调一次，回调在 UI 主线程执行；stop() 停止回调但保留期望帧率和已注册的回调，可再 start()；off('frame') 不传 callback 时移除全部回调",
+   "source": "https://gitcode.com/openharmony/docs/blob/master/zh-cn/application-dev/reference/apis-arkgraphics2d/js-apis-graphics-displaySync.md，setExpectedFrameRateRange、on('frame')、start、stop；鸿蒙 SDK 的 ets/api/@ohos.graphics.displaySync.d.ts，displaySync.create、DisplaySync.setExpectedFrameRateRange、DisplaySync.on、DisplaySync.off、DisplaySync.start、DisplaySync.stop；https://gitcode.com/openharmony/docs/blob/master/zh-cn/application-dev/reference/apis-arkui/arkui-ts/ts-explicit-animation.md，ExpectedFrameRateRange",
+   "kind": "鸿蒙接口",
+   "origin": "沿用并复核"
+  },
+  {
+   "step": "做法第 2 步",
+   "fact": "没调用 setExpectedFrameRateRange 时两方说法不同：SDK 声明注释写 min、max、expected 默认都是 60；文档写跟随应用当前运行的帧率（传 (0, 0, 0) 同样跟随）；默认行为以文档为准",
+   "source": "https://gitcode.com/openharmony/docs/blob/master/zh-cn/application-dev/reference/apis-arkgraphics2d/js-apis-graphics-displaySync.md，setExpectedFrameRateRange；鸿蒙 SDK 的 ets/api/@ohos.graphics.displaySync.d.ts，DisplaySync.setExpectedFrameRateRange",
+   "kind": "鸿蒙接口",
+   "origin": "沿用并复核"
+  },
+  {
+   "step": "做法第 1 步",
+   "fact": "DisplaySync.start() 会把实例关联到 UI 上下文和窗口；在非 UI 页面或异步回调里调用 start() 可能取到错误的 UI 上下文，回调不执行、期望帧率不生效；stop() 解除这一关联",
+   "source": "https://gitcode.com/openharmony/docs/blob/master/zh-cn/application-dev/reference/apis-arkgraphics2d/js-apis-graphics-displaySync.md，start、stop",
+   "kind": "鸿蒙接口",
+   "origin": "新查"
+  },
+  {
+   "step": "做法第 2 步",
+   "fact": "UIContext.postFrameCallback(frameCallback)（API 12 起）注册的回调只在下一帧渲染时调用一次，回调方法是 FrameCallback.onFrame(frameTimeInNano)；持续按帧驱动要在每次 onFrame 里重新 postFrameCallback",
+   "source": "https://gitcode.com/openharmony/docs/blob/master/zh-cn/application-dev/reference/apis-arkui/arkts-apis-uicontext-uicontext.md，postFrameCallback；鸿蒙 SDK 的 ets/api/@ohos.arkui.UIContext.d.ts，UIContext.postFrameCallback、FrameCallback.onFrame",
+   "kind": "鸿蒙接口",
+   "origin": "沿用并复核"
+  },
+  {
+   "step": "原因 / 做法第 3 步",
+   "fact": "SurfaceHolder.lockCanvas() 在 surface 尚未创建或不能编辑时返回 null；在 surfaceCreated 之前或 surfaceDestroyed 之后反复调用，会被节流到很慢的频率（SurfaceView 的实现：视图不可见、绘制已停止或还没有 surface 时返回 null，并让两次失败调用之间至少隔 100ms）",
+   "source": "android.view.SurfaceHolder#lockCanvas；android.view.SurfaceView#internalLockCanvas",
    "kind": "安卓平台",
    "origin": "沿用并复核"
   },
   {
-   "step": "原因",
-   "fact": "Thread.start() 只能调用一次，线程结束后也不能再 start，否则抛 IllegalThreadStateException",
+   "step": "原因 / 做法第 3 步",
+   "fact": "同一个 Thread 对象只能 start() 一次，线程已启动或已结束时再次调用 start() 抛 IllegalThreadStateException",
    "source": "java.lang.Thread#start",
    "kind": "安卓平台",
    "origin": "沿用并复核"
   },
   {
-   "step": "原因",
-   "fact": "SurfaceView 调 surfaceCreated 等回调时 catch (Exception) 后只 Log.e(\"Exception configuring surface\")：回调里抛的异常不让进程崩溃，新 surface 留空",
+   "step": "原因 / 做法第 3 步",
+   "fact": "SurfaceView.updateSurface 里回调 surfaceCreated、surfaceChanged 等时，用 catch (Exception) 捕获异常、只记 Log.e 的 “Exception configuring surface”，不向外抛",
    "source": "android.view.SurfaceView#updateSurface",
    "kind": "安卓平台",
    "origin": "沿用并复核"
   },
   {
-   "step": "做法第 2 步",
-   "fact": "displaySync 从 @kit.ArkGraphics2D 导出；displaySync.create(): DisplaySync（@since 11）",
-   "source": "鸿蒙 SDK 的 ets/kits/@kit.ArkGraphics2D.d.ts；ets/api/@ohos.graphics.displaySync.d.ts，displaySync.create",
-   "kind": "鸿蒙接口",
-   "origin": "沿用并复核"
-  },
-  {
-   "step": "做法第 2 步",
-   "fact": "DisplaySync.setExpectedFrameRateRange(rateRange: ExpectedFrameRateRange)，不调时 min/max/expected 默认都是 60；ExpectedFrameRateRange { min, max, expected } 单位 fps，min ≤ expected ≤ max，取值 [0, 设备最大帧率]",
-   "source": "鸿蒙 SDK 的 ets/api/@ohos.graphics.displaySync.d.ts，DisplaySync.setExpectedFrameRateRange；ets/component/common.d.ts，ExpectedFrameRateRange；文档 ts-explicit-animation.md，ExpectedFrameRateRange",
-   "kind": "鸿蒙接口",
-   "origin": "沿用并复核"
-  },
-  {
-   "step": "做法第 2 步",
-   "fact": "DisplaySync.on('frame', callback: Callback<IntervalInfo>)；off('frame', callback?) 不传 callback 时移除全部；start() 加入渲染管线启用回调、stop() 移出；IntervalInfo.timestamp、targetTimestamp 单位纳秒",
-   "source": "鸿蒙 SDK 的 ets/api/@ohos.graphics.displaySync.d.ts，DisplaySync.on/off/start/stop、IntervalInfo；文档 js-apis-graphics-displaySync.md",
-   "kind": "鸿蒙接口",
-   "origin": "沿用并复核"
-  },
-  {
-   "step": "做法第 2 步",
-   "fact": "UIContext.postFrameCallback(frameCallback: FrameCallback)（@since 12）只在下一帧运行一次；FrameCallback 是抽象类，实现 onFrame(frameTimeInNano: number)",
-   "source": "鸿蒙 SDK 的 ets/api/@ohos.arkui.UIContext.d.ts，UIContext.postFrameCallback、FrameCallback",
-   "kind": "鸿蒙接口",
-   "origin": "沿用并复核"
-  },
-  {
-   "step": "做法第 2 步",
-   "fact": "60Hz 模拟器上，每次回调里更新并绘制一帧的 setInterval(16) 实际约 39 次/秒；displaySync 期望 {60, 60, 60} 的 on('frame') 随显示刷新约 60 次/秒回调，与安卓无 sleep 的 lockCanvas 循环同节拍",
-   "source": "卡里上机实测",
+   "step": "原因 / 做法第 3 步",
+   "fact": "源端 run() 中 lockCanvas 后不判空就绘制、渲染循环在跑时，安卓设备上按返回、按 Home 各 4 次均崩溃，旋转（Activity 重建）也崩溃；对局结束、循环已停时旋转按重建重开",
+   "source": "卡里上机实测（case-d3f1bcc562a64e5f56f7，安卓设备上按返回、Home、旋转）",
    "kind": "卡里验证",
    "origin": "沿用并复核"
   },
   {
    "step": "做法第 3 步",
-   "fact": "onPageShow?() / onPageHide?()：页面每次显示、隐藏时调用，含切前台、切后台；只对 @Entry 装饰的组件生效；NavDestination 另有 NavDestinationAttribute.onShown / onHidden 显示、隐藏回调",
-   "source": "鸿蒙 SDK 的 ets/component/common.d.ts，BaseCustomComponent.onPageShow、onPageHide；ets/component/nav_destination.d.ts，NavDestinationAttribute.onShown、onHidden",
-   "kind": "鸿蒙接口",
-   "origin": "沿用并复核"
-  },
-  {
-   "step": "做法第 3 步",
-   "fact": "清画布：CanvasRenderer.clearRect(x, y, w, h)（默认单位 vp）；reset() 清空后备缓冲、状态栈、路径和样式（@since 12）",
-   "source": "鸿蒙 SDK 的 ets/component/canvas.d.ts，CanvasRenderer.clearRect、CanvasRenderer.reset",
-   "kind": "鸿蒙接口",
-   "origin": "新查"
-  },
-  {
-   "step": "做法第 3 步",
-   "fact": "configChanges 未声明的配置变化发生时 Activity 重启；orientation = 0x0080；targetSdk ≥ 13 时横竖屏切换同时改变 screenSize（0x0400），两者都声明才不重建",
-   "source": "Android SDK 平台资源 data/res/values/attrs_manifest.xml，configChanges（android-34）",
+   "fact": "configChanges 没有列出的配置变化发生时 Activity 重启；旋转对应 orientation（0x0080），横竖切换时可用屏幕尺寸 screenSize（0x0400）也随之变化，targetSdk ≥ 13（HONEYCOMB_MR2）时两者都列出才不因旋转重启；例外：targetSdk 低于 13 时 screenSize、smallestScreenSize 的变化不重启，Android 8.0 起 mcc、mnc 变化默认也不重启（要重启得写进 recreateOnConfigChanges）",
+   "source": "Android SDK 平台资源 data/res/values/attrs_manifest.xml，configChanges、recreateOnConfigChanges；android.content.pm.ActivityInfo#getRealConfigChanged",
    "kind": "安卓平台",
    "origin": "沿用并复核"
   },
   {
    "step": "做法第 3 步",
-   "fact": "window.on('windowSizeChange', Callback<Size>) 只在窗口尺寸变化时触发，旋转 180° 不触发；display.on('change', Callback<number>) 在屏幕旋转时触发，此时 Display 的 width/height/orientation/rotation 已更新，Window 取到的可能仍是旧宽高",
-   "source": "文档 faqs-window-manager.md（如何监听窗口大小的变化；display.on('change') 回调中取窗口大小的时序）；鸿蒙 SDK 的 ets/api/@ohos.window.d.ts，Window.on('windowSizeChange')；ets/api/@ohos.display.d.ts，display.on、Display.rotation",
+   "fact": "onPageShow、onPageHide 只对 @Entry 装饰的 router 页面生效：每次显示（含路由跳转、应用进入前台）、每次隐藏（含路由跳转、应用进入后台）各触发一次；Navigation 子页面用 NavDestination 的 onShown、onHidden（API 10 起），onHidden 在有新页面压栈使它不在栈顶、它作为栈顶页面出栈、或应用切到后台时触发",
+   "source": "https://gitcode.com/openharmony/docs/blob/master/zh-cn/application-dev/reference/apis-arkui/arkui-ts/ts-custom-component-lifecycle.md，onPageShow、onPageHide；https://gitcode.com/openharmony/docs/blob/master/zh-cn/application-dev/ui/arkts-navigation-navdestination.md，页面生命周期；鸿蒙 SDK 的 ets/component/common.d.ts，BaseCustomComponent.onPageShow、BaseCustomComponent.onPageHide；鸿蒙 SDK 的 ets/component/nav_destination.d.ts，NavDestinationAttribute.onShown、NavDestinationAttribute.onHidden",
    "kind": "鸿蒙接口",
    "origin": "沿用并复核"
   },
   {
    "step": "做法第 3 步",
-   "fact": "安卓上 SurfaceView 渲染线程在 lockCanvas 后不判空就绘制时，循环运行中按返回、按 Home，或旋转导致 Activity 重建，都会因拿到 null 画布而崩溃",
-   "source": "卡里上机实测",
-   "kind": "卡里验证",
+   "fact": "display.on('change', callback) 在显示设备改变（如方向改变）时回调，参数是 displayId；Display.rotation 取 0、1、2、3，表示屏幕顺时针旋转 0°、90°、180°、270°",
+   "source": "https://gitcode.com/openharmony/docs/blob/master/zh-cn/application-dev/reference/apis-arkui/js-apis-display.md，display.on('add' | 'remove' | 'change')；鸿蒙 SDK 的 ets/api/@ohos.display.d.ts，display.on、Display.rotation",
+   "kind": "鸿蒙接口",
    "origin": "沿用并复核"
   }
  ],
- "device_todo": [],
- "dropped_notes": 1
+ "device_todo": [
+  "每帧重投 UIContext.postFrameCallback 驱动时，实际帧率是否与 displaySync 期望 {60, 60, 60} 相同（卡里只在设备上验证了 displaySync）"
+ ],
+ "dropped_notes": 0
 }
