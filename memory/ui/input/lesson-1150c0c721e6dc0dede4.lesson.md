@@ -1,6 +1,6 @@
 # 按 EditText 对齐 TextInput 时，未声明 background 的输入框按主题状态背景（editTextBackground 的 9-patch，随聚焦切换并取其内边距）复刻，并显式关闭源端没有的 ArkUI 默认装饰：填充底与圆角、Password 显隐图标、清除按钮，核默认高度
 
-ID：`lesson-1150c0c721e6dc0dede4` · 版本：5
+ID：`lesson-1150c0c721e6dc0dede4` · 版本：4
 
 [本主题](index.md)
 
@@ -10,7 +10,7 @@ ID：`lesson-1150c0c721e6dc0dede4` · 版本：5
 
 ## 适用情境
 
-源输入框是裸 EditText 或其子类，用 android:password、inputType=textPassword/numberPassword 掩码，没有 TextInputLayout passwordToggleEnabled 或自绘显隐按钮，也没有清除按钮；目标用 TextInput，type 为 InputType.Password 或 Normal。 也包括源 EditText 未声明 background、padding 与高度，外观来自框架主题的 editTextBackground 状态选择器（Holo 暗色单行框为 textfield_default/activated_holo_dark 两张 9-patch（多行框换成 textfield_multiline_* 一组），含端头竖线与内容内边距；Material 系为 <inset> 包着随状态切换的 9-patch 选择器 edit_text_material；AppCompat、MaterialComponents 主题在 API 22 起也取框架的 edit_text_material，appcompat 1.7.x 及更早在 API 21 及以下取库自带的 abc_edit_text_material）。
+源输入框是裸 EditText 或其子类，用 android:password、inputType=textPassword/numberPassword 掩码，没有 TextInputLayout passwordToggleEnabled 或自绘显隐按钮，也没有清除按钮；目标用 TextInput，type 为 InputType.Password 或 Normal。 也包括源 EditText 未声明 background、padding 与高度，外观来自框架主题的 editTextBackground 状态选择器（Holo 为 textfield_default/activated_holo_dark 两张 9-patch，含端头竖线与内容内边距；Material 系为 <inset> 包着随状态切换的 9-patch 选择器 edit_text_material）。
 
 ## 例外与边界
 

@@ -1,6 +1,6 @@
 # Java/ICU 正则、String/List 方法与 Android 工具类不按形似 JS 内建改写：先列语义差异，不等价就按源实现移植
 
-ID：`lesson-0cbafc2ad4096001d0e8` · 版本：4
+ID：`lesson-0cbafc2ad4096001d0e8` · 版本：3
 
 [本主题](index.md)
 
@@ -23,7 +23,7 @@ ID：`lesson-0cbafc2ad4096001d0e8` · 版本：4
 ## 做法
 
 1. 写“等价/直迁”前逐项列出所用调用的源端语义与 JS 内建的差异：正则字符类所属引擎、替换是否单遍、切分单位、比较规则、原地修改还是新建、解码容错、URI 解析与解码、未知值的平台默认；对不上的按源实现逐分支移植成共享函数，各调用点复用。
-2. 常用对照：\s、\p{L} 按 ICU 字符集写成显式 Unicode 类并用 u 标志；Pattern.quote 交替的 replaceAll 写成一个交替正则单遍替换；split("") 用 Array.from 按码点切（应用 targetSdkVersion ≤ 28，或系统是 Android 9 及以下时，源端结果开头还多一个空串）；compareToIgnoreCase 逐字符先比 toUpperCase 再比 toLowerCase；List.remove(Object) 用 indexOf + splice 原地移除首个（元素类覆写了 equals 时，按源端 equals 比较的字段找下标）；Base64.decode(DEFAULT) 移植 android.util.Base64 的解码状态机；Uri.parse(path).getPath() 先解析 scheme/authority 再百分号解码；getType 未知扩展名回退 application/octet-stream 后再走源端归类；Kotlin contains/endsWith/startsWith 不传 ignoreCase 即大小写敏感，不自行加 toLowerCase，isNotBlank/isBlank 只用于判断、返回原串不 trim，lineSequence()/lines() 按 \r\n、\n、\r 分行。
+2. 常用对照：\s、\p{L} 按 ICU 字符集写成显式 Unicode 类并用 u 标志；Pattern.quote 交替的 replaceAll 写成一个交替正则单遍替换；split("") 用 Array.from 按码点切；compareToIgnoreCase 逐字符先比 toUpperCase 再比 toLowerCase；List.remove(Object) 用 indexOf + splice 原地移除首个；Base64.decode(DEFAULT) 移植 android.util.Base64 的解码状态机；Uri.parse(path).getPath() 先解析 scheme/authority 再百分号解码；getType 未知扩展名回退 application/octet-stream 后再走源端归类；Kotlin contains/endsWith/startsWith 不传 ignoreCase 即大小写敏感，不自行加 toLowerCase，isNotBlank/isBlank 只用于判断、返回原串不 trim，lineSequence()/lines() 按 \r\n、\n、\r 分行。
 3. 规格提取写这类契约时写语义点（切分与截断规则、正则引擎、舍入、解码容错、未知值默认）并标“需逐语义移植”，不用“非空白字符数”“拒绝某前缀”一类口语描述。
 4. 源仓库有覆盖这些函数的单测（如 app/src/test 下的 *Test.kt）时先读，把用例当作移植样例逐条对拍；常见差异：java.net.URL.host 不含 userinfo 与端口、replaceFirst 只替换首个、Kotlin String.replace 替换全部、matcher().matches() 为整串匹配、ktor Url 接受相对路径；选用 @ohos.url URL 替代 java.net.URL 或 ktor Url 前同样用这些用例核对，不以“边缘情况可接受”跳过。源端以 URL(link) 是否抛 MalformedURLException 判定绝对、有无 scheme 或合法时，不用 new url.URL 构造器的抛错复刻：本地 @ohos.url.d.ts 中构造器标 @useinstead parseURL，已观察到它对无 scheme、相对路径与非法串不抛错，host 也省略默认端口；先用 scheme 正则（如 /^[a-zA-Z][a-zA-Z0-9+.-]*:/）判定，带 scheme 再解析校验，无 scheme 才补 http://，非绝对才按 base 解析，OrThrow 语义的调用点过滤失败项；URL(base, "/path") 取基址时按字符串截取 scheme://authority 并保留显式端口。
 

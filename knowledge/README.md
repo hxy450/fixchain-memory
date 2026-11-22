@@ -4,11 +4,11 @@
 
 派生自 main `369bbbf3`（store `e797fb15`，active 651 条、retired 1 条）。相对 main：
 
-1. **store**：照维护流程写提案、apply（共 5 次：建分支时一次，之后每并入一批带正文改动的知识一次，见「并入记录」），store 版本 `e797fb15` → `6a5b8844`（`6a5b88445403fae2fbfea56b1994c11b5a544168c56323376196874ab190ee80`）。
+1. **store**：照维护流程写提案、apply（共 4 次：建分支时一次，之后每并入一批带正文改动的知识一次，见「并入记录」），store 版本 `e797fb15` → `b5e76f80`（`b5e76f80d2a1cfb41787446f87371b13468e8f60afdd1284387f548f33ac452b`）。
    - 退役 4 条通用审查式经验（没有具体触发情景，要求把某一类东西全部核一遍或交付前做通用动作）：`lesson-6e558834938be19c04e2`、`lesson-25bc0b7518d335a947d6`、`lesson-42df1ac4d4030421da34`、`lesson-0c9e222422d81871b464`；理由写在 store 快照的 `retirement_reason` 里。
-   - 52 条经验按本目录知识文件里核实过的 `changes` 改正文（各次的处数见「并入记录」；被换掉的知识文件的改句仍在正文里，不在现在的知识文件里），版本比 main 高 1–2（先后被两批知识改过正文的经验高不止 1）；`evidence`、`requires`、`topic`、`status` 原样。
+   - 45 条经验按本目录知识文件里核实过的 `changes` 改正文（共 104 处），版本各 +1；`evidence`、`requires`、`topic`、`status` 原样。
    - 现在 active 647 条、retired 5 条（其中 1 条在 main 上就已退役）。
-2. **memory/**：从新 store 用维护脚本重新导出（开发版，带卡片链接，`--link-cards`），通过发布脚本用的严格校验（manifest 的版本等于 store HEAD、每个文件 sha256 对得上、没有多余文件）；`MEMORY.md` 的发布版本行同步改了。和 main 比：4 个退役经验的文件没了，52 个经验文件和 19 个索引 / manifest 文件变了，其余经验文件逐字节相同。
+2. **memory/**：从新 store 用维护脚本重新导出（开发版，带卡片链接，`--link-cards`），通过发布脚本用的严格校验（manifest 的版本等于 store HEAD、每个文件 sha256 对得上、没有多余文件）；`MEMORY.md` 的发布版本行同步改了。和 main 比：4 个退役经验的文件没了，45 个经验文件和 18 个索引 / manifest 文件变了，其余经验文件逐字节相同。
 3. **新增两个目录**：`knowledge/`（本目录）和 `shadow/`（定向核对版影子的提示词和用法）；`.gitignore` 放行这两个目录。仓库根 `README.md` 没改。
 
 ## 并入记录
@@ -20,7 +20,6 @@
 | 1 | 2026-11-21 | 9 条：`2fcb6612`、`4f81eeea`、`7083c6ad`、`92aee54a`、`99080bd3`、`bc5b8558`、`c8e645a5`、`cf111aad`、`eb4de4fd` | 37 | 7 处、5 条经验：`7083c6ad` 3、`92aee54a` 1、`99080bd3` 1、`bc5b8558` 1、`c8e645a5` 1 | `7312cbfe` → `09bd22c2` | 第七版规则，写完后经另一个人逐条独立复核 |
 | 2 | 2026-11-21 | 24 条：`08e71bb7`、`1696967d`、`18d9c9a3`、`29744eb6`、`3f3e1ff0`、`4567f9f7`、`4a4f8d84`、`4d0f0176`、`55f44e2e`、`776ed5eb`、`8a881c2e`、`8b145360`、`8d297954`、`9147be4d`、`943544ce`、`b58df29f`、`c4af68b3`、`d80ced7b`、`d9143de0`、`dcb3c5e6`、`ea965b7b`、`f6b95d7d`、`f80ae7c3`、`f88b9c82` | 86 | 9 处、5 条经验：`18d9c9a3` 1、`4a4f8d84` 2、`943544ce` 3、`b58df29f` 1、`f88b9c82` 2 | `09bd22c2` → `1e791453` | 第七版规则，写完后经另一个人逐条独立复核 |
 | 3 | 2026-11-21 | 24 条：`0a26e0cf`、`19dd006e`、`1e972af4`、`31ab9f59`、`39d1dee4`、`6d6ba721`、`6dae0bf2`、`783faf27`、`824031d5`、`8390913d`、`8953e390`、`8e0e9fe5`、`94a3f7a5`、`a58ebfe7`、`a6ed8a9c`、`ad6f23b8`、`ae093ded`、`b1916207`、`c1968bdf`、`c4a6eaaf`、`cf018b76`、`dbfae443`、`fb996956`、`feec63f6` | 72 | 21 处、12 条经验：`0a26e0cf` 2、`19dd006e` 2、`6d6ba721` 2、`824031d5` 2、`8953e390` 1、`8e0e9fe5` 1、`a58ebfe7` 3、`b1916207` 2、`c4a6eaaf` 2、`cf018b76` 1、`dbfae443` 1、`feec63f6` 2 | `1e791453` → `b5e76f80` | 第七版规则，写完后经另一个人逐条独立复核 |
-| 4 | 2026-11-21 | 18 条：`0457a04c`、`0cbafc2a`、`1150c0c7`、`237091b9`、`31ab9f59`、`368c4592`、`4f81eeea`、`5a82d62f`、`8390913d`、`9147be4d`、`92aee54a`、`9c4de55a`、`a6121cc7`、`b58df29f`、`bc5b8558`、`eb4de4fd`、`edc9465d`、`fde79829`（其中覆盖已有的 16 个） | 298 | 27 处、11 条经验：`0457a04c` 3、`0cbafc2a` 2、`1150c0c7` 1、`237091b9` 2、`31ab9f59` 1、`368c4592` 2、`5a82d62f` 5、`92aee54a` 1、`9c4de55a` 3、`a6121cc7` 5、`edc9465d` 2 | `b5e76f80` → `6a5b8844` | 照 knowledge 目录下的规则写，安卓平台和依赖库两类条目及全部正文改句经另一个人专门复核 |
 
 ## 是什么
 
@@ -52,17 +51,17 @@
 
 ## 格式
 
-现在有两种格式：旧格式（下面前两种，第三版和第七版规则的文件，`sdk` 只记 `harmony`、`android`）和 2026-11-21 起的新格式（第三种）。已经换成新格式的经验 18 条（active 18 条）：`0457a04c`、`0cbafc2a`、`1150c0c7`、`237091b9`、`31ab9f59`、`368c4592`、`4f81eeea`、`5a82d62f`、`8390913d`、`9147be4d`、`92aee54a`、`9c4de55a`、`a6121cc7`、`b58df29f`、`bc5b8558`、`eb4de4fd`、`edc9465d`、`fde79829`；其余 90 个知识文件还是旧格式。
+现在有两种格式：旧格式（下面前两种，第三版和第七版规则的文件，`sdk` 只记 `harmony`、`android`）和 2026-11-21 起的新格式（第三种）。还没有经验换成新格式，106 个知识文件都是旧格式。
 
 共同：`sdk` 是核实时用的版本（`harmony`、`android` 两个键；新格式另有三个键）；`changes` 每项有 `where`（正文哪一部分）、`before`（原句）、`after`（新句）、`basis`（依据）、`type`（改动类别）；`entries` 是平台事实；`device_todo` 是要上机才能定的事项，只留给维护的人；`dropped_notes` 是配的人删掉的条数。交给模型的只有正文（已含改句）和条目的 `step`、`fact`、`scope`；`source`、`code`、`origin`、`basis`、`device_todo` 不交。
 
 - **第三版规则的格式（27 个文件）**：顶层 `id`、`sdk`、`changes`、`entries`、`device_todo`、`dropped_notes`（个别有 `note`）。条目栏 `step`、`fact`、`source`、`kind`（鸿蒙接口 / 安卓平台 / 依赖库 / 卡里验证）、`origin`，个别带 `code`；**没有 `scope`**，条数比第七版多（共 319 条，一条经验最多 29 条）。
-- **第七版规则的格式（63 个文件）**：顶层 `lesson`、`sdk`、`changes`、`entries`、`device_todo`、`dropped_notes`、`note`。条目栏 `step`、`fact`、`scope`（成立范围：对什么成立、什么条件下成立、最常见的不成立情形）、`source`、`kind`（鸿蒙接口 / 安卓平台 / 依赖库）、`origin`，可选 `code`；每条经验最多 6 条（共 255 条）。规则见 `RULES.md`。
-- **新格式（2026-11-21 起，18 个文件）**：和第三版同一种结构（顶层 `id`、`sdk`、`changes`、`entries`、`device_todo`、`dropped_notes`，没有条目时有 `note`），`sdk` 另记 `verified_on`（核实日期）、`docs_commit`、`docs_date`（核实时用的 OpenHarmony 文档 master 的提交和日期）。条目栏 `step`、`fact`、`source`、`kind`（鸿蒙接口 / 安卓平台 / 依赖库 / 卡里验证）、`origin`；没有 `scope`，条数不设上限（共 298 条，一条经验最多 50 条）。渲染时段头在鸿蒙 SDK 版本后面多写文档 master 的日期和提交，条目不带成立范围。
+- **第七版规则的格式（79 个文件）**：顶层 `lesson`、`sdk`、`changes`、`entries`、`device_todo`、`dropped_notes`、`note`。条目栏 `step`、`fact`、`scope`（成立范围：对什么成立、什么条件下成立、最常见的不成立情形）、`source`、`kind`（鸿蒙接口 / 安卓平台 / 依赖库）、`origin`，可选 `code`；每条经验最多 6 条（共 319 条）。规则见 `RULES.md`。
+- **新格式（2026-11-21 起，0 个文件）**：和第三版同一种结构（顶层 `id`、`sdk`、`changes`、`entries`、`device_todo`、`dropped_notes`，没有条目时有 `note`），`sdk` 另记 `verified_on`（核实日期）、`docs_commit`、`docs_date`（核实时用的 OpenHarmony 文档 master 的提交和日期）。条目栏 `step`、`fact`、`source`、`kind`（鸿蒙接口 / 安卓平台 / 依赖库 / 卡里验证）、`origin`；没有 `scope`，条数不设上限（共 0 条）。渲染时段头在鸿蒙 SDK 版本后面多写文档 master 的日期和提交，条目不带成立范围。
 
 ## 覆盖
 
-108 个知识文件。其中 4 个对应本分支退役的经验（文件原样留着，不渲染，它们的 8 处改句没有套）；其余 **104 / 647 条 active 经验**有知识文件（第三版 23 条、第七版 63 条、新格式 18 条），其中 98 条有条目（`29744eb6`、`447ba581`、`6dae0bf2`、`776ed5eb`、`8390913d`、`c1968bdf` 是流程类经验，没有可挂的条目）。其余 active 经验还没有知识。
+106 个知识文件。其中 4 个对应本分支退役的经验（文件原样留着，不渲染，它们的 8 处改句没有套）；其余 **102 / 647 条 active 经验**有知识文件（第三版 23 条、第七版 79 条），其中 93 条有条目（`29744eb6`、`447ba581`、`4f81eeea`、`6dae0bf2`、`776ed5eb`、`8390913d`、`9147be4d`、`c1968bdf`、`eb4de4fd` 是流程类经验，没有可挂的条目）。其余 active 经验还没有知识。
 
 | id | 主题 | 规则 | 条目（带成立范围） | 改句（已进正文） | 标题 |
 |---|---|---|---:|---:|---|
@@ -92,8 +91,8 @@
 | `lesson-b1991f633e5307abdc4d` | arkts/async | 第三版 | 7（0） | 0 | 源端阻塞到完成才返回的 void 方法（排空队列、关闭设备、停录）改… |
 | `lesson-8b145360b447a10d52ef` | arkts/decorators | 第七版 | 5（5） | 0 | V2 组件成员装饰器裸写（@Local/@Param/@Once/@… |
 | `lesson-c1968bdf112ed3e6b259` | arkts/decorators | 第七版 | 0（0） | 0 | 自定义组件的成员不与组件通用属性方法同名（position、widt… |
-| `lesson-0cbafc2ad4096001d0e8` | arkts/stdlib | 新格式 | 25（0） | 2（是） | Java/ICU 正则、String/List 方法与 Androi… |
-| `lesson-237091b9b04bc4cd340b` | arkts/stdlib | 新格式 | 19（0） | 2（是） | Java 文本读行、split/trim、BOM、String.fo… |
+| `lesson-0cbafc2ad4096001d0e8` | arkts/stdlib | 第七版 | 6（6） | 0 | Java/ICU 正则、String/List 方法与 Androi… |
+| `lesson-237091b9b04bc4cd340b` | arkts/stdlib | 第七版 | 6（6） | 1（是） | Java 文本读行、split/trim、BOM、String.fo… |
 | `lesson-ae093dedda604fddf17e` | arkts/stdlib | 第七版 | 6（6） | 0 | DecimalFormat、BigDecimal 舍入与 Float… |
 | `lesson-1696967d1320c7735732` | arkts/strict-mode | 第七版 | 2（2） | 0 | ArkTS 里给对象字面量写显式 class/interface 类… |
 | `lesson-dbfae443e671c568e14e` | arkts/strict-mode | 第七版 | 2（2） | 1（是） | catch 中继续抛出时先把异常收窄为 Error，不直接 thro… |
@@ -105,20 +104,20 @@
 | `lesson-29744eb694376e8acaca` | process/build | 第七版 | 0（0） | 0 | 编译修复只改报错定位的行与符号，不以删掉功能或语义不同的替代换取通过… |
 | `lesson-6dae0bf2657b0e339742` | process/build | 第七版 | 0（0） | 0 | 用 shell 一行命令或脚本改写含 $ 或反斜杠转义的 ArkTS… |
 | `lesson-776ed5eb216833c6b002` | process/gates | 第七版 | 0（0） | 0 | 写文件以真实执行回执为准：只有文本形式的工具调用即未写入；覆盖模板入… |
-| `lesson-8390913de64b0adc00fc` | process/gates | 新格式 | 0（0） | 0 | 处理孤儿检测报出的无调用方页面或弹窗时，已登记为范围内的产物不删除：… |
-| `lesson-9147be4d87153de9c5b6` | process/gates | 新格式 | 9（0） | 0 | 功能对齐与验收结论逐项以代码落点为准：按规格验收项与导航出口检索实际… |
+| `lesson-8390913de64b0adc00fc` | process/gates | 第七版 | 0（0） | 0 | 处理孤儿检测报出的无调用方页面或弹窗时，已登记为范围内的产物不删除：… |
+| `lesson-9147be4d87153de9c5b6` | process/gates | 第七版 | 0（0） | 0 | 功能对齐与验收结论逐项以代码落点为准：按规格验收项与导航出口检索实际… |
 | `lesson-ad6f23b88f09b55dd92a` | process/gates | 第七版 | 2（2） | 0 | 用共享组件替换页面已实现片段前（关闭孤儿组件检查或按计划收口），完整… |
 | `lesson-f6b95d7d6d0159cb0436` | process/gates | 第七版 | 2（2） | 0 | 修复安全区等按关键字判定的结构检查时逐页落实实现，不用含检查关键字的… |
 | `lesson-447ba5818e4e203272e8` | process/task-handoff | 第三版 | 0（0） | 0 | 页面先于共享组件或共享工具实现时，页内等价实现登记为待收敛项；共享件… |
-| `lesson-4f81eeea17b94190c2de` | process/task-handoff | 新格式 | 6（0） | 0 | 要靠其他文件或任务补实现的功能，登记成带负责方、验证方式和源端确定值… |
+| `lesson-4f81eeea17b94190c2de` | process/task-handoff | 第七版 | 0（0） | 0 | 要靠其他文件或任务补实现的功能，登记成带负责方、验证方式和源端确定值… |
 | `lesson-a2f6a4ae9a72be740de6` | process/task-handoff | 第三版 | 8（0） | 0 | “不确定”“待补资源”“无等价”“延期”“契约未确认”这类占位只登记… |
-| `lesson-eb4de4fd7452308a0483` | process/task-handoff | 新格式 | 6（0） | 0 | 解决前向占位时按登记的触发文本逐项兑现：只接一半、写成常量或删掉标记… |
+| `lesson-eb4de4fd7452308a0483` | process/task-handoff | 第七版 | 0（0） | 0 | 解决前向占位时按登记的触发文本逐项兑现：只接一半、写成常量或删掉标记… |
 | `lesson-d80ced7be82765244889` | ui/accessibility | 第七版 | 4（4） | 0 | 图标无障碍文本按源 contentDescription 转写：nu… |
 | `lesson-6d6ba721c81206d45fbe` | ui/animation | 第七版 | 6（6） | 2（是） | 帧时钟动画（Animatable、ValueAnimator）改自驱… |
 | `lesson-0a26e0cfc44a183d3a02` | ui/dialog | 第七版 | 5（5） | 2（是） | 用页内覆层承载 Activity 级 Dialog 时挂在覆盖整窗的… |
-| `lesson-368c4592e4c7075c1871` | ui/dialog | 新格式 | 14（0） | 2（是） | 源端 XPopup/DialogFragment 真弹窗（居中、锚点… |
+| `lesson-368c4592e4c7075c1871` | ui/dialog | 第七版 | 5（5） | 0 | 源端 XPopup/DialogFragment 真弹窗（居中、锚点… |
 | `lesson-3f3e1ff0a4d0e0299bda` | ui/dialog | 第七版 | 6（6） | 0 | @ComponentV2 页面的弹窗不用 CustomDialogC… |
-| `lesson-9c4de55af3c1ecd8eaa4` | ui/dialog/appearance | 新格式 | 50（0） | 3（是） | 只靠平台默认外观的 AlertDialog（含 DialogPref… |
+| `lesson-9c4de55af3c1ecd8eaa4` | ui/dialog/appearance | 第七版 | 6（6） | 3（是） | 只靠平台默认外观的 AlertDialog（含 DialogPref… |
 | `lesson-1a66114fb7523a1f9af1` | ui/effects | 第三版 | 13（0） | 3（是） | 位图着色（ColorFilter.tint、setColorFilt… |
 | `lesson-8335bc404934f58c6f31` | ui/feedback | 第七版 | 5（5） | 1（是） | 公共 Toast 封装把时长做成每次调用的参数，逐调用点映射源端 L… |
 | `lesson-7708f650eb4b55dce045` | ui/graphics | 第三版 | 11（0） | 2（是） | android:background 的整屏背景位图按拉伸铺满映射，… |
@@ -127,21 +126,19 @@
 | `lesson-4da9eabca745b3b2be91` | ui/graphics/canvas | 第三版 | 13（0） | 0 | SurfaceView 自建线程的 lockCanvas 循环按线程… |
 | `lesson-7083c6ad69ab19ad17dd` | ui/graphics/canvas | 第七版 | 6（6） | 3（是） | 按 Android px 公式移植自绘 View 时先定画布上下文单… |
 | `lesson-c3bd9c8b2f24c209a659` | ui/graphics/canvas | 第三版 | 11（0） | 1（是） | 源端位图按密度解码、createScaledBitmap 预缩放后原… |
-| `lesson-0457a04c31208e1fb916` | ui/input | 新格式 | 16（0） | 3（是） | EditText 的 inputType 键盘与候选提示和内容约束分… |
-| `lesson-1150c0c721e6dc0dede4` | ui/input | 新格式 | 16（0） | 1（是） | 按 EditText 对齐 TextInput 时，未声明 back… |
-| `lesson-edc9465d3902807c386b` | ui/input | 新格式 | 11（0） | 2（是） | 菜单 SearchView 迁成自绘搜索栏时把展开、焦点、提交、收起… |
+| `lesson-1150c0c721e6dc0dede4` | ui/input | 第七版 | 6（6） | 0 | 按 EditText 对齐 TextInput 时，未声明 back… |
+| `lesson-edc9465d3902807c386b` | ui/input | 第七版 | 6（6） | 1（是） | 菜单 SearchView 迁成自绘搜索栏时把展开、焦点、提交、收起… |
 | `lesson-4a4f8d845a204ffa244b` | ui/interaction | 第七版 | 6（6） | 2（是） | Stack 上层全尺寸容器和页面级遮罩会参与命中测试：不处理点击的覆… |
 | `lesson-68023ac5f088c72a775a` | ui/interaction | 第三版 | 14（0） | 3（是） | 源端 onTouch 自己按未掩码 getAction 只跟随首指时… |
 | `lesson-7389433391eddbaea827` | ui/interaction | 第三版 | 7（0） | 1（是） | Image 承载点击/长按按钮或自绘拖拽柄时设 draggable(… |
 | `lesson-99080bd3bfc1bcbb9c5f` | ui/interaction | 第七版 | 5（5） | 1（是） | 源端禁用态只靠代码换背景、文字色固定时，不用 ArkUI .enab… |
 | `lesson-cf018b76af68b4c00895` | ui/interaction | 第七版 | 4（4） | 1（是） | 弹窗防穿透的 Block 只放在无子控件的遮罩层，内容面板与根容器保… |
-| `lesson-fde79829831c2269e925` | ui/interaction | 新格式 | 18（0） | 0 | 源端可点击容器自带的按压反馈（Compose clickable、C… |
+| `lesson-fde79829831c2269e925` | ui/interaction | 第七版 | 6（6） | 0 | 源端可点击容器自带的按压反馈（Compose clickable、C… |
 | `lesson-51bf52bc666b921ef2e9` | ui/layout | 第三版 | 7（0） | 1（是） | values-sw<N>dp(-land) 覆盖按设备屏幕短边 mi… |
 | `lesson-786a04847bf10d364d9d` | ui/layout | 第七版 | 6（6） | 1（是） | 源应用声明 supportsRtl=true 时保留逻辑方向：sta… |
-| `lesson-a6121cc7eaf207b702f7` | ui/layout | 新格式 | 27（0） | 5（是） | 导航图标与菜单分区按实际生效者实现：DrawerToggle 画汉堡… |
 | `lesson-c8e645a542254d96997e` | ui/layout | 第七版 | 5（5） | 1（是） | 源布局（含 include 引入的布局）有 layout-land、… |
 | `lesson-08b9064f678f1635e647` | ui/layout/constraints | 第三版 | 18（0） | 3（是） | 源端默认起始对齐和贴顶要显式写出：Android 与 Compose… |
-| `lesson-92aee54a305ea0bde363` | ui/layout/constraints | 新格式 | 22（0） | 1（是） | Stack 中内容尺寸的子项按 alignContent 定位：子项… |
+| `lesson-92aee54a305ea0bde363` | ui/layout/constraints | 第七版 | 6（6） | 1（是） | Stack 中内容尺寸的子项按 alignContent 定位：子项… |
 | `lesson-80dd4e626e1c207028e6` | ui/layout/scrolling | 第三版 | 17（0） | 7（是） | ScrollView 未写 overScrollMode、Compo… |
 | `lesson-0ef2cd00e1a91491b350` | ui/layout/sizing | 第三版 | 11（0） | 4（是） | 源端在整数 px 上取整的布局公式：规格写明运算域，实现在 px 域… |
 | `lesson-a58ebfe7a4c55b041b14` | ui/layout/sizing | 第七版 | 6（6） | 3（是） | 由内容定尺寸的父级（列表行、wrap_content 头部、FIT_… |
@@ -161,15 +158,15 @@
 | `lesson-b3bb0bc33f4caded78a2` | ui/state | 第七版 | 6（6） | 0 | 源页面在每次可见时、或由事件订阅与结果回调触发的重新加载，要迁成可见… |
 | `lesson-d9143de006714935afe2` | ui/state | 第七版 | 4（4） | 0 | 源端 Activity 实例字段承载的会话态映射为页面实例作用域：服… |
 | `lesson-22432022455bff6f849b` | ui/text | 第七版 | 4（4） | 1（是） | resourceManager 代码内取值（字符串、数组、复数、颜色… |
-| `lesson-31ab9f59945e5f0259ea` | ui/text | 新格式 | 3（0） | 1（是） | Tab 标签、页面标题与设置行等可见文案沿资源引用链取源端 stri… |
+| `lesson-31ab9f59945e5f0259ea` | ui/text | 第七版 | 3（3） | 0 | Tab 标签、页面标题与设置行等可见文案沿资源引用链取源端 stri… |
 | `lesson-4567f9f77f4280ec1747` | ui/text | 第七版 | 1（1） | 0 | 可见文案改为资源引用时值取自源端原文：目标字符串表缺键就新建专属键并… |
-| `lesson-b58df29f032cc6a8c9d6` | ui/text | 新格式 | 10（0） | 0 | 字符串语言目录与键集按源端实际存在的 values-<语言>（含依赖… |
+| `lesson-b58df29f032cc6a8c9d6` | ui/text | 第七版 | 3（3） | 1（是） | 字符串语言目录与键集按源端实际存在的 values-<语言>（含依赖… |
 | `lesson-cce58a1538fedfda3695` | ui/text | 第三版 | 9（0） | 1（是） | 源端 textAllCaps（含 Material、AppCompa… |
 | `lesson-1e972af4bc7e27b23d9c` | ui/theme | 第七版 | 3（3） | 0 | 追加主题颜色资源时同一次写深色限定目录的同名键，已存在的资源文件只追… |
 | `lesson-47785524c7f132ea7efe` | ui/theme | 第三版 | 24（0） | 8（是） | 把主题、控件默认样式或依赖库隐式提供的外观写成目标显式样式：按“控件… |
 | `lesson-4e9507a2a793c5583aa8` | ui/theme | 第三版 | 9（0） | 1（是） | 按源端实际色值与字号在资源里反查同值键：主题语义色、排版样式先解析到… |
-| `lesson-5a82d62ff7e087616968` | ui/theme | 新格式 | 31（0） | 5（是） | 委托 Material/AppCompat 库或平台框架（Theme… |
-| `lesson-bc5b8558ab086168b462` | ui/theme | 新格式 | 15（0） | 0 | 引用 style 或抽成共享 @Builder 的控件：先展开共享默… |
+| `lesson-5a82d62ff7e087616968` | ui/theme | 第七版 | 6（6） | 0 | 委托 Material/AppCompat 库或平台框架（Theme… |
+| `lesson-bc5b8558ab086168b462` | ui/theme | 第七版 | 5（5） | 1（是） | 引用 style 或抽成共享 @Builder 的控件：先展开共享默… |
 
 退役经验的知识文件（不渲染）：
 
@@ -183,7 +180,7 @@
 ## 两版规则各做了哪些
 
 - **第三版规则（早先那版，27 条）**：条目多（共 319 条）、没有 `scope`，kind 里有「卡里验证」；不是按 `RULES.md` 做的。文件：`08b9064f`、`0c9e2224`、`0e1c8468`、`0ef2cd00`、`11e9d15d`、`1a66114f`、`25bc0b75`、`42df1ac4`、`447ba581`、`47785524`、`4da9eabc`、`4e9507a2`、`51bf52bc`、`68023ac5`、`6e558834`、`73894333`、`7708f650`、`803ba029`、`80dd4e62`、`843a70af`、`94715d0d`、`a2f6a4ae`、`a8452bfe`、`b1991f63`、`bdc493f5`、`c3bd9c8b`、`cce58a15`。
-- **第七版规则（63 条）**：按 `RULES.md` 做，每条事实写了成立范围；写完由另一个人逐条独立复核了成立范围（建分支时那批 22 个文件 124 条，复核改了约三成，多数是漏了例外；之后各批见「并入记录」）。文件：`08e71bb7`、`0a26e0cf`、`1696967d`、`18d9c9a3`、`19dd006e`、`1e972af4`、`22432022`、`29744eb6`、`2e636699`、`2fcb6612`、`396d5447`、`39d1dee4`、`3f3e1ff0`、`4567f9f7`、`4a4f8d84`、`4d0f0176`、`51651155`、`55f44e2e`、`652974ce`、`6d6ba721`、`6dae0bf2`、`7083c6ad`、`776ed5eb`、`783faf27`、`786a0484`、`824031d5`、`8335bc40`、`8953e390`、`8a881c2e`、`8b145360`、`8d297954`、`8e0e9fe5`、`943544ce`、`94a3f7a5`、`99080bd3`、`9fa98065`、`a23ad0b5`、`a4ee90ea`、`a58ebfe7`、`a6ed8a9c`、`ad6f23b8`、`ae093ded`、`b1916207`、`b3bb0bc3`、`c1968bdf`、`c4a6eaaf`、`c4af68b3`、`c8e645a5`、`cf018b76`、`cf111aad`、`d80ced7b`、`d9143de0`、`dbfae443`、`dcb3c5e6`、`ea965b7b`、`ea9a6cfe`、`efff9374`、`f6b95d7d`、`f80ae7c3`、`f88b9c82`、`fb996956`、`feec63f6`、`ff5e8fbf`。
+- **第七版规则（79 条）**：按 `RULES.md` 做，每条事实写了成立范围；写完由另一个人逐条独立复核了成立范围（建分支时那批 22 个文件 124 条，复核改了约三成，多数是漏了例外；之后各批见「并入记录」）。文件：`08e71bb7`、`0a26e0cf`、`0cbafc2a`、`1150c0c7`、`1696967d`、`18d9c9a3`、`19dd006e`、`1e972af4`、`22432022`、`237091b9`、`29744eb6`、`2e636699`、`2fcb6612`、`31ab9f59`、`368c4592`、`396d5447`、`39d1dee4`、`3f3e1ff0`、`4567f9f7`、`4a4f8d84`、`4d0f0176`、`4f81eeea`、`51651155`、`55f44e2e`、`5a82d62f`、`652974ce`、`6d6ba721`、`6dae0bf2`、`7083c6ad`、`776ed5eb`、`783faf27`、`786a0484`、`824031d5`、`8335bc40`、`8390913d`、`8953e390`、`8a881c2e`、`8b145360`、`8d297954`、`8e0e9fe5`、`9147be4d`、`92aee54a`、`943544ce`、`94a3f7a5`、`99080bd3`、`9c4de55a`、`9fa98065`、`a23ad0b5`、`a4ee90ea`、`a58ebfe7`、`a6ed8a9c`、`ad6f23b8`、`ae093ded`、`b1916207`、`b3bb0bc3`、`b58df29f`、`bc5b8558`、`c1968bdf`、`c4a6eaaf`、`c4af68b3`、`c8e645a5`、`cf018b76`、`cf111aad`、`d80ced7b`、`d9143de0`、`dbfae443`、`dcb3c5e6`、`ea965b7b`、`ea9a6cfe`、`eb4de4fd`、`edc9465d`、`efff9374`、`f6b95d7d`、`f80ae7c3`、`f88b9c82`、`fb996956`、`fde79829`、`feec63f6`、`ff5e8fbf`。
 
 核实时用的版本：鸿蒙 API 23（SDK 6.1.0.105）和 OpenHarmony 中文文档；安卓源码 android-36.1，平台资源 android-30 至 36；依赖库版本写在各文件的 `sdk` 和条目出处里。
 
@@ -212,6 +209,6 @@ python knowledge/check.py knowledge/lessons --only <id 前 8 位,…>     # 配�
 
 新格式的文件（没有 `lesson` 键、`sdk` 里有 `verified_on` / `docs_commit` / `docs_date`）按写知识时的检查规则查，`--legacy-ok` 对它不起作用：顶层键齐全、`id` 和文件名一致；`sdk` 的核实日期、文档日期写成 YYYY-MM-DD，文档提交号是十六进制，`harmony` 写明 API 几；条目五栏非空，kind 四选一（含「卡里验证」）、origin 二选一、step 是正文的部分名，条数不设上限；卡里验证的事实不写返修怎么改，事实不带返修经过和做法建议的尾巴；文档出处写成文档仓库 master 的链接，网址只认一手来源，fact / after / note 里不放链接；没有本机路径、行号写法和应用名；改句已在正文里的同上，没进正文的按顺序要套得上。默认值缺「应用没有另设」一类限定、提到高于本机 SDK 的 API、新句提到设备或截图的只列出，给人看。出处和本机 SDK、文档的逐条核对不在这里做。
 
-本分支的结果：108 个文件 0 处错误（加 `--legacy-ok`，只列出 119 处 = 旧格式 107 处 + 新格式 8 处（要人看的）+ 4 个退役经验）；第七版的 63 个文件、新格式的 18 个文件不加 `--legacy-ok` 也是 0 处错误。
+本分支的结果：106 个文件 0 处错误（加 `--legacy-ok`，只列出 111 处 = 旧格式 107 处 + 4 个退役经验）；第七版的 79 个文件不加 `--legacy-ok` 也是 0 处错误。
 
 效果数据见 `shadow/README.md`。
