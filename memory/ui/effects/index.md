@@ -34,7 +34,7 @@
 - [位图着色（ColorFilter.tint、setColorFilter）用 Image.colorFilter：fillColor 只对 SVG 图源生效](lesson-1a66114fb7523a1f9af1.lesson.md)
   - 时机：界面实现阶段为源端着色的图片写 ArkUI Image 修饰链、选择着色 API 时；规格提取阶段为 ColorFilter.tint 一类着色写转换决策时
   - 情境：源端 Compose Image 的 colorFilter = ColorFilter.tint(color)（默认 SrcIn），或 ImageView 的 tint、setColorFilter（XML android:tint 未写 tintMode 与 setColorFilter(int) 默认 SRC_ATOP，app:tint、setImageTintList 默认 SRC_IN），作用在 png/jpg/webp 位图上（常见白色加透明通道、靠着色才可见的示意图）；目标资源仍是同一位图；规格转换行可能把 fillColor 与 colorFilter 列成并列选项。
-  - 例外：资源已转成 SVG 时，fillColor 可以承担着色（它替换 SVG 中所有可绘制元素的填充色；工程开了 supportSvg2(true) 时，fill 为 'none' 的元素不受 fillColor 影响）
+  - 例外：资源已转成 SVG 时，fillColor 可以承担着色
 - [源端图像模糊、乘法压暗与折叠态着色按参数等价实现](lesson-55cac970ada4ca8fd3f1.lesson.md)
   - 时机：界面实现阶段，迁移折叠头部等使用图片模糊、LightingColorFilter 压暗和按折叠状态切换工具栏图标颜色的页面时
   - 情境：源背景图经模糊变换与 LightingColorFilter(mul, 0) 处理，工具栏图标由专门的着色管理类按折叠阈值切换颜色。

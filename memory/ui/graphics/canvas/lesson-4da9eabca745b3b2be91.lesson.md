@@ -1,6 +1,6 @@
 # SurfaceView 自建线程的 lockCanvas 循环按线程实例迁移：vsync 回调驱动，页面隐藏按 surface 失效写结果
 
-ID：`lesson-4da9eabca745b3b2be91` · 版本：2
+ID：`lesson-4da9eabca745b3b2be91` · 版本：1
 
 [本主题](index.md)
 
@@ -25,7 +25,7 @@ ID：`lesson-4da9eabca745b3b2be91` · 版本：2
 
 1. 先数源端循环实例：查 Thread 子类的构造调用点、保存实例的字段的全部赋值、surfaceCreated/surfaceDestroyed 方法体与各对话框按钮回调。每次 new 映射为一个目标循环对象（实例字段＋各自的帧订阅），启动与停止只作用于字段当前引用的最新实例；重开前不停旧实例的，旧对象继续运行，不收敛成全局单一句柄，也不在启动新循环时清掉旧句柄。规格或派工要求单一句柄而源码每轮 new 时，写进 handback 的 decision_gaps 回报规格分歧。
 2. 源循环无 sleep、每轮 lockCanvas 时用 vsync 回调驱动：@kit.ArkGraphics2D 的 displaySync.create() → setExpectedFrameRateRange({ min, max, expected }) 取源端刷新率 → on('frame') → start()，停止时 stop() 并 off('frame')；或每帧重投 UIContext.postFrameCallback。不用 setInterval/setTimeout(16) 代替。规格写“与源端等价节流”时同时写出源端节拍来源和目标驱动 API（本地 SDK ets/api/@ohos.graphics.displaySync.d.ts，@since 11）。
-3. 按源端运行态（循环在跑或已结束、对话框是否显示）分别写返回、切后台、旋转的结果：run() 中 lockCanvas 后不判空就绘制时，循环在跑遇 surface 失效即崩溃；已结束的线程在 surfaceCreated 再 start() 只记日志、画面留空。目标在页面隐藏时（@Entry 页面用 onPageHide、onPageShow，Navigation 子页面用 NavDestination 的 onHidden、onShown）让画布失效并通知仍在跑的循环，下一轮走源端拿到 null 画布的路径；页面重新显示时清画布后走 surfaceCreated 的等价路径。这些是对源端结果的复刻，不是额外防护；Activity 重建的其余后果见 lesson-94715d0df4c03a8fb5a5。
+3. 按源端运行态（循环在跑或已结束、对话框是否显示）分别写返回、切后台、旋转的结果：run() 中 lockCanvas 后不判空就绘制时，循环在跑遇 surface 失效即崩溃；已结束的线程在 surfaceCreated 再 start() 只记日志、画面留空。目标在页面隐藏时让画布失效并通知仍在跑的循环，下一轮走源端拿到 null 画布的路径；页面重新显示时清画布后走 surfaceCreated 的等价路径。这些是对源端结果的复刻，不是额外防护；Activity 重建的其余后果见 lesson-94715d0df4c03a8fb5a5。
 
 ## 可选检查
 

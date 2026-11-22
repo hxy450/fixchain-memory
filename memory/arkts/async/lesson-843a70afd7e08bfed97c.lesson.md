@@ -1,6 +1,6 @@
 # 异步初始化里，用户可编辑的输入状态在第一个 await 之前写入初值；源端初始化本是同步的就保持同步，不加输入门控、不吞异常
 
-ID：`lesson-843a70afd7e08bfed97c` · 版本：3
+ID：`lesson-843a70afd7e08bfed97c` · 版本：2
 
 [本主题](index.md)
 
@@ -18,7 +18,7 @@ ViewModel 实现阶段，编排页面初始化方法中异步存储/SDK 绑定�
 
 ## 做法
 
-1. 把源端同步设置的输入类状态（关键词、输入框文本、清除按钮可见性）放在第一个 await 之前赋值；异步步骤只加载数据，不在续体里回写用户可编辑字段。 先看源端初始化是否在构造器或 onCreate 里同步做完、之后才接收输入：是的话目标在生命周期回调（如 aboutToAppear）里按源顺序同步执行，SDK 同时有 Promise 与 Sync 变体时用 Sync 变体（写前在同一 interface 的 d.ts 里查，如 ImageSource.createPixelMapSync、resourceManager.getMediaContentSync、WindowStage.getMainWindowSync），不引入异步窗口，也不加“初始化完成前忽略输入”的门控。源端本来会抛出的异常（规格照搬的崩溃），从抛出函数到生命周期入口都不加 try/catch、Promise.catch，也不放进不被等待的 async 包装；工程也不注册 errorManager 的 'error' 观测器（注册后 JS_CRASH 由观测器接住，应用不退出）。
+1. 把源端同步设置的输入类状态（关键词、输入框文本、清除按钮可见性）放在第一个 await 之前赋值；异步步骤只加载数据，不在续体里回写用户可编辑字段。 先看源端初始化是否在构造器或 onCreate 里同步做完、之后才接收输入：是的话目标在生命周期回调（如 aboutToAppear）里按源顺序同步执行，SDK 同时有 Promise 与 Sync 变体时用 Sync 变体（写前在同一 interface 的 d.ts 里查，如 ImageSource.createPixelMapSync、resourceManager.getMediaContentSync、WindowStage.getMainWindowSync），不引入异步窗口，也不加“初始化完成前忽略输入”的门控。源端本来会抛出的异常（规格照搬的崩溃），从抛出函数到生命周期入口都不加 try/catch、Promise.catch，也不放进不被等待的 async 包装。
 2. 确需在续体赋值时，先确认字段仍是进入时的值再写。
 
 来源支持：2 张卡 · 2 次迁移 · 2 个应用

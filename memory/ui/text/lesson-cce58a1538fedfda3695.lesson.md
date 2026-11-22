@@ -1,6 +1,6 @@
-# 源端 textAllCaps（含 Material、AppCompat、MaterialComponents 主题下 Button 与 AlertDialog 按钮样式默认的全大写；Holo 与 Material3 主题的按钮默认不全大写）必须显示为全大写，按资源原样不是可接受的降级：取资源字符串后按当前 locale toLocaleUpperCase（Resource 参数先 getStringSync），封装成共享 allCaps 复用；textCase(UpperCase) 不转 ü、西里尔字母这类非 ASCII 字母，不用它代替
+# 源端 textAllCaps（含 Material、AppCompat、MaterialComponents 主题下 Button 与 AlertDialog 按钮样式默认的全大写；Holo 与 Material3 主题的按钮默认不全大写）必须显示为全大写，按资源原样不是可接受的降级：取资源字符串后按当前 locale toLocaleUpperCase（Resource 参数先 getStringSync），封装成共享 allCaps 复用；textCase(UpperCase) 只转拉丁字母，不用它代替
 
-ID：`lesson-cce58a1538fedfda3695` · 版本：4
+ID：`lesson-cce58a1538fedfda3695` · 版本：3
 
 [本主题](index.md)
 
@@ -18,7 +18,7 @@ ID：`lesson-cce58a1538fedfda3695` · 版本：4
 
 ## 做法
 
-1. 按钮或文本参数是 Resource/ResourceStr 时，先经 resourceManager.getStringSync(资源的 id)（或 UIContext 宿主 context 的资源管理器；传 Resource 对象的重载自 API 20 起废弃）取字符串，再调用 toLocaleUpperCase(tag)，与 AllCapsTransformationMethod 的 toUpperCase(locale) 对齐；封装为共享 allCaps(ctx, text)，语言切换后重算。写跨页文字变换前先 grep 工程已有实现并复用，不另写一套。
+1. 按钮或文本参数是 Resource/ResourceStr 时，先经 resourceManager.getStringSync（或 UIContext 宿主 context 的资源管理器）取字符串，再调用 toLocaleUpperCase(tag)，与 AllCapsTransformationMethod 的 toUpperCase(locale) 对齐；封装为共享 allCaps(ctx, text)，语言切换后重算。写跨页文字变换前先 grep 工程已有实现并复用，不另写一套。
 2. tag 由资源配置 locale 按 '_' 拆分、丢弃空子标签、再用 '-' 连接；结果为空或调用抛 RangeError 时回落到不带 locale 的 toUpperCase()。
 
 ## 可选检查

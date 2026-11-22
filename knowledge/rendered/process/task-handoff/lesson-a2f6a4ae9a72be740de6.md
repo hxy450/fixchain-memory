@@ -30,19 +30,12 @@
 
 来源支持：26 张卡 · 已知 6 次迁移（部分未记录） · 已知 5 个应用（部分未记录）
 
-已核实的平台事实（核实时用的是 HarmonyOS 6.1.0（API 23，SDK 6.1.0.105）；OpenHarmony 文档 master 2026-11-21（提交 e42bd18a）；安卓 android-36.1 的源码（android.media.MediaRecorder）。和具体应用无关，直接用，不用再查；其中的默认值只在应用自己的主题、样式、清单和代码没有另设时成立，应用有没有另设要到应用里看）：
-- 〔做法第 5 步〕鸿蒙 SDK 的声明文件里同一成员前常叠着多段注释，按 @since 从旧到新排，第一段的 @since 是起始版本，紧挨声明的最后一段是当前说法（如 WindowStage.getMainWindowSync 前三段依次标 9、10、11，接口自 API 9 起可用）
-- 〔做法第 5 步〕HarmonyOS 专有能力的声明在 SDK 的 hms/ets（api、kits）下，和 openharmony/ets 分开；@kit.MapKit、@kit.PushKit、@kit.ScanKit、@kit.AccountKit 等只在 hms/ets/kits 里
-- 〔做法第 5 步〕窗口亮度没有名为 getWindowBrightness 的读取接口，读取走属性集合：Window.getWindowProperties()（API 9 起）返回的 WindowProperties.brightness 是窗口亮度；写入是 setWindowBrightness
-- 〔做法第 5 步〕系统亮度设置的键是 settings.display.SCREEN_BRIGHTNESS_STATUS，取值 0 到 255
-- 〔做法第 5 步〕OAID 由 @ohos.identifier.oaid 的 identifier.getOAID() 提供（Promise 和 callback 两种，API 10 起），@kit.AdsKit 也导出 identifier；需要 ohos.permission.APP_TRACKING_CONSENT，未授权时返回 00000000-0000-0000-0000-000000000000
-- 〔做法第 5 步〕AVRecorder.getAudioCapturerMaxAmplitude()（API 11 起，Promise）返回从上次获取到本次调用之间的最大振幅，要在 prepare() 之后调用；名字和安卓的 getMaxAmplitude 不对称
-- 〔做法第 5 步〕MediaRecorder.getMaxAmplitude() 返回自上次调用以来采样到的最大绝对振幅，第一次调用返回 0，要在 setAudioSource() 之后调用
-- 〔做法第 5 步〕media.d.ts 的 AudioSourceType 里有 AUDIO_SOURCE_TYPE_CAMCORDER = 13（API 12 起），CodecMimeType 里有 VIDEO_HEVC = 'video/hevc'（API 11 起）；本机 SDK 声明里 CAMCORDER 距 enum AudioSourceType 起点约 1633 字符（枚举体约 1665 字符），VIDEO_HEVC 距 enum CodecMimeType 起点约 3413 字符（枚举体约 4140 字符），只截前 1600 或 2600 字符看不到它们
-- 〔适用情境 / 做法第 5 步〕common.d.ts 有 BlendMode 枚举（含 PLUS = 13、DARKEN = 17）和 CommonMethod.blendMode(value, type?)（API 11 起，type 为 BlendApplyType）
-- 〔适用情境 / 做法第 5 步〕linearGradient 的 LinearGradientOptions.repeating 为 true 时渐变在组件范围内循环重复填充，没有设时为 false；colors 里每个颜色的位置是 [0, 1.0] 的比例
-- 〔适用情境 / 做法第 8 步〕bindPopup 用 CustomPopupOptions 时，popupColor 没有设时为透明色加 COMPONENT_ULTRA_THICK 模糊背景（API 11 起；API 10 为 '#4d4d4d'），去掉模糊要把 backgroundBlurStyle 设为 BlurStyle.NONE；backgroundBlurStyle 没有设时为 COMPONENT_ULTRA_THICK，radius 没有设时为 20vp；PopupOptions（API 18 起的 PopupCommonOptions 也是）有同名的 popupColor、backgroundBlurStyle、radius
-- 〔做法第 6 步〕系统先在与设备状态匹配的限定词目录里找资源，没有匹配的限定词目录或在其中找不到时才去 base；有多个屏幕密度限定词目录时先向上匹配最接近的，没有再向下匹配最接近的
-- 〔做法第 6 步〕屏幕密度限定词共六个：sdpi (0, 120]、mdpi (120, 160]、ldpi (160, 240]、xldpi (240, 320]、xxldpi (320, 480]、xxxldpi (480, 640]（单位 dpi）
-- 〔适用情境 / 做法第 8 步〕hvigor 构建时生成 BuildProfile（位于模块构建输出的 generated/profile 目录，如 entry/build/<product>/generated/profile/<target>/BuildProfile.ets），源码里 import BuildProfile from 'BuildProfile' 读到的 BuildProfile.DEBUG 在 debug 构建为 true；这个文件不在 src 下，在 src 里检索不到
-- 〔做法第 5 步〕canIUse(syscap) 判断某个 SysCap 对应的 API 集合在当前设备上能否调用，不判断某个硬件在不在；同一设备类型的不同型号软硬件规格可能不同，要再用对应模块的能力查询接口判断（能力查询机制并非 canIUse）
+已核实的平台事实（核实时用的是 HarmonyOS 6.1.0（API 23，openharmony ets 6.1.0.105；文档副本含到 API 26 的内容，超出 SDK 的已注明）；安卓 平台资源 android-34；框架源码 android-36.1；androidx Compose 1.10.3（foundation、ui、ui-unit、ui-graphics，按字节码核）。和具体应用无关，直接用，不用再查；其中的默认值只在应用自己的主题、样式、清单和代码没有另设时成立，应用有没有另设要到应用里看）：
+- 〔做法第 5 步〕本地 SDK 有两套声明：openharmony/ets（component、api、kits）和 hms/ets（api、kits）；@kit.* 只是转导出
+- 〔做法第 5 步〕混合模式：CommonMethod.blendMode(value: BlendMode, type?: BlendApplyType)（@since 12），默认 BlendMode.NONE（效果同 SRC_OVER），BlendApplyType 默认 FAST，OFFSCREEN 为离屏混合
+- 〔做法第 5 步〕渐变平铺：linearGradient/sweepGradient/radialGradient 的选项有 repeating?: boolean（默认 false）；drawing.ShaderEffect.createLinearGradient(startPt, endPt, colors, mode: TileMode, …)，TileMode：CLAMP 0、REPEAT 1、MIRROR 2、DECAL 3
+- 〔做法第 5 步〕属性集合式读取的例子：窗口亮度在 Window.getWindowProperties() 返回的 WindowProperties.brightness（没有 getWindowBrightness）；系统亮度在设置模块的键 settings.display.SCREEN_BRIGHTNESS_STATUS（0–255）
+- 〔做法第 6 步〕资源匹配：先找与设备状态匹配的限定词目录，找不到或没有匹配目录才去 base；密度限定词不要求完全一致，先向上取最接近的、否则向下，所以只放在某个密度目录的资源在任何密度的设备上都能匹配到
+- 〔做法第 6 步〕鸿蒙密度限定词：sdpi (0,120]、mdpi (120,160]、ldpi (160,240]、xldpi (240,320]、xxldpi (320,480]、xxxldpi (480,640]，与安卓 drawable-ldpi、hdpi 等同名不同义
+- 〔做法第 8 步〕CustomPopupOptions.popupColor 默认 TRANSPARENT 加 COMPONENT_ULTRA_THICK 模糊，backgroundBlurStyle 为 BlurStyle.NONE（= 7）时才不模糊；PopupOptions 也有 popupColor 与 backgroundBlurStyle
+- 〔做法第 8 步〕hvigor 生成 <模块>/build/<product>/generated/profile/<target>/BuildProfile.ets，含 BUNDLE_NAME、VERSION_CODE、VERSION_NAME、BUILD_MODE_NAME、DEBUG 等，并合入 build-profile.json5 的 buildOption.arkOptions.buildProfileFields

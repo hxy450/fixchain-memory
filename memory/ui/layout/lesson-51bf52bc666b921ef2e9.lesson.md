@@ -1,6 +1,6 @@
 # values-sw<N>dp(-land) 覆盖按设备屏幕短边 min(宽,高) 判定再叠加方向，不译成 mediaquery min-width
 
-ID：`lesson-51bf52bc666b921ef2e9` · 版本：4
+ID：`lesson-51bf52bc666b921ef2e9` · 版本：3
 
 [本主题](index.md)
 
@@ -22,7 +22,7 @@ sw<N>dp 比较的是 smallestScreenWidthDp：两种方向下应用可用宽高�
 
 ## 做法
 
-1. 按短边判定：从 display.getDefaultDisplaySync() 取宽高（px 换成 vp），取较小者与阈值 N 比较，再按限定目录与当前方向组合（-land 即横屏且短边≥N，横屏包括 Display.orientation 为 LANDSCAPE 和 LANDSCAPE_INVERTED 两种）；方向或窗口变化时重算（display.on('change') 在显示方向改变时回调）。不用 mediaquery 的 min-width/width 代替短边条件。
+1. 按短边判定：从 display.getDefaultDisplaySync() 取宽高（px 换成 vp），取较小者与阈值 N 比较，再按限定目录与当前方向组合（-land 即横屏且短边≥N）；方向或窗口变化时重算。不用 mediaquery 的 min-width/width 代替短边条件。
 2. 规格登记 sw 覆盖时写明判定量是设备短边、与方向无关，再写方向条件，并给出手机横屏不命中的样例；不只写“最小宽度”。
 
 来源支持：1 张卡 · 1 次迁移 · 1 个应用

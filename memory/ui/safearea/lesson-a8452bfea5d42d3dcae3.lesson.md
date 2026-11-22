@@ -1,6 +1,6 @@
 # 开启全屏布局前逐边核对源端系统栏：只沉浸状态栏（透明状态栏、未设 navigationBarColor、targetSdk≤34）时底部保留不透明导航栏底色；全屏后前景按测得的避让区逐边补 padding（顶部加在包住标题栏的层，底部加在伸到窗口底边的层）；expandSafeArea 只让背景越过安全区，预设系统标题栏也不会自动避让
 
-ID：`lesson-a8452bfea5d42d3dcae3` · 版本：9
+ID：`lesson-a8452bfea5d42d3dcae3` · 版本：8
 
 [本主题](index.md)
 
@@ -18,9 +18,9 @@ setWindowLayoutFullScreen(true) 让窗口内容铺到系统栏下，expandSafeAr
 
 ## 做法
 
-1. 开全屏前逐边列出源端状态栏、导航栏的颜色与是否沉浸：只有源端让内容画到某条系统栏下（enableEdgeToEdge、LAYOUT_HIDE_NAVIGATION、应用主题或代码显式设了透明 navigationBarColor，或 targetSdk≥35 且主题没有用 windowOptOutEdgeToEdgeEnforcement=true 退出强制，targetSdk≥36 时这项退出无效；只继承平台主题、没另设 navigationBarColor 且不被强制 edge-to-edge 时，AOSP 配置下导航栏是黑色），或源窗口背景按整窗铺满（Material / AppCompat 系主题下按窗口尺寸拉伸或定位的位图背景，见 lesson-0e1c846868f2683cc280 第 1 步「窗口背景层」）时，才让该边背景延伸；源端导航栏不透明时，全屏后在底部避让区叠同色、不参与命中的占位，不让页面底色填充。
+1. 开全屏前逐边列出源端状态栏、导航栏的颜色与是否沉浸：只有源端让内容画到某条系统栏下（enableEdgeToEdge、LAYOUT_HIDE_NAVIGATION、透明 navigationBarColor 或 targetSdk≥35），或源窗口背景按整窗铺满（Material / AppCompat 系主题下按窗口尺寸拉伸或定位的位图背景，见 lesson-0e1c846868f2683cc280 第 1 步「窗口背景层」）时，才让该边背景延伸；源端导航栏不透明时，全屏后在底部避让区叠同色、不参与命中的占位，不让页面底色填充。
 2. 规格把沉浸式实现委托给具名 skill 时，先完整加载该 skill，按其分层清单（窗口全屏、避让区测量、前景 padding）实现，不以自拟的最简方案代替；找不到 skill 时在实现记录中写明缺口。
-3. 用 getWindowAvoidArea(TYPE_SYSTEM) 的 topRect.height 取顶部避让；底部取 TYPE_SYSTEM 与 TYPE_NAVIGATION_INDICATOR 两者 bottomRect.height 的较大值。经 UIContext 的 px2vp 换算后按边落实：顶部加在包住标题栏的那一层，底部加在伸到窗口底边的内容层（入口尚未开全屏时也接上；共享窗口模型在入口未开全屏时发布 0，因为非沉浸式布局下系统已替内容避开状态栏和导航区域），按 min(宽,高) 取边长的区域在避让之后测量；在 avoidAreaChange 时更新。背景需要延伸到系统栏下时，才在背景节点自身加 expandSafeArea；Navigation、NavDestination 自 API 11 起默认带 SYSTEM 类型、TOP 与 BOTTOM 两边的 expandSafeArea，某边背景不该延伸时在该组件上显式重写 edges。
+3. 用 getWindowAvoidArea(TYPE_SYSTEM) 的 topRect.height 取顶部避让；底部取 TYPE_SYSTEM 与 TYPE_NAVIGATION_INDICATOR 两者 bottomRect.height 的较大值。经 UIContext 的 px2vp 换算后按边落实：顶部加在包住标题栏的那一层，底部加在伸到窗口底边的内容层（入口尚未开全屏时也接上；共享窗口模型在入口未开全屏时发布 0，因为非沉浸式布局下系统已替内容避开状态栏和导航区域），按 min(宽,高) 取边长的区域在避让之后测量；在 avoidAreaChange 时更新。背景需要延伸到系统栏下时，才在背景节点自身加 expandSafeArea。
 4. 壳页承载声明豁免安全区的内嵌子页时，根容器同时补顶部与底部避让；移植 insets 时逐边核对四边各由谁负责，包括经 fitsSystemWindows 隐式消费的顶部。
 5. 需要标题栏的全屏 NavDestination 页用 hideTitleBar(true)，自绘工具栏并给其所在容器加顶部避让；除非在根容器扩展状态下实测确认，不预设系统标题栏会自动避让。
 
