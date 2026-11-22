@@ -25,7 +25,7 @@
 - [源端对话框、底部弹层或下拉菜单改成页内覆盖层后，在宿主 onBackPressed 里自顶向下逐层关闭，全部关闭后才进未保存门禁或出栈](lesson-396d54479492828eeea3.lesson.md)
   - 时机：页面转换阶段，把源端 Dialog/AlertDialog/ModalBottomSheet/ExposedDropdownMenu（以及可能存在的 BackHandler）改写成 NavDestination 页内覆盖层、确定系统返回如何处理时
   - 情境：源页的对话框、底部弹层或下拉菜单以 onDismissRequest 关闭；源页可能另有 BackHandler 处理行内编辑器或未保存门禁，也可能完全没有 BackHandler。目标把这些弹层做成 NavDestination 内 Stack 条件渲染的覆盖层或由 activeDialog 一类状态驱动的组件，而不是自带返回关闭的弹窗机制，系统返回统一交给宿主。也包括源端 ContextMenu 窗口、ActionMode 多选态被改写成页面 @Local 浮层或选择态，页面是嵌入宿主的组件。也包括 View 体系 AlertDialog（默认可取消、带 setOnCancelListener）被写成自带蒙层的共享页内浮层组件，只接蒙层点击，页面的返回拦截不感知弹窗。
-  - 例外：弹层改用自带返回关闭的弹窗机制（openCustomDialog、bindSheet、NavDestinationMode.DIALOG 等）时，由弹窗自身处理返回
+  - 例外：弹层改用自带返回关闭的弹窗机制（openCustomDialog、bindSheet、NavDestinationMode.DIALOG，以及 onWillDismiss 不设的 bindPopup 气泡等）时，由弹窗自身处理返回 - 源端的层不可按返回关闭（View 体系 setCancelable(false)、Compose 的 dismissOnBackPress = false）时，它可见期间按返回不关闭它、不走它的取消回调，这次返回也不传给下层页面：目标在它可见时 return true，但不调用关闭回调
 - [源端用 NavController.handleDeepLink 处理外部拉起的深链时，目标清空 NavPathStack 并合成“起始页 + 目标页”返回栈，不在当前栈上 push](lesson-69229aa8c7b051229f26.lesson.md)
   - 时机：规格提取与入口接线阶段，把源端 handleDeepLink/navDeepLink 迁成 want 解析后的导航动作、决定打开深链后的返回栈时
   - 情境：源 Activity 在 onCreate、onNewIntent 或 LaunchedEffect(intent) 中调用 navController.handleDeepLink(intent)，目的地以 navDeepLink(uriPattern) 注册；外部链接经 VIEW intent 以新任务（FLAG_ACTIVITY_NEW_TASK）拉起宿主。目标由 UIAbility 的 onCreate/onNewWant 解析 want.uri 后操作 Navigation 的 NavPathStack；规格可能写成“在当前栈上 pushPathByName、目标已在栈顶则只更新参数”。

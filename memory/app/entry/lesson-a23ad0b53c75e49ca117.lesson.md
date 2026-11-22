@@ -1,6 +1,6 @@
 # intent-filter 逐条映射为 module.json5 skills：有对应 action 的不合并，载荷键不自造，源端没有的不加
 
-ID：`lesson-a23ad0b53c75e49ca117` · 版本：2
+ID：`lesson-a23ad0b53c75e49ca117` · 版本：3
 
 [本主题](index.md)
 
@@ -10,7 +10,7 @@ ID：`lesson-a23ad0b53c75e49ca117` · 版本：2
 
 ## 适用情境
 
-源 Activity 声明多条 intent-filter（SEARCH、VIEW 自定义 scheme、SEND/SEND_MULTIPLE */*、PROCESS_TEXT 等），入口分发读取 Intent.EXTRA_* 键，并可能在初始化或验密门之后才处理 Intent；目标为 UIAbility 的 module.json5 skills（actions、entities、uris，分享目标需 utd 与 maxFileSupported）与 Want parameters、systemShare 载荷；skill 参考或交接笔记可能给出“调用某系统能力须声明某 skill”的片段。也包括集成者在入口 Ability 解析第三方拉起 Want 的 extras：多个键表达同一选项、源端按固定顺序短路判定，且取值限定在少数几个值。
+源 Activity 声明多条 intent-filter（SEARCH、VIEW 自定义 scheme、SEND/SEND_MULTIPLE */*、PROCESS_TEXT 等），入口分发读取 Intent.EXTRA_* 键，并可能在初始化或验密门之后才处理 Intent；目标为 UIAbility 的 module.json5 skills（actions、entities、uris，分享目标需 utd 与 maxFileSupported）与 Want parameters、systemShare 载荷；skill 参考或交接笔记可能给出“调用某系统能力须声明某 skill”的片段。源端 MAIN/LAUNCHER 对应的入口 skill（ohos.want.action.home 加 entity.system.home）留在入口 Ability 上，不在“源端没有的不加”之列。也包括集成者在入口 Ability 解析第三方拉起 Want 的 extras：多个键表达同一选项、源端按固定顺序短路判定，且取值限定在少数几个值。源端某条 intent-filter 的 action 在鸿蒙没有对应值（如 PROCESS_TEXT）时，不自造 ohos.want.action.* 字符串当作已映射（skills 的 actions 收任意字符串，写错也不报错），在规格里写明鸿蒙没有对应入口。
 
 ## 原因
 

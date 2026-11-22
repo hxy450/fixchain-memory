@@ -11,7 +11,7 @@
   - 情境：源方法注释或调用点表明意图是重启（语言切换、数据恢复或重置后、导入完成通知点击），实现只有 System.exit(0)；源前台进程被杀后，Android 按残留任务栈重建 Activity 并交回 savedInstanceState（抽屉开合、列表位置、搜索条件等）；目标在 UIAbility.terminateSelf 与 ApplicationContext.restartApp 之间选择。
 - [intent-filter 逐条映射为 module.json5 skills：有对应 action 的不合并，载荷键不自造，源端没有的不加](lesson-a23ad0b53c75e49ca117.lesson.md)
   - 时机：规格提取阶段把 AndroidManifest 的 intent-filter 与入口 Intent 载荷翻成 module.json5 skills 与 Want 参数契约时；接线阶段按笔记或 skill 参考给出的片段修改 skills 时；集成阶段在入口 Ability 实现外部 Want 的参数解析时
-  - 情境：源 Activity 声明多条 intent-filter（SEARCH、VIEW 自定义 scheme、SEND/SEND_MULTIPLE */*、PROCESS_TEXT 等），入口分发读取 Intent.EXTRA_* 键，并可能在初始化或验密门之后才处理 Intent；目标为 UIAbility 的 module.json5 skills（actions、entities、uris，分享目标需 utd 与 maxFileSupported）与 Want parameters、systemShare 载荷；skill 参考或交接笔记可能给出“调用某系统能力须声明某 skill”的片段。也包括集成者在入口 Ability 解析第三方拉起 Want 的 extras：多个键表达同一选项、源端按固定顺序短路判定，且取值限定在少数几个值。
+  - 情境：源 Activity 声明多条 intent-filter（SEARCH、VIEW 自定义 scheme、SEND/SEND_MULTIPLE */*、PROCESS_TEXT 等），入口分发读取 Intent.EXTRA_* 键，并可能在初始化或验密门之后才处理 Intent；目标为 UIAbility 的 module.json5 skills（actions、entities、uris，分享目标需 utd 与 maxFileSupported）与 Want parameters、systemShare 载荷；skill 参考或交接笔记可能给出“调用某系统能力须声明某 skill”的片段。源端 MAIN/LAUNCHER 对应的入口 skill（ohos.want.action.home 加 entity.system.home）留在入口 Ability 上，不在“源端没有的不加”之列。也包括集成者在入口 Ability 解析第三方拉起 Want 的 extras：多个键表达同一选项、源端按固定顺序短路判定，且取值限定在少数几个值。源端某条 intent-filter 的 action 在鸿蒙没有对应值（如 PROCESS_TEXT）时，不自造 ohos.want.action.* 字符串当作已映射（skills 的 actions 收任意字符串，写错也不报错），在规格里写明鸿蒙没有对应入口。
 - [ohos.ability.shortcuts 挂在承载快捷方式的 UIAbility 的 metadata 下，不追加到 module 级 metadata](lesson-67118603fcc769a5edc9.lesson.md)
   - 时机：配置实现阶段，在 module.json5 中挂载桌面长按快捷菜单（ohos.ability.shortcuts）时；构建后长按不出菜单或快捷方式条目变少时；编译门报 module.json5 schema 不允许某字段时
   - 情境：把 Android App Shortcuts 迁为 HarmonyOS 静态快捷方式：在 resources/base/profile 下新建快捷方式配置，并在 module.json5 中用 metadata 引用；module 级已有 metadata 数组（如 client_id），入口 UIAbility 还没有 metadata。把 shortcuts 引用从 module 级挪到 ability 下时，module 级 metadata 里原有的其他项（如 client_id）原样保留，只移走 ohos.ability.shortcuts 这一项。这里管的是源端在清单里静态声明的快捷方式（启动器 Activity 下 meta-data 引用的 shortcuts XML）；源端用 ShortcutManager.setDynamicShortcuts、requestPinShortcut 在运行时添加的动态或固定快捷方式不属于这份静态配置，不在这条范围内。 也包括规格或笔记凭记忆给出 module 级 shortcuts 数组，构建 schema 报 propertyName shortcuts 不允许，编译门准备删掉整块并记缺口。
@@ -34,13 +34,14 @@
 - [源 Activity 的 SEND 分享接收入口（standard 启动、无 onNewIntent）映射为独立 multiton Ability：skills 用 sendData 加 utd 声明，结束只 terminateSelf 本实例](lesson-51651155ed8226212e55.lesson.md)
   - 时机：规格提取与入口配置阶段，把源端 ACTION_SEND/SEND_MULTIPLE 接收入口映射为目标 Ability 的实例形态、module.json5 skills 声明与结束范围时；接线阶段给入口 Ability 加分享解析或结束逻辑时
   - 情境：源 AndroidManifest 在某 Activity（常是 LAUNCHER）上另有 SEND + DEFAULT + mimeType（如 text/plain）的 intent-filter，未声明 singleTop/singleTask/singleInstance，源码没有 onNewIntent，只在 onCreate 读 EXTRA_TEXT 等处理，结束时 finish()。目标工程只有入口 EntryAbility（launchType 默认 singleton），外部数据经系统分享面板送达，接收方用 systemShare.getSharedData 读取。
-  - 例外：源 Activity 声明 singleTop/singleTask/singleInstance 或实现 onNewIntent 承接分享：按源端复用实例的语义映射到已有 Ability 的 onNewWant
+  - 例外：源 Activity 声明 singleTop/singleTask/singleInstance 或实现 onNewIntent 承接分享：按源端复用实例的语义映射到已有 Ability 的 onNewWant；把分享承接从 EntryAbility 移到独立 Ability 时，只删 EntryAbility 里为分享加的解析、热启动分支和中转事件槽；它的桌面入口 skill（ohos.want.action.home 加 entity.system.home）和 onNewWant 里其他来源的处理保留；新 Ability 的分享 skill 不挂 entity.system.home
 - [源端“getLast(Custom)NonConfigurationInstance 为空才按启动参数建立状态”只在配置变化重建时取回实例：目标按“本次是否由配置变化重建”区分，正常进入一律按入口参数分支，不用单例是否存在代替](lesson-ed571550c44efdeb321e.lesson.md)
   - 时机：规格提取与页面实现阶段，翻译源 Activity.onCreate 中“取回保留实例为空才读启动参数”的建局或建状态逻辑时
   - 情境：源 Activity 未声明 configChanges，用 onRetain(Custom)NonConfigurationInstance 与 getLast(Custom)NonConfigurationInstance 跨配置变化保留对象，该对象可能同时是静态单例（只在退出时 destroy）；目标页面不因配置变化重建，单例跨页面常驻，同一页面有多个入口模式（如新开与续局）。
 - [源端在入口 onCreate 首帧前按偏好设主题时，目标在 EntryAbility.onCreate 同步读取偏好并在 loadContent 前 setColorMode；恢复函数返回 Promise 而调用方不等待，就是首帧后才生效](lesson-dcb3c5e66dec2d126234.lesson.md)
   - 时机：入口与应用级配置阶段，规格提取或实现冷启动时应用持久化外观设置（深浅色等）的时机，并为启动恢复写移交或接线时
   - 情境：源入口 Activity 在 onCreate 首行（super.onCreate 之前）按 SharedPreferences 同步设置 DayNight 主题；目标 ApplicationContext.setColorMode 是进程态，偏好仓库只提供异步 init；功能规格只写“保存后即时生效”，没有冷启动恢复要求；恢复函数由一个任务写成 async，并以 HANDOFF 交给入口接线者调用。
+  - 例外：源端存的是 AppCompatDelegate 的夜间模式整数时按含义对应、不照搬数值：MODE_NIGHT_YES（2）→ COLOR_MODE_DARK（0），MODE_NIGHT_NO（1）→ COLOR_MODE_LIGHT（1），MODE_NIGHT_FOLLOW_SYSTEM（-1）→ COLOR_MODE_NOT_SET（-1，跟随系统）；「跟随系统」不写成浅色；setColorMode 只承接深浅色；源端按偏好切换的是主题色、字号等其他 style 时，首帧前生效的要求照样成立，但目标的承接方式另定，不套用 setColorMode
 - [源端在设备或会话就绪回调（如相机打开）里读后即清的一次性入口请求，目标在同类就绪回调消费，不用页面显示时机代替](lesson-49ea8b0d74b224c316af.lesson.md)
   - 时机：规格提取与跨切片接线阶段，为桌面卡片、快捷方式等外部入口置位的一次性请求确定目标消费时点与挂载点时
   - 情境：源端由小部件或快捷入口置位一次性标志，在设备或会话就绪回调（如相机打开后进入 setup）中读取并清除，再按就绪后的分支延时执行；目标把入口分发、页面生命周期（aboutToAppear/onPageShow/onShown）与引擎回调分给不同切片或文件。

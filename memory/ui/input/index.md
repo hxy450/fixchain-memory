@@ -21,11 +21,11 @@
   - 情境：源端 Switch 传了 thumbContent = { if (checked) Icon(Icons.Rounded.Check) } 一类显式子内容；目标准备用 Toggle({ type: ToggleType.Switch })，写者认为原生开关打开时会自带勾选图标，或计划中的图标在落盘时被省略。
 - [EditText 的 inputType 键盘与候选提示和内容约束分开映射：textCapCharacters → autoCapitalizationMode、textNoSuggestions → enablePreviewText(false)、带符号数字用含 +/- 的键盘；只有源端有 digits/InputFilter 才过滤，程序写入按 maxLength 截断](lesson-0457a04c31208e1fb916.lesson.md)
   - 时机：界面实现阶段（含公共输入组件设计、页面规格的控件映射与页面转换），把 Android EditText 的 inputType、digits、InputFilter、maxLength 与粘贴回填翻译成 ArkUI TextInput/TextArea 属性时；为多个单行输入框确定键盘动作键与焦点链时
-  - 情境：源布局用 textCapCharacters、textNoSuggestions、number、numberSigned 等 inputType 标志声明键盘与输入法行为，多数未配 android:digits 或 InputFilter，内容合法性在点击计算或保存时才校验；个别控件挂了 InputFilter.AllCaps；页面另有粘贴或扫描回填写入带 maxLength 的输入框。目标 ArkUI（SDK 6.x 可用 autoCapitalizationMode、enablePreviewText、InputType.Number/PhoneNumber）；映射参考只给 number → InputType.Number 与“capitalize 无直接对应，使用文本转换”。 也包括多个单行 EditText 未写 imeOptions，源端键盘动作键靠框架缺省形成“下一项”焦点链。
+  - 情境：源布局用 textCapCharacters、textNoSuggestions、number、numberSigned 等 inputType 标志声明键盘与输入法行为，多数未配 android:digits 或 InputFilter，内容合法性在点击计算或保存时才校验；个别控件挂了 InputFilter.AllCaps；页面另有粘贴或扫描回填写入带 maxLength 的输入框。去掉目标端多出的输入期过滤或大写转换时，源端在点击、计算或保存时做的合法性校验与提示留在原处（目标只有过滤、没有这道校验的，按源端补回）；源端确实挂了 InputFilter 或 android:digits 的那几个控件保留对应约束，不随公共组件的默认过滤一起去掉。目标 ArkUI（SDK 6.x 可用 autoCapitalizationMode、enablePreviewText、InputType.Number/PhoneNumber）；映射参考只给 number → InputType.Number 与“capitalize 无直接对应，使用文本转换”。 也包括多个单行 EditText 未写 imeOptions，源端键盘动作键靠框架缺省形成“下一项”焦点链。
 - [EditText.setError 迁为尾部错误图标加仅聚焦时显示的气泡、输入即清，不用 errorMessage 常显红字或行内文字](lesson-5d1c2c78b5c27d9c5e97.lesson.md)
   - 时机：规格提取与界面实现阶段，为源端 EditText.setError（含 AppCompatEditText）写转换决策并落实校验失败提示时
   - 情境：源端校验失败时对输入框调用 setError(文案)，没有自定义错误视图；目标为 ArkUI TextInput，候选是 TextInput.errorMessage、输入框下方的行内红字或自绘气泡；规格可能写成“实时校验”或“HarmonyOS 自带错误提示”。
-  - 例外：源端用 Material TextInputLayout.setError（框下常显错误文字）而不是 EditText.setError：按该控件的呈现实现
+  - 例外：源端用 Material TextInputLayout.setError（框下常显错误文字）而不是 EditText.setError：按该控件的呈现实现；源端调两参的 setError(文案, 图标) 时，错误图标用源端给的 drawable，不换成平台 indicator_input_error；出错期间错误图标暂占该框末端的复合图位置，框原有的末端图标（drawableEnd/Right）在错误清除后恢复，目标叠错误图标时不删掉原末端图标；源端在文本变化回调（TextWatcher）里调用 setError 时，源端本来就是边输入边校验，照源端在输入时重设错误，不按「输入即清」处理
 - [受控值含文本与选区（TextFieldValue）时，选区经 TextAreaController.setTextSelection 落到输入框](lesson-bc79621b279ff82517ab.lesson.md)
   - 时机：公共组件实现阶段，把 Compose 受控输入组件（格式工具栏、插入链接、插图回填）转成 ArkUI 共享组件时
   - 情境：源组件以 TextFieldValue 同时回写文本与选区（工具栏加粗、插入链接后光标落到末尾）；目标 ArkUI TextArea/TextInput 的选区只能经 controller 设置，组件内另有 @Local 记录选区。
@@ -61,7 +61,7 @@
   - 情境：Android 选择区由各自 Fragment + ViewModel 以 RecyclerView 列表提供（背景含渐变方案与图片素材、文字为纯色列表、边框为位图素材且首项是调色盘），Fragment 泛型参数或布局 data-binding 指向对应 ViewModel；迁移任务同时给出设备截图作为视觉参考。
 - [菜单 SearchView 迁成自绘搜索栏时把展开、焦点、提交、收起与菜单重建分成独立状态和事件，焦点态取自 TextInput 焦点回调](lesson-edc9465d3902807c386b.lesson.md)
   - 时机：规格提取与界面实现阶段，把菜单 actionView 的 SearchView（collapseActionView）翻成自绘标题栏搜索框、决定工具栏菜单随搜索状态切换时
-  - 情境：源端菜单项以 SearchView 为 actionView 且 showAsAction 含 collapseActionView，代码注册 OnActionExpandListener、OnQueryTextFocusChangeListener 与 OnQueryTextListener（onQueryTextSubmit 返回 false 才由 SearchView 投递 ACTION_SEARCH），收起时 invalidateOptionsMenu 重建菜单，提交后只收键盘不清焦点；目标为自绘标题栏加按条件构建的 TextInput。
+  - 情境：源端菜单项以 SearchView 为 actionView 且 showAsAction 含 collapseActionView，代码注册 OnActionExpandListener、OnQueryTextFocusChangeListener 与 OnQueryTextListener（onQueryTextSubmit 返回 false 才由 SearchView 投递 ACTION_SEARCH），收起时 invalidateOptionsMenu 重建菜单，提交后只收键盘不清焦点；目标为自绘标题栏加按条件构建的 TextInput。展开、收起回调只在菜单项带 collapseActionView 时存在：源端菜单项没有这个标志时 OnActionExpandListener 不回调，不给目标补展开态和收起时的清空、重载、菜单重建副作用，按源端实际注册的监听列状态。
 - [透明 TextInput 叠在掩码格上时，输入层铺满格区并显式获焦，多段输入各用独立节点](lesson-90a7888a65eefb3e94b3.lesson.md)
   - 时机：界面实现阶段，把格子式密码框等自定义输入控件转成“透明 TextInput + 掩码格”叠层时
   - 情境：源端弹窗内是固定尺寸的格子式输入控件（如 4 位数字密码），多段流程（设置、再次确认）各弹独立 Dialog 并各带新输入框；目标用页内条件挂载的浮层，透明 TextInput 与掩码 Row 叠放，外层卡片有吞点击的 onClick。

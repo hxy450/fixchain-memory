@@ -1,6 +1,6 @@
 # layout_marginStart/End 写成 margin 的 start/end 时同一对象各边都用 LengthMetrics；不需要随语言方向翻转时改用 left/right 数值
 
-ID：`lesson-e3077bf60cfc3f34d0a2` · 版本：3
+ID：`lesson-e3077bf60cfc3f34d0a2` · 版本：4
 
 [本主题](index.md)
 
@@ -19,7 +19,7 @@ ID：`lesson-e3077bf60cfc3f34d0a2` · 版本：3
 ## 做法
 
 1. 需要随布局方向翻转时写 .margin({ bottom: LengthMetrics.vp(16), end: LengthMetrics.vp(16) })，并从 @kit.ArkUI 导入 LengthMetrics；同一对象内不混用数字与 LengthMetrics。
-2. 源应用未声明 supportsRtl（布局恒 LTR）或源端写的就是物理 left/right 时，统一写 left/right/top/bottom 数值（如 { bottom: 16, right: 16 }）；源端 supportsRtl=true 且用 start/end 时按第 1 条保留逻辑方向，不就近改成 left/right。映射参考示例与 SDK 声明不一致时以声明为准，并修正参考。
+2. 源应用未声明 supportsRtl（布局恒 LTR）或源端写的就是物理 left/right 时，统一写 left/right/top/bottom 数值（如 { bottom: 16, right: 16 }）；这只固定边距：ArkUI 组件 direction 不设时随系统语言方向，Row、Flex 等容器在从右向左的系统语言下仍会镜像，源端布局恒 LTR 时在这些容器上设 direction(Direction.Ltr)；源端 supportsRtl=true 且用 start/end 时按第 1 条保留逻辑方向，不就近改成 left/right。映射参考示例与 SDK 声明不一致时以声明为准，并修正参考。
 
 来源支持：2 张卡 · 2 次迁移 · 2 个应用
 

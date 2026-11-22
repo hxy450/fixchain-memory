@@ -1,6 +1,6 @@
 # 由内容定尺寸的父级（列表行、wrap_content 头部、FIT_CONTENT 半模态）里不写 width/height('100%')：描边背景画在节点自身，行内撑满用 Stretch；源端描边不改尺寸时注意 .border() 计入测量（定尺寸遮罩中的居中弹卡不在此列，宽度按源窗口规则）
 
-ID：`lesson-a58ebfe7a4c55b041b14` · 版本：10
+ID：`lesson-a58ebfe7a4c55b041b14` · 版本：11
 
 [本主题](index.md)
 
@@ -15,7 +15,9 @@ ID：`lesson-a58ebfe7a4c55b041b14` · 版本：10
 ## 例外与边界
 
 - 父节点有确定的宽高（显式数值，或已被外层约束定死）时，百分比层按该尺寸解析，可以使用；为满足这一条而给行或格子补的高度取源端该项的实际测量结果，不用 aspectRatio、固定 vp 或 layoutWeight 凑
+- 目标写的是 LayoutPolicy.matchParent（不是 '100%'），且父容器设了 LayoutPolicy.wrapContent（API 20 起）时，容器先由其它确定尺寸的子组件撑开、matchParent 子组件再匹配容器，与源端 wrap_content 父级里 match_parent 子项的结果一致，不按本条改写；父容器里没有确定尺寸的子组件时两者都为 0，仍按本条处理
 - 页面根 Stack 等定尺寸遮罩里的居中弹窗卡片：父级已定尺寸，宽度按源端窗口规则写（Holo、Material 系与 AppCompat 的 AlertDialog 默认窗口宽 wrap_content，最小宽取当前屏宽的竖屏 95%、横屏 65%（large 屏 80%/55%，xlarge 屏 72%/45%），内容更宽时随内容；可见卡片再减去窗口背景的左右内缩：Material 与 AppCompat 各 16dp，Holo 各 8dp），不适用本条，也不从本条取固定 vp 估值
+- 第 4 步把铺满层挪进 .background(builder) 只适用于纯展示的层：自定义背景不响应事件，内容更新也不一定跟着重绘（文档写 API 20 起才支持动态更新）；层要响应点击、手势，或随滑动进度等状态变化时，改用 ListItem.swipeAction，或保留独立节点并按源端测量给显式尺寸
 
 ## 原因
 

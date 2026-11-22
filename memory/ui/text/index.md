@@ -26,7 +26,7 @@
   - 例外：项目允许平台差异、不要求逐字复刻末行时，直接使用内置行为，不引入运行期测量；粒度差异只出在英文等以空格分词的文字上：中文等 CJK 文本在默认设置下本就按字截断，BREAK_ALL 对 CJK 与 NORMAL 相同，纯 CJK 文案不必为此补 wordBreak 或测量
 - [resourceManager 代码内取值（字符串、数组、复数、颜色）一律传 $r(...).id 数字重载，不用 Resource 对象重载](lesson-22432022455bff6f849b.lesson.md)
   - 时机：界面与服务实现阶段，把安卓命令式取资源（getString、getStringArray、getQuantityString、getColor，如自绘 View 里 drawText、measureText 的文案）改写为 ArkTS 代码内取值并选择 resourceManager 接口时；新写取值辅助函数，或把已有取值写法扩展到更多调用点、其他取值方法时
-  - 情境：源端在自绘 View 或代码里按当前资源配置取文案、字符串数组、复数串或颜色；目标需要在 ArkTS 中拿到纯值（Canvas 绘制、测宽、拼接、菜单与选择器文案），同一屏还有走声明式 $r 的组件文本；应用带多个 locale 资源目录，可能以应用偏好语言运行（i18n.System.setAppPreferredLanguage）；SDK 对 getStringSync、getStringArrayValue(Sync)、getIntPluralStringValueSync、getColorSync 等同时提供 (resId: number) 与 (resource: Resource) 两种重载。
+  - 情境：源端在自绘 View 或代码里按当前资源配置取文案、字符串数组、复数串或颜色；目标需要在 ArkTS 中拿到纯值（Canvas 绘制、测宽、拼接、菜单与选择器文案），同一屏还有走声明式 $r 的组件文本（组件属性里直接写的 $r(...) 本身随应用偏好语言切换，不在这条的改写范围，保持原样，不改成代码内取值）；应用带多个 locale 资源目录，可能以应用偏好语言运行（i18n.System.setAppPreferredLanguage）；SDK 对 getStringSync、getStringArrayValue(Sync)、getIntPluralStringValueSync、getColorSync 等同时提供 (resId: number) 与 (resource: Resource) 两种重载。取值代码和资源同在 HAP 或 HSP 模块里时直接适用；代码在中间码 HAR 或字节码 HAR 里取 HAR 自身资源时，compatibleSdkVersion 低于 23、或取值发生在本模块 AbilityStage 的 onCreate 回调之前，按资源 ID 取会因 ID 无效抛异常，这时改用按资源名取的接口（如 getStringByNameSync），不套 .id；跨 HAP、HSP 取资源要先用 createModuleContext 拿到对应模块的 resourceManager，再按 ID 或资源名取。
 - [分开单行文本盒与多行行距，不把 Compose lineHeight 同名直映为 ArkUI .lineHeight](lesson-2a2924aaebbfbea80780.lesson.md)
   - 时机：规格提取、主题实现或页面转换阶段，把 Compose 排版令牌落成 ArkUI 文本属性或据文本高度推算容器尺寸时；视觉修复阶段改写主题层行高公式时
   - 情境：源 TextStyle 声明 fontSize/lineHeight、未设 lineHeightStyle；目标准备给所有 Text 无条件设置 .lineHeight()，或把 lineHeight 数值当单行文本的实际盒高来推算横向列表等容器的显式高度；映射参考可能给出 lineHeight → .lineHeight() 的 1:1 对应。

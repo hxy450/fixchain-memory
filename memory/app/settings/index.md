@@ -9,6 +9,7 @@
 - [SharedPreferences 迁移保留同步时序：onCreate 用 getPreferencesSync 装载，读写走 Sync 接口、异步 flush](lesson-9fa98065e5de983b7c01.lesson.md)
   - 时机：基础层偏好迁移阶段，设计偏好存储封装的初始化与读写时序时；派工者为该任务写验收标准时
   - 情境：源端用 SharedPreferences（或其封装库）在 Application.onCreate 构建，之后任意读都等待载入完成；目标改用 @ohos.data.preferences，派工或封装设想“异步载入 + 内存缓存 + 写队列”，载入完成前的读返回调用方默认值。
+  - 例外：同一键在不同读点用不同缺省值（如过滤处读 false、菜单显隐处读 true）时，封装保留各读点自己的缺省值（getSync 的 defValue 由调用处传），不收敛成按键的单一默认；源端用 commit() 并依赖它的返回值，或要求落盘后才继续（随后结束进程、导出或分享偏好文件）时，对应处等 flush 完成再继续，不按「异步 flush」处理
 - [onPreferenceChange 返回 true 即接受并持久化新值：其中发起的验证按源顺序先落值再补偿，取消不回滚](lesson-8b84279c4ecbeaf26e3e.lesson.md)
   - 时机：设置页实现阶段，把 Preference 的 onPreferenceChange 监听（含其中发起的验密、确认弹窗）翻译成目标开关回调时；规格提取阶段描述这类联动流程时
   - 情境：源端在 onPreferenceChange 里发起异步验证后立即 return true，验证成功的回调只做补偿动作（如再次 setChecked 同值），取消没有回滚分支；目标用受控 Toggle 与回调实现，写者倾向“先回滚、验证成功才落值”。

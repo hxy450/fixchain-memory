@@ -1,6 +1,6 @@
 # 源端在入口 onCreate 首帧前按偏好设主题时，目标在 EntryAbility.onCreate 同步读取偏好并在 loadContent 前 setColorMode；恢复函数返回 Promise 而调用方不等待，就是首帧后才生效
 
-ID：`lesson-dcb3c5e66dec2d126234` · 版本：1
+ID：`lesson-dcb3c5e66dec2d126234` · 版本：2
 
 [本主题](index.md)
 
@@ -11,6 +11,11 @@ ID：`lesson-dcb3c5e66dec2d126234` · 版本：1
 ## 适用情境
 
 源入口 Activity 在 onCreate 首行（super.onCreate 之前）按 SharedPreferences 同步设置 DayNight 主题；目标 ApplicationContext.setColorMode 是进程态，偏好仓库只提供异步 init；功能规格只写“保存后即时生效”，没有冷启动恢复要求；恢复函数由一个任务写成 async，并以 HANDOFF 交给入口接线者调用。
+
+## 例外与边界
+
+- 源端存的是 AppCompatDelegate 的夜间模式整数时按含义对应、不照搬数值：MODE_NIGHT_YES（2）→ COLOR_MODE_DARK（0），MODE_NIGHT_NO（1）→ COLOR_MODE_LIGHT（1），MODE_NIGHT_FOLLOW_SYSTEM（-1）→ COLOR_MODE_NOT_SET（-1，跟随系统）；「跟随系统」不写成浅色
+- setColorMode 只承接深浅色；源端按偏好切换的是主题色、字号等其他 style 时，首帧前生效的要求照样成立，但目标的承接方式另定，不套用 setColorMode
 
 ## 原因
 

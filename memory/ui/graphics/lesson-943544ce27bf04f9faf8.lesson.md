@@ -1,6 +1,6 @@
 # 图标按源端原始资源落实：缺失时从 Android 密度目录、SDK 平台或依赖库 AAR 复制原图，不用字形、近名图标、系统符号或二次着色替代
 
-ID：`lesson-943544ce27bf04f9faf8` · 版本：10
+ID：`lesson-943544ce27bf04f9faf8` · 版本：11
 
 [本主题](index.md)
 
@@ -12,6 +12,11 @@ ID：`lesson-943544ce27bf04f9faf8` · 版本：10
 
 资源迁移把 drawable-xhdpi 等位图直接复制到 resources/xldpi/media 一类限定词目录，不在 base/media；构建日志对这些图只报“does not have a base resource”警告；工程里还有外观相近的通用图标（如生活指数图标）。 也包括规格或布局已给出原始 drawable 名，目标 media 却只有其他模块的同类近名图标（如带 1/2 后缀的阅读器图标），现有代码用 SymbolGlyph 或 Unicode 字形占位，或工程 skill 要求图标优先用已验证的系统 symbol；以及源端用粗体文字字符（“-”“+”）充当按钮图形。也包括源端 Text 直接显示 emoji 字符（如 ⭐、☕️），规格或写者按“不把 emoji 塞进 Text 当图标”一类 symbol 规则改成 SymbolGlyph。 也包括图标由平台主题或框架控件提供（ActionBar 的 Up 与溢出按钮、CheckBox 勾选图），应用 res 里没有同名资源，写者以“平台 chrome、应用无源图”为由用 Polyline、Circle 或字形自绘。 也包括 AppCompat Activity 调 setDisplayHomeAsUpEnabled(true)，返回箭头由 appcompat 库主题提供，已迁移的 media 目录里找不到，目标准备改用系统符号。
 
+## 例外与边界
+
+- 源端在布局或代码里给图标设了着色（ImageView 的 android:tint / app:tint、setColorFilter，Compose Icon 的 tint，或矢量自带的 android:tint 主题属性）时，目标按同一颜色给 SVG 设 fillColor、给位图设 colorFilter，这是还原源端着色，不属于第 5 步的二次着色
+- 把占位符号或近似图标换成原图时只换图源：原有的按钮或可点击容器、点击回调、无障碍文字保留，图标显示尺寸、点击区与间距按源布局取，不随换图改动
+
 ## 原因
 
 只在 base/media 查找会把已迁移的资源判为缺失，写者随之用 Text('人')、Text('›') 之类字形、品牌色底或外观相近的通用图标代替，头像、箭头、提醒图标和透明波浪头图的收口都与源端不符；截图修复时按视觉相似挑图也会延续偏差。来源中页面转换者读到源布局列出的全部 drawable 名，只核对 base/media 就把四个资源判为不存在，改成字形占位并在透明头图下垫了品牌色；返修又从通用资源里挑近似图标。 缺图时用近名资源、系统符号或 fillColor 着色去模仿原图，同样会改变图形、线宽与颜色；skill 的“只用已验证 symbol 名称”约束的是名称合法，不保证外形与源端一致。另一应用中写者已读到规格列出的原图名并查到目标缺图，仍改用另一模块的近名图标加黄色着色，交付时称其为原图；同一应用的步进器把文字“-”换成带圆圈的 minus_circle，另一页的菜单与批量底栏在缺图时直接写成纯文字。
@@ -21,7 +26,7 @@ ID：`lesson-943544ce27bf04f9faf8` · 版本：10
 1. 判断资源可用性时检索 resources 下全部限定词目录（base、xldpi、dark 等）或按资源映射表核对；构建日志里的“does not have a base resource”说明文件在限定词目录：只在屏幕密度目录（如 xldpi）里的，任何密度的设备都取得到，不是缺失；只在 dark、横竖屏、设备类型或语言目录里的，设备状态不一致时（如浅色模式下的 dark 目录）回落 base 取不到，仍按缺失处理。
 2. 图标与装饰图按源布局的 src、drawableStart、background 中的 drawable 名取用，写完按源布局的 drawable 清单逐项对照组件中的引用；确认缺失时登记资源缺口，不以文字字形、纯色底或外观近似的图标替代。
 3. 头图带透明边缘时，其下的底色取页面背景，不填品牌色。
-4. 源图在目标 media 缺失时，从 Android 仓库对应密度目录（如 drawable-xxhdpi）复制原图并引用（重名时加模块前缀），或登记资源缺口；应用 res 里没有、由主题或框架控件提供的图标，从本机 SDK platforms/android-<api>/data/res 复制原图：Holo 主题的在 drawable-<密度> 下，是位图（返回箭头的位图名带 _am 后缀，drawable/ 下的同名 XML 只是包装）；Material 主题的返回箭头和溢出按钮（ic_ab_back_material、ic_menu_moreoverflow_material）在 drawable/ 下，是靠 android:tint="?attr/colorControlNormal" 着色的白色矢量，转 SVG 后按图标所在处生效的 colorControlNormal 设 fillColor（窗口动作栏里取 actionBarTheme 覆盖层的值）；其他控件图（如 CheckBox 勾选框）按各自矢量的 tint 取色。不拿其他模块同类、近名或带 1/2 后缀的图标顶替，不用 Polyline、Circle 或字形自绘平台图标，也不因缺图把“图标 + 文字”结构降成纯文字。 AppCompat/Material 库主题提供的图标（如 homeAsUp 的 abc_ic_ab_back_material）不在 SDK 平台目录，从对应版本库 AAR 的 res/drawable 取矢量转 SVG；矢量声明 autoMirrored=true 的加 matchTextDirection(true)（安卓应用 manifest 没声明 android:supportsRtl="true" 时 RTL 语言下也不镜像，这种情况不加）；路径填充为白色、靠 android:tint="?attr/colorControlNormal" 着色的（abc_ic_ab_back_material 即是），转 SVG 后按图标所在处生效的 colorControlNormal 设 fillColor（窗口动作栏里是 actionBarTheme 覆盖层的 textColorPrimary），这不属于第 5 步说的二次着色。系统符号只在库资源确实取不到时使用，并登记为替代。
+4. 源图在目标 media 缺失时，从 Android 仓库对应密度目录（如 drawable-xxhdpi）复制原图并引用（重名时加模块前缀；按密度放进限定词目录时按 dpi 对应，drawable-hdpi 放 ldpi、drawable-xhdpi 放 xldpi、drawable-xxhdpi 放 xxldpi，不按同名对应），或登记资源缺口；应用 res 里没有、由主题或框架控件提供的图标，从本机 SDK platforms/android-<api>/data/res 复制原图：Holo 主题的在 drawable-<密度> 下，是位图（返回箭头的位图名带 _am 后缀，drawable/ 下的同名 XML 只是包装）；Material 主题的返回箭头和溢出按钮（ic_ab_back_material、ic_menu_moreoverflow_material）在 drawable/ 下，是靠 android:tint="?attr/colorControlNormal" 着色的白色矢量，转 SVG 后按图标所在处生效的 colorControlNormal 设 fillColor（窗口动作栏里取 actionBarTheme 覆盖层的值）；其他控件图（如 CheckBox 勾选框）按各自矢量的 tint 取色。不拿其他模块同类、近名或带 1/2 后缀的图标顶替，不用 Polyline、Circle 或字形自绘平台图标，也不因缺图把“图标 + 文字”结构降成纯文字。 AppCompat/Material 库主题提供的图标（如 homeAsUp 的 abc_ic_ab_back_material）不在 SDK 平台目录，从对应版本库 AAR 的 res/drawable 取矢量转 SVG；矢量声明 autoMirrored=true 的加 matchTextDirection(true)（安卓应用 manifest 没声明 android:supportsRtl="true" 时 RTL 语言下也不镜像，这种情况不加）；路径填充为白色、靠 android:tint="?attr/colorControlNormal" 着色的（abc_ic_ab_back_material 即是），转 SVG 后按图标所在处生效的 colorControlNormal 设 fillColor（窗口动作栏里是 actionBarTheme 覆盖层的 textColorPrimary），这不属于第 5 步说的二次着色。系统符号只在库资源确实取不到时使用，并登记为替代。
 5. 原图自带颜色时不再 fillColor 二次着色；替代图颜色不对时先确认是否选错资源。现有代码里对应 Android 位图的 SymbolGlyph 或 Unicode 占位要换成原图，只改颜色或字号不算对齐；交付记录写明每个资源来自 Android 原图复制还是工程既有资源，不把近名资源称作原图。
 6. 源端用文字字符充当按钮图形或直接显示字符（粗体“-”“+”、Text 中的 emoji）时按原字符用 Text 实现（短横也可用 Divider/Rect 画同形），symbol 库没有同形名称时不选外形不同的近似 symbol（如 minus_circle）；“只用 symbol、不把 emoji 当图标”一类规则约束的是源端矢量图标资源的映射，与源端字面字符冲突时在规格中记录，不替换。
 
