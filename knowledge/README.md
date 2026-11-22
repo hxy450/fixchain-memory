@@ -31,18 +31,21 @@
 
 | 路径 | 内容 |
 |---|---|
-| `lessons/lesson-<id>.json` | 每条经验的知识源文件（两种格式，见下） |
+| `lessons/lesson-<id>.json` | 每条经验的知识源文件（格式见下） |
 | `rendered/<主题>/lesson-<id>.md` | 渲染好的样子（交给模型的那一段），给人看；由 `render.py` 生成 |
 | `render.py` | 把 `memory/` 里的正文和知识文件渲染成交给模型的那一段 |
 | `check.py` | 检查知识文件（字段、条数、本机路径、应用名、改句是否已在正文里） |
 | `RULES.md` | 配知识的规则（第七版） |
 
-## 两种格式
+## 格式
 
-共同：`sdk` 是核实时用的版本（`harmony`、`android` 两个键）；`changes` 每项有 `where`（正文哪一部分）、`before`（原句）、`after`（新句）、`basis`（依据）、`type`（改动类别）；`entries` 是平台事实；`device_todo` 是要上机才能定的事项，只留给维护的人；`dropped_notes` 是配的人删掉的条数。交给模型的只有正文（已含改句）和条目的 `step`、`fact`、`scope`；`source`、`code`、`origin`、`basis`、`device_todo` 不交。
+现在有两种格式：旧格式（下面前两种，第三版和第七版规则的文件，`sdk` 只记 `harmony`、`android`）和 2026-11-21 起的新格式（第三种）。还没有经验换成新格式，106 个知识文件都是旧格式。
 
-- **旧格式（第三版规则，27 个文件）**：顶层 `id`、`sdk`、`changes`、`entries`、`device_todo`、`dropped_notes`（个别有 `note`）。条目栏 `step`、`fact`、`source`、`kind`（鸿蒙接口 / 安卓平台 / 依赖库 / 卡里验证）、`origin`，个别带 `code`；**没有 `scope`**，条数比第七版多（共 319 条，一条经验最多 29 条）。
-- **新格式（第七版规则，79 个文件）**：顶层 `lesson`、`sdk`、`changes`、`entries`、`device_todo`、`dropped_notes`、`note`。条目栏 `step`、`fact`、`scope`（成立范围：对什么成立、什么条件下成立、最常见的不成立情形）、`source`、`kind`（鸿蒙接口 / 安卓平台 / 依赖库）、`origin`，可选 `code`；每条经验最多 6 条（共 319 条）。规则见 `RULES.md`。
+共同：`sdk` 是核实时用的版本（`harmony`、`android` 两个键；新格式另有三个键）；`changes` 每项有 `where`（正文哪一部分）、`before`（原句）、`after`（新句）、`basis`（依据）、`type`（改动类别）；`entries` 是平台事实；`device_todo` 是要上机才能定的事项，只留给维护的人；`dropped_notes` 是配的人删掉的条数。交给模型的只有正文（已含改句）和条目的 `step`、`fact`、`scope`；`source`、`code`、`origin`、`basis`、`device_todo` 不交。
+
+- **第三版规则的格式（27 个文件）**：顶层 `id`、`sdk`、`changes`、`entries`、`device_todo`、`dropped_notes`（个别有 `note`）。条目栏 `step`、`fact`、`source`、`kind`（鸿蒙接口 / 安卓平台 / 依赖库 / 卡里验证）、`origin`，个别带 `code`；**没有 `scope`**，条数比第七版多（共 319 条，一条经验最多 29 条）。
+- **第七版规则的格式（79 个文件）**：顶层 `lesson`、`sdk`、`changes`、`entries`、`device_todo`、`dropped_notes`、`note`。条目栏 `step`、`fact`、`scope`（成立范围：对什么成立、什么条件下成立、最常见的不成立情形）、`source`、`kind`（鸿蒙接口 / 安卓平台 / 依赖库）、`origin`，可选 `code`；每条经验最多 6 条（共 319 条）。规则见 `RULES.md`。
+- **新格式（2026-11-21 起，0 个文件）**：和第三版同一种结构（顶层 `id`、`sdk`、`changes`、`entries`、`device_todo`、`dropped_notes`，没有条目时有 `note`），`sdk` 另记 `verified_on`（核实日期）、`docs_commit`、`docs_date`（核实时用的 OpenHarmony 文档 master 的提交和日期）。条目栏 `step`、`fact`、`source`、`kind`（鸿蒙接口 / 安卓平台 / 依赖库 / 卡里验证）、`origin`；没有 `scope`，条数不设上限（共 0 条）。渲染时段头在鸿蒙 SDK 版本后面多写文档 master 的日期和提交，条目不带成立范围。
 
 ## 覆盖
 
@@ -179,6 +182,8 @@ python knowledge/render.py --check         # 只核对，不写
 
 交给模型的那一段 = 经验正文（`memory/<主题>/lesson-<id>.lesson.md` 去掉 ID 行和「[本主题](index.md)」，截到「## 来源」之前，「来源支持：…」一行保留）；知识文件有条目时，空一行接「已核实的平台事实（核实时用的是 …；安卓 …。…）：」一段，每条「- 〔step〕fact」，有成立范围的再接「〔成立范围：scope〕」；不带出处和写法。和影子提示词生成器里的经验块是同一种写法：本分支建好后拿一套此前用 main 正文加这些知识文件生成的影子提示词核过，其中 27 条经验（32 个经验块，12 条的改句现在已在正文里）和 `render.py` 的输出逐字相同。
 
+新格式的文件（`sdk` 里有 `docs_date` 或 `docs_commit`）知识段照写知识时用的渲染脚本：段头写成「核实时用的是 <harmony>；OpenHarmony 文档 master <docs_date>（提交 <docs_commit 前 8 位>）；安卓 …」，每条只有「- 〔step〕fact」，没有成立范围；同一个文件、同一份正文，和那个脚本的输出逐字节相同。旧格式的渲染不变。
+
 知识文件里的改句：已在正文里的只核对；还没进正文的（新写的知识文件），原句在正文里恰好对上一处时当场套上并报出处数，对不上就报错。
 
 ## 怎么检查
@@ -189,6 +194,8 @@ python knowledge/check.py knowledge/lessons --only <id 前 8 位,…>     # 配�
 ```
 
 查：json 能解析、`lesson` 和文件名一致、经验在 `memory/` 里（store 里已退役的只列出）；条目六栏非空、kind 三选一、最多 6 条；source / fact / scope / code 没有本机路径和「文件:行号」；fact / scope 没有被迁移应用的名字（留作评测的应用名不写在仓库里，用 `--app-name` 传）；改句已在正文里（新句在、原句在新句之外不再出现），还没进正文的要能唯一定位。旧格式文件加 `--legacy-ok` 时，`id` 键、没有 scope、超过 6 条、kind「卡里验证」只列出。
+
+新格式的文件（没有 `lesson` 键、`sdk` 里有 `verified_on` / `docs_commit` / `docs_date`）按写知识时的检查规则查，`--legacy-ok` 对它不起作用：顶层键齐全、`id` 和文件名一致；`sdk` 的核实日期、文档日期写成 YYYY-MM-DD，文档提交号是十六进制，`harmony` 写明 API 几；条目五栏非空，kind 四选一（含「卡里验证」）、origin 二选一、step 是正文的部分名，条数不设上限；卡里验证的事实不写返修怎么改，事实不带返修经过和做法建议的尾巴；文档出处写成文档仓库 master 的链接，网址只认一手来源，fact / after / note 里不放链接；没有本机路径、行号写法和应用名；改句已在正文里的同上，没进正文的按顺序要套得上。默认值缺「应用没有另设」一类限定、提到高于本机 SDK 的 API、新句提到设备或截图的只列出，给人看。出处和本机 SDK、文档的逐条核对不在这里做。
 
 本分支的结果：106 个文件 0 处错误（加 `--legacy-ok`，只列出 111 处 = 旧格式 107 处 + 4 个退役经验）；第七版的 79 个文件不加 `--legacy-ok` 也是 0 处错误。
 

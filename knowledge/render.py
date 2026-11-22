@@ -6,6 +6,11 @@
     「来源支持：…」一行留在正文末尾。
   - 知识文件有条目时，空一行接一段「已核实的平台事实（核实时用的是 …；安卓 …。…）：」，每条一行「- 〔step〕fact」，
     条目有非空 scope 的在后面加「〔成立范围：scope〕」。不带出处（source）、不带写法（code）、不带 device_todo。
+  - 新格式（2026-11-21 起：sdk 里有 docs_date 或 docs_commit）的知识段照写知识的 skill 的渲染脚本：段头在鸿蒙 SDK 版本后面
+    多一句「；OpenHarmony 文档 master <docs_date>（提交 <docs_commit 前 8 位>）」，每条只有「- 〔step〕fact」（不看 scope），
+    条数不设上限，没有附件。改句也照那个脚本：依次看每处，已发布进正文的（新句在、原句不在新句之外出现）不再套、
+    不报错，否则当场套（逐字一处，或空白可有可无恰好一处），都不是就报错；所以发布前后渲染结果相同。
+    旧格式（第三版、第七版规则的文件）的写法不变。
   - 知识文件里的 changes（对正文某句的改动）：本分支已经经 store 提案把它们发布进正文，这时只核对（改后的句子在，原句在
     改后的句子之外不再出现）。某处改动还没发布进正文（新句不在、原句恰好对上一处，按原样或忽略空白）时，照提示词生成器的
     做法当场套上，并在汇总里报出套了几处。两样都不是就报错。
@@ -112,7 +117,65 @@ def apply_or_check(text, changes, lid):
     return text, problems, n_now
 
 
+def is_new(d):
+    """新格式（2026-11-21 起）：sdk 里记了文档 master 的日期或提交。和写知识的 skill 的渲染脚本用同一个判据。"""
+    sdk = d.get("sdk") if isinstance(d.get("sdk"), dict) else {}
+    return bool(sdk.get("docs_date") or sdk.get("docs_commit"))
+
+
+def published(text, before, after):
+    """新格式：这处改句是不是已经发布进正文（照写知识的 skill 的渲染脚本）：新句在正文里，而原句不在新句之外出现。"""
+    if after not in text:
+        return False
+    if before not in text:
+        return not list(loose(before).finditer(text))
+    # 原句还在：只有它每一次出现都落在新句里面（新句 = 原句加了条件的那种）才算已发布
+    return before in after and text.count(before) == text.count(after) * after.count(before)
+
+
+def apply_new(text, changes, lid):
+    """新格式的改句，照写知识的 skill 的渲染脚本：依次看每处，已发布的算套上、正文不动；否则逐字一处 → 替换；
+    否则空白可有可无恰好一处 → 替换；否则报出来。-> (正文, 问题列表, 当场套上的处数)。"""
+    problems, n_now = [], 0
+    for k, c in enumerate(changes, 1):
+        before, after = (c.get("before") or "").strip(), (c.get("after") or "").strip()
+        if not before or not after:
+            problems.append(f"{lid[7:15]} 第 {k} 处改动缺原句或新句")
+            continue
+        if published(text, before, after):
+            continue
+        if text.count(before) == 1:
+            text = text.replace(before, after)
+            n_now += 1
+            continue
+        m = list(loose(before).finditer(text))
+        if len(m) == 1:
+            text = text[:m[0].start()] + after + text[m[0].end():]
+            n_now += 1
+        else:
+            problems.append(f"{lid[7:15]} 第 {k} 处改动：没发布进正文，原句对上 {len(m)} 处：{before[:40]}…")
+    return text, problems, n_now
+
+
+def knowledge_new(d):
+    """新格式的知识段：和写知识的 skill 的渲染脚本（不加 --with-source、--kinds）逐字节相同。"""
+    ent = d.get("entries") or []
+    if not ent:
+        return ""
+    sdk = d.get("sdk") or {}
+    h = sdk.get("harmony", "鸿蒙 SDK")
+    when = sdk.get("docs_date") or ""
+    commit = (sdk.get("docs_commit") or "")[:8]
+    h += "；OpenHarmony 文档 master " + when + (f"（提交 {commit}）" if commit else "")
+    lines = [KN_HEAD.format(h=h, a=sdk.get("android", "平台资源和源码"), tail=KN_TAIL)]
+    for e in ent:
+        lines.append(f"- 〔{(e.get('step') or '').strip()}〕{(e.get('fact') or '').strip()}")
+    return "\n".join(lines)
+
+
 def knowledge(d):
+    if is_new(d):
+        return knowledge_new(d)
     ent = d.get("entries") or []
     if not ent:
         return ""
@@ -135,7 +198,7 @@ def render(lid, path, d, counter=None):
     inner = "\n" + body(path).strip() + "\n"
     problems = []
     if d:
-        inner, problems, n_now = apply_or_check(inner, d.get("changes") or [], lid)
+        inner, problems, n_now = (apply_new if is_new(d) else apply_or_check)(inner, d.get("changes") or [], lid)
         if counter is not None and n_now:
             counter[lid] = n_now
     text = inner.strip()
