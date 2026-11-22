@@ -1,6 +1,6 @@
 # 页面、控件、算法或实体基类由二进制三方库承载时，按依赖坐标取库制品核对真值，不按调用面推断或以原生组件近似
 
-ID：`lesson-033b8254b5b6de0bd9e1` · 版本：5
+ID：`lesson-033b8254b5b6de0bd9e1` · 版本：4
 
 [本主题](index.md)
 
@@ -22,9 +22,9 @@ ID：`lesson-033b8254b5b6de0bd9e1` · 版本：5
 
 ## 做法
 
-1. 从 build.gradle（含 gradle.properties、版本目录）读出库坐标与版本，按序取制品：Gradle 用户缓存 ~/.gradle/caches/modules-2/files-2.1/<group>/<artifact>/<version>/<文件 SHA-1 的十六进制，去掉开头的 0>/（构建时解包过的 aar 在 caches/transforms-3（更早是 transforms-2）或 caches/<Gradle 版本号>/transforms 下的 <哈希>/transformed/<artifact>-<version>/）；没有就用 Gradle 解析下载该依赖，或按坐标从 Maven 仓库（androidx、Material 组件在 Google Maven，其他库常见于 Maven Central；路径为 <group 的点换成斜杠>/<artifact>/<version>/，同目录常有 -sources.jar）、JitPack（https://jitpack.io/com/github/<owner>/<repo>/<version>/）、上游仓库对应版本 tag 获取，有 sources jar 时优先。
-2. 解包后按库的职责取真值：UI 库读 res 的 layout、values（aar 里每个 values 限定目录合并成一个 values*.xml，dimens、styles、strings、integers 都在里面；限定目录名可能带构建时补的版本后缀，如 values-sw600dp-v13、values-night-v8）、anim/animator、drawable 及其限定目录（layout-land、values-sw600dp 等），并用 javap -p -c 或反编译读控件、管理器与 Builder 的测量、缺省参数、动画、队列与触摸分支；先列出库内全部视图类，再判断目标组件是否足够（图片查看器的缩放、平移、双击、惯性属于库行为，不是可省略的增强）。实体基类读字段集、类型、缺省值、equals/toString 与序列化规则；库里的常量与正则按库值迁移。 只有编译 jar、没有 sources jar 不等于不可核：用 javap -p -c -constants 读构造器缺省分支与 companion 常量（Kotlin 函数的缺省参数在 <名字>$default 合成方法里按掩码位赋值；companion 属性的存储字段在外部类上，对外部类读），本机未装 JDK 时用 Android Studio 自带的 jbr/bin/javap；动效与物理类库读更新与发射方法，确认参数的时间域（每帧还是每秒）、帧率归一化、重力与质量、阻尼、寿命与淡出，再写常量与步进。上游提醒或注释写“库源不可核”时先自己核一次。
-3. 算法库（重复规则、相对时间、日期格式、文本拆分与序列化）用 JDK 小程序加载同版本 jar 跑代表输入（执行路径上调用 android.* 的库桌面 JDK 跑不了：SDK 里 android.jar 的 android.* 类只有抛 "Stub!" 的桩），把输出的字面形态（时区形态、行尾、文案模板、单位阈值与取整）写成契约；登记常量时同时登记它经库序列化后的字符串。系统 i18n/intl 只在与库输出对代表输入逐字一致时替代；库有自有阈值、模板或资源表时移植算法与资源。
+1. 从 build.gradle（含 gradle.properties、版本目录）读出库坐标与版本，按序取制品：本机 ~/.gradle/caches/modules-2/files-2.1；没有就用 Gradle 解析下载该依赖，或按坐标从 Maven 仓库、JitPack（https://jitpack.io/com/github/<owner>/<repo>/<version>/）、上游仓库对应版本 tag 获取，有 sources jar 时优先。
+2. 解包后按库的职责取真值：UI 库读 res 的 layout、values（dimens、styles、strings、integers）、anim/animator、drawable 及其限定目录（layout-land、values-sw600dp 等），并用 javap -p -c 或反编译读控件、管理器与 Builder 的测量、缺省参数、动画、队列与触摸分支；先列出库内全部视图类，再判断目标组件是否足够（图片查看器的缩放、平移、双击、惯性属于库行为，不是可省略的增强）。实体基类读字段集、类型、缺省值、equals/toString 与序列化规则；库里的常量与正则按库值迁移。 只有编译 jar、没有 sources jar 不等于不可核：用 javap -p -c -constants 读构造器缺省分支与 companion 常量，本机未装 JDK 时用 Android Studio 自带的 jbr/bin/javap；动效与物理类库读更新与发射方法，确认参数的时间域（每帧还是每秒）、帧率归一化、重力与质量、阻尼、寿命与淡出，再写常量与步进。上游提醒或注释写“库源不可核”时先自己核一次。
+3. 算法库（重复规则、相对时间、日期格式、文本拆分与序列化）用 JDK 小程序加载同版本 jar 跑代表输入，把输出的字面形态（时区形态、行尾、文案模板、单位阈值与取整）写成契约；登记常量时同时登记它经库序列化后的字符串。系统 i18n/intl 只在与库输出对代表输入逐字一致时替代；库有自有阈值、模板或资源表时移植算法与资源。
 4. 把真值写进规格映射行或组件头注释，注明库内文件、资源名或类方法与版本；映射行的依据只是仓库内调用行、README、单元测试或分析产物里的“建议”时，不标 Auto、不进跨栈硬映射基线，实现也不凭样式常量类自定时长、角度或间距。
 5. 确实取不到时，在规格逐项列出缺失的库真值（队列时序、几何、手势、序列化格式、文案）及其影响，登记为阻塞或交用户改判；不写「默认样式即可对齐」，也不把这类占位的兑现交给视觉对齐步骤。派工给出 Android 源码路径时，一并给出库制品缓存路径与可解包提示。
 

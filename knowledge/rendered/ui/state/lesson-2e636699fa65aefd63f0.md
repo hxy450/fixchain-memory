@@ -31,19 +31,10 @@ ForEach 键值不变时复用已有子组件、不再执行条目构建，子组
 
 来源支持：10 张卡 · 9 次迁移 · 9 个应用
 
-已核实的平台事实（核实时用的是 HarmonyOS 6.1.0（API 23，SDK 6.1.0.105）；OpenHarmony 文档 master 2026-11-21（提交 e42bd18a）；安卓 源码 android-36.1。和具体应用无关，直接用，不用再查；其中的默认值只在应用自己的主题、样式、清单和代码没有另设时成立，应用有没有另设要到应用里看）：
-- 〔做法第 1 步〕ForEach(arr: Array<any>, itemGenerator: (item: any, index: number) => void, keyGenerator?: (item: any, index: number) => string)（首段 @since 7）：第三个参数自定义键值；LazyForEach(dataSource: IDataSource, itemGenerator, keyGenerator?) 的第三个参数同样是键值生成函数
-- 〔原因 / 做法第 1 步〕ForEach 非首次渲染时逐项生成新键值：键值在上次渲染中已存在就不创建新组件、不重跑条目生成函数，直接渲染该键值对应的已有组件；键值不存在才为该项新建组件
-- 〔原因 / 做法第 1、3 步〕ForEach 的对象数组项被替换、而新项生成的键值没变时，ForEach 不把数据更新同步给子组件，子组件仍绑定旧数组项，之后新项的属性变化子组件也感知不到；文档的使用建议因此写明数组项为对象类型时不建议用内容相同的数组项替换旧项
-- 〔做法第 1 步〕ForEach 不传 keyGenerator 时默认键值为 index + '__' + JSON.stringify(item)；itemGenerator 声明了 index 参数而 keyGenerator 没声明 index 时，框架把 index 拼接在 keyGenerator 返回值之后作为最终键值。文档建议键值里用与 UI 显示相关的数据属性
-- 〔原因 / 做法第 3、6 步〕ForEach 键值只用下标时，在数组中间插入一项后旧下标键全被复用、只有末尾新建，界面显示错位（文档例：期望 ['one','new item','two','three']，实际 ['one','two','three','three']）；键值含 index 或用默认键时，插入点之后的项都会重建。文档不建议键值含 index，但说明 index 是保证键值唯一的最终手段，确需使用要接受数据源变更后重建组件的性能损耗
-- 〔原因 / 做法第 6 步〕ForEach 对重复键值发运行时警告，不同数组项键值相同时框架行为未定义：首次渲染遇到已出现过的键值不再创建组件（文档例 ['one','two','two','three'] 只建一个 two），UI 更新时出现重复键值框架可能无法正常工作
-- 〔例外与边界 / 做法第 1、4 步〕declare const ObservedV2: ClassDecorator、declare const Trace: PropertyDecorator、declare const Param: PropertyDecorator（均 @since 12）：@ObservedV2 类（须用 new 创建）中 @Trace 属性的值变化会触发绑定该属性的 UI 组件刷新，没加 @Trace 的属性变化不触发刷新；观察的是这个对象上的属性写入，数组元素换成另一个对象不在其内。@Trace 修饰的 Array 可观测 push、pop、shift、unshift、splice、copyWithin、fill、reverse、sort
-- 〔做法第 4 步〕Repeat 的键值由 RepeatAttribute<T>.key(keyGenerator: (item: T, index: number) => string): RepeatAttribute<T>（@since 12）生成，Repeat 根据键值是否变化判断数据项是否更新；.key() 缺省时生成新的随机键值，发现重复键时在已有键值上递归生成新键直到不重复；文档要求同一数据项每次输出一致、数组变化后仍唯一，允许但不建议用 index
-- 〔做法第 4 步〕Repeat 不设 .virtualScroll()（全量加载模式）时页面刷新取决于键值变化：更新前后键值相同，即使数据改变页面也不刷新；设了 .virtualScroll()（懒加载模式，须配合状态管理 V2 与 List、Grid、Swiper、WaterFlow、ListItemGroup 使用）时键值变化或数据变化都会触发刷新，复用缓存池节点时只更新节点的 item 和 index，子孙组件按 V2 规则同步
-- 〔做法第 4 步〕Repeat 与 @Builder 或自定义组件混用时，只传 RepeatItem.item 或 RepeatItem.index（按值传递），参数值改变不会引起 @Builder 内的 UI 刷新；整体传 RepeatItem（按引用）才能监听到数据变化；API 20 起也可用 UIUtils.makeBinding() 和 Binding / MutableBinding 传参
-- 〔原因 / 做法第 3 步〕安卓 ListActivity 把 ListView 的 AdapterView.OnItemClickListener 转发到 onListItemClick(ListView l, View v, int position, long id)：position 是点击时被点视图在 ListView 里的位置（ListView 加了 header 时 adapter 被包成 HeaderViewListAdapter，position 把 header 计在内），id 是 adapter.getItemId(position)；方法说明建议用 getListView().getItemAtPosition(position) 取数据，即点击时按位置从当前 adapter 取，不经过行对象身份
-- 〔原因〕设备上 ForEach 键只含 id（或 id 加下标、静态标志）时，以同 id、字段已变的新对象替换数组项或整表重新赋值后，该行仍显示旧对象的字段：改名后反馈已是新名而卡片仍为旧名；添加成功后计数停在旧值
-- 〔原因 / 做法第 4 步〕设备上 Swiper 页用 ForEach、键只含页标识、页模型是普通 interface、异步结果以新对象替换数组项时，已创建的页节点一直收不到新数据，各视图显示为空；用 Repeat 而把 RepeatItem.item 解包传给子组件时同样为空；页模型为 @ObservedV2/@Trace 且新数据在同一实例上原位赋值时能显示，以不可变新对象替换时无数据
-- 〔原因 / 做法第 3 步〕设备上整表重建为新对象（如 onPageShow 重新加载）而 ForEach 键不变时，该行不重跑条目生成函数，onClick 闭包捕获的仍是旧对象：在新数组上 indexOf(旧对象) 得 -1，arr[-1] 为 undefined，继续访问其属性抛 TypeError 闪退
-- 〔适用情境 / 原因〕设备上 Repeat 键只含 id 与选中位时，以同 id 新实例替换数组元素（arr[pos] = 新对象后整体赋值），行内由新实例字段推导的按钮保持旧状态（下载完成后仍显示下载）；卡里没写这个 Repeat 是否开了 virtualScroll
+已核实的平台事实（核实时用的是 HarmonyOS 6.1.0（API 23，SDK 6.1.0.105）；安卓 不涉及。和具体应用无关，直接用，不用再查；其中的默认值只在应用自己的主题、样式、清单和代码没有另设时成立，应用有没有另设要到应用里看）：
+- 〔原因〕ForEach 非首次渲染时，新生成的键值在上次渲染中已存在就不创建新组件、直接沿用该键对应的组件，也不把新的数组项同步给子组件，子组件仍绑定旧对象；之后修改这个新对象的属性，该子组件也感知不到。〔成立范围：对象：ForEach 的子组件。条件：数组元素被换成新对象（按下标替换、整表赋值）而键值不变。不成立的情形：键值变化时为该项新建组件；对子组件已绑定的同一对象改属性（可观察类）时会刷新。〕
+- 〔做法第 1 步〕ForEach 未传 keyGenerator 时默认键为 index + '__' + JSON.stringify(item)：数组中间插入或删除会让其后各项键值全变而全部重建；数组项含 bigint 等 JSON.stringify 无法序列化的数据时直接 jscrash（use of default id generator function not possible on provided data structure）。〔成立范围：对象：省略第三个参数的 ForEach。条件：数据项是对象且会插入删除，或含不可序列化的字段。不成立的情形：传了 keyGenerator 时以它的返回值为准（另见 itemGenerator 声明 index 时的拼接规则）。〕
+- 〔做法第 3 步〕itemGenerator 声明了 index 参数而 keyGenerator 没有声明 index 时，框架会在 keyGenerator 的返回值后再拼接 index 作为最终键值，键随位置变化。〔成立范围：对象：ForEach 的 itemGenerator 与 keyGenerator 形参。条件：itemGenerator 写成 (item, index) => …，keyGenerator 写成 (item) => …。不成立的情形：keyGenerator 也声明 index 参数时按其返回值原样作键。〕
+- 〔做法第 6 步〕ForEach 中不同数组项生成相同键值时行为未定义，框架只发运行时警告；文档示例里两个相同数据项只创建了一个子组件。〔成立范围：对象：ForEach。条件：键只由显示内容拼成且内容可能重复（基本类型数组拿数据项本身作键同理）。不成立的情形：Repeat 发现重复键时会自动生成新键（见 Repeat 键值条目）。〕
+- 〔做法第 4 步〕Repeat 不开 virtualScroll（全量加载模式）时页面刷新只取决于键值：更新前后键值相同，即使数据变了也不刷新；开启 virtualScroll（懒加载模式）时键值变化或数据变化都会触发刷新。〔成立范围：对象：Repeat。条件：全量模式可与 V1 状态管理配合；懒加载模式须放在 List、ListItemGroup、Grid、Swiper、WaterFlow 中并配合 V2 状态管理。不成立的情形：ForEach 不区分这两种模式，始终按键值复用。〕
+- 〔做法第 6 步〕Repeat 未设置 .key() 时为每项生成新的随机键值；发现重复键时在已有键值基础上递归生成新键，直到没有重复。〔成立范围：对象：Repeat 的 .key()。条件：省略 .key()，或键可能重复。不成立的情形：ForEach 对重复键不做去重（行为未定义）。〕
