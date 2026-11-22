@@ -1,6 +1,6 @@
 # DecimalFormat、BigDecimal 舍入与 Float 转字符串按源 API 语义复刻：HALF_EVEN，小数点与数字符号取应用偏好语言（Locale.getDefault 跟随应用语言，不是系统区域），Float.toString 的十进制串与“.0”；不用 Math.round、toFixed、无参 intl.NumberFormat 或模板串顶替
 
-ID：`lesson-ae093dedda604fddf17e` · 版本：3
+ID：`lesson-ae093dedda604fddf17e` · 版本：4
 
 [本主题](index.md)
 
@@ -18,8 +18,8 @@ ID：`lesson-ae093dedda604fddf17e` · 版本：3
 
 ## 做法
 
-1. 按源 API 逐项实现目标函数：DecimalFormat 用 HALF_EVEN（源端调用了 setRoundingMode 就照设置），最少与最多小数位取自模式串（"0.#" 为 0～1 位，"0.00" 固定 2 位）；小数点与数字符号按 Locale.getDefault() 语义取应用偏好语言，目标用 new intl.NumberFormat(i18n.System.getAppPreferredLanguage()) 探测，不用无参构造、toLocaleString() 或系统区域，也不固定写“.”。
-2. 源值是 Float 时先按 float32 取值（Math.fround），BigDecimal 舍入从该值的 Float.toString 十进制串开始；Float 直接转字符串（toString、字符串模板、资源参数）时按 Float.toString 输出：float32 的最短往返十进制，整数值保留“.0”，数量级在 [10^-3, 10^7) 之外为 E 记数；短写法：按 1..9 位依次 toPrecision，取首个经 Math.fround(parseFloat(s)) 往返等于原 float32 值的结果，整数值补“.0”。
+1. 按源 API 逐项实现目标函数：DecimalFormat 用 HALF_EVEN，舍入作用在待格式化 double 的 Double.toString 十进制写法上、不按二进制真值（源值是 Float 时先 Math.fround 再取 String(v) 的十进制串做 HALF_EVEN；如 double 0.15 按 "0.#" 得 "0.2"）（源端调用了 setRoundingMode 就照设置），最少与最多小数位取自模式串（"0.#" 为 0～1 位，"0.00" 固定 2 位）；小数点与数字符号按 Locale.getDefault() 语义取应用偏好语言，目标用 new intl.NumberFormat(i18n.System.getAppPreferredLanguage()) 探测，不用无参构造、toLocaleString() 或系统区域，也不固定写“.”。
+2. 源值是 Float 时先按 float32 取值（Math.fround），BigDecimal 舍入从该值的 Float.toString 十进制串开始；Float 直接转字符串（toString、字符串模板、资源参数）时按 Float.toString 输出：float32 的最短往返十进制（这是 Android 15 QPR2 起的系统构建和 API 36 上的 FloatToDecimal 实现；更早的系统构建用 FloatingDecimal，规范是小数部分至少一位、之后只取足以与相邻 float 区分的位数，与前者不是同一套规则），整数值保留“.0”，数量级在 [10^-3, 10^7) 之外为 E 记数；短写法：按 1..9 位依次 toPrecision，取首个经 Math.fround(parseFloat(s)) 往返等于原 float32 值的结果（1 位就往返时再取 2 位的 toPrecision，两者都往返的取更接近原值的，一样近取尾数为偶的），整数值补“.0”。
 3. 规格为格式化函数写映射时同时写舍入模式、应用语言下的小数点与 Float→String 规则，判例与所声明的舍入一致（HALF_EVEN 下 "0.#" 格式化 15.25 得 "15.2"），不配“四舍五入”式的例子。
 4. 修改共享数值工具时对照源码与自己的源码笔记逐个函数核对；同文件里已有实现与源语义不符的函数（笔记写 HALF_EVEN、实现却是 Math.round）一并修正或登记，不只改派工点名的那个。
 

@@ -11,7 +11,7 @@
   - 情境：源端处理线程常驻并阻塞在 BlockingQueue.take()，生产者在满队时阻塞等待空位，并按请求成本追加占位条目；目标没有阻塞原语，改成入队后启动一个异步泵，并提供 waitUntilDone 等待计数归零。
 - [Kit API 的 catch 值按 BusinessError 取 message 与 code，code 先 Number() 归一再比较错误码](lesson-b19162077a2ab886d809.lesson.md)
   - 时机：规格提取与服务实现阶段，迁移源端按异常类型分类、以 getMessage() 记录详情的 catch 分支时；按 SDK @throws 错误码为 Kit 调用编写异常分支判别时
-  - 情境：目标 catch 到的是网络、文件、数据库、定位等 Kit API 抛出或拒绝的 BusinessError（运行时形态因接口而异：@ohos.net.http 拒绝的是带数值 code 与 message 的普通对象，不是 Error 实例；经 napi_throw_error 抛出的，如 geoLocationManager 的同步出错路径，是 Error 实例且 code 为字符串；经 napi_create_error 或 napi_throw_business_error 的是 code 为数的 Error 实例）；源端按 IllegalArgumentException、SocketTimeoutException、UnknownHostException 等异常类型分支；@ohos.net.http 的失败码为 2300000 加 libcurl 码。也包括依据 d.ts @throws 列出的数值错误码（如定位开关关闭）决定等待、重试或失败，而 d.ts 把 BusinessError.code 声明为 number。
+  - 情境：目标 catch 到的是网络、文件、数据库、定位等 Kit API 抛出或拒绝的 BusinessError（运行时形态因接口而异：@ohos.net.http 拒绝的是带数值 code 与 message 的普通对象，不是 Error 实例；经 napi_throw_error 抛出的，如 geoLocationManager 的同步出错路径，是 Error 实例且 code 为字符串；经 napi_create_error 的是 Error 实例、code 为原生侧传入的字符串或数，经 napi_throw_business_error 的是 code 为数的 Error 实例）；源端按 IllegalArgumentException、SocketTimeoutException、UnknownHostException 等异常类型分支；@ohos.net.http 的失败码为 2300000 加 libcurl 码。也包括依据 d.ts @throws 列出的数值错误码（如定位开关关闭）决定等待、重试或失败，而 d.ts 把 BusinessError.code 声明为 number。
 - [单线程写执行器改为 Promise 串行队列时，为重入调用提供不经队列的内部版本](lesson-cdc6de4ebcdeeadc287c.lesson.md)
   - 时机：数据层实现阶段，把源端单线程 Executor（调用方已在执行线程即同步内联）移植为异步串行队列时
   - 情境：源端写方法在已处于执行线程时直接内联执行嵌套调用（如按线程名判断后 runnable.run()）；目标队列任务体内会再调用同类公开写方法。
