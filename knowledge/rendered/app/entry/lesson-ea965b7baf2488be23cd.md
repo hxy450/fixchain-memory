@@ -6,7 +6,7 @@
 
 ## 适用情境
 
-源应用主体可能是固定 px 字号的 Canvas 自绘，但仍有系统 AlertDialog、Toast、菜单或 sp 单位文本；Activity 是否在 configChanges 声明 fontScale 决定字号变化时重建还是回调；目标 HarmonyOS 应用默认不跟随系统字号（nonFollowSystem），需在 AppScope 配置 configuration profile 才会跟随并下发配置变化。
+源应用主体可能是固定 px 字号的 Canvas 自绘，但仍有系统 AlertDialog、Toast、菜单或 sp 单位文本；Activity 是否在 configChanges 声明 fontScale 决定字号变化时重建还是回调；目标 HarmonyOS 应用默认不跟随系统字号（nonFollowSystem），需在 AppScope 配置 configuration profile 才会跟随并下发配置变化。改成跟随后，目标里不带单位的 fontSize（按 fp 计）和写成 fp 的字号都会随系统字号放大；源端用 px 或 dp 固定的字号（自绘文字、固定尺寸标签），在目标要写成 px 或 vp 才保持不随系统字号变化，不要随这次改动一起变成 fp。
 
 ## 原因
 
@@ -20,7 +20,11 @@
 
 来源支持：1 张卡 · 1 次迁移 · 1 个应用
 
-已核实的平台事实（核实时用的是 HarmonyOS 6.1.0（API 23，SDK 6.1.0.105）；安卓 不涉及。和具体应用无关，直接用，不用再查；其中的默认值只在应用自己的主题、样式、清单和代码没有另设时成立，应用有没有另设要到应用里看）：
-- 〔适用情境〕AppScope/app.json5 不写 configuration 时，应用字体大小按不跟随系统（nonFollowSystem）处理：不随系统字号缩放，应用也无法通过环境变量订阅感知系统字号的变化；要跟随，须让 configuration 指向 AppScope/resources/base/profile 下的配置文件并把 fontSizeScale 设为 followSystem。〔成立范围：对象：Stage 模型应用 app.json5 的 configuration 标签及其 profile。条件：配成 followSystem 后也只有按 fp 指定的字号随系统缩放（Text 的 fontSize 传 number 时按 fp），按 vp、px 写的字号不变。依据是文档说明。最常见的不成立情形：应用调用了 ApplicationContext.setFontSizeScale，此时即使配置 followSystem 也不再跟随系统。〕
-- 〔做法第 2 步〕fontSizeMaxScale 只接受 1、1.15、1.3、1.45、1.75、2、3.2，缺省为 3.2；它是跟随系统时的放大上限，系统倍数超过它时按它封顶（上限 1.75、系统 2 倍时 10fp 文字显示为 17.5fp）；fontSizeScale 为 nonFollowSystem 时不生效。〔成立范围：对象：configuration profile 中的 fontSizeMaxScale（字符串）。条件：Text 等组件自己设了 maxFontScale 时，实际倍数还受组件的上限约束。依据是文档说明；填表外的值时系统怎样处理文档没写。最常见的不成立情形：fontSizeScale 没写或为 nonFollowSystem，上限写什么都不起作用。〕
-- 〔做法第 2 步〕调用 ApplicationContext.setFontSizeScale 设置应用字体大小后，应用字体不再跟随系统变化，也不再支持订阅系统字体大小的变化。〔成立范围：对象：ApplicationContext.setFontSizeScale（只能在主线程调用）。条件：与 configuration 的 followSystem 同时存在时以接口设置的倍数为准，但设的值超过 fontSizeMaxScale 时实际按 fontSizeMaxScale 生效。依据是文档说明。最常见的不成立情形：应用从不调用 setFontSizeScale，是否跟随只由 configuration 决定。〕
+已核实的平台事实（核实时用的是 HarmonyOS 6.1.0（API 23，SDK 6.1.0.105）；OpenHarmony 文档 master 2026-11-21（提交 e42bd18a）；安卓 android-37.0 的平台资源；android-36.1 的源码。和具体应用无关，直接用，不用再查；其中的默认值只在应用自己的主题、样式、清单和代码没有另设时成立，应用有没有另设要到应用里看）：
+- 〔做法第 2、3 步〕app.json5 用 "configuration": "$profile:configuration" 引用 AppScope/resources/base/profile 下的配置文件，文件名可自定义，但要和 configuration 标签指定的资源名对应
+- 〔适用情境 / 原因〕应用没有配置 configuration 的 fontSizeScale 时取缺省值 nonFollowSystem，应用字体大小不跟随系统；设为 followSystem 才跟随
+- 〔做法第 2 步〕fontSizeMaxScale 是跟随系统后应用字体的最大放大倍数，只支持 1、1.15、1.3、1.45、1.75、2、3.2，缺省 3.2；系统放大倍数超过它时按它封顶（如配 1.75、系统调到 2 倍时 10fp 的字显示为 17.5fp）；fontSizeScale 为 nonFollowSystem 时该项不生效
+- 〔原因 / 做法第 2 步〕设备上 AppScope 配置 fontSizeScale 为 followSystem、fontSizeMaxScale 为 "2" 时，修改系统字号后应用收到配置变化回调并重建，系统对话框里的文字随系统字号放大
+- 〔适用情境 / 做法第 1 步〕安卓 Activity 的 android:configChanges 里有 fontScale 标志（用户选了新的全局字号）；没有声明这一项时，字号变化由系统重建 Activity
+- 〔原因 / 做法第 1 步〕安卓的 sp（TypedValue.COMPLEX_UNIT_SP）是 scaled pixel，按用户的系统字号设置缩放；px 不随系统字号变化
+- 〔做法第 2 步〕安卓框架（android-36.1 源码）的非线性字号缩放表预置的最大 fontScale 是 2.0

@@ -1,6 +1,6 @@
 # 颜色插值或混合按 ARGB 四通道拆分并输出同一格式：#AARRGGBB 串与 getColorSync 数值不按 #RRGGBB 偏移取子串
 
-ID：`lesson-b742fb724345e4cfeb50` · 版本：1
+ID：`lesson-b742fb724345e4cfeb50` · 版本：2
 
 [本主题](index.md)
 
@@ -10,7 +10,7 @@ ID：`lesson-b742fb724345e4cfeb50` · 版本：1
 
 ## 适用情境
 
-目标代码先把颜色取成 '#AARRGGBB' 字符串或 32 位 ARGB 数值（resourceManager.getColorSync 的结果、8 位 color.json 值），再在两个颜色之间按比例插值或混合；写者自写分量运算，工程里可能已有或稍后才有 ARGB 混色工具。
+目标代码先把颜色取成 '#AARRGGBB' 字符串或 32 位 ARGB 数值（resourceManager.getColorSync 的结果、8 位 color.json 值），再在两个颜色之间按比例插值或混合；写者自写分量运算，工程里可能已有或稍后才有 ARGB 混色工具。两个端点都确定是不带透明度的 6 位 #RRGGBB 串、输出也是 6 位串时，按 #RRGGBB 偏移取 R/G/B 本身是对的，这样的代码不在本条改动范围内。
 
 ## 原因
 

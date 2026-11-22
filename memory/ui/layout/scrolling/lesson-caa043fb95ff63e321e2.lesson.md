@@ -1,6 +1,6 @@
 # LazyRow 摘要行转成可横滑容器，不降成普通 Row：少量固定项用 Scroll 包最小满宽的 Row 保留 Arrangement，item 内 AnimatedVisibility 的槽位恒在
 
-ID：`lesson-caa043fb95ff63e321e2` · 版本：1
+ID：`lesson-caa043fb95ff63e321e2` · 版本：2
 
 [本主题](index.md)
 
@@ -15,6 +15,7 @@ ID：`lesson-caa043fb95ff63e321e2` · 版本：1
 ## 例外与边界
 
 - 源端是普通 Row（没有 LazyRow 或 horizontalScroll），超宽时按源端的裁切或压缩处理
+- 恒在槽位只对应「item 恒在、显隐在 item 内部」：条件写在 item { } 外面（不满足时根本不调用 item）的项，源端就不存在这一项、不参与间隙分配，目标端照样按条件增删，不补空槽位
 
 ## 原因
 

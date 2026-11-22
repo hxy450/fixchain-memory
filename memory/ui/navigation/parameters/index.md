@@ -8,10 +8,10 @@
 
 - [Compose 带参路由迁到 NavPathStack 时，目的地名用固定名、参数只走 param，pageMap 按固定名精确匹配](lesson-300200dd52892e9dadd2.lesson.md)
   - 时机：界面转换与导航壳实现阶段，写 pushPathByName 与 navDestination 分发时
-  - 情境：源端 Compose Navigation 以带占位符的路由模式（如 detail/{id}）注册目的地，并用拼串函数生成实际路由；目标用 Navigation + NavPathStack，由 pageMap 按目的地名分发。
+  - 情境：源端 Compose Navigation 以带占位符的路由模式（如 detail/{id}）注册目的地，并用拼串函数生成实际路由；目标用 Navigation + NavPathStack，由 pageMap 按目的地名分发。已有的前缀分发不能先删：先把所有入栈调用点（列表、详情里的二次跳转、深链等外部入口）改成固定名加 param，参数照旧传到目标页，再把 pageMap 收成精确匹配，否则漏改的入口打不开页面。
 - [pushPathByName 传参用目标页 instanceof 的类：ArkTS 名义匹配，同形局部类与 JSON 对象不命中](lesson-b714378f18d168bce81c.lesson.md)
   - 时机：页面转换与功能切片接线阶段，为 pushPathByName 选择参数类型、在 NavDestination onReady 解析路由参数时；计划阶段为分批或并行生成的页面确定路由参数契约时；壳或深链分发器统一为多条路由选择 pushPathByName 参数时；接线收口阶段解除跳转类前向占位（FWD-REF）时
-  - 情境：目标页在 onReady 用 instanceof 收窄 pathInfo.param；源端路由是 profile/{id} 一类字符串模板；多个页面由不同写者分批或并行生成，canonical 参数类可能在路由宿主或独立路由模块里，也可能尚未建立；部分参数来自 API 响应 DTO（JSON.parse 得到的普通对象）。 也包括壳或深链分发器统一解析 URI 后为多条路由 pushPathByName：源端监听器把 pathname+search 整体交给路由、多个目标页各自从 query 取参，目标页由其他切片实现并各自导出参数类。 也包括发送方写跳转时目标页尚未生成或其参数类未导出，写者先建同形本地类并登记前向占位，由后续切片或收口者解除。
+  - 情境：目标页在 onReady 用 instanceof 收窄 pathInfo.param；源端路由是 profile/{id} 一类字符串模板；多个页面由不同写者分批或并行生成，canonical 参数类可能在路由宿主或独立路由模块里，也可能尚未建立；部分参数来自 API 响应 DTO（JSON.parse 得到的普通对象）。前提是目标页用 instanceof 判定；目标页 onReady 本来就只按字段读取、或直接收基元值（如单个 id）时，名义匹配不起作用，发送方照它读取的形状传即可，不为套用这条新建参数类或改动目标页的解析。 也包括壳或深链分发器统一解析 URI 后为多条路由 pushPathByName：源端监听器把 pathname+search 整体交给路由、多个目标页各自从 query 取参，目标页由其他切片实现并各自导出参数类。 也包括发送方写跳转时目标页尚未生成或其参数类未导出，写者先建同形本地类并登记前向占位，由后续切片或收口者解除。
 - [同一目标页有多个启动入口时，按全部源端入口的 Intent extras 定义一个共享路由载荷，并实现每个来源分支](lesson-953309e05bc1cd36c0d1.lesson.md)
   - 时机：功能切片、页面转换与编译修复阶段，为有多个入口的目标页（如搜索页）定义路由参数、编写各入口的 push 与接收端解析、实现选中结果的去向时
   - 情境：Android 目标 Activity 被多个入口以不同 Intent extras 启动（如 searchText、locationType、searchFromMap），并按这些 extra 决定结果去向（setResult 回传或跳转下一页）；目标用 NavPathStack 传单一 param，各入口由不同切片、编译修复或巡检修复分别写入。也包括结果页一类接收页按启动方传入的来源类型（fromType）只对特定来源显示“下一步”等跨功能动作，目标契约却规定路由参数只传稳定的媒体或实体 ID、对象留在共享 Store。
@@ -36,7 +36,7 @@
 - [经 router.pushUrl 进入的 @Entry 页在 aboutToAppear 用 router.getParams() 读取必填入参，不声明等待外部赋值的普通字段](lesson-0d7d6e7302f8c8c77c66.lesson.md)
   - 时机：页面实现阶段，编写由 router.pushUrl 打开、需要入参（如详情 id）的 @Entry 页面时；给页面补 @Entry 或登记路由时
   - 情境：源端 Fragment 经 Navigation Component 进入，nav_graph 声明必填 &lt;argument&gt;，Fragment 用 requireArguments()/navArgs 读取；目标页登记在 main_pages.json、以 @Entry 页面经 router.pushUrl({ url, params }) 打开。
-  - 例外：目标页作为 NavDestination 经 NavPathStack 进入：从 NavPathStack 的参数取值；该 struct 是被父组件实例化的子组件：入参由父组件构造时传入
+  - 例外：目标页作为 NavDestination 经 NavPathStack 进入：从 NavPathStack 的参数取值；该 struct 是被父组件实例化的子组件：入参由父组件构造时传入；页面已用 UIContext 的 Router（this.getUIContext().getRouter().getParams()）在 aboutToAppear 取参：与 router.getParams() 等价，保留原写法，不改回全局 router 接口
 - [路由参数以接收端契约为准：接收方不读取或写死的 extra 不透传，也不在目标页新增对它的消费](lesson-4a7c04b864ef635c87b6.lesson.md)
   - 时机：功能接线阶段，为跨页跳转构造目标页参数、决定哪些发起页状态要带过去时；为目标页新增入参消费或入页自动动作时
   - 情境：源发起页用 putExtra 传一个开关（如显隐标签），但接收 Activity 不读取该 extra，或创建 Fragment 时写死该参数；目标页参数类已用默认值与注释标明该字段由接收端固定。也包括多个调用方 putExtra 一个看似有含义的开关（如“显示一键登录弹窗”），接收 Activity 从不读取；目标页准备在 onReady 读取该参数并触发自动动作。

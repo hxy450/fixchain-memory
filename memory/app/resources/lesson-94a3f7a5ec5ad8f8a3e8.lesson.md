@@ -1,6 +1,6 @@
 # values 批量转 element JSON 按目标格式出口：颜色只写 hex 或已定义的 $color:，数组项写成 {value} 对象并映射引用，不可解析值不原样写出
 
-ID：`lesson-94a3f7a5ec5ad8f8a3e8` · 版本：2
+ID：`lesson-94a3f7a5ec5ad8f8a3e8` · 版本：3
 
 [本主题](index.md)
 
@@ -11,6 +11,10 @@ ID：`lesson-94a3f7a5ec5ad8f8a3e8` · 版本：2
 ## 适用情境
 
 资源源为 Android res 或反编译 APK；颜色值含 @android:color/* 系统色或指向本次未转换条目的 @color/ 引用，string-array 含 @string/ 引用；转换规则文档已给出目标格式，但转换由自写脚本完成，运行后控制台只报 unresolved 计数。
+
+## 例外与边界
+
+- 源端值是指向本应用颜色的 @color/x 引用、且 x 已转换时，写 $color:x 保留引用，不为了“只写 hex”把它解析成字面值：x 在深色或其他限定目录里有不同取值时，引用会跟着当前的深浅色模式取值，字面 hex 不会。第 1 步的固定值映射只用于平台颜色和确实无法引用的值。
 
 ## 原因
 

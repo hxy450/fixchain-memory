@@ -1,6 +1,6 @@
 # catch 中继续抛出时先把异常收窄为 Error，不直接 throw catch 变量
 
-ID：`lesson-dbfae443e671c568e14e` · 版本：2
+ID：`lesson-dbfae443e671c568e14e` · 版本：3
 
 [本主题](index.md)
 
@@ -15,6 +15,7 @@ ArkTS 严格模式工程中，catch 分支需要把当前任务的异常继续�
 ## 例外与边界
 
 - 抛出的值已经在同一分支里由 instanceof Error 等判断收窄为 Error
+- 上游按错误码分支处理（读 code 区分取消、权限、网络等）时，收窄不能丢掉码：BusinessError 在声明里只是带 code 字段的接口，Kit 以普通对象拒绝时过不了 instanceof Error，被包成 new Error(String(error)) 后上游读不到 code；这时抛出带同一 code 字段的 Error 子类，让读 code 的上游照旧拿到原来的码。
 
 ## 原因
 

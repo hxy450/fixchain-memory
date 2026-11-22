@@ -20,10 +20,10 @@ Navigation/@Entry宿主与页面注册（含根 Navigation 默认标题栏与工
   - 例外：源端确有常驻在内容之上的抽屉切换按钮时，保留内置按钮，并按源端位置与图标设置 controlButton 样式
 - [main_pages.json 只登记经 router 进入或由 loadContent 按路径加载的 @Entry 页：被 Tabs/父页导入的子组件与 @CustomDialog 不登记，10905402 与 @Entry+export 警告先判定角色](lesson-c4a6eaaf6a22c0b8823f.lesson.md)
   - 时机：入口装配阶段写 main_pages.json 路由登记时；编译修复遇到“登记页面须有且仅有一个 @Entry”（10905402）或“export struct with @Entry”警告时
-  - 情境：源端单 Activity 以底部导航承载多个 Fragment，另有 DialogFragment 与经导航跳转的二级页；目标主页面用 Tabs/TabContent import 并实例化页面 struct，弹窗写成 @CustomDialog，这些文件都放在 pages/ 目录；工程用 main_pages.json 登记路由页。
+  - 情境：源端单 Activity 以底部导航承载多个 Fragment，另有 DialogFragment 与经导航跳转的二级页；目标主页面用 Tabs/TabContent import 并实例化页面 struct，弹窗写成 @CustomDialog，这些文件都放在 pages/ 目录；工程用 main_pages.json 登记路由页。工程改用 Navigation 路由时，经 NavPathStack 进入的 NavDestination 子页注册在 navDestination 映射或系统路由表 router_map.json 里，同样不是 main_pages 的登记对象，不为它们补 @Entry；main_pages 只留按路径加载的入口页和仍经 router 进入的页。
 - [一进入就无条件跳转并 finish 的 Activity 是路由跳板：目标按同样条件直达实际页面，不把它的布局做成可见页](lesson-0b72c197ea20fbe6f277.lesson.md)
   - 时机：页面转换阶段迁移入口类 Activity、以及调用方为 Intent(X) 确定目标路由时
-  - 情境：Android Activity 在 onCreate/initView 开头按条件 startActivity 到另一页并立即 finish()（如登录入口按配置转到短信登录或一键登录），它的布局文件仍含可渲染的按钮；多个调用方以 Intent 指向这个跳板 Activity。
+  - 情境：Android Activity 在 onCreate/initView 开头按条件 startActivity 到另一页并立即 finish()（如登录入口按配置转到短信登录或一键登录），它的布局文件仍含可渲染的按钮；多个调用方以 Intent 指向这个跳板 Activity。只在 onCreate/initView 的每条分支都 startActivity 并 finish()、用户在任何条件下都看不到它的布局时才算跳板；若有分支不跳转、留下显示布局（如条件不满足时停在本页），这个布局仍是可见页，照常转换，只把跳走的分支按跳板处理。
 - [入口页 Navigation 宿主：NavDestination 首屏只在 navDestination 映射中注册并在空栈时压入同一栈，不作根内容；隐藏 navBar 时初始栈必须非空；.navDestination 直接传 @Builder](lesson-8953e390416a80d7dd8c.lesson.md)
   - 时机：入口页实现或收尾接线阶段，创建 Navigation 宿主、决定首屏放在根内容还是压栈、编写 navDestination 分发时；为根 Navigation 决定是否设 hideNavBar 时
   - 情境：目标入口页用 Navigation + @Provider NavPathStack 承载路由；首屏（启动页等）写成返回 NavDestination 的组件，在 onReady 取栈并按启动决策 pushPathByName 下一页；目的地由 @Builder 映射分发。也包括启动页以 NavDestination 为根、已在 pageMap 注册，入口却把它放进 Navigation 内容槽并加 hideNavBar(true)，初始栈为空；或首屏页依赖 onShown、onResult、onBackPressed（如接收文件选择结果），却作为 Navigation 首页内容承载。
@@ -40,13 +40,13 @@ Navigation/@Entry宿主与页面注册（含根 Navigation 默认标题栏与工
 - [嵌在 Swiper/Tabs 里的页面组件只用 @Consumer 注入的根 NavPathStack，不在 onReady 用 context.pathStack 覆盖](lesson-1cebb531c991239d2691.lesson.md)
   - 时机：页面转换与主壳接线阶段，为由主页 Tab/Swiper 承载的 Fragment 页确定导航栈来源、编写 onReady 时；把已有页面接入主页 Swiper/Tabs 时
   - 情境：Android 主 Activity 用 ViewPager/底部 Tab 承载多个 Fragment；目标由入口页 Navigation 以 @Provider 提供根 NavPathStack，主页 Swiper 嵌入各 Tab 页组件，子页用 @Consumer('navPathStack') 取栈，外层仍保留 NavDestination 与 onReady；工程里经 pushPathByName 压栈的页面普遍在 onReady 写 this.navPathStack = context.pathStack。
-  - 例外：页面本身经 pushPathByName 压入根栈、不在 Swiper/Tabs 子树内时，onReady 的 context.pathStack 就是根栈，该赋值无害
+  - 例外：页面本身经 pushPathByName 压入根栈、不在 Swiper/Tabs 子树内时，onReady 的 context.pathStack 就是根栈，该赋值无害；删赋值只在本页已经用 @Consumer('navPathStack') 接到入口页 @Provider 的根栈时成立；删时保留这个注入和 onReady 里读 pathInfo.param 的部分。本页没有注入、只靠这行赋值拿栈时，先补上注入再删，不能只删
 - [根 Navigation 只作路由容器时显式隐藏默认标题栏和工具栏](lesson-69e07207a06a8a8a7ba9.lesson.md)
   - 时机：界面实现阶段，为入口页根 Navigation 编写属性链时
-  - 情境：源端外壳没有系统标题栏或工具栏（如 Compose Scaffold 只传自绘 bottomBar 与 snackbarHost），目标以 @Entry 页的 Navigation 作根路由容器，承载 tab 内容和自绘底栏，详情页走 NavDestination。
+  - 情境：源端外壳没有系统标题栏或工具栏（如 Compose Scaffold 只传自绘 bottomBar 与 snackbarHost），目标以 @Entry 页的 Navigation 作根路由容器，承载 tab 内容和自绘底栏，详情页走 NavDestination。根 Navigation 若用 title 或 toolbarConfiguration 承载源端确实有的标题、底部导航项，那一栏不隐藏，只隐藏没有承载内容的栏；用系统标题栏显示标题和返回钮的 NavDestination 也不加 hideTitleBar。
 - [源 Activity 或其基类 onCreate 调 overridePendingTransition(0,0) 时，“进入无转场”是目的地页的属性：进入该页的每条路由（按钮跳转、引导完成、启动分流、抽屉）都关闭转场；未调用时按主题默认窗口动画写目标转场，不留目标默认横滑](lesson-9886f489045488c8b454.lesson.md)
   - 时机：规格提取阶段写页面规格与路由契约时；实现阶段写 pushPathByName/replacePathByName 时；规格提取阶段把 startActivity/finish 映射为路由契约、决定页面切换动画时
-  - 情境：源 Activity 或所继承的基类在 onCreate 调 overridePendingTransition(0,0)；目标用 Navigation 的 push/replace 进入该页，进入路径不止一条，规格可能只把转场禁用挂在抽屉基座等某一条路径上。 也包括源端多个 Activity 用 startActivity 线性跳转、按返回 finish，源码没有 overridePendingTransition，styles 也没覆盖 windowAnimationStyle；目标 router.pushUrl 的 @Entry 页或 Navigation 页未写转场，系统默认横向滑入滑出。
+  - 情境：源 Activity 或所继承的基类在 onCreate 调 overridePendingTransition(0,0)；目标用 Navigation 的 push/replace 进入该页，进入路径不止一条，规格可能只把转场禁用挂在抽屉基座等某一条路径上。只有调用写在目的地自己或基类的 onCreate 里才算目的地属性；调用方在某次 startActivity 或 finish 之后紧接着调的 overridePendingTransition 只管那一次切换，按那一条路由写 animated=false，不推广到进入该页的其他路由。 也包括源端多个 Activity 用 startActivity 线性跳转、按返回 finish，源码没有 overridePendingTransition，styles 也没覆盖 windowAnimationStyle；目标 router.pushUrl 的 @Entry 页或 Navigation 页未写转场，系统默认横向滑入滑出。
 - [源工具栏无返回键、标题居中或带右侧动作时，用 hideTitleBar 加页内头部，不塞系统标题栏的 title/menus 槽](lesson-d1cf63055d6991eeb2b5.lesson.md)
   - 时机：界面实现阶段，把源页面工具栏（标题、动作按钮、有无返回键）落成 NavDestination 系统标题栏或页内头部时；验证或返修发现自定义标题槽运行期为空时
   - 情境：源页面头部是自定义工具栏（如 Ionic iOS 模式的 IonToolbar：居中图标加标题、slot=end 一组图标按钮、没有 IonBackButton），目标页是 Navigation 下 push 的 NavDestination，需要在系统标题栏 title/menus 的 CustomBuilder 槽与 hideTitleBar(true) 后在内容区自绘头部之间选择。
@@ -54,11 +54,11 @@ Navigation/@Entry宿主与页面注册（含根 Navigation 默认标题栏与工
 - [源端一个 Composable 内多屏共享的清理，拆成多页面后归属外层生命周期，切屏不释放](lesson-2ed8c21943925bf0ae9a.lesson.md)
   - 时机：规格提取与计划阶段，把源端 DisposableEffect/onDispose 等清理映射成目标多页面的生命周期契约时；实现阶段把共享服务的 stop/dispose 挂到页面回调时
   - 情境：源端单 Activity 在同一个 Composable 里用状态变量切换多个屏幕，播放器等资源和 DisposableEffect 清理挂在这个外层 Composable；目标端拆成 Navigation 下的多个页面，共享服务需要重新确定由哪一层、在什么时机停止和释放。
-  - 例外：源端清理本就挂在单个屏幕自己的 Composable 上，切屏即离开组合，此时按该屏对应页面的退出处理
+  - 例外：源端清理本就挂在单个屏幕自己的 Composable 上，切屏即离开组合，此时按该屏对应页面的退出处理；这条只管随外层 Composable 离开组合才触发的清理（onDispose 一类）；源端切屏入口里自己显式停止或取消的（切屏回调里直接调 stop()、cancel()），目标对应的导航动作照样停止，不因“切屏不释放”删掉
 - [源端在导航目的地内用 LocalLifecycleOwner 观察 ON_STOP/ON_RESUME 时，owner 是返回栈条目：导航离开与退后台都要触发，目标按 onHidden/onShown 接线；销毁前只补调幂等停止入口，源端 onDestroy 不存档就不在 aboutToDisappear 存档或计时](lesson-19dd006e049c3f9d7563.lesson.md)
   - 时机：规格提取阶段翻译 LifecycleEventObserver 的 ON_STOP/ON_RESUME 触发契约时；页面实现阶段把引擎或服务暴露的 onStop/onResume 一类入口、或源 Activity 的存档时机接到 NavDestination 生命周期时
   - 情境：源 Composable 用 DisposableEffect(LocalLifecycleOwner.current) 注册 LifecycleEventObserver，ON_STOP 时移交后台服务、暂停或保存，ON_RESUME 时取回；该 Composable 位于 navigation-compose 的目的地内。目标页面是 NavDestination，引擎是普通类，需由页面在 onShown/onHidden/aboutToDisappear 中显式调用入口；规格可能把触发写成“退后台/前后台切换”。也包括源 Activity 只在 onPause、onBackPressed、onSaveInstanceState、Up 存档，onDestroy 不存档，存档按 now − startingTime 累计时长或写统计；目标页可能在隐藏很久后才被清栈销毁（桌面图标重进、popToIndex、replace）。
-  - 例外：观察者挂在 Activity 或 ProcessLifecycleOwner 上：只对应应用前后台，按 Ability 或应用前后台回调接线
+  - 例外：观察者挂在 Activity 或 ProcessLifecycleOwner 上：只对应应用前后台，按 Ability 或应用前后台回调接线；源端在 onDestroy 或 finish 路径里本来就存档、计时或写统计：目标在 aboutToDisappear（或出栈路径）里的同一副作用照源端保留，不按这条删掉；这条只禁止新增源端销毁时不做的副作用
 - [路由表只注册以 NavDestination 为根的组件：Tab 内容组件兼作路由目标时由路由侧包一层帧](lesson-6c474c15ac28fca733a1.lesson.md)
   - 时机：导航壳与路由表收口阶段，往 navDestination 映射的槽位填目标组件时
-  - 情境：同一个页面组件既嵌在底栏 Tab 里作内容组件（build 根是 Column 等普通容器），又是深链或按钮跳转的路由目标；路由表按 struct 名把它直接挂进 pageMap。
+  - 情境：同一个页面组件既嵌在底栏 Tab 里作内容组件（build 根是 Column 等普通容器），又是深链或按钮跳转的路由目标；路由表按 struct 名把它直接挂进 pageMap。改法只在路由侧加帧：被包的 Tab 内容组件本身保持原样（根节点不改成 NavDestination），它在 Tab 里的嵌入用法不变。

@@ -1,6 +1,6 @@
 # greenrobot EventBus 迁移先核投递契约：需同步按引用、priority 与嵌套 post 排队时自建进程内总线，不直接用 emitter
 
-ID：`lesson-32c7d4b2ada4b341778d` · 版本：1
+ID：`lesson-32c7d4b2ada4b341778d` · 版本：2
 
 [本主题](index.md)
 
@@ -11,6 +11,11 @@ ID：`lesson-32c7d4b2ada4b341778d` · 版本：1
 ## 适用情境
 
 源端用 greenrobot EventBus（默认线程模式在 post 线程同步回调订阅者、事件对象按引用传递、register(this, priority)、订阅回调中嵌套 post 会排队）发布实体对象事件；目标候选是 @ohos.events.emitter、eventHub 或自建订阅表。
+
+## 例外与边界
+
+- 同步回调只是默认 POSTING 模式的语义：订阅方法在 @Subscribe 里写了 threadMode = MAIN、MAIN_ORDERED、BACKGROUND 或 ASYNC 的（MAIN 在非主线程 post 时、MAIN_ORDERED 与 ASYNC 总是经队列投递），post 返回时这些订阅不一定已处理完，按各自的线程模式迁，不一律改成同步调用。
+- 源端用了 postSticky 或 @Subscribe(sticky = true) 的，自建总线要保留粘性事件：按事件类型记住最近一次，粘性订阅者注册时立即收到，并提供对应的取出与移除。
 
 ## 原因
 

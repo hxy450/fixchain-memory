@@ -1,6 +1,6 @@
 # 源 manifest 未声明 android:supportsRtl 时布局方向恒为 LTR：有顺序或对齐语义的容器逐个显式 Direction.Ltr
 
-ID：`lesson-148a3e67bd557bafd722` · 版本：1
+ID：`lesson-148a3e67bd557bafd722` · 版本：2
 
 [本主题](index.md)
 
@@ -22,7 +22,7 @@ ArkUI 组件默认 Direction.Auto，跟随系统语言；来源实测子组件�
 
 ## 做法
 
-1. 规格把“布局方向恒 LTR”写成目标契约；实现时在每个有顺序或对齐语义的容器（按钮条 Row、alignItems(Start) 的 Column、对话框面板）上显式 .direction(Direction.Ltr)，不只设在最外层。
+1. 规格把“布局方向恒 LTR”写成目标契约；实现时在每个有顺序或对齐语义的容器（按钮条 Row 等 Row、Stack、Flex 容器）上显式 .direction(Direction.Ltr)，不只设在最外层；direction 在 Column 上不生效，对话框面板、alignItems(Start) 的内容区是 Column 时，给 Column 自己设 Ltr 没有效果，要给它里面有顺序或起止对齐语义的 Row、Stack 子容器逐个设 Ltr。
 
 ## 可选检查
 

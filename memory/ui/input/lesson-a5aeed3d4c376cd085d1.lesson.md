@@ -1,6 +1,6 @@
 # 金额类输入可含小数时不用 InputType.Number：按源端解析函数选择允许小数点的输入方式
 
-ID：`lesson-a5aeed3d4c376cd085d1` · 版本：1
+ID：`lesson-a5aeed3d4c376cd085d1` · 版本：2
 
 [本主题](index.md)
 
@@ -10,7 +10,7 @@ ID：`lesson-a5aeed3d4c376cd085d1` · 版本：1
 
 ## 适用情境
 
-源端 EditText 未设数字 inputType（或为 numberDecimal），保存时用 toDoubleOrNull 一类解析允许小数；目标 TextInput 准备用 InputType.Number。
+源端 EditText 未设数字 inputType（或为 numberDecimal），保存时用 toDoubleOrNull 一类解析允许小数；目标 TextInput 准备用 InputType.Number。源端只收非负整数（inputType 为 number 且不带 numberDecimal、numberSigned，按 toIntOrNull 一类解析）时，InputType.Number 本来就对，不在这条范围。
 
 ## 原因
 
@@ -18,7 +18,7 @@ InputType.Number 按纯数字输入处理，小数点无法输入；源端能输
 
 ## 做法
 
-1. 先从源端读输入约束（inputType、maxLength）与解析函数（toDoubleOrNull/toIntOrNull）确定允许字符；可含小数时用支持小数点的类型（如 InputType.NUMBER_DECIMAL，按当前 SDK 核对可用性）或普通文本加 onChange 规范化（单个小数点、限定小数位、去多余前导零）。
+1. 先从源端读输入约束（inputType、maxLength）与解析函数（toDoubleOrNull/toIntOrNull）确定允许字符；可含小数时用支持小数点的类型（如 InputType.NUMBER_DECIMAL，API 11 起提供，只允许数字和一个小数点、不支持负数，源端允许负数时改用 inputFilter）或普通文本加 onChange 规范化（单个小数点、限定小数位、去多余前导零）。
 
 ## 可选检查
 

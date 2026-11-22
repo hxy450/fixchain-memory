@@ -1,6 +1,6 @@
 # 行组件内挂了 onClick 时外层 ListItem 的 onClick 收不到点击：点击只设一个归属，动作经 @Event 传入或组件内不挂点击
 
-ID：`lesson-f122d4c4d386c60fd8d5` · 版本：1
+ID：`lesson-f122d4c4d386c60fd8d5` · 版本：2
 
 [本主题](index.md)
 
@@ -14,7 +14,7 @@ ID：`lesson-f122d4c4d386c60fd8d5` · 版本：1
 
 ## 例外与边界
 
-- 父子确需响应同一次点击（如内层另有独立动作、外层仍要处理）时，按 ArkUI 手势规则给子元素改用 parallelGesture 等并行手势，不依赖冒泡
+- 父子确需响应同一次点击（如内层另有独立动作、外层仍要处理）时，按 ArkUI 手势规则在父容器（外层 ListItem 或行容器）上用 parallelGesture 绑定点击手势（mask 用默认的 GestureMask.Normal，不屏蔽子组件手势），子元素保留自己的 onClick，不依赖冒泡
 
 ## 原因
 

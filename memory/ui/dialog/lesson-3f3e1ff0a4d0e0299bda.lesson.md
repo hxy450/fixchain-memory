@@ -1,6 +1,6 @@
 # @ComponentV2 页面的弹窗不用 CustomDialogController 承载 V2 组件，改用状态驱动浮层、半模态或 openCustomDialog
 
-ID：`lesson-3f3e1ff0a4d0e0299bda` · 版本：1
+ID：`lesson-3f3e1ff0a4d0e0299bda` · 版本：2
 
 [本主题](index.md)
 
@@ -10,7 +10,7 @@ ID：`lesson-3f3e1ff0a4d0e0299bda` · 版本：1
 
 ## 适用情境
 
-项目要求页面与子组件都用 @ComponentV2、不混用 V1；需要把 Android Dialog/DialogFragment 一类居中或底部弹窗迁成 ArkUI；规格可能写着 CustomDialog、@CustomDialog 或 bindSheet。
+项目要求页面与子组件都用 @ComponentV2、不混用 V1；需要把 Android Dialog/DialogFragment 一类居中或底部弹窗迁成 ArkUI；规格可能写着 CustomDialog、@CustomDialog 或 bindSheet。 换载体只换承载方式，不换呈现形态：源端是居中对话框时选居中的条件浮层或 openCustomDialog，bindSheet / bindContentCover 只用于源端本就是底部面板或全屏覆盖的弹窗；源弹窗的按钮集合和取消路径照旧。页面是 V1 的 @Component 时不在本条范围，CustomDialogController 加 @CustomDialog 照常可用。
 
 ## 原因
 

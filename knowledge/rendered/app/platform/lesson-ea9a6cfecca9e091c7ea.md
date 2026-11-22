@@ -6,7 +6,11 @@
 
 ## 适用情境
 
-源端某个 Activity 在 onCreate 给 getWindow() 加标志且没有清除代码，靠该 Activity 不可见或 finish 时随窗口失效；目标各页以 Navigation/NavDestination 共用一个主窗口，经 window.getLastWindow 调 setWindowKeepScreenOn 等窗口级 API。
+源端某个 Activity 在 onCreate 给 getWindow() 加标志且没有清除代码，靠该 Activity 不可见或 finish 时随窗口失效；目标各页以 Navigation/NavDestination 共用一个主窗口，经 window.getLastWindow 调 setWindowKeepScreenOn 等窗口级 API。页面是 router 管理的 @Entry 页而不是 NavDestination 时，成对的时机换成该页的 onPageShow / onPageHide；该页面对应独立的窗口（单独的 UIAbility 主窗口或子窗口）时，窗口标志随那个窗口失效，不在本条范围内。
+
+## 例外与边界
+
+- 常亮只在该窗口位于前台时生效：整个应用退到后台时平台已不再保持常亮，不需要另在 onBackground 里关；本条要补的是同一窗口内离开该页面（返回、跳到别的页）这一侧。
 
 ## 原因
 
@@ -19,9 +23,9 @@
 
 来源支持：1 张卡 · 1 次迁移 · 1 个应用
 
-已核实的平台事实（核实时用的是 HarmonyOS 6.1.0（API 23，SDK 6.1.0.105）；安卓 Android SDK 源码 android-36.1。和具体应用无关，直接用，不用再查；其中的默认值只在应用自己的主题、样式、清单和代码没有另设时成立，应用有没有另设要到应用里看）：
-- 〔原因〕安卓 FLAG_KEEP_SCREEN_ON 是窗口标志，含义是「只要这个窗口对用户可见，就保持屏幕常亮」；Activity 不可见或 finish 后效果随窗口失效，不需要清除代码。〔成立范围：对加在 Activity 自身窗口（getWindow()）上的标志；同一 Activity 内切换 Fragment 不改变窗口可见性，常亮一直生效；含义依据是 javadoc（常亮的实际判定在系统服务里，SDK 源码看不到）；最常见的不成立情形：代码显式 clearFlags 时提前失效。〕
-- 〔做法第 1 步〕鸿蒙 Window.setWindowKeepScreenOn 设置的是该窗口位于前台时屏幕是否常亮，是窗口级属性，不随页面切换变化；文档要求只在导航、视频播放、绘画、游戏等必要场景设 true，退出场景后重置为 false，系统检测到不规范使用时可能恢复自动灭屏；异源虚拟屏下不生效。〔成立范围：对调用它的那个 Window 实例（窗口级设置，不区分窗口里显示的是哪一页）；最常见的不成立情形：窗口退到后台时不常亮（只在前台生效），回前台再生效。〕
-- 〔适用情境〕window.getLastWindow(ctx) 返回当前应用内层级最高的子窗口；只有没有子窗口、或子窗口未调用 showWindow() 显示时才返回应用主窗口；自由窗口状态下独立子窗不在计算范围内。〔成立范围：对 window.getLastWindow（API 9 起）；最常见的不成立情形：页面显示期间应用另外显示了子窗口时，onShown / onHidden 里经 getLastWindow 设置的常亮或隐私模式落在子窗口上，主窗口没被设置或没被复位。〕
-- 〔做法第 1 步〕NavDestination 的 onHidden 在被新页覆盖、出栈和应用切后台时都会触发，onShown 在显示、上层页出栈露出和应用回前台时触发；从 API 21 起，打开或关闭全模态（bindContentCover）也会让 NavDestination 触发 onHidden / onShown，回调参数为 VisibilityChangeReason.CONTENT_COVER。〔成立范围：对 NavDestination；API 21 之前文档没有写明全模态是否触发；被 NavDestinationMode.DIALOG 页覆盖或它出栈时，下层页不触发 onHidden / onShown（只触发 onInactive / onActive）；最常见的不成立情形：Navigation 首页内容不是 NavDestination，收不到这两个回调。〕
-- 〔适用情境〕安卓 FLAG_SECURE 让窗口内容不出现在截屏中、不能在非安全显示器上显示；鸿蒙 Window.setWindowPrivacyMode(true) 让窗口内容无法被截屏或录屏，未调用时默认不开启，隐私模式窗口退后台后在多任务卡片中显示为白色蒙层或隐私蒙层；该接口需要 ohos.permission.PRIVACY_WINDOW，没有时抛 201。〔成立范围：对调用它的那个 Window 实例；PRIVACY_WINDOW 在 HarmonyOS 6.1.0（API 23）SDK 的权限定义里是 system_grant、normal，只需在 module.json5 声明；最常见的不成立情形：漏声明权限，调用失败、截屏不受限。〕
+已核实的平台事实（核实时用的是 HarmonyOS 6.1.0（API 23，SDK 6.1.0.105）；OpenHarmony 文档 master 2026-11-21（提交 e42bd18a）；安卓 android-36.1 的源码。和具体应用无关，直接用，不用再查；其中的默认值只在应用自己的主题、样式、清单和代码没有另设时成立，应用有没有另设要到应用里看）：
+- 〔标题 / 原因〕安卓 WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON 只在加了它的那个窗口对用户可见期间保持屏幕常亮
+- 〔适用情境 / 原因〕window.getLastWindow 取当前应用最上层的窗口，没有子窗口时返回应用主窗口
+- 〔原因 / 做法第 1 步〕Window.setWindowKeepScreenOn 设置的是该窗口位于前台时设备屏幕是否常亮，不随应用内页面切换自动撤销；文档要求退出导航、视频、游戏等场景后重置为 false，系统检测到不规范使用时可能恢复自动灭屏
+- 〔做法第 1 步〕NavDestination 的 onShown 在该页面显示时触发，onHidden 在该页面隐藏时触发；API 21 起回调参数 VisibilityChangeReason 说明触发原因
+- 〔原因 / 做法第 2 步〕卡里设备上页面只在 aboutToAppear 里对主窗口设常亮、离开时不传 false，返回上一页后应用仍持有常亮锁（windowLock），而源端的常亮已随该 Activity 不可见失效

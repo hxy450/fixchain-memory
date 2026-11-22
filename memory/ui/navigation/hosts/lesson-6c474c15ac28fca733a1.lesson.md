@@ -1,6 +1,6 @@
 # 路由表只注册以 NavDestination 为根的组件：Tab 内容组件兼作路由目标时由路由侧包一层帧
 
-ID：`lesson-6c474c15ac28fca733a1` · 版本：2
+ID：`lesson-6c474c15ac28fca733a1` · 版本：3
 
 [本主题](index.md)
 
@@ -10,7 +10,7 @@ ID：`lesson-6c474c15ac28fca733a1` · 版本：2
 
 ## 适用情境
 
-同一个页面组件既嵌在底栏 Tab 里作内容组件（build 根是 Column 等普通容器），又是深链或按钮跳转的路由目标；路由表按 struct 名把它直接挂进 pageMap。
+同一个页面组件既嵌在底栏 Tab 里作内容组件（build 根是 Column 等普通容器），又是深链或按钮跳转的路由目标；路由表按 struct 名把它直接挂进 pageMap。改法只在路由侧加帧：被包的 Tab 内容组件本身保持原样（根节点不改成 NavDestination），它在 Tab 里的嵌入用法不变。
 
 ## 原因
 

@@ -1,6 +1,6 @@
 # LinearLayout 的 weightSum 与子权重之和不等，或 wrap_content 子项带权重时，不用 layoutWeight 归一化：余量（可用尺寸减各子项自然尺寸）按 w/剩余 weightSum 依次分配，份额耗尽的子项只留自然尺寸，超出 weightSum 的末块被裁
 
-ID：`lesson-adad817f2c3c8f1eaa09` · 版本：2
+ID：`lesson-adad817f2c3c8f1eaa09` · 版本：3
 
 [本主题](index.md)
 
@@ -12,13 +12,17 @@ ID：`lesson-adad817f2c3c8f1eaa09` · 版本：2
 
 源布局声明 weightSum 且与子权重之和不等（如根 weightSum=10 而子权重 4/1/9，列 weightSum=6 而 8 个 wrap_content 子项各权重 1），或 wrap_content 子项带权重、自然尺寸各不相同。 也包括带权重的 wrap_content ImageView 未设 adjustViewBounds、位图按密度放大后宽于父级，各子项自然尺寸之和可能超过可用尺寸（横屏、小屏）。
 
+## 例外与边界
+
+- LinearLayout 主轴尺寸确定（match_parent 或固定值）、带权子项主轴都写 0dp、没写 weightSum 或它等于权重之和时，各子项就是按权重比例分可用尺寸，与 ArkUI layoutWeight 一致：已有的 layoutWeight 写法保留，不按这条改写。带权子项主轴是 match_parent 时不在此列（自然尺寸取父尺寸、余量为负），按做法第 1 步的公式算。
+
 ## 原因
 
 ArkUI layoutWeight 按权重和的比例分配全部空间，等于忽略 weightSum 与子项自然尺寸：源端被裁的末块、份额耗尽的子项与留白都会变形。 flexGrow 只在余量为正时按比例增长：自然尺寸之和超过可用尺寸时，LinearLayout 用同一公式给每个带权子项分负份额、逐项扣减，flexGrow/flexShrink 复现不了；自然尺寸取错（如把未设 adjustViewBounds 的图片高按父宽等比缩小），分出的各框尺寸也跟着错。
 
 ## 做法
 
-1. 按 LinearLayout 算法计算：先测各子项自然尺寸，余量按权重依次分配（每次除以剩余 weightSum），weightSum 用尽后的子项只保留自然尺寸，总和超出可用尺寸的末块按剩余空间裁切；可按容器实测尺寸算出位置后绝对定位，或用占位补足 weightSum 余下的份额。 份额逐项计算为 share = (int)(w × 剩余余量 / 剩余 weightSum)（本机 android-36.1 源码 LinearLayout.java 的 measureVertical/measureHorizontal），余量为负时同一公式给出负份额、逐项扣减；不交给 flexGrow/flexShrink，显式算出各子项尺寸。
+1. 按 LinearLayout 算法计算：先测各子项自然尺寸，余量按权重依次分配（每次除以剩余 weightSum），weightSum 用尽后的子项只保留自然尺寸，总和超出可用尺寸的末块按剩余空间裁切；可按容器实测尺寸算出位置后绝对定位，或用占位补足 weightSum 余下的份额。 份额逐项计算为 share = (int)(w × 剩余余量 / 剩余 weightSum)（android.widget.LinearLayout 的 measureVertical / measureHorizontal，android-36.1 源码），余量为负时同一公式给出负份额、逐项扣减；不交给 flexGrow/flexShrink，显式算出各子项尺寸。
 2. 带权重的 wrap_content 图片固有尺寸超过行能给的空间时，只把超限的那一轴夹紧到父级上限；ImageView 未设 adjustViewBounds 时另一轴保持密度缩放后的固有尺寸（位图在盒内 centerInside/FIT_CENTER 缩小绘制，盒子不等比缩小），以此作为自然尺寸代入余量分配，不填经验值；写完抽 2–3 个位置（行中心、分隔线）与源端截图的 dp 对比。
 3. 规格写权重布局时同时写 weightSum 与子权重之和，以及溢出、份额为 0 的子项，不只列各子项权重。
 

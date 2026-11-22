@@ -8,6 +8,10 @@
 
 源端设置用 DataStore/SharedPreferences 持久化，并被主题、计时器、反馈等运行期代码实时读取；目标端的设置页、偏好仓库、主题状态和消费页面由不同任务编写，靠占位登记传递“持久化并立即生效”的契约。也包括源端设置保存除远端同步外还更新本地配置缓存并发刷新事件（如排序设置保存后各列表按新配置排序），目标只写远端设置；以及源端切换视图即写偏好、启动时读取恢复，目标只改内存状态。也包括应用内语言选择只调用持久化的偏好语言接口，而规格要求保存后立即切换。
 
+## 例外与边界
+
+- 主题设置里有“跟随系统”一项时，目标对应设成未设置颜色模式（COLOR_MODE_NOT_SET），由系统深浅色决定，不在启动时读一次系统当前模式再固定成深色或浅色；只有用户选了明确的深色、浅色才设成对应模式。源端某项设置本来只在启动时读一次（改完要重启才生效）时，目标照源端的生效时机，不必为它补即时生效。
+
 ## 原因
 
 设置页只调持久化 setter 时，开关看起来能切换，行为却不变；消费方在另一个文件，编译和结构审计都不检查。来源中主题与波浪计时器开关只写偏好，主题状态类除默认值外无人读写；步骤提示音与振动开关同样没有消费方，振动封装也没移植；页面转换者以“偏好未知”为由只写了进度样式的一个分支，还是源端默认值之外的那个。另一应用的排序设置保存只写远端设置，列表查询不读任何本地排序配置，重构时又原样抽进 ViewModel；首页视图位置的持久化规格获批后没有排期，视图选择只写内存，重启总回默认视图。
@@ -24,10 +28,13 @@
 
 来源支持：6 张卡 · 4 次迁移 · 4 个应用
 
-已核实的平台事实（核实时用的是 HarmonyOS 6.1.0（API 23，SDK 6.1.0.105）；安卓 不涉及。和具体应用无关，直接用，不用再查；其中的默认值只在应用自己的主题、样式、清单和代码没有另设时成立，应用有没有另设要到应用里看）：
-- 〔做法第 6 步〕用户首选项默认的 XML 存储模式下，put / putSync 只改内存中的 Preferences 实例，flush / flushSync 后才写入文件；用 on('change') 订阅的回调也要等 flush 执行后才触发。只 put 不 flush 时，同进程内读得到新值，但进程被杀后重启读回旧值，订阅方也收不到变更。〔成立范围：对象：@ohos.data.preferences 的 Preferences 实例。例外：API 18 起可选的 GSKV 存储模式写入实时落盘，订阅回调不需 flush 即触发。依据是 SDK 声明注释和文档说明。最常见的不成立情形：创建实例时选了 GSKV 存储模式。〕
-- 〔做法第 7 步〕i18n.System.setAppPreferredLanguage 设置的偏好语言在应用启动时用于加载资源；设为 'default'（恢复跟随系统语言）要应用冷启动后才生效。〔成立范围：对象：@ohos.i18n 的 System.setAppPreferredLanguage。依据是 SDK 声明注释和文档说明；设为具体语言后当前进程已显示的界面是否立即切换，开发指南写「界面会切换为目标语言」、声明注释写「启动时按偏好语言加载」，两处没说清（记入 device_todo）。最常见的不成立情形：传入的既不是合法语言 ID 也不是 'default'，接口抛 890001 参数错误。〕
-- 〔做法第 7 步〕ApplicationContext.setLanguage 设置应用语言，只能在主线程调用，文档要求在窗口创建完成、loadContent 加载页面之后调用；设置后应用不再能订阅系统语言的变化。〔成立范围：对象：ApplicationContext.setLanguage。依据是文档说明；进程重启后是否保留，文档没写。最常见的不成立情形：在 EntryAbility.onCreate 或 loadContent 之前调用，不在文档保证的范围内。〕
-- 〔做法第 1 步〕深浅色生效优先级为 UIAbility 级（UIAbilityContext.setColorMode）> 应用级（ApplicationContext.setColorMode）> 系统；应用没设时为默认的 COLOR_MODE_NOT_SET、跟随系统，设成深色或浅色后深浅色固定、不随系统变化，onConfigurationUpdate 等订阅也收不到系统深浅色的变化。〔成立范围：对象：ApplicationContext.setColorMode 与 UIAbilityContext.setColorMode，只能在主线程调用。例外：应用从未调用 setColorMode 且工程 dark 目录下没有任何深色资源时，系统组件在系统深色模式下仍保持浅色，文档建议显式设为 COLOR_MODE_NOT_SET 才让它们跟随系统。依据是文档说明。最常见的不成立情形：工程里某个 UIAbility 自己调过 UIAbilityContext.setColorMode，应用级设置对这个 UIAbility 不起作用。〕
-- 〔做法第 3 步〕resourceManager.getRawFd 返回的 fd 是 rawfile 所在 HAP 包的文件描述符，offset 是该 rawfile 在 HAP 内的起点、length 是它的长度；AVPlayer 的 fdSrc（AVFileDescriptor）不传 offset 时按 0、不传 length 时读到文件末尾，所以只传 fd 会从 HAP 包头开始读，fd、offset、length 要一起传。〔成立范围：对象：getRawFd 的返回值交给 AVPlayer.fdSrc。依据是 SDK 声明注释。最常见的不成立情形：fd 来自自己打开的沙箱文件（整个文件就是媒体），只传 fd 即从文件头播放。〕
-- 〔做法第 3 步〕AVPlayer 播纯音频时 audioRendererInfo 的 usage 默认是 STREAM_USAGE_MUSIC；按系统音频焦点策略，后开始的音乐流会让先在播的音乐流（如别的应用以音乐类型播放的歌曲）停止，所以用默认 usage 播提示音会打断用户正在听的音乐。audioRendererInfo 只能在 initialized 状态、首次 prepare 之前设置。〔成立范围：对象：AVPlayer（媒体源含视频时默认 usage 为 STREAM_USAGE_MOVIE）。条件：焦点处理按双方的 usage 决定，例如音乐流与游戏流可并发混音、互不影响；打断针对别的应用的流，同一应用创建的多个流默认是共享焦点模式（SHARE_MODE），彼此不按焦点策略打断；应用用音频会话管理（AudioSession）改了焦点策略时按其设置。依据是 SDK 声明注释和文档说明。最常见的不成立情形：已在 initialized 状态把 usage 设成别的类型，按那种类型的焦点策略处理。〕
+已核实的平台事实（核实时用的是 HarmonyOS 6.1.0（API 23，SDK 6.1.0.105）；OpenHarmony 文档 master 2026-11-21（提交 e42bd18a）；安卓 不涉及。和具体应用无关，直接用，不用再查；其中的默认值只在应用自己的主题、样式、清单和代码没有另设时成立，应用有没有另设要到应用里看）：
+- 〔做法第 1 步〕ApplicationContext.setColorMode 只能在主线程调用；可设深色、浅色或不设置（COLOR_MODE_NOT_SET，跟随系统主题模式）
+- 〔做法第 1 步〕Ability.onConfigurationUpdate（UIAbility 继承）在系统配置更新时回调，参数是更新后的配置
+- 〔做法第 3 步〕vibrator.VibrateTime 按系统默认强度持续振动，duration 单位毫秒
+- 〔做法第 3 步〕vibrator.startVibration 需要 ohos.permission.VIBRATE，缺权限时以 201 拒绝；该权限级别 normal、授权方式 system_grant，在 module.json5 里声明即被授予，不用运行时申请
+- 〔做法第 5、6 步〕Preferences.put 把值写进 Preferences 实例（键已存在时覆盖），要调 flush 才保存到文件
+- 〔做法第 6 步〕Preferences.get 是异步读取；键对应的值为 null 或不是 ValueType 格式时返回传入的默认值
+- 〔做法第 7 步〕i18n.System.setAppPreferredLanguage 设置应用偏好语言，资源在应用启动时按偏好语言加载；设成 default 时应用语言跟随系统，应用冷启动后生效
+- 〔做法第 7 步〕ApplicationContext.setLanguage 设置应用语言，自 API 21 起提供，只能在主线程调用
+- 〔做法第 7 步〕卡里真机上保存语言时调用 ApplicationContext.setLanguage，当前进程的语言即时切换；此前用 getStringSync 取出、存在代码里的文案不会自己变，要重新取

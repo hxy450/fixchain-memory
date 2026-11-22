@@ -23,9 +23,11 @@ Android 的 setEnabled 只改状态，颜色由 drawable 与 textColor 选择器
 
 来源支持：1 张卡 · 1 次迁移 · 1 个应用
 
-已核实的平台事实（核实时用的是 HarmonyOS 6.1.0（API 23，SDK 6.1.0.105）；安卓 Android SDK 源码 android-36.1；Android SDK 平台资源 android-30、android-34、android-36；appcompat 1.1.0、1.8.0；material 1.4.0、1.8.0、1.14.0。和具体应用无关，直接用，不用再查；其中的默认值只在应用自己的主题、样式、清单和代码没有另设时成立，应用有没有另设要到应用里看）：
-- 〔做法第 2 步〕hitTestBehavior(HitTestMode.None) 只让组件自身不参与触摸测试，不阻塞它的子组件、兄弟组件和祖先组件：点在它上面时，子组件、Stack 里位于下层的兄弟组件或祖先组件上的点击、触摸处理仍可能响应。〔成立范围：对象：通用属性 hitTestBehavior。条件：触摸测试（鼠标左键按下也转换成触摸事件）。不成立：换成 HitTestMode.Block（自身响应，阻塞子、兄弟和祖先）时不放行；API 20 起的 BLOCK_DESCENDANTS 让自身和全部后代都不响应，但不影响祖先，祖先上的点击、触摸处理照样响应。〕
-- 〔原因〕Android 里 setEnabled(false) 但可点击的 View 在 onTouchEvent 中仍返回 true 消费触摸事件，只是不响应点击，所以点击不会穿透到它下面的 View，也不会交给父布局处理。〔成立范围：对象：android.view.View#onTouchEvent 的禁用分支。条件：View 是 clickable、longClickable 或 contextClickable（设置了点击监听或 Button 默认样式即 clickable）。不成立：调用过 setAllowClickWhenDisabled(true)（android:allowClickWhenDisabled）的 View 禁用时照常处理点击。〕
-- 〔适用情境（AppCompat 按钮禁用时投影归零）〕Android 平台 Widget.Material.Button 的 stateListAnimator 在启用态给 elevation 2dp（按下再加 translationZ 4dp），禁用态把 elevation 和 translationZ 都置 0；AppCompat 的 Widget.AppCompat.Button 在 API 21 起继承这个平台样式，MaterialComponents 的 Widget.MaterialComponents.Button 同样是启用 2dp、禁用 0dp。〔成立范围：对象：用这些按钮样式（或其子样式）且没改 stateListAnimator 的 Button / MaterialButton。条件：API 21 起；平台资源 android-30、android-34、android-36 取值一致，appcompat 1.1.0 与 1.8.0、material 1.4.0 与 1.14.0 已核。不成立：Borderless 系列样式的 stateListAnimator 为 @null，本来没有投影；Material3 的 Widget.Material3.Button 启用态 elevation 也是 0（level0），禁用前后都没有投影。〕
-- 〔做法第 2 步（回调内判态）〕ArkUI 的 onClick 也可以由键盘或手柄在组件获焦时触发（事件 SourceType 为 KEY 或 JOYSTICK），这条路径不是触摸测试，hitTestBehavior 管不到。〔成立范围：对象：通用事件 onClick 与 hitTestBehavior。条件：设备接了键盘或手柄且组件可获焦；依据是文档说明（hitTestBehavior 文档只涉及触摸测试）。不成立：纯触屏操作时只有触摸路径，hitTestBehavior 生效；enabled(false) 会同时屏蔽按键和焦点事件。〕
-- 〔例外与边界〕ArkUI 的 enabled 只在按下时判定：手指按下后、交互过程中再改 enabled 不生效；enabled(false) 时组件不响应点击、触摸、拖拽、按键、焦点、鼠标、悬浮和手势等事件。〔成立范围：对象：通用属性 enabled。条件：依据是文档说明。不成立：要挡住的是本次按下之前就已切成禁用的交互；按下之后才切禁用，这次点击照常完成。〕
+已核实的平台事实（核实时用的是 HarmonyOS 6.1.0（API 23，SDK 6.1.0.105）；OpenHarmony 文档 master 2026-11-21（提交 e42bd18a）；安卓 android-36 的平台资源和源码（android-37.0 平台资源同值）；androidx.appcompat:appcompat 1.1.0、1.8.0。和具体应用无关，直接用，不用再查；其中的默认值只在应用自己的主题、样式、清单和代码没有另设时成立，应用有没有另设要到应用里看）：
+- 〔做法第 2 步〕hitTestBehavior 不写时为 HitTestMode.Default：自身及子节点响应触摸测试，阻塞兄弟节点，不影响祖先节点；设为 HitTestMode.None 时组件自身不响应触摸测试，也不阻塞子节点、兄弟节点和祖先节点的触摸测试
+- 〔原因〕CommonMethod.enabled 的声明注释只写了 false 时不响应点击操作，没有写外观变化；文档 enabled 示例里的禁用按钮另外显式写了 opacity(0.4)；文档说明禁用控制属性仅在按下时生效，交互过程中更改 enabled 无效
+- 〔原因〕设备上组件设 enabled(false) 时，背景和文字被一起施加默认禁用透明度，不透明灰底、纯白字显示成发虚的浅灰
+- 〔适用情境〕应用主题和控件没有另设按钮样式时，平台 Widget.Material.Button 提供 background=@drawable/btn_default_material、minHeight 48dip、minWidth 88dip、textAppearance=?attr/textAppearanceButton 和 stateListAnimator=@anim/button_state_list_anim_material
+- 〔适用情境 / 做法第 1 步〕平台 button_state_list_anim_material：启用且按下时 elevation 2dp（button_elevation_material）、translationZ 4dp（button_pressed_z_material）；启用静止时 elevation 2dp、translationZ 0；未启用时 elevation 和 translationZ 都是 0，按钮禁用时投影消失
+- 〔适用情境〕androidx.appcompat 1.1.0、1.8.0 中 Base.Widget.AppCompat.Button 在 API 21 起的 parent 是 android:Widget.Material.Button，自身不设 stateListAnimator，AppCompat 按钮在应用没有另设 stateListAnimator 时沿用平台的 button_state_list_anim_material（1.1.0 在 API 14–20 上 parent 是 android:Widget，没有这一动画）
+- 〔适用情境〕安卓 View 换背景（setBackgroundDrawable / setBackgroundResource）时，只有新背景的 getPadding 返回 true 才用它的 padding 改写内边距；换成不带 padding 的 shape 背景时，原样式带来的内边距保留

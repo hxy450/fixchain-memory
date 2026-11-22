@@ -29,6 +29,7 @@
 - [源端用 NavController.handleDeepLink 处理外部拉起的深链时，目标清空 NavPathStack 并合成“起始页 + 目标页”返回栈，不在当前栈上 push](lesson-69229aa8c7b051229f26.lesson.md)
   - 时机：规格提取与入口接线阶段，把源端 handleDeepLink/navDeepLink 迁成 want 解析后的导航动作、决定打开深链后的返回栈时
   - 情境：源 Activity 在 onCreate、onNewIntent 或 LaunchedEffect(intent) 中调用 navController.handleDeepLink(intent)，目的地以 navDeepLink(uriPattern) 注册；外部链接经 VIEW intent 以新任务（FLAG_ACTIVITY_NEW_TASK）拉起宿主。目标由 UIAbility 的 onCreate/onNewWant 解析 want.uri 后操作 Navigation 的 NavPathStack；规格可能写成“在当前栈上 pushPathByName、目标已在栈顶则只更新参数”。
+  - 例外：清栈合成只在 want 能匹配到某个注册的深链时做：匹配不到时（普通的桌面图标拉起、没注册的 uri），源端 handleDeepLink 直接返回 false，返回栈原样不动；目标端的 onCreate、onNewWant 遇到这类 want 也不 clear，保留当前页面栈。
 - [源端经 TaskStackBuilder.addNextIntentWithParentStack(...).startActivities() 跳转时，按 Manifest 父链清栈重建 \[父…, 目标\]：目标 NavPathStack 先 clear 再依次 push 父页与目标，返回落到父页而非来源页](lesson-2986423250986124d039.lesson.md)
   - 时机：规格提取与基座实现阶段，把基类的父栈跳转方法（抽屉导航等）翻译成 NavPathStack 操作与返回验收时
   - 情境：源基类被多个页面继承，抽屉等跳转经 TaskStackBuilder 发起，Manifest 为目标声明 parentActivityName 或 PARENT_ACTIVITY；目标是单个 Navigation + NavPathStack，跳转可从栈底以外的任意宿主页发起；页面规格里可能有“pushPathByName（主页为根天然在栈底）”一类只在来源页是主页时成立的映射。

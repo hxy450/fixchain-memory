@@ -1,6 +1,6 @@
 # 显式 JSON 解码器按源解析器的接受范围和源数据的实际类型定规则：Gson 的数字与字符串互转要保留
 
-ID：`lesson-871d3751cadde6dda1dc` · 版本：1
+ID：`lesson-871d3751cadde6dda1dc` · 版本：2
 
 [本主题](index.md)
 
@@ -15,6 +15,7 @@ ID：`lesson-871d3751cadde6dda1dc` · 版本：1
 ## 例外与边界
 
 - 源端对该字段确实以类型不符为错误（例如源码显式校验并走失败分支），此时保留严格校验
+- 源端为该类型注册了 TypeAdapter / JsonDeserializer，或字段带 @JsonAdapter 时，接受范围由那份实现决定：照它写转换规则，不套用 Gson 默认的数字与字符串互转
 
 ## 原因
 

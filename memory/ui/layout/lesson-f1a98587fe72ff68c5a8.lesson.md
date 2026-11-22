@@ -1,6 +1,6 @@
 # 页面转换逐项落实源 XML 的 gone 节点（代码只绑点击、没有设为可见的入口也不渲染）、固定尺寸点击容器与 tools:listitem 行布局
 
-ID：`lesson-f1a98587fe72ff68c5a8` · 版本：4
+ID：`lesson-f1a98587fe72ff68c5a8` · 版本：5
 
 [本主题](index.md)
 
@@ -11,6 +11,10 @@ ID：`lesson-f1a98587fe72ff68c5a8` · 版本：4
 ## 适用情境
 
 源布局含 visibility=gone 的标题等节点、固定尺寸的点击容器（如 40×48dp 的返回 ImageView），列表 RecyclerView 用 tools:listitem 引用独立的 item 布局；迁移用的页面快照是合成的，可能把 gone 节点列为可见文本。 也包括 Activity 对 visibility=gone 的标题栏图标 findViewById 并绑定跳转（如打开搜索页），全文没有 setVisibility(VISIBLE)；目标工程其他页面已有同类入口的现成写法。也包括页面声明并在更新函数中维护某个展示状态（如倍速文本），build 中却没有消费它的组件。也包括 gone 的结果标题行容器：Activity 只改它子控件的文案或可见性，从不让容器本身可见；合成 view.xml 列出了该节点却没有 visibility 属性。
+
+## 例外与边界
+
+- 判定「从不设为可见」时，Kotlin 源码里的写法要一并算上：属性赋值 xxx.visibility = View.VISIBLE，以及 androidx core-ktx 的 isVisible = true、isGone = false、isInvisible = false；只搜 setVisibility( 会漏掉这些，把运行时会显示的节点当成常驻 gone 删掉。
 
 ## 原因
 

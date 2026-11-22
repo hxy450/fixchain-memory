@@ -12,6 +12,7 @@ ArkUI V2 状态刷新与订阅：@Builder 参数（含异步重赋值的数组�
 - [共享单例 ViewModel 按规格的键丢弃过期响应，页面各加载入口先做单飞，不写成“新请求取消上一请求”](lesson-c883a0ff96c32dfbd9ba.lesson.md)
   - 时机：页面接线阶段，把 aboutToAppear、Refresh 的 onRefreshing、@Monitor 等多个加载入口接到共享单例 ViewModel 或 Service 时
   - 情境：目标 ViewModel 为单例，run() 对任何新请求先取消上一请求；页面同时存在 aboutToAppear、Refresh（refreshing 初值可能为 true）与切城监听等入口；规格要求按 areaId 一类键丢弃旧城市的迟到响应、一次刷新只产生一次请求。
+  - 例外：单飞只合并同一个键的重复调用；切到另一个键（如换城市）的请求不能被在途标志挡掉，要照常发起，旧键的迟到响应按键丢弃。页面级的在途标志只有在页面本身按键区分（每个键一个页面实例）时才等于按键单飞。
 - [列表条目以新对象替换或整表重建时，ForEach/Repeat 键要包含会变且需要显示的字段；要稳定键就改为可观察实例原位更新](lesson-2e636699fa65aefd63f0.lesson.md)
   - 时机：功能实现与页面接线阶段，为可编辑或会重新拉取的列表选定条目更新方式与 ForEach 键时；为消除重建抖动而稳定 ForEach/Repeat 的键时
   - 情境：列表条目编辑（如改名）后以保留 id 的新对象替换，或操作成功后重新请求列表并整表 setList（id 不变、计数等字段变化）；ArkUI 用 ForEach 渲染，并把条目字段作为子组件的 @Param 传入；源端是 Compose 不设 key 的 forEach 加不可变 copy，或 RecyclerView 整表刷新。也包括分页或 Swiper 的页模型是普通 interface，键原先拼入请求状态与数据导致每次加载都销毁重建（抖动），修复者准备把键缩成只含页标识。也包括 RecyclerView 的 remove+add+notifyItemChanged 被迁成 arr\[pos\] = 新实例、splice 或整表赋值，行内显示取自条目可变字段（下载态、播放态），注释以“@Trace 字段级刷新”代替键检查。也包括源端 removeAllViews 后逐项 inflate 的结果区改成嵌套 ForEach，键只用显示内容拼接（内容可能完全相同，如多个全零数据块），条目是普通 class，每次计算整体重建。
@@ -25,6 +26,7 @@ ArkUI V2 状态刷新与订阅：@Builder 参数（含异步重赋值的数组�
 - [复用开关组件的变更事件给出目标值时，把它原样写入该开关的 setter，不改成无参回调再按旧值取反](lesson-40fc63b124b4a44e7a9f.lesson.md)
   - 时机：界面接线阶段，把开关行接入带 @Param isOn 与 @Event onToggleChange(nextState) 的复用组件，并连到 ViewModel 的开关接口时
   - 情境：源端每个开关点击时翻转自身字段、写偏好并刷新自身图标；目标复用组件在事件里给出下一状态，ViewModel 提供 toggleX() 取反接口，页面本地 @Local 与 ViewModel 各持一份开关值。
+  - 例外：ViewModel 里与源端逐开关取反一致的 toggleX() 接口不必删除，只是这类组件的接线不经它取反；开关的持久化键和各行各自的状态绑定照旧保留。
 - [定时器或帧回调里同步遍历 V2 可观察数组时，用 UIUtils.getTarget 取原始数组计算，提交时再整体赋给可观察字段](lesson-c4b31755d45425bfc01d.lesson.md)
   - 时机：功能实现阶段，为 @ObservedV2 模型或 V2 组件编写由定时器、帧回调驱动、在 UI 线程同步执行的逐格或逐元素计算，并读取 @Trace、@Local 数组时
   - 情境：源端在 delay 循环或帧回调里对普通 List/数组逐元素计算（同步耗时可忽略，周期约等于设定间隔）；目标把数据放在 @Trace、@Local 等 V2 可观察字段上（含二维数组，嵌套的每一行也是代理），在 setTimeout、setInterval 或帧回调中同步计算后提交。
@@ -52,6 +54,7 @@ ArkUI V2 状态刷新与订阅：@Builder 参数（含异步重赋值的数组�
 - [源端以引用比较判断“有未保存改动”时，先确认未改动时两侧是同一对象；ArkUI V2 中改用显式改动标志，不拿 @Local 数组与另存的原数组或新字面量做 ===](lesson-5d6e099ff0c8965f2b3c.lesson.md)
   - 时机：界面实现阶段，把编辑页的未保存检测（离开前确认、canSafelyExit 一类）从 Compose 翻译到 ArkUI V2 状态时
   - 情境：源端编辑页以 remember(x){ mutableStateOf(x) } 一类写法让编辑状态的初值就是入参对象，修改时整体替换成新列表，再用 !== / === 引用比较判断是否改动；目标用 @Local 数组承载编辑状态，另存一份初始数组，或在新增模式把两者各自初始化为 \[\]。
+  - 例外：状态管理 V2 只给 @Local、@Trace 装饰的 Array、Map、Set、Date 加代理；编辑状态是普通 class 实例时不被代理，@Local 与另存的同一个实例做 === 仍成立，这时只需确认两侧取自同一来源，不必改成标志。
 - [源端只在断连等事件分支写入的占位文本不作状态初值：初值按源端尚未收到事件时的显示（常为空、不绘制）](lesson-ea759569c71526092f2b.lesson.md)
   - 时机：服务层或 ViewModel 实现阶段，为事件驱动的状态显示（外设读数、连接状态行、OSD 文本）确定初值时
   - 情境：源端显示内容只由事件回调写入，例如外设断连时写入“--”一类占位、收到读数时写入数值，字段初始为 null、绘制时跳过；目标把状态声明为带初值的 @Trace/@Local 字段，常量表里已有该占位串。
@@ -61,12 +64,15 @@ ArkUI V2 状态刷新与订阅：@Builder 参数（含异步重赋值的数组�
 - [源页面在每次可见时、或由事件订阅与结果回调触发的重新加载，要迁成可见性回调或订阅：Navigation 根页、Tab 内容或经 router 返回的 @Entry 页在子页返回时不会再走 aboutToAppear](lesson-b3bb0bc33f4caded78a2.lesson.md)
   - 时机：ViewModel 与页面接线阶段，决定目标页由哪些入口触发数据重新加载时；流程闭环阶段从该页新增 push 子流程时；把 Activity 的 onStart/onResume 初始化与只在页面可见时接收的监听映射到 NavDestination 生命周期时
   - 情境：源 Fragment 用 EventBus @Subscribe（登录成功、记录变化等）和 ActivityResult 回调重拉数据；目标页是 Navigation 下常驻的根内容或 Tab 页，登录、详情等子页用 pushPathByName 覆盖后 pop 返回；工程已有会话状态与应用事件总线。 也包括列表页经 router.pushUrl 打开新增/编辑页，对方保存后 router.back 返回，列表数据只在 aboutToAppear 拉取。也包括源 Activity 在 onStart/onResume 每次可见时重读 Intent、重建列表或校验目录，目标挂在一次性的 onReady/aboutToAppear；以及只应在页面可见时接收的监听（如 NFC 标签监听）挂在 aboutToAppear/aboutToDisappear，被覆盖的页面仍在接收。
+  - 例外：每次进入都重新 push 创建的页面（不是返回到栈里已有的实例），aboutToAppear 每次都会执行，首次加载放在里面即可，不在这条的改动范围内。；按 Ability 注册的能力（如 NFC 前台派发 registerForegroundDispatch）不随单个页面开关：注册放在 Ability 的前后台回调里，页面只在 onShown/onHidden 登记、注销自己的接收；不要让某个页面的 onHidden 注销整个应用的派发。
 - [用 @Monitor 监听数组路径代替 collect 时，生产方按源端以新数组重新赋值发出变更](lesson-0cc7ae4eec0a59086202.lesson.md)
   - 时机：状态模型与 ViewModel 实现阶段，把 StateFlow/Flow 的列表或消息队列迁成 @Trace 数组，并由消费方用 @Monitor 监听数组属性路径时
   - 情境：源端以 StateFlow.update { list + item } 一类写法每次发射新列表；目标生产方准备原位 push（出队却重新赋值），消费方以 @Monitor('model.items') 一类路径模拟 collect。
+  - 例外：这条只管数组本身的增删（入队、出队）。列表项字段的更新不在内：ForEach 的 key 只含稳定 id、行组件以 @Param 接收整个元素时，已有的「原位修改该项的 @Trace 字段」写法保留，不改成生成新对象再重新赋值数组——同 key 的行不会重建，行内显示会停在旧对象上。；消费方 @Monitor 监听的是数组长度路径（如 'model.items.length'）时，push 引起的长度变化能被观测到，不属于这条要改的情形。
 - [翻译“离开组合即销毁”的状态复位时，同时列出目标框架会替用户恢复的界面状态](lesson-1f6e36f8e8bf9df951da.lesson.md)
   - 时机：规格提取阶段，把源端 remember（非 rememberSaveable）随组合销毁的状态语义翻译成目标端复位方案时
   - 情境：源页面离开组合时丢弃全部状态，其中 focused 等由框架事件驱动的字段直接决定显示分支；目标端该页面常驻在 Navigation 的 NavBar（或 Stack、Tabs 保活）中，经 pushPath 进入子页后再系统返回。
+  - 例外：复位或判别只针对返回时框架替用户恢复的状态；用户自己点按输入框引起的聚焦仍要照常驱动 focused 一类业务字段，不能为了复位把焦点回调到业务字段的映射整个删掉（例如用「有没有先收到触摸按下」来区分两种聚焦来源）。
 - [规格要求乐观更新时，先本地翻转状态再发请求，回调只用服务端真值回填](lesson-18c8e7630a96d66540bc.lesson.md)
   - 时机：界面交互实现阶段，编写收藏、点赞类切换的点击处理，确定本地状态翻转与服务端调用的先后时
   - 情境：验收要求点击后状态翻转、界面即时刷新（乐观更新）；源端把选中态设置写在网络接口的成功回调里；目标用状态变量驱动图标并异步调用接口。
@@ -76,18 +82,20 @@ ArkUI V2 状态刷新与订阅：@Builder 参数（含异步重赋值的数组�
 - [迁移 Compose remember 状态时按源端的求值与重建时机落实：无键 remember 只在首次组合求值，remember(key) 只在 key 变化时重算，条件挂载的子组件每次显示都是新状态，无 key 惰性项随位置重建](lesson-3b4a96141329db62a6af.lesson.md)
   - 时机：界面实现或公共组件抽取阶段，把 Compose 中 remember、derivedStateOf、LaunchedEffect 持有或算出的局部状态迁到 ArkUI（写成 @Computed、getter 或缓存字段，提升为页级 @Local，放进常驻的 ListItem 或子组件，或改成选择 handler 里的直接赋值），并决定何时求值、何时复位时
   - 情境：源端状态写在无键 remember { … } 或 remember { derivedStateOf { … } } 包住的一次性判定（如按目标值是否含小数点决定是否显示小数）、remember(k1, k2){…} 派生值、条件挂载（if (show) Dialog/卡片）子组件内的 remember 与 LaunchedEffect，或 LazyColumn 中不设 key 的 item{}/items 项里；源码没有显式重算或清空，时机依赖组合身份。目标准备写成每次渲染都重算的 @Computed、getter，或把状态放到页级 @Local、常驻组件，或在每次点击时重写派生值。
-  - 例外：目标保持与源端相同的挂载结构（条件渲染的子组件自己持有状态、每次显示新建实例），重建语义已自然保留
+  - 例外：目标保持与源端相同的挂载结构（条件渲染的子组件自己持有状态、每次显示新建实例），重建语义已自然保留；derivedStateOf 读的是会变的 State（如动画进度）时，它随这些 State 更新；目标写成依赖对应状态变量的 @Computed 或 getter 是对的，不按「首次组合求值一次」改成缓存——只把其中捕获的普通参数、一次性判定按首次求值处理
 - [迁移按状态切换的显示时同时迁移 setVisibility 分支：该状态下隐藏的控件不渲染，显示的区块要实现](lesson-43a9050245b1afa165bf.lesson.md)
   - 时机：界面实现与巡检修复阶段，迁移登录态等状态下控件的显示内容与显隐时；把 ViewHolder.bind 中的 setVisibility 逻辑移植到共享行组件时
   - 情境：源端 Fragment 按登录态等状态对多个控件 setVisibility（如登录后隐藏用户名、显示签到区），部分 setText 被注释；目标 ArkTS 按状态条件渲染；工程可能有显隐或绑定检查器报告源控件丢失。
+  - 例外：每个状态的显隐以 Fragment、ViewHolder/Adapter 里运行时的 setVisibility 分支为准，XML 里的 visibility 只是初值；做法第 4 步「invisible 容器在任何状态都占位」只在代码没有把它改成 GONE 时成立。；目标用 .visibility(Visibility.None) 隐藏源端 GONE 的控件，与条件不渲染一样不占位，不必改写成 if 分支；源端 INVISIBLE 的对应 Visibility.Hidden，不能用这两种不占位的写法。
 - [随状态变化的控件参数不作 @Builder 值参，改为内联读取状态或用 @ComponentV2 子组件的 @Param](lesson-8d2979542fa2cd65150c.lesson.md)
   - 时机：界面实现阶段（页面转换与公共组件抽取），以及返修或按源端几何重写已有页面时，为源端带状态参数的子控件、多个同构开关行或数据文字选择 ArkUI 复用写法时；把 LazyForEach 改写为 Repeat、拆出条目 @Builder 时
   - 情境：源端 Compose 子 Composable 以当前状态算出的值作参数（如 enabled = count &gt; 1、颜色随选中态变化），或 Android 页面有多个同构的开关行、各自持有状态；目标 ArkUI 组件需要在状态变化后刷新 enabled、颜色、开关图标等属性，准备把子控件或开关行抽成共享的 @Builder 方法。也包括用多参数 @Builder 渲染会被异步重新赋值的数组或对象（搜索结果、定位城市卡）的情形。也包括把 LazyForEach 改为 Repeat 时，each 回调写成 this.Row(ri.item)，把 RepeatItem.item 按值传给 @Builder。也包括页面转换为子页面嵌入点写只含前向引用的空 @Builder 槽位，并把异步加载的分类数组与选中索引作为位置值参传入。也包括返修时为对齐源端几何重写已能刷新的内联文字（设置摘要、统计数值、按 onAreaChange 尺寸计算的布局），把 this.&lt;状态&gt; 或尺寸作为值参传入新抽出的 @Builder。
-  - 例外：传入 @Builder 的只有文案、尺寸等在该组件生命周期内不随状态变化的值
+  - 例外：传入 @Builder 的只有文案、尺寸等在该组件生命周期内不随状态变化的值；@Builder 只有一个参数、调用处直接传对象字面量（如 this.Row({ value: this.count })）时属于按引用传递，状态变化会刷新 Builder 内的 UI，不属于这条要改的情形；有两个及以上参数、或值参和对象字面量混传时仍按值处理，照这条改
 - [页面向单例仓库或偏好注册监听时，把回调或句柄存成字段，在 aboutToDisappear 用同一引用移除](lesson-14b7f4090b7b83873b22.lesson.md)
   - 时机：功能接线阶段，在页面 aboutToAppear 里向应用级单例仓库、数据库或偏好注册数据监听时
   - 情境：目标数据层是应用级单例，用 addListener/removeListener（按回调引用移除）提供可观察数据；源端页面用 observeAsState、collectAsState 这类随界面生命周期自动结束的观察；ArkTS 子页出栈时不会自动注销。
+  - 例外：移除时传注册时的同一引用；不要改用不带回调的 off('change') 之类一次清掉——偏好的 off 不传回调会取消该实例上这一类型的全部回调，连别的页面或模块注册的一起取消。
 - [页面直接读共享 @ObservedV2 模型的 @Trace 字段，不复制成 @Local 快照再手动同步](lesson-08c38f950b69e991607d.lesson.md)
   - 时机：功能接线与页面实现阶段，把页面显示状态接到 @ObservedV2 模型或共享 store，且模型会被其他页面、异步加载或服务回调改写时
   - 情境：目标端用 @ObservedV2 + @Trace 模型（AppStorageV2.connect 或单例 getter 取得）承载共享状态：源端由一个根状态持有者驱动多个屏幕，拆成 Navigation 下多个页面后由子页修改模型；或源端 Flow/StateFlow 持续推送列表与加载态，目标由异步加载、BLE/消息回调整体重新赋值 store 的 @Trace 字段，页面是 @ComponentV2 子组件。
-  - 例外：需要与模型解耦的纯界面态（弹窗开关、未提交的输入草稿）仍放在页面 @Local
+  - 例外：需要与模型解耦的纯界面态（弹窗开关、未提交的输入草稿）仍放在页面 @Local；用 @Local 或 @Param 持有模型实例本身（引用，如 @Local store = 取共享实例的 getter）不算快照，保留；要改的是把 @Trace 字段的值或由它过滤、派生出的列表拷进 @Local——派生结果改在 build 或它调用的方法里现算

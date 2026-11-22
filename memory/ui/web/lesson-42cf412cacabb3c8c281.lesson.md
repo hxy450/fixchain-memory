@@ -1,6 +1,6 @@
 # 源 WebView 未设 WebViewClient 时链接按 Android 默认交给外部浏览器：拦截非本地 URL，用 viewData + entity.system.browsable 拉起，失败再由 Web 自行加载；页内锚点与本地资源放行
 
-ID：`lesson-42cf412cacabb3c8c281` · 版本：1
+ID：`lesson-42cf412cacabb3c8c281` · 版本：2
 
 [本主题](index.md)
 
@@ -15,6 +15,8 @@ ID：`lesson-42cf412cacabb3c8c281` · 版本：1
 ## 例外与边界
 
 - 源端设置了 WebViewClient 并覆写 shouldOverrideUrlLoading：按其逻辑实现
+- 源端设置了 WebViewClient 但没有覆写 shouldOverrideUrlLoading：默认实现返回 false，链接照常在 WebView 内打开，不按本条把外链交给浏览器
+- 应用自己用 loadUrl 发起的加载（含远程 http(s) 首页）在源端不经这一判定、照常在 WebView 里打开；本条只管页面内点击、脚本和重定向发起的导航，拦截时放行应用自己发起的加载
 
 ## 原因
 
@@ -22,7 +24,7 @@ Android WebView 没有 WebViewClient 时，跨文档链接交给能处理 BROWSA
 
 ## 做法
 
-1. 用 onOverrideUrlLoading（或 onLoadIntercept）拦截非本地 URL，以 { action: 'ohos.want.action.viewData', entities: ['entity.system.browsable'], uri } 调 startAbility 打开外部浏览器，失败后再由 Web 自行 loadUrl；页内锚点与本地 rawfile 资源不拦截。
+1. 用 onOverrideUrlLoading（或 onLoadIntercept）拦截非本地 URL，以 { action: 'ohos.want.action.viewData', entities: ['entity.system.browsable'], uri } 调 startAbility 打开外部浏览器，失败后再由 Web 自行 loadUrl（拦截回调对这次回退加载的 URL 放行，不在回调里对同一 URL 调 loadUrl 后又返回 true）；页内锚点与本地 rawfile 资源不拦截。
 2. 复用已有外链打开函数前，核对 Want 字段是否包含 browsable 实体并符合本页源码的 ACTION_VIEW 语义，不按“与某页对齐”直接复制。
 
 来源支持：1 张卡 · 1 次迁移 · 1 个应用

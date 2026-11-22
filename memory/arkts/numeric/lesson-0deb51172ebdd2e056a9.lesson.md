@@ -1,6 +1,6 @@
 # Kotlin/Java Float 的运算与比较迁到 ArkTS 时对齐 float32：算术每步 Math.fround 后再按 Java (int) 截断，==/!= 两侧 fround 后用 ===，不自加容差；选中、存在判断与删除共用同一比较
 
-ID：`lesson-0deb51172ebdd2e056a9` · 版本：4
+ID：`lesson-0deb51172ebdd2e056a9` · 版本：5
 
 [本主题](index.md)
 
@@ -15,6 +15,8 @@ ID：`lesson-0deb51172ebdd2e056a9` · 版本：4
 ## 例外与边界
 
 - 源端本身就用容差或先舍入再比较
+- 源端的值是 Double / double（Kotlin 不带 f 后缀的小数字面量、toDouble()，Java double）时不套 Math.fround：它与 number 同为 64 位，按原式计算、直接 === 比较。
+- Math.fround 只用于比较和算术；值要显示成文字时仍照源端的格式化（Float.toString 给出能区分这个 float 的最短十进制串），不把 fround 后的 number 直接转字符串显示，在写入状态时就 fround 的，显示处按 Float.toString 的规则格式化。
 
 ## 原因
 

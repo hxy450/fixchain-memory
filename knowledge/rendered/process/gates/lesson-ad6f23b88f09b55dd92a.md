@@ -21,6 +21,6 @@
 
 来源支持：5 张卡 · 4 次迁移 · 4 个应用
 
-已核实的平台事实（核实时用的是 HarmonyOS 6.1.0（API 23，SDK 6.1.0.105）；实现对照 OpenHarmony arkui_ace_engine 标签 OpenHarmony-v6.0-Release；安卓 不涉及。和具体应用无关，直接用，不用再查；其中的默认值只在应用自己的主题、样式、清单和代码没有另设时成立，应用有没有另设要到应用里看）：
-- 〔做法第 4 步〕用 overlay(builder 或 ComponentContent) 挂上的浮层节点在命中测试中排在宿主未设 zIndex 的子节点之上（实现把浮层节点追加在宿主子节点列表末尾），浮层最外层为默认的 HitTestMode.Default 时，触点落在浮层范围内就阻断宿主下方子节点的交互，宿主自身的事件仍会收到；要让下方子节点可点，须在浮层 builder 最外层设 hitTestBehavior(HitTestMode.Transparent)。〔成立范围：只对同一宿主的浮层与其子节点之间成立；宿主子节点设了大于 0 的 zIndex 时排在浮层之前被测试（实现按 zIndex 升序、同值按加入顺序排列，浮层最后加入）；zIndex 只调整同一父节点内兄弟的先后（zIndex 文档），宿主的兄弟节点与浮层的先后由宿主在其父节点中的位置决定。依据：overlay 文档的说明（阻塞浮层下方组件的交互、Transparent 放行）与 OpenHarmony arkui_ace_engine 标签 OpenHarmony-v6.0-Release 的 FrameNode::RebuildRenderContextTree、FrameNode::TouchTest。不成立：宿主或沿途祖先 clip 为 true 时，浮层超出该节点范围的部分不响应。〕
-- 〔做法第 4 步〕子节点用 position、offset 等画到父节点范围之外时，超出的部分仍能被命中（命中测试在触点不在父节点热区时会继续检查子节点区域），前提是父节点和沿途祖先都没有裁剪；clip 为 true 的节点范围外的部分既不显示也不响应手势。通用属性文档写明默认不裁剪，下列组件文档写明默认 clip 为 true：Shape、RowSplit、ColumnSplit、SideBarContainer、Stepper、List、Grid、WaterFlow、Scroll、Refresh、Swiper、Tabs、TabContent。〔成立范围：对把节点移出原容器或改用 position 定位后的命中范围成立。依据：sharp-clipping 文档（clip 设为 true 后子组件超出部分不响应绑定的手势事件）、background 文档的默认裁剪组件清单、TabContent 文档的说明；实现见 OpenHarmony arkui_ace_engine 标签 OpenHarmony-v6.0-Release 的 FrameNode::IsOutOfTouchTestRegion（不在自身热区且 clip 为 true 时直接判为未命中）。不成立：组件或其祖先设了 enabled(false) 时整棵子树不参与命中测试（交互基础原理文档的禁用控制）。〕
+已核实的平台事实（核实时用的是 HarmonyOS 6.1.0（API 23，SDK 6.1.0.105）；OpenHarmony 文档 master 2026-11-21（提交 e42bd18a）；安卓 不涉及。和具体应用无关，直接用，不用再查；其中的默认值只在应用自己的主题、样式、清单和代码没有另设时成立，应用有没有另设要到应用里看）：
+- 〔做法第 1、4 步〕触摸测试按右子树优先的后序遍历收集；兄弟组件中后声明的（右子树）显示在先声明的上方；没有设置 hitTestBehavior 的组件（HitTestMode.Default）自身命中后阻塞兄弟组件，不阻塞子组件
+- 〔做法第 4 步〕overlay 把浮层覆盖在所绑定组件的上方，阻塞用户对浮层下方组件的交互；浮层的定位基于当前组件计算，浮层不通过组件树渲染

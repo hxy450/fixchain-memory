@@ -1,6 +1,6 @@
 # 保存媒体到相册或文件：缺写入权限时用 showAssetsCreationDialog，picker 返回的 URI 先 openSync 取 fd
 
-ID：`lesson-0ce9fe04eb82e77d219f` · 版本：3
+ID：`lesson-0ce9fe04eb82e77d219f` · 版本：4
 
 [本主题](index.md)
 
@@ -15,6 +15,7 @@ ID：`lesson-0ce9fe04eb82e77d219f` · 版本：3
 ## 例外与边界
 
 - 保存的是相机会话刚拍摄的照片或录像：走相机系统资产路线（photoAssetAvailable + saveCameraPhoto、AVRecorder AUTO_CREATE_CAMERA_SCENE），不逐张弹授权框，也不用 createAsset 系列
+- 保存由安全控件 SaveButton 的点击触发、在其回调里调 createImageAssetRequest / applyChanges 的：平台已按这次点击临时授权，不需要 WRITE_IMAGEVIDEO，这条写法照留，不改成 showAssetsCreationDialog；工程签名配置里已有受限权限授权、createAsset 能写入的，同样不必换
 
 ## 原因
 

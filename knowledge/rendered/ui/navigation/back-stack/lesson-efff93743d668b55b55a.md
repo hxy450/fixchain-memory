@@ -25,10 +25,12 @@
 
 来源支持：5 张卡 · 已知 4 次迁移（部分未记录） · 已知 4 个应用（部分未记录）
 
-已核实的平台事实（核实时用的是 HarmonyOS 6.1.0（API 23，SDK 6.1.0.105）；安卓 Android SDK 源码 android-36.1。和具体应用无关，直接用，不用再查；其中的默认值只在应用自己的主题、样式、清单和代码没有另设时成立，应用有没有另设要到应用里看）：
-- 〔做法第 1 步〕NavDestination 的 onBackPressed 只在与 Navigation 绑定的路由栈里有页面时生效；回调返回 true 表示页面自己处理返回、不出栈，返回 false 表示回退到上一个页面（当前页出栈）。〔成立范围：对 NavDestination 组件的 onBackPressed（API 10 起）；Navigation 首页（NavBar）不在路由栈里，没有这个回调；最常见的不成立情形：栈里已没有 NavDestination（只剩首页）时，返回不经过任何 onBackPressed。〕
-- 〔原因〕Navigation 直接挂载的子节点是导航栏（NavBar），单栏显示时就是首页；NavBar 不在页面栈 NavPathStack 中、不具备页面生命周期，也不能用 NavPathStack 的方法控制，因此 size() 只数压入的 NavDestination：首页压入唯一页面后 size() 为 1，这一页出栈就露出首页。〔成立范围：对 Navigation + NavPathStack 的单栏显示；最常见的不成立情形：分栏显示时 NavBar 是固定显示的导航栏，子页出栈后不是「露出首页」而是内容区变空；hideNavBar(true) 时栈空显示空白。〕
-- 〔做法第 2 步〕UIAbility.onBackPressed（侧滑或按返回键退到 UIAbility 层时回调）未覆写时：targetSdkVersion ≥ 12 默认返回 true，UIAbility 被移到后台、不销毁；targetSdkVersion < 12 默认返回 false，UIAbility 被销毁。〔成立范围：对未覆写 onBackPressed 的 UIAbility，因此 Navigation 空栈时「按系统默认处理」在 targetSdkVersion ≥ 12 的工程里是退后台、实例和页面状态都保留，不等于安卓的 finish；最常见的不成立情形：targetSdkVersion < 12 的工程默认销毁。〕
-- 〔做法第 1 步〕UIAbilityContext.moveAbilityToBackground() 把处于前台的 UIAbility 移到后台（不销毁），只能在主线程调用；从 API 13 起只在 Phone、Tablet、Wearable、TV 上可正常调用，其他设备返回错误码 16000061，UIAbility 不在前台时返回 16000065。〔成立范围：对 moveAbilityToBackground（API 12 起；API 12 时 Tablet 也返回 16000061）；它返回 Promise，失败不会反映到 onBackPressed 已同步返回的 true 上；最常见的不成立情形：在 PC/2in1 等不在上述列表里的设备上调用失败，返回已被消费，界面无反应。〕
-- 〔做法第 1 步〕应用从后台回到前台时，栈顶 NavDestination 触发 onShown、不触发 onWillShow；退到后台时触发 onHidden、不触发 onWillHide。从 API 21 起 onShown / onHidden 的回调参数 VisibilityChangeReason 为 APP_STATE（前后台切换）、TRANSITION（页面跳转）或 CONTENT_COVER（全模态开关）。〔成立范围：对 NavDestination 的可见性回调；API 21 之前回调没有原因参数；最常见的不成立情形：把「下次显示时重走 onCreate 的初始化」放在 onWillShow，moveAbilityToBackground 后再回前台时不会执行。〕
-- 〔适用情境〕安卓 Activity.onBackPressed 的默认实现随平台版本不同：Android 12（API 31）之前 finish 当前 Activity；从 Android 12 起，任务根 Activity 且在清单里声明了 ACTION_MAIN + CATEGORY_LAUNCHER 的 intent-filter 时，Activity 连同任务被移到后台而不 finish，其他 Activity 照旧 finish。〔成立范围：对没有覆写 onBackPressed、也没有注册返回回调消费返回的 Activity；默认实现先收起已展开的 ActionBar actionView、再弹框架 FragmentManager 的回退栈，两步都没发生才按 finish 或移到后台处理；版本条件取自 Activity#onBackPressed 的文档说明（实际判定在系统服务里，SDK 源码看不到）；最常见的不成立情形：Activity 不是任务根（例如被别的应用拉起在对方任务里）时按 finish 处理。〕
+已核实的平台事实（核实时用的是 HarmonyOS 6.1.0（API 23，SDK 6.1.0.105）；OpenHarmony 文档 master 2026-11-21（提交 e42bd18a）；安卓 android-36.1 的源码。和具体应用无关，直接用，不用再查；其中的默认值只在应用自己的主题、样式、清单和代码没有另设时成立，应用有没有另设要到应用里看）：
+- 〔适用情境 / 原因〕应用没有覆写 onBackPressed、也没注册返回回调时，Activity 的返回行为：Android 12（S）以前结束当前 Activity；S 起，任务根且在 manifest 里声明了 ACTION_MAIN + CATEGORY_LAUNCHER intent-filter 的 Activity 连同任务移到后台、不结束，其他 Activity 照样结束
+- 〔适用情境 / 原因〕SDK 37 模拟器上用 am start -n 启动的根 Activity 按返回后，进程 pid 不变，再启动为 WARM，输入框文字和所选等级回到初值，静态单例里的局面仍在（表现为 finish：onDestroy 执行、实例态丢失、进程保留）
+- 〔原因 / 做法第 1 步〕NavDestination.onBackPressed 在与 Navigation 绑定的导航控制器中存在内容时生效，点击返回键时触发；返回 true 表示重写返回键逻辑，返回 false 表示回退到上一个页面
+- 〔原因〕onBackPress 只对 @Entry 装饰的路由页面生效：返回 true 表示页面自己处理返回、不做页面路由；返回 false 或不返回值时走默认的路由返回逻辑
+- 〔原因〕Navigation 首页内容为空、启动时用 pushPathByName 压入唯一页面后，路由栈深 size() 为 1
+- 〔做法第 1 步〕UIAbilityContext.moveAbilityToBackground（API 12 起）把处于前台的 UIAbility 移到后台，只能在 UIAbility 处于前台时调用（否则 16000065），仅支持主线程调用；API 12 只在 Phone 上可用，API 13 起 Phone、Tablet，API 18 起加 Wearable，API 19 起加 TV，其他设备返回 16000061
+- 〔原因 / 做法第 1 步〕设备上栈底页调用 terminateSelf 销毁 UIAbility 时进程随之结束，静态单例里的续局丢失；调用 moveAbilityToBackground 退到后台时进程保留，页面的 aboutToDisappear 不执行
+- 〔做法第 1 步〕NavDestination.onShown 在该页面显示时回调（API 21 起回调参数为 VisibilityChangeReason）

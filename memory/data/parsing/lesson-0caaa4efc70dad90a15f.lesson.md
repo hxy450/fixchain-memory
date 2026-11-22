@@ -1,6 +1,6 @@
 # 备份/导出 JSON 按 org.json 或 Gson 库语义序列化（null 删键或省略、“/”与 HTML 转义），不用 JSON.stringify
 
-ID：`lesson-0caaa4efc70dad90a15f` · 版本：2
+ID：`lesson-0caaa4efc70dad90a15f` · 版本：3
 
 [本主题](index.md)
 
@@ -11,6 +11,10 @@ ID：`lesson-0caaa4efc70dad90a15f` · 版本：2
 ## 适用情境
 
 源端 serialize() 对可空值直接 put（如 put(key, steps?.serialize())、put(key, time)），再以 JSONObject/JSONArray 的 toString() 或 toString(indent) 写文件；对应 Kotlin 字段声明为可空；目标准备用 DTO 加 JSON.stringify(obj, null, n) 输出，规格可能写“null 字段输出 JSON null（键保留）”。也包括源端以 Gson 反射序列化实体（new Gson().toJson(obj)，未调 serializeNulls/disableHtmlEscaping），目标手写 toJson 或照抄标注为推断的示例 JSON。
+
+## 例外与边界
+
+- “/”一律写成“\/”是安卓系统自带 org.json 的行为；源端是纯 JVM 模块、依赖的是 Maven 上的 org.json:json 时，put 的值为 null 同样删键，但“/”只在紧跟“<”时才转义——先确认源端实际用的是哪一份实现，再定转义规则。Gson 反射序列化默认跳过 transient 与 static 字段，字段带 @SerializedName 时键名取注解值，源端注册了 TypeAdapter / JsonSerializer 或字段带 @JsonAdapter 时由它们决定输出；这些字段照源端的定义输出，不按字段名和反射默认规则重写。
 
 ## 原因
 

@@ -24,4 +24,4 @@ Web 组件承载 H5：加载错误回调的范围与整页失败态，宿主原�
 - [源 WebView 未设 WebViewClient 时链接按 Android 默认交给外部浏览器：拦截非本地 URL，用 viewData + entity.system.browsable 拉起，失败再由 Web 自行加载；页内锚点与本地资源放行](lesson-42cf412cacabb3c8c281.lesson.md)
   - 时机：界面实现阶段，把未设置 WebViewClient 的 Android WebView 迁移为 ArkWeb、确定链接点击的导航处理与外链打开写法时；复用其他页面已有的外链打开函数时
   - 情境：源 Activity 只 findViewById 后 loadUrl 本地 asset HTML，没有 setWebViewClient；HTML 含页内锚点与外部 http(s) 链接；目标拦截外链后用 startAbility 打开，工程其他页面可能照抄同一个外链函数。
-  - 例外：源端设置了 WebViewClient 并覆写 shouldOverrideUrlLoading：按其逻辑实现
+  - 例外：源端设置了 WebViewClient 并覆写 shouldOverrideUrlLoading：按其逻辑实现；源端设置了 WebViewClient 但没有覆写 shouldOverrideUrlLoading：默认实现返回 false，链接照常在 WebView 内打开，不按本条把外链交给浏览器；应用自己用 loadUrl 发起的加载（含远程 http(s) 首页）在源端不经这一判定、照常在 WebView 里打开；本条只管页面内点击、脚本和重定向发起的导航，拦截时放行应用自己发起的加载

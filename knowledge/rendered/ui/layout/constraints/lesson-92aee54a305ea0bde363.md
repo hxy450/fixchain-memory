@@ -6,7 +6,7 @@
 
 ## 适用情境
 
-源端自定义 Layout 用 placeRelative(x, (maxHeight - height) / 2) 把定宽文字纵向居中，或 Box 中文字按居中对齐放置；目标用 Stack({ alignContent: Alignment.TopStart }) 同时容纳文字与图片等对齐需求不同的子项。也包括源端固定尺寸 FrameLayout 中的小角标以 layout_gravity=end|bottom 贴右下，目标写成 Stack({ alignContent: Alignment.TopStart }) 并只给角标加 .align(Alignment.BottomEnd)。也包括源 Box 中部分子项用 Modifier.align 放到非默认位置（如贴底的购买栏），目标 Stack 设了统一的 alignContent(TopStart)，规格写着“底部对齐”。也包括映射参考或兄弟页把 layout_gravity 写成 .align(Alignment.X)，工具栏、浮层、FAB 于是落在父 Stack 中部。也包括标题栏：返回图标约束到父 start、右侧入口约束到 end、标题 0dp 加左右 margin 居中，目标写成 Stack({ alignContent: Alignment.Center }) 并只给返回图标加 .align(Alignment.Start)，后写的页面与公共标题栏组件以它为模板复制。
+源端自定义 Layout 用 placeRelative(x, (maxHeight - height) / 2) 把定宽文字纵向居中，或 Box 中文字按居中对齐放置；目标用 Stack({ alignContent: Alignment.TopStart }) 同时容纳文字与图片等对齐需求不同的子项。也包括源端固定尺寸 FrameLayout 中的小角标以 layout_gravity=end|bottom 贴右下，目标写成 Stack({ alignContent: Alignment.TopStart }) 并只给角标加 .align(Alignment.BottomEnd)。也包括源 Box 中部分子项用 Modifier.align 放到非默认位置（如贴底的购买栏），目标 Stack 设了统一的 alignContent(TopStart)，规格写着“底部对齐”。也包括映射参考或兄弟页把 layout_gravity 写成 .align(Alignment.X)，工具栏、浮层、FAB 于是落在父 Stack 中部。也包括标题栏：返回图标约束到父 start、右侧入口约束到 end、标题 0dp 加左右 margin 居中，目标写成 Stack({ alignContent: Alignment.Center }) 并只给返回图标加 .align(Alignment.Start)，后写的页面与公共标题栏组件以它为模板复制。下面两种写法位置本身是对的，不在本条改动范围：子项已用 layoutGravity（API 20 起，父组件为 Stack 时生效）单独对齐；子项撑满父 Stack（宽高 100%），.align() 只用来摆放它自己的内容。
 
 ## 原因
 
@@ -29,10 +29,18 @@ Stack 按 alignContent（或 Stack 自身的 align，二者后设置的生效）
 
 来源支持：11 张卡 · 8 次迁移 · 7 个应用
 
-已核实的平台事实（核实时用的是 HarmonyOS 6.1.0（API 23，SDK 6.1.0.105）；安卓 Android SDK 源码 android-36.1。和具体应用无关，直接用，不用再查；其中的默认值只在应用自己的主题、样式、清单和代码没有另设时成立，应用有没有另设要到应用里看）：
-- 〔原因；适用情境〕通用属性 align 设置的是组件自身绘制区域内子组件或内容的对齐方式，不改变该组件在父容器里的位置；它只在 Stack、FolderStack、Button、Text、TextInput、TextArea、ListItem、GridItem、Scroll 等文档列出的组件上生效，默认 Alignment.Center；在 Text 上只决定文本段落在 Text 自身框内的纵向位置（Top 系顶部、Start/Center/End 居中、Bottom 系底部），横向由 textAlign 决定。〔成立范围：对象：任意组件上的 .align()。条件：Text 高度大于文本内容时纵向对齐才看得出来，高度随内容的 Text 上设 align 没有可见效果。不成立：Column、Row、Image 等不在列表里的组件上 align 不生效；子项要在父 Stack 里单独定位得用 layoutGravity（API 20 起）、position/offset，或改父 Stack 的对齐。〕
-- 〔做法第 3、4、5 步〕通用属性 layoutGravity(LocalizedAlignment) 单独设置一个 Stack 子组件在父 Stack 里的对齐，默认 LocalizedAlignment.CENTER；文档写明它与 align 同时使用时 layoutGravity 优先，LocalizedAlignment 的 START/END 随 direction 或系统语言方向镜像。〔成立范围：对象：父组件是 Stack 的组件（Stack 的直接子组件）。条件：API 20 起，仅 Stage 模型；传异常值按 CENTER 处理。不成立：父组件是 Column、Row、RelativeContainer 等其他容器，或加在 Stack 子项内部更深一层的组件上，都不生效；应用兼容的最低 API 低于 20 时只能用 position 或嵌套 Stack。〕
-- 〔做法第 5 步；适用情境〕Stack 不设对齐时子组件按 Alignment.Center 居中；对齐可以由构造参数 alignContent、alignContent 属性或通用属性 align 给出，属性与构造参数同时设以属性为准，alignContent 属性与 align 同时设以后设置的为准；Android FrameLayout 子项没写 layout_gravity 时则按 TOP|START 贴左上。〔成立范围：对象：Stack 容器及其未撑满的子组件。条件：Stack 上的 align 支持镜像（Start/End 随 RTL 互换），其他组件上的 align 不支持镜像（依据是文档说明）；align 改传 LocalizedAlignment（API 20 起的重载）时，文档列出的生效组件里没有 Stack。不成立：子组件自己设了 layoutGravity（API 20 起）或 position 时不按 Stack 的对齐摆放。〕
-- 〔适用情境（layout_gravity 映射）〕Android FrameLayout 子项的 layout_gravity 只写一个方向时，另一个方向取顶边或左边（LTR 下 end 落在右上，bottom 落在左下）；ArkUI Alignment 的单向值 Start、End 是纵向居中，Top、Bottom 是横向居中，所以 layout_gravity=end 对应 TopEnd 而不是 End。〔成立范围：对象：FrameLayout 的直接子 View 与 ArkUI Alignment 枚举。条件：FrameLayout.layoutChildren 中缺省轴走 default 分支（横向取 parentLeft、纵向取 parentTop）；缺省的横向取的是绝对左边，RTL 下也不换边，只写 bottom 时 RTL 仍贴左下。不成立：gravity 里写了 center、center_vertical 或 center_horizontal 的那一轴按居中。〕
-- 〔做法第 3、4 步〕position 以父组件内容区（父组件尺寸减去 border、padding、safeAreaPadding）为基准：Position{x,y} 相对内容区左上角，Edges{left/top/right/bottom} 按到内容区各边的距离，只有 LocalizedEdges{start/end} 随 RTL 镜像；position 在尺寸测量完成后生效，与 offset 同时设时 offset 不生效，markAnchor 再从 position 结果里减去锚点坐标。〔成立范围：对象：任意组件的通用属性 position。条件：父组件是 Row、Column、Flex 时设了 position 的子组件不占位。不成立：父组件是 RelativeContainer 且子组件设了 alignRules 时 position 不生效；父组件没设固定宽高时，按第一个设了固定宽高的祖先组件定位（依据是文档说明）。〕
-- 〔做法第 6 步〕Stack 的子组件按声明顺序入栈，后声明的盖在先声明的上面；zIndex 只调整同一父容器内兄弟组件之间的层级，默认 0，值大的在上。〔成立范围：对象：同一父容器下的兄弟组件。条件：兄弟节点不增减时动态改 zIndex 会在原顺序上稳定排序。不成立：分属不同 Stack 的组件之间，zIndex 再大也不能跨容器盖到对方上面。〕
+已核实的平台事实（核实时用的是 HarmonyOS 6.1.0（API 23，SDK 6.1.0.105）；OpenHarmony 文档 master 2026-11-21（提交 e42bd18a）；安卓 源码 android-36.1。和具体应用无关，直接用，不用再查；其中的默认值只在应用自己的主题、样式、清单和代码没有另设时成立，应用有没有另设要到应用里看）：
+- 〔原因 / 做法第 1、2 步〕通用属性 align 设置组件内容在自身绘制区域内的对齐方式，默认 Alignment.Center；在 Stack 上它与 alignContent 效果一致，只设置子组件在当前组件内的对齐，写在 Stack 的子项上不移动子项本身
+- 〔原因 / 做法第 5 步〕Stack 的 alignContent 默认 Alignment.Center，非法值按默认处理；alignContent 与 align 同时设置时后设置的生效；构造参数与 alignContent 属性同时设置时以属性为准，与顺序无关
+- 〔原因〕layoutGravity（API 20 起）单独设置 Stack 中某个子组件的对齐，只在父组件为 Stack 时生效；与 align 同时使用时 layoutGravity 优先
+- 〔原因 / 做法第 2 步〕Text 上的 align 控制文字在 Text 框内的纵向位置，Alignment.Start、Center、End 效果相同；水平对齐由 textAlign 决定，默认 TextAlign.Start
+- 〔做法第 1、3、4、5 步〕position 确定子组件相对父组件内容区（父组件大小减去 border、padding、safeAreaPadding）的位置，Edges 写法（top、left、bottom、right）自 API 12 起；父组件为 Row、Column、Flex 时设了 position 的子组件不占位，全部子组件都设 position 时父组件按 (0, 0) 测算
+- 〔做法第 1 步〕offset 让组件基于原本的布局位置偏移，只在绘制时调整，不影响父组件布局
+- 〔做法第 6 步〕Stack 容器中的子元素依次入栈，后一个子元素覆盖前一个
+- 〔做法第 6 步〕同一容器内兄弟组件按 zIndex 分层，值越大显示层级越高
+- 〔做法第 1 步〕Column 的 justifyContent 默认 FlexAlign.Start；子组件不设 flexShrink 时默认不压缩，子组件主轴尺寸累加超过容器时 FlexAlign.Center、FlexAlign.End 失效
+- 〔做法第 7 步〕alignRules 只在父容器是 RelativeContainer 时生效
+- 〔适用情境 / 做法第 3、5 步〕安卓 FrameLayout 子项不写 layout_gravity 时按 DEFAULT_CHILD_GRAVITY = Gravity.TOP | Gravity.START 摆放（贴左上，RTL 下贴右上）；鸿蒙 Stack 不设对齐时居中，两端默认不同
+- 〔适用情境 / 做法第 5 步〕RelativeLayout 中横向没有任何定位规则的子 View 放在起始边（LTR 下左边），纵向同理放在顶边，几个这样的子 View 叠在同一坐标
+- 〔做法第 5 步〕RelativeLayout 设了 gravity（非 start、top）时，onMeasure 末尾把可见子项（ignoreGravity 指定的那个除外）作为一组按 gravity 平移
+- 〔原因〕根 Stack 用默认居中、只在子项上写 .align(Alignment.Top) 或 .align(Alignment.Bottom) 时，设备上这些子项仍落在 Stack 中部

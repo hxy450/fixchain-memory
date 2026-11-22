@@ -6,7 +6,7 @@
 
 ## 适用情境
 
-源工程（如 targetSdk 35）未定义 windowSplashScreen* 主题属性，在 Android 12+ 设备上显示系统启动画面；启动器图标是 adaptive-icon（前景层加背景）；主题是没有夜间变体的 Light 系主题，或 AppCompat 等库的 DayNight 主题（窗口背景取库默认的浅、深两态）；目标工程仍是脚手架 startIcon 与 start_window_background（base 白、dark 黑），身份技能只写“复制前景或 ic_launcher”。
+源工程（如 targetSdk 35）未定义 windowSplashScreen* 主题属性，在 Android 12+ 设备上显示系统启动画面；启动器图标是 adaptive-icon（前景层加背景）；主题是没有夜间变体的 Light 系主题，或 AppCompat 等库的 DayNight 主题（窗口背景取库默认的浅、深两态）；目标工程仍是脚手架 startIcon 与 start_window_background（base 白、dark 黑），身份技能只写“复制前景或 ic_launcher”。“源主题”指启动器 Activity 的 android:theme，它没设时才取 application 的主题。#FAFAFA、#303030 只是 AppCompat 一系 DayNight 在主题链没有覆盖 windowBackground 时的默认值：Theme.MaterialComponents.DayNight 一系在 API 21 起默认为日间 #FFFFFF、夜间 #121212，Material3 等其他主题族也按应用依赖的库版本另行解析，不套 AppCompat 的值。
 
 ## 例外与边界
 
@@ -24,10 +24,12 @@
 
 来源支持：3 张卡 · 3 次迁移 · 3 个应用
 
-已核实的平台事实（核实时用的是 HarmonyOS 6.1.0（API 23，SDK 6.1.0.105）；安卓 Android SDK 平台资源 android-30、android-34、android-36.1、android-37.0；androidx.appcompat:appcompat 1.1.0、1.8.0；com.google.android.material:material 1.4.0、1.8.0、1.12.0、1.14.0。和具体应用无关，直接用，不用再查；其中的默认值只在应用自己的主题、样式、清单和代码没有另设时成立，应用有没有另设要到应用里看）：
-- 〔做法第 1 步〕安卓 12 起，主题没设 windowSplashScreenBackground 时，系统启动画面的底色按主题的 windowBackground 计算。〔成立范围：对象：API 31 及以上设备上的系统启动画面。条件：主题设了 windowSplashScreenBackground 时以它为准；windowBackground 是图片等非纯色 drawable 时怎样计算，SDK 里看不到。依据是平台 attrs.xml 的属性注释，绘制实现在系统界面里、不在 SDK 源码中。最常见的不成立情形：源端用 windowSplashScreen* 属性或 SplashScreen API 自定义了启动画面（本条经验的例外）。〕
-- 〔做法第 1 步〕AppCompat 主题在应用没另设时的窗口背景：Theme.AppCompat.Light 与 Theme.AppCompat.DayNight 的浅色态为 #FAFAFA，Theme.AppCompat 与 DayNight 的深色态为 #303030；API 21 起这两个值来自平台 Theme.Material.Light / Theme.Material 的 colorBackground（windowBackground 取 ?attr/colorBackground）。〔成立范围：对象：parent 链落到 Theme.AppCompat(.Light / .DayNight，含 NoActionBar 子主题) 且链上没有覆写 android:windowBackground、android:colorBackground 的主题；DayNight 在 values 与 values-night 分别以 Theme.AppCompat.Light、Theme.AppCompat 为父。版本：appcompat 1.1.0 与 1.8.0 相同，平台资源 android-30、android-34、android-36.1、android-37.0 相同。最常见的不成立情形：主题继承 MaterialComponents 或 Material3（见下一条），或应用自己覆写了 windowBackground。〕
-- 〔做法第 1 步〕MaterialComponents 与 Material3 主题覆写了 android:colorBackground，窗口背景随之不同：Theme.MaterialComponents(.Light / .DayNight) 浅色 #FFFFFF、深色 #121212；Theme.Material3(.Light / .Dark / .DayNight) 在 material 1.8.0 为浅色 #FFFBFE、深色 #1C1B1F，在 1.12.0 至 1.14.0 为浅色 #FEF7FF、深色 #141218（Material3 的 windowBackground 取 ?android:attr/colorBackground）。〔成立范围：对象：com.google.android.material 的这两族主题及其 NoActionBar 子主题，链上未再覆写 colorBackground / windowBackground。版本：MaterialComponents 的值在 1.4.0 与 1.14.0 相同；Material3 的值随库版本变，按源工程实际依赖的版本取。例外：Theme.Material3.DynamicColors.* 在 API 31 起改用系统动态配色，背景随设备而变、无法从资源静态确定。最常见的不成立情形：源工程用的是纯 AppCompat 主题（取上一条的值）。〕
-- 〔做法第 1 步〕module.json5 里同一 UIAbility 配了 startWindow（增强启动页）时，startWindowIcon 和 startWindowBackground 不生效，启动页图标与底色改由 startWindow 指向的 profile 里的 startWindowAppIcon、startWindowBackgroundColor 等决定。〔成立范围：对象：module.json5 abilities 中同一 UIAbility 的启动页字段（startWindow 从 API 20 起可用）。例外：startWindow 指向的 profile 没配 startWindowBackgroundColor 时，增强配置整体不生效，回到 startWindowIcon / startWindowBackground 的简易启动页。依据是文档说明。最常见的不成立情形：脚手架工程只配了 startWindowIcon / startWindowBackground、没有 startWindow，这两项照常生效。〕
-- 〔做法第 3 步〕简易启动页的 startWindowIcon 按图标资源的实际大小在启动页居中显示，不随窗口尺寸缩放。〔成立范围：对象：未配 startWindow 时的 startWindowIcon。对照：增强启动页的 startWindowAppIcon 由系统缩放到完全显示在展示区内。依据是文档说明；「实际大小」按像素还是按屏幕密度换算，文档没写。最常见的不成立情形：配了 startWindow。〕
-- 〔做法第 1 步〕应用没有调用 setColorMode 时，resources 的 dark 目录下有深色资源，系统组件在深色模式下自动切成深色；dark 目录下没有任何深色资源时，系统组件在深色模式下保持浅色。〔成立范围：对象：工程 resources 的 dark 限定词目录与系统组件的深浅色。条件：应用调用了 setColorMode 时以接口为准。依据是文档说明；dark 目录里只放与 base 同值的颜色是否也算「有深色资源」，文档没写。最常见的不成立情形：应用在入口调用 setColorMode 固定了浅色。〕
+已核实的平台事实（核实时用的是 HarmonyOS 6.1.0（API 23，SDK 6.1.0.105）；OpenHarmony 文档 master 2026-11-21（提交 e42bd18a）；安卓 android-36、android-37.0 的平台资源；android-36.1 的源码；androidx.appcompat:appcompat 1.1.0、1.7.0、1.8.0。和具体应用无关，直接用，不用再查；其中的默认值只在应用自己的主题、样式、清单和代码没有另设时成立，应用有没有另设要到应用里看）：
+- 〔适用情境 / 原因〕源端 targetSdk 不低于 31、主题没有写 windowSplashScreen* 属性时，在 Android 12 及以上设备上启动画面由系统按主题窗口背景和自适应图标绘制，旧版栅格 launcher 图（如大尺寸 logo PNG）不会出现
+- 〔例外与边界 / 做法第 1 步〕安卓主题属性 windowSplashScreenAnimatedIcon 替换启动窗中央的图标（动画 drawable 会播放动画）；windowSplashScreenBackground 是启动画面背景色，主题没有设置时系统从 windowBackground 计算
+- 〔做法第 1 步〕安卓自适应图标的前景、背景两层都按 108×108dp 绘制，只有中央 72×72dp 出现在遮罩视口内，四周各 18dp 留给系统做遮罩和视觉效果
+- 〔适用情境 / 做法第 1、2 步〕主题链上没有任何一层覆盖 windowBackground 时：平台 Theme.Material.Light 的 windowBackground 为 ?attr/colorBackground，解析到 background_material_light = material_grey_50 = #fffafafa；appcompat 的 Light 主题在 API 21 起经 Platform.V21.AppCompat.Light 继承 android:Theme.Material.Light.NoActionBar，取到同一个 #fffafafa（appcompat 1.1.0、1.8.0 相同）
+- 〔适用情境 / 做法第 1、2 步〕应用主题是 Theme.AppCompat.DayNight 且主题链上没有覆盖 windowBackground 时（appcompat 1.7.0、平台 android-36 资源）：日间为 #fffafafa（Theme.Material.Light 的 background_material_light），夜间为 #ff303030（Theme.Material 的 colorBackground = background_material_dark = material_grey_850）
+- 〔何时使用 / 做法第 1 步〕module.json5 abilities 里的 startWindowIcon（启动页面图标资源索引）和 startWindowBackground（启动页面背景颜色资源索引，如 $color:red）都不可缺省，取值不超过 255 字节；同一 UIAbility 配置了 startWindow 标签时这两项都不生效
+- 〔做法第 1 步〕简易启动页的 startWindowIcon 用于展示应用图标，不会随窗口尺寸缩放
+- 〔原因 / 做法第 1 步〕resources 下深色模式的限定词目录名为 dark：base/element/color.json 与 dark/element/color.json 里定义同名颜色时，深色模式下取 dark 里的值；dark 目录里没有这一项时回落到 base 里的值

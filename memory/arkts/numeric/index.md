@@ -12,7 +12,7 @@
 - [Kotlin/Java Float 的运算与比较迁到 ArkTS 时对齐 float32：算术每步 Math.fround 后再按 Java (int) 截断，==/!= 两侧 fround 后用 ===，不自加容差；选中、存在判断与删除共用同一比较](lesson-0deb51172ebdd2e056a9.lesson.md)
   - 时机：实现阶段，把 Kotlin/Java 中 Float 的算术（含随后 (int) 截断）与 ==/!= 比较（选项选中判断、列表去重、删除过滤）翻译成 ArkTS 时；规格提取阶段为 float 表达式写数值契约时
   - 情境：源端用 value.toFloat() == state 一类写法比较 Float（如倍率、刻度选项与当前值），值来自字符串解析或滑杆；目标 number 为双精度，写者担心浮点误差，准备用 Math.abs(a - b) &lt; ε 容差比较，或在不同位置各写一套比较。 也包括 Java 用 (float) 强转与 f 字面量计算比值、透明度、字号后再 (int) 截断，规格只写了 float→int 收窄（NaN→0、±∞ 饱和、向零截断），实现照写成 double 表达式。
-  - 例外：源端本身就用容差或先舍入再比较
+  - 例外：源端本身就用容差或先舍入再比较；源端的值是 Double / double（Kotlin 不带 f 后缀的小数字面量、toDouble()，Java double）时不套 Math.fround：它与 number 同为 64 位，按原式计算、直接 === 比较。；Math.fround 只用于比较和算术；值要显示成文字时仍照源端的格式化（Float.toString 给出能区分这个 float 的最短十进制串），不把 fround 后的 number 直接转字符串显示，在写入状态时就 fround 的，显示处按 Float.toString 的规则格式化。
 - [迁移比值与进度计算时保留源端的零分母分支与范围钳制：ArkTS number 除法不抛错，0/0 得 NaN](lesson-52d7edb9042110e30eb4.lesson.md)
   - 时机：服务或业务逻辑实现阶段，把源端带保护的比值、进度计算改写或内联到目标回调并写入共享状态时
-  - 情境：源端用辅助方法计算 completed/total，其中含 total==0 分支与 coerceIn(0,1) 一类钳制；目标把计算内联进进度回调，直接以 current/total 写入 0..1 语义的共享状态。
+  - 情境：源端用辅助方法计算 completed/total，其中含 total==0 分支与 coerceIn(0,1) 一类钳制；目标把计算内联进进度回调，直接以 current/total 写入 0..1 语义的共享状态。前提是源端写了这些保护：源端本身直接做 Float、Double 除法而没有判零时，源端同样得到 NaN、Infinity（只有整数除法以 0 为除数才抛 ArithmeticException），照源端，不在这条范围里另加保护。

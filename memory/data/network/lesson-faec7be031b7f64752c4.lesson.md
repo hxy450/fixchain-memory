@@ -1,6 +1,6 @@
 # 源端声明 INTERNET（及 ACCESS_NETWORK_STATE）且目标有网络请求时，在 module.json5 声明 ohos.permission.INTERNET（及 GET_NETWORK_INFO），并让这项声明有确定的写者
 
-ID：`lesson-faec7be031b7f64752c4` · 版本：2
+ID：`lesson-faec7be031b7f64752c4` · 版本：3
 
 [本主题](index.md)
 
@@ -18,7 +18,7 @@ HarmonyOS 应用发起网络请求需要在 module.json5 声明 ohos.permission.
 
 ## 做法
 
-1. 与网络层同一轮在 module.json5 的 requestPermissions 加入 { "name": "ohos.permission.INTERNET" }；代码会判断连接状态时同时加入 ohos.permission.GET_NETWORK_INFO（均为 system_grant，无需 reason）。
+1. 与网络层同一轮在 module.json5 的 requestPermissions 加入 { "name": "ohos.permission.INTERNET" }；代码会判断连接状态时同时加入 ohos.permission.GET_NETWORK_INFO（均为 system_grant，无需 reason）。requestPermissions 里已有其他功能的权限项（如振动、相机）时只追加网络项，原有条目和它们的 reason、usedScene 原样保留，不整段重写。
 2. 计划拆分时核对规格的权限映射段有任务引用：写进网络任务的 input/output（output 含 module.json5 的 requestPermissions），或单列一个工程配置任务。
 3. 网络层写域不含 module.json5 时，在返回信封里把权限声明列为跨文件改动草稿；接线任务首次创建 requestPermissions 时，对照规格的权限映射表与工程中的 http、Web 调用补齐网络权限。
 

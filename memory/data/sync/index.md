@@ -9,6 +9,7 @@
 - [greenrobot EventBus 迁移先核投递契约：需同步按引用、priority 与嵌套 post 排队时自建进程内总线，不直接用 emitter](lesson-32c7d4b2ada4b341778d.lesson.md)
   - 时机：基础层实现阶段，为源端事件总线选择目标投递模型、订阅优先级与事件载荷形态时
   - 情境：源端用 greenrobot EventBus（默认线程模式在 post 线程同步回调订阅者、事件对象按引用传递、register(this, priority)、订阅回调中嵌套 post 会排队）发布实体对象事件；目标候选是 @ohos.events.emitter、eventHub 或自建订阅表。
+  - 例外：同步回调只是默认 POSTING 模式的语义：订阅方法在 @Subscribe 里写了 threadMode = MAIN、MAIN_ORDERED、BACKGROUND 或 ASYNC 的（MAIN 在非主线程 post 时、MAIN_ORDERED 与 ASYNC 总是经队列投递），post 返回时这些订阅不一定已处理完，按各自的线程模式迁，不一律改成同步调用。；源端用了 postSticky 或 @Subscribe(sticky = true) 的，自建总线要保留粘性事件：按事件类型记住最近一次，粘性订阅者注册时立即收到，并提供对应的取出与移除。
 - [同步调度保留源端每次触发都会执行的语义：合并在途任务要补跑尾随请求，失败队列按源端选取条件重推](lesson-cfe552e1b20080212ce9.lesson.md)
   - 时机：数据同步迁移的规格提取、调度实现与复核阶段，确定多次同步触发的并发语义与失败项重试范围时
   - 情境：源端每次同步触发都启动新任务并在互斥锁后排队执行（如协程 launch + Mutex.withLock，锁内先推送队列再拉取），待推送队列按资源类型而非同步状态选取；目标端用单一同步服务和 Promise 串行队列统一调度全量同步、定向拉取与状态推送；已有规格可能写着“并发触发复用当前任务”。

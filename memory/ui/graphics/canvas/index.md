@@ -11,7 +11,7 @@
   - 情境：源端自定义 View 由 setBackgroundColor 设背景，onDraw 先画背景或 drawBitmap 一张只烘焙一次的透明背景位图（标题、说明等抗锯齿文字只栅格化一次），再叠加动态层；目标用同一个 CanvasRenderingContext2D 多次 render()。
 - [Canvas 字体串按注册字族名原样引用、不加源端没有的 bold；字体参与测宽布局时，首次布局前确认字体已就绪](lesson-74295d12b4edc025569f.lesson.md)
   - 时机：规格提取与渲染实现阶段，为源端自定义字体制定 ArkUI Canvas 的 ctx.font 串格式，并安排字体注册与首次 measureText 布局的先后时
-  - 情境：源端以 Typeface.createFromAsset 同步装载单一字面（如 Bold）的字体文件并 setTypeface 给 Paint，文本测宽参与布局计算；目标用 font.registerFont 注册字族，在 Canvas 中以 ctx.font 串引用并 measureText。
+  - 情境：源端以 Typeface.createFromAsset 同步装载单一字面（如 Bold）的字体文件并 setTypeface 给 Paint，文本测宽参与布局计算；目标用 font.registerFont 注册字族，在 Canvas 中以 ctx.font 串引用并 measureText。Canvas 的字体串从 API 20 起才能引用注册过的自定义字体（只能在主线程用），工程最低 API 低于 20 时这条的做法不成立。
 - [Canvas.drawText 移植为 fillText 时按每串首个强方向字符设置 ctx.direction，不让画布方向随系统语言 inherit](lesson-68717b80482f4bd12825.lesson.md)
   - 时机：规格提取与渲染实现阶段，把安卓 Canvas.drawText 文字迁到 ArkUI fillText、确定文字段落方向时
   - 情境：源端文字经 Canvas.drawText 配默认 new Paint()（未设 bidi）绘制；应用有 fa、ar 等 RTL 资源，或可能在无对应资源、回落英文的 RTL 系统语言下运行；目标 CanvasRenderingContext2D.direction 保持默认 inherit。

@@ -1,6 +1,6 @@
 # relationalStore 事务体含 await 时用 createTransaction，不用 beginTransaction；单语句直接 await
 
-ID：`lesson-a078efd3361b4abe58e3` · 版本：3
+ID：`lesson-a078efd3361b4abe58e3` · 版本：4
 
 [本主题](index.md)
 
@@ -12,9 +12,14 @@ ID：`lesson-a078efd3361b4abe58e3` · 版本：3
 
 ArkTS 用 @kit.ArkData relationalStore 普通（非向量）关系库，DAO 的单条 INSERT/DELETE 经共享写入口执行；规格要求“写完才返回、失败不留半条记录、异常回滚”；SDK d.ts 中同时有 beginTransaction()/commit()/rollBack() 与 beginTrans(): Promise<number>、execute(sql, txId, args)、commit(txId)、rollback(txId) 两套事务写法，后者列出 801（Capability not supported）；data-layer skill 参考只给出前一套（API 14+ 另有 createTransaction()）。也包括事务体内要多次 await 异步写接口（insert/update/delete 或其他 DAO 方法），而同一 store 上可能同时有其他异步库操作或同一流程的并发调用。
 
+## 例外与边界
+
+- 单语句直接 await 只针对写入口本身：源端用 Room @Transaction 方法或 runInTransaction 把多条写入包成一体的，外层事务照留（按第 2 步用事务对象执行），不因每条语句各自原子就拆掉。
+- StoreConfig 配置 vector 为 true 的向量库上，beginTrans() 与带事务 ID 的 execute、commit、rollback 是文档支持的写法，不在这条的替换范围内。
+
 ## 原因
 
-单条 SQL 本身是原子语句，已满足“写完才返回、失败不留半条”，为它套事务只多出失败点。共享 store 上 beginTransaction 开启的事务不绑定调用方：事务体内每次 await 都会让出执行，其他经同一 store 的异步库操作会落进这个事务，同一流程并发进入时再次开启事务会造成嵌套错位；createTransaction()（API 14+）返回独立的 Transaction 对象，事务内语句经它执行并由它 commit/rollback。两套接口的 @since 相同，@since 只说明接口出现的版本，不说明当前库类型与设备支持：事务 ID 一套曾在 API 24 真机、API 26 模拟器的普通库上调用 beginTrans() 即返回 801，所有保存都失败，而 unit 判定与签名比对都发现不了。该接口的官方适用库类型尚未核实，beginTransaction() 也未做真机验证。
+单条 SQL 本身是原子语句，已满足“写完才返回、失败不留半条”，为它套事务只多出失败点。共享 store 上 beginTransaction 开启的事务不绑定调用方：事务体内每次 await 都会让出执行，其他经同一 store 的异步库操作会落进这个事务，同一流程并发进入时再次开启事务会造成嵌套错位；createTransaction()（API 14+）返回独立的 Transaction 对象，事务内语句经它执行并由它 commit/rollback。两套接口的 @since 并不相同（beginTransaction 为 9，beginTrans 为 12），而且@since 只说明接口出现的版本，不说明当前库类型与设备支持：事务 ID 一套曾在 API 24 真机、API 26 模拟器的普通库上调用 beginTrans() 即返回 801，所有保存都失败，而 unit 判定与签名比对都发现不了。文档写明 beginTrans() 及带事务 ID 的 execute、commit、rollback 仅支持向量数据库（StoreConfig 配置 vector 为 true），普通库上调用即返回 801；beginTransaction() 未做真机验证。
 
 ## 做法
 

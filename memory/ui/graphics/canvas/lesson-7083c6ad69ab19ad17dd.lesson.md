@@ -1,6 +1,6 @@
 # 按 Android px 公式移植自绘 View 时先定画布上下文单位：用 LengthMetricsUnit.PX 构造，让字号、测宽、几何与触点同域，dp 常量与 vp 输入在边界换算
 
-ID：`lesson-7083c6ad69ab19ad17dd` · 版本：4
+ID：`lesson-7083c6ad69ab19ad17dd` · 版本：5
 
 [本主题](index.md)
 
@@ -19,7 +19,7 @@ CanvasRenderingContext2D 默认按 vp 解释坐标与尺寸参数（字号按字
 ## 做法
 
 1. 按源端运算域选择构造：源公式在 int px 上推导时用 new CanvasRenderingContext2D(settings, LengthMetricsUnit.PX)，再逐式移植布局函数；保留默认 vp 时，整套公式都按 vp 推导，不混用。
-2. 选定域后逐项换算跨域输入：字体串后缀与上下文单位一致；TouchObject.x/y 等 vp 量、窗口避让值（getWindowAvoidArea 等窗口接口给的是 px，经 px2vp 写入窗口模型后才是 vp）按域决定是否换算；来自 drawable 或 dimens 的 dp 常量（圆角、描边）在 px 域用 uiContext.vp2px 换算。位图固有尺寸（Drawable.getIntrinsicWidth/Height）是从资源所在密度目录缩放到设备密度后的 px，不是解码像素：目标只保留某一密度目录的位图时，按 Android Bitmap.scaleFromDensity 的整数式 (px×设备dpi + 目录dpi/2) / 目录dpi 换算后再进公式（设备 dpi = vp2px(160)；目录 dpi：mdpi 160、hdpi 240、xhdpi 320、xxhdpi 480、xxxhdpi 640）。
+2. 选定域后逐项换算跨域输入：字体串后缀与上下文单位一致；TouchObject.x/y 等 vp 量、窗口避让值（getWindowAvoidArea 等窗口接口给的是 px，经 px2vp 写入窗口模型后才是 vp）按域决定是否换算；来自 drawable 或 dimens 的 dp 常量（圆角、描边）在 px 域用 uiContext.vp2px 换算。位图固有尺寸（Drawable.getIntrinsicWidth/Height）是从资源所在密度目录缩放到设备密度后的 px，不是解码像素：目标只保留某一密度目录的位图时，按 Android Bitmap.scaleFromDensity 的整数式 (px×设备dpi + 目录dpi/2) / 目录dpi 换算后再进公式（设备 dpi = vp2px(160)；目录 dpi：mdpi 160、hdpi 240、xhdpi 320、xxhdpi 480、xxxhdpi 640）。源端位图放在不带密度限定的 drawable 目录时，目录 dpi 按 160 算；放在 drawable-nodpi 时不缩放，固有尺寸就是解码像素，不套这个换算式。
 3. 字号与位图绘制尺寸同样按域换算：字体串的 px 后缀按物理像素解释（默认 vp 上下文中也是如此，固定写 'Npx' 会随密度变小）；源字号是 sp（N×scaledDensity）时还含系统字体缩放，用 fp2px(N) 得到物理像素再以 px 后缀写入，不只乘密度（fp2px 只有在应用 configuration 的 fontSizeScale 配为 followSystem 时才随系统字体设置变，缺省的 nonFollowSystem 不跟随），并保留源 Typeface 的粗细。三参数 drawImage(pm, x, y) 按 PixelMap 像素数以物理像素绘制；与按 vp 计算的变换矩阵或目标矩形同用时，改用五参数 drawImage(pm, x, y, w, h)，w、h 取与矩阵源矩形同一组数值（如都取 getImageInfoSync().size）。
 4. 规格提取时只写一份画布单位契约：上下文构造参数，以及字体串（含 sp 字号的换算）、measureText、ctx.width、触点、避让值、dp 常量、位图固有尺寸（连同其来源密度目录）和 drawImage 绘制尺寸各自的单位，各 feature 映射引用同一表述。
 

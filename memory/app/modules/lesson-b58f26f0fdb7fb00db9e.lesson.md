@@ -1,6 +1,6 @@
 # 页面与组件共用的非 UI 函数放进普通模块：不从路由页面模块具名导出供生产代码导入
 
-ID：`lesson-b58f26f0fdb7fb00db9e` · 版本：1
+ID：`lesson-b58f26f0fdb7fb00db9e` · 版本：2
 
 [本主题](index.md)
 
@@ -15,6 +15,7 @@ ID：`lesson-b58f26f0fdb7fb00db9e` · 版本：1
 ## 例外与边界
 
 - 函数本来就定义在 services/、utils/ 等非页面模块中
+- 页面模块供系统路由表、pageMap 装配用的页面 Builder 导出是路由需要的，不在迁出范围，照留；这条只管为复用而导出的非 UI 函数
 
 ## 原因
 

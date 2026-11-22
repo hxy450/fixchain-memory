@@ -1,6 +1,6 @@
 # Compose Switch 的 thumbContent（如选中时的勾选图标）等显式子内容，在目标原生开关没有对应参数时自绘承载，不假定 Toggle 会自动显示
 
-ID：`lesson-c3a3797da8b412c31aa7` · 版本：1
+ID：`lesson-c3a3797da8b412c31aa7` · 版本：2
 
 [本主题](index.md)
 
@@ -18,7 +18,7 @@ ID：`lesson-c3a3797da8b412c31aa7` · 版本：1
 
 ## 做法
 
-1. 映射前对照目标控件的参数列表，确认源端每个内容槽（thumbContent、icon、leading/trailing 一类）都有承载位置；没有时自绘该控件（或在当前 SDK 支持时用 Toggle 的 contentModifier 自定义内容），图标用工程中已迁移的对应资源，按选中态显示。
+1. 映射前对照目标控件的参数列表，确认源端每个内容槽（thumbContent、icon、leading/trailing 一类）都有承载位置；没有时自绘该控件（或用 Toggle 的 contentModifier（API 12 起）自定义内容区），图标用工程中已迁移的对应资源，按选中态显示。
 
 来源支持：1 张卡 · 1 次迁移 · 1 个应用
 

@@ -32,6 +32,7 @@
 - [弹窗防穿透的 Block 只放在无子控件的遮罩层，内容面板与根容器保持 Default；改真弹窗 API 后删掉自绘防穿透](lesson-cf018b76af68b4c00895.lesson.md)
   - 时机：弹窗或浮层实现与改造阶段，为遮罩、内容面板、根容器设置 hitTestBehavior，或把页面内浮层迁到 showCustomDialog/showBindSheet、openCustomDialog 等真弹窗时
   - 情境：弹窗或底部面板采用“根 Stack + 遮罩 + 内容面板”结构，在根或内容面板上写 hitTestBehavior(HitTestMode.Block)（含 visible ? Block : None）防止点击穿透；面板内有按钮、checkbox、列表项等要响应点击的子控件。也包括源端用全屏空 clickable 拦截层防穿透、遮罩点击关闭、居中卡片阻止冒泡，目标在包住遮罩、卡片、滑杆与滚动区的弹层根 Stack 上写 Block。
+  - 例外：删掉自绘遮罩改用框架弹窗时，源端遮罩的行为要用弹窗参数对上，不随遮罩一起丢：用带 BaseDialogOptions 的弹窗接口时，isModal 默认 true（有蒙层、蒙层不透传事件），autoCancel 默认 true（点蒙层就关闭），maskColor 默认 0x33000000；源端点遮罩不关闭（如强制更新）时设 autoCancel 为 false，源端遮罩颜色与默认不同时显式写 maskColor。
 - [接入已有专页时逐项兑现它的 @Event 回调契约：要求回传会话或结果的回调给出真实值或交父页分派，不用空值短路专页自带的导航](lesson-c061106fa1d809e518da.lesson.md)
   - 时机：界面实现阶段，把源端编辑项 Fragment 对应的现有 ArkTS 专页接入容器、实现专页回调时
   - 情境：源端工厂把同类数据的不同 type 映射到不同 Fragment（如 photo 进照片编辑页，photo_select/photoPicker 进图片选择）；目标已有专页经 @Event（如 requestPhotoEditorSession(key, onReady)）把会话与导航交给父容器，父容器里已有一个可复用的通用入口。
@@ -58,7 +59,7 @@
 - [源端监听回调体被注释时按无响应控件迁移；审计不因“已裁定/集成点”注释放行与源端运行态相背的接线](lesson-f3e614f295aa409485fd.lesson.md)
   - 时机：1:1 对齐审计与修复阶段，判定目标端交互接线是否与安卓运行态一致，或重写组件时决定是否保留随行的 onClick 时
   - 情境：安卓控件注册了 setOnClickListener，但回调体被整段注释（如选图调用被注释），XML 也可能写着 clickable；目标端按规格集成点把它接成可用功能，代码注释自述源码为死码并写着“裁定/集成点”；项目要求 1:1 忠实复刻（含源码缺陷）。
-  - 例外：项目决策明确要求启用该功能，且用户已知并接受与源端不同
+  - 例外：项目决策明确要求启用该功能，且用户已知并接受与源端不同；按无响应迁移不等于整个控件不接收点击：源端注册了监听的 View 已是可点的，会消费这次点击，祖先容器的点击处理收不到；目标端摘掉 onClick 后，点击会交给祖先的 onClick。祖先带点击处理时，在这一层保留一个空的点击处理，让祖先动作不被触发；祖先没有点击处理时直接不挂
 - [源端禁用态只靠代码换背景、文字色固定时，不用 ArkUI .enabled(false)（会对整个组件降透明）：显式切换背景与投影，用 hitTestBehavior(HitTestMode.None) 或回调内判态拦截点击](lesson-99080bd3bfc1bcbb9c5f.lesson.md)
   - 时机：规格提取阶段为 setEnabled/android:enabled 切换的控件写转换决策时；界面实现阶段落实控件禁用态外观与点击拦截时
   - 情境：源端在 setEnabled(false) 的同时 setBackgroundResource 换成没有 state_enabled 分支的灰色 drawable，textColor 是固定颜色而非 ColorStateList（AppCompat 按钮禁用时投影另归零）；映射参考把 setEnabled(false)/android:enabled 一律对到 .enabled(false)。
@@ -70,10 +71,11 @@
 - [点击事件挂在源端真正持有点击的节点上：源端只绑整栏就挂外层，只绑行内子 View 就只挂该子控件；带文字的 CheckBox/RadioButton 拆成勾选控件加 Text 时整体可点、命中区按源宽度](lesson-fd3add7128663eb9998f.lesson.md)
   - 时机：界面实现与返修阶段，为由多个子控件拼成的搜索栏、入口条或设置行决定 onClick 挂在哪一层，或清理、重写其中的点击绑定时；把带文字的 CheckBox/RadioButton 拆成 ArkUI 勾选控件加 Text 时
   - 情境：源布局只在整条容器上绑定点击（如 LinearLayout 的 onClick 或 DataBinding 点击），内部图标、提示文字、“搜索”字样只负责展示；目标用 Row + Image + Text 模拟占位搜索框（不是 TextInput），点击后压栈进入目标页。也包括源端 Java 只对行内某个子 View（如右侧值文本）setOnClickListener，同页其他行绑定整行 layout；目标用 Row 承载这些设置行。也包括带文字的 CheckBox/RadioButton（XML 声明或代码动态创建，宽度来自 wrap_content、match_parent、alignParentLeft 加 toLeftOf 两端锚定或父容器默认 LayoutParams），目标 Checkbox/Radio 不带文字、需另配 Text；为折行给 Text 加 layoutWeight(1) 时连同点击挂在整行上。
+  - 例外：删的只是子控件上和外层重复的同一动作：源端子 View 自己另有 setOnClickListener、做的是别的动作（如栏内的清除、语音图标）时，这个子控件的 onClick 保留；源端可点的子 View 先消费点击，目标端父子都挂点击时子组件优先触发，两边一致。
 - [行组件内挂了 onClick 时外层 ListItem 的 onClick 收不到点击：点击只设一个归属，动作经 @Event 传入或组件内不挂点击](lesson-f122d4c4d386c60fd8d5.lesson.md)
   - 时机：界面实现阶段，为可复用的列表行、设置行子组件定义点击接口，并在父页面为每行挂接动作时
   - 情境：源端整行可点（PreferenceScreen 的 Preference/ListPreference 行、子屏入口等），目标把行抽成 @ComponentV2 子组件放进 ListItem 或容器；组件内部声明带空默认实现的 @Event（如 onTap: () =&gt; void = () =&gt; {}）并在内层 Row 挂 .onClick 调用它，调用点却不传该事件，而把真实动作挂在外层 ListItem().onClick 上。
-  - 例外：父子确需响应同一次点击（如内层另有独立动作、外层仍要处理）时，按 ArkUI 手势规则给子元素改用 parallelGesture 等并行手势，不依赖冒泡
+  - 例外：父子确需响应同一次点击（如内层另有独立动作、外层仍要处理）时，按 ArkUI 手势规则在父容器（外层 ListItem 或行容器）上用 parallelGesture 绑定点击手势（mask 用默认的 GestureMask.Normal，不屏蔽子组件手势），子元素保留自己的 onClick，不依赖冒泡
 - [迁移带点击绑定的控件时按源点击处理器的分支逐项迁移副作用，不只做状态取反和换图](lesson-55e33a0621c3008ab8b3.lesson.md)
   - 时机：界面迁移阶段，为布局中带 onClick 绑定、状态选图或滑动面板的控件编写 ArkUI 事件与状态逻辑时
   - 情境：源布局控件用 android:onClick/数据绑定声明点击，或按 ViewModel 状态选图；实际行为（按键音、振动、偏好持久化、历史面板展开与回填）写在 Fragment 统一点击处理器、ViewModel 或第三方面板组件中；目标页需复刻这些开关与面板。 也包括源端 ViewModel 的选择与写操作（再次点击同一项即取消、前置为空即失败、同商品同规格累加写入本地购物车）由页面弹层触发。

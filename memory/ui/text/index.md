@@ -9,26 +9,28 @@
 - [Compose FontWeight 按数值字重写入 ArkUI：SemiBold、Light 等没有同名枚举成员时写 fontWeight(600/300)，编译修复不就近换成 Medium、Lighter](lesson-605038b091e03c26c005.lesson.md)
   - 时机：界面实现与主题排版阶段，把 Compose FontWeight 写成 ArkUI fontWeight 时；编译修复遇到 FontWeight 缺少某成员的报错时
   - 情境：源端 Text 或 TextStyle 用 FontWeight.SemiBold、Light、ExtraBold、Thin、ExtraLight、Black 或 FontWeight(数值)；ArkUI 的 FontWeight 枚举只有 Lighter、Normal、Regular、Medium、Bold、Bolder，写成 FontWeight.SemiBold 会报 “Property 'SemiBold' does not exist on type 'typeof FontWeight'”；fontWeight 属性同时接受 100–900 的数值。
+  - 例外：数值相同的枚举写法与数值等价，已这样写的不必改：Thin 写 FontWeight.Lighter（100）、Normal 写 Normal 或 Regular（400）、Medium（500）、Bold（700）、Black 写 FontWeight.Bolder（900）。要改的只是换成了数值不同的成员。
 - [Compose 可折叠正文（onTextLayout 的 didOverflowHeight 决定展开钮、maxLines 折叠）迁 ArkUI：用文本测量比较限行与不限行高度判定溢出，overflow 按源默认 Clip，其余加工与交互逐项落实](lesson-c61ac79c7db81729a544.lesson.md)
   - 时机：界面实现阶段，把 Compose 可折叠文本卡转换为 ArkUI 组件，确定是否显示展开按钮、折叠态 overflow 与文本加工时；占位复核阶段决定字符数近似是否保留时
   - 情境：源 Text 用 onTextLayout { didOverflowHeight / hasVisualOverflow } 决定是否显示展开钮，maxLines 在折叠与展开间切换且未设 overflow（Compose 默认 Clip），正文可能经 buildAnnotatedStringWithUrls 等加工，外层 toggleable/clickable 带按压反馈；ArkUI Text 没有同名排版回调，写者可能用字符数阈值近似。
+  - 例外：目标 Text 没写 textOverflow 时默认就是 Clip，与源端一致，不必为此补写；源端显式设了 overflow（如 Ellipsis）时按源端的值，不在第 3 步的范围内。；按压反馈跟随源端的可切换状态：外层 toggleable 只在文本溢出、可展开时有按压态，不溢出时不加。
 - [SpannableString.setSpan(start, end) 拆成 ArkUI Span 时按 end 为开区间逐字核对着色范围](lesson-eb59a95e5eb219c238b0.lesson.md)
   - 时机：界面实现阶段，把源端 setSpan 着色、加粗的文字拆成 ArkUI Text + Span 时
   - 情境：源端用 SpannableString.setSpan(span, start, end, flags) 按字符索引给一段文字着色，常见“固定前缀 + 动态值 + 后缀”的拼接，终点按前缀长度加动态值长度再加偏移计算。
 - [Tab 标签、页面标题与设置行等可见文案沿资源引用链取源端 strings 资源的逐字值，不用枚举名、路由名或自拟英文](lesson-31ab9f59945e5f0259ea.lesson.md)
   - 时机：界面实现阶段，为 Tab 标签、页面/路由标题、设置入口行等可见文案取值并写入页面与路由表时；以及派发侦察或规格任务、确定导航与标题字段的形态时
-  - 情境：源端可见文案经资源键间接引用（导航目的地的 label、配置路由的标题资源、顶栏 title），常与目的地枚举名或功能名不同（如 Map 目的地显示“Mesh Map”、Messages 目的地的页面标题为“Conversations”）；目标以硬编码字符串或自建资源表承载；上游 brief 或页面规格已给出、或可从 strings.xml 解析出逐字值。
+  - 情境：源端可见文案经资源键间接引用（导航目的地的 label、配置路由的标题资源、顶栏 title），常与目的地枚举名或功能名不同（如 Map 目的地显示“Mesh Map”、Messages 目的地的页面标题为“Conversations”）；目标以硬编码字符串或自建资源表承载；上游 brief 或页面规格已给出、或可从 strings.xml 解析出逐字值。源端还有按语言区分的 strings（values-&lt;语言&gt; 目录）时，第 2 步的集中文案要用按语言限定词分目录的资源文件承载、各语言的逐字值都迁过去，页面经资源引用取值；不要把默认语言的字面值写成常量，把已有的多语言丢掉。
 - [maxLines + Ellipsis 两端截断粒度不同：单行补 wordBreak(BREAK_ALL)，多行写明差异、确需字符级一致才测量截断](lesson-836a5414b52f0e062f1f.lesson.md)
   - 时机：规格提取阶段为带 maxLines(N) + TextOverflow.Ellipsis（或 android:ellipsize、singleLine）的单行或多行文本写转换决策，以及界面实现阶段落实标题行与折叠态末行时
   - 情境：源端多行正文以 maxLines + Ellipsis 折叠；目标用 .maxLines() + .textOverflow({ overflow: TextOverflow.Ellipsis })，默认 wordBreak 为 BREAK_WORD；映射参考只记 ellipsize → textOverflow 的 API 对应；项目可能要求完整复刻源端可观察行为。 也包括单行用户内容（标题、分类名、工具栏标题）：Android 的 TextUtils.ellipsize 按字符截断，ArkUI 默认先按词断行再省略；以及源控件是三方 TextView 子类（布局声明了库命名空间、未写 android:ellipsize），截断由库自身实现（例如取前 N 行、按空格回退、去尾标点再加省略号）。
-  - 例外：项目允许平台差异、不要求逐字复刻末行时，直接使用内置行为，不引入运行期测量
+  - 例外：项目允许平台差异、不要求逐字复刻末行时，直接使用内置行为，不引入运行期测量；粒度差异只出在英文等以空格分词的文字上：中文等 CJK 文本在默认设置下本就按字截断，BREAK_ALL 对 CJK 与 NORMAL 相同，纯 CJK 文案不必为此补 wordBreak 或测量
 - [resourceManager 代码内取值（字符串、数组、复数、颜色）一律传 $r(...).id 数字重载，不用 Resource 对象重载](lesson-22432022455bff6f849b.lesson.md)
   - 时机：界面与服务实现阶段，把安卓命令式取资源（getString、getStringArray、getQuantityString、getColor，如自绘 View 里 drawText、measureText 的文案）改写为 ArkTS 代码内取值并选择 resourceManager 接口时；新写取值辅助函数，或把已有取值写法扩展到更多调用点、其他取值方法时
   - 情境：源端在自绘 View 或代码里按当前资源配置取文案、字符串数组、复数串或颜色；目标需要在 ArkTS 中拿到纯值（Canvas 绘制、测宽、拼接、菜单与选择器文案），同一屏还有走声明式 $r 的组件文本；应用带多个 locale 资源目录，可能以应用偏好语言运行（i18n.System.setAppPreferredLanguage）；SDK 对 getStringSync、getStringArrayValue(Sync)、getIntPluralStringValueSync、getColorSync 等同时提供 (resId: number) 与 (resource: Resource) 两种重载。
 - [分开单行文本盒与多行行距，不把 Compose lineHeight 同名直映为 ArkUI .lineHeight](lesson-2a2924aaebbfbea80780.lesson.md)
   - 时机：规格提取、主题实现或页面转换阶段，把 Compose 排版令牌落成 ArkUI 文本属性或据文本高度推算容器尺寸时；视觉修复阶段改写主题层行高公式时
   - 情境：源 TextStyle 声明 fontSize/lineHeight、未设 lineHeightStyle；目标准备给所有 Text 无条件设置 .lineHeight()，或把 lineHeight 数值当单行文本的实际盒高来推算横向列表等容器的显式高度；映射参考可能给出 lineHeight → .lineHeight() 的 1:1 对应。
-  - 例外：当前源端的 LineHeightStyle、字体内边距或已有明确契约要求固定行盒时，保留该契约，不默认改成自然高度。
+  - 例外：当前源端的 LineHeightStyle、字体内边距或已有明确契约要求固定行盒时，保留该契约，不默认改成自然高度。；「未设 lineHeightStyle」要看最终生效的样式，不只看源码里的 TextStyle(...) 字面：未设时安卓端套用默认 LineHeightStyle（Proportional、Trim.Both）；而直接用 Material3 默认排版令牌、或在其上 copy 出的样式，带的是 LineHeightStyle（Center、Trim.None）（material3 1.4.0 如此，其他版本先查），不属于这条的前提——单行盒高以安卓端 dump 的盒高为准，不照这条删掉 .lineHeight。
 - [动态布局文本的字号、行距按源端 dp × 文字倍率落成 vp，只有 bounds、padding、背景等几何乘设计画布比例](lesson-4c494b9f89c7e9db2b55.lesson.md)
   - 时机：动态或灵活组件的渲染实现阶段，把源端动态布局文本的字号、行距换算成 ArkUI 预览、测量或原生绘制尺寸时
   - 情境：源端动态文本以 fontSize.dpF × dynamicTextScale × fontSizeScale 设字号、以 lineSpacing.dpF 设行距，只有节点宽高、位置、padding、背景按根尺寸与设计宽度之比缩放；目标预览用 renderWidth / document.width 一类画布比例统一换算几何。
@@ -43,7 +45,7 @@
 - [可见文案改为资源引用时值取自源端原文：目标字符串表缺键就新建专属键并连同原值移交，补值者回查源布局，不用语义相近的现成资源或按键名自拟](lesson-4567f9f77f4280ec1747.lesson.md)
   - 时机：页面转换、切片实现与组收口阶段，源端文案在目标 string.json 中没有对应条目，或把页面字面量改成由他人单写的资源引用、由收口者补值时
   - 情境：源布局或源码给出页面专属文案（如空态“暂时没有常用的路线”、隐私弹窗“同意并继续/不同意”）或纯数字徽标序号（android:text="1"…"4"），目标字符串表没有对应键，共享资源文件由收口 agent 单写；工程里有语义相近的通用资源（“暂无数据”、他页“隐私政策”、“取消/确定”）可引用；交接可能只给键名不给值，显示容器可能是固定尺寸的小徽标。
-  - 例外：纯数字等不需要翻译的序号可以保留字面量，不必新建资源
+  - 例外：纯数字等不需要翻译的序号可以保留字面量，不必新建资源；这条只管源端专属的文案：源端本就引用通用字符串（如共用的取消、确定），或目标已有键的值与源端原文逐字一致时，沿用现成资源是对的，不必另建重复的键
 - [复用基类的显示格式化 getter 前核对精度：品类精度不同（如 ETF 三位小数）时在子类覆写全部相关 getter，同一字段的各分支用同一精度](lesson-042445ba332611e04a80.lesson.md)
   - 时机：界面实现阶段，把源端十字光标、高亮联动等显示接入目标页面，决定复用基类 ViewModel 的格式化 getter 还是在子类覆写时；修改同一显示字段的任一分支（静态值、无数据兜底、高亮值）时
   - 情境：多个品类详情页共用一个基类 ViewModel，基类显示 getter 用通用精度格式化（如 formatPrice 保留两位）；某一品类的静态字段与源端联动代码使用不同精度（如 getPrice(..., 3)），子类尚未覆写对应 getter。
@@ -64,9 +66,11 @@
 - [源端文案来自框架（android.R.string.*，或偏好对话框未声明按钮文案时的默认）按框架译文落地：不借同名应用键，补齐各语言目录](lesson-ff19b09146b57d0f91a8.lesson.md)
   - 时机：页面实现阶段，为源端 stringResource(android.R.string.ok)、@android:string/cancel 一类系统字符串，或由框架默认提供的对话框按钮文案选择目标文案来源并新建应用字符串键时
   - 情境：源码或布局引用 android.R.string.ok、cancel 等框架字符串，它们不在应用 strings.xml 中，由系统按设备语言提供译文；目标工程已有多个语言限定目录（可能区分简繁）；转换者准备新增一个应用键（如 button_ok），只在 base 写英文值。也包括源端没有显式引用：ListPreference、EditTextPreference 等偏好对话框的 XML 未声明 positiveButtonText/negativeButtonText，按钮由框架默认 @android:string/ok、cancel 提供，而应用恰好也有 ok、cancel、confirm 等同名或近义键。
+  - 例外：判断「未声明按钮文案」要连主题一起看：偏好 XML 或应用主题（偏好对话框样式）另设了 positiveButtonText/negativeButtonText、指向应用自己的字符串时，按钮文案就是应用串，沿用应用键是对的，不在这条范围内。
 - [移植文本组件时先确认显示的是原始字符串还是加工后的富文本（Compose AnnotatedString、Html.fromHtml、带标记的字符串资源），样式、链接识别与点击要落到目标端；Html.fromHtml 只产出单个符号实体、按大字号逐个生成作页码点等图形时不算富文本，按源字体下的可见几何绘制图形](lesson-57a52be767730880cbba.lesson.md)
   - 时机：界面实现阶段，把源端 Compose Text、TextView 或对话框正文译成 ArkUI Text 时
   - 情境：源组件先调用工具函数（如按正则识别 URL、附加 LinkAnnotation 的 buildAnnotatedStringWithUrls）生成 AnnotatedString 再交给 Text；目标页面规格和验收条目只写了空值隐藏、折叠展开等布局行为。也包括 View 体系以 Html.fromHtml、setMessage(resId) 或 android:text 引用带 `&lt;b&gt;`/`&lt;i&gt;`/`&lt;a&gt;` 标记或 CDATA 的字符串资源，并用 LinkMovementMethod 让链接可点；目标准备用 Text($r(...)) 直接显示，或在正文外另起链接行。也包括循环中逐个 new TextView、setText(Html.fromHtml("&amp;#8226;")) 并 setTextSize(35) 作翻页圆点：内容只有一个符号，可见尺寸、步进与垂直位置取决于源字体（Roboto）的字形度量。
+  - 例外：源端用 getString 取出不带 CDATA 的带标记资源后直接 setText（不经 Html.fromHtml、不设 LinkMovementMethod）时，样式在取值时已被去掉，源端显示的就是纯文本；目标照纯文本显示与源端一致，不必解析成 Span。要按富文本处理的是经 getText、setMessage(resId)、布局 android:text 引用或 Html.fromHtml 显示的情形。
 - [系统语言映射按 BCP 47 的 script/region 逐类写到语言包，不把源端对裸 'zh' 等精确值的特判扩成前缀匹配](lesson-b853123dbef8142607fd.lesson.md)
   - 时机：规格提取与实现阶段，把源端初始语言选择翻译成目标端系统语言解析函数及其验收判据时
   - 情境：源端按设备返回的语言代码挑选语言包，并对某个精确值做特判（如 === 'zh' 时改用 zh-TW），或由 navigator.language 等检测结果直接匹配语言包名（如 zh-CN）；目标系统语言 API 返回 zh-Hans-CN、zh-Hant-TW 这类带 script/region 的标签。

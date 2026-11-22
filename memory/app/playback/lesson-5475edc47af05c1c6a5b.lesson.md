@@ -1,6 +1,6 @@
 # MediaPlayer 短提示音迁 AVPlayer 时保留源端隐式语义：未申请音频焦点就与其他音频混播，start() 在播放中调用不重启；源端为 SoundPool 时不适用
 
-ID：`lesson-5475edc47af05c1c6a5b` · 版本：2
+ID：`lesson-5475edc47af05c1c6a5b` · 版本：3
 
 [本主题](index.md)
 
@@ -15,6 +15,7 @@ ID：`lesson-5475edc47af05c1c6a5b` · 版本：2
 ## 例外与边界
 
 - 源端申请了音频焦点（requestAudioFocus/AudioFocusRequest），此时按其焦点类型映射目标的焦点与打断策略
+- 第 3 步“播放中再次触发直接忽略”只适用于源端复用同一个 MediaPlayer 实例再调 start()：源端每次触发都 MediaPlayer.create(...) 新建实例时，连续触发是几个实例各自从头播、彼此重叠，不是忽略，目标照这种重入语义映射，不改成忽略
 - 源端用 android.media.SoundPool（new SoundPool(...) 或 SoundPool.Builder，load 与 play 分开调用）播放短音效：目标用 media.createSoundPool，按 lesson-1267d6cabb117824c67a 的 SoundPool 分支处理，不用“每次播放新建 AVPlayer 实例”模拟叠播
 
 ## 原因

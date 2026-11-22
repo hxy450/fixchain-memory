@@ -9,12 +9,14 @@ Room 到 relationalStore 的库名、schema 版本、建表语句（含标识符
 - [Room 数据库落成 relationalStore 时保留库名、schema 版本与显式升级路径；基线建表与版本重放方式一致，迁移代码里的 xxx_new 是临时表](lesson-a6f300f9295ba538f23b.lesson.md)
   - 时机：数据层实现阶段，把 Room 数据库落成 relationalStore，确定库名、schema 版本、建表语句与升级路径时；以及评审或修复分诊缺表、重复列问题时
   - 情境：源端 Room @Database 声明 version，配 addMigrations/AutoMigration 与 fallbackToDestructiveMigration，迁移代码可能 ALTER TABLE ADD COLUMN、CREATE TABLE 或用 xxx_new 临时表重建后 RENAME；实体类只给出最终版本的表结构；规格要求显式版本化迁移、保留源 schema 历史与字段可空性。
+  - 例外：schemas/&lt;Database&gt;/&lt;version&gt;.json 只在源端开启 schema 导出（@Database 的 exportSchema 为 true 且配置了 room.schemaLocation）并提交了产物时才有；没有这些文件时，列定义按实体注解和各 Migration 的 DDL 推出，并在报告里写明不是取自导出文件。；某段旧版本源端没有对应 Migration、靠 fallbackToDestructiveMigration 处理的，这一段照源端删表后按当前结构重建，不另编源端没有的增量迁移脚本。
 - [SQLiteOpenHelper 构造不建库，首个 getReadable/WritableDatabase 才建：目标不在启动 init 里预建库，依赖“库文件是否存在”的流程（备份失败、恢复建库）按源路径保留](lesson-519f6769ca714500d9c3.lesson.md)
   - 时机：规格提取与数据层实现阶段，把继承 SQLiteOpenHelper 的 helper 与其调用方映射为 relationalStore 初始化时
   - 情境：源 helper 继承 SQLiteOpenHelper，构造只调 super，启动路径只 new helper，DAO 可能没有调用方；目标准备在入口或服务构造里 getRdbStore/init 建库，备份读写依赖库文件是否存在。
 - [relationalStore 事务体含 await 时用 createTransaction，不用 beginTransaction；单语句直接 await](lesson-a078efd3361b4abe58e3.lesson.md)
   - 时机：数据层实现阶段，为 relationalStore 的 DAO 共享写入口选择单语句执行或事务接口时
   - 情境：ArkTS 用 @kit.ArkData relationalStore 普通（非向量）关系库，DAO 的单条 INSERT/DELETE 经共享写入口执行；规格要求“写完才返回、失败不留半条记录、异常回滚”；SDK d.ts 中同时有 beginTransaction()/commit()/rollBack() 与 beginTrans(): Promise&lt;number&gt;、execute(sql, txId, args)、commit(txId)、rollback(txId) 两套事务写法，后者列出 801（Capability not supported）；data-layer skill 参考只给出前一套（API 14+ 另有 createTransaction()）。也包括事务体内要多次 await 异步写接口（insert/update/delete 或其他 DAO 方法），而同一 store 上可能同时有其他异步库操作或同一流程的并发调用。
+  - 例外：单语句直接 await 只针对写入口本身：源端用 Room @Transaction 方法或 runInTransaction 把多条写入包成一体的，外层事务照留（按第 2 步用事务对象执行），不因每条语句各自原子就拆掉。；StoreConfig 配置 vector 为 true 的向量库上，beginTrans() 与带事务 ID 的 execute、commit、rollback 是文档支持的写法，不在这条的替换范围内。
 - [relationalStore 写操作返回受影响行数时取 update/delete 的返回值，不在 executeSql 后另查 changes()](lesson-4ada94833c1fdf169dfe.lesson.md)
   - 时机：数据层实现阶段，为 UPDATE/DELETE 编写 DAO 方法或共享写入 helper，并决定受影响行数从哪里取时
   - 情境：源端 Room @Query UPDATE/DELETE 返回 Int，或目标 DAO 签名承诺 Promise&lt;number&gt; 受影响行数；目标 relationalStore 的 executeSql 返回 Promise&lt;void&gt;，update(values, predicates) 与 delete(predicates) 返回 Promise&lt;number&gt;。
@@ -24,10 +26,11 @@ Room 到 relationalStore 的库名、schema 版本、建表语句（含标识符
 - [手写 relationalStore 插入语句时省略 Room autoGenerate 主键列：默认 0 表示未赋值，显式写入会让同批行按主键互相替换](lesson-5c101b4b3f08ab317202.lesson.md)
   - 时机：数据层实现阶段，把 Room 实体与 @Insert 方法翻译成 relationalStore 手写 INSERT/INSERT OR REPLACE SQL、决定自增主键列是否写入时
   - 情境：源 Room 实体用 @PrimaryKey(autoGenerate = true) val id = 0，行由映射函数新建且 id 保持默认 0，再经 @Insert(onConflict = REPLACE) 批量写入；目标用 executeSql 手写插入，行接口保留 id 字段。
-  - 例外：源端确实为该行指定了非 0 的真实主键（如按固定 id 播种），此时照源端写入该值
+  - 例外：源端确实为该行指定了非 0 的真实主键（如按固定 id 播种），此时照源端写入该值；主键声明为可空的 Long?/Int?（默认 null）时，Room 把 null 而不是 0 当作未赋值：值为 null 的新行同样省略该列，非 null 的值（含 0）照源端写入
 - [源端以 Cursor.getString 读数值列时复刻 CursorWindow 的文本转换（REAL 按 %g），不直接换成 getString](lesson-58deb5f78fd00dfe7a3b.lesson.md)
   - 时机：数据层实现阶段，把 SQLite Cursor 读取（尤其以 cursor.getString 读数值列）转成 relationalStore ResultSet 读取时
   - 情境：源端以 cursor.getString(i) 读取 REAL 或 INTEGER 列，再交给模型的 String 入口解析或直接显示；目标准备一对一改成 resultSet.getString(columnIndex)。
 - [用 relationalStore 重写 SQLiteOpenHelper 子类时补齐基类打开契约：按版本号分派建表、升级与降级报错，打开失败后下次取库重试](lesson-65358a02b1bf9ef652d3.lesson.md)
   - 时机：数据层实现阶段，用 relationalStore 重写 SQLiteOpenHelper 子类的打开、建表与版本处理时；规格写“升级路径不迁移”“onCreate 即唯一入口”一类决策时
   - 情境：源 helper 以 super(context, name, factory, VERSION) 构造并覆写 onCreate/onUpgrade，DAO 每次经 getWritableDatabase/getReadableDatabase 取库；目标用 getRdbStore 单例、store.version 与缓存的初始化 Promise 实现。
+  - 例外：源 helper 还覆写了 onConfigure 或 onOpen（如开启外键约束、WAL、执行 PRAGMA）时，基类在每次打开时都会调用它们（onConfigure 在版本比较之前、onOpen 在版本处理之后）；按这条补分派骨架时把这些每次打开都要做的设置一并保留，不只留建表和升级。源端构造时另传了 minimumSupportedVersion 的，库内版本大于 0 且低于它时基类先删库再按版本 0 重新建表，这一支也照源端保留。

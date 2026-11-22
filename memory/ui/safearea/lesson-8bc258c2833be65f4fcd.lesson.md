@@ -1,6 +1,6 @@
 # 源端只在三键导航时给导航栏着色：以 TYPE_SYSTEM 底部避让高度判定导航方式，非手势时用 navigationBarColor 着色并随避让区变化更新
 
-ID：`lesson-8bc258c2833be65f4fcd` · 版本：1
+ID：`lesson-8bc258c2833be65f4fcd` · 版本：2
 
 [本主题](index.md)
 
@@ -10,7 +10,7 @@ ID：`lesson-8bc258c2833be65f4fcd` · 版本：1
 
 ## 适用情境
 
-源端在 Activity 中按是否手势导航决定导航栏底色（如非手势导航时 setNavigationBarColor(背景色带透明度)），判定依赖隐藏系统资源（config_navBarInteractionMode）或系统设置；目标为全屏沉浸窗口，入口用 getWindowAvoidArea 测避让区、用 setWindowSystemBarProperties 设置系统栏。
+源端在 Activity 中按是否手势导航决定导航栏底色（如非手势导航时 setNavigationBarColor(背景色带透明度)），判定依赖隐藏系统资源（config_navBarInteractionMode）或系统设置；目标为全屏沉浸窗口，入口用 getWindowAvoidArea 测避让区、用 setWindowSystemBarProperties 设置系统栏。前提是源端的着色调用真的生效：源应用 targetSdkVersion 为 35（Android 15）及以上时，setNavigationBarColor 的颜色固定为透明、改不了（窗口要求导航栏对比度时由系统自己决定是否加遮罩），这时源端导航栏实际是透明的（是否加遮罩由系统决定），目标也保持透明，不按代码里的调用着色。
 
 ## 原因
 

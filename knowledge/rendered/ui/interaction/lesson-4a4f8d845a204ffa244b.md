@@ -14,7 +14,7 @@ ArkUI 中没有 onClick 的容器同样参与命中测试（HitTestMode.Default 
 
 ## 做法
 
-1. 按最终声明顺序逐层检查：位于可点击兄弟之上、覆盖其区域且自身不处理点击的容器，显式写 hitTestBehavior(HitTestMode.Transparent)；重排子节点或修改对齐与几何后重新核对。 命中模式只作用于写它的节点：外层定位容器写 None 后，内部有尺寸的绘制子节点仍按 Default 命中，照样挡住外层容器下方的兄弟，要在这些子节点上各自写（外层写 Transparent 时下层兄弟仍参与命中）；可开合的浮层容器（如关闭态只剩平移到屏外的面板、遮罩按条件渲染的抽屉浮层）随状态切换，打开 Default、关闭 Transparent。
+1. 按最终声明顺序逐层检查：位于可点击兄弟之上、覆盖其区域且自身不处理点击的容器，显式写 hitTestBehavior(HitTestMode.Transparent)；源端该层本身消费触摸（设了 clickable、longClickable，或挂了点击监听，如用来挡住下层操作的加载遮罩）时，它本来就该拦截，保持 Default，不改成 Transparent。重排子节点或修改对齐与几何后重新核对。 命中模式只作用于写它的节点：外层定位容器写 None 后，内部有尺寸的绘制子节点仍按 Default 命中，照样挡住外层容器下方的兄弟，要在这些子节点上各自写（外层写 Transparent 时下层兄弟仍参与命中）；可开合的浮层容器（如关闭态只剩平移到屏外的面板、遮罩按条件渲染的抽屉浮层）随状态切换，打开 Default、关闭 Transparent。
 2. 源端按内容定高、align(BottomCenter) 贴底的底栏，在 Stack 中保持自身尺寸并直接锚到底部（position 的 bottom 边或 RelativeContainer 的对齐规则），不用满屏 Column + Blank 作定位壳；确需全屏壳时给壳设 Transparent，或让可点击的覆盖控件最后声明、提高 zIndex。
 3. 页面级全屏遮罩用无 padding 的根 Stack 条件子节点实现（条件为假时不产生节点），不在带 padding 的容器上用 .overlay() 挂条件 builder；复用同仓遮罩时连同挂载层级一起复用。
 4. 一次性全屏动效（彩纸、提示动画）按源端生命周期只在播放期间条件渲染，结束或取消回调里移除；不要让全屏组件常驻，只靠内部子节点的 HitTestMode.None 放行。 条件渲染只解决空闲期：源端播放期间也不拦截触摸时，在挂载实例上同样写 Transparent（写 None 只管实例这一层，组件内部按 Default 命中的节点仍会挡住下层兄弟，见第 1 步）——调用处的 width/height/zIndex 等通用属性会生成缺省命中的外层节点，组件内部根节点（含 Canvas）上的设置管不到它（见 lesson-6aeb4924b6d6ee3d15f6）。
@@ -27,10 +27,17 @@ ArkUI 中没有 onClick 的容器同样参与命中测试（HitTestMode.Default 
 
 来源支持：7 张卡 · 6 次迁移 · 6 个应用
 
-已核实的平台事实（核实时用的是 HarmonyOS 6.1.0（API 23，SDK 6.1.0.105）；安卓 Android SDK 源码 android-36.1；Android SDK 平台资源 android-34。和具体应用无关，直接用，不用再查；其中的默认值只在应用自己的主题、样式、清单和代码没有另设时成立，应用有没有另设要到应用里看）：
-- 〔原因〕HitTestMode 各值（应用没有设 hitTestBehavior 时为 Default）：Default 自身和子节点响应触摸测试，阻塞被它遮住的兄弟节点，不影响祖先；Transparent 自身和子节点响应，不阻塞兄弟和祖先；None 自身不响应，不阻塞子节点、兄弟和祖先；Block 自身响应，阻塞子节点、兄弟和祖先。〔成立范围：依据是文档和声明注释，文档没有把阻塞兄弟限定在绑定了事件的节点上。None 只说节点自身：它的子节点被点中时照样按子节点自己的模式挡住下层兄弟（见下一条），Transparent 则连同子节点一起不阻塞兄弟。影响点击、触摸、拖拽、鼠标、悬浮和手势等事件。设了 enabled(false) 的组件及其子组件不发起触摸测试、直接回到父组件继续，不阻塞兄弟。API 20 起另有 BLOCK_HIERARCHY（阻止优先级较低的兄弟和父节点）和 BLOCK_DESCENDANTS（自身和全部后代都不响应）。〕
-- 〔做法第 1 步〕Stack 里上层节点的子组件被点中时，上层节点设 None 仍挡住下层兄弟（子组件按 Default 命中后阻塞），只有给上层节点设 Transparent，下层兄弟才继续参与触摸测试。〔成立范围：依据是文档说明和 hitTestBehavior 文档的示例 4（上层全尺寸 Stack 里放按钮，点按钮时 None 下层背景收不到、Transparent 收得到）。点在上层节点没有子组件的区域时，None 和 Transparent 都放行。〕
-- 〔做法第 4 步〕在调用处给自定义组件链式设通用属性（width、height、zIndex、hitTestBehavior 等）时，相当于给它套了一个不可见的容器组件，属性设在这个容器上，而不是组件 build 里的根节点上；这个容器没设 hitTestBehavior 时按 Default 命中。〔成立范围：依据是文档说明（文档示例是 @Component）；调用处一个通用属性都不设时，文档没有说会套容器。组件内部根节点或 Canvas 上写的 hitTestBehavior 管不到调用处生成的这层容器。〕
-- 〔适用情境〕安卓 ViewGroup 分发 ACTION_DOWN 时从绘制顺序最上层的子 View 往下逐个尝试；View.onTouchEvent 只有在 clickable、long-clickable、context-clickable 或带 tooltip 时才消费事件，所以不可点击的上层 View（含 match_parent 的 FrameLayout 子层）不消费，触摸落到下层兄弟。〔成立范围：setOnClickListener、setOnLongClickListener 会把 View 设为可点击；Widget.Button 等控件样式自带 clickable=true；设了 OnTouchListener 且返回 true 也会消费；ScrollView 这类重写了 onTouchEvent 的滚动容器只要有子 View 就消费 ACTION_DOWN，不看是否 clickable；disabled 但 clickable 的 View 仍消费触摸（只是不响应），这与鸿蒙 enabled(false) 的组件不参与触摸测试相反。〕
-- 〔做法第 2 步〕position 传 Edges 时以父组件内容区（父组件 padding 以内）的四边为基准，top、bottom、left、right 是到父内容区对应边的距离，在尺寸测量完成后生效；文档写明支持镜像模式的是 LocalizedEdges（start、end）。〔成立范围：依据是文档说明。同时设了 top 和 bottom 时只有 top 生效，同时设了 left 和 right 时只有 left 生效（不能靠两边一起设来拉伸）。父组件是 Row、Column、Flex 时设了 position 的子组件不占位；父组件是 RelativeContainer 且子组件设了 alignRules 时 position 不生效；父组件没设固定宽高时，参考第一个设了固定宽高的祖先定位；不能设在宽高为零的布局组件上。〕
-- 〔做法第 2 步〕zIndex 只调整同一容器里兄弟组件之间的堆叠顺序，值大的盖在值小的上面；嵌在子容器里的组件设 zIndex，越不过它所在容器的兄弟。〔成立范围：依据是文档说明；不增减兄弟节点时动态改 zIndex，会在原层级顺序的基础上稳定排序。〕
+已核实的平台事实（核实时用的是 HarmonyOS 6.1.0（API 23，SDK 6.1.0.105）；OpenHarmony 文档 master 2026-11-21（提交 e42bd18a）；安卓 android-36.1 的源码。和具体应用无关，直接用，不用再查；其中的默认值只在应用自己的主题、样式、清单和代码没有另设时成立，应用有没有另设要到应用里看）：
+- 〔适用情境 / 原因〕安卓 FrameLayout 的子视图按栈绘制，最后加入（声明越晚）的在最上面
+- 〔适用情境 / 做法第 5 步〕安卓 View.onTouchEvent 只有视图带 CLICKABLE、LONG_CLICKABLE、CONTEXT_CLICKABLE（或 TOOLTIP）标志时才消费触摸；没设 clickable 的容器、进度环、ProgressBar 不吞点击，事件继续派给下层视图
+- 〔原因 / 做法第 1 步〕ArkUI 组件不写 hitTestBehavior 时为 HitTestMode.Default：自身和子节点都响应触摸命中，并阻塞被它遮住的其他节点；没有 onClick 的容器同样参与命中
+- 〔做法第 1 步〕HitTestMode.Transparent：自身和子节点照常响应命中，同时允许被它遮住的其他节点参与命中；HitTestMode.None：自身不响应命中，子节点仍按各自的模式响应
+- 〔做法第 1 步〕Stack 里多个节点的触摸区域重叠、最上层节点的子组件被命中时，默认只对最上层节点做触摸测试；只有最上层节点设了 HitTestMode.Transparent，下层节点才参与触摸测试
+- 〔做法第 1 步〕HitTestMode.None、Transparent 只作用于写它的节点：外层容器写了 None，内部有尺寸的子节点仍按 Default 命中，照样挡住外层容器下方的兄弟控件
+- 〔原因 / 做法第 3 步〕overlay 浮层覆盖在所绑定组件的上方，会阻塞用户对浮层下方组件的全部交互
+- 〔原因 / 做法第 3 步〕遮罩用 overlay 挂在带 padding 的容器上时只覆盖内容盒，底部 padding 带不变暗
+- 〔原因 / 做法第 4 步〕全屏自定义组件常驻挂载（100% 宽高、高 zIndex）时，即使内部 Canvas 设了 HitTestMode.None，下层页面仍点不动、滑不动
+- 〔做法第 4 步〕自定义组件的 aboutToAppear 在新实例创建之后、build() 执行之前调用
+- 〔做法第 2 步〕StackOptions.alignContent 不写时为 Alignment.Center，Stack 里所有子项共用这一个对齐方式
+- 〔做法第 2 步〕position 设置组件相对父组件的绝对位置；API 12 起可传 Edges（top、left、bottom、right），按 bottom 边锚定
+- 〔做法第 2 步〕zIndex 只决定同一容器内兄弟组件的显示层级，值大的在上

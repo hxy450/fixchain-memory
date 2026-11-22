@@ -1,6 +1,6 @@
 # Compose Slider 的 steps 是两端之间的离散值个数：取值共 steps+2 个，步长为区间/(steps+1)
 
-ID：`lesson-d715fa78ada2e79a5fd2` · 版本：2
+ID：`lesson-d715fa78ada2e79a5fd2` · 版本：3
 
 [本主题](index.md)
 
@@ -10,7 +10,7 @@ ID：`lesson-d715fa78ada2e79a5fd2` · 版本：2
 
 ## 适用情境
 
-源端 Slider(valueRange = a..b, steps = n) 做离散取值，n 可能由表达式算出（如 (区间 / 某个名为 step 的常量).roundToInt() + 1）；当前值标签可能以 Float.toString 输出；目标用 ArkUI Slider 的 min、max、step。
+源端 Slider(valueRange = a..b, steps = n) 做离散取值，n 可能由表达式算出（如 (区间 / 某个名为 step 的常量).roundToInt() + 1）；当前值标签可能以 Float.toString 输出；目标用 ArkUI Slider 的 min、max、step。steps 为 0 时源端没有刻度、连续取值，不套本条的步长公式；这时 ArkUI 的 step 不写就按 1 处理（最小可设 0.01），源端区间小（如 0..1）时要显式写小步长，否则只剩两端两个值。
 
 ## 原因
 

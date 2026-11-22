@@ -1,6 +1,6 @@
 # 源端在首次建库回调里播种时，目标把播种放进建表分支的同一事务并写入种子主键；手动补充按不带 id 的新行插入
 
-ID：`lesson-488a3bd782acef92f5cf` · 版本：1
+ID：`lesson-488a3bd782acef92f5cf` · 版本：2
 
 [本主题](index.md)
 
@@ -11,6 +11,10 @@ ID：`lesson-488a3bd782acef92f5cf` · 版本：1
 ## 适用情境
 
 源端 Room 在 onCreate 回调里按固定 id 插入预置数据，另有补充对话框列出全部预置项并以 copy(id = 0) 重新插入；目标用 relationalStore 自行建表与播种。
+
+## 例外与边界
+
+- 这条只管源端在 RoomDatabase.Callback 的 onCreate（只在首次建库、建完全部表后调用一次）里播种的情形；源端本身就在 onOpen（每次打开都调用）或启动流程里按“表为空”判断补种的，照源端的判断写，不改成只在首建时播种。
 
 ## 原因
 

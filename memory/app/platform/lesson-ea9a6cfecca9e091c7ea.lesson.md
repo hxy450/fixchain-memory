@@ -1,6 +1,6 @@
 # 源端 Activity 对自身 getWindow() 加的标志（FLAG_KEEP_SCREEN_ON、FLAG_SECURE 等）随该 Activity 窗口失效；映射到应用共享的 UIAbility 主窗口时按页面可见性成对开关（onShown 开、onHidden 关）
 
-ID：`lesson-ea9a6cfecca9e091c7ea` · 版本：1
+ID：`lesson-ea9a6cfecca9e091c7ea` · 版本：2
 
 [本主题](index.md)
 
@@ -10,7 +10,11 @@ ID：`lesson-ea9a6cfecca9e091c7ea` · 版本：1
 
 ## 适用情境
 
-源端某个 Activity 在 onCreate 给 getWindow() 加标志且没有清除代码，靠该 Activity 不可见或 finish 时随窗口失效；目标各页以 Navigation/NavDestination 共用一个主窗口，经 window.getLastWindow 调 setWindowKeepScreenOn 等窗口级 API。
+源端某个 Activity 在 onCreate 给 getWindow() 加标志且没有清除代码，靠该 Activity 不可见或 finish 时随窗口失效；目标各页以 Navigation/NavDestination 共用一个主窗口，经 window.getLastWindow 调 setWindowKeepScreenOn 等窗口级 API。页面是 router 管理的 @Entry 页而不是 NavDestination 时，成对的时机换成该页的 onPageShow / onPageHide；该页面对应独立的窗口（单独的 UIAbility 主窗口或子窗口）时，窗口标志随那个窗口失效，不在本条范围内。
+
+## 例外与边界
+
+- 常亮只在该窗口位于前台时生效：整个应用退到后台时平台已不再保持常亮，不需要另在 onBackground 里关；本条要补的是同一窗口内离开该页面（返回、跳到别的页）这一侧。
 
 ## 原因
 

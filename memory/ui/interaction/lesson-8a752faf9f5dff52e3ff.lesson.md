@@ -1,6 +1,6 @@
 # Compose combinedClickable 的长按自带系统触感：目标 LongPressGesture 不会振动，要在长按触发时显式调用一次长按触感
 
-ID：`lesson-8a752faf9f5dff52e3ff` · 版本：1
+ID：`lesson-8a752faf9f5dff52e3ff` · 版本：2
 
 [本主题](index.md)
 
@@ -22,7 +22,7 @@ Compose 识别长按时由框架执行一次系统长按触感，不在回调代
 
 ## 做法
 
-1. 在长按手势触发时显式调用一次系统长按触感（vibrator 预置效果，声明 ohos.permission.VIBRATE），与回调里源端自带的业务振动分开调用；多个组件都有这类长按时共用一个触感入口。
+1. 在长按手势触发时显式调用一次系统长按触感（vibrator 预置效果，声明 ohos.permission.VIBRATE），振动属性的 usage 取 'touch'（受触摸振动开关管控，和源端系统触感一样随用户关掉触感而不振；不写时为 'unknown'，不受特定开关管控），与回调里源端自带的业务振动分开调用；多个组件都有这类长按时共用一个触感入口。
 
 来源支持：1 张卡 · 1 次迁移 · 1 个应用
 

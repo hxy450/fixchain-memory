@@ -1,6 +1,6 @@
 # 源端在代码里格式化的含固定措辞文案（SimpleDateFormat、String.format、拼接）也建参数化字符串资源并用 $r 传参，不写模板字符串
 
-ID：`lesson-d442eb6e9aab4d77db18` · 版本：2
+ID：`lesson-d442eb6e9aab4d77db18` · 版本：3
 
 [本主题](index.md)
 
@@ -22,7 +22,7 @@ Android 源在 Kotlin/Java 里用 SimpleDateFormat、String.format 或拼接生�
 
 ## 做法
 
-1. 源端代码生成的显示文本只要含固定措辞或单位，就建参数化字符串资源（如 %s年%s月），用 $r('app.string.<key>', 参数...) 传值；沿用本模块 string.json 已有的 %s/%d 写法与命名前缀，参数保持源格式的数值形态（如 M 不补零）。
+1. 源端代码生成的显示文本只要含固定措辞或单位，就建参数化字符串资源（如 %s年%s月），用 $r('app.string.<key>', 参数...) 传值；沿用本模块 string.json 已有的 %s/%d 写法与命名前缀，参数保持源格式的数值形态（如 M 不补零），传给 %s 的数值先转成字符串（如 month.toString()）。
 2. 追加本页静态文案键时，把动态标题、数量、单位等格式串一并登记。
 
 ## 可选检查

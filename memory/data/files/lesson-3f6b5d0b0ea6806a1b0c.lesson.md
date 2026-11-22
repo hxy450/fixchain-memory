@@ -1,6 +1,6 @@
 # fileIo.mkdirSync 对已存在目录会抛 13900015：翻译“确保目录存在”时先判断或只放过该错误码，覆盖写先处理已存在目标
 
-ID：`lesson-3f6b5d0b0ea6806a1b0c` · 版本：1
+ID：`lesson-3f6b5d0b0ea6806a1b0c` · 版本：2
 
 [本主题](index.md)
 
@@ -10,11 +10,11 @@ ID：`lesson-3f6b5d0b0ea6806a1b0c` · 版本：1
 
 ## 适用情境
 
-源端用 createOrExistsDir、mkdirs、getExternalFilesDir 保证目录存在，并在同一固定目录内重复下载、复制或覆盖（ignoreFilePathOccupy、exists 后 delete 再 copyTo）；目标用 fileIo.mkdirSync / moveFileSync / copyFileSync 实现同一管线。
+源端用 createOrExistsDir、mkdirs、getExternalFilesDir 保证目录存在，并在同一固定目录内重复下载、复制或覆盖（ignoreFilePathOccupy、exists 后 delete 再 copyTo）；目标用 fileIo.mkdirSync / moveFileSync / copyFileSync 实现同一管线。源端在同名非空文件已存在时直接复用、不再下载的短路分支要照样保留：第 2 步的删旧覆盖只用于源端确实覆盖写入的那一步，不改成每次都删旧重下。
 
 ## 原因
 
-mkdirSync(dir, true) 的“递归”不等于“已存在即成功”，目录已存在时抛 13900015；moveFileSync 默认模式对已存在目标也会失败。建目录、删旧文件、移动放在同一个 try 里时，第二次执行必然走进失败分支（报“下载失败”）。来源中生成者读到的源码表明目录会复用，但所加载的下载 skill 把裸 mkdirSync(dir, true) 写成标准步骤，错误码表只列了目录不存在的情况。
+mkdirSync(dir, true) 的“递归”不等于“已存在即成功”，目录已存在时抛 13900015；moveFileSync 默认 mode 为 0，目标位置已有同名文件时强制覆盖，只有传 mode 1 才会因同名抛异常。建目录、删旧文件、移动放在同一个 try 里时，第二次执行必然走进失败分支（报“下载失败”）。来源中生成者读到的源码表明目录会复用，但所加载的下载 skill 把裸 mkdirSync(dir, true) 写成标准步骤，错误码表只列了目录不存在的情况。
 
 ## 做法
 

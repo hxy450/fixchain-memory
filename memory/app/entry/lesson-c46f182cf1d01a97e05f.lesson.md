@@ -1,6 +1,6 @@
 # 只经桌面快捷方式或通知点击进入的页面：module.json5 快捷方式声明、EntryAbility 的 Want 分支与目标页参数都要有确定写者
 
-ID：`lesson-c46f182cf1d01a97e05f` · 版本：1
+ID：`lesson-c46f182cf1d01a97e05f` · 版本：2
 
 [本主题](index.md)
 
@@ -10,7 +10,7 @@ ID：`lesson-c46f182cf1d01a97e05f` · 版本：1
 
 ## 适用情境
 
-源端页面由静态或动态 shortcut、通知 PendingIntent 携带 extras（如 shortId、通知渠道）进入；目标规格把入口配置定为 module.json5 静态声明；页面与切片 worker 的写域不含 module.json5 和 EntryAbility。
+源端页面由静态或动态 shortcut、通知 PendingIntent 携带 extras（如 shortId、通知渠道）进入；目标规格把入口配置定为 module.json5 静态声明；页面与切片 worker 的写域不含 module.json5 和 EntryAbility。EntryAbility 的 onCreate、onNewWant 对点桌面图标的普通启动和其他入口同样触发（某些系统场景下实例已存在时也会触发 onNewWant），加快捷方式、通知分支时只认带源端 extras 键的 Want；不带这些键的 Want 照原有启动流程（启动页分流、首页或留在当前页）走，已有的其他 Want 分支原样保留。
 
 ## 原因
 

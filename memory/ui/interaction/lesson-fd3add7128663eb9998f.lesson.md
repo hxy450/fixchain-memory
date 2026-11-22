@@ -1,6 +1,6 @@
 # 点击事件挂在源端真正持有点击的节点上：源端只绑整栏就挂外层，只绑行内子 View 就只挂该子控件；带文字的 CheckBox/RadioButton 拆成勾选控件加 Text 时整体可点、命中区按源宽度
 
-ID：`lesson-fd3add7128663eb9998f` · 版本：3
+ID：`lesson-fd3add7128663eb9998f` · 版本：4
 
 [本主题](index.md)
 
@@ -11,6 +11,10 @@ ID：`lesson-fd3add7128663eb9998f` · 版本：3
 ## 适用情境
 
 源布局只在整条容器上绑定点击（如 LinearLayout 的 onClick 或 DataBinding 点击），内部图标、提示文字、“搜索”字样只负责展示；目标用 Row + Image + Text 模拟占位搜索框（不是 TextInput），点击后压栈进入目标页。也包括源端 Java 只对行内某个子 View（如右侧值文本）setOnClickListener，同页其他行绑定整行 layout；目标用 Row 承载这些设置行。也包括带文字的 CheckBox/RadioButton（XML 声明或代码动态创建，宽度来自 wrap_content、match_parent、alignParentLeft 加 toLeftOf 两端锚定或父容器默认 LayoutParams），目标 Checkbox/Radio 不带文字、需另配 Text；为折行给 Text 加 layoutWeight(1) 时连同点击挂在整行上。
+
+## 例外与边界
+
+- 删的只是子控件上和外层重复的同一动作：源端子 View 自己另有 setOnClickListener、做的是别的动作（如栏内的清除、语音图标）时，这个子控件的 onClick 保留；源端可点的子 View 先消费点击，目标端父子都挂点击时子组件优先触发，两边一致。
 
 ## 原因
 

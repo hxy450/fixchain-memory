@@ -6,7 +6,7 @@
 
 ## 适用情境
 
-源页面用 BuildConfig.VERSION_NAME/VERSION_CODE 显示版本或比较更新提示；目标 app.json5 已写有 versionName/versionCode，页面留有“由服务提供版本”的前向占位。
+源页面用 BuildConfig.VERSION_NAME/VERSION_CODE 显示版本或比较更新提示；目标 app.json5 已写有 versionName/versionCode，页面留有“由服务提供版本”的前向占位。只处理源端取自 BuildConfig 的版本值；源端本来就写死在代码里的版本数字（更新日志条目、数据迁移的版本阈值、和服务端比较的固定版本）照源端保留，不因和 app.json5 的值相同而改成运行时读取。
 
 ## 原因
 
@@ -19,5 +19,6 @@
 
 来源支持：1 张卡 · 1 次迁移 · 1 个应用
 
-已核实的平台事实（核实时用的是 HarmonyOS 6.1.0（API 23，SDK 6.1.0.105）；安卓 不涉及。和具体应用无关，直接用，不用再查；其中的默认值只在应用自己的主题、样式、清单和代码没有另设时成立，应用有没有另设要到应用里看）：
-- 〔做法第 1 步〕以 BundleFlag.GET_BUNDLE_INFO_DEFAULT 调 getBundleInfoForSelfSync / getBundleInfoForSelf 时，返回的 BundleInfo 带 versionName、versionCode 等顶层字段，但不填 applicationInfo（appInfo）、hapModuleInfo、ability、extensionAbility、signatureInfo 和权限信息；这些子信息要在 bundleFlags 里组合对应标志才会带回（如 GET_BUNDLE_INFO_WITH_APPLICATION；ability、extensionAbility 的标志单独用不生效，要和 GET_BUNDLE_INFO_WITH_HAP_MODULE 一起传）。〔成立范围：对象：@ohos.bundle.bundleManager 的 getBundleInfoForSelf / getBundleInfoForSelfSync 的 bundleFlags 参数。条件：依据是文档说明（SDK 声明注释与接口文档对 BundleFlag 各值的说明），实现未看。不成立：bundleFlags 组合了 GET_BUNDLE_INFO_WITH_APPLICATION 等标志时，对应子信息会填上。〕
+已核实的平台事实（核实时用的是 HarmonyOS 6.1.0（API 23，SDK 6.1.0.105）；OpenHarmony 文档 master 2026-11-21（提交 e42bd18a）；安卓 不涉及。和具体应用无关，直接用，不用再查；其中的默认值只在应用自己的主题、样式、清单和代码没有另设时成立，应用有没有另设要到应用里看）：
+- 〔做法第 1 步〕用 BundleFlag.GET_BUNDLE_INFO_DEFAULT 取到的 BundleInfo 不含 signatureInfo、applicationInfo、hapModuleInfo、ability、extensionAbility 和 permission 信息，但版本字段 versionCode、versionName 在内
+- 〔原因 / 做法第 1 步〕BundleInfo.versionCode 是应用包的版本号、versionName 是版本文本描述，分别对应 app.json5 里配置的 versionCode、versionName 字段

@@ -1,6 +1,6 @@
 # 源端 BuildConfig.VERSION_NAME/VERSION_CODE 迁为运行时读取应用包信息，不把 app.json5 的版本值复制成页面常量
 
-ID：`lesson-a6ed8a9c6017ddb73beb` · 版本：1
+ID：`lesson-a6ed8a9c6017ddb73beb` · 版本：2
 
 [本主题](index.md)
 
@@ -10,7 +10,7 @@ ID：`lesson-a6ed8a9c6017ddb73beb` · 版本：1
 
 ## 适用情境
 
-源页面用 BuildConfig.VERSION_NAME/VERSION_CODE 显示版本或比较更新提示；目标 app.json5 已写有 versionName/versionCode，页面留有“由服务提供版本”的前向占位。
+源页面用 BuildConfig.VERSION_NAME/VERSION_CODE 显示版本或比较更新提示；目标 app.json5 已写有 versionName/versionCode，页面留有“由服务提供版本”的前向占位。只处理源端取自 BuildConfig 的版本值；源端本来就写死在代码里的版本数字（更新日志条目、数据迁移的版本阈值、和服务端比较的固定版本）照源端保留，不因和 app.json5 的值相同而改成运行时读取。
 
 ## 原因
 

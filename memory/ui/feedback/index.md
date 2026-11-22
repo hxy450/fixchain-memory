@@ -27,7 +27,7 @@
   - 情境：Android 弹窗确认时依次校验必填项并以 toast 提示；目标用“遮罩 + layoutWeight 中间区 + 固定高度键盘”的弹层承载，校验失败只写一个页内错误文字状态。
 - [源端单一提示宿主（SnackbarHost、三方提示条库的全局队列）用唯一宿主按源端排队与时长展示；每个结果态要有渲染分支，catch 写入的状态要有消费方](lesson-187c725b1bb9d8d1bf4d.lesson.md)
   - 时机：页面转换与功能接线阶段，把源端 Snackbar 结果反馈和规格里的操作状态落成 ArkUI 提示，并给成功与失败分支接通界面时；把三方提示条库（makeText(...).show() 一类全局队列提示）迁成目标提示组件时
-  - 情境：源端页面只有一个 SnackbarHost，按顺序显示操作结果，showSnackbar 可能带 actionLabel；目标规格给出含 error 的操作状态，并要求失败时报错且不留成功状态；目标页用条件渲染的底部浮层或单槽定时器实现提示。 也包括源端经三方提示条库显示（Lib.makeText(activity, 文案, 样式, 容器).show()），库内管理器全局串行排队、提供 cancelAll，应用侧只留样式常量；目标准备做成页面自持、@Param visible 驱动的单条组件。 也包括通用映射表把 Snackbar 写成 promptAction.showToast，共享提示组件据此只调用 Toast。
+  - 情境：源端页面只有一个 SnackbarHost，按顺序显示操作结果，showSnackbar 可能带 actionLabel；目标规格给出含 error 的操作状态，并要求失败时报错且不留成功状态；目标页用条件渲染的底部浮层或单槽定时器实现提示。 也包括源端经三方提示条库显示（Lib.makeText(activity, 文案, 样式, 容器).show()），库内管理器全局串行排队、提供 cancelAll，应用侧只留样式常量；目标准备做成页面自持、@Param visible 驱动的单条组件。 也包括通用映射表把 Snackbar 写成 promptAction.showToast，共享提示组件据此只调用 Toast。 源端本来就用 Toast.makeText 显示的提示不在这条范围内，仍按 Toast 迁移，不并进 Snackbar 宿主。
 - [源端只经通知、Toast 等平台通道交给用户的接口返回数据，推迟该能力时要为数据定义替代去向](lesson-9d54e42c44b0d3e78bb1.lesson.md)
   - 时机：规格与计划阶段决定推迟或替换通知等平台能力时；实现阶段调用返回非 void 的接口、准备丢弃返回值时
   - 情境：源端接口返回用户必需的数据（如测试环境下发的短信验证码），客户端只经本地通知或 Toast 展示；目标本轮不迁移通知能力，规格只保留接口签名与“请求成功”的验收条目。

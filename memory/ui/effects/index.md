@@ -15,7 +15,7 @@
   - 例外：源端混合只依赖自身 alpha（SRC_IN、DST_IN 一类）时，不需要纳入底色，也不需要预混
 - [Compose 渐变按端点几何换算成 ArkUI linearGradient：默认对角按宽高算角度，端点周期按渐变线长缩放 stop，Mirror 用回文 stop](lesson-4ce3a1c186651285f362.lesson.md)
   - 时机：界面实现阶段，把 Brush.linearGradient/horizontalGradient 翻成 ArkUI linearGradient，确定方向角、stop 位置与平铺、平移写法时
-  - 情境：源渐变或未指定 start/end（默认从组件左上 (0,0) 到右下 (w,h)），或以端点距离（startX/endX、start/end）定义图案周期并配 TileMode.Mirror 与随滚动、动画的平移；ArkUI linearGradient 只有角度或方向、按组件自身渐变线长取比例的 stop 和 repeating 开关；目标组件可能宽高不等（胶囊、卡片）。
+  - 情境：源渐变或未指定 start/end（默认从组件左上 (0,0) 到右下 (w,h)），或以端点距离（startX/endX、start/end）定义图案周期并配 TileMode.Mirror 与随滚动、动画的平移；ArkUI linearGradient 只有角度或方向、按组件自身渐变线长取比例的 stop 和 repeating 开关；目标组件可能宽高不等（胶囊、卡片）。 只有源端是 Repeated / Mirror 平铺时才开 repeating：源端用默认 TileMode.Clamp 时，端点之外延续端色、不重复，stop 照样按端点距离 / 渐变线长换算，但不开 repeating。horizontalGradient、verticalGradient 不给端点时铺满组件宽或高（startX 为 0、endX 为无穷大），ArkUI direction Right、Bottom 已经等价，不在角度换算范围内。
 - [ImageView tint 着色的渐变装饰层用容器 linearGradient 实现](lesson-fcd86aeea6209ea0718b.lesson.md)
   - 时机：界面实现阶段，迁移以 app:tint 主题色着色的白到透明渐变装饰层时
   - 情境：源 ImageView 用 tint=?attr/colorBackground 一类主题色给渐变 shape 着色，目标准备改用 SVG 加 fillColor；目标有深色资源目录。

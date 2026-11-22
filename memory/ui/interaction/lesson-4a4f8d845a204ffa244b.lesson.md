@@ -1,6 +1,6 @@
 # Stack 上层全尺寸容器和页面级遮罩会参与命中测试：不处理点击的覆盖层显式 Transparent，贴底内容栏直接锚定而不套全屏壳，条件遮罩与一次性动效层用根 Stack 条件子节点
 
-ID：`lesson-4a4f8d845a204ffa244b` · 版本：7
+ID：`lesson-4a4f8d845a204ffa244b` · 版本：8
 
 [本主题](index.md)
 
@@ -18,7 +18,7 @@ ArkUI 中没有 onClick 的容器同样参与命中测试（HitTestMode.Default 
 
 ## 做法
 
-1. 按最终声明顺序逐层检查：位于可点击兄弟之上、覆盖其区域且自身不处理点击的容器，显式写 hitTestBehavior(HitTestMode.Transparent)；重排子节点或修改对齐与几何后重新核对。 命中模式只作用于写它的节点：外层定位容器写 None 后，内部有尺寸的绘制子节点仍按 Default 命中，照样挡住外层容器下方的兄弟，要在这些子节点上各自写（外层写 Transparent 时下层兄弟仍参与命中）；可开合的浮层容器（如关闭态只剩平移到屏外的面板、遮罩按条件渲染的抽屉浮层）随状态切换，打开 Default、关闭 Transparent。
+1. 按最终声明顺序逐层检查：位于可点击兄弟之上、覆盖其区域且自身不处理点击的容器，显式写 hitTestBehavior(HitTestMode.Transparent)；源端该层本身消费触摸（设了 clickable、longClickable，或挂了点击监听，如用来挡住下层操作的加载遮罩）时，它本来就该拦截，保持 Default，不改成 Transparent。重排子节点或修改对齐与几何后重新核对。 命中模式只作用于写它的节点：外层定位容器写 None 后，内部有尺寸的绘制子节点仍按 Default 命中，照样挡住外层容器下方的兄弟，要在这些子节点上各自写（外层写 Transparent 时下层兄弟仍参与命中）；可开合的浮层容器（如关闭态只剩平移到屏外的面板、遮罩按条件渲染的抽屉浮层）随状态切换，打开 Default、关闭 Transparent。
 2. 源端按内容定高、align(BottomCenter) 贴底的底栏，在 Stack 中保持自身尺寸并直接锚到底部（position 的 bottom 边或 RelativeContainer 的对齐规则），不用满屏 Column + Blank 作定位壳；确需全屏壳时给壳设 Transparent，或让可点击的覆盖控件最后声明、提高 zIndex。
 3. 页面级全屏遮罩用无 padding 的根 Stack 条件子节点实现（条件为假时不产生节点），不在带 padding 的容器上用 .overlay() 挂条件 builder；复用同仓遮罩时连同挂载层级一起复用。
 4. 一次性全屏动效（彩纸、提示动画）按源端生命周期只在播放期间条件渲染，结束或取消回调里移除；不要让全屏组件常驻，只靠内部子节点的 HitTestMode.None 放行。 条件渲染只解决空闲期：源端播放期间也不拦截触摸时，在挂载实例上同样写 Transparent（写 None 只管实例这一层，组件内部按 Default 命中的节点仍会挡住下层兄弟，见第 1 步）——调用处的 width/height/zIndex 等通用属性会生成缺省命中的外层节点，组件内部根节点（含 Canvas）上的设置管不到它（见 lesson-6aeb4924b6d6ee3d15f6）。

@@ -1,6 +1,6 @@
 # main_pages.json 只登记经 router 进入或由 loadContent 按路径加载的 @Entry 页：被 Tabs/父页导入的子组件与 @CustomDialog 不登记，10905402 与 @Entry+export 警告先判定角色
 
-ID：`lesson-c4a6eaaf6a22c0b8823f` · 版本：3
+ID：`lesson-c4a6eaaf6a22c0b8823f` · 版本：4
 
 [本主题](index.md)
 
@@ -10,7 +10,7 @@ ID：`lesson-c4a6eaaf6a22c0b8823f` · 版本：3
 
 ## 适用情境
 
-源端单 Activity 以底部导航承载多个 Fragment，另有 DialogFragment 与经导航跳转的二级页；目标主页面用 Tabs/TabContent import 并实例化页面 struct，弹窗写成 @CustomDialog，这些文件都放在 pages/ 目录；工程用 main_pages.json 登记路由页。
+源端单 Activity 以底部导航承载多个 Fragment，另有 DialogFragment 与经导航跳转的二级页；目标主页面用 Tabs/TabContent import 并实例化页面 struct，弹窗写成 @CustomDialog，这些文件都放在 pages/ 目录；工程用 main_pages.json 登记路由页。工程改用 Navigation 路由时，经 NavPathStack 进入的 NavDestination 子页注册在 navDestination 映射或系统路由表 router_map.json 里，同样不是 main_pages 的登记对象，不为它们补 @Entry；main_pages 只留按路径加载的入口页和仍经 router 进入的页。
 
 ## 原因
 

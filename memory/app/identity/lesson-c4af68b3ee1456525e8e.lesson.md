@@ -1,6 +1,6 @@
 # 启动窗按源端实际启动画面映射：未自定义 SplashScreen 时图标取自适应图标前景层、底色取源主题背景，深色目录不留模板黑底
 
-ID：`lesson-c4af68b3ee1456525e8e` · 版本：3
+ID：`lesson-c4af68b3ee1456525e8e` · 版本：4
 
 [本主题](index.md)
 
@@ -10,7 +10,7 @@ ID：`lesson-c4af68b3ee1456525e8e` · 版本：3
 
 ## 适用情境
 
-源工程（如 targetSdk 35）未定义 windowSplashScreen* 主题属性，在 Android 12+ 设备上显示系统启动画面；启动器图标是 adaptive-icon（前景层加背景）；主题是没有夜间变体的 Light 系主题，或 AppCompat 等库的 DayNight 主题（窗口背景取库默认的浅、深两态）；目标工程仍是脚手架 startIcon 与 start_window_background（base 白、dark 黑），身份技能只写“复制前景或 ic_launcher”。
+源工程（如 targetSdk 35）未定义 windowSplashScreen* 主题属性，在 Android 12+ 设备上显示系统启动画面；启动器图标是 adaptive-icon（前景层加背景）；主题是没有夜间变体的 Light 系主题，或 AppCompat 等库的 DayNight 主题（窗口背景取库默认的浅、深两态）；目标工程仍是脚手架 startIcon 与 start_window_background（base 白、dark 黑），身份技能只写“复制前景或 ic_launcher”。“源主题”指启动器 Activity 的 android:theme，它没设时才取 application 的主题。#FAFAFA、#303030 只是 AppCompat 一系 DayNight 在主题链没有覆盖 windowBackground 时的默认值：Theme.MaterialComponents.DayNight 一系在 API 21 起默认为日间 #FFFFFF、夜间 #121212，Material3 等其他主题族也按应用依赖的库版本另行解析，不套 AppCompat 的值。
 
 ## 例外与边界
 

@@ -1,6 +1,6 @@
 # 延后无对等 API 的采集通道时，单独移植源端与采集无关的超时兜底，保证启动门闩等待的事件有发布者
 
-ID：`lesson-99a8d47085e4b1ae44de` · 版本：1
+ID：`lesson-99a8d47085e4b1ae44de` · 版本：2
 
 [本主题](index.md)
 
@@ -10,7 +10,7 @@ ID：`lesson-99a8d47085e4b1ae44de` · 版本：1
 
 ## 适用情境
 
-源端启动链在缓存为空时等待就绪事件（如 OaidResultEvent）才继续；该事件既由采集回调发布，也由与采集结果无关的定时兜底（Observable.timer 后无条件 post）发布；目标平台的采集 API 尚未确认，准备写 FWD-REF 或延迟域占位。
+源端启动链在缓存为空时等待就绪事件（如 OaidResultEvent）才继续；该事件既由采集回调发布，也由与采集结果无关的定时兜底（Observable.timer 后无条件 post）发布；目标平台的采集 API 尚未确认，准备写 FWD-REF 或延迟域占位。先查本地 SDK：鸿蒙公开 SDK 有对应接口的（如 OAID 由 @ohos.identifier.oaid 的 getOAID 提供，自 API 10 起，需要 ohos.permission.APP_TRACKING_CONSENT），按接口真实现，不属于延后情形；这时源端的定时兜底同样要保留，采集失败或用户不授权时靠它放行门闩。
 
 ## 原因
 

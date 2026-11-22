@@ -29,10 +29,20 @@
 
 来源支持：4 张卡 · 已知 2 次迁移（部分未记录） · 已知 2 个应用（部分未记录）
 
-已核实的平台事实（核实时用的是 HarmonyOS 6.1.0（API 23，SDK 6.1.0.105）；安卓 Android SDK 源码 android-36.1。和具体应用无关，直接用，不用再查；其中的默认值只在应用自己的主题、样式、清单和代码没有另设时成立，应用有没有另设要到应用里看）：
-- 〔做法第 2 步〕android.util.Base64.decode(…, DEFAULT) 按状态机解码：字母表外的字节（空白、换行和其他任何非 Base64 字符）在任何位置都直接跳过；结尾的 '=' 可以省略，但写了就必须个数正确，'=' 出现在不该出现的位置、'=' 之后再有数据字符、或最后只剩 1 个数据字符时抛 IllegalArgumentException（"bad base-64"）；String 入参先按默认字符集转成字节。鸿蒙 util.Base64Helper.decodeSync 的 options 缺省为 Type.BASIC，文档写明输入含回车换行时用 Type.MIME。〔成立范围：对象：android.util.Base64.decode 的 DEFAULT 标志。条件：输入可能带换行、空格或混入非法字符。不成立的情形：带 URL_SAFE 标志时改用 '-'、'_' 字母表，'+'、'/' 反而成了被跳过的字母表外字符。〕
-- 〔做法第 2 步〕android.net.Uri#getPath 返回解码后的路径，解码由 Uri.decode 完成：只解 %XX、不把 '+' 转成空格，非法的百分号序列替换成 U+FFFD、不抛异常；非层级 URI（如 mailto:）返回 null。鸿蒙侧 decodeURIComponent 遇到格式不正确的输入抛 URIError（未捕获即 jscrash）。〔成立范围：对象：Uri.parse(s).getPath()。条件：路径里可能有孤立的 '%'、截断的 %X 或非 UTF-8 序列。不成立的情形：getEncodedPath 返回未解码的原串。〕
-- 〔做法第 4 步〕Java 的 String.matches(regex) 与 Matcher.matches() 要求整串匹配（相当于隐式首尾锚定），Patterns.WEB_URL.matcher(s).matches() 同理；Matcher.find() 和 JS 的 RegExp.test 是在串中找子串，部分匹配就返回 true。〔成立范围：对象：源端 matches() 判定迁成 JS 正则时。条件：正则本身没有 ^ 和 $。不成立的情形：源端用 Matcher.find() 时本来就是子串查找。〕
-- 〔做法第 2 步〕String.compareToIgnoreCase 与 String.CASE_INSENSITIVE_ORDER 逐个 UTF-16 字符比较：两字符不等时先各自 Character.toUpperCase，仍不等再各自 toLowerCase，返回两者之差；共同前缀比完则返回长度差。不看区域设置，也不做语言排序。〔成立范围：对象：Android 的 java.lang.String#compareToIgnoreCase 与 String.CASE_INSENSITIVE_ORDER。条件：准备改写成 localeCompare、Intl.Collator 或先 toLowerCase() 再比较时。不成立的情形：源端用 java.text.Collator 时本就是区域相关排序。〕
-- 〔做法第 4 步〕java.net.URL#getHost 只返回主机名，端口由 getPort 单独给出，URL 里没写端口时 getPort 返回 -1 而不是协议默认端口；@ohos.url 的 URL.host 是“主机名:端口”（如 host:8080），hostname 才不带端口；端口等于协议默认端口（http 80、https 443、ftp 21、gopher 70、ws 80、wss 443）时 port 解析为空串，host 也不带端口。〔成立范围：对象：java.net.URL 的 getHost/getPort 迁到 url.URL.parseURL 结果的 host、hostname、port。条件：URL 带非默认端口，或源端拼 scheme://host:port 时依赖 getPort。不成立的情形：URL 不带端口时 host 与 hostname 相同。〕
-- 〔做法第 4 步〕java.net.URL(String) 在没有协议、协议未知或入参为 null 时抛 MalformedURLException；Android 内置的协议处理器只有 file、ftp、jar、http、https，所以 mailto:、content:、data: 这类带 scheme 的串同样抛异常。〔成立范围：对象：源端用 new URL(s) 是否抛 MalformedURLException 判定合法或绝对的分支。条件：应用没有调用 URL.setURLStreamHandlerFactory，也没设 java.protocol.handler.pkgs。不成立的情形：注册了自定义处理器的协议可以正常构造；只用 scheme 正则判定时这类串会被当成带 scheme 的合法串。〕
+已核实的平台事实（核实时用的是 HarmonyOS 6.1.0（API 23，SDK 6.1.0.105）；OpenHarmony 文档 master 2026-11-21（提交 e42bd18a）；安卓 源码 android-36.1。和具体应用无关，直接用，不用再查；其中的默认值只在应用自己的主题、样式、清单和代码没有另设时成立，应用有没有另设要到应用里看）：
+- 〔原因 / 做法第 2 步〕Android 2.3 起 java.util.regex 的后端是 ICU4C；\s 定义为 \p{IsWhite_Space}（Unicode 空白，含全角空格等），不只是 ASCII 空白
+- 〔原因 / 做法第 2 步〕String.compareToIgnoreCase 对每个字符做 Character.toLowerCase(Character.toUpperCase(c)) 后逐字符比较，不是整串小写后比较
+- 〔原因 / 做法第 2 步〕List.remove(Object) 原地删除第一次出现的相等元素；JS Array.filter 返回满足条件的元素组成的新数组
+- 〔原因 / 做法第 2 步〕android.util.Base64.decode：结尾的 '=' 可省略，但一旦出现个数必须正确；解码表里字母表以外的字符记为 SKIP，解码时跳过而不报错
+- 〔原因 / 做法第 2 步〕android.net.Uri.getPath 返回解码后的路径，不是分层 URI 时返回 null
+- 〔原因 / 做法第 2 步〕String.split(regex) 等于 limit 为 0 的 split，结果里不含末尾的空串；JS split 会保留末尾空串
+- 〔原因 / 做法第 2 步〕Java String.trim 只去掉两端码点 ≤ U+0020 的字符；JS String.trim 去掉两端的空白符和行终止符，范围更宽
+- 〔做法第 4 步〕String.matches(regex) 等同 Pattern.matches(regex, str)，Matcher.matches 要求整个区域匹配，不是前缀或包含
+- 〔适用情境 / 做法第 4 步〕android.util.Patterns.WEB_URL 依次是可选的协议加 userinfo、主机、可选端口、可选路径和查询、词边界；协议是不分大小写的 http|https|rtsp|ftp；主机须为带 TLD 的主机名（一个以上「标签.」后接 TLD）或 IP 地址，不带点的裸 localhost 不匹配
+- 〔做法第 4 步〕JS String.replace 的 searchValue 是字符串或不带 g 标志的正则时只替换第一个匹配
+- 〔做法第 4 步〕java.net.URL.getHost 只返回主机名，userInfo、端口分别由 getUserInfo、getPort 返回
+- 〔做法第 4 步〕java.net.URL 构造时没有协议抛 MalformedURLException（no protocol），协议未知同样抛 MalformedURLException（unknown protocol）
+- 〔做法第 4 步〕@ohos.url 的 URL.parseURL：相对 URL 必须给 base，给的是绝对 URL 时忽略 base；非法串抛 10200002（Invalid url string）
+- 〔做法第 4 步〕@ohos.url 的带参构造 URL(url, base) 自 API 9 起废弃、@useinstead parseURL，声明里没有列出抛错条件
+- 〔做法第 4 步〕@ohos.url 解析时端口等于当前协议的默认端口（http 80、https 443）就解析为空字符串，host 里也不带这个端口
+- 〔做法第 3 步〕Java Math.round(float) 取最接近的整数，正好在中间时向正无穷取；参数为 NaN 时结果是 0（JS Math.round(NaN) 是 NaN）

@@ -1,6 +1,6 @@
 # 状态栏实色避让带挂在只承担避让的外层 Column：宿主是 Tabs 时把 Tabs 包进该 Column，不在 Tabs 上挂 padding 加背景色
 
-ID：`lesson-fe10bd2491ca4ba82cb5` · 版本：1
+ID：`lesson-fe10bd2491ca4ba82cb5` · 版本：2
 
 [本主题](index.md)
 
@@ -11,6 +11,11 @@ ID：`lesson-fe10bd2491ca4ba82cb5` · 版本：1
 ## 适用情境
 
 源 Activity 基类在 onCreate 设置实色状态栏；目标全屏布局，用测得的顶部避让值做 padding；宿主页的避让 padding 写在 Tabs（或 Swiper）上，TabContent 是满铺白底子页；工程其他页面已用“padding + 背景色挂在只包标题条的普通 Column”实现同一色带。
+
+## 例外与边界
+
+- 只把 Tabs 上的避让 padding 与背景色（连同 layoutWeight）移到外层 Column，Tabs 自身的页签栏、控制器、onChange 等配置留在 Tabs 上不动。
+- 工程里已经用包裹层写法、真机上避让带颜色正确的页面不在这条的改动范围内。
 
 ## 原因
 

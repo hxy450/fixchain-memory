@@ -19,10 +19,7 @@ async 只改变函数的返回形态，函数体里的同步调用仍在调用�
 
 来源支持：1 张卡 · 迁移数未记录 · 应用数未记录
 
-已核实的平台事实（核实时用的是 HarmonyOS 6.1.0（API 23，SDK 6.1.0.105）；安卓 Android SDK 源码 android-36.1。和具体应用无关，直接用，不用再查；其中的默认值只在应用自己的主题、样式、清单和代码没有另设时成立，应用有没有另设要到应用里看）：
-- 〔做法第 1 步〕TaskPool 任务函数（LongTask 除外）在工作线程里的同步执行时长不能超过 3 分钟：同步接口的整个耗时（含磁盘 I/O 阻塞）都计入，Promise/async 的等待时长不计入；超时阻塞会让该线程无法再调度其他任务，长时间执行的任务可能导致进程被强制终止（TerminationError）。〔成立范围：对象：taskpool.execute 提交的普通 Task / TaskGroup。条件：任务里用 copyFileSync、readSync 等同步接口拷贝大文件或批量文件。不成立的情形：taskpool.LongTask；任务内改用 fileIo 的 Promise 接口时只计 CPU 处理时长。〕
-- 〔做法第 1 步〕普通对象和普通类实例跨线程传给 TaskPool 时按序列化拷贝，只带数据、类方法丢失，任务里对它的修改不会回到宿主线程；只有 @Sendable 类的实例跨线程后能携带类方法。〔成立范围：对象：taskpool 任务函数的入参。条件：传入未加 @Sendable 的类实例（如带方法的导入器、服务对象）或简单对象。不成立的情形：@Sendable 类实例。〕
-- 〔适用情境〕安卓 AsyncTask.execute() 交给进程内全局的 SERIAL_EXECUTOR，多个任务一个接一个顺序执行；只有 executeOnExecutor(THREAD_POOL_EXECUTOR, …) 才并行。〔成立范围：对象：源端 AsyncTask 的提交方式。条件：Android 3.0（HONEYCOMB）及以上、应用没有改默认执行器。不成立的情形：源端用 executeOnExecutor(THREAD_POOL_EXECUTOR) 或自建 Executor 时为并行。〕
-- 〔做法第 1 步〕传给 TaskPool 的 ArrayBuffer 默认按转移传递，提交后宿主线程不能再使用这个 ArrayBuffer（任务返回的 ArrayBuffer 同样默认转移）；要多次执行或宿主侧继续使用，须用 setCloneList 把它改成拷贝，或调用 setTransferList 且不把它列入转移列表（传空数组时全部 ArrayBuffer 参数按拷贝）。〔成立范围：对象：taskpool Task 的 ArrayBuffer 参数与返回值。条件：没有调用 setTransferList/setCloneList 改传输方式。不成立的情形：已 setCloneList([buf])，或调用过 setTransferList 而 buf 不在列表里时，按拷贝传递。〕
-- 〔做法第 1 步〕TaskPool 序列化传输的数据量上限为 16MB。〔成立范围：对象：taskpool 任务入参与返回值中走序列化的部分。条件：把整份文件内容作为字符串或对象传入、传出。不成立的情形：只传路径、fd 数值等小参数时不受影响。〕
-- 〔做法第 1 步〕TaskPool/Worker 工作线程不能使用操作 UI 的模块和只支持在主线程使用的模块，文档点名的有 ApplicationContext。〔成立范围：对象：@Concurrent 任务函数体内调用的模块。条件：任务里要取 filesDir、cacheDir 等沙箱路径，或要弹 UI 提示。不成立的情形：hilog、TaskPool、Worker 等线程安全模块可在工作线程使用。〕
+已核实的平台事实（核实时用的是 HarmonyOS 6.1.0（API 23，SDK 6.1.0.105）；OpenHarmony 文档 master 2026-11-21（提交 e42bd18a）；安卓 不涉及。和具体应用无关，直接用，不用再查；其中的默认值只在应用自己的主题、样式、清单和代码没有另设时成立，应用有没有另设要到应用里看）：
+- 〔原因〕Promise 和 async/await 是同一线程内的异步并发：异步代码在等待时挂起、操作完成后恢复，同一时间只有一段代码在运行；文档把它们定位于单次 I/O、轻量且无 CPU 阻塞的任务
+- 〔做法第 1 步〕taskpool 的任务函数要用 @Concurrent 标注；入参须是序列化支持的类型（@State、@Prop、@Link 等装饰的复杂类型不支持）；ArrayBuffer 参数默认按转移传递，要多次调用使用同一 ArrayBuffer 参数的 task 时需用 setCloneList 改成拷贝传递
+- 〔做法第 1 步〕taskpool 任务函数（LongTask 除外）的 CPU 执行时长不能超过 3 分钟；同步 I/O 的整个时长（含阻塞时间）都计入，异步 I/O 的等待时间不计入

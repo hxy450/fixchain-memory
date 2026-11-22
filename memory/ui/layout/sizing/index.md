@@ -9,6 +9,7 @@
 - [Compose Modifier 链里位于背景之前的内距与 inset 放外层，背景、圆角和裁剪放内层](lesson-5c6217b05bb4c266f254.lesson.md)
   - 时机：规格提取与界面实现阶段，描述或翻译同一条 Compose Modifier 链中的 padding、statusBarsPadding 与 background、clip、Surface 形状时
   - 情境：源 Modifier 链中 padding 或窗口 inset 位于 background、clip 或 Surface 包装之前；目标 ArkUI 的 padding 计入组件尺寸，backgroundColor 和 borderRadius 覆盖含 padding 的整个组件。
+  - 例外：拆成内外两层时，链里的点击（clickable、Surface 的 onClick）也按它在链中的位置落层，不随手留在原来那层：位于背景之前的点击区含内距，挂外层；位于背景之后、或由 Surface 类包装组件自带的点击只覆盖背景区，挂内层。ArkUI 组件的触摸热区默认是整个组件，挂错层会让内距区可点或不可点。
 - [Compose Row 中无 weight 的 fillMaxWidth 子项先占满剩余宽：不换成 layoutWeight(1)，后续兄弟按实得宽度判断是否绘制](lesson-45f77b3088fa69398f9e.lesson.md)
   - 时机：规格提取或页面转换阶段，解释 Compose Row 的可见元素和横向空间分配时
   - 情境：有限宽度的 Row 中，无 weight 子项使用 fillMaxWidth()，后面还有兄弟（按钮、文字）；规格或派工可能用“近乎不可见、按源码保留”描述该兄弟，实现者准备把该子项换成 layoutWeight(1)。
@@ -22,6 +23,7 @@
 - [LinearLayout 的 weightSum 与子权重之和不等，或 wrap_content 子项带权重时，不用 layoutWeight 归一化：余量（可用尺寸减各子项自然尺寸）按 w/剩余 weightSum 依次分配，份额耗尽的子项只留自然尺寸，超出 weightSum 的末块被裁](lesson-adad817f2c3c8f1eaa09.lesson.md)
   - 时机：界面实现阶段，把 Android LinearLayout 的 layout_weight/weightSum 分配翻译成 ArkUI 尺寸时；规格提取阶段写权重布局时
   - 情境：源布局声明 weightSum 且与子权重之和不等（如根 weightSum=10 而子权重 4/1/9，列 weightSum=6 而 8 个 wrap_content 子项各权重 1），或 wrap_content 子项带权重、自然尺寸各不相同。 也包括带权重的 wrap_content ImageView 未设 adjustViewBounds、位图按密度放大后宽于父级，各子项自然尺寸之和可能超过可用尺寸（横屏、小屏）。
+  - 例外：LinearLayout 主轴尺寸确定（match_parent 或固定值）、带权子项主轴都写 0dp、没写 weightSum 或它等于权重之和时，各子项就是按权重比例分可用尺寸，与 ArkUI layoutWeight 一致：已有的 layoutWeight 写法保留，不按这条改写。带权子项主轴是 match_parent 时不在此列（自然尺寸取父尺寸、余量为负），按做法第 1 步的公式算。
 - [Row 中位于定宽兄弟之后的 wrap_content 多行文字要加 flexShrink(1)（或 layoutWeight(1)）才会在剩余宽度内折行：Row 设了满宽，子项也默认不收缩](lesson-8566839cffc9e9e7fa30.lesson.md)
   - 时机：界面实现阶段，把横向 LinearLayout 中位于固定尺寸兄弟之后的 wrap_content 文字转成 ArkUI Row 子项时
   - 情境：源横向 LinearLayout（常见于 layout-land）中，固定 dp 的 ImageView 之后跟 wrap_content 宽、带左右 padding 的多行 TextView；文本长于剩余宽度时 Android 以 AT_MOST 取行内剩余宽折行。目标 Row 本身可能已设 width('100%')。
@@ -44,7 +46,7 @@
 - [将图片内容缩放与组件尺寸约束分别落实：wrap_content + adjustViewBounds 或 Web 端未设宽高的 img，按位图像素比确定高度](lesson-624248be2c5f81082268.lesson.md)
   - 时机：界面实现阶段，为图片组件确定宽高约束时；校准阶段处理图片比例、宽度类的不确定占位时
   - 情境：源 ImageView 为 wrap_content + adjustViewBounds（可带 layout_constrainedWidth 与 bias），宽度受同行兄弟和边距约束，高度应随位图固有比例跟随；目标用 Row 内的 Image 承接。 也包括 Web/Ionic 源端块级内容流里未设宽高的 IonImg/img（满宽、按资源固有比例），后续兄弟（分页点、按钮）紧随其后，源容器没有 flex-grow、height 或 padding；目标在 Column/Swiper 里可能引入 Contain 加 layoutWeight 撑满剩余高度。
-  - 例外：当前父布局或明确的尺寸规则已给出图片盒的宽高，此时只需设置盒内缩放
+  - 例外：当前父布局或明确的尺寸规则已给出图片盒的宽高，此时只需设置盒内缩放；本征宽上限只对应宽为 wrap_content 的 ImageView：源宽是 match_parent、固定值或约束布局里的 0dp 时，宽度就是父布局给的宽，不加 constraintSize({ maxWidth: 本征宽 })，只用 aspectRatio 让高度跟随；源端另写了 android:maxWidth、maxHeight 时，上限取它和本征尺寸中较小的一个
 - [并排 wrap_content 图片列不按固有 dp 写死宽度：按固有宽度比例分列，高度用 aspectRatio](lesson-0618cdf331560d389f0e.lesson.md)
   - 时机：界面实现阶段，把 match_parent 父行中并排的 wrap_content 图片列转换为 ArkUI Row/Column 并确定列宽时；修复“右侧顶满/被遮挡”时
   - 情境：源布局在 match_parent 的水平 LinearLayout 中并排放置 wrap_content 图片列，列宽来自 drawable 固有尺寸与左右、列间 margin，其总和接近或超过常见手机屏宽；目标要在宽度不同的设备上与源截图对齐。

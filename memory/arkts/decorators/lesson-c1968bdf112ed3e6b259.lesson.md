@@ -1,6 +1,6 @@
 # 自定义组件的成员不与组件通用属性方法同名（position、width、height、animation、id、visibility、enabled、zIndex、opacity 等）
 
-ID：`lesson-c1968bdf112ed3e6b259` · 版本：2
+ID：`lesson-c1968bdf112ed3e6b259` · 版本：3
 
 [本主题](index.md)
 
@@ -10,7 +10,7 @@ ID：`lesson-c1968bdf112ed3e6b259` · 版本：2
 
 ## 适用情境
 
-把源端事件或模型的字段名（如播放进度事件的 position）直接转写成组件成员；规格的状态接口表就是实现的成员表，实现者按表照写。 也包括为新建组件声明尺寸参数或动画实例字段（width/height、animation），或按另一处先写好的调用点参数名声明 @Param。
+把源端事件或模型的字段名（如播放进度事件的 position）直接转写成组件成员；规格的状态接口表就是实现的成员表，实现者按表照写。 也包括为新建组件声明尺寸参数或动画实例字段（width/height、animation），或按另一处先写好的调用点参数名声明 @Param。只约束自定义组件 struct（@Component、@ComponentV2）自己的成员——它们的基类带着这些通用属性方法；普通类、接口、事件和数据模型的字段不继承这些方法，照源端命名，不跟着改名。
 
 ## 原因
 

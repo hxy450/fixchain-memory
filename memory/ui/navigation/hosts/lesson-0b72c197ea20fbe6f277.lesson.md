@@ -1,6 +1,6 @@
 # 一进入就无条件跳转并 finish 的 Activity 是路由跳板：目标按同样条件直达实际页面，不把它的布局做成可见页
 
-ID：`lesson-0b72c197ea20fbe6f277` · 版本：2
+ID：`lesson-0b72c197ea20fbe6f277` · 版本：3
 
 [本主题](index.md)
 
@@ -10,7 +10,7 @@ ID：`lesson-0b72c197ea20fbe6f277` · 版本：2
 
 ## 适用情境
 
-Android Activity 在 onCreate/initView 开头按条件 startActivity 到另一页并立即 finish()（如登录入口按配置转到短信登录或一键登录），它的布局文件仍含可渲染的按钮；多个调用方以 Intent 指向这个跳板 Activity。
+Android Activity 在 onCreate/initView 开头按条件 startActivity 到另一页并立即 finish()（如登录入口按配置转到短信登录或一键登录），它的布局文件仍含可渲染的按钮；多个调用方以 Intent 指向这个跳板 Activity。只在 onCreate/initView 的每条分支都 startActivity 并 finish()、用户在任何条件下都看不到它的布局时才算跳板；若有分支不跳转、留下显示布局（如条件不满足时停在本页），这个布局仍是可见页，照常转换，只把跳走的分支按跳板处理。
 
 ## 原因
 

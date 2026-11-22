@@ -1,6 +1,6 @@
 # 源对话框带目标系统弹窗没有的槽位（setView 注入的复选框等自定义布局、Compose AlertDialog 的 icon）时改用自定义弹窗承载，不写成 AlertDialog.show 的参数，也不自行省略
 
-ID：`lesson-18fca50f9c801cb282ec` · 版本：3
+ID：`lesson-18fca50f9c801cb282ec` · 版本：4
 
 [本主题](index.md)
 
@@ -15,6 +15,7 @@ ID：`lesson-18fca50f9c801cb282ec` · 版本：3
 ## 例外与边界
 
 - 源对话框只有标题、正文与按钮，没有自定义视图或图标：可以映射 AlertDialog.show，但正/负键按角色核对目标槽位位置；项目要求一比一还原平台默认外观时改用自定义弹窗复刻
+- 改用自定义弹窗时保留源对话框的关闭方式：点遮罩、按返回键能不能关闭要和源端一致（源端 setCancelable(false) 等）；自定义弹窗的 autoCancel 默认为 true，点遮罩即关闭，返回键等交互关闭要拦时用 onWillDismiss
 
 ## 原因
 

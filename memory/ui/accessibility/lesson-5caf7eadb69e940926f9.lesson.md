@@ -1,6 +1,6 @@
 # 转写 Compose 可点击行与卡片时一并落实无障碍语义：role 写 accessibilityRole、enabled 写 .enabled()，整卡合并朗读、卡内独立按钮单独成节点
 
-ID：`lesson-5caf7eadb69e940926f9` · 版本：1
+ID：`lesson-5caf7eadb69e940926f9` · 版本：2
 
 [本主题](index.md)
 
@@ -10,7 +10,7 @@ ID：`lesson-5caf7eadb69e940926f9` · 版本：1
 
 ## 适用情境
 
-源端用 clickable 或 combinedClickable(enabled = 条件, role = Role.Button, onLongClick = …) 让整行或整卡可点（常经共享的行背景组件），卡内另有 IconButton 等独立关闭或动作按钮；目标准备用 onClick、LongPressGesture 实现，规格或验收条目只写了结构、样式与回调。
+源端用 clickable 或 combinedClickable(enabled = 条件, role = Role.Button, onLongClick = …) 让整行或整卡可点（常经共享的行背景组件），卡内另有 IconButton 等独立关闭或动作按钮；目标准备用 onClick、LongPressGesture 实现，规格或验收条目只写了结构、样式与回调。 只转写源修饰实际给出的语义参数：源端 clickable 没写 role（role 默认为空）时不补 BUTTON 角色，没写 enabled 条件时不臆造可用条件。
 
 ## 原因
 

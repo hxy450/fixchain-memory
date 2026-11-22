@@ -9,16 +9,17 @@ ScrollView/NestedScrollView 与 weight 剩余区列表的滚动范围（固定�
 - [Compose LazyColumn 默认无滚动条：ArkUI List/Scroll 显式 BarState.Off，自定义滚动条按参数复刻](lesson-29b42ac7502c0f284b9a.lesson.md)
   - 时机：列表与滚动区实现阶段，把 Compose LazyColumn、verticalScroll 或自定义滚动条修饰符转成 ArkUI List/Scroll 时
   - 情境：源端 Compose LazyColumn/verticalScroll 没有滚动条修饰符，或用自定义修饰符（如 simpleVerticalScrollbar：按项数绘制、滚动时淡入淡出）画滚动条；目标 ArkUI List/Scroll 默认按 BarState.Auto 显示系统滚动条。
+  - 例外：只管源端是 Compose 的列表和滚动区。源端是 View 体系的 ScrollView、ListView 时不照这条关掉：平台样式 Widget.ScrollView、Widget.AbsListView（Material 主题下的 ScrollView、ListView 样式沿用它们）默认 scrollbars=vertical，有竖向滚动条，按源端 android:scrollbars 的实际取值决定。
 - [LazyListState.scrollToItem/animateScrollToItem 把目标项滚到可视区起始边：映射 scrollToIndex(index, smooth, ScrollAlign.START)，不自选居中；同一函数里的其他滚动副作用一并迁移](lesson-f0a40d990c62738fc04e.lesson.md)
   - 时机：界面实现阶段，把 Compose LazyListState 的程序滚动（scrollToItem、animateScrollToItem）翻译成 ArkUI Scroller.scrollToIndex 并选择对齐方式时
   - 情境：源端调用 animateScrollToItem(index) 或 scrollToItem(index)（scrollOffset 默认 0），同一函数可能还折叠顶栏等；目标 List 绑定 Scroller，scrollToIndex 的 align 可选 START、CENTER、END、AUTO。
 - [LazyRow 摘要行转成可横滑容器，不降成普通 Row：少量固定项用 Scroll 包最小满宽的 Row 保留 Arrangement，item 内 AnimatedVisibility 的槽位恒在](lesson-caa043fb95ff63e321e2.lesson.md)
   - 时机：规格提取与界面实现阶段，把 Compose LazyRow（含只放几个固定 item 的摘要行、信息行）映射为 ArkUI 容器，确定是否可滚动、排列方式与条件项写法时
   - 情境：源端用 LazyRow(horizontalArrangement = Arrangement.SpaceEvenly 等) 放少量固定 item，每个 item 恒在、显隐由 item 内部的 AnimatedVisibility 或条件控制；窄屏或大字号下内容可能超出行宽；映射表或规格可能把它写成“Row + 若干子项”。
-  - 例外：源端是普通 Row（没有 LazyRow 或 horizontalScroll），超宽时按源端的裁切或压缩处理
+  - 例外：源端是普通 Row（没有 LazyRow 或 horizontalScroll），超宽时按源端的裁切或压缩处理；恒在槽位只对应「item 恒在、显隐在 item 内部」：条件写在 item { } 外面（不满足时根本不调用 item）的项，源端就不存在这一项、不参与间隙分配，目标端照样按条件增删，不补空槽位
 - [LazyRow/LazyColumn 的 contentPadding 译为 contentStartOffset/contentEndOffset，不用 List.padding](lesson-4030f978a230df37de2b.lesson.md)
   - 时机：界面实现阶段为滚动列表确定首尾留白时；规格提取阶段描述 Lazy 列表留白时
-  - 情境：源 LazyRow/LazyColumn 用 contentPadding（PaddingValues start/end）给首尾项留白；目标 ArkUI List 可写 .padding，也可写 contentStartOffset/contentEndOffset；映射参考只有通用的 padding → .padding()。
+  - 情境：源 LazyRow/LazyColumn 用 contentPadding 在滚动方向上给首尾项留白（LazyRow 是 PaddingValues 的 start/end，LazyColumn 是 top/bottom）；contentStartOffset/contentEndOffset 各只有一个沿滚动方向的数，交叉轴方向的留白（LazyRow 的 top/bottom、LazyColumn 的 start/end）不在这条的范围内；目标 ArkUI List 可写 .padding，也可写 contentStartOffset/contentEndOffset；映射参考只有通用的 padding → .padding()。
 - [ScrollView 未写 overScrollMode、Compose verticalScroll/Lazy 列表未置空 overscroll 时，都按 Android 默认 IF_CONTENT_SCROLLS 映射：Scroll 写 edgeEffect(EdgeEffect.Spring 或 Fade, { alwaysEnabled: false })，按源设备版本选（API 31 起 Spring、30 及以下 Fade）；GridView/ListView 同此，滚动条按源端默认显式设置](lesson-80dd4e626e1c207028e6.lesson.md)
   - 时机：界面转换阶段，把 ScrollView/NestedScrollView（含对话框内的滚动区）转换为 ArkUI Scroll 并设置边缘效果时；把会滚动的 GridView/ListView 转成 Grid/List 并决定滚动条与越界效果时；把 Compose Modifier.verticalScroll/horizontalScroll 或 LazyColumn/LazyRow 转成 Scroll/List（含 bindSheet 半模态里的内容区）并设置边缘效果时
   - 情境：源 ScrollView 没有声明 overScrollMode（Android 默认 IF_CONTENT_SCROLLS：内容可滚时有越界效果（API 31 起为拉伸，API 30 及以下为辉光））；映射参考只列显式 overScrollMode，且把 ifContentScrolls 与 always 都映射为不带选项的 EdgeEffect.Spring；目标 Scroll 默认没有边缘效果。 也包括 GridView/ListView 没有改写 scrollbars、overScrollMode（AbsListView 同样默认 IF_CONTENT_SCROLLS），目标 Grid/List 没有显式设置 scrollBar 与 edgeEffect。 也包括 Compose Modifier.verticalScroll/horizontalScroll、LazyColumn/LazyRow 的默认重载带平台越界效果（Android 12+ 拉伸；foundation-android 1.12.1 的默认重载经 LocalOverscrollFactory 取平台效果，字节码已核），源工程没有经 LocalOverscrollFactory/LocalOverscrollConfiguration 或 overscrollEffect 参数置空，页面规格只写 verticalScroll、不提边缘效果。

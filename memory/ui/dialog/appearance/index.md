@@ -8,7 +8,7 @@
 
 - [MaterialAlertDialog 卡片外观按源主题代际取值，每个弹层显式设置取自源主题的遮罩](lesson-39077e6612d5f97b0731.lesson.md)
   - 时机：界面实现与规格提取阶段，把 MaterialAlertDialogBuilder 对话框转换为 ArkUI 自绘卡片或弹层，确定卡片宽度、圆角、底色与遮罩时
-  - 情境：应用主题继承 Theme.Material3.*（或 MaterialComponents），对话框由 MaterialAlertDialogBuilder 构建；目标用 openCustomDialog、bindSheet 或页内遮罩自绘，工程中有被当作族先例的卡片，可能登记了按 M2 推断的近似值。
+  - 情境：应用主题继承 Theme.Material3.*（或 MaterialComponents），对话框由 MaterialAlertDialogBuilder 构建；目标用 openCustomDialog、bindSheet 或页内遮罩自绘，工程中有被当作族先例的卡片，可能登记了按 M2 推断的近似值。 做法第 1 步的圆角与底色只对 Material3 基底成立；MaterialComponents 基底的底色取 colorSurface、圆角取 shapeAppearanceMediumComponent，按应用自己的主题解析。遮罩浓度要看应用依赖的 material 库版本：较新版本（如 1.14.0）的 MaterialAlertDialog 主题叠层在 MaterialComponents 基底下也设 0.32，较早版本（如 1.4.0）还没有这项、沿用 0.6。
 - [只靠平台默认外观的 AlertDialog（含 DialogPreference 弹出的偏好对话框）迁移前写出完整可见契约：标题字号色与标题线、消息、按钮条与按钮集合、框体、宽度规则与进出场从源主题的平台资源取值；按钮按角色核对槽位，要求一比一时用共享自定义弹窗复刻；按钮排位与面板读对话框样式的 layout 资源，返回键与点外部两条取消路径分别核对](lesson-9c4de55af3c1ecd8eaa4.lesson.md)
   - 时机：规格提取阶段为源端系统对话框（代码中 AlertDialog.Builder 构造，或 PreferenceActivity 中 EditTextPreference、ListPreference 等点击弹出）写转换决策时，以及界面实现阶段按该决策落地 ArkUI 系统弹窗或自定义弹窗时；规格整合时在几条来源之间裁定按钮排位、面板样式与取消方式时；页内复刻多个同时显示的对话框、安排遮罩与遮罩点击时
   - 情境：源码用 AlertDialog.Builder 内联构造确认框，只设 title、message、setPositiveButton、setNegativeButton，无自定义布局或样式，外观由应用主题继承的平台默认警告框决定；目标准备用 ArkUI AlertDialog.show(primaryButton/secondaryButton) 等系统弹窗替代，项目要求与源端逐屏一致。 也包括应用主题为 Theme.Holo 等框架主题，多个对话框都由 Builder 或 DialogPreference 构造、没有自定义样式；规格只按经验摘要写了“标题左对齐、负左正右、遮罩、cancelable”几项，各页写者凭记忆或兄弟页先例自绘面板。 也包括 targetSdk≤20 或 values-v11/v14 中应用主题继承 Theme.Holo/Theme 的旧应用：Builder 未调用 setCancelable、setCanceledOnTouchOutside，源端可能同时叠放两个以上对话框；目标用页内遮罩加自绘面板复刻，同时要防止点击穿透到下层画面。

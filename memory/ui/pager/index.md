@@ -8,7 +8,7 @@
 
 - [分页容器的初始页用 Swiper.index 状态绑定，不在 onReady 里立即调用 changeIndex](lesson-ccccf83dc93ae809ccfb.lesson.md)
   - 时机：界面实现阶段，把源端 ViewPager 的初始定位（post 里 setCurrentItem）与首播触发转写成 ArkUI Swiper 时
-  - 情境：源端装好数据后在 view.post 等延后回调里 setCurrentItem(index, false)，并靠 onPageSelected 启动当前页；目标在 NavDestination.onReady 读路由参数，Swiper 位于按列表非空条件渲染的分支里。
+  - 情境：源端装好数据后在 view.post 等延后回调里 setCurrentItem(index, false)，并靠 onPageSelected 启动当前页；目标在 NavDestination.onReady 读路由参数，Swiper 位于按列表非空条件渲染的分支里。这条只管进入页面时的初始定位：Swiper 挂载之后由用户操作、按钮或回调触发的 changeIndex、showNext 等控制器调用照常有效，保留不动。
 - [只有一页或禁用了滑动的 ViewPager2 不写成可滑的 Swiper；禁滑用 disableSwipe(true)，不用 enabled(false)](lesson-540747e352d7f006016d.lesson.md)
   - 时机：规格提取阶段为 ViewPager/ViewPager2 选择目标容器并写明手势行为时；实现阶段落地该容器时
   - 情境：源页面用 ViewPager2（+FragmentStateAdapter），但适配器实际只有 1 页，或以 isUserInputEnabled=false 只关手势、由 Tab 点击 setCurrentItem 切页、子页仍可交互；通用映射表或页面元数据只按类型给出 ViewPager2 → Swiper。

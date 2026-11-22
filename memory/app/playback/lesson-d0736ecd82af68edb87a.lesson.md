@@ -1,6 +1,6 @@
 # AVPlayer 错误只经一条通道上报，Promise 调用接 catch 并按状态表调用
 
-ID：`lesson-d0736ecd82af68edb87a` · 版本：1
+ID：`lesson-d0736ecd82af68edb87a` · 版本：2
 
 [本主题](index.md)
 
@@ -11,6 +11,10 @@ ID：`lesson-d0736ecd82af68edb87a` · 版本：1
 ## 适用情境
 
 AVPlayer 同时有 on('error') 与 stateChange('error') 两条错误通道，控制方法返回 Promise；参考模板可能同时处理两条通道、prepare() 也不接 catch。
+
+## 例外与边界
+
+- “stateChange('error') 只做状态处理”指不在这里再发一次错误事件，不是删掉它：状态切到 error 时用 reset()（仍为 error 再 release()）退出播放的处理要保留；on('error') 触发而状态没有切到 error 时，只做提示、不必停止播控。
 
 ## 原因
 

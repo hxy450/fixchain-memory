@@ -9,7 +9,7 @@
 - [ExpandableListView 未设组点击监听时组头仍按默认切换展开；按 isExpanded 切换的资源由可变展开状态驱动](lesson-e01c6f821d631fad5383.lesson.md)
   - 时机：界面实现及对齐修复阶段，把 ExpandableListView + BaseExpandableListAdapter 翻译为 ArkUI 列表，确定组头交互与展开状态时
   - 情境：源 Activity 只调用 expandGroup(n) 设定初始展开，没有 setOnGroupClickListener（或监听返回 false）；getGroupView 按 isExpanded 切换上下箭头等资源；目标用 List/ForEach 渲染分组。
-  - 例外：源端注册了 OnGroupClickListener 并返回 true 拦截默认行为，此时按监听体实现
+  - 例外：源端注册了 OnGroupClickListener 并返回 true 拦截默认行为，此时按监听体实现；默认切换的前提是组头布局里没有可获得焦点的子控件：getGroupView 返回的布局里有 Button、CheckBox、EditText 等可聚焦控件（或显式 focusable=true 的子 View）时，点组头不走列表的条目点击，默认的展开/折叠不会发生，按源端真实表现迁移，不补组头切换
 - [LazyForEach 整批替换或延迟填充数据时保持同一数据源实例并发 onDataReloaded 等通知，不重新赋值数据源对象](lesson-92ced15126309dd90a1a.lesson.md)
   - 时机：界面实现、返修或重写阶段，为 LazyForEach 列表实现源端 setAdapter、notifyDataSetChanged 一类整批换数据、排序或延迟填充时
   - 情境：目标列表用 LazyForEach 绑定实现 IDataSource 的数据源对象，并把该对象存在组件状态里；源端在排序、筛选、切换适配器或延迟加载后整批替换数据，写者准备用“this.数据源 = 新数据源”换数据。

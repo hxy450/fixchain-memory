@@ -1,6 +1,6 @@
 # 裁定“大字体”是否迁移时看源端是否有随系统字号缩放的文本，而不是有无 fontScale 代码；需要时在 AppScope 声明 configuration 跟随系统字号
 
-ID：`lesson-ea965b7baf2488be23cd` · 版本：1
+ID：`lesson-ea965b7baf2488be23cd` · 版本：2
 
 [本主题](index.md)
 
@@ -10,7 +10,7 @@ ID：`lesson-ea965b7baf2488be23cd` · 版本：1
 
 ## 适用情境
 
-源应用主体可能是固定 px 字号的 Canvas 自绘，但仍有系统 AlertDialog、Toast、菜单或 sp 单位文本；Activity 是否在 configChanges 声明 fontScale 决定字号变化时重建还是回调；目标 HarmonyOS 应用默认不跟随系统字号（nonFollowSystem），需在 AppScope 配置 configuration profile 才会跟随并下发配置变化。
+源应用主体可能是固定 px 字号的 Canvas 自绘，但仍有系统 AlertDialog、Toast、菜单或 sp 单位文本；Activity 是否在 configChanges 声明 fontScale 决定字号变化时重建还是回调；目标 HarmonyOS 应用默认不跟随系统字号（nonFollowSystem），需在 AppScope 配置 configuration profile 才会跟随并下发配置变化。改成跟随后，目标里不带单位的 fontSize（按 fp 计）和写成 fp 的字号都会随系统字号放大；源端用 px 或 dp 固定的字号（自绘文字、固定尺寸标签），在目标要写成 px 或 vp 才保持不随系统字号变化，不要随这次改动一起变成 fp。
 
 ## 原因
 

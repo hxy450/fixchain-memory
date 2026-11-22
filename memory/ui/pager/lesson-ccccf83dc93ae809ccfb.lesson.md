@@ -1,6 +1,6 @@
 # 分页容器的初始页用 Swiper.index 状态绑定，不在 onReady 里立即调用 changeIndex
 
-ID：`lesson-ccccf83dc93ae809ccfb` · 版本：1
+ID：`lesson-ccccf83dc93ae809ccfb` · 版本：2
 
 [本主题](index.md)
 
@@ -10,7 +10,7 @@ ID：`lesson-ccccf83dc93ae809ccfb` · 版本：1
 
 ## 适用情境
 
-源端装好数据后在 view.post 等延后回调里 setCurrentItem(index, false)，并靠 onPageSelected 启动当前页；目标在 NavDestination.onReady 读路由参数，Swiper 位于按列表非空条件渲染的分支里。
+源端装好数据后在 view.post 等延后回调里 setCurrentItem(index, false)，并靠 onPageSelected 启动当前页；目标在 NavDestination.onReady 读路由参数，Swiper 位于按列表非空条件渲染的分支里。这条只管进入页面时的初始定位：Swiper 挂载之后由用户操作、按钮或回调触发的 changeIndex、showNext 等控制器调用照常有效，保留不动。
 
 ## 原因
 

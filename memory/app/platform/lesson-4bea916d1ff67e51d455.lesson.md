@@ -1,6 +1,6 @@
 # 打开系统设置的显式 Want 包名随设备与系统版本变化：写前在目标设备核对，启动失败要可观察，不照抄参考里标“已验证”的值
 
-ID：`lesson-4bea916d1ff67e51d455` · 版本：1
+ID：`lesson-4bea916d1ff67e51d455` · 版本：2
 
 [本主题](index.md)
 
@@ -10,7 +10,7 @@ ID：`lesson-4bea916d1ff67e51d455` · 版本：1
 
 ## 适用情境
 
-源端经 Settings.ACTION_* 一类 Intent 跳转系统设置（全部文件访问、应用详情等）；目标为 HarmonyOS NEXT 应用，需要以显式 Want 指定系统设置应用，规格与源码都不给目标包名，可查到的参考文档给出硬编码的厂商设置包名并标注已验证。
+源端经 Settings.ACTION_* 一类 Intent 跳转系统设置（全部文件访问、应用详情等）；目标为 HarmonyOS NEXT 应用，需要以显式 Want 指定系统设置应用，规格与源码都不给目标包名，可查到的参考文档给出硬编码的厂商设置包名并标注已验证。跳设置只是为了让用户重新打开已被拒绝的运行时权限时，目标可以用 abilityAccessCtrl 的 requestPermissionOnSetting（API 12 起）由系统弹出权限设置框，不需要设置应用的包名；代码已经这样写的照留，不改成显式 Want。
 
 ## 原因
 

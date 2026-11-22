@@ -1,6 +1,6 @@
 # 落地应用显示名时同时改 AppScope 的 app_name 与入口 Ability 的 label 字符串，值取 Android 的应用名（有语言译名时 AppScope 与 entry 同建语言目录）；资源迁移合并而不覆盖模板 string.json
 
-ID：`lesson-55f44e2efdc1a49ac387` · 版本：6
+ID：`lesson-55f44e2efdc1a49ac387` · 版本：7
 
 [本主题](index.md)
 
@@ -10,7 +10,7 @@ ID：`lesson-55f44e2efdc1a49ac387` · 版本：6
 
 ## 适用情境
 
-目标工程由脚手架生成，AppScope/app.json5 的 label 与 entry 模块 module.json5 中入口 Ability 的 label 都指向 $string 资源，值仍是脚手架工程名；module.json5 还引用 module_desc、EntryAbility_desc 等模板键；Android 应用名来自 strings.xml 的 app_name（由 Manifest 的 android:label 引用），或由 build.gradle 的 resValue 提供。工程还可能有 en_US 等语言限定目录，含同名的脚手架身份键（可能由 i18n 补齐步骤以模板值填入）。 也包括 Android 应用名在 values-<语言> 有译名（如 values-ja 的 app_name），而身份裁决只给出 base 显示名。
+目标工程由脚手架生成，AppScope/app.json5 的 label 与 entry 模块 module.json5 中入口 Ability 的 label 都指向 $string 资源，值仍是脚手架工程名；module.json5 还引用 module_desc、EntryAbility_desc 等模板键；Android 应用名来自 strings.xml 的 app_name（由 Manifest 的 android:label 引用），或由 build.gradle 的 resValue 提供。工程还可能有 en_US 等语言限定目录，含同名的脚手架身份键（可能由 i18n 补齐步骤以模板值填入）。 也包括 Android 应用名在 values-<语言> 有译名（如 values-ja 的 app_name），而身份裁决只给出 base 显示名。“Android 应用名”按两层取：application 的 android:label 对应 AppScope 的 app_name；桌面上显示的名称先取启动器 Activity 的 MAIN/LAUNCHER intent-filter 的 label、再取该 Activity 的 android:label，都没设才用 application 的 label，所以启动器 Activity 自己设了不同的 label 时，入口 Ability 的 label 取它，不统一改成 application 的值。
 
 ## 例外与边界
 

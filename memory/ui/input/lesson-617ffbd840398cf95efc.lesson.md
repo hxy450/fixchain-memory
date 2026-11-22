@@ -1,6 +1,6 @@
 # 源端受控输入框的拒绝条件要阻止文本显示：长度上限用 TextInput.maxLength，其他拒绝条件在 onWillChange 返回 false，不靠 onChange 里不写回
 
-ID：`lesson-617ffbd840398cf95efc` · 版本：2
+ID：`lesson-617ffbd840398cf95efc` · 版本：3
 
 [本主题](index.md)
 
@@ -18,8 +18,8 @@ Compose 输入框只显示状态值，拒绝写回就等于拒绝输入；ArkUI 
 
 ## 做法
 
-1. 长度上限写成 .maxLength(N)，N 取源码条件中的值；onChange 只负责同步状态。字符集类限制可用 inputFilter。
-2. 长度与字符集之外的拒绝条件（数值格式、第二个小数点、取值范围等），在 onWillChange 中用与源码相同的判断返回 false 拒绝本次变更，框内保持宿主值；不靠父组件“不更新值”回退。
+1. 长度上限写成 .maxLength(N)，N 取源码条件中的值；onChange 只负责同步状态；源端 onValueChange 里除了按条件写回还有别的动作（如清掉错误提示、触发查询）时，这些动作照样留在 onChange 里，不随拒绝条件一起移走。字符集类限制可用 inputFilter。
+2. 长度与字符集之外的拒绝条件（数值格式、第二个小数点、取值范围等），在 onWillChange（API 15 起提供）中用与源码相同的判断返回 false 拒绝本次变更，框内保持宿主值；不靠父组件“不更新值”回退。
 3. 逐条列出源码 onValueChange 中的拒绝条件，确认每条在 ArkUI 侧都有能阻止输入显示的属性或回调，而不只是让状态不更新。
 
 ## 可选检查

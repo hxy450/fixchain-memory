@@ -1,6 +1,6 @@
 # 只收键盘不清焦点用 hideTextInput：show/hideSoftKeyboard 需系统权限，stopInputSession 会让输入框失焦
 
-ID：`lesson-edae4e2795ec169255bb` · 版本：1
+ID：`lesson-edae4e2795ec169255bb` · 版本：2
 
 [本主题](index.md)
 
@@ -22,7 +22,7 @@ ID：`lesson-edae4e2795ec169255bb` · 版本：1
 
 ## 做法
 
-1. 写前在 SDK 的 @ohos.inputMethod.d.ts 核对所选方法的 @permission、@systemapi 与对焦点和会话的影响；只收键盘、保留焦点用 hideTextInput()，弹出用 showTextInput() 或让 TextInput 自身获焦拉起；源端同时清焦点时才用 stopInputSession。
+1. 写前在 SDK 的 @ohos.inputMethod.d.ts 核对所选方法的 @permission、@systemapi 与对焦点和会话的影响；只收键盘、保留焦点用 hideTextInput()（它和 showTextInput 要配对使用：收起后需要再输入时，先调 showTextInput 重新进入编辑状态；输入框仍在焦点上，不会再经获焦拉起键盘），弹出用 showTextInput() 或让 TextInput 自身获焦拉起；源端同时清焦点时才用 stopInputSession。
 2. 规格要求“实现期核实”而检索无结果时，继续查 d.ts 声明，不用 catch 吞掉调用失败收口；失败分支打日志，保持可观察。
 
 ## 可选检查

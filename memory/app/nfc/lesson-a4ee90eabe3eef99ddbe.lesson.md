@@ -1,6 +1,6 @@
 # Android Activity 级 NFC 前台派发迁到 HarmonyOS 时按 UIAbility 前后台注册，再用可见顶页登记表仿真页面级开关与默认新标签处理
 
-ID：`lesson-a4ee90eabe3eef99ddbe` · 版本：1
+ID：`lesson-a4ee90eabe3eef99ddbe` · 版本：2
 
 [本主题](index.md)
 
@@ -10,7 +10,7 @@ NFC 引擎与基类行为迁移阶段，把基类 onResume/onPause 的前台派�
 
 ## 适用情境
 
-Android 多数页面继承基类：onResume 设置待处理组件并 enableForegroundDispatch，onPause 关闭，onNewIntent 统一处理新标签，卡或设备不支持时跳转信息页；全局保存任意技术的 Tag。目标 tag.registerForegroundDispatch 按 UIAbility 注册，页面用 Navigation/NavDestination 组织，服务切片不能改页面。
+Android 多数页面继承基类：onResume 设置待处理组件并 enableForegroundDispatch，onPause 关闭，onNewIntent 统一处理新标签，卡或设备不支持时跳转信息页；全局保存任意技术的 Tag。目标 tag.registerForegroundDispatch 按 UIAbility 注册，页面用 Navigation/NavDestination 组织，服务切片不能改页面。源端不继承该基类、自己也不开前台派发的页面不登记：它在最上层时源端前台派发是关的，目标的登记表此时也不把标签投给压在下面的已登记页。
 
 ## 原因
 

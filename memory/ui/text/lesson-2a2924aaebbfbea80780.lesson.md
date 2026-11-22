@@ -1,6 +1,6 @@
 # 分开单行文本盒与多行行距，不把 Compose lineHeight 同名直映为 ArkUI .lineHeight
 
-ID：`lesson-2a2924aaebbfbea80780` · 版本：1
+ID：`lesson-2a2924aaebbfbea80780` · 版本：2
 
 [本主题](index.md)
 
@@ -15,6 +15,7 @@ ID：`lesson-2a2924aaebbfbea80780` · 版本：1
 ## 例外与边界
 
 - 当前源端的 LineHeightStyle、字体内边距或已有明确契约要求固定行盒时，保留该契约，不默认改成自然高度。
+- 「未设 lineHeightStyle」要看最终生效的样式，不只看源码里的 TextStyle(...) 字面：未设时安卓端套用默认 LineHeightStyle（Proportional、Trim.Both）；而直接用 Material3 默认排版令牌、或在其上 copy 出的样式，带的是 LineHeightStyle（Center、Trim.None）（material3 1.4.0 如此，其他版本先查），不属于这条的前提——单行盒高以安卓端 dump 的盒高为准，不照这条删掉 .lineHeight。
 
 ## 原因
 
