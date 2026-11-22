@@ -39,4 +39,4 @@
 - [被 @Entry 页直接组合、未进入 Navigation 栈的子组件要拦截返回键时，由 @Entry.onBackPress 转调子组件登记的处理函数，多个登记方后进先出；@Entry 承载 Navigation 且栈内有 NavDestination 时，挂载点改为栈顶 NavDestination.onBackPressed](lesson-803ba029eea852122e77.lesson.md)
   - 时机：页面转换与接线阶段，为源端非根 Composable 里的 BackHandler/PredictiveBackHandler，或把 OnBackPressedDispatcher 的多级回调映射到 ArkUI 返回键钩子时
   - 情境：源端在抽屉宿主等非 Activity 根的 Composable 中按状态条件拦截返回（例如抽屉打开时先关抽屉）；目标端该组件不是 @Entry，由唯一的 @Entry 页直接组合，没有作为页面驻留在 Navigation 路由栈内。也包括源端 OnBackPressedDispatcher 按后登记先问分发（Activity 只登记壳层回调，选择模式等另登记回调），目标壳页的返回处理是封闭分支、嵌入的子页没有登记入口。
-  - 例外：组件本身就是 @Entry 页、且没有承载内有页面的 Navigation 时，直接实现 onBackPress；组件位于 NavDestination 内容中（含被页面组合的 BasePage 等共享基座）时，返回先交该 NavDestination.onBackPressed，返回 false 即出栈，@Entry.onBackPress 不会被调用；由该 NavDestination 的 onBackPressed 转调基座的裁决函数，不在 @Entry 上兑现
+  - 例外：组件本身就是 @Entry 页、且没有承载内有页面的 Navigation 时，直接实现 onBackPress；组件位于 NavDestination 内容中（含被页面组合的 BasePage 等共享基座）时，返回先交该 NavDestination.onBackPressed，返回 false 即出栈，@Entry.onBackPress 不会被调用；由该 NavDestination 的 onBackPressed 转调基座的裁决函数，不在 @Entry 上兑现 - 要拦截返回的临时界面在目标用 CustomDialog 一类系统弹窗承载时，三键返回默认由弹窗自己关闭（注册 onWillDismiss 才会拦下），不必再登记进回调栈；只有改写成页面内状态浮层（按状态变量条件渲染）的菜单、选择模式才按做法第 3 步登记

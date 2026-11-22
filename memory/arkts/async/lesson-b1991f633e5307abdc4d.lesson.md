@@ -1,6 +1,6 @@
 # 源端阻塞到完成才返回的 void 方法（排空队列、关闭设备、停录）改为 Promise 签名并逐层 await，销毁、重启、重开排在完成之后
 
-ID：`lesson-b1991f633e5307abdc4d` · 版本：1
+ID：`lesson-b1991f633e5307abdc4d` · 版本：2
 
 [本主题](index.md)
 
@@ -10,11 +10,12 @@ ID：`lesson-b1991f633e5307abdc4d` · 版本：1
 
 ## 适用情境
 
-源端 void 方法内部阻塞到工作完成（waitUntilDone 排空保存队列、后台线程同步 stop+release 后才置 CLOSED、MediaRecorder 同步 stop/release），验收要求“X 先于 Y”（保存先于销毁或重启、关闭完成才回调或重开）；目标对应接口返回 Promise，规格接口表或占位 seam 照搬 Java 的 void 签名，页面生命周期回调（aboutToDisappear）不能 await。
+源端 void 方法内部阻塞到工作完成（waitUntilDone 排空保存队列、后台线程同步 stop+release 后才置 CLOSED、MediaRecorder 同步 stop/release），验收要求“X 先于 Y”（保存先于销毁或重启、关闭完成才回调或重开）；目标对应接口返回 Promise，规格接口表或占位 seam 照搬 Java 的 void 签名，页面生命周期回调（aboutToDisappear）不能 await。UIAbility.onDestroy 不在此列：它可以返回 Promise，平台等它完成后才继续后续生命周期，落在这里的序列直接 await，不必按做法第 2 步只发起；onWindowStageDestroy、onBackground 和 aboutToDisappear 一样只返回 void。
 
 ## 例外与边界
 
 - 源端本身就是异步完成且调用方不等待（回调、未 join 的 Future）时，按源端时序迁移，不额外补等待或取消
+- 源端的等待设了上限（如销毁时最多等关闭任务若干毫秒）时，目标保留同样的上限，到时按源端超时后的路径继续，不改成无限等待
 
 ## 原因
 

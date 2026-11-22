@@ -8,6 +8,11 @@ ViewModel 实现阶段，编排页面初始化方法中异步存储/SDK 绑定�
 
 源页面在初始化时同步写入关键词或输入框文本，操作读取实时输入；目标输入框双向绑定 ViewModel 字段，初始化方法内含 await（存储、历史、SDK 绑定），页面生命周期回调以不等待的方式调用它。 也包括源端在 Activity.onCreate 或自定义 View 构造器里同步完成取尺寸、初始化与位图解码，之后才接收输入，其中一条路径是规格要求照搬的未捕获异常崩溃；目标 SDK 对这些步骤同时提供 Promise 与 Sync 接口，写者准备在 aboutToAppear 里调用不等待的 async 启动函数、catch 只记日志，并用 booted/ready 标志拦截输入。
 
+## 例外与边界
+
+- 源端初始化本身就是异步的（放在后台线程、协程、回调或 Future 里完成）时，异步是源端行为，目标保持异步，只按做法第 1 步把输入类初值放在第一个 await 之前，不改成同步。
+- 目标 SDK 对某一步只有 Promise 或回调形式、没有 Sync 变体时（如 window.getLastWindow），这一步不在“改用 Sync 变体”的范围内；“不加捕获”只针对源端本来不捕获、会崩溃的路径，源端自己 try/catch 处理的异常照源端保留捕获。
+
 ## 原因
 
 页面不等初始化完成就可编辑；续体里较晚到达的初值赋值会覆盖用户已输入的文字，点击操作读到空值，表现为“点了没反应”。来源中写者读到源端先同步设置关键词与输入框，却把赋值放到 await 绑定之后；后续写者又在 await 链前插入更多异步步骤，顺序一直保留到返修。 把同步初始化改成生命周期回调里不等待的 async 函数后，其中抛出的异常变成被拒绝的 Promise，不再沿回调同步抛出；再包一层只写日志的 catch，源端会崩溃退出的路径就变成停在空白画面，ready 标志永不置位，输入全被丢弃。源端没有丢弃输入的行为，这种门控只是把异步窗口藏起来。
@@ -19,7 +24,7 @@ ViewModel 实现阶段，编排页面初始化方法中异步存储/SDK 绑定�
 
 来源支持：2 张卡 · 2 次迁移 · 2 个应用
 
-已核实的平台事实（核实时用的是 HarmonyOS 6.1.0（API 23，openharmony ets 6.1.0.105；文档副本含到 API 26 的内容，超出 SDK 的已注明）；安卓 平台资源 android-34；框架源码 android-36.1；androidx Compose 1.10.3（foundation、ui、ui-unit、ui-graphics，按字节码核）。和具体应用无关，直接用，不用再查；其中的默认值只在应用自己的主题、样式、清单和代码没有另设时成立，应用有没有另设要到应用里看）：
+已核实的平台事实（核实时用的是 HarmonyOS 6.1.0（API 23，openharmony ets 6.1.0.105；文档副本含到 API 26 的内容，超出 SDK 的已注明）；OpenHarmony 文档 master 2026-11-21（提交 e42bd18a）；安卓 平台资源 android-34；框架源码 android-36.1；androidx Compose 1.10.3（foundation、ui、ui-unit、ui-graphics，按字节码核）。和具体应用无关，直接用，不用再查；其中的默认值只在应用自己的主题、样式、清单和代码没有另设时成立，应用有没有另设要到应用里看）：
 - 〔做法第 1 步〕aboutToAppear?(): void 在组件实例创建后、build() 执行前同步调用，返回 void，框架不等待其中的 Promise；在其中改的状态变量在 build() 时生效
 - 〔原因〕async 函数内抛出且没被捕获的异常不产生 JS Crash、进程不退出，表现为 unhandledRejection；未捕获的同步异常才导致 JS Crash 进程退出
 - 〔原因〕aboutToAppear 里同步抛出、沿途没有捕获的异常会让进程退出：hilog 记 “about to exit due to”，调用栈从抛出处指回 aboutToAppear

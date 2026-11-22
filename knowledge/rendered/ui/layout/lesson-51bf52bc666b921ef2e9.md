@@ -23,7 +23,7 @@ sw<N>dp 比较的是 smallestScreenWidthDp：两种方向下应用可用宽高�
 
 来源支持：1 张卡 · 1 次迁移 · 1 个应用
 
-已核实的平台事实（核实时用的是 API 23（HarmonyOS 6.1.0，SDK ets 6.1.0.105）；文档用 2026-05 的 OpenHarmony 中文文档副本；安卓 平台资源 android-34；源码 android-36.1。和具体应用无关，直接用，不用再查；其中的默认值只在应用自己的主题、样式、清单和代码没有另设时成立，应用有没有另设要到应用里看）：
+已核实的平台事实（核实时用的是 API 23（HarmonyOS 6.1.0，SDK ets 6.1.0.105）；文档用 2026-05 的 OpenHarmony 中文文档副本；OpenHarmony 文档 master 2026-11-21（提交 e42bd18a）；安卓 平台资源 android-34；源码 android-36.1。和具体应用无关，直接用，不用再查；其中的默认值只在应用自己的主题、样式、清单和代码没有另设时成立，应用有没有另设要到应用里看）：
 - 〔原因 / 做法第 1 步〕Configuration#smallestScreenWidthDp 对应 sw<N>dp 限定词，是竖屏与横屏两种方向下 screenWidthDp、screenHeightDp 的最小值，与当前方向无关
 - 〔例外与边界〕Configuration#screenWidthDp 对应 w<N>dp（可用宽）限定词，随横竖屏变化；targetSdk < 35 时不含窗口 insets，targetSdk ≥ 35 等于 WindowMetrics 宽度
 - 〔原因〕configChanges 的 smallestScreenSize 表示不论方向的尺寸，只在物理屏尺寸变化（如换到外接显示器）时才变；横竖切换只改变 screenSize

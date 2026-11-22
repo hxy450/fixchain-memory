@@ -6,7 +6,7 @@
 
 ## 适用情境
 
-源 Activity 在 AndroidManifest 中未声明 android:configChanges，实现了 onSaveInstanceState/savedInstanceState 恢复分支，或在 View 构造、onSizeChanged、绘制时读取资源文案与 firstRun 等一次性状态；目标 HarmonyOS UIAbility 在语言、深浅色、字号、显示大小变化时不重建，只回调 onConfigurationUpdate 或发出 display 'change'。 也包括页面用 AlertDialog.Builder.show()/Dialog.show() 直接弹出非托管对话框（不经 DialogFragment、showDialog 或 DialogPreference），目标用页内状态驱动的浮层承载，页面没有动态文案。 也包括 configChanges 已声明但不含 orientation（如只写 screenSize），Activity 持有 SurfaceView 与自建渲染线程，监听器里用 setBackgroundResource/setImageResource 等代码设置界面状态。 也包括源界面是 Compose（setContent），组合内以 LaunchedEffect(key)、remember 或 BoxWithConstraints 读取窗口约束做一次性计算（如按宽度算格数、列数），ViewModel 跨重建存活；目标在启动或重放中调用设置应用语言的接口（setLanguage、setAppPreferredLanguage）；页面用 getStringSync 等把资源文案取成字符串存进状态。
+源 Activity 在 AndroidManifest 中未声明 android:configChanges，实现了 onSaveInstanceState/savedInstanceState 恢复分支，或在 View 构造、onSizeChanged、绘制时读取资源文案与 firstRun 等一次性状态；目标 HarmonyOS UIAbility 在语言、深浅色、字号、显示大小变化时不重建，只回调 onConfigurationUpdate 或发出 display 'change'。 也包括页面用 AlertDialog.Builder.show()/Dialog.show() 直接弹出非托管对话框（不经 DialogFragment、showDialog 或 DialogPreference），目标用页内状态驱动的浮层承载，页面没有动态文案。 也包括 configChanges 已声明但不含 orientation（如只写 screenSize），Activity 持有 SurfaceView 与自建渲染线程，监听器里用 setBackgroundResource/setImageResource 等代码设置界面状态。 也包括源界面是 Compose（setContent），组合内以 LaunchedEffect(key)、remember 或 BoxWithConstraints 读取窗口约束做一次性计算（如按宽度算格数、列数），ViewModel 跨重建存活；目标在启动或重放中调用设置应用语言的接口（setLanguage、setAppPreferredLanguage）；页面用 getStringSync 等把资源文案取成字符串存进状态。不论源端是 View 还是 Compose，跨重建保留的东西不在复位和重放范围：ViewModel 里的数据、onRetainNonConfigurationInstance 或保留实例的 Fragment 持有的对象、onSaveInstanceState 与 rememberSaveable 存下的值，重建后仍是原值，目标对应的状态保持不动；要复位的只是 Activity 字段、代码设置且未存档的视图属性和非 Saveable 的 remember。
 
 ## 原因
 
@@ -26,7 +26,7 @@
 
 来源支持：8 张卡 · 5 次迁移 · 5 个应用
 
-已核实的平台事实（核实时用的是 API 23（HarmonyOS 6.1.0，SDK ets 6.1.0.105）；文档用 2026-05 的 OpenHarmony 中文文档副本；安卓 平台资源 android-34；源码 android-36.1。和具体应用无关，直接用，不用再查；其中的默认值只在应用自己的主题、样式、清单和代码没有另设时成立，应用有没有另设要到应用里看）：
+已核实的平台事实（核实时用的是 API 23（HarmonyOS 6.1.0，SDK ets 6.1.0.105）；文档用 2026-05 的 OpenHarmony 中文文档副本；OpenHarmony 文档 master 2026-11-21（提交 e42bd18a）；安卓 平台资源 android-34；源码 android-36.1。和具体应用无关，直接用，不用再查；其中的默认值只在应用自己的主题、样式、清单和代码没有另设时成立，应用有没有另设要到应用里看）：
 - 〔原因 / 做法第 1 步〕configChanges 没列出的配置变化发生时 Activity 被重启，列出的改为回调 onConfigurationChanged；重启即走 onPause、onStop、onDestroy，再用 onSaveInstanceState 存下的 savedInstanceState 新建实例
 - 〔做法第 1、2 步〕configChanges 取值：locale、uiMode、fontScale、fontWeightAdjustment、density、orientation、screenSize 等；横竖切换时 screenSize 也变（targetSdk ≥ 13），旋转不重建要两者都声明；mcc、mnc 自 Android 8.0 起未声明也不重建，要重建须写进 recreateOnConfigChanges
 - 〔原因 / 做法第 1 步〕Activity#showDialog 托管的对话框首次调 onCreateDialog，此后自动存档恢复（args 也存）；Activity 销毁时 handleDestroyActivity 对其 token 执行 closeAll，直接 show() 的对话框窗口被移除
@@ -41,5 +41,3 @@
 - 〔做法第 3 步〕系统语言切换后，$r 渲染的文本自动按新语言刷新；用 getStringSync 取出存进状态的字符串保持旧值
 - 〔做法第 4 步〕onAreaChange(event: (oldValue: Area, newValue: Area) => void): T，组件区域变化时回调；Area.width: Length，单位 vp
 - 〔做法第 4 步〕转屏时 UIAbility 与页面都不重建，页内状态变量（如浮层显示标志）保持转屏前的值
-- 〔原因 / 做法第 4 步〕视图层级存档：Activity#onSaveInstanceState 默认把窗口视图层级存进 Bundle，onRestoreInstanceState 默认按它恢复；View#dispatchSaveInstanceState 只给 mID != NO_ID 且没禁用存档（saveEnabled 默认 true）的视图调 onSaveInstanceState，恢复时按同一 id 取回：没有 id 的视图不存也不恢复
-- 〔原因 / 做法第 4 步〕DrawerLayout 自己存抽屉开合（drawerlayout 1.0.0、1.2.0 相同）：onSaveInstanceState 遍历子项，openState 为 OPENED(1) 或 OPENING(2) 的抽屉把其 gravity 写进 SavedState.openDrawerGravity（另存各方向的锁定模式）；onRestoreInstanceState 读到非 0 就 findDrawerWithGravity 后 openDrawer(view)，首次布局前调用时直接置 onScreen=1、openState=OPENED，不播动画：DrawerLayout 带 id 时，抽屉开着旋转，重建后仍开着

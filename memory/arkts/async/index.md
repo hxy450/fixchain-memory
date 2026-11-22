@@ -24,7 +24,7 @@
   - 情境：源端或已批准的差异要求同一 workId 任何时刻最多一个运行实例：再次启动时取消旧句柄并写入新句柄；目标在 finally 或完成回调里清理运行表，旧任务可能晚于新任务开始后才结束。
 - [异步初始化里，用户可编辑的输入状态在第一个 await 之前写入初值；源端初始化本是同步的就保持同步，不加输入门控、不吞异常](lesson-843a70afd7e08bfed97c.lesson.md)
   - 时机：ViewModel 实现阶段，编排页面初始化方法中异步存储/SDK 绑定与输入状态初值的先后顺序时；切片实现阶段把源端构造器或 onCreate 里的同步初始化（取尺寸、解码位图、开局）移到组件生命周期，决定是否异步、怎样处理异常时
-  - 情境：源页面在初始化时同步写入关键词或输入框文本，操作读取实时输入；目标输入框双向绑定 ViewModel 字段，初始化方法内含 await（存储、历史、SDK 绑定），页面生命周期回调以不等待的方式调用它。 也包括源端在 Activity.onCreate 或自定义 View 构造器里同步完成取尺寸、初始化与位图解码，之后才接收输入，其中一条路径是规格要求照搬的未捕获异常崩溃；目标 SDK 对这些步骤同时提供 Promise 与 Sync 接口，写者准备在 aboutToAppear 里调用不等待的 async 启动函数、catch 只记日志，并用 booted/ready 标志拦截输入。
+  - 情境：源页面在初始化时同步写入关键词或输入框文本，操作读取实时输入；目标输入框双向绑定 ViewModel 字段，初始化方法内含 await（存储、历史、SDK 绑定），页面生命周期回调以不等待的方式调用它。 也包括源端在 Activity.onCreate 或自定义 View 构造器里同步完成取尺寸、初始化与位图解码，之后才接收输入，其中一条路径是规格要求照搬的未捕获异常崩溃；目标 SDK 对这些步骤同时提供 Promise 与 Sync 接口，写者准备在 aboutToAppear 里调用不等待的 async 启动函数、catch 只记日志，并用 booted/ready 标志拦截输入。 ## 例外与边界 - 源端初始化本身就是异步的（放在后台线程、协程、回调或 Future 里完成）时，异步是源端行为，目标保持异步，只按做法第 1 步把输入类初值放在第一个 await 之前，不改成同步。 - 目标 SDK 对某一步只有 Promise 或回调形式、没有 Sync 变体时（如 window.getLastWindow），这一步不在“改用 Sync 变体”的范围内；“不加捕获”只针对源端本来不捕获、会崩溃的路径，源端自己 try/catch 处理的异常照源端保留捕获。
 - [源 API 用返回值表示“被拒”、用异常表示故障，而目标 SDK 两者都 reject 时，用一个单次原语适配器还原三态，所有重试与返回码路径都经它](lesson-47faf26b44bb4075b0d2.lesson.md)
   - 时机：服务或引擎实现阶段，把以 boolean 返回业务结果、以异常表示 I/O 失败或目标丢失的源 API（如 MIFARE 扇区认证）映射到只以 Promise reject 报错的 SDK，并实现带重试或返回码的上层方法时
   - 情境：源方法返回 false 表示被拒并据此按偏好重试，只有 IOException、TagLostException 等才立即失败；目标方法返回 Promise&lt;void&gt;，被拒与 I/O、状态异常都以 BusinessError reject，d.ts 只列错误码、不说明各码对应哪种情形；同一文件里可能已有区分两者的单次函数，却只被部分路径调用。
@@ -42,8 +42,8 @@
   - 情境：源端在同一方法里依次同步调用两个平台方法且后者依赖前者已生效（如 Vibrator.cancel() 后立刻 vibrate(pattern)）；目标 API（如 vibrator.stopVibration/startVibration）返回 Promise，网关接口按规格声明为 void，调用方仍按源顺序逐个调用。
 - [源端阻塞到完成才返回的 void 方法（排空队列、关闭设备、停录）改为 Promise 签名并逐层 await，销毁、重启、重开排在完成之后](lesson-b1991f633e5307abdc4d.lesson.md)
   - 时机：规格提取写接口清单、跨切片 seam 设计、实现与接线阶段，把源端阻塞式等待或同步关闭/停止映射为 ArkTS 异步实现，并决定签名与调用方是否 await 时
-  - 情境：源端 void 方法内部阻塞到工作完成（waitUntilDone 排空保存队列、后台线程同步 stop+release 后才置 CLOSED、MediaRecorder 同步 stop/release），验收要求“X 先于 Y”（保存先于销毁或重启、关闭完成才回调或重开）；目标对应接口返回 Promise，规格接口表或占位 seam 照搬 Java 的 void 签名，页面生命周期回调（aboutToDisappear）不能 await。
-  - 例外：源端本身就是异步完成且调用方不等待（回调、未 join 的 Future）时，按源端时序迁移，不额外补等待或取消
+  - 情境：源端 void 方法内部阻塞到工作完成（waitUntilDone 排空保存队列、后台线程同步 stop+release 后才置 CLOSED、MediaRecorder 同步 stop/release），验收要求“X 先于 Y”（保存先于销毁或重启、关闭完成才回调或重开）；目标对应接口返回 Promise，规格接口表或占位 seam 照搬 Java 的 void 签名，页面生命周期回调（aboutToDisappear）不能 await。UIAbility.onDestroy 不在此列：它可以返回 Promise，平台等它完成后才继续后续生命周期，落在这里的序列直接 await，不必按做法第 2 步只发起；onWindowStageDestroy、onBackground 和 aboutToDisappear 一样只返回 void。
+  - 例外：源端本身就是异步完成且调用方不等待（回调、未 join 的 Future）时，按源端时序迁移，不额外补等待或取消 - 源端的等待设了上限（如销毁时最多等关闭任务若干毫秒）时，目标保留同样的上限，到时按源端超时后的路径继续，不改成无限等待
 - [缓存 Promise 做单飞的入口方法不声明 async，直接返回缓存的实例：async 每次返回新的包装 Promise，只保证结果相同、不保证实例相同](lesson-24a6af9f04763e8cda90.lesson.md)
   - 时机：服务层或 ViewModel 实现阶段，为一次性异步入口（启动恢复、首次加载）写单飞防重并确定方法签名时
   - 情境：规格要求返回 Promise 的入口重复调用只执行一次；实现用静态或成员字段缓存首次的 Promise，并在注释或契约里声称重入共享同一 Promise；同类其他方法多写成 async。

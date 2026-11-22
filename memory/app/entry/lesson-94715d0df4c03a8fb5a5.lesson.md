@@ -1,6 +1,6 @@
 # 源 Activity 未声明 configChanges 时，旋转（未被 screenOrientation 锁定）、语言、深浅色、字号、显示大小变化都会重建它：目标 UIAbility 与页面不重建，逐页按源端重建时序显式处理——直接 show() 的非托管对话框关闭、托管对话框以新实例重显（setter 注入的监听与参数丢失）、文案与一次性状态刷新、新实例 onCreate/onResume 的可见效果重放；configChanges 不含 orientation 时旋转同样重建
 
-ID：`lesson-94715d0df4c03a8fb5a5` · 版本：6
+ID：`lesson-94715d0df4c03a8fb5a5` · 版本：7
 
 [本主题](index.md)
 
@@ -10,7 +10,7 @@ ID：`lesson-94715d0df4c03a8fb5a5` · 版本：6
 
 ## 适用情境
 
-源 Activity 在 AndroidManifest 中未声明 android:configChanges，实现了 onSaveInstanceState/savedInstanceState 恢复分支，或在 View 构造、onSizeChanged、绘制时读取资源文案与 firstRun 等一次性状态；目标 HarmonyOS UIAbility 在语言、深浅色、字号、显示大小变化时不重建，只回调 onConfigurationUpdate 或发出 display 'change'。 也包括页面用 AlertDialog.Builder.show()/Dialog.show() 直接弹出非托管对话框（不经 DialogFragment、showDialog 或 DialogPreference），目标用页内状态驱动的浮层承载，页面没有动态文案。 也包括 configChanges 已声明但不含 orientation（如只写 screenSize），Activity 持有 SurfaceView 与自建渲染线程，监听器里用 setBackgroundResource/setImageResource 等代码设置界面状态。 也包括源界面是 Compose（setContent），组合内以 LaunchedEffect(key)、remember 或 BoxWithConstraints 读取窗口约束做一次性计算（如按宽度算格数、列数），ViewModel 跨重建存活；目标在启动或重放中调用设置应用语言的接口（setLanguage、setAppPreferredLanguage）；页面用 getStringSync 等把资源文案取成字符串存进状态。
+源 Activity 在 AndroidManifest 中未声明 android:configChanges，实现了 onSaveInstanceState/savedInstanceState 恢复分支，或在 View 构造、onSizeChanged、绘制时读取资源文案与 firstRun 等一次性状态；目标 HarmonyOS UIAbility 在语言、深浅色、字号、显示大小变化时不重建，只回调 onConfigurationUpdate 或发出 display 'change'。 也包括页面用 AlertDialog.Builder.show()/Dialog.show() 直接弹出非托管对话框（不经 DialogFragment、showDialog 或 DialogPreference），目标用页内状态驱动的浮层承载，页面没有动态文案。 也包括 configChanges 已声明但不含 orientation（如只写 screenSize），Activity 持有 SurfaceView 与自建渲染线程，监听器里用 setBackgroundResource/setImageResource 等代码设置界面状态。 也包括源界面是 Compose（setContent），组合内以 LaunchedEffect(key)、remember 或 BoxWithConstraints 读取窗口约束做一次性计算（如按宽度算格数、列数），ViewModel 跨重建存活；目标在启动或重放中调用设置应用语言的接口（setLanguage、setAppPreferredLanguage）；页面用 getStringSync 等把资源文案取成字符串存进状态。不论源端是 View 还是 Compose，跨重建保留的东西不在复位和重放范围：ViewModel 里的数据、onRetainNonConfigurationInstance 或保留实例的 Fragment 持有的对象、onSaveInstanceState 与 rememberSaveable 存下的值，重建后仍是原值，目标对应的状态保持不动；要复位的只是 Activity 字段、代码设置且未存档的视图属性和非 Saveable 的 remember。
 
 ## 原因
 

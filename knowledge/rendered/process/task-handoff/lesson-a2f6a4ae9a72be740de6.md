@@ -11,6 +11,7 @@
 ## 例外与边界
 
 - 缺的确实是输入里没有的值，例如合成快照缺少尺寸、资源映射表里没有对应资产
+- 依赖确在仓外（三方 SDK 或平台 API 缺失、平台凭据）或确需真机数据才能判定的项，保留 deferred 或写明具体缺口的阻断提示，不为清掉占位而硬写近似实现；已走决策审批、登记了具体差异和对应验收条目的降级，按已批准的决策保留，不当成占位债务推翻
 
 ## 原因
 
@@ -30,7 +31,7 @@
 
 来源支持：26 张卡 · 已知 6 次迁移（部分未记录） · 已知 5 个应用（部分未记录）
 
-已核实的平台事实（核实时用的是 HarmonyOS 6.1.0（API 23，openharmony ets 6.1.0.105；文档副本含到 API 26 的内容，超出 SDK 的已注明）；安卓 平台资源 android-34；框架源码 android-36.1；androidx Compose 1.10.3（foundation、ui、ui-unit、ui-graphics，按字节码核）。和具体应用无关，直接用，不用再查；其中的默认值只在应用自己的主题、样式、清单和代码没有另设时成立，应用有没有另设要到应用里看）：
+已核实的平台事实（核实时用的是 HarmonyOS 6.1.0（API 23，openharmony ets 6.1.0.105；文档副本含到 API 26 的内容，超出 SDK 的已注明）；OpenHarmony 文档 master 2026-11-21（提交 e42bd18a）；安卓 平台资源 android-34；框架源码 android-36.1；androidx Compose 1.10.3（foundation、ui、ui-unit、ui-graphics，按字节码核）。和具体应用无关，直接用，不用再查；其中的默认值只在应用自己的主题、样式、清单和代码没有另设时成立，应用有没有另设要到应用里看）：
 - 〔做法第 5 步〕本地 SDK 有两套声明：openharmony/ets（component、api、kits）和 hms/ets（api、kits）；@kit.* 只是转导出
 - 〔做法第 5 步〕混合模式：CommonMethod.blendMode(value: BlendMode, type?: BlendApplyType)（@since 12），默认 BlendMode.NONE（效果同 SRC_OVER），BlendApplyType 默认 FAST，OFFSCREEN 为离屏混合
 - 〔做法第 5 步〕渐变平铺：linearGradient/sweepGradient/radialGradient 的选项有 repeating?: boolean（默认 false）；drawing.ShaderEffect.createLinearGradient(startPt, endPt, colors, mode: TileMode, …)，TileMode：CLAMP 0、REPEAT 1、MIRROR 2、DECAL 3

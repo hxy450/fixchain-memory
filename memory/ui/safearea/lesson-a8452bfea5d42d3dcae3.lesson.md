@@ -1,6 +1,6 @@
 # 开启全屏布局前逐边核对源端系统栏：只沉浸状态栏（透明状态栏、未设 navigationBarColor、targetSdk≤34）时底部保留不透明导航栏底色；全屏后前景按测得的避让区逐边补 padding（顶部加在包住标题栏的层，底部加在伸到窗口底边的层）；expandSafeArea 只让背景越过安全区，预设系统标题栏也不会自动避让
 
-ID：`lesson-a8452bfea5d42d3dcae3` · 版本：8
+ID：`lesson-a8452bfea5d42d3dcae3` · 版本：9
 
 [本主题](index.md)
 
@@ -11,6 +11,10 @@ ID：`lesson-a8452bfea5d42d3dcae3` · 版本：8
 ## 适用情境
 
 规格或 ui-manifest 标注全屏页、需要沉浸式安全区，并把 API 细节委托给具名 skill（如 arkts-immersive-safearea）；EntryAbility 开启全屏布局，页面标题由 NavDestination 标题栏或自绘标题承担；源端通常是 enableEdgeToEdge 加 safeDrawingPadding。也包括源端只用 SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN 加透明 statusBarColor，没有 navigationBarColor、windowTranslucentNavigation、HIDE_NAVIGATION，targetSdk≤34：导航栏是不透明黑底，应用内容止于其上。也包括页面只给标题栏补了顶部避让，伸到窗口底边的内容（如按 min(宽,高) 取边长的棋盘）没有底部避让。也包括壳页承载声明豁免安全区、自绘工具栏的内嵌子页，源端顶部 inset 由子 Fragment 的 AppBarLayout 或 Toolbar 根布局 fitsSystemWindows 隐式消费；或 NavDestination 页保留预设系统标题栏。
+
+## 例外与边界
+
+- 按做法第 5 步把预设系统标题栏换成 hideTitleBar(true) 加自绘工具栏时，原标题栏承担的标题文字、返回键及其返回行为、menus 菜单项都要在自绘工具栏里一并保留，只换载体和避让位置。
 
 ## 原因
 

@@ -11,7 +11,7 @@
   - 情境：源端通过统一日志类直接写日志，或经 log2File、debugFile 等包装在同步各阶段、网络请求、卡片刷新、导入、本地增删改等边界写文件日志；决策要求目标在这些对应边界统一改用日志封装（如 BqLog），而现有目标工程已接入日志库，只有少量起止或 method/status 日志。
 - [新增错误日志沿用工程的 hilog 约定，不写 console.*](lesson-11e9d15d947b30d2ce7e.lesson.md)
   - 时机：功能实现阶段，在服务层、ViewModel 或页面的 catch 分支里为新增的错误处理选择日志写法时
-  - 情境：源端对失败静默处理或没有日志（如 Kotlin runCatching 吞掉异常），目标 ArkTS 在 catch 中新增错误日志；工程里已有 hilog 写法（TAG、DOMAIN 常量），而生成期规则只约束 build() 内的 console.log 或占位写法。
+  - 情境：源端对失败静默处理或没有日志（如 Kotlin runCatching 吞掉异常），目标 ArkTS 在 catch 中新增错误日志；工程里已有 hilog 写法（TAG、DOMAIN 常量），而生成期规则只约束 build() 内的 console.log 或占位写法。 ## 例外与边界 - 把 console.* 改成 hilog 时只换日志调用本身：catch 里原有的处理（复位状态或屏障、重新抛出、向上层或界面上报错误）和日志里的说明文字、错误信息照旧保留，不因改日志而删减。
 - [源端采集或上报由构建配置决定是否启用（如上报地址为空即不初始化）时，按参照构建的生效状态迁移，不为未启用的采集新增同意门控](lesson-a0b051964114bd4fdbcc.lesson.md)
   - 时机：规格提取与决策阶段，为崩溃上报、统计等需构建期参数才启用的采集功能确定目标范围与合规设计时
   - 情境：源端在 Application.onCreate 里按 BuildConfig 或 gradle.properties 的值决定是否初始化 SDK（如上报 URL 为空就跳过 ACRA.init），参照构建中该值为空；规格、接口清单或派工以“上架要求隐私同意后才可采集”为由，提议新增本地采集链与同意门控。

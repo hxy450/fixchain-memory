@@ -19,7 +19,7 @@
 - [Image 承载点击/长按按钮或自绘拖拽柄时设 draggable(false)：ArkUI Image 默认可被系统拖出，按住会进入拖拽并接管输入](lesson-7389433391eddbaea827.lesson.md)
   - 时机：界面实现阶段，用 Image 承载按钮、可点图标或拖拽柄时：在 Image 或其外层 Stack/Button 上挂 onClick、长按手势，或在其上挂 onTouch、PanGesture 等自绘拖拽或按压逻辑时
   - 情境：源端在 ACTION_DOWN 或 onTouch 中立即开始自定义拖拽（如清单条目拖拽排序），或图标只是点击、长按按钮（ImageButton/可点 ImageView，如快门、缩略图入口、屏上开关图标），没有任何拖放行为；目标用 Image 组件实现（可外包挂点击的 Stack/Button），未设置 draggable。
-  - 例外：源端本就允许把图片拖出到其他位置或应用时保留系统拖拽
+  - 例外：源端本就允许把图片拖出到其他位置或应用时保留系统拖拽；目标用 SymbolGlyph 或 Canvas 绘制承载图标时不涉及：它们不在默认可拖出的组件之列，不需要补 draggable(false)；给 Image 补 draggable(false) 时，原有的 onClick、长按手势和自绘 onTouch 原样保留
 - [Stack 上层全尺寸容器和页面级遮罩会参与命中测试：不处理点击的覆盖层显式 Transparent，贴底内容栏直接锚定而不套全屏壳，条件遮罩与一次性动效层用根 Stack 条件子节点](lesson-4a4f8d845a204ffa244b.lesson.md)
   - 时机：界面实现与巡检修复阶段，把 FrameLayout 或 Compose Box 叠放层转成 ArkUI Stack、确定各层 hitTestBehavior 与贴底栏的定位方式时；为页面加保存中、引导等全屏遮罩时；实现彩纸等一次性全屏动效的覆盖层时
   - 情境：源 FrameLayout 中较晚声明、z 序更高的 match_parent 容器本身不可点击却覆盖下方按钮（Android 非 clickable 视图不消费触摸）；目标对应子层是 width/height('100%') 的容器；或页面要在带安全区 padding 的根容器上加全屏遮罩。也包括源 Compose Box 中返回按钮等可点击覆盖层之后，还有以 Modifier.align(Alignment.BottomCenter) 贴底、按内容定高的底栏，目标 Stack 的 alignContent 改为 TopStart 后需要另找贴底方式。也包括源端在触发瞬间向窗口根视图添加全屏、不可点击的动效层并在播完后移除，目标改成常驻挂载、带 zIndex 的全屏自定义组件，只给内部 Canvas 设 HitTestMode.None。也包括按钮之上叠有同尺寸、不可点击的自绘进度环或加载圈（源端触摸落到下层按钮），目标 Stack 保留 z 序而点击只挂在最底层图片上。

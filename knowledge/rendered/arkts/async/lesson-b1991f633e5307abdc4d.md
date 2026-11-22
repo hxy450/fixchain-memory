@@ -6,11 +6,12 @@
 
 ## 适用情境
 
-源端 void 方法内部阻塞到工作完成（waitUntilDone 排空保存队列、后台线程同步 stop+release 后才置 CLOSED、MediaRecorder 同步 stop/release），验收要求“X 先于 Y”（保存先于销毁或重启、关闭完成才回调或重开）；目标对应接口返回 Promise，规格接口表或占位 seam 照搬 Java 的 void 签名，页面生命周期回调（aboutToDisappear）不能 await。
+源端 void 方法内部阻塞到工作完成（waitUntilDone 排空保存队列、后台线程同步 stop+release 后才置 CLOSED、MediaRecorder 同步 stop/release），验收要求“X 先于 Y”（保存先于销毁或重启、关闭完成才回调或重开）；目标对应接口返回 Promise，规格接口表或占位 seam 照搬 Java 的 void 签名，页面生命周期回调（aboutToDisappear）不能 await。UIAbility.onDestroy 不在此列：它可以返回 Promise，平台等它完成后才继续后续生命周期，落在这里的序列直接 await，不必按做法第 2 步只发起；onWindowStageDestroy、onBackground 和 aboutToDisappear 一样只返回 void。
 
 ## 例外与边界
 
 - 源端本身就是异步完成且调用方不等待（回调、未 join 的 Future）时，按源端时序迁移，不额外补等待或取消
+- 源端的等待设了上限（如销毁时最多等关闭任务若干毫秒）时，目标保留同样的上限，到时按源端超时后的路径继续，不改成无限等待
 
 ## 原因
 
@@ -24,7 +25,7 @@ void 签名承载不了等待：调用方只能 fire-and-forget（void promise�
 
 来源支持：2 张卡 · 迁移数未记录 · 应用数未记录
 
-已核实的平台事实（核实时用的是 HarmonyOS 6.1.0（API 23，openharmony ets 6.1.0.105；文档副本含到 API 26 的内容，超出 SDK 的已注明）；安卓 平台资源 android-34；框架源码 android-36.1；androidx Compose 1.10.3（foundation、ui、ui-unit、ui-graphics，按字节码核）。和具体应用无关，直接用，不用再查；其中的默认值只在应用自己的主题、样式、清单和代码没有另设时成立，应用有没有另设要到应用里看）：
+已核实的平台事实（核实时用的是 HarmonyOS 6.1.0（API 23，openharmony ets 6.1.0.105；文档副本含到 API 26 的内容，超出 SDK 的已注明）；OpenHarmony 文档 master 2026-11-21（提交 e42bd18a）；安卓 平台资源 android-34；框架源码 android-36.1；androidx Compose 1.10.3（foundation、ui、ui-unit、ui-graphics，按字节码核）。和具体应用无关，直接用，不用再查；其中的默认值只在应用自己的主题、样式、清单和代码没有另设时成立，应用有没有另设要到应用里看）：
 - 〔适用情境〕MediaRecorder.stop() 是同步 native 调用，返回即已停止；没收到有效音视频数据时故意抛 RuntimeException，让应用清理不完整的输出文件
 - 〔适用情境〕BlockingQueue.take() 取队头，必要时一直等到有元素
 - 〔适用情境〕AVRecorder 的 prepare(config)、start()、pause()、stop()、reset()、release() 都返回 Promise<void>；状态 AVRecorderState = 'idle' | 'prepared' | 'started' | 'paused' | 'stopped' | 'released' | 'error'，经 state 读取

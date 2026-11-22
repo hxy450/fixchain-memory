@@ -24,7 +24,7 @@
 
 来源支持：1 张卡 · 1 次迁移 · 1 个应用
 
-已核实的平台事实（核实时用的是 HarmonyOS 6.1.0（API 23，openharmony ets 6.1.0.105；文档副本含到 API 26 的内容，超出 SDK 的已注明）；安卓 平台资源 android-34；框架源码 android-36.1；androidx Compose 1.10.3（foundation、ui、ui-unit、ui-graphics，按字节码核）。和具体应用无关，直接用，不用再查；其中的默认值只在应用自己的主题、样式、清单和代码没有另设时成立，应用有没有另设要到应用里看）：
+已核实的平台事实（核实时用的是 HarmonyOS 6.1.0（API 23，openharmony ets 6.1.0.105；文档副本含到 API 26 的内容，超出 SDK 的已注明）；OpenHarmony 文档 master 2026-11-21（提交 e42bd18a）；安卓 平台资源 android-34；框架源码 android-36.1；androidx Compose 1.10.3（foundation、ui、ui-unit、ui-graphics，按字节码核）。和具体应用无关，直接用，不用再查；其中的默认值只在应用自己的主题、样式、清单和代码没有另设时成立，应用有没有另设要到应用里看）：
 - 〔原因〕decodeResource → decodeResourceStream：Options 没另设 inDensity/inTargetDensity 时，inDensity 取资源所在目录的密度（无限定目录为 160），inTargetDensity 取 res.getDisplayMetrics().densityDpi；inScaled 默认 true，结果按 设备dpi/目录dpi 缩放
 - 〔原因〕Bitmap.createScaledBitmap(src, w, h, filter)：filter=true 用双线性，false 用最近邻（内部 Matrix + createBitmap(…, filter)）
 - 〔原因〕CanvasRenderer.imageSmoothingEnabled: boolean 默认 true（绘制期缩放走平滑插值），imageSmoothingQuality 默认 'low'

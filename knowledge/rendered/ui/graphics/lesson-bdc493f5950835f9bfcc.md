@@ -11,6 +11,7 @@
 ## 例外与边界
 
 - 图片位于权重行或定尺寸父格中、固有尺寸大于父级可给的空间时：只在父级给出上限的那一轴夹紧图片盒，位图在盒内等比缩小（FIT_CENTER/Contain），不按固有尺寸溢出，也不填经验值；写后与源端截图核对盒位置。ImageView 未设 adjustViewBounds（默认 false）时 onMeasure 对宽、高分别 resolveSize，未超限的轴仍是密度缩放后的固有尺寸，盒子不等比收缩，这个尺寸也是 LinearLayout 量子项、分余量所用的自然尺寸；GridView/ListView 只把条目宽定为列宽，条目高按 UNSPECIFIED 测得（固有高加条目 padding），不为套用本例外给格子补宽高比（如 aspectRatio(1)）。只有 adjustViewBounds=true 时盒子才按位图比例收缩。固有像素按 Bitmap.scaleFromDensity 取整：(px×设备dpi+目录dpi/2)/目录dpi（本机 android-36.1 源码 Bitmap.java）
+- 源 ImageView 在定尺寸的盒子里用 fitCenter（布局与样式都没写 scaleType 时的默认）、fitXY 或 centerCrop 时，图片本来就按盒子缩放（小图也放大）：目标 Image 设成盒子尺寸并对应写 Contain、Fill、Cover 是对的，不按本条改成固有尺寸；本条只管 centerInside、center、wrap_content 与未设尺寸的情形
 
 ## 原因
 
@@ -33,7 +34,7 @@ centerInside 只缩不放，小于盒子的图标按固有尺寸居中；Contain
 
 来源支持：12 张卡 · 10 次迁移 · 10 个应用
 
-已核实的平台事实（核实时用的是 HarmonyOS 6.1.0（API 23，openharmony ets 6.1.0.105；文档副本含到 API 26 的内容，超出 SDK 的已注明）；安卓 平台资源 android-34；框架源码 android-36.1；androidx Compose 1.10.3（foundation、ui、ui-unit、ui-graphics，按字节码核）。和具体应用无关，直接用，不用再查；其中的默认值只在应用自己的主题、样式、清单和代码没有另设时成立，应用有没有另设要到应用里看）：
+已核实的平台事实（核实时用的是 HarmonyOS 6.1.0（API 23，openharmony ets 6.1.0.105；文档副本含到 API 26 的内容，超出 SDK 的已注明）；OpenHarmony 文档 master 2026-11-21（提交 e42bd18a）；安卓 平台资源 android-34；框架源码 android-36.1；androidx Compose 1.10.3（foundation、ui、ui-unit、ui-graphics，按字节码核）。和具体应用无关，直接用，不用再查；其中的默认值只在应用自己的主题、样式、清单和代码没有另设时成立，应用有没有另设要到应用里看）：
 - 〔做法第 1 步〕安卓目录 dpi：ldpi 120、mdpi 160（DENSITY_DEFAULT）、hdpi 240、xhdpi 320、xxhdpi 480、xxxhdpi 640；固有 dp = px × 160 ÷ 目录 dpi（xhdpi ÷2、xxhdpi ÷3、ldpi ×4/3）
 - 〔做法第 1 步〕位图 drawable 的固有尺寸取 bitmap.getScaledWidth/Height(设备密度)，换算式 (px × 设备dpi + 目录dpi/2) / 目录dpi（整数除法，四舍五入）；折成 dp 就是 px × 160 ÷ 目录 dpi
 - 〔做法第 1 步〕资源位图经 ImageDecoder 解码：目录 dpi 高于设备时解码成 (int)(px × 设备dpi/目录dpi + 0.5)；低于设备且 targetSdk ≥ 28 时解码期不放大，固有尺寸由 BitmapDrawable 按上式换算。两种取整都是四舍五入
@@ -42,9 +43,6 @@ centerInside 只缩不放，小于盒子的图标按固有尺寸居中；Contain
 - 〔做法第 1 步〕Stack 的 alignContent 默认 Alignment.Center：不写对齐时子组件在 Stack 内居中
 - 〔做法第 1 步〕Image 不设宽高：文档写“加载成功且组件不设置宽高时，其显示大小自适应父组件”；CommonMethod.width 注释写缺省用内容所需宽度、超出父容器时画到外面。两处都不等于按安卓固有 dp 显示
 - 〔做法第 1 步〕ArkUI Image 只设 objectFit、不设宽高时，从安卓密度目录搬来、放在 base/media 或 xldpi、xxldpi/media 的位图，在设备上显示得比源端固有 dp 大，可越出容器
-- 〔做法第 1 步〕资源选哪一份（工具链 sdk-common 的实现，27.0.2 与 32.4.1 相同；设备运行时的原生匹配代码未核）：限定词按固定顺序逐个淘汰，最小宽度排在可用宽高、屏幕方向、夜间模式、密度之前；sw<N>dp 只在 N ≤ 设备最小宽度（dp）时匹配，多份匹配时 N 越大（越接近设备值）越优先；没有 sw 限定的那份对任何设备都匹配，排在匹配上的 sw 目录之后
-- 〔做法第 1 步〕资源位图的密度取自所在目录：目录没有密度限定时资源密度为 TypedValue.DENSITY_DEFAULT（0），解码按 DisplayMetrics.DENSITY_DEFAULT（160，mdpi）处理；drawable-nodpi 为 DENSITY_NONE（0xffff，Configuration 里对应 nodpi），ImageDecoder 的资源源把它记成 Bitmap.DENSITY_NONE，BitmapFactory.decodeResourceStream 也不设 inDensity，Bitmap.scaleFromDensity 遇 DENSITY_NONE 原样返回：nodpi 位图按物理像素显示，不随设备密度缩放
-- 〔做法第 1 步〕长度单位 px 是屏幕物理像素、不随密度换算（不带单位时按 vp）；UIContext.px2vp(value: number): number 把 px 换成 vp；全局 px2vp 自 API 18 废弃，改用 this.getUIContext().px2vp
 - 〔做法第 2 步〕ImageView 在布局和所用 style 都没写 scaleType 时（应用没有另设）为 FIT_CENTER；CENTER_INSIDE 在图宽高都不超过视图内区时 scale = 1，否则 scale = min(vw/dw, vh/dh)，再居中（只缩不放）
 - 〔做法第 2 步〕ImageFit.Contain 保持宽高比缩小或放大到完整显示（小图会被放大）；ImageFit.ScaleDown 保持宽高比缩小或保持不变（只缩不放，与 centerInside 同义）；ImageFit.None 原尺寸居中
 - 〔做法第 2 步〕Image.objectFit 不设时默认 ImageFit.Cover（保持宽高比缩放、居中裁切）
@@ -58,6 +56,6 @@ centerInside 只缩不放，小于盒子的图标按固有尺寸居中；Contain
 - 〔做法第 5 步〕同一组件的修饰链上 width/height 写两次时后写的生效（文档：属性覆盖原则，后设置的生效）；Image 于是按后写的尺寸成盒，Contain 把图标放大到这个盒子
 - 〔做法第 7 步〕View 背景按整个视图边界绘制、不扣 padding；ImageView 的 src 画在 padding 以内：被 padding 缩小的是 src 图形，可见尺寸 = 布局尺寸 − padding
 - 〔例外与边界〕LinearLayout 分余量：share = (int)(权重 × remainingExcess / remainingWeightSum)，起始 remainingWeightSum = weightSum > 0 ? weightSum : 权重和；带权子项主轴为 0 时取 share，否则 = 自然尺寸 + share（下限 0）
-- 〔例外与边界〕layoutWeight 从主轴剩余空间按权重分配，分配时忽略元素自身尺寸设置；只在 Row/Column/Flex 中生效；有子元素设了大于 0 的 layoutWeight 时，所有子元素不再按 flexShrink/flexGrow 布局
+- 〔例外与边界〕layoutWeight 从主轴剩余空间按权重分配，分配时忽略元素自身 width/height 设置，但保留 minWidth/minHeight 约束；只在 Row/Column/Flex 中生效；有子元素设了大于 0 的 layoutWeight 时，所有子元素不再按 flexShrink/flexGrow 布局
 - 〔例外与边界〕GridView 条目：宽 getChildMeasureSpec(makeMeasureSpec(列宽, EXACTLY), 0, lp.width)，高 getChildMeasureSpec(makeMeasureSpec(0, UNSPECIFIED), 0, lp.height)；getView 没设 LayoutParams 时默认 (MATCH_PARENT, WRAP_CONTENT)
 - 〔例外与边界〕ListView 条目：宽取 ListView 宽度约束，lp.height > 0 时高为 EXACTLY，否则 UNSPECIFIED（按内容量高）

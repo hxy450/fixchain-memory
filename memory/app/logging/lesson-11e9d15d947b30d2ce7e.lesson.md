@@ -1,6 +1,6 @@
 # 新增错误日志沿用工程的 hilog 约定，不写 console.*
 
-ID：`lesson-11e9d15d947b30d2ce7e` · 版本：2
+ID：`lesson-11e9d15d947b30d2ce7e` · 版本：3
 
 [本主题](index.md)
 
@@ -11,6 +11,10 @@ ID：`lesson-11e9d15d947b30d2ce7e` · 版本：2
 ## 适用情境
 
 源端对失败静默处理或没有日志（如 Kotlin runCatching 吞掉异常），目标 ArkTS 在 catch 中新增错误日志；工程里已有 hilog 写法（TAG、DOMAIN 常量），而生成期规则只约束 build() 内的 console.log 或占位写法。
+
+## 例外与边界
+
+- 把 console.* 改成 hilog 时只换日志调用本身：catch 里原有的处理（复位状态或屏障、重新抛出、向上层或界面上报错误）和日志里的说明文字、错误信息照旧保留，不因改日志而删减。
 
 ## 原因
 

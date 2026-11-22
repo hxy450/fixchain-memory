@@ -6,7 +6,7 @@
 
 ## 适用情境
 
-安卓按钮或文本靠 textAllCaps（AllCapsTransformationMethod 按当前 locale 大写）显示全大写，资源串多为首字母大写（Yes/No、New Game）；应用带含非 ASCII 或非拉丁字母的多语言资源（de 的 ü、tr 的 i/İ、ru 的西里尔字母），也可能以只有语言码的应用偏好语言运行；目标按钮参数常是 Resource/ResourceStr，要自己取字符串做大写，并把 resourceManager 配置的 locale（下划线分隔、子标签可能为空，如 fa_Arab_）转成 BCP 47 标签。也包括工程里已有按 locale 大写的私有实现，其他页面又用 textCase 另写一套。
+安卓按钮或文本靠 textAllCaps（AllCapsTransformationMethod 按当前 locale 大写）显示全大写，资源串多为首字母大写（Yes/No、New Game）；应用带含非 ASCII 或非拉丁字母的多语言资源（de 的 ü、tr 的 i/İ、ru 的西里尔字母），也可能以只有语言码的应用偏好语言运行；目标按钮参数常是 Resource/ResourceStr，要自己取字符串做大写，并把 resourceManager 配置的 locale（下划线分隔、子标签可能为空，如 fa_Arab_）转成 BCP 47 标签。也包括工程里已有按 locale 大写的私有实现，其他页面又用 textCase 另写一套。前提是控件、它的 style 与文字外观、主题这条链上都没有把 textAllCaps 设为 false：设了 false 的，以及 Holo、Material3 主题下默认不全大写的按钮，按资源原样显示，不在这条范围内。
 
 ## 原因
 
@@ -23,7 +23,7 @@
 
 来源支持：3 张卡 · 2 次迁移 · 2 个应用
 
-已核实的平台事实（核实时用的是 HarmonyOS 6.1.0（API 23，SDK 6.1.0.105）；安卓 Android SDK 平台资源 android-34；Android SDK 源码 android-36.1；appcompat 1.7.1。和具体应用无关，直接用，不用再查；其中的默认值只在应用自己的主题、样式、清单和代码没有另设时成立，应用有没有另设要到应用里看）：
+已核实的平台事实（核实时用的是 HarmonyOS 6.1.0（API 23，SDK 6.1.0.105）；OpenHarmony 文档 master 2026-11-21（提交 e42bd18a）；安卓 Android SDK 平台资源 android-34；Android SDK 源码 android-36.1；appcompat 1.7.1。和具体应用无关，直接用，不用再查；其中的默认值只在应用自己的主题、样式、清单和代码没有另设时成立，应用有没有另设要到应用里看）：
 - 〔适用情境〕AllCapsTransformationMethod.getTransformation：locale 取 TextView.getTextLocale()，取不到用构造时的 getResources().getConfiguration().getLocales().get(0)，再 TextUtils.toUpperCase(locale, source, copySpans)
 - 〔适用情境〕按钮默认全大写（按钮样式或控件没有另设 textAllCaps=false 时）：TextAppearance.Material.Button、Base.TextAppearance.AppCompat.Button 都写 textAllCaps=true；AlertDialog 按钮的 buttonBarButtonStyle（Widget.Material.Button.ButtonBar.AlertDialog / Widget.AppCompat.Button.ButtonBar.AlertDialog）经 Borderless.Colored 的文字外观继承到它们，同样全大写
 - 〔做法第 1 步〕ResourceManager.getStringSync(resId: number): string 可用；getStringSync(resource: Resource) 自 API 20 @deprecated（useinstead getStringSync），可传 resource.id（Resource.id: number）

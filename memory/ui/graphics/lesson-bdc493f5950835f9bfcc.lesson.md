@@ -1,6 +1,6 @@
 # 图标按资源固有 dp 显示、触摸盒放在外层：centerInside、wrap_content 或未设尺寸的图片不设成盒子尺寸再 Contain，同一 Image 上后写的槽位宽高会覆盖图标尺寸
 
-ID：`lesson-bdc493f5950835f9bfcc` · 版本：11
+ID：`lesson-bdc493f5950835f9bfcc` · 版本：12
 
 [本主题](index.md)
 
@@ -15,6 +15,7 @@ ID：`lesson-bdc493f5950835f9bfcc` · 版本：11
 ## 例外与边界
 
 - 图片位于权重行或定尺寸父格中、固有尺寸大于父级可给的空间时：只在父级给出上限的那一轴夹紧图片盒，位图在盒内等比缩小（FIT_CENTER/Contain），不按固有尺寸溢出，也不填经验值；写后与源端截图核对盒位置。ImageView 未设 adjustViewBounds（默认 false）时 onMeasure 对宽、高分别 resolveSize，未超限的轴仍是密度缩放后的固有尺寸，盒子不等比收缩，这个尺寸也是 LinearLayout 量子项、分余量所用的自然尺寸；GridView/ListView 只把条目宽定为列宽，条目高按 UNSPECIFIED 测得（固有高加条目 padding），不为套用本例外给格子补宽高比（如 aspectRatio(1)）。只有 adjustViewBounds=true 时盒子才按位图比例收缩。固有像素按 Bitmap.scaleFromDensity 取整：(px×设备dpi+目录dpi/2)/目录dpi（本机 android-36.1 源码 Bitmap.java）
+- 源 ImageView 在定尺寸的盒子里用 fitCenter（布局与样式都没写 scaleType 时的默认）、fitXY 或 centerCrop 时，图片本来就按盒子缩放（小图也放大）：目标 Image 设成盒子尺寸并对应写 Contain、Fill、Cover 是对的，不按本条改成固有尺寸；本条只管 centerInside、center、wrap_content 与未设尺寸的情形
 
 ## 原因
 

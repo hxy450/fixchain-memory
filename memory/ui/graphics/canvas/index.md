@@ -18,7 +18,7 @@
 - [SurfaceView 自建线程的 lockCanvas 循环按线程实例迁移：vsync 回调驱动，页面隐藏按 surface 失效写结果](lesson-4da9eabca745b3b2be91.lesson.md)
   - 时机：规格提取、架构决策与渲染实现阶段，把源端 SurfaceView 加自建 Thread 的游戏或渲染循环映射为目标帧驱动方式、循环实例结构与页面生命周期契约时
   - 情境：源端 SurfaceView 子类实现 SurfaceHolder.Callback，Thread 子类的 run() 在 while(isRunning) 里 lockCanvas → 更新 → onDraw → unlockCanvasAndPost，循环体没有 sleep；循环对象在初始化或重开方法里 new 并赋给同一字段，surfaceCreated 里 start()，surfaceDestroyed 里置停止标志再 join；结算弹窗由循环线程 post 到 UI，弹窗按钮直接重开；速度、周期与动画步进按“每帧”计、没有 delta-time。目标在 ArkUI Canvas 上用帧回调实现，页面隐藏与旋转时不销毁重建。
-  - 例外：源循环体内有固定周期等待（Thread.sleep、SystemClock 等待），或节拍由 Handler.postDelayed、Timer 决定：按源端周期迁移节拍，做法第 2 步不适用；源端在重开前停止并 join 旧实例、任何时刻只有一个循环在跑：单一循环句柄与按实例迁移的结果相同
+  - 例外：源循环体内有固定周期等待（Thread.sleep、SystemClock 等待），或节拍由 Handler.postDelayed、Timer 决定：按源端周期迁移节拍，做法第 2 步不适用 - 源端 Activity 在 configChanges 里同时声明 orientation 与 screenSize（targetSdk ≥ 13）时，旋转不重建 Activity：旋转一项不按重建写，按源端旋转时实际收到的回调写；源端在重开前停止并 join 旧实例、任何时刻只有一个循环在跑：单一循环句柄与按实例迁移的结果相同 - 源端 run() 对 lockCanvas 的返回值判空（拿到 null 就跳过绘制或退出循环）时，surface 失效不会崩溃：做法第 3 步的崩溃结果不复刻，按源端判空后的分支写
 - [View.invalidate 迁成唯一的“请求下一帧绘制一次”入口：待决标志合并请求，用 postFrameCallback 调度，只在动画活跃时续帧；SurfaceView 自建线程的 lockCanvas 循环不适用](lesson-27d9e16a099c2fb437eb.lesson.md)
   - 时机：渲染与动画实现阶段，为 Canvas 自绘视图确定帧循环、invalidate 重绘入口与停止条件时
   - 情境：源端自定义 View 在 onDraw 尾部按动画状态 invalidate()（加 tick）自续帧，业务层也用 invalidate() 请求重绘；目标在 ArkUI Canvas 上全量重绘，需要选下一帧调度 API，并处理同帧多次请求、动画结束停止和页面销毁。 不包括 SurfaceView 子类配自建 Thread、run() 里循环 lockCanvas 的渲染循环。

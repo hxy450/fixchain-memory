@@ -1,6 +1,6 @@
 # SurfaceView 自建线程的 lockCanvas 循环按线程实例迁移：vsync 回调驱动，页面隐藏按 surface 失效写结果
 
-ID：`lesson-4da9eabca745b3b2be91` · 版本：1
+ID：`lesson-4da9eabca745b3b2be91` · 版本：2
 
 [本主题](index.md)
 
@@ -15,7 +15,9 @@ ID：`lesson-4da9eabca745b3b2be91` · 版本：1
 ## 例外与边界
 
 - 源循环体内有固定周期等待（Thread.sleep、SystemClock 等待），或节拍由 Handler.postDelayed、Timer 决定：按源端周期迁移节拍，做法第 2 步不适用
+- 源端 Activity 在 configChanges 里同时声明 orientation 与 screenSize（targetSdk ≥ 13）时，旋转不重建 Activity：旋转一项不按重建写，按源端旋转时实际收到的回调写
 - 源端在重开前停止并 join 旧实例、任何时刻只有一个循环在跑：单一循环句柄与按实例迁移的结果相同
+- 源端 run() 对 lockCanvas 的返回值判空（拿到 null 就跳过绘制或退出循环）时，surface 失效不会崩溃：做法第 3 步的崩溃结果不复刻，按源端判空后的分支写
 
 ## 原因
 

@@ -1,6 +1,6 @@
 # 源端 textAllCaps（含 Material、AppCompat、MaterialComponents 主题下 Button 与 AlertDialog 按钮样式默认的全大写；Holo 与 Material3 主题的按钮默认不全大写）必须显示为全大写，按资源原样不是可接受的降级：取资源字符串后按当前 locale toLocaleUpperCase（Resource 参数先 getStringSync），封装成共享 allCaps 复用；textCase(UpperCase) 只转拉丁字母，不用它代替
 
-ID：`lesson-cce58a1538fedfda3695` · 版本：3
+ID：`lesson-cce58a1538fedfda3695` · 版本：4
 
 [本主题](index.md)
 
@@ -10,7 +10,7 @@ ID：`lesson-cce58a1538fedfda3695` · 版本：3
 
 ## 适用情境
 
-安卓按钮或文本靠 textAllCaps（AllCapsTransformationMethod 按当前 locale 大写）显示全大写，资源串多为首字母大写（Yes/No、New Game）；应用带含非 ASCII 或非拉丁字母的多语言资源（de 的 ü、tr 的 i/İ、ru 的西里尔字母），也可能以只有语言码的应用偏好语言运行；目标按钮参数常是 Resource/ResourceStr，要自己取字符串做大写，并把 resourceManager 配置的 locale（下划线分隔、子标签可能为空，如 fa_Arab_）转成 BCP 47 标签。也包括工程里已有按 locale 大写的私有实现，其他页面又用 textCase 另写一套。
+安卓按钮或文本靠 textAllCaps（AllCapsTransformationMethod 按当前 locale 大写）显示全大写，资源串多为首字母大写（Yes/No、New Game）；应用带含非 ASCII 或非拉丁字母的多语言资源（de 的 ü、tr 的 i/İ、ru 的西里尔字母），也可能以只有语言码的应用偏好语言运行；目标按钮参数常是 Resource/ResourceStr，要自己取字符串做大写，并把 resourceManager 配置的 locale（下划线分隔、子标签可能为空，如 fa_Arab_）转成 BCP 47 标签。也包括工程里已有按 locale 大写的私有实现，其他页面又用 textCase 另写一套。前提是控件、它的 style 与文字外观、主题这条链上都没有把 textAllCaps 设为 false：设了 false 的，以及 Holo、Material3 主题下默认不全大写的按钮，按资源原样显示，不在这条范围内。
 
 ## 原因
 

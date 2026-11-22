@@ -8,6 +8,10 @@
 
 规格或 ui-manifest 标注全屏页、需要沉浸式安全区，并把 API 细节委托给具名 skill（如 arkts-immersive-safearea）；EntryAbility 开启全屏布局，页面标题由 NavDestination 标题栏或自绘标题承担；源端通常是 enableEdgeToEdge 加 safeDrawingPadding。也包括源端只用 SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN 加透明 statusBarColor，没有 navigationBarColor、windowTranslucentNavigation、HIDE_NAVIGATION，targetSdk≤34：导航栏是不透明黑底，应用内容止于其上。也包括页面只给标题栏补了顶部避让，伸到窗口底边的内容（如按 min(宽,高) 取边长的棋盘）没有底部避让。也包括壳页承载声明豁免安全区、自绘工具栏的内嵌子页，源端顶部 inset 由子 Fragment 的 AppBarLayout 或 Toolbar 根布局 fitsSystemWindows 隐式消费；或 NavDestination 页保留预设系统标题栏。
 
+## 例外与边界
+
+- 按做法第 5 步把预设系统标题栏换成 hideTitleBar(true) 加自绘工具栏时，原标题栏承担的标题文字、返回键及其返回行为、menus 菜单项都要在自绘工具栏里一并保留，只换载体和避让位置。
+
 ## 原因
 
 setWindowLayoutFullScreen(true) 让窗口内容铺到系统栏下，expandSafeArea 只允许容器背景延伸进安全区，两者都不会给前景留出避让空间；既不测量避让区也不补 padding，标题与返回键就画进状态栏。只补顶部时，伸到窗口底边的内容落进导航条区（来源中横屏棋盘最下一行与重开按钮被盖住）。“透明状态栏”也不等于整窗沉浸：源端导航栏不透明时，全屏后让页面底色填进导航区就与源端不同。来源中规格模板要求所有全屏页按四层架构实现，却没问每条系统栏在源端是什么样；只照搬源 Activity 显式写出的 insets 代码会漏掉经 fitsSystemWindows 隐式消费的顶部；预设系统标题栏不会因根容器扩展而自动避让。
@@ -27,7 +31,7 @@ setWindowLayoutFullScreen(true) 让窗口内容铺到系统栏下，expandSafeAr
 
 来源支持：8 张卡 · 已知 6 次迁移（部分未记录） · 已知 6 个应用（部分未记录）
 
-已核实的平台事实（核实时用的是 API 23（HarmonyOS 6.1.0，SDK ets 6.1.0.105）；文档用 2026-05 的 OpenHarmony 中文文档副本；安卓 平台资源 android-34（windowOptOutEdgeToEdgeEnforcement 用 android-36）；源码 android-36.1。和具体应用无关，直接用，不用再查；其中的默认值只在应用自己的主题、样式、清单和代码没有另设时成立，应用有没有另设要到应用里看）：
+已核实的平台事实（核实时用的是 API 23（HarmonyOS 6.1.0，SDK ets 6.1.0.105）；文档用 2026-05 的 OpenHarmony 中文文档副本；OpenHarmony 文档 master 2026-11-21（提交 e42bd18a）；安卓 平台资源 android-34（windowOptOutEdgeToEdgeEnforcement 用 android-36）；源码 android-36.1。和具体应用无关，直接用，不用再查；其中的默认值只在应用自己的主题、样式、清单和代码没有另设时成立，应用有没有另设要到应用里看）：
 - 〔做法第 1 步〕导航栏底色：应用主题与代码都没另设 navigationBarColor、未强制 edge-to-edge、设备 config_navBarDefaultTransparent 为 false 时用 navigation_bar_compatible（不透明黑）；targetSdk ≥ 35 强制 edge-to-edge 时两栏颜色置透明、内容不按 insets 适配
 - 〔做法第 1 步〕SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN：窗口按已请求 SYSTEM_UI_FLAG_FULLSCREEN 的方式布局，内容可被状态栏盖住；导航栏一侧对应的是另一个标志 SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
 - 〔做法第 1 步〕hitTestBehavior(value: HitTestMode): T；HitTestMode.None：自身不响应触摸测试，也不阻塞子节点、兄弟节点和祖先节点
