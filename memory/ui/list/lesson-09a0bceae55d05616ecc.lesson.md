@@ -1,6 +1,6 @@
 # 会换位或增删的列表，位置相关值（首尾标记、序号、上移/下移可用态、首尾圆角）在渲染时按当前位置计算，不取 ForEach/Repeat 生成时的闭包 index
 
-ID：`lesson-09a0bceae55d05616ecc` · 版本：2
+ID：`lesson-09a0bceae55d05616ecc` · 版本：3
 
 [本主题](index.md)
 
@@ -11,6 +11,10 @@ ID：`lesson-09a0bceae55d05616ecc` · 版本：2
 ## 适用情境
 
 源端每次重组把当前 index 传给条目（isFirst/isLast、序号、首尾行形状、移动按钮可用态）；目标 ForEach/Repeat 以实例 id 或内容为键（不含位置），在 itemGenerator 中用闭包 index 计算这些值并作为子组件的构造参数。
+
+## 例外与边界
+
+- ForEach 的键里本来就含位置时（没写 keyGenerator 用默认键 index + '__' + JSON.stringify(item)，或 itemGenerator 声明了 index 而 keyGenerator 没声明、框架会自动拼上 index），换位或增删会让位置变了的项重新生成，闭包 index 就是当前位置，已有写法不用按这条改。
 
 ## 原因
 

@@ -8,6 +8,10 @@
 
 源端每次重组把当前 index 传给条目（isFirst/isLast、序号、首尾行形状、移动按钮可用态）；目标 ForEach/Repeat 以实例 id 或内容为键（不含位置），在 itemGenerator 中用闭包 index 计算这些值并作为子组件的构造参数。
 
+## 例外与边界
+
+- ForEach 的键里本来就含位置时（没写 keyGenerator 用默认键 index + '__' + JSON.stringify(item)，或 itemGenerator 声明了 index 而 keyGenerator 没声明、框架会自动拼上 index），换位或增删会让位置变了的项重新生成，闭包 index 就是当前位置，已有写法不用按这条改。
+
 ## 原因
 
 键不含位置时，换位或增删后同键的项被复用、不重跑生成函数，闭包 index 和由它传入的 @Param 都停在旧位置；Compose 重组总按当前 index 重算，源端没有这个问题。来源中写者已读到“同键复用旧子组件、不重派 @Param”的说明，仍认为换位后闭包会随新 index 重建；修复期改用 Repeat 的 index 后上移仍然无效，按当前位置求值后才正确。 按对象身份 indexOf 求当前位置只在数组元素保持同一实例（原位换位、splice）时成立：列表整表重建为新对象而键不变时，复用行闭包里的 item 已不在新数组中，indexOf 得 -1。

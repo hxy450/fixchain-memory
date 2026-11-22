@@ -16,6 +16,7 @@
 - [底部 tab 的 popUpTo(start){saveState}、外部入口的 CLEAR_TOP，以及进程存活时从桌面图标再次拉起触发的路由跳板再分流，要拆出返回栈后果写成验收，并在 onBackPress、onNewWant 显式实现](lesson-39f137ee173e50363f79.lesson.md)
   - 时机：规格提取阶段描述底部 tab 切换和外部深链入口，或把 LAUNCHER 路由跳板 Activity（启动页按条件分流）映射为入口分流时；入口装配与实现阶段核对导航壳差异、接线 EntryAbility 与入口页时
   - 情境：源端 tab 切换用 navigate { popUpTo(startDestination){ saveState }; launchSingleTop; restoreState }，桌面卡片、通知等外部入口用带 FLAG_ACTIVITY_CLEAR_TOP/NEW_TASK 的 Intent 拉起主 Activity；目标端用单 Navigation 加下标或条件渲染切 tab，NavPathStack 承载详情页。也包括 LAUNCHER 路由跳板 Activity（未声明 launchMode 即 standard）按条件跳主页并带 CLEAR_TOP，任务根已被 TaskStackBuilder 等改写成主页：进程存活时从桌面图标再次进入，源端在任务顶新建跳板并重跑分流（首启进引导，否则清掉主页之上的页面回主页），从最近任务切回才保持原页；目标单例 UIAbility 再次拉起只回原页面栈。
+  - 例外：在 onNewWant 里再分流时，桌面图标重进以外的回前台也可能走到这里：实例已存在时，系统接口 missionManager.moveMissionToFront、showAbility、backToCallerAbilityWithResult 把 UIAbility 拉到前台都会触发 onNewWant。源端这些场景保持原页的，用 setOnNewWantSkipScenarios（API 20 起）在 onCreate 里跳过这三种场景，或在 onNewWant 里先判断是不是桌面图标拉起，再决定是否清栈回主页。
 - [源端 popUpTo(根){inclusive=true} 加 navigate(根) 映射为 NavPathStack 重建，不用 pop() 代替](lesson-96c890012b26b5cb32cd.lesson.md)
   - 时机：接线阶段实现删除、克隆等操作完成后的导航时
   - 情境：源端在操作完成后 navigate 到列表并 popUpTo 列表 inclusive，重建返回栈；目标用 Navigation + NavPathStack，列表是 Navigation 根内容。

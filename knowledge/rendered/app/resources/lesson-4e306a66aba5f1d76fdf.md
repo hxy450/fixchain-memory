@@ -11,6 +11,7 @@
 ## 例外与边界
 
 - 第 3 步的整体替换只在 vector 根没有另设 android:tintMode（按默认 src_in 混合）时成立；另设了 multiply、screen 等其他模式时，tint 是和原填色混合而不是替换，不能直接把 tint 色写进每个 path。tint 链里的主题属性（如 colorControlActivated、colorControlNormal）按应用实际使用的主题逐层解析，应用或其父主题覆盖过 colorAccent 等属性时取覆盖值，不直接套框架主题的默认。
+- 烘焙进 SVG 的颜色是静态的：源端 tint 随深浅色或主题变化（如 colorControlNormal 取 textColorSecondary，明暗主题下不同）时，目标代码层已有的、引用随深浅色变化的颜色资源的 fillColor 要保留，不因 SVG 已烘焙就删掉或改成字面色。
 
 ## 原因
 
