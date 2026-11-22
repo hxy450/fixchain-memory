@@ -23,3 +23,11 @@
 7. 当场做不完的源行为登记为占位，不只写进报告的“保真缺口”；UI 阶段规格写明交互留给后续切片时登记占位，不照兄弟页写成与源端不符的真实实现。
 
 来源支持：42 张卡 · 已知 17 次迁移（部分未记录） · 已知 16 个应用（部分未记录）
+
+已核实的平台事实（核实时用的是 HarmonyOS 6.1.0（API 23，SDK 6.1.0.105）；OpenHarmony 文档 master 2026-11-21（提交 e42bd18a）；安卓 不涉及。和具体应用无关，直接用，不用再查；其中的默认值只在应用自己的主题、样式、清单和代码没有另设时成立，应用有没有另设要到应用里看）：
+- 〔适用情境 / 做法第 4 步〕onPageShow、onPageHide、onBackPress 只对 @Entry 装饰的自定义组件（页面）回调，子组件和被页面组合进来的组件收不到：onPageShow 每次页面显示（含路由返回、应用回到前台）触发一次，onPageHide 每次隐藏（含路由跳走、应用进后台）触发一次；onBackPress 在用户按返回时触发，返回 true 表示页面自己处理，false 或不返回走默认返回
+- 〔适用情境 / 做法第 4 步〕Navigation 的子页用 NavDestination 自己的生命周期：onShown、onHidden（API 10 起；回调带 VisibilityChangeReason 参数自 API 21 起，TRANSITION=0 页面导航、CONTENT_COVER=1 bindContentCover、APP_STATE=2 应用前后台）；onHidden 在非栈顶页面 push 进栈、栈顶页面 pop 出栈或应用切到后台时执行；onWillShow、onWillHide 在应用前后台切换时不执行
+- 〔适用情境 / 做法第 4 步〕NavDestination.onBackPressed(callback: () => boolean)（API 10 起）：与 Navigation 绑定的导航控制器里有内容时，按返回键触发；返回 true 表示重写返回逻辑，false 表示回退到上一页。NavDestination 必须作为 Navigation 目的页面的根节点，单独使用时只是普通容器，没有路由相关能力
+- 〔做法第 3 步〕UIAbility 启动到前台依次回调 onCreate()、onWindowStageCreate()、onForeground()；页面由 onWindowStageCreate 里的 windowStage.loadContent 加载；切到后台再回前台依次回调 onNewWant()、onForeground()；经 startAbilityByCall 启动到后台时回调 onCreate()、onBackground()，不执行 onWindowStageCreate()。生命周期回调在应用主线程执行
+- 〔做法第 3 步〕UIAbility.onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void：声明写明它同步返回、不支持异步回调；onDestroy(): void | Promise<void> 可以返回 Promise，声明说明用异步生命周期可让后续生命周期在 onDestroy 里的异步操作完成之后才继续
+- 〔做法第 3 步〕aboutToAppear 在自定义组件新实例创建后、执行 build() 之前调用，实例不重建就不再调；aboutToDisappear 在组件析构销毁之前调用，不允许在里面改状态变量（尤其 @Link），文档不建议在里面用 async await

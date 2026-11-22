@@ -1,6 +1,6 @@
 # 导航图标与菜单分区按实际生效者实现：DrawerToggle 画汉堡、parentActivityName 默认 Up，showAsAction 按名额宽度分流
 
-ID：`lesson-a6121cc7eaf207b702f7` · 版本：6
+ID：`lesson-a6121cc7eaf207b702f7` · 版本：7
 
 [本主题](index.md)
 
@@ -14,16 +14,16 @@ ID：`lesson-a6121cc7eaf207b702f7` · 版本：6
 
 ## 原因
 
-全部放进溢出菜单或只设选中态，会丢掉工具栏图标位与勾选指示；反过来把 ifRoom 项一律上栏，又会在窄屏多出源端放进溢出的图标、挤掉标题——ifRoom 项是否上栏由 ActionMenuPresenter 按按钮名额与宽度预算决定。AppCompat 只读 app: 命名空间的 showAsAction，android:showAsAction 被忽略、所有项进右上 ⋮ 溢出菜单；把这些项做成标题栏图标，会多出源端没有的入口。导航图标同样由实际生效者决定：“只在源端启用 Up 时绘制”只是必要条件——AppCompat 窗口 ActionBar 在 Manifest 有 parentActivityName 时默认启用 Up，不调 setDisplayHomeAsUpEnabled 也显示箭头；基类的 ActionBarDrawerToggle.syncState 又会把同一 Toolbar 的 Up 换成汉堡。把前者读成“没调 setDisplayHomeAsUpEnabled 就不画”，或把后者保留成自定义返回标题栏，都会与源端不同。框架 ActionBar 的 withText 由 values-w480dp 控制，高度与标题字号另有 values-land 取值。同一菜单复用到 ActionMode 时，未声明 showAsAction 的项缺省值与选项菜单不同；DrawerToggle 管理的导航图标是按抽屉进度插值的同一绘制，不是两张图标切换。
+全部放进溢出菜单或只设选中态，会丢掉工具栏图标位与勾选指示；反过来把 ifRoom 项一律上栏，又会在窄屏多出源端放进溢出的图标、挤掉标题——ifRoom 项是否上栏由 ActionMenuPresenter 按按钮名额与宽度预算决定。AppCompat 只读 app: 命名空间的 showAsAction，android:showAsAction 被忽略、所有项进右上 ⋮ 溢出菜单；把这些项做成标题栏图标，会多出源端没有的入口。导航图标同样由实际生效者决定：“只在源端启用 Up 时绘制”只是必要条件——AppCompat 窗口 ActionBar 在 Manifest 有 parentActivityName 时默认启用 Up，不调 setDisplayHomeAsUpEnabled 也显示箭头；基类的 ActionBarDrawerToggle.syncState 又会把同一 Toolbar 的 Up 换成汉堡。把前者读成“没调 setDisplayHomeAsUpEnabled 就不画”，或把后者保留成自定义返回标题栏，都会与源端不同。框架 ActionBar 的 withText 安卓 7.0 起由屏宽（≥480dp）或横屏决定（6.0 及以前由 values-w480dp 的 config_allowActionMenuItemTextWithIcon 控制），高度与标题字号另有 values-land 取值。同一菜单复用到 ActionMode 时，未声明 showAsAction 的项缺省值与选项菜单不同；DrawerToggle 管理的导航图标是按抽屉进度插值的同一绘制，不是两张图标切换。
 
 ## 做法
 
 1. 绘制导航图标前按顺序判定：①Activity 或其基类（常见 BaseActivity.onPostCreate）以同一 Toolbar 构造 ActionBarDrawerToggle 并 syncState() 时，导航图标是汉堡、点击开关抽屉，setDisplayHomeAsUpEnabled 不再决定图标，目标装配抽屉基座的汉堡栏；②否则看主题是否带窗口 ActionBar（NoActionBar + 自建 Toolbar 按 setSupportActionBar 之后的调用判断）；③窗口 ActionBar 页在 Manifest 声明 parentActivityName 或 PARENT_ACTIVITY meta-data 时 AppCompat 默认显示 Up，点 Up 走 onOptionsItemSelected 的 android.R.id.home 分支或回父页；④代码显式 setDisplayHomeAsUpEnabled(true/false) 时以它为准；都没有才不画，返回交给系统返回键与手势。复用模板或兄弟页标题栏前先按当前源核对。
-2. 按生效的 showAsAction（AppCompat 读 app:showAsAction，框架 ActionBar 读 android:showAsAction）照 ActionMenuPresenter.flagActionItems 分配：always 项必上栏；ifRoom 项按名额与宽度分配——名额取 ActionBarPolicy.getMaxActionButtons（按当前配置 dp：smallestWidth>600，或宽>960 且高>720，或宽>720 且高>960 为 5；宽≥500，或宽>640 且高>480，或宽>480 且高>640 为 4；宽≥360 为 3；否则 2），有 never 项或 always 与 ifRoom 合计超出名额时先给溢出钮扣一个名额，always 先扣；宽度预算为屏宽一半减溢出钮宽，按菜单顺序逐项扣按钮宽，透支的退回溢出；未上栏的 ifRoom 项与 never/collapseActionView 项按 orderInCategory 进溢出面板；横竖屏或窗口宽变化后重算。判断信号：同一菜单 always 与 ifRoom 合计 3 个以上，或含无图标的 ifRoom 文字项。checkable 项显式开启 selectIcon 等勾选指示。框架 ActionBar 的 withText 项只在窗口宽 ≥480dp 时在图标旁显示 TextAppearance.Holo.Widget.ActionBar.Menu 文字（12sp 粗体全大写；出处：框架 values-w480dp/bools.xml 的 config_allowActionMenuItemTextWithIcon 与 styles.xml），竖屏窄屏只显示图标。
+2. 按生效的 showAsAction（AppCompat 读 app:showAsAction，框架 ActionBar 读 android:showAsAction）照 ActionMenuPresenter.flagActionItems 分配：always 项必上栏；ifRoom 项按名额与宽度分配——名额取 ActionBarPolicy.getMaxActionButtons（按当前配置 dp：smallestWidth>600，或宽>960 且高>720，或宽>720 且高>960 为 5；宽≥500，或宽>640 且高>480，或宽>480 且高>640 为 4；宽≥360 为 3；否则 2），有 never 项或 always 与 ifRoom 合计超出名额时先给溢出钮扣一个名额，always 先扣；宽度预算为屏宽像素一半减溢出钮宽，按菜单顺序（orderInCategory 小的在前，相同的按 XML 先后）逐项扣按钮宽，扣完后「剩余预算 + 第一个上栏按钮宽」不大于 0 的才退回溢出（可透支不到一个首按钮宽）；未上栏的 ifRoom 项与 never/collapseActionView 项按 orderInCategory 进溢出面板；横竖屏或窗口宽变化后重算。判断信号：同一菜单 always 与 ifRoom 合计 3 个以上，或含无图标的 ifRoom 文字项。checkable 项显式开启 selectIcon 等勾选指示。框架 ActionBar 的 withText 项（安卓 7.0 起；6.0 及以前看 values-w480dp 的 config_allowActionMenuItemTextWithIcon）在 screenWidthDp ≥480、或宽 ≥640 且高 ≥480、或横屏时在图标旁显示 TextAppearance.Holo.Widget.ActionBar.Menu 文字（12sp 粗体全大写；出处：框架 ActionMenuItemView.shouldAllowTextWithIcon 与 styles_holo.xml），竖屏且宽 <480dp 时只显示图标。
 3. Activity 基于 AppCompat 而菜单写 android:showAsAction 时，该属性被忽略，全部项进右上 ⋮ 溢出菜单，不转成标题栏图标或 NavDestination 图标菜单。
 4. 自绘框架 ActionBar 时多页共用一个标题栏组件，各页只传图标、标题、是否 Up 与动作项（showAsAction、orderInCategory），上栏集合由组件按上一步计算：显示该 Activity 或 application 的 manifest android:icon，Up 尖角与溢出按钮用平台原图（如 ic_ab_back_holo_dark_am、ic_menu_moreoverflow_normal_holo_dark），高度、背景与标题字号取平台样式及 values-land 覆盖值，随窗口尺寸切换。
-5. 同一菜单复用于 ActionMode（CAB）时分别填充：未声明 showAsAction 的项在选项菜单缺省 never，在 AppCompat StandaloneActionMode 缺省 ifRoom（MenuBuilder.setDefaultShowAsAction），按各自缺省值再走第 2 步的名额与宽度计算，不复制同一张固定清单。自绘 CAB 覆盖工具栏；窗口为 edge-to-edge 时 AppCompat 在 CAB 显示期间给状态栏区绘制 status guard 并盖住工具栏投影，按源 targetSdk 与窗口模式核对后实现。
-6. 源端由 ActionBarDrawerToggle 管理导航图标时，图标是 DrawerArrowDrawable：汉堡与返回箭头是同一绘制按 position 插值，position 由 onDrawerSlide 写入抽屉滑动进度（源端调 setDrawerSlideAnimationEnabled(false) 或覆写 onDrawerSlide 时按源端）；setDrawerIndicatorEnabled(false) 改显返回箭头并让点击走返回，syncState() 按抽屉开合重设图标。目标用一个按进度绘制的图标和指示器启用态逐条承接源端这些调用，不用两张图标切透明度，也不以验收描述已覆盖代替缺失的调用。
+5. 同一菜单复用于 ActionMode（CAB）时分别填充：未声明 showAsAction 的项在选项菜单缺省 never，在 AppCompat StandaloneActionMode 缺省 ifRoom（MenuBuilder.setDefaultShowAsAction），按各自缺省值再走第 2 步的名额与宽度计算，不复制同一张固定清单。自绘 CAB 覆盖工具栏；窗口为 edge-to-edge 时 AppCompat（1.1.0 至 1.7.x）在 CAB 显示期间给状态栏区绘制 status guard 并盖住工具栏投影，按源 targetSdk、窗口模式与 appcompat 版本核对后实现；源端依赖 appcompat 1.8.0 时不画 status guard。
+6. 源端由 ActionBarDrawerToggle 管理导航图标时，图标是 DrawerArrowDrawable：汉堡与返回箭头是同一绘制按 position 插值，position 由 onDrawerSlide 写入抽屉滑动进度（源端调 setDrawerSlideAnimationEnabled(false) 或覆写 onDrawerSlide 时按源端）；setDrawerIndicatorEnabled(false) 改显主题的 homeAsUpIndicator（或 setHomeAsUpIndicator 设的图），点击不再开关抽屉，改走源端 setToolbarNavigationClickListener 设的监听（以 Toolbar 构造时）或 onOptionsItemSelected 的 android.R.id.home 分支（未传 Toolbar 时），syncState() 按抽屉开合重设图标。目标用一个按进度绘制的图标和指示器启用态逐条承接源端这些调用，不用两张图标切透明度，也不以验收描述已覆盖代替缺失的调用。
 
 来源支持：9 张卡 · 已知 5 次迁移（部分未记录） · 已知 5 个应用（部分未记录）
 

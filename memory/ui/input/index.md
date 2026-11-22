@@ -34,7 +34,7 @@
   - 情境：源 Activity 在同一页面持有多组语义相近的输入控件（写块的扇区/块与值块的扇区/块、值块数值与另一模式的数值），各执行方法分别读取自己表单的控件；目标由页面收集参数构造一个请求对象交给共享服务，页面已为各表单建了独立状态。
 - [按 EditText 对齐 TextInput 时，未声明 background 的输入框按主题状态背景（editTextBackground 的 9-patch，随聚焦切换并取其内边距）复刻，并显式关闭源端没有的 ArkUI 默认装饰：填充底与圆角、Password 显隐图标、清除按钮，核默认高度](lesson-1150c0c721e6dc0dede4.lesson.md)
   - 时机：界面实现或 1:1 对齐修复阶段，把安卓 EditText（含密码框、数字掩码的验证码框）转换或核对为 ArkUI TextInput，决定要显式覆盖哪些默认外观时；为未声明 background 的 EditText 写 TextInput 外观修饰链时
-  - 情境：源输入框是裸 EditText 或其子类，用 android:password、inputType=textPassword/numberPassword 掩码，没有 TextInputLayout passwordToggleEnabled 或自绘显隐按钮，也没有清除按钮；目标用 TextInput，type 为 InputType.Password 或 Normal。 也包括源 EditText 未声明 background、padding 与高度，外观来自框架主题的 editTextBackground 状态选择器（Holo 为 textfield_default/activated_holo_dark 两张 9-patch，含端头竖线与内容内边距；Material 系为 &lt;inset&gt; 包着随状态切换的 9-patch 选择器 edit_text_material）。
+  - 情境：源输入框是裸 EditText 或其子类，用 android:password、inputType=textPassword/numberPassword 掩码，没有 TextInputLayout passwordToggleEnabled 或自绘显隐按钮，也没有清除按钮；目标用 TextInput，type 为 InputType.Password 或 Normal。 也包括源 EditText 未声明 background、padding 与高度，外观来自框架主题的 editTextBackground 状态选择器（Holo 暗色单行框为 textfield_default/activated_holo_dark 两张 9-patch（多行框换成 textfield_multiline_* 一组），含端头竖线与内容内边距；Material 系为 &lt;inset&gt; 包着随状态切换的 9-patch 选择器 edit_text_material；AppCompat、MaterialComponents 主题在 API 22 起也取框架的 edit_text_material，appcompat 1.7.x 及更早在 API 21 及以下取库自带的 abc_edit_text_material）。
   - 例外：源端确有可见性切换（passwordToggleEnabled 或自绘眼睛按钮）或清除按钮，此时保留并按源端对齐样式
 - [源码用 selectable 行加条件尾部勾选表示选中时按同一结构实现，不按“单选”语义换成 Radio](lesson-d53223f43ad454261f26.lesson.md)
   - 时机：界面实现阶段，把 Compose 排序、筛选等选择列表行转换为 ArkUI 行组件并确定选中标记时
@@ -61,7 +61,7 @@
   - 情境：Android 选择区由各自 Fragment + ViewModel 以 RecyclerView 列表提供（背景含渐变方案与图片素材、文字为纯色列表、边框为位图素材且首项是调色盘），Fragment 泛型参数或布局 data-binding 指向对应 ViewModel；迁移任务同时给出设备截图作为视觉参考。
 - [菜单 SearchView 迁成自绘搜索栏时把展开、焦点、提交、收起与菜单重建分成独立状态和事件，焦点态取自 TextInput 焦点回调](lesson-edc9465d3902807c386b.lesson.md)
   - 时机：规格提取与界面实现阶段，把菜单 actionView 的 SearchView（collapseActionView）翻成自绘标题栏搜索框、决定工具栏菜单随搜索状态切换时
-  - 情境：源端菜单项以 SearchView 为 actionView 且 showAsAction 含 collapseActionView，代码注册 OnActionExpandListener、OnQueryTextFocusChangeListener 与 OnQueryTextListener（onQueryTextSubmit 返回 false 才由 SearchView 投递 ACTION_SEARCH），收起时 invalidateOptionsMenu 重建菜单，提交后只收键盘不清焦点；目标为自绘标题栏加按条件构建的 TextInput。
+  - 情境：源端菜单项以 SearchView 为 actionView 且 showAsAction 含 collapseActionView，代码注册 OnActionExpandListener、OnQueryTextFocusChangeListener 与 OnQueryTextListener（查询 trim 后非空才回调 onQueryTextSubmit；返回 false 时 SearchView 收起键盘、不清焦点，设过 setSearchableInfo 的才再投递 ACTION_SEARCH；返回 true 时这两件都不做），收起时 invalidateOptionsMenu 重建菜单，提交后只收键盘不清焦点；目标为自绘标题栏加按条件构建的 TextInput。
 - [透明 TextInput 叠在掩码格上时，输入层铺满格区并显式获焦，多段输入各用独立节点](lesson-90a7888a65eefb3e94b3.lesson.md)
   - 时机：界面实现阶段，把格子式密码框等自定义输入控件转成“透明 TextInput + 掩码格”叠层时
   - 情境：源端弹窗内是固定尺寸的格子式输入控件（如 4 位数字密码），多段流程（设置、再次确认）各弹独立 Dialog 并各带新输入框；目标用页内条件挂载的浮层，透明 TextInput 与掩码 Row 叠放，外层卡片有吞点击的 onClick。
