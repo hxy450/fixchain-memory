@@ -4,11 +4,11 @@
 
 派生自 main `369bbbf3`（store `e797fb15`，active 651 条、retired 1 条）。相对 main：
 
-1. **store**：照维护流程写提案、apply（共 10 次：建分支时一次，之后每并入一批带正文改动的知识一次，见「并入记录」），store 版本 `e797fb15` → `df34eed4`（`df34eed41a6d3fb255496da67a9db5445e78ab01a6ea785989f95d52f1e8353a`）。
+1. **store**：照维护流程写提案、apply（共 11 次：建分支时一次，之后每并入一批带正文改动的知识一次，见「并入记录」），store 版本 `e797fb15` → `6a0b6391`（`6a0b6391556e5e42f3b75771f9ed2b23b26005553584ee3146fda48b51b44092`）。
    - 退役 4 条通用审查式经验（没有具体触发情景，要求把某一类东西全部核一遍或交付前做通用动作）：`lesson-6e558834938be19c04e2`、`lesson-25bc0b7518d335a947d6`、`lesson-42df1ac4d4030421da34`、`lesson-0c9e222422d81871b464`；理由写在 store 快照的 `retirement_reason` 里。
-   - 294 条经验按本目录知识文件里核实过的 `changes` 改正文（各次的处数见「并入记录」；被换掉的知识文件的改句仍在正文里，不在现在的知识文件里），版本比 main 高 1–3（先后被两批知识改过正文的经验高不止 1）；`evidence`、`requires`、`topic`、`status` 原样。
+   - 342 条经验按本目录知识文件里核实过的 `changes` 改正文（各次的处数见「并入记录」；被换掉的知识文件的改句仍在正文里，不在现在的知识文件里），版本比 main 高 1–3（先后被两批知识改过正文的经验高不止 1）；`evidence`、`requires`、`topic`、`status` 原样。
    - 现在 active 647 条、retired 5 条（其中 1 条在 main 上就已退役）。
-2. **memory/**：从新 store 用维护脚本重新导出（开发版，带卡片链接，`--link-cards`），通过发布脚本用的严格校验（manifest 的版本等于 store HEAD、每个文件 sha256 对得上、没有多余文件）；`MEMORY.md` 的发布版本行同步改了。和 main 比：4 个退役经验的文件没了，294 个经验文件和 69 个索引 / manifest 文件变了，其余经验文件逐字节相同。
+2. **memory/**：从新 store 用维护脚本重新导出（开发版，带卡片链接，`--link-cards`），通过发布脚本用的严格校验（manifest 的版本等于 store HEAD、每个文件 sha256 对得上、没有多余文件）；`MEMORY.md` 的发布版本行同步改了。和 main 比：4 个退役经验的文件没了，342 个经验文件和 73 个索引 / manifest 文件变了，其余经验文件逐字节相同。
 3. **新增两个目录**：`knowledge/`（本目录）和 `shadow/`（定向核对版影子的提示词和用法）；`.gitignore` 放行这两个目录。仓库根 `README.md` 没改。
 
 ## 并入记录
@@ -26,6 +26,7 @@
 | 7 | 2026-11-22 | 5 条：`09a0bcea`、`39f137ee`、`4e306a66`、`b3f534eb`、`f88b9c82`（其中覆盖已有的 5 个） | 29 | 4 处、4 条经验：`09a0bcea` 1、`39f137ee` 1、`4e306a66` 1、`b3f534eb` 1 | `8d2cf9a9` → `94c9b166` | 照第三版的写法写（每条经验最多 24 条、只留编译查不出来的那类）；另核过适用情境和例外与边界，有依据的补进正文 |
 | 8 | 2026-11-22 | 39 条：`033b8254`、`09a0bcea`、`0cc7ae4e`、`0ce9fe04`、`1267d6ca`、`148a3e67`、`1e972af4`、`1f366fe4`、`22432022`、`2a2924aa`、`2cf26148`、`4bea916d`、`4e306a66`、`5034b56b`、`51138567`、`5475edc4`、`5990184d`、`67118603`、`6d6ba721`、`716d06e7`、`74295d12`、`7b19b801`、`824031d5`、`836a5414`、`871d3751`、`8bc258c2`、`8e0e9fe5`、`9147be4d`、`9d42548e`、`a078efd3`、`ae093ded`、`c7ee1769`、`d715fa78`、`e01c6f82`、`eb4de4fd`、`f64afc22`、`f6b95d7d`、`f86b02e9`、`feec63f6`（其中覆盖已有的 39 个） | 208 | 39 处、39 条经验：`033b8254` 1、`09a0bcea` 1、`0cc7ae4e` 1、`0ce9fe04` 1、`1267d6ca` 1、`148a3e67` 1、`1e972af4` 1、`1f366fe4` 1、`22432022` 1、`2a2924aa` 1、`2cf26148` 1、`4bea916d` 1、`4e306a66` 1、`5034b56b` 1、`51138567` 1、`5475edc4` 1、`5990184d` 1、`67118603` 1、`6d6ba721` 1、`716d06e7` 1、`74295d12` 1、`7b19b801` 1、`824031d5` 1、`836a5414` 1、`871d3751` 1、`8bc258c2` 1、`8e0e9fe5` 1、`9147be4d` 1、`9d42548e` 1、`a078efd3` 1、`ae093ded` 1、`c7ee1769` 1、`d715fa78` 1、`e01c6f82` 1、`eb4de4fd` 1、`f64afc22` 1、`f6b95d7d` 1、`f86b02e9` 1、`feec63f6` 1 | `94c9b166` → `34ad0c12` | 把前面已核实并写进正文的前提简短地写进标题和何时使用，没有新增事实 |
 | 9 | 2026-11-23 | 79 条：`0670bec9`、`0880ecd4`、`089bb378`、`0c355313`、`0e997c4e`、`0f67121a`、`1368f3a5`、`19cedec8`、`1ba734fe`、`1c175988`、`1c5ea21b`、`262681f6`、`29922f57`、`2b00c4ff`、`2b3d45c1`、`2fd3f5f2`、`31b2022c`、`33791daf`、`33cc1f6b`、`372d4a11`、`376cb07b`、`41bb62cd`、`45739c78`、`463f8ca8`、`49ea8b0d`、`4b7012d4`、`4c254d10`、`598d3bd0`、`5a140e45`、`62ac5e65`、`63660a83`、`6587c954`、`6717b958`、`6b287970`、`6b4950ca`、`6bd9ae0d`、`7a081dc3`、`7ad5a7d1`、`850dc758`、`89368bd5`、`8b84279c`、`8b8e304a`、`8c24f05e`、`938301f1`、`9477f662`、`95314752`、`97966205`、`99b35920`、`9abd54b8`、`a0b05196`、`a317e16c`、`b59097ee`、`b5e8609c`、`b72e0d67`、`bb7ca42b`、`bbb31db6`、`bc48518f`、`bd33d8ba`、`c2f15aa3`、`c78d27d0`、`ccbf0a7f`、`cd4a69e8`、`cde53c6e`、`cf077549`、`d434bb5c`、`d7dcfc80`、`dc3ac050`、`dc66a65d`、`df70c7f1`、`e0f3b5b7`、`e1211056`、`e23468a0`、`e2fc9486`、`e6b1032f`、`e85bdb26`、`ecc67592`、`ed571550`、`edb937b0`、`f260fb56` | 249 | 81 处、56 条经验：`0880ecd4` 2、`089bb378` 1、`0c355313` 1、`0e997c4e` 2、`1368f3a5` 1、`19cedec8` 2、`1ba734fe` 2、`1c175988` 1、`1c5ea21b` 2、`262681f6` 2、`29922f57` 2、`2b00c4ff` 1、`2b3d45c1` 1、`2fd3f5f2` 1、`31b2022c` 2、`33791daf` 1、`33cc1f6b` 2、`45739c78` 1、`463f8ca8` 1、`49ea8b0d` 1、`4b7012d4` 1、`598d3bd0` 2、`5a140e45` 3、`62ac5e65` 1、`6587c954` 1、`6717b958` 2、`6b4950ca` 2、`6bd9ae0d` 1、`7a081dc3` 2、`7ad5a7d1` 1、`89368bd5` 2、`8b84279c` 1、`8b8e304a` 2、`8c24f05e` 1、`938301f1` 1、`95314752` 1、`9abd54b8` 1、`a317e16c` 1、`b59097ee` 1、`b5e8609c` 1、`bc48518f` 2、`bd33d8ba` 1、`ccbf0a7f` 1、`cde53c6e` 1、`cf077549` 1、`d434bb5c` 1、`d7dcfc80` 2、`dc66a65d` 1、`df70c7f1` 2、`e1211056` 1、`e23468a0` 1、`e85bdb26` 1、`ecc67592` 2、`ed571550` 1、`edb937b0` 1、`f260fb56` 5 | `34ad0c12` → `df34eed4` | 照第三版的写法写（每条经验最多 24 条、只留编译查不出来的那类）；另对着知识核过前提、例外、标题和何时使用，有依据的补进正文 |
+| 10 | 2026-11-23 | 81 条：`060a67da`、`06e3564e`、`08854573`、`0ac4dfb5`、`0bba9db6`、`0bc494e8`、`14411595`、`15256c11`、`1575e3ac`、`17b70790`、`1c513fdf`、`1cc76f37`、`1d0b6dde`、`1f4747c8`、`20afdfff`、`217e93ef`、`22032aef`、`238588d3`、`24a6af9f`、`2a4e6af2`、`2e8ffecc`、`30ccd1d6`、`32141cb6`、`34c8ac69`、`34f35851`、`352b96f5`、`3684e085`、`381ebc58`、`39506b53`、`3cdb1fea`、`3d6d1981`、`3ea52b78`、`40ee4d97`、`4232e195`、`431a6580`、`4428ce76`、`447985a4`、`4606ccc4`、`4ad956ba`、`4ada9483`、`4d893217`、`4fb1c103`、`519f6769`、`58deb5f7`、`5948050d`、`62499aa2`、`686bbe76`、`6a95a3ae`、`6d259db1`、`7231acad`、`76aa7901`、`77ca67f1`、`7a065e8f`、`7d643db6`、`7e04234b`、`83ce396a`、`84b5498c`、`8c18bb22`、`91c89aff`、`9362c9e0`、`9b880b43`、`9f4bb32c`、`ae1aa4ff`、`af15c432`、`b3c9382d`、`b402fa54`、`bad79e09`、`bb79b83d`、`c1e00d34`、`c6379cfc`、`cdc6de4e`、`ce456d60`、`cfe552e1`、`d18e6e01`、`d767b842`、`da377615`、`dc5c370e`、`e2a08b9a`、`e7a9842a`、`f5183471`、`f5cf8413` | 219 | 64 处、48 条经验：`060a67da` 1、`0ac4dfb5` 2、`0bba9db6` 1、`0bc494e8` 1、`14411595` 1、`15256c11` 1、`17b70790` 1、`1cc76f37` 2、`1d0b6dde` 1、`1f4747c8` 2、`20afdfff` 1、`217e93ef` 1、`238588d3` 1、`24a6af9f` 2、`30ccd1d6` 1、`34c8ac69` 1、`352b96f5` 2、`3684e085` 1、`3d6d1981` 2、`3ea52b78` 1、`4232e195` 2、`4606ccc4` 1、`4fb1c103` 1、`519f6769` 3、`58deb5f7` 1、`5948050d` 1、`6d259db1` 1、`7231acad` 1、`76aa7901` 1、`7a065e8f` 1、`7d643db6` 2、`7e04234b` 1、`83ce396a` 1、`84b5498c` 2、`8c18bb22` 1、`9362c9e0` 1、`af15c432` 2、`b402fa54` 2、`bb79b83d` 1、`c1e00d34` 2、`c6379cfc` 1、`cdc6de4e` 2、`ce456d60` 1、`d18e6e01` 1、`d767b842` 2、`da377615` 1、`dc5c370e` 1、`f5cf8413` 1 | `df34eed4` → `6a0b6391` | 照第三版的写法写（每条经验最多 24 条、只留编译查不出来的那类）；另对着知识核过前提、例外、标题和何时使用，有依据的补进正文 |
 
 ## 是什么
 
@@ -57,17 +58,17 @@
 
 ## 格式
 
-现在有两种格式：旧格式（下面前两种，第三版和第七版规则的文件，`sdk` 只记 `harmony`、`android`）和 2026-11-21 起的新格式（第三种）。已经换成新格式的经验 394 条（active 394 条）：`009212ca`、`033b8254`、`03786d9b`、`0457a04c`、`046c8bbb`、`0670bec9`、`0880ecd4`、`089bb378`、`08b9064f`、`08c38f95`、`08e71bb7`、`09a0bcea`、`0a26e0cf`、`0b72c197`、`0c355313`、`0caaa4ef`、`0cbafc2a`、`0cc7ae4e`、`0ce9fe04`、`0d7d6e73`、`0deb5117`、`0e1c8468`、`0e997c4e`、`0ef2cd00`、`0f67121a`、`1150c0c7`、`11e9d15d`、`1267d6ca`、`1368f3a5`、`14509c64`、`148a3e67`、`14b7f409`、`1696967d`、`16c24b9a`、`1856958f`、`187c725b`、`18d9c9a3`、`18fca50f`、`19cedec8`、`19dd006e`、`1a315093`、`1a66114f`、`1ba734fe`、`1c175988`、`1c27b6c7`、`1c5ea21b`、`1cebb531`、`1d3ab8b9`、`1e972af4`、`1f366fe4`、`1f6e36f8`、`1fa08bf9`、`21db515a`、`22432022`、`22f5100f`、`237091b9`、`24625282`、`24bc4929`、`2622bc32`、`262681f6`、`27d9e16a`、`29744eb6`、`29922f57`、`29b42ac7`、`29f62d17`、`2a2924aa`、`2b00c4ff`、`2b3d45c1`、`2cf26148`、`2e4279c4`、`2e636699`、`2ed8c219`、`2fcb6612`、`2fd3f5f2`、`300200dd`、`30643cd3`、`3117bc94`、`31ab9f59`、`31b2022c`、`32af50a1`、`32c7d4b2`、`3348c580`、`33791daf`、`338f1184`、`33cc1f6b`、`351ce34d`、`35a68486`、`35b9cdfd`、`35f4f9b3`、`368c4592`、`372d4a11`、`376cb07b`、`39077e66`、`396d5447`、`39d1dee4`、`39f137ee`、`3af52968`、`3b4a9614`、`3f3e1ff0`、`3f6b5d0b`、`4030f978`、`40fc63b1`、`41bb62cd`、`420023d4`、`42364ad3`、`4283cc34`、`42cf412c`、`43a90502`、`447ba581`、`4567f9f7`、`45739c78`、`463f8ca8`、`46a0d7f2`、`47785524`、`47faf26b`、`488a3bd7`、`49ea8b0d`、`4a4f8d84`、`4a7c04b8`、`4b5903a8`、`4b7012d4`、`4bea916d`、`4c254d10`、`4c93cca5`、`4ce3a1c1`、`4d0f0176`、`4d1c980b`、`4da9eabc`、`4e306a66`、`4e9507a2`、`4f81eeea`、`5034b56b`、`51138567`、`51651155`、`51bf52bc`、`52d7edb9`、`5475edc4`、`55f44e2e`、`5754b7be`、`57a52be7`、`598d3bd0`、`5990184d`、`5a140e45`、`5a82d62f`、`5bc9af19`、`5c101b4b`、`5c6217b0`、`5c703b4b`、`5caf7ead`、`5d1c2c78`、`5d6e099f`、`5e235f28`、`5f669c37`、`5f883372`、`605038b0`、`617ffbd8`、`624248be`、`62ac5e65`、`63660a83`、`652974ce`、`65358a02`、`6587c954`、`666a7460`、`66e08237`、`67118603`、`6717b958`、`67ab02ab`、`68023ac5`、`68717b80`、`69229aa8`、`69e07207`、`6a3a7f46`、`6b287970`、`6b4950ca`、`6bd9ae0d`、`6c474c15`、`6d3ac9a5`、`6d6ba721`、`6dae0bf2`、`6e74f064`、`7083c6ad`、`716d06e7`、`73894333`、`73a7dd4f`、`74295d12`、`74d535af`、`7508ddc5`、`75f4743d`、`7708f650`、`771d1ba1`、`776ed5eb`、`7827e070`、`783faf27`、`786a0484`、`7a081dc3`、`7ad5a7d1`、`7b19b801`、`7caea06a`、`7ed00c55`、`7f5eba1b`、`803ba029`、`80dd4e62`、`80e1d2c0`、`824031d5`、`8335bc40`、`836a5414`、`8390913d`、`843a70af`、`850dc758`、`8534b92d`、`871d3751`、`89368bd5`、`8953e390`、`8a752faf`、`8a7d2595`、`8a881c2e`、`8b145360`、`8b7c4ece`、`8b84279c`、`8b8e304a`、`8bc258c2`、`8c24f05e`、`8d297954`、`8e0e9fe5`、`9147be4d`、`92aee54a`、`931ef95a`、`938301f1`、`943544ce`、`94715d0d`、`9477f662`、`94a3f7a5`、`95314752`、`953309e0`、`95aa64d6`、`96c89001`、`96eea0fe`、`9769c8f7`、`97966205`、`97bf3cf5`、`9886f489`、`99080bd3`、`99a8d470`、`99b35920`、`9abd54b8`、`9c4de55a`、`9d42548e`、`9de33221`、`9f2d3b8b`、`9fa98065`、`a078efd3`、`a0b05196`、`a23ad0b5`、`a2f6a4ae`、`a317e16c`、`a3ac761b`、`a45be200`、`a4e6bcfb`、`a4ee90ea`、`a58ebfe7`、`a5aeed3d`、`a6121cc7`、`a6ed8a9c`、`a6f300f9`、`a7f81d00`、`a8452bfe`、`aae5f345`、`ac7a2e17`、`ad1db0aa`、`ad6f23b8`、`adad817f`、`ae093ded`、`ae78da6f`、`afae8d13`、`b0405a29`、`b1916207`、`b1991f63`、`b366cf7a`、`b3bb0bc3`、`b3f534eb`、`b58df29f`、`b58f26f0`、`b59097ee`、`b5e8609c`、`b661a3a6`、`b714378f`、`b72e0d67`、`b73a1ac8`、`b742fb72`、`b92a8a56`、`ba0cb144`、`bb7ca42b`、`bbb31db6`、`bc48518f`、`bc5b8558`、`bc79621b`、`bd33d8ba`、`bdb97da6`、`bdc493f5`、`c066489f`、`c1968bdf`、`c2f15aa3`、`c3a3797d`、`c3bd9c8b`、`c46f182c`、`c4a6eaaf`、`c4af68b3`、`c55c5644`、`c61ac79c`、`c73deaf6`、`c78d27d0`、`c7ee1769`、`c883a0ff`、`c8e645a5`、`caa043fb`、`ccbf0a7f`、`ccccf83d`、`cce58a15`、`cd4a69e8`、`cde4120a`、`cde53c6e`、`cf018b76`、`cf077549`、`cf111aad`、`cf670f80`、`d0736ecd`、`d0aad947`、`d434bb5c`、`d442eb6e`、`d53223f4`、`d715fa78`、`d77baa74`、`d7c148c4`、`d7dcfc80`、`d80ced7b`、`d838f923`、`d9143de0`、`dbfae443`、`dc3ac050`、`dc3f2589`、`dc66a65d`、`dcb3c5e6`、`df1f6917`、`df70c7f1`、`dfcdbb19`、`e01c6f82`、`e0f3b5b7`、`e1211056`、`e17b45a2`、`e23468a0`、`e2fc9486`、`e3077bf6`、`e6b1032f`、`e6b1f909`、`e85bdb26`、`e9890889`、`e9f03fcc`、`ea965b7b`、`ea9a6cfe`、`eb4de4fd`、`ecbaa172`、`ecc67592`、`ed555632`、`ed571550`、`edae4e27`、`edb937b0`、`edc9465d`、`ef93bb20`、`efb94f2d`、`efff9374`、`f0a40d99`、`f1069f51`、`f122d4c4`、`f1963297`、`f1a98587`、`f260fb56`、`f395cbdf`、`f3e614f2`、`f64afc22`、`f6b95d7d`、`f80ae7c3`、`f86b02e9`、`f876887b`、`f88b9c82`、`f9f923ac`、`faec7be0`、`fb996956`、`fd3add71`、`fde79829`、`fe10bd24`、`feec63f6`、`fef54f39`、`ff19b091`、`ff5e8fbf`；其余 4 个知识文件还是旧格式。
+现在有两种格式：旧格式（下面前两种，第三版和第七版规则的文件，`sdk` 只记 `harmony`、`android`）和 2026-11-21 起的新格式（第三种）。已经换成新格式的经验 475 条（active 475 条）：`009212ca`、`033b8254`、`03786d9b`、`0457a04c`、`046c8bbb`、`060a67da`、`0670bec9`、`06e3564e`、`0880ecd4`、`08854573`、`089bb378`、`08b9064f`、`08c38f95`、`08e71bb7`、`09a0bcea`、`0a26e0cf`、`0ac4dfb5`、`0b72c197`、`0bba9db6`、`0bc494e8`、`0c355313`、`0caaa4ef`、`0cbafc2a`、`0cc7ae4e`、`0ce9fe04`、`0d7d6e73`、`0deb5117`、`0e1c8468`、`0e997c4e`、`0ef2cd00`、`0f67121a`、`1150c0c7`、`11e9d15d`、`1267d6ca`、`1368f3a5`、`14411595`、`14509c64`、`148a3e67`、`14b7f409`、`15256c11`、`1575e3ac`、`1696967d`、`16c24b9a`、`17b70790`、`1856958f`、`187c725b`、`18d9c9a3`、`18fca50f`、`19cedec8`、`19dd006e`、`1a315093`、`1a66114f`、`1ba734fe`、`1c175988`、`1c27b6c7`、`1c513fdf`、`1c5ea21b`、`1cc76f37`、`1cebb531`、`1d0b6dde`、`1d3ab8b9`、`1e972af4`、`1f366fe4`、`1f4747c8`、`1f6e36f8`、`1fa08bf9`、`20afdfff`、`217e93ef`、`21db515a`、`22032aef`、`22432022`、`22f5100f`、`237091b9`、`238588d3`、`24625282`、`24a6af9f`、`24bc4929`、`2622bc32`、`262681f6`、`27d9e16a`、`29744eb6`、`29922f57`、`29b42ac7`、`29f62d17`、`2a2924aa`、`2a4e6af2`、`2b00c4ff`、`2b3d45c1`、`2cf26148`、`2e4279c4`、`2e636699`、`2e8ffecc`、`2ed8c219`、`2fcb6612`、`2fd3f5f2`、`300200dd`、`30643cd3`、`30ccd1d6`、`3117bc94`、`31ab9f59`、`31b2022c`、`32141cb6`、`32af50a1`、`32c7d4b2`、`3348c580`、`33791daf`、`338f1184`、`33cc1f6b`、`34c8ac69`、`34f35851`、`351ce34d`、`352b96f5`、`35a68486`、`35b9cdfd`、`35f4f9b3`、`3684e085`、`368c4592`、`372d4a11`、`376cb07b`、`381ebc58`、`39077e66`、`39506b53`、`396d5447`、`39d1dee4`、`39f137ee`、`3af52968`、`3b4a9614`、`3cdb1fea`、`3d6d1981`、`3ea52b78`、`3f3e1ff0`、`3f6b5d0b`、`4030f978`、`40ee4d97`、`40fc63b1`、`41bb62cd`、`420023d4`、`4232e195`、`42364ad3`、`4283cc34`、`42cf412c`、`431a6580`、`43a90502`、`4428ce76`、`447985a4`、`447ba581`、`4567f9f7`、`45739c78`、`4606ccc4`、`463f8ca8`、`46a0d7f2`、`47785524`、`47faf26b`、`488a3bd7`、`49ea8b0d`、`4a4f8d84`、`4a7c04b8`、`4ad956ba`、`4ada9483`、`4b5903a8`、`4b7012d4`、`4bea916d`、`4c254d10`、`4c93cca5`、`4ce3a1c1`、`4d0f0176`、`4d1c980b`、`4d893217`、`4da9eabc`、`4e306a66`、`4e9507a2`、`4f81eeea`、`4fb1c103`、`5034b56b`、`51138567`、`51651155`、`519f6769`、`51bf52bc`、`52d7edb9`、`5475edc4`、`55f44e2e`、`5754b7be`、`57a52be7`、`58deb5f7`、`5948050d`、`598d3bd0`、`5990184d`、`5a140e45`、`5a82d62f`、`5bc9af19`、`5c101b4b`、`5c6217b0`、`5c703b4b`、`5caf7ead`、`5d1c2c78`、`5d6e099f`、`5e235f28`、`5f669c37`、`5f883372`、`605038b0`、`617ffbd8`、`624248be`、`62499aa2`、`62ac5e65`、`63660a83`、`652974ce`、`65358a02`、`6587c954`、`666a7460`、`66e08237`、`67118603`、`6717b958`、`67ab02ab`、`68023ac5`、`686bbe76`、`68717b80`、`69229aa8`、`69e07207`、`6a3a7f46`、`6a95a3ae`、`6b287970`、`6b4950ca`、`6bd9ae0d`、`6c474c15`、`6d259db1`、`6d3ac9a5`、`6d6ba721`、`6dae0bf2`、`6e74f064`、`7083c6ad`、`716d06e7`、`7231acad`、`73894333`、`73a7dd4f`、`74295d12`、`74d535af`、`7508ddc5`、`75f4743d`、`76aa7901`、`7708f650`、`771d1ba1`、`776ed5eb`、`77ca67f1`、`7827e070`、`783faf27`、`786a0484`、`7a065e8f`、`7a081dc3`、`7ad5a7d1`、`7b19b801`、`7caea06a`、`7d643db6`、`7e04234b`、`7ed00c55`、`7f5eba1b`、`803ba029`、`80dd4e62`、`80e1d2c0`、`824031d5`、`8335bc40`、`836a5414`、`8390913d`、`83ce396a`、`843a70af`、`84b5498c`、`850dc758`、`8534b92d`、`871d3751`、`89368bd5`、`8953e390`、`8a752faf`、`8a7d2595`、`8a881c2e`、`8b145360`、`8b7c4ece`、`8b84279c`、`8b8e304a`、`8bc258c2`、`8c18bb22`、`8c24f05e`、`8d297954`、`8e0e9fe5`、`9147be4d`、`91c89aff`、`92aee54a`、`931ef95a`、`9362c9e0`、`938301f1`、`943544ce`、`94715d0d`、`9477f662`、`94a3f7a5`、`95314752`、`953309e0`、`95aa64d6`、`96c89001`、`96eea0fe`、`9769c8f7`、`97966205`、`97bf3cf5`、`9886f489`、`99080bd3`、`99a8d470`、`99b35920`、`9abd54b8`、`9b880b43`、`9c4de55a`、`9d42548e`、`9de33221`、`9f2d3b8b`、`9f4bb32c`、`9fa98065`、`a078efd3`、`a0b05196`、`a23ad0b5`、`a2f6a4ae`、`a317e16c`、`a3ac761b`、`a45be200`、`a4e6bcfb`、`a4ee90ea`、`a58ebfe7`、`a5aeed3d`、`a6121cc7`、`a6ed8a9c`、`a6f300f9`、`a7f81d00`、`a8452bfe`、`aae5f345`、`ac7a2e17`、`ad1db0aa`、`ad6f23b8`、`adad817f`、`ae093ded`、`ae1aa4ff`、`ae78da6f`、`af15c432`、`afae8d13`、`b0405a29`、`b1916207`、`b1991f63`、`b366cf7a`、`b3bb0bc3`、`b3c9382d`、`b3f534eb`、`b402fa54`、`b58df29f`、`b58f26f0`、`b59097ee`、`b5e8609c`、`b661a3a6`、`b714378f`、`b72e0d67`、`b73a1ac8`、`b742fb72`、`b92a8a56`、`ba0cb144`、`bad79e09`、`bb79b83d`、`bb7ca42b`、`bbb31db6`、`bc48518f`、`bc5b8558`、`bc79621b`、`bd33d8ba`、`bdb97da6`、`bdc493f5`、`c066489f`、`c1968bdf`、`c1e00d34`、`c2f15aa3`、`c3a3797d`、`c3bd9c8b`、`c46f182c`、`c4a6eaaf`、`c4af68b3`、`c55c5644`、`c61ac79c`、`c6379cfc`、`c73deaf6`、`c78d27d0`、`c7ee1769`、`c883a0ff`、`c8e645a5`、`caa043fb`、`ccbf0a7f`、`ccccf83d`、`cce58a15`、`cd4a69e8`、`cdc6de4e`、`cde4120a`、`cde53c6e`、`ce456d60`、`cf018b76`、`cf077549`、`cf111aad`、`cf670f80`、`cfe552e1`、`d0736ecd`、`d0aad947`、`d18e6e01`、`d434bb5c`、`d442eb6e`、`d53223f4`、`d715fa78`、`d767b842`、`d77baa74`、`d7c148c4`、`d7dcfc80`、`d80ced7b`、`d838f923`、`d9143de0`、`da377615`、`dbfae443`、`dc3ac050`、`dc3f2589`、`dc5c370e`、`dc66a65d`、`dcb3c5e6`、`df1f6917`、`df70c7f1`、`dfcdbb19`、`e01c6f82`、`e0f3b5b7`、`e1211056`、`e17b45a2`、`e23468a0`、`e2a08b9a`、`e2fc9486`、`e3077bf6`、`e6b1032f`、`e6b1f909`、`e7a9842a`、`e85bdb26`、`e9890889`、`e9f03fcc`、`ea965b7b`、`ea9a6cfe`、`eb4de4fd`、`ecbaa172`、`ecc67592`、`ed555632`、`ed571550`、`edae4e27`、`edb937b0`、`edc9465d`、`ef93bb20`、`efb94f2d`、`efff9374`、`f0a40d99`、`f1069f51`、`f122d4c4`、`f1963297`、`f1a98587`、`f260fb56`、`f395cbdf`、`f3e614f2`、`f5183471`、`f5cf8413`、`f64afc22`、`f6b95d7d`、`f80ae7c3`、`f86b02e9`、`f876887b`、`f88b9c82`、`f9f923ac`、`faec7be0`、`fb996956`、`fd3add71`、`fde79829`、`fe10bd24`、`feec63f6`、`fef54f39`、`ff19b091`、`ff5e8fbf`；其余 4 个知识文件还是旧格式。
 
 共同：`sdk` 是核实时用的版本（`harmony`、`android` 两个键；新格式另有三个键）；`changes` 每项有 `where`（正文哪一部分）、`before`（原句）、`after`（新句）、`basis`（依据）、`type`（改动类别）；`entries` 是平台事实；`device_todo` 是要上机才能定的事项，只留给维护的人；`dropped_notes` 是配的人删掉的条数。交给模型的只有正文（已含改句）和条目的 `step`、`fact`、`scope`；`source`、`code`、`origin`、`basis`、`device_todo` 不交。
 
 - **第三版规则的格式（4 个文件）**：顶层 `id`、`sdk`、`changes`、`entries`、`device_todo`、`dropped_notes`（个别有 `note`）。条目栏 `step`、`fact`、`source`、`kind`（鸿蒙接口 / 安卓平台 / 依赖库 / 卡里验证）、`origin`，个别带 `code`；**没有 `scope`**，条数比第七版多（共 35 条，一条经验最多 19 条）。
 - **第七版规则的格式（0 个文件）**：顶层 `lesson`、`sdk`、`changes`、`entries`、`device_todo`、`dropped_notes`、`note`。条目栏 `step`、`fact`、`scope`（成立范围：对什么成立、什么条件下成立、最常见的不成立情形）、`source`、`kind`（鸿蒙接口 / 安卓平台 / 依赖库）、`origin`，可选 `code`；每条经验最多 6 条（共 0 条）。规则见 `RULES.md`。
-- **新格式（2026-11-21 起，394 个文件）**：和第三版同一种结构（顶层 `id`、`sdk`、`changes`、`entries`、`device_todo`、`dropped_notes`，没有条目时有 `note`），`sdk` 另记 `verified_on`（核实日期）、`docs_commit`、`docs_date`（核实时用的 OpenHarmony 文档 master 的提交和日期）。条目栏 `step`、`fact`、`source`、`kind`（鸿蒙接口 / 安卓平台 / 依赖库 / 卡里验证）、`origin`；没有 `scope`，条数不设上限（共 1986 条，一条经验最多 24 条）。渲染时段头在鸿蒙 SDK 版本后面多写文档 master 的日期和提交，条目不带成立范围。
+- **新格式（2026-11-21 起，475 个文件）**：和第三版同一种结构（顶层 `id`、`sdk`、`changes`、`entries`、`device_todo`、`dropped_notes`，没有条目时有 `note`），`sdk` 另记 `verified_on`（核实日期）、`docs_commit`、`docs_date`（核实时用的 OpenHarmony 文档 master 的提交和日期）。条目栏 `step`、`fact`、`source`、`kind`（鸿蒙接口 / 安卓平台 / 依赖库 / 卡里验证）、`origin`；没有 `scope`，条数不设上限（共 2205 条，一条经验最多 24 条）。渲染时段头在鸿蒙 SDK 版本后面多写文档 master 的日期和提交，条目不带成立范围。
 
 ## 覆盖
 
-398 个知识文件。其中 4 个对应本分支退役的经验（文件原样留着，不渲染，它们的 8 处改句没有套）；其余 **394 / 647 条 active 经验**有知识文件（第三版 0 条、第七版 0 条、新格式 394 条），其中 354 条有条目（`08e71bb7`、`0f67121a`、`1fa08bf9`、`22f5100f`、`31ab9f59`、`35b9cdfd`、`35f4f9b3`、`372d4a11`、`41bb62cd`、`447ba581`、`4c254d10`、`5c703b4b`、`5f883372`、`6587c954`、`6a3a7f46`、`6b287970`、`6d3ac9a5`、`6e74f064`、`8390913d`、`8a7d2595`、`8c24f05e`、`9147be4d`、`931ef95a`、`95314752`、`95aa64d6`、`99a8d470`、`99b35920`、`aae5f345`、`ae78da6f`、`b92a8a56`、`bbb31db6`、`c1968bdf`、`cd4a69e8`、`d9143de0`、`dbfae443`、`dc3ac050`、`dfcdbb19`、`e23468a0`、`ed555632`、`f395cbdf` 是流程类经验，没有可挂的条目）。其余 active 经验还没有知识。
+479 个知识文件。其中 4 个对应本分支退役的经验（文件原样留着，不渲染，它们的 8 处改句没有套）；其余 **475 / 647 条 active 经验**有知识文件（第三版 0 条、第七版 0 条、新格式 475 条），其中 409 条有条目（`06e3564e`、`08e71bb7`、`0bc494e8`、`0f67121a`、`1575e3ac`、`1c513fdf`、`1d0b6dde`、`1fa08bf9`、`22032aef`、`22f5100f`、`2e8ffecc`、`31ab9f59`、`32141cb6`、`34f35851`、`35b9cdfd`、`35f4f9b3`、`372d4a11`、`41bb62cd`、`4428ce76`、`447ba581`、`4ad956ba`、`4c254d10`、`5c703b4b`、`5f883372`、`62499aa2`、`6587c954`、`686bbe76`、`6a3a7f46`、`6a95a3ae`、`6b287970`、`6d3ac9a5`、`6e74f064`、`7231acad`、`76aa7901`、`77ca67f1`、`8390913d`、`8a7d2595`、`8c24f05e`、`9147be4d`、`931ef95a`、`9362c9e0`、`95314752`、`95aa64d6`、`99a8d470`、`99b35920`、`9b880b43`、`aae5f345`、`ae78da6f`、`af15c432`、`b92a8a56`、`bad79e09`、`bbb31db6`、`c1968bdf`、`cd4a69e8`、`cfe552e1`、`d18e6e01`、`d9143de0`、`da377615`、`dbfae443`、`dc3ac050`、`dfcdbb19`、`e23468a0`、`e7a9842a`、`ed555632`、`f395cbdf`、`f5183471` 是流程类经验，没有可挂的条目）。其余 active 经验还没有知识。
 
 | id | 主题 | 规则 | 条目（带成立范围） | 改句（已进正文） | 标题 |
 |---|---|---|---:|---:|---|
@@ -207,22 +208,36 @@
 | `lesson-19cedec8ad1bc4b08b2c` | arkts/api-signatures | 新格式 | 7（0） | 2（是） | ArkTS intl.NumberFormat 用 style: '… |
 | `lesson-31b2022cb16eba3d9f1e` | arkts/api-signatures | 新格式 | 2（0） | 2（是） | MessageDigest 改用 cryptoFramework M… |
 | `lesson-63660a8304f7d3920bfc` | arkts/api-signatures | 新格式 | 1（0） | 0 | 传给 ArkUI 属性方法的值按其实际重载定型，不传 string … |
+| `lesson-7d643db6ab406ae64c77` | arkts/api-signatures | 新格式 | 7（0） | 2（是） | 向 @BuilderParam 槽传内容时用箭头闭包只调用 @Bui… |
+| `lesson-b402fa546504a1dd6db7` | arkts/api-signatures | 新格式 | 3（0） | 2（是） | TabContent.tabBar 只接受字符串、资源、Custom… |
+| `lesson-ce456d60534d97524aa4` | arkts/api-signatures | 新格式 | 5（0） | 1（是） | 源端单调计时（System.nanoTime、SystemClock… |
+| `lesson-f5cf8413ebea57f3b415` | arkts/api-signatures | 新格式 | 16（0） | 1（是） | 依赖 API 的单位、默认行为或作用范围时，源端与目标端都读到语义说… |
+| `lesson-15256c115e73ac0a1d86` | arkts/async | 新格式 | 2（0） | 1（是） | BlockingQueue 常驻消费线程改成 Promise 泵时，… |
+| `lesson-24a6af9f04763e8cda90` | arkts/async | 新格式 | 2（0） | 2（是） | 缓存 Promise 做单飞的入口方法不声明 async，直接返回缓… |
 | `lesson-338f11844f0010e46bc3` | arkts/async | 新格式 | 4（0） | 1（是） | 同步读取改成异步 initialize 后，失败分支要复位状态并让页… |
+| `lesson-39506b537e290273ecb1` | arkts/async | 新格式 | 1（0） | 0 | 源端同步的“提交挂起对象后清空字段”改成含 await 的实现时，先… |
+| `lesson-3cdb1fea9a29344c9205` | arkts/async | 新格式 | 3（0） | 0 | 源端后台线程或回调里写的字段，调用方发起后又同步写同一字段时，按实际… |
 | `lesson-47faf26b44bb4075b0d2` | arkts/async | 新格式 | 4（0） | 0 | 源 API 用返回值表示“被拒”、用异常表示故障，而目标 SDK 两… |
 | `lesson-5c703b4b1128e37dbef5` | arkts/async | 新格式 | 0（0） | 1（是） | 需授权、需初始化或依赖定位坐标的仓库方法，前置条件缺失时按源端分支处… |
 | `lesson-843a70afd7e08bfed97c` | arkts/async | 新格式 | 7（0） | 1（是） | 异步初始化里，用户可编辑的输入状态在第一个 await 之前写入初值… |
+| `lesson-9b880b43ef451669814e` | arkts/async | 新格式 | 0（0） | 0 | 源端在构造期同步完成 initialize 的客户端，目标设显式就绪… |
 | `lesson-b19162077a2ab886d809` | arkts/async | 新格式 | 7（0） | 3（是） | Kit API 的 catch 值按 BusinessError 取… |
 | `lesson-b1991f633e5307abdc4d` | arkts/async | 新格式 | 7（0） | 2（是） | 源端阻塞到完成才返回的 void 方法（排空队列、关闭设备、停录）改… |
 | `lesson-ba0cb144aa48f9584060` | arkts/async | 新格式 | 2（0） | 1（是） | 源端连续的同步平台调用（先取消再振动、先停止再启动）映射到返回 Pr… |
+| `lesson-cdc6de4ebcdeeadc287c` | arkts/async | 新格式 | 3（0） | 2（是） | 单线程写执行器（已在执行线程时同步内联嵌套调用）改为 Promise… |
+| `lesson-f5183471e9c0e1189f6f` | arkts/async | 新格式 | 0（0） | 0 | 同键覆盖前先取消旧任务时，完成清理按句柄身份删除：运行表当前项仍是本… |
 | `lesson-8b145360b447a10d52ef` | arkts/decorators | 新格式 | 1（0） | 0 | V2 组件成员装饰器裸写（@Local/@Param/@Once/@… |
 | `lesson-c1968bdf112ed3e6b259` | arkts/decorators | 新格式 | 0（0） | 1（是） | 自定义组件的成员不与组件通用属性方法同名（position、widt… |
 | `lesson-0deb51172ebdd2e056a9` | arkts/numeric | 新格式 | 4（0） | 1（是） | Kotlin/Java Float 的运算与比较迁到 ArkTS 时… |
 | `lesson-52d7edb9042110e30eb4` | arkts/numeric | 新格式 | 1（0） | 1（是） | 迁移比值与进度计算时保留源端的零分母分支与范围钳制：ArkTS nu… |
 | `lesson-5f669c379cfcdb14ad10` | arkts/numeric | 新格式 | 3（0） | 1（是） | Java long 常量进入 SQL 或字符串时检查 JS 安全整数… |
 | `lesson-0cbafc2ad4096001d0e8` | arkts/stdlib | 新格式 | 16（0） | 0 | Java/ICU 正则、String/List 方法与 Androi… |
+| `lesson-1f4747c81f16e9529787` | arkts/stdlib | 新格式 | 11（0） | 2（是） | Java 集合迭代序、有符号 byte 比较与 switch 返回码… |
 | `lesson-237091b9b04bc4cd340b` | arkts/stdlib | 新格式 | 15（0） | 1（是） | Java 文本读行、split/trim、BOM、String.fo… |
 | `lesson-ae093dedda604fddf17e` | arkts/stdlib | 新格式 | 8（0） | 3（是） | DecimalFormat、BigDecimal 舍入与 Float… |
+| `lesson-c1e00d34bafe6700a8ca` | arkts/stdlib | 新格式 | 5（0） | 2（是） | Kotlin 严格解析（toIntOrNull、ZonedDateT… |
 | `lesson-ecbaa1723e2beb9b1aec` | arkts/stdlib | 新格式 | 3（0） | 0 | 手写 getString/String.format 的位置参数插入… |
+| `lesson-060a67da4cdf63d03b19` | arkts/strict-mode | 新格式 | 3（0） | 1（是） | 路由参数类及其基类放进不导入页面的叶子模块，避免路由层与页面循环导入… |
 | `lesson-1696967d1320c7735732` | arkts/strict-mode | 新格式 | 1（0） | 1（是） | ArkTS 里给对象字面量写显式 class/interface 类… |
 | `lesson-6e74f064efe2649fc295` | arkts/strict-mode | 新格式 | 0（0） | 1（是） | SDK 把观察者或回调类型声明为 class 时不写 impleme… |
 | `lesson-931ef95a3d0cf202fe5b` | arkts/strict-mode | 新格式 | 0（0） | 0 | 只含方法签名的自定义接口用 implements 它的具名类实现：不… |
@@ -231,46 +246,113 @@
 | `lesson-08e71bb72d05b1d79d28` | arkts/ui-syntax | 新格式 | 0（0） | 0 | build() 与 @Builder 里每个组件、条件与循环渲染各占… |
 | `lesson-18d9c9a34c1952f43f53` | arkts/ui-syntax | 新格式 | 3（0） | 0 | justifyContent/alignItems 只属于 Colu… |
 | `lesson-39d1dee415d4a252fc5c` | arkts/ui-syntax | 新格式 | 2（0） | 1（是） | stateStyles 各状态只写 @Styles 方法引用、全局 … |
+| `lesson-0bba9db6a18f2e732334` | data/codec | 新格式 | 3（0） | 1（是） | 转写源码定长字节数组常量时逐下标列出全部字节并核总长；规格中的分段简… |
+| `lesson-1d0b6dde849cbd70ee8f` | data/codec | 新格式 | 0（0） | 1（是） | 用命名常量替换源端字面下标或区间时按每处调用的用途选端点：同一结构里… |
+| `lesson-84b5498c19a108c51c8e` | data/codec | 新格式 | 10（0） | 2（是） | 自写 TIFF/EXIF 等多目录二进制序列化器替代库时：值区偏移跨… |
+| `lesson-ae1aa4ff5e2217b67e06` | data/codec | 新格式 | 6（0） | 0 | 手写 proto3 编解码时按字段 wire type 成对实现读写… |
+| `lesson-3d6d1981a3055c9a298b` | data/files | 新格式 | 2（0） | 2（是） | 用 zlib 替代 GZIPInputStream 识别损坏数据时先… |
 | `lesson-3f6b5d0b0ea6806a1b0c` | data/files | 新格式 | 5（0） | 2（是） | fileIo.mkdirSync 对已存在目录会抛 13900015… |
 | `lesson-4c93cca5dde48080b008` | data/files | 新格式 | 4（0） | 0 | OutputStream 覆盖写改成 fileIo：打开加 TRUN… |
 | `lesson-8534b92df38e546092fe` | data/files | 新格式 | 7（0） | 1（是） | 文件导入导出按源端运行时与库默认语义实现：OOM 兜底不改成读前大小… |
 | `lesson-ff5e8fbfb9ed491d99ee` | data/files | 新格式 | 3（0） | 0 | 源端在后台线程执行的文件拷贝与导入改用异步 IO 或 taskpoo… |
+| `lesson-0ac4dfb5731bf1559e78` | data/model | 新格式 | 2（0） | 2（是） | 把源端判定函数改写成名称谓词时，大小写等归一放在谓词内部，不依赖调用… |
+| `lesson-22032aef44d6cd2bdb08` | data/model | 新格式 | 0（0） | 0 | “应用默认”一类排除式派生判定按源 ViewModel 谓词的完整取… |
 | `lesson-22f5100f6718eaecc66f` | data/model | 新格式 | 0（0） | 1（是） | 宿主或适配层给展示型 UI 模型赋值时逐字段按源端绑定取值：code… |
+| `lesson-4ad956bab5fca6d7f418` | data/model | 新格式 | 0（0） | 0 | 完成态等协作状态的派生与写入逐分支移植源端函数：审计摘要或审查意见只… |
+| `lesson-6a95a3ae5f47a15892fc` | data/model | 新格式 | 0（0） | 0 | 带“本月”一类关联语义的保存与读取，按源端实体构造参数和查询条件建模… |
+| `lesson-7231acadeaed3a9a56c0` | data/model | 新格式 | 0（0） | 1（是） | 响应 DTO 按 SDK data class 逐字段建模：平铺还是… |
 | `lesson-7caea06acbf8f99d6128` | data/model | 新格式 | 2（0） | 0 | SDK 序列化的枚举分开写线上形态与本地持久化形态：kotlinx.… |
 | `lesson-9f2d3b8b099a927b53f4` | data/model | 新格式 | 1（0） | 0 | 模型字段按源端类型与构造路径建模：装箱数值不改成字符串域，null … |
 | `lesson-b92a8a56aee6db5e9c52` | data/model | 新格式 | 0（0） | 0 | 把以字符串持久化的模型枚举映射到页面本地类型时，按模型枚举成员逐一 … |
+| `lesson-bb79b83df499d3f93f38` | data/model | 新格式 | 3（0） | 1（是） | 编辑会话的脏检查与保存差集按源对象语义迁移：isChanged/eq… |
 | `lesson-c066489fcf35ab37378c` | data/model | 新格式 | 3（0） | 0 | 服务器下发的大整数 id 在 JSON.parse 之前保住原文：源… |
 | `lesson-c73deaf6f27d3426c4e9` | data/model | 新格式 | 2（0） | 0 | 逐字段搬运 Builder 或构造调用时，同时核对两端模型字段的单位 |
+| `lesson-0bc494e864b2d8ab1a34` | data/network | 新格式 | 0（0） | 1（是） | Service 只收不透明请求体时，从源端调用链追到 body 的构… |
+| `lesson-1575e3acad2a2b4689df` | data/network | 新格式 | 0（0） | 0 | 源端靠 catch 处理 HTTP 失败、目标客户端永不 rejec… |
+| `lesson-17b7079006badd437bb1` | data/network | 新格式 | 7（0） | 1（是） | OkHttp 缓存映射到 RCP ResponseCache 时，m… |
+| `lesson-1cc76f37fe0aea9fef25` | data/network | 新格式 | 2（0） | 2（是） | 按源端 Retrofit 实际选中的重载确定请求体编码：标了 @Fo… |
+| `lesson-20afdfffa13dc5bca10c` | data/network | 新格式 | 2（0） | 1（是） | 平台计费网络判定按承载显式映射，不直译为单一能力位 |
+| `lesson-217e93ef9097efc519f1` | data/network | 新格式 | 1（0） | 1（是） | 源端拦截器统一注入的请求头逐条迁到 HttpClient 默认头，头… |
 | `lesson-246252824c631aa6eff5` | data/network | 新格式 | 2（0） | 1（是） | 服务地址与环境沿地址键名追到源端常量与取址逻辑：分清各接口族的 ho… |
+| `lesson-2a4e6af209308c08aaa6` | data/network | 新格式 | 2（0） | 0 | 源端从响应头取 token/refreshToken 时，HTTP … |
+| `lesson-30ccd1d65d2c39029256` | data/network | 新格式 | 5（0） | 1（是） | 源端构建期注入的服务地址、签名与响应解密材料，按决策从私有构建配置接… |
+| `lesson-3684e08592c85de82204` | data/network | 新格式 | 13（0） | 1（是） | 把 RSA-OAEP + AES-GCM 网关加密移植到 crypt… |
+| `lesson-4232e195ff42fc63ba43` | data/network | 新格式 | 6（0） | 2（是） | 移植加解密工具时逐分支保留源工具的前置返回与异常回退：空串不进 Ci… |
+| `lesson-62499aa25e87fa6ab5e1` | data/network | 新格式 | 0（0） | 0 | 新增或改写请求通道时按源端重载决定是否内置取 key 门；确需门时按… |
+| `lesson-7e04234bdf5aef97b651` | data/network | 新格式 | 2（0） | 1（是） | 拦截器按本地键读取的公共参数都要有生产者：按源端初始化序列补齐写入步… |
+| `lesson-bad79e090d2af44d167b` | data/network | 新格式 | 0（0） | 0 | 鉴权失效判定按源响应拦截器实际分支的错误码与动作迁移，不把错误码枚举… |
+| `lesson-c6379cfcbee86500f91f` | data/network | 新格式 | 1（0） | 1（是） | 多路请求聚合写 TTL 缓存前先确认至少一路成功；缓存命中同时校验时… |
+| `lesson-d767b84213eb5ef93034` | data/network | 新格式 | 3（0） | 2（是） | 用字符串拼接替代 Retrofit 时，在拼接函数里统一处理 bas… |
+| `lesson-da377615b178b2fe0c67` | data/network | 新格式 | 0（0） | 1（是） | 迁移源端链接 getter 时按完整返回表达式构造 URL：配置里的… |
 | `lesson-faec7be031b7f64752c4` | data/network | 新格式 | 5（0） | 1（是） | 源端声明 INTERNET（及 ACCESS_NETWORK_STA… |
 | `lesson-0caaa4efc70dad90a15f` | data/parsing | 新格式 | 6（0） | 1（是） | 备份/导出 JSON 按 org.json 或 Gson 库语义序列… |
 | `lesson-2622bc32995ac62389c3` | data/parsing | 新格式 | 3（0） | 1（是） | 自写 fromJson 从宽类型输入取值时用 typeof/inst… |
+| `lesson-447985a4376146f6d9f2` | data/parsing | 新格式 | 4（0） | 0 | 用 @ohos.xml 重建 SAX 开始事件时采用与回调顺序无关的… |
 | `lesson-5034b56be6fd828164c9` | data/parsing | 新格式 | 6（0） | 2（是） | 翻译源端 JSON 解析时按源解析器与取值 API 的语义定规则：安… |
+| `lesson-83ce396a8881f15c44ad` | data/parsing | 新格式 | 1（0） | 1（是） | 源端用 URLSearchParams.get 读 query 时，… |
 | `lesson-871d3751cadde6dda1dc` | data/parsing | 新格式 | 3（0） | 2（是） | 显式 JSON 解码器按源解析器的接受范围和源数据的实际类型定规则：… |
+| `lesson-dc5c370e370c2be803c1` | data/parsing | 新格式 | 3（0） | 1（是） | 源端访问解包后对象的字段时，先确定目标 res.data 对应哪一层… |
+| `lesson-4ada94833c1fdf169dfe` | data/schema | 新格式 | 2（0） | 0 | relationalStore 写操作返回受影响行数时取 updat… |
+| `lesson-519f6769ca714500d9c3` | data/schema | 新格式 | 2（0） | 3（是） | SQLiteOpenHelper 构造不建库，首个 getReada… |
+| `lesson-58deb5f78fd00dfe7a3b` | data/schema | 新格式 | 3（0） | 1（是） | 源端以 Cursor.getString 读数值列时复刻 Curso… |
 | `lesson-5c101b4b3f08ab317202` | data/schema | 新格式 | 1（0） | 1（是） | 手写 relationalStore 插入语句时省略 Room au… |
 | `lesson-65358a02b1bf9ef652d3` | data/schema | 新格式 | 5（0） | 1（是） | 用 relationalStore 重写 SQLiteOpenHel… |
 | `lesson-a078efd3361b4abe58e3` | data/schema | 新格式 | 8（0） | 4（是） | relationalStore 事务体含 await 时用 crea… |
 | `lesson-a6f300f9295ba538f23b` | data/schema | 新格式 | 4（0） | 1（是） | Room 数据库落成 relationalStore 时保留库名、s… |
 | `lesson-c55c56444f5271471a64` | data/schema | 新格式 | 1（0） | 0 | 手写 relationalStore 建表 SQL 时给表名与列名统… |
+| `lesson-1c513fdf2cf212354aa0` | data/seeding | 新格式 | 0（0） | 0 | 演示、预置与参考数据逐字段取自源端种子工厂、模板常量或 assets… |
 | `lesson-488a3bd782acef92f5cf` | data/seeding | 新格式 | 1（0） | 1（是） | 源端在首次建库回调里播种时，目标把播种放进建表分支的同一事务并写入种… |
+| `lesson-6d259db1ffd8927834a2` | data/seeding | 新格式 | 2（0） | 1（是） | 源端由算法库对任意日期实时计算的字段，不改绑为只覆盖少量日期的静态资… |
 | `lesson-dc3f2589254d02893b0e` | data/seeding | 新格式 | 3（0） | 1（是） | 源端在应用启动时按标记首次播种、设置中可重置时，目标在启动路径落实际… |
 | `lesson-1d3ab8b9d39bd8f6e24d` | data/sync | 新格式 | 1（0） | 0 | 源端不等待的落库改为异步写后，在落库完成后再广播触发重查的事件 |
 | `lesson-32c7d4b2ada4b341778d` | data/sync | 新格式 | 4（0） | 1（是） | greenrobot EventBus 迁移先核投递契约：需同步按引… |
+| `lesson-34f35851208470602570` | data/sync | 新格式 | 0（0） | 0 | 同步进度与失败事件按整批发布：补跑多轮时终态只在最后一轮后发一次，开… |
+| `lesson-686bbe76f7c2c783f2bd` | data/sync | 新格式 | 0（0） | 0 | 重写源端同步或扫描等多阶段数据流程时保留不产出数据的副作用步骤：缓存… |
+| `lesson-cfe552e1b20080212ce9` | data/sync | 新格式 | 0（0） | 0 | 同步调度保留源端每次触发都会执行的语义：合并在途任务要补跑尾随请求，… |
+| `lesson-d18e6e019cad3d26839b` | data/sync | 新格式 | 0（0） | 1（是） | 替代源端作业聚合器时把结束作业写成显式终态，并保证每个状态都有产出点 |
 | `lesson-29744eb694376e8acaca` | process/build | 新格式 | 9（0） | 3（是） | 编译修复只改报错定位的行与符号，不以删掉功能或语义不同的替代换取通过… |
 | `lesson-6dae0bf2657b0e339742` | process/build | 新格式 | 2（0） | 0 | 用 shell 一行命令或脚本改写含 $ 或反斜杠转义的 ArkTS… |
 | `lesson-776ed5eb216833c6b002` | process/gates | 新格式 | 2（0） | 1（是） | 写文件以真实执行回执为准：只有文本形式的工具调用即未写入；覆盖模板入… |
 | `lesson-8390913de64b0adc00fc` | process/gates | 新格式 | 0（0） | 0 | 处理孤儿检测报出的无调用方页面或弹窗时，已登记为范围内的产物不删除：… |
 | `lesson-9147be4d87153de9c5b6` | process/gates | 新格式 | 0（0） | 2（是） | 功能对齐与验收结论逐项以代码落点为准：按规格验收项与导航出口检索实际… |
+| `lesson-9f4bb32cf5b3cc9dc7d5` | process/gates | 新格式 | 1（0） | 0 | 收尾者处理结构检查报出的缺失服务或未实例化符号时，先读该符号的规格 … |
 | `lesson-ad6f23b88f09b55dd92a` | process/gates | 新格式 | 2（0） | 0 | 用共享组件替换页面已实现片段前（关闭孤儿组件检查或按计划收口），完整… |
+| `lesson-af15c43279110b3b7692` | process/gates | 新格式 | 0（0） | 2（是） | 执行已批准计划的批次与全量收口时，把替换清单逐行转成本批检查项；横切… |
 | `lesson-afae8d13e00941efe808` | process/gates | 新格式 | 3（0） | 1（是） | 交互问题先复现并分层定位、确认触摸可达再改约束；未经设备验证、被阻断… |
 | `lesson-bdb97da6a6eb8d68435f` | process/gates | 新格式 | 5（0） | 0 | 运行会改写源码的自愈脚本后先审阅其改动；异常尺寸、与已有显式尺寸重复… |
 | `lesson-f6b95d7d6d0159cb0436` | process/gates | 新格式 | 3（0） | 2（是） | 修复安全区等按关键字判定的结构检查时逐页落实实现，不用含检查关键字的… |
+| `lesson-06e3564e91948a2b05a3` | process/implementation | 新格式 | 0（0） | 0 | 目标仓储把源端落盘方法内的守卫（如 saveStateToFile … |
+| `lesson-14411595fd9ac1e17683` | process/implementation | 新格式 | 8（0） | 1（是） | 源端看似缺陷或不够健壮的可观察行为照原样迁移并按次数核对：失败返回、… |
+| `lesson-352b96f599237cd27403` | process/implementation | 新格式 | 4（0） | 2（是） | 不补写源端没有的元素、输入规范化或交互步骤：有没有某元素按源端最终渲… |
+| `lesson-381ebc5899e92cbd23a2` | process/implementation | 新格式 | 1（0） | 0 | 翻译含布尔组合的条件表达式时保留括号并列真值表 |
+| `lesson-4428ce765fcef294b004` | process/implementation | 新格式 | 0（0） | 0 | 内联或重建被宿主调用的组件时按“调用点实参 → 被调公式”整链转写：… |
+| `lesson-4d8932173d880e64635a` | process/implementation | 新格式 | 1（0） | 0 | 源端在菜单或 ActionMode 回调入口统一门控（验密、登录、权… |
+| `lesson-8c18bb22a8ecfe8c7f8a` | process/implementation | 新格式 | 1（0） | 1（是） | 翻译源端条件里的 == null / != null 前先核变量的声… |
+| `lesson-9362c9e06ddc3b9c5398` | process/implementation | 新格式 | 0（0） | 1（是） | 错误类型按源路径实际的 catch 与构造映射：sealed cla… |
+| `lesson-b3c9382df9327b1ed3d8` | process/implementation | 新格式 | 1（0） | 0 | 源回调接口实现类继承空默认基类时，按源子类的覆写全集落实目标覆写与界… |
+| `lesson-e2a08b9a98504718cd24` | process/implementation | 新格式 | 1（0） | 0 | 用一个复位函数模拟源端每局重开时，按字段声明位置与生命周期决定复位：… |
 | `lesson-033b8254b5b6de0bd9e1` | process/input-loading | 新格式 | 22（0） | 6（是） | 页面、控件、算法或实体基类由二进制三方库承载时，按依赖坐标取库制品核… |
 | `lesson-35f4f9b3cf566d33e79c` | process/input-loading | 新格式 | 0（0） | 0 | 依据另一文件的返回语义改写调用方前，重读该文件当前版本；编辑回执提示… |
 | `lesson-6a3a7f46c8fec282affa` | process/input-loading | 新格式 | 0（0） | 0 | Windows PowerShell 5.1 读取 UTF-8 中文… |
 | `lesson-b3f534eb740a768d95a6` | process/input-loading | 新格式 | 10（0） | 1（是） | 源端行为依赖的辅助方法、谓词、getter 与框架约定，要读到定义再… |
+| `lesson-e7a9842a56aa53621d27` | process/input-loading | 新格式 | 0（0） | 0 | 推断参考端的默认选中或过滤结果前，读到绑定的默认值回调、过滤函数与回… |
+| `lesson-238588d3cceaf707ccfe` | process/scope | 新格式 | 2（0） | 1（是） | 决策把系统表面（桌面 Widget 等）替换为应用内页面时写明入口位… |
+| `lesson-32141cb6d0d09cabd2f1` | process/scope | 新格式 | 0（0） | 0 | 按功能增量迁移时从源端反查该功能的全部入口：入口所在页上与功能相关的… |
 | `lesson-3348c580951ef82a9737` | process/scope | 新格式 | 9（0） | 1（是） | 写应用壳契约与实施计划时枚举源导航模块的全部入口能力（含深链解析与 … |
 | `lesson-7827e0707780cb7546ee` | process/scope | 新格式 | 5（0） | 1（是） | 落盘差异决策时，以成本、复杂度或“首版不做”为理由的降级按范围裁剪处… |
+| `lesson-91c89aff3f8c5c47bd2a` | process/scope | 新格式 | 1（0） | 0 | 用户只给出部分页面截图时，迁移范围包含这些页面入口直达的二级页面；范… |
+| `lesson-08854573a81a9fa03746` | process/spec-handoff | 新格式 | 4（0） | 0 | 规格提取写验收条目时实读所引源码段落，照抄比较符、范围与名称变换，条… |
+| `lesson-2e8ffecce25935dda502` | process/spec-handoff | 新格式 | 0（0） | 0 | 源端并存新旧两套实现时，以当前构建启用或目标页对应的实现为行为基准 |
+| `lesson-34c8ac69ad849f8c24e1` | process/spec-handoff | 新格式 | 1（0） | 1（是） | 共享组件挂到哪些页面，以源码里的宿主容器与 replace/add … |
+| `lesson-3ea52b78643f49c13cd1` | process/spec-handoff | 新格式 | 2（0） | 1（是） | 合成快照里空的点击或导航清单不能当作“无交互”：按源布局点击绑定与规… |
+| `lesson-40ee4d9782ae3cb4aa88` | process/spec-handoff | 新格式 | 2（0） | 0 | 源码默认值写的是符号常量时，先解析其定义取值再写进规格或模型常量，不… |
+| `lesson-431a65808f9b46b95974` | process/spec-handoff | 新格式 | 3（0） | 0 | 按 feature 切分规格归属时，源 ViewModel 的每一步… |
+| `lesson-4606ccc434e247d4a240` | process/spec-handoff | 新格式 | 9（0） | 1（是） | 源端行为经 helper、DAO、适配器或子组件层层委托时，追到最终… |
+| `lesson-4fb1c103822a8fd30b2a` | process/spec-handoff | 新格式 | 4（0） | 1（是） | Application 初始化链注册的广播接收器与系统监听要读本体写… |
+| `lesson-5948050d3b6dc39239a4` | process/spec-handoff | 新格式 | 2（0） | 1（是） | 从源端窗口或控件封装类提取行为时，把按触发源或状态分叉的可见行为逐项… |
+| `lesson-76aa7901a0ae1af9d544` | process/spec-handoff | 新格式 | 0（0） | 1（是） | 页面入口与对接点只从该页布局和页面类的实际绑定推导：共享 ViewM… |
+| `lesson-77ca67f164d77ec63cda` | process/spec-handoff | 新格式 | 0（0） | 0 | 规格需要的值在上游清单或数据源里取不到时，回源码补全或标“待核”，不… |
+| `lesson-7a065e8fe384b8c462cc` | process/spec-handoff | 新格式 | 23（0） | 1（是） | 规格或派工与写前读到的源码、主题或映射参考冲突或遗漏时，按源端可观察… |
 | `lesson-35b9cdfd5d22ce53465e` | process/task-handoff | 新格式 | 0（0） | 0 | 规格把实现路径写成“由后续决策轮裁决”时，后续决策轮逐条出题或关闭；… |
 | `lesson-447ba5818e4e203272e8` | process/task-handoff | 新格式 | 0（0） | 1（是） | 页面先于共享组件或共享工具实现时，页内等价实现登记为待收敛项；共享件… |
 | `lesson-4f81eeea17b94190c2de` | process/task-handoff | 新格式 | 3（0） | 0 | 要靠其他文件或任务补实现的功能，登记成带负责方、验证方式和源端确定值… |
@@ -507,6 +589,6 @@ python knowledge/check.py knowledge/lessons --only <id 前 8 位,…>     # 配�
 
 新格式的文件（没有 `lesson` 键、`sdk` 里有 `verified_on` / `docs_commit` / `docs_date`）按写知识时的检查规则查，`--legacy-ok` 对它不起作用：顶层键齐全、`id` 和文件名一致；`sdk` 的核实日期、文档日期写成 YYYY-MM-DD，文档提交号是十六进制，`harmony` 写明 API 几；条目五栏非空，kind 四选一（含「卡里验证」）、origin 二选一、step 是正文的部分名，条数不设上限；卡里验证的事实不写返修怎么改，事实不带返修经过和做法建议的尾巴；文档出处写成文档仓库 master 的链接，网址只认一手来源，fact / after / note 里不放链接；没有本机路径、行号写法和应用名；改句已在正文里的同上，没进正文的按顺序要套得上。默认值缺「应用没有另设」一类限定、提到高于本机 SDK 的 API、新句提到设备或截图的只列出，给人看。出处和本机 SDK、文档的逐条核对不在这里做。
 
-本分支的结果：398 个文件 0 处错误（加 `--legacy-ok`，只列出 65 处 = 旧格式 12 处 + 新格式 49 处（要人看的）+ 4 个退役经验）；第七版的 0 个文件、新格式的 394 个文件不加 `--legacy-ok` 也是 0 处错误。
+本分支的结果：479 个文件 0 处错误（加 `--legacy-ok`，只列出 65 处 = 旧格式 12 处 + 新格式 49 处（要人看的）+ 4 个退役经验）；第七版的 0 个文件、新格式的 475 个文件不加 `--legacy-ok` 也是 0 处错误。
 
 效果数据见 `shadow/README.md`。

@@ -1,6 +1,6 @@
 # Application 初始化链注册的广播接收器与系统监听要读本体写进规格：锚点、触发条件、承接方法与目标 API
 
-ID：`lesson-4fb1c103822a8fd30b2a` · 版本：1
+ID：`lesson-4fb1c103822a8fd30b2a` · 版本：2
 
 [本主题](index.md)
 
@@ -11,6 +11,10 @@ ID：`lesson-4fb1c103822a8fd30b2a` · 版本：1
 ## 适用情境
 
 Android 源在 Application 初始化链注册接收器（如监听 CONNECTIVITY_ACTION 的网络切换），接收器本体按前后状态判断后调用业务检测或上报，并传入专用触发来源常量；上游契约已点名该接收器，但它不在 feature 锚点内；目标需用 @ohos.net.connection 等监听等价实现。
+
+## 例外与边界
+
+- 只对经 Context.registerReceiver 动态注册的接收器成立；在清单里静态声明的 CONNECTIVITY_ACTION 接收器，应用 targetSdkVersion ≥ 24 时收不到该广播，源端可观察行为是从不触发，不据此新增目标端网络监听，在规格里按“不触发”记录。
 
 ## 原因
 

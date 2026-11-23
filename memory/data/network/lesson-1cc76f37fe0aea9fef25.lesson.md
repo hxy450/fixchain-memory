@@ -1,6 +1,6 @@
-# 按源端 Retrofit 实际选中的重载确定请求体编码：post(url, Map)/@FieldMap 用表单，只有 @Body 用 JSON
+# 按源端 Retrofit 实际选中的重载确定请求体编码：标了 @FormUrlEncoded 的 post(url, Map)/@FieldMap 用表单，只有 @Body 用 JSON
 
-ID：`lesson-1cc76f37fe0aea9fef25` · 版本：1
+ID：`lesson-1cc76f37fe0aea9fef25` · 版本：2
 
 [本主题](index.md)
 
@@ -15,6 +15,7 @@ Android 通过 Retrofit 通用 post(url, Map) 包装或 @FormUrlEncoded + @Field
 ## 例外与边界
 
 - 服务端契约已确认同一端点也接受 JSON（接口文档或抓包证明），且当前决策选择 JSON
+- 先看通用 post(url, Map) 背后的 ApiService 方法本身的注解再定编码：它若是 @Body Map、没有 @FormUrlEncoded，请求体由所配的转换器序列化（Gson、Moshi 一类转换器出的是 JSON），保持 JSON、不改成表单；@Multipart + @Part/@PartMap 发的是 multipart/form-data 分段请求，既不改成 formBody 也不改成 JSON。
 
 ## 原因
 

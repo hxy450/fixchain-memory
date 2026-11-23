@@ -1,6 +1,6 @@
 # 平台计费网络判定按承载显式映射，不直译为单一能力位
 
-ID：`lesson-20afdfffa13dc5bca10c` · 版本：1
+ID：`lesson-20afdfffa13dc5bca10c` · 版本：2
 
 [本主题](index.md)
 
@@ -11,6 +11,10 @@ ID：`lesson-20afdfffa13dc5bca10c` · 版本：1
 ## 适用情境
 
 源以平台判定计费网络并门控刷新、下载、流播或图片，同一工具类对以太网另有放行；目标只能读取 networkCap 与 bearerTypes，SDK 声明没写各承载是否会置 NOT_METERED。
+
+## 例外与边界
+
+- 显式分支只覆盖源端结论确定、不随网络变化的承载（如以太网不计费、蜂窝计费）；Wi-Fi 这类结论取决于网络本身计费标记的承载，仍保留按 NET_CAPABILITY_NOT_METERED 判定，不因为加了按承载的分支就统一写成不计费。
 
 ## 原因
 

@@ -1,6 +1,6 @@
 # 翻译源端条件里的 == null / != null 前先核变量的声明类型与来源：非空类型上的空判断是恒定死分支，按“从不触发”迁移，不译成“未初始化/首启”触发或三态偏好
 
-ID：`lesson-8c18bb22a8ecfe8c7f8a` · 版本：1
+ID：`lesson-8c18bb22a8ecfe8c7f8a` · 版本：2
 
 [本主题](index.md)
 
@@ -11,6 +11,10 @@ ID：`lesson-8c18bb22a8ecfe8c7f8a` · 版本：1
 ## 适用情境
 
 Compose 页面用 collectAsState(initial = false) 收集 Flow<Boolean>（DataStore getter 映射为 preferences[KEY] == true 或带 ?: 默认值），显示条件里却把该状态与 null 比较；规格可能同时写着“该偏好 Boolean、默认 false”与“== null 表示从未写入/首次进入”。
+
+## 例外与边界
+
+- 只对声明为 Kotlin 非空类型的变量成立：Java 源码里的引用类型、Kotlin 的可空类型（T?）以及直接取自标注 @Nullable 的 Java 接口的值（如没有该键时返回 null 的 Intent#getStringExtra）上的 == null / != null 判断照常可达，按原条件迁移，不当作死分支删掉。
 
 ## 原因
 

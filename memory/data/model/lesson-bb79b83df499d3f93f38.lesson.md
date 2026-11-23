@@ -1,6 +1,6 @@
 # 编辑会话的脏检查与保存差集按源对象语义迁移：isChanged/equals 比全部持久字段，共享集合保持同一引用并就地修改
 
-ID：`lesson-bb79b83df499d3f93f38` · 版本：1
+ID：`lesson-bb79b83df499d3f93f38` · 版本：2
 
 [本主题](index.md)
 
@@ -11,6 +11,10 @@ ID：`lesson-bb79b83df499d3f93f38` · 版本：1
 ## 适用情境
 
 源编辑页持有原始、编辑中、暂存多份实体副本，保存前以 isChanged/equals 判定是否写库，并以 setXxxOld(other.getXxxList()) 一类 setter 让两个对象共享同一集合，保存任务随后对它就地 remove 求差集；判定方法可能定义在主仓之外的基类里。
+
+## 例外与边界
+
+- 是否共享按 getter、setter 的实现判断，不只看调用点：源端 getter 返回或 setter 存入的是 new ArrayList(...) 一类新列表时，两处本来就互不影响，目标端照样拷贝，不改成共享同一引用；getter、setter 定义在依赖库里时同做法第 1 步先取库制品读实现。
 
 ## 原因
 

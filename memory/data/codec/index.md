@@ -12,9 +12,11 @@
 - [用命名常量替换源端字面下标或区间时按每处调用的用途选端点：同一结构里着色与数据提取的边界不同，不沿用相邻用途的常量](lesson-1d0b6dde849cbd70ee8f.lesson.md)
   - 时机：服务层实现或重构阶段，把源端内联的定长记录切片（substring、subarray）抽进服务并用一组共享命名常量替换字面下标时
   - 情境：源码对同一行或同一块按用途取不同区间（如着色只取 3 字节访问位 substring(12,18)，提取并解码访问条件取访问位加 GPB substring(12,20)）；目标为切分点定义了一组共享常量，页面里原本有正确的内联切片，规格也写明了精确区间。
+  - 例外：按源端写法换算端点：Java 的 substring(begin, end) 与 JS 的 substring/subarray 一样不含 end，数值照搬；Kotlin 的 substring(a..b) 用闭区间，b 是包含的，换成 JS 时结束位写 b + 1，命名常量也按换算后的值定义。
 - [自写 TIFF/EXIF 等多目录二进制序列化器替代库时：值区偏移跨目录连续推进，有符号类型与 NUL 按类型读写，按输出的实际编码选容器](lesson-84b5498c19a108c51c8e.lesson.md)
-  - 时机：数据层实现阶段，自写二进制元数据读写器替代源端库（如 androidx ExifInterface），编写多 IFD 序列化、类型读写、tag 表与图像容器写入时
-  - 情境：源端经库按 tag 名读写 EXIF，并对 JPEG、PNG、WebP 输出统一写入；目标无等价 API，自研 TIFF 段写回，需要处理 IFD0/Exif/GPS/Interop 多个目录的超长值区、SSHORT/SLONG/SRATIONAL、含 NUL 的 ASCII/UNDEFINED 值、数字 tag 号与各图像容器。
+  - 时机：数据层实现阶段，平台图片接口满足不了需求、自写二进制元数据读写器替代源端库（如 androidx ExifInterface），编写多 IFD 序列化、类型读写、tag 表与图像容器写入时
+  - 情境：源端经库按 tag 名读写 EXIF，并对 JPEG、PNG、WebP 输出统一写入；平台图片接口满足不了需求时才自研 TIFF 段写回：ImageSource.modifyImageProperty（API 11 起）只能修改本身已含 Exif 信息的 JPEG、PNG、HEIF（API 12 起）、WEBP（API 23 起）文件，须用 fd 或路径创建的 ImageSource，键限于 PropertyKey 列出的属性；输出原本不含 Exif、要写 PropertyKey 之外的 tag 或格式不在支持之列时才走本条，已用该接口正确覆盖需求的写入不换成自研序列化器，需要处理 IFD0/Exif/GPS/Interop 多个目录的超长值区、SSHORT/SLONG/SRATIONAL、含 NUL 的 ASCII/UNDEFINED 值、数字 tag 号与各图像容器。
 - [转写源码定长字节数组常量时逐下标列出全部字节并核总长；规格中的分段简写与源字面量冲突时以源字面量逐下标实现](lesson-0bba9db6a18f2e732334.lesson.md)
   - 时机：规格提取与业务服务实现阶段，把源码中的定长字节数组常量（协议块、扇区尾块、头部魔数）转写成规格常量、伪代码，并据此用 Uint8Array 等按下标填充时
   - 情境：源码用有符号 byte\[\] 字面量定义固定长度的协议块（如 16 字节扇区尾块：KeyA 6 | 访问位 3 | GPB 1 | KeyB 6），规格用 hex 分段串或伪代码重述，同一规格里常量行、验收条目与伪代码可能是几种不同写法；目标按下标逐字节填充。
+  - 例外：「同一常量只保留一种权威写法」不等于把变体合并：源码按条件给出不同字节的（如最后一个扇区的某个字节取值不同），每个变体各按下标列一份并写明取用条件，不统一成其中一种。

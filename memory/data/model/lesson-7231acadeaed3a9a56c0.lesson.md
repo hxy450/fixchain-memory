@@ -1,6 +1,6 @@
 # 响应 DTO 按 SDK data class 逐字段建模：平铺还是嵌套、可空性与名称相近的字段分别写明，页面按源端访问路径取值
 
-ID：`lesson-7231acadeaed3a9a56c0` · 版本：1
+ID：`lesson-7231acadeaed3a9a56c0` · 版本：2
 
 [本主题](index.md)
 
@@ -10,7 +10,7 @@ API 清单与规格提取阶段整理共享响应 Bean 字段表时；数据模�
 
 ## 适用情境
 
-源端经第三方 SDK 的 kotlinx.serialization data class 直接反序列化 JSON（字段名即 wire key），SDK 源码不在工程内但可下载；目标手写 DTO 并用 JSON.parse 直转；视图类型里可能有平铺字段而非嵌套 *View 的类型，或名称相近、语义不同的字段（作者被本社区封禁与当前用户被封禁）。
+源端经第三方 SDK 的 kotlinx.serialization data class 直接反序列化 JSON（字段名即 wire key；字段带 @SerialName 时以注解里的名字为准，SDK 的 Json 实例配置了 namingStrategy 时按它换算，DTO 写换算后的 wire key，不照抄 Kotlin 属性名），SDK 源码不在工程内但可下载；目标手写 DTO 并用 JSON.parse 直转；视图类型里可能有平铺字段而非嵌套 *View 的类型，或名称相近、语义不同的字段（作者被本社区封禁与当前用户被封禁）。
 
 ## 原因
 

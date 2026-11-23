@@ -9,28 +9,34 @@
 - [OkHttp 缓存映射到 RCP ResponseCache 时，maxSize 按实测单位传入并实写确认，缓存指令名逐项保留](lesson-17b7079006badd437bb1.lesson.md)
   - 时机：网络层与图片策略实现阶段，把 OkHttp Cache(dir, N MiB) 的容量与 CacheControl 指令映射到 RCP ResponseCache 或请求缓存头时
   - 情境：源端用 OkHttp Cache 提供自动 HTTP 缓存，并用 CacheControl.Builder().maxAge(...).maxStale(...) 控制图片缓存；目标用 @kit.RemoteCommunicationKit 的 rcp.ResponseCache / CacheConfiguration。
+  - 例外：保留 max-age、max-stale 等指令名只决定请求里发出的缓存指令；ResponseCache 里记录多久过期由 CacheConfiguration.defaultExpirationPolicy 或记录自带的过期策略决定，两者都没设时隐式按 1 小时的滑动过期——源端靠 maxAge 定下的缓存时长要另配过期策略，不能当作指令名保留后自动生效。
 - [Service 只收不透明请求体时，从源端调用链追到 body 的构造处照抄字段与取值来源，不用空对象占位](lesson-0bc494e864b2d8ab1a34.lesson.md)
   - 时机：数据层实现与规格提取阶段，编写 Repository 调用网络 Service、确定 POST 请求体字段时
   - 情境：目标 Service 方法只接收 data: Object（对应源端 @Body RequestBody），规格 API 表没列这个端点或它的请求字段；源端由 ViewModel 调用某个 Repository 方法，在那里组装 body（如 device_id 取自设备 ID 工具）。
+  - 例外：追到构造处后源端本来就发空体（空 JSON 对象或不带字段的请求体）的，目标端照抄空体，不自行补字段；要排除的只是没追到构造处就写的 {} 占位。
 - [rcp Session 以 baseAddress 加相对路径构造 Request 时，拦截器内不无保护地读取 context.request.url](lesson-20bc5640e0b8114e27b3.lesson.md)
   - 时机：网络层实现阶段，在 rcp Interceptor（含 401 刷新与重试链）中读取请求属性，例如为日志取请求地址时
   - 情境：rcp SessionConfiguration 设置 baseAddress，HTTP 封装以 'users/me' 一类相对路径构造 rcp.Request；拦截器在发送前拿到该 Request，并把源端仅用于调试的 url 日志迁到刷新主链上。
 - [多路请求聚合写 TTL 缓存前先确认至少一路成功；缓存命中同时校验时效和载荷](lesson-c6379cfcbee86500f91f.lesson.md)
   - 时机：数据层实现阶段，为首页等多路并发请求（如首页数据与趋势）实现按键（城市）的 TTL 缓存写入与命中判定时
   - 情境：源端或规格按城市缓存多路并发结果（refreshTime + 4h 一类），每一路都可能失败；目标 Service 把各路结果聚合成一条缓存记录，命中条件只看保存时间。
+  - 例外：源端字面上可能失败也写空记录；规格或决策要求「成功后才写缓存」「网络失败读有效缓存」时按规格实现，并在交接里写明和源码的这处差异，不以忠实复刻为由照搬失败写空记录。
 - [平台计费网络判定按承载显式映射，不直译为单一能力位](lesson-20afdfffa13dc5bca10c.lesson.md)
   - 时机：网络基础层实现阶段，把 isActiveNetworkMetered 等平台判定改写为 @ohos.net.connection 实现时
   - 情境：源以平台判定计费网络并门控刷新、下载、流播或图片，同一工具类对以太网另有放行；目标只能读取 networkCap 与 bearerTypes，SDK 声明没写各承载是否会置 NOT_METERED。
+  - 例外：显式分支只覆盖源端结论确定、不随网络变化的承载（如以太网不计费、蜂窝计费）；Wi-Fi 这类结论取决于网络本身计费标记的承载，仍保留按 NET_CAPABILITY_NOT_METERED 判定，不因为加了按承载的分支就统一写成不计费。
 - [把 RSA-OAEP + AES-GCM 网关加密移植到 cryptoFramework：生成器规格串只写算法与位数、加解密结果判空、Buffer 不套 Node 视图](lesson-3684e08592c85de82204.lesson.md)
   - 时机：网络基础设施实现阶段，把 Android 端 RSA-OAEP 包裹会话密钥加 AES-GCM 加密的网关传输改写为 ArkTS cryptoFramework 与 buffer 调用时（含为通过编译改写同步 API 与类型的收敛步骤）
   - 情境：源端用 X509EncodedKeySpec 解析“BEGIN PUBLIC KEY”PEM，以 RSA/ECB/OAEPWithSHA-256AndMGF1Padding 包裹随机密钥，用 AES/GCM/NoPadding 加密可能为空的请求体并解密响应；目标用 createAsyKeyGenerator/convertPemKeySync、Cipher.updateSync/doFinalSync 与 @kit.ArkTS buffer 实现同一协议。
+  - 例外：不加 PKCS1 后缀只针对 createAsyKeyGenerator 的规格串；createCipher 的 RSA 加解密规格串仍要写全填充、摘要和掩码摘要（OAEP 与 MGF1 都是 SHA-256 时写 RSA2048|PKCS1_OAEP|SHA256|MGF1_SHA256），不能跟着一并删掉。
 - [拦截器按本地键读取的公共参数都要有生产者：按源端初始化序列补齐写入步骤，只迁读取侧不算完成](lesson-7e04234bdf5aef97b651.lesson.md)
   - 时机：迁移或重构隐私同意后的初始化链、网络公共参数与拦截器时，确认每个公参字段由谁写入时
   - 情境：目标拦截器每次请求从偏好键或当前选中项缓存读取设备标识、当前分组等公参；源端这些值由隐私同意后的 SDK 初始化序列（如获取 OAID）或同步后的默认选中处理写入，目标只迁了读取侧。
-- [按源端 Retrofit 实际选中的重载确定请求体编码：post(url, Map)/@FieldMap 用表单，只有 @Body 用 JSON](lesson-1cc76f37fe0aea9fef25.lesson.md)
+  - 例外：补 OAID 这类广告标识的生产者时，只在配置里声明 ohos.permission.APP_TRACKING_CONSENT 不够：它是用户授权权限，要在隐私同意后的链上运行时向用户请求；没拿到授权时 getOAID 返回全零值，写入步骤要按授权结果处理，不能只补一个读取后直接写缓存的调用。
+- [按源端 Retrofit 实际选中的重载确定请求体编码：标了 @FormUrlEncoded 的 post(url, Map)/@FieldMap 用表单，只有 @Body 用 JSON](lesson-1cc76f37fe0aea9fef25.lesson.md)
   - 时机：接口层实现、模块抽取或把调用搬到平台适配层时，为每个 POST 端点确定请求体编码；发现同类编码偏差后确定修复范围时
   - 情境：Android 通过 Retrofit 通用 post(url, Map) 包装或 @FormUrlEncoded + @FieldMap/@Field 发送参数；目标端点目录的默认 post 是 application/json，另有 formPost/formBody 一类表单写法；目标里已有端点定义或 jsonBody 调用可以直接沿用；规格或 API 清单只列参数名、不写 Content-Type。
-  - 例外：服务端契约已确认同一端点也接受 JSON（接口文档或抓包证明），且当前决策选择 JSON
+  - 例外：服务端契约已确认同一端点也接受 JSON（接口文档或抓包证明），且当前决策选择 JSON；先看通用 post(url, Map) 背后的 ApiService 方法本身的注解再定编码：它若是 @Body Map、没有 @FormUrlEncoded，请求体由所配的转换器序列化（Gson、Moshi 一类转换器出的是 JSON），保持 JSON、不改成表单；@Multipart + @Part/@PartMap 发的是 multipart/form-data 分段请求，既不改成 formBody 也不改成 JSON。
 - [新增或改写请求通道时按源端重载决定是否内置取 key 门；确需门时按请求实际基址握手，不用可被切服改写的默认基址](lesson-62499aa25e87fa6ab5e1.lesson.md)
   - 时机：网络通道实现或修复阶段，为新增或改写的请求通道决定是否内置会话密钥前置门（ensureKey 一类）及其握手基址时
   - 情境：源端某请求重载只带公共头直接发送（如 OkGo 无 body 的 post 重载），由调用方先按特定基址握手取 key；目标端会话 key 是全局单槽缓存，按基址比对决定命中或重新握手，默认基址取运行期可被选省、切服改写的地址，调用方则按另一基址握手。
@@ -46,22 +52,26 @@
 - [源端拦截器统一注入的请求头逐条迁到 HttpClient 默认头，头名与格式以源码为准，不照模板写 Bearer 前缀](lesson-217e93ef9097efc519f1.lesson.md)
   - 时机：网络基础层实现阶段，写 HttpClient 默认请求头与 Authorization 取值格式时
   - 情境：源端用 OkHttp 拦截器（如 TokenInterceptor）给每个请求加鉴权、语言、平台、地区等头，接口声明上看不到这些头；目标端用 @ohos.net.http 自建 HttpClient，skill 参考模板示范 `Authorization: Bearer ${token}`；API 清单可能只给出拦截器路径和 header_write 一类标签。
+  - 例外：源码里本来就带 Bearer 前缀的（如鉴权基类对有 token 的请求统一注入 Bearer），照源码保留前缀；要去掉的只是源码没有、照模板加上的前缀。；源端按条件加的头保留同样的条件（只在有 token 时加鉴权头、只在调试构建加调试头）；token、系统语言、地区这类会变的取值在每次发请求时读取，不在客户端创建时固定成常量。
 - [源端构建期注入的服务地址、签名与响应解密材料，按决策从私有构建配置接入并实现同算法解码器；不以空配置装配网络客户端](lesson-30ccd1d65d2c39029256.lesson.md)
   - 时机：网络基础设施实现与装配阶段，实现网络运行配置来源、响应解密，并在装配根构造 HTTP 客户端时
   - 情境：源端通过 BuildConfig/gradle 注入 API 地址、请求签名材料与 release 响应的 AES 等解密密钥，并在解析前解密响应；目标决策要求密钥不进源码、构建期从本地私有配置注入，网络层对空配置拒绝发包；另有决策只记录了“未提供测试环境或测试账号”。也包括目标用 process.getEnvironmentVar 读取可选运行配置（成功码、渠道、客户端身份）并以 `|| 默认值` 兜底的情形。
+  - 例外：缺键即让构建或启动失败，只针对源端必须有值才能发请求的服务地址、签名与解密材料；源端本来就带缺省值的可选运行配置（如业务成功码缺省 200、渠道、客户端身份），保留缺省回退和空值兜底，不改成缺键即失败。
 - [源端靠 catch 处理 HTTP 失败、目标客户端永不 reject 时，在消费 res.data 前写 status 失败分支还原 catch 语义](lesson-1575e3acad2a2b4689df.lesson.md)
   - 时机：服务层实现阶段，把源端请求的 try/catch 失败处理翻译到“永不 reject、以信封 status 表示失败”的 HTTP 客户端时
   - 情境：源端 HTTP 调用在非 2xx 时抛错（如 Angular HttpClient 的 HttpErrorResponse），由 catch 设置错误文案并返回失败；目标网络层契约把非 2xx、传输异常和解析失败都归一为失败信封、不 reject，调用方按 status 判成功；方法还维护 hasMore、游标或已加载标记等分页状态。
   - 例外：目标客户端契约或实现对失败确实 reject，此时源 catch 可原样承接
 - [用字符串拼接替代 Retrofit 时，在拼接函数里统一处理 baseUrl 与 path 之间的斜杠，不依赖各接口 path 的写法](lesson-d767b84213eb5ef93034.lesson.md)
-  - 时机：网络层实现阶段，把 Retrofit 接口迁成自写 HttpClient，确定 baseUrl 常量与各 Service 的 path 如何连成完整 URL 时
+  - 时机：网络层实现阶段，把 Retrofit 接口迁成自写 HttpClient，确定 baseUrl 常量与各 Service 的 path 如何连成完整 URL 时（源端 baseUrl 带路径段时，带前导 / 的 path 按主机根另行处理）
   - 情境：源端用 Retrofit 的 baseUrl 加 @GET/@POST 相对路径（多数不带前导 /，少数带），目标端改用 @kit.NetworkKit http 手工拼 URL；参考模板示范 `${baseUrl}${path}` 直接拼接；baseUrl 常量与各 Service 的 path 分散在不同文件里声明。
 - [移植加解密工具时逐分支保留源工具的前置返回与异常回退：空串不进 Cipher，解密失败回退为原文](lesson-4232e195ff42fc63ba43.lesson.md)
-  - 时机：规格提取与网络层实现阶段，确定响应解密/解码步骤的失败语义，或把 Android 请求参数加密与响应解密工具（AESUtil、aesEncrypt/aesDecrypt 一类）移植为 cryptoFramework 封装时
+  - 时机：规格提取与网络层实现阶段，确定响应解密/解码步骤的失败语义，或把 Android 请求参数加密与响应解密工具（AESUtil、aesEncrypt/aesDecrypt 一类）移植为 cryptoFramework 封装时（源工具带空串直接返回、catch 返回原文一类分支）
   - 情境：Android 加密工具开头以 isEmpty 直接返回空串、不调用 Cipher，解密在 catch 中返回原文（明文响应也能通过）；目标用 cryptoFramework 对每个业务值做 AES-CBC，业务参数可能为空（如缺省城市没有经纬度），部分接口返回明文 JSON。也包括源端在响应转换钩子（如 beforeResponse）里于 release 下无条件调用 aesDecrypt，是否所有接口都返回密文没有抓包证据，规格或台账准备写“解密失败显式报错、不伪造成功”。
+  - 例外：回退和前置返回都以源工具实际有的分支为准：源工具解密失败照常抛错、或空串也照样加密的，目标照源端写，不凭这条补上源端没有的回退。
 - [迁移源端链接 getter 时按完整返回表达式构造 URL：配置里的基础地址加上 getter 追加的渠道等运行期参数，以“key=”空值结尾的 query 是待补值信号](lesson-da377615b178b2fe0c67.lesson.md)
   - 时机：功能切片实现阶段，把源端配置读取与链接 getter（协议、隐私、个人信息清单等）迁移成目标 Service 里的 URL 常量或构造方法时
   - 情境：Android 从 assets JSON 等配置读取基础地址（query 以 aliasCode= 一类空值结尾），由配置类的 getter 在返回时追加启动渠道等运行期参数；目标在 Service 层统一提供受控 WebView 链接，工程已有渠道常量或构建配置。
+  - 例外：以「key=」空值结尾只是提示去查 getter 的返回表达式；源 getter 原样返回配置地址、没有追加参数的，照源端保留这个空值，不自行补渠道等参数。追加时照源端的拼接方式（源端直接字符串相加的就不另做编码或改参数名）。
 - [鉴权失效判定按源响应拦截器实际分支的错误码与动作迁移，不把错误码枚举里的举例成员当触发条件](lesson-bad79e090d2af44d167b.lesson.md)
   - 时机：规格提取与网络层实现阶段，写 token 失效判定、踢登与刷新策略时
   - 情境：源端由响应拦截器按响应体 reasonCode 分支踢登，错误码枚举里同时有多个登录/token 相关成员（LoginExpired、TokenEmpty、TokenExpired、TokenInvalid、RemotingLoginExpired 等）；刷新 token 可能在进入主页的初始化请求里调用，不在拦截器里。

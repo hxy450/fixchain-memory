@@ -15,7 +15,7 @@ Java 标准库与语言语义到 ArkTS 的等价实现：读行、split/trim、B
 - [Java 集合迭代序、有符号 byte 比较与 switch 返回码按 Java 语义复刻：HashSet/HashMap 决定顺序时用桶序，byte 先换回 -128..127，只把源 case 列出的码判失败](lesson-1f4747c81f16e9529787.lesson.md)
   - 时机：规格提取与切片实现阶段，转写依赖 Java 集合迭代序（keySet、toArray、new ArrayList&lt;&gt;(set)）、byte 与 int 字面量比较、按返回码 switch 分支的逻辑时
   - 情境：源端用 HashSet/HashMap 的迭代序决定输出文件、尝试顺序、写入顺序或问题清单顺序；用 byte 变量与 0x81 一类 int 字面量比较；switch 只把部分返回码（如 2、-1）判为失败；目标准备用 JS Set/Map（插入序）、0–255 的 number 与相邻方法的 result !== 0 判定。
-  - 例外：规格或决策明确不要求复刻集合迭代序，并在验收中写明
+  - 例外：规格或决策明确不要求复刻集合迭代序，并在验收中写明；按实际构造的类型判断，不看变量声明成 Set/Map：源端构造的是 LinkedHashSet/LinkedHashMap（默认插入序）时，JS Set/Map 的插入序本来就一致，不改成桶序；TreeSet/TreeMap 按键排序；源端迭代后随即整体排序再输出的，按那次排序复刻即可，不需要桶序工具。
 - [Java/ICU 正则、String/List 方法与 Android 工具类不按形似 JS 内建改写：先列语义差异，不等价就按源实现移植](lesson-0cbafc2ad4096001d0e8.lesson.md)
   - 时机：服务层、模型层与页面逻辑实现阶段，把源码直接调用的 Java 正则、String/List 方法或 Android 平台工具类翻译成 ArkTS 表达式时；规格提取阶段为这些调用写契约时
   - 情境：源方法体调用的是平台库而不是应用自身代码：Pattern/matches/replaceAll（\\s、\\p{L}、Pattern.quote 交替）、String.split("")、compareToIgnoreCase、List.remove(Object)、android.util.Base64.decode、Uri.parse(path).getPath()、ContentResolver.getType；目标只有 JS RegExp/String/Array 与内建解码可用，写者准备在注释里写“等价/直迁”。 也包括 Kotlin 的 contains/endsWith/startsWith（未传 ignoreCase）、lineSequence().firstOrNull(String::isNotBlank) 一类判定与截取；也包括 String.replaceFirst(…, ignoreCase)、java.net.URL.host、Patterns.WEB_URL.matcher().matches()、io.ktor.http.Url 等依赖库语义的 URL 工具函数，目标准备改用手写正则或 @ohos.url URL（WHATWG 语义）。
@@ -23,6 +23,7 @@ Java 标准库与语言语义到 ArkTS 的等价实现：读行、split/trim、B
 - [Kotlin 严格解析（toIntOrNull、ZonedDateTime.parse、类型化解码）不改写成 parseInt、Date.parse 或 as](lesson-c1e00d34bafe6700a8ca.lesson.md)
   - 时机：数据层与服务层实现阶段，把外部字符串或 JSON 转成数值、时间或类型化对象的 Kotlin 解析调用改写为 ArkTS 时
   - 情境：源码用 toIntOrNull/toLongOrNull、ZonedDateTime.parse、Json.decodeFromString 等严格解析，失败时回落默认值、null 或保留旧值；目标侧可选 parseInt、Number、Date.parse 与 as 类型断言，它们接受的输入更宽或不做运行时检查。
+  - 例外：toLongOrNull 对应的值可能超过 9007199254740991（2^53 − 1）时（如 64 位 id），整串校验后不要直接 Number()：number 已不能精确表示，范围检查和保存改用 BigInt 或保留原字符串；只有值域确定落在安全整数内（如 Int 范围、分钟数）才用 Number()。
 - [手写 getString/String.format 的位置参数插入时，不把用户数据作为 String.replace 的替换串：用 split/join 或替换回调字面插入](lesson-ecbaa1723e2beb9b1aec.lesson.md)
   - 时机：实现阶段，把 Android getString(resId, args) 或 String.format 的 %1$s、%s 位置参数改写为 ArkTS 字符串拼装（自写 formatRes 一类 helper）时
   - 情境：源端 getString(R.string.x, name) 把用户输入的名称、标题插入格式串（如克隆名后缀）；目标取到格式串后准备用 s.replace('%1$s', arg) 替换占位，或复用兄弟页面已有的同类 helper。

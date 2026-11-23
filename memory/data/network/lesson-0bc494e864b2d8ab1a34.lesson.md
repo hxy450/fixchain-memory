@@ -1,6 +1,6 @@
 # Service 只收不透明请求体时，从源端调用链追到 body 的构造处照抄字段与取值来源，不用空对象占位
 
-ID：`lesson-0bc494e864b2d8ab1a34` · 版本：1
+ID：`lesson-0bc494e864b2d8ab1a34` · 版本：2
 
 [本主题](index.md)
 
@@ -11,6 +11,10 @@ ID：`lesson-0bc494e864b2d8ab1a34` · 版本：1
 ## 适用情境
 
 目标 Service 方法只接收 data: Object（对应源端 @Body RequestBody），规格 API 表没列这个端点或它的请求字段；源端由 ViewModel 调用某个 Repository 方法，在那里组装 body（如 device_id 取自设备 ID 工具）。
+
+## 例外与边界
+
+- 追到构造处后源端本来就发空体（空 JSON 对象或不带字段的请求体）的，目标端照抄空体，不自行补字段；要排除的只是没追到构造处就写的 {} 占位。
 
 ## 原因
 

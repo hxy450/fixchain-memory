@@ -1,6 +1,6 @@
 # 源端以 Cursor.getString 读数值列时复刻 CursorWindow 的文本转换（REAL 按 %g），不直接换成 getString
 
-ID：`lesson-58deb5f78fd00dfe7a3b` · 版本：1
+ID：`lesson-58deb5f78fd00dfe7a3b` · 版本：2
 
 [本主题](index.md)
 
@@ -11,6 +11,10 @@ ID：`lesson-58deb5f78fd00dfe7a3b` · 版本：1
 ## 适用情境
 
 源端以 cursor.getString(i) 读取 REAL 或 INTEGER 列，再交给模型的 String 入口解析或直接显示；目标准备一对一改成 resultSet.getString(columnIndex)。
+
+## 例外与边界
+
+- 源端 getString 读到 NULL 字段返回的是 null：共享读取函数先用 isColumnNull 判空并原样返回 null，不把 NULL 格式化成 '0'、'0.0' 或空串；源端用 getDouble、getInt 等数值方法读的列不在这条范围内，照原方法迁移。
 
 ## 原因
 

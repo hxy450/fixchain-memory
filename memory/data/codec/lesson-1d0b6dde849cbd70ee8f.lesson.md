@@ -1,6 +1,6 @@
 # 用命名常量替换源端字面下标或区间时按每处调用的用途选端点：同一结构里着色与数据提取的边界不同，不沿用相邻用途的常量
 
-ID：`lesson-1d0b6dde849cbd70ee8f` · 版本：1
+ID：`lesson-1d0b6dde849cbd70ee8f` · 版本：2
 
 [本主题](index.md)
 
@@ -11,6 +11,10 @@ ID：`lesson-1d0b6dde849cbd70ee8f` · 版本：1
 ## 适用情境
 
 源码对同一行或同一块按用途取不同区间（如着色只取 3 字节访问位 substring(12,18)，提取并解码访问条件取访问位加 GPB substring(12,20)）；目标为切分点定义了一组共享常量，页面里原本有正确的内联切片，规格也写明了精确区间。
+
+## 例外与边界
+
+- 按源端写法换算端点：Java 的 substring(begin, end) 与 JS 的 substring/subarray 一样不含 end，数值照搬；Kotlin 的 substring(a..b) 用闭区间，b 是包含的，换成 JS 时结束位写 b + 1，命名常量也按换算后的值定义。
 
 ## 原因
 

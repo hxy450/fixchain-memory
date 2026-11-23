@@ -17,9 +17,11 @@ JSON 与 XML 解析：打包资源的字段必填与空值语义，源解析器�
 - [源端用 URLSearchParams.get 读 query 时，手写取值按表单编码：值先把 '+' 换成空格再 decodeURIComponent](lesson-83ce396a8881f15c44ad.lesson.md)
   - 时机：功能实现阶段，把源端 URLSearchParams（或其他按表单编码读取 query 的 API）改写为目标端手写取值函数时
   - 情境：源端用 new URLSearchParams(location.search).get(key) 读取深链或 URL query 参数（如预填标题、日期）；目标端不复用等价 API，而是手写 split('&amp;')/split('=') 加 URI 解码。
+  - 例外：先确认源端的取值 API 真按表单编码解码再换 '+'：安卓 Uri.getQueryParameter 会把 '+' 解成空格，但同一个类的 getQueryParameters（复数）和 Uri.decode 只做百分号解码、'+' 原样保留——源端用后两者时手写取值不换 '+'，只做 decodeURIComponent。
 - [源端访问解包后对象的字段时，先确定目标 res.data 对应哪一层类型，再逐层写取值键](lesson-dc5c370e370c2be803c1.lesson.md)
   - 时机：数据层服务实现阶段，把源端 Retrofit/Gson 响应 Bean 的字段访问路径翻译成目标端对原始 JSON 的逐键取值时；页面回调依赖服务层解析产出的 success、errorCode 等字段，准备给出“逐行一致”的复核结论时
   - 情境：源端 success 回调已把 BaseResponse&lt;T&gt; 解包成 T，业务代码写 result.data?.xxx；T 本身是含 data 字段的容器 Bean（如 {total, data:{…}}）；目标网络层把响应 data 原样返回，服务层用 getObject/getArray 按键手动取值。
+  - 例外：少一层只发生在源端回调已把信封解包、且 T 自身又含 data 字段时；源端回调拿到的是未解包的信封（result 就是 BaseResponse&lt;T&gt;）时，result.data.xxx 和目标 res.data.xxx 是同一层，照原路径取值，不要再多加一层 getObject(…, 'data')。
 - [用 @ohos.xml 重建 SAX 开始事件时采用与回调顺序无关的组装，并自建命名空间作用域](lesson-447985a4376146f6d9f2.lesson.md)
   - 时机：实现阶段，用 XmlPullParser 的 token 与属性分离回调重建 namespace-aware 开始事件（本元素属性与命名空间 URI）时
   - 情境：源 SAX/XmlPullParser 在开始标签读取本元素属性并按 uri 加前缀分发命名空间；目标用 tokenValueCallbackFunction 与 attributeWithTagCallbackFunction 两路回调，SDK 声明未写两路回调先后，也未保证 getNamespace() 给出元素 URI。

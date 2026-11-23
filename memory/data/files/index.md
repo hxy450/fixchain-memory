@@ -22,3 +22,4 @@
 - [用 zlib 替代 GZIPInputStream 识别损坏数据时先校验 gzip 魔数：gzopen 'rb' 对非 gzip 输入不抛错](lesson-3d6d1981a3055c9a298b.lesson.md)
   - 时机：数据层实现阶段，把依赖 GZIPInputStream 抛异常识别损坏或非 gzip 数据的读取路径改写为 HarmonyOS zlib 时
   - 情境：源端读取 gzip 压缩的正文、缓存或备份文件，损坏或非 gzip 数据由 GZIPInputStream 抛 ZipException/EOFException 落入失败分支（如显示加载失败）；目标用 @ohos.zlib 的 gzopen(path, 'rb') 一类接口读取。
+  - 例外：魔数校验只挡住非 gzip 输入；源端对头部正确、但正文截断（EOFException）或尾部 CRC、长度不符（ZipException）的数据同样走失败分支。加了魔数校验后，原有对读取或解压抛错的 catch 要保留并接到同一失败分支，不因有了魔数判断就删掉。

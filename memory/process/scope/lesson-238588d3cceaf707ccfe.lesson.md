@@ -1,6 +1,6 @@
 # 决策把系统表面（桌面 Widget 等）替换为应用内页面时写明入口位置与形式；受保护的对等页面不新增可见控件
 
-ID：`lesson-238588d3cceaf707ccfe` · 版本：1
+ID：`lesson-238588d3cceaf707ccfe` · 版本：2
 
 [本主题](index.md)
 
@@ -15,6 +15,7 @@ ID：`lesson-238588d3cceaf707ccfe` · 版本：1
 ## 例外与边界
 
 - 决策明确批准在某个对等页面加可见入口
+- 选来挂长按入口的区域，源端不能已有长按行为；挂上后该区域原有的点击和子组件自己的手势照旧保留：用 gesture 绑在容器上时子组件经 gesture 绑定的手势默认优先识别，不为让入口生效改用 GestureMask.IgnoreInternal 屏蔽子组件手势，也不改用 priorityGesture 抢走子组件原有的交互。
 
 ## 原因
 

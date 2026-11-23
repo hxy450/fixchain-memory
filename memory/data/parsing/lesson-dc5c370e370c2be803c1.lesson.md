@@ -1,6 +1,6 @@
 # 源端访问解包后对象的字段时，先确定目标 res.data 对应哪一层类型，再逐层写取值键
 
-ID：`lesson-dc5c370e370c2be803c1` · 版本：3
+ID：`lesson-dc5c370e370c2be803c1` · 版本：4
 
 [本主题](index.md)
 
@@ -11,6 +11,10 @@ ID：`lesson-dc5c370e370c2be803c1` · 版本：3
 ## 适用情境
 
 源端 success 回调已把 BaseResponse<T> 解包成 T，业务代码写 result.data?.xxx；T 本身是含 data 字段的容器 Bean（如 {total, data:{…}}）；目标网络层把响应 data 原样返回，服务层用 getObject/getArray 按键手动取值。
+
+## 例外与边界
+
+- 少一层只发生在源端回调已把信封解包、且 T 自身又含 data 字段时；源端回调拿到的是未解包的信封（result 就是 BaseResponse<T>）时，result.data.xxx 和目标 res.data.xxx 是同一层，照原路径取值，不要再多加一层 getObject(…, 'data')。
 
 ## 原因
 

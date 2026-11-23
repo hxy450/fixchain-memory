@@ -1,6 +1,6 @@
 # 共享组件挂到哪些页面，以源码里的宿主容器与 replace/add 调用为准；模板示例和上游说法不是依据
 
-ID：`lesson-34c8ac69ad849f8c24e1` · 版本：1
+ID：`lesson-34c8ac69ad849f8c24e1` · 版本：2
 
 [本主题](index.md)
 
@@ -11,6 +11,10 @@ ID：`lesson-34c8ac69ad849f8c24e1` · 版本：1
 ## 适用情境
 
 源端共享组件只被个别 Activity 布局的容器 replace/add 挂载；流水线模板示例、功能索引或派工里写着“主页(某组件)常驻”一类通用说法。
+
+## 例外与边界
+
+- 宿主布局里用 <fragment android:name=…>（或 class=…）标签、或带 android:name 的 FragmentContainerView 静态声明的 Fragment，没有代码里的 replace/add 调用也挂在该页：布局加载时由框架实例化并放进容器，同样算源码里的挂载依据，按源保留到对应目标页。
 
 ## 原因
 

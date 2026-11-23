@@ -8,13 +8,14 @@
 
 - [BlockingQueue 常驻消费线程改成 Promise 泵时，先入队启动泵再等成本占位，逐项 try/catch，泵标志在 finally 复位](lesson-15256c115e73ac0a1d86.lesson.md)
   - 时机：服务实现阶段，把源端常驻消费线程（while(true) queue.take()）与满队等待、成本占位改写成 ArkTS 按需启动的 Promise 消费循环时
-  - 情境：源端处理线程常驻并阻塞在 BlockingQueue.take()，生产者在满队时阻塞等待空位，并按请求成本追加占位条目；目标没有阻塞原语，改成入队后启动一个异步泵，并提供 waitUntilDone 等待计数归零。
+  - 情境：源端处理线程常驻并阻塞在 BlockingQueue.take()，生产者在满队时阻塞等待空位，并按请求成本追加占位条目；目标没有阻塞原语，改成入队后启动一个异步泵，并提供 waitUntilDone 等待计数归零。前提是每项处理本身是 I/O 类异步调用（如文件读写、网络请求）或短任务：Promise 泵和调用方在同一线程上轮流执行，单项处理若是长时间同步计算，泵不会把它移出当前线程，这部分仍要另放到 TaskPool 或 Worker（泵的启动顺序和逐项异常隔离照本条做）。
 - [Kit API 的 catch 值按 BusinessError 取 message 与 code，code 先 Number() 归一再比较错误码](lesson-b19162077a2ab886d809.lesson.md)
   - 时机：规格提取与服务实现阶段，迁移源端按异常类型分类、以 getMessage() 记录详情的 catch 分支时；按 SDK @throws 错误码为 Kit 调用编写异常分支判别时
   - 情境：目标 catch 到的是网络、文件、数据库、定位等 Kit API 抛出或拒绝的 BusinessError（运行时形态因接口而异：@ohos.net.http 拒绝的是带数值 code 与 message 的普通对象，不是 Error 实例；经 napi_throw_error 抛出的，如 geoLocationManager 的同步出错路径，是 Error 实例且 code 为字符串；经 napi_throw_business_error 的是 code 为数的 Error 实例；经 napi_create_error 的是 Error 实例，code 是数还是字符串取决于传入的值）；源端按 IllegalArgumentException、SocketTimeoutException、UnknownHostException 等异常类型分支；@ohos.net.http 的失败码为 2300000 加 libcurl 码。源端靠异常判出的 HTTP 状态失败（HttpURLConnection 读 4xx、5xx 响应时抛 FileNotFoundException 一类 IOException）在 @ohos.net.http 下不进 catch：请求照常完成，状态在响应的 responseCode 里，这类分支按 responseCode 判断，不在 catch 的错误码里找。也包括依据 d.ts @throws 列出的数值错误码（如定位开关关闭）决定等待、重试或失败，而 d.ts 把 BusinessError.code 声明为 number。
-- [单线程写执行器改为 Promise 串行队列时，为重入调用提供不经队列的内部版本](lesson-cdc6de4ebcdeeadc287c.lesson.md)
+- [单线程写执行器（已在执行线程时同步内联嵌套调用）改为 Promise 串行队列时，为重入调用提供不经队列的内部版本](lesson-cdc6de4ebcdeeadc287c.lesson.md)
   - 时机：数据层实现阶段，把源端单线程 Executor（调用方已在执行线程即同步内联）移植为异步串行队列时
   - 情境：源端写方法在已处于执行线程时直接内联执行嵌套调用（如按线程名判断后 runnable.run()）；目标队列任务体内会再调用同类公开写方法。
+  - 例外：源端只是把任务交给普通单线程执行器、没有「已在执行线程就直接运行」的判断时，任务内的嵌套提交在源端本来就排在当前任务之后；目标端任务体内不 await 地调用同队列公开方法、让它排在后面，与源端顺序一致，不必改成内部版本。
 - [同步读取改成异步 initialize 后，失败分支要复位状态并让页面离开加载态](lesson-338f11844f0010e46bc3.lesson.md)
   - 时机：功能实现阶段（ViewModel 与页面接线），把源端同步读取的设置或数据改成异步加载，并给页面加“加载完成前不显示或不可交互”的门时
   - 情境：源端在首帧前用 SharedPreferences 等同步接口读取（缺键用默认值），界面没有加载态或失败态；目标端改为 async 读取，ViewModel 暴露返回 Promise 的 initialize()，页面在 aboutToAppear 中调用，并用“已加载”标志在 LoadingProgress 与正式内容之间切换。
@@ -45,8 +46,9 @@
   - 情境：源端 void 方法内部阻塞到工作完成（waitUntilDone 排空保存队列、后台线程同步 stop+release 后才置 CLOSED、MediaRecorder 同步 stop/release），验收要求“X 先于 Y”（保存先于销毁或重启、关闭完成才回调或重开）；目标对应接口返回 Promise，规格接口表或占位 seam 照搬 Java 的 void 签名，页面生命周期回调（aboutToDisappear）不能 await。UIAbility.onDestroy 不在此列：它可以返回 Promise，平台等它完成后才继续后续生命周期，落在这里的序列直接 await，不必按做法第 2 步只发起；onWindowStageDestroy、onBackground 和 aboutToDisappear 一样只返回 void。
   - 例外：源端本身就是异步完成且调用方不等待（回调、未 join 的 Future）时，按源端时序迁移，不额外补等待或取消 - 源端的等待设了上限（如销毁时最多等关闭任务若干毫秒）时，目标保留同样的上限，到时按源端超时后的路径继续，不改成无限等待
 - [缓存 Promise 做单飞的入口方法不声明 async，直接返回缓存的实例：async 每次返回新的包装 Promise，只保证结果相同、不保证实例相同](lesson-24a6af9f04763e8cda90.lesson.md)
-  - 时机：服务层或 ViewModel 实现阶段，为一次性异步入口（启动恢复、首次加载）写单飞防重并确定方法签名时
+  - 时机：服务层或 ViewModel 实现阶段，为一次性异步入口（启动恢复、首次加载）写单飞防重并确定方法签名、且契约或注释要求重复调用返回同一 Promise 实例时
   - 情境：规格要求返回 Promise 的入口重复调用只执行一次；实现用静态或成员字段缓存首次的 Promise，并在注释或契约里声称重入共享同一 Promise；同类其他方法多写成 async。
+  - 例外：契约和测试只要求工作只执行一次、不要求同一实例时，已写成 async 的入口不算错，不为此改签名。；去掉 async 后，入口里在返回缓存之前同步抛出的异常会直接抛给调用方，不再变成被拒绝的 Promise；入口只做取缓存和存缓存，可能抛错的逻辑全部放进被缓存的私有 async 工作函数。
 - [需授权、需初始化或依赖定位坐标的仓库方法，前置条件缺失时按源端分支处理（改走其他查询，或走与声明一致的错误通道），不静默返回空集合](lesson-5c703b4b1128e37dbef5.lesson.md)
   - 时机：数据层实现阶段，为依赖上下文与运行时权限的枚举、查询类仓库方法编写前置失败分支（上下文未初始化、未授权、枚举失败）时；为依赖定位的附近列表确定无坐标、未授权时的查询分支与结果状态时
   - 情境：仓库方法依赖 UIAbilityContext 与运行时权限（如媒体读取）；规格或源端要求失败时由调用方显示错误提示，调用方靠捕获异常区分“出错”与“确实为空”的空态引导；方法还会把结果写入缓存。也包括依赖定位的附近列表：源端有权限且有坐标时按坐标加半径搜索，无权限或坐标未知时仍按当前城市查询；目标坐标可能未知，决策要求失败保持显式错误、不伪造空成功，页面只有加载中、错误信息与列表三个状态，空列表落入预写的“附近无站点”空态。

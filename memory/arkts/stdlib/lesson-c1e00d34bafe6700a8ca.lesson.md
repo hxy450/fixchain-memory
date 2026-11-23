@@ -1,6 +1,6 @@
 # Kotlin 严格解析（toIntOrNull、ZonedDateTime.parse、类型化解码）不改写成 parseInt、Date.parse 或 as
 
-ID：`lesson-c1e00d34bafe6700a8ca` · 版本：2
+ID：`lesson-c1e00d34bafe6700a8ca` · 版本：3
 
 [本主题](index.md)
 
@@ -12,13 +12,17 @@ ID：`lesson-c1e00d34bafe6700a8ca` · 版本：2
 
 源码用 toIntOrNull/toLongOrNull、ZonedDateTime.parse、Json.decodeFromString 等严格解析，失败时回落默认值、null 或保留旧值；目标侧可选 parseInt、Number、Date.parse 与 as 类型断言，它们接受的输入更宽或不做运行时检查。
 
+## 例外与边界
+
+- toLongOrNull 对应的值可能超过 9007199254740991（2^53 − 1）时（如 64 位 id），整串校验后不要直接 Number()：number 已不能精确表示，范围检查和保存改用 BigInt 或保留原字符串；只有值域确定落在安全整数内（如 Int 范围、分钟数）才用 Number()。
+
 ## 原因
 
 只照抄了失败时的回落分支，接受范围却被放宽：parseInt 只解析前缀（'15abc' 得 15），Date.parse 接受 '2024-01-02' 这类纯日期，as 不在运行期检查类型；源函数会拒绝的输入在目标被当成有效值，命中错误分支或覆盖旧值。自加源码没有的合法性规则（如把 0 当非法）同样改变结果。
 
 ## 做法
 
-1. 改写前写出源函数接受与拒绝的输入：toIntOrNull/toLongOrNull 要求整串为十进制整数（可带正负号）且在 Int/Long 范围内；ZonedDateTime.parse 要求含 T 时间部分与 Z、±HH:MM 或 [Zone]；kotlinx 解码在字段类型不符时抛错。
+1. 改写前写出源函数接受与拒绝的输入：toIntOrNull/toLongOrNull 要求整串为十进制整数（可带正负号）且在 Int/Long 范围内；ZonedDateTime.parse 要求含 T 与时分，并且必须带偏移（Z 或 ±HH:MM），偏移之后可再跟 [Zone]；只有 [Zone] 没有偏移的串会被拒；kotlinx 解码在字段类型不符时抛错。
 2. 整数串先用 ^[+-]?\d+$ 整串校验再 Number() 并检查范围；时间串先按 ISO_ZONED_DATE_TIME 格式校验再转 epoch 毫秒；手写 fromJson 对每个字段 typeof 检查，不符即抛给外层回退。只保留源码已有的回落分支。
 
 ## 可选检查

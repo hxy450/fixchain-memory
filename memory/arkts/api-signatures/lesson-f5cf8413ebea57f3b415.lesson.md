@@ -1,6 +1,6 @@
 # 依赖 API 的单位、默认行为或作用范围时，源端与目标端都读到语义说明：行为级契约写出源 API 实际的作用区域与度量，不只抄字面参数，也不以签名存在推定等价
 
-ID：`lesson-f5cf8413ebea57f3b415` · 版本：5
+ID：`lesson-f5cf8413ebea57f3b415` · 版本：6
 
 [本主题](index.md)
 
@@ -15,6 +15,7 @@ ID：`lesson-f5cf8413ebea57f3b415` · 版本：5
 ## 例外与边界
 
 - 当前输入已有适用版本下的明确规则或已成立实现时，直接复用，无需重复查证或补写证明材料。
+- 同名的阴影参数单位不一定相同：ShadowOptions（含 shadow、textShadow、弹窗与半模态的 shadow）按 px，要 vp2px；DataPanel、Gauge 的阴影选项（MultiShadowOptions）按 vp，已按 vp 写的数值保留，不套 vp2px。
 
 ## 原因
 
