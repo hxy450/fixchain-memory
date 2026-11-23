@@ -1,12 +1,12 @@
 # 分开单行文本盒与多行行距，不把 Compose lineHeight 同名直映为 ArkUI .lineHeight
 
-ID：`lesson-2a2924aaebbfbea80780` · 版本：2
+ID：`lesson-2a2924aaebbfbea80780` · 版本：3
 
 [本主题](index.md)
 
 ## 何时使用
 
-规格提取、主题实现或页面转换阶段，把 Compose 排版令牌落成 ArkUI 文本属性或据文本高度推算容器尺寸时；视觉修复阶段改写主题层行高公式时
+规格提取、主题实现或页面转换阶段，把 Compose 排版令牌落成 ArkUI 文本属性或据文本高度推算容器尺寸时；视觉修复阶段改写主题层行高公式时（前提：最终生效的样式未设 lineHeightStyle）
 
 ## 适用情境
 

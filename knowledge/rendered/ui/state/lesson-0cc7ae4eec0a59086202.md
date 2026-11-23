@@ -2,7 +2,7 @@
 
 ## 何时使用
 
-状态模型与 ViewModel 实现阶段，把 StateFlow/Flow 的列表或消息队列迁成 @Trace 数组，并由消费方用 @Monitor 监听数组属性路径时
+状态模型与 ViewModel 实现阶段，把 StateFlow/Flow 的列表或消息队列迁成 @Trace 数组，并由消费方用 @Monitor 监听数组属性路径时（只管数组本身增删，且监听的是数组整体而非 length 路径）
 
 ## 适用情境
 

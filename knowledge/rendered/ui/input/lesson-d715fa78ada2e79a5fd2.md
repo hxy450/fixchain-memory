@@ -1,4 +1,4 @@
-# Compose Slider 的 steps 是两端之间的离散值个数：取值共 steps+2 个，步长为区间/(steps+1)
+# Compose Slider 的 steps 是两端之间的离散值个数：steps>0 时取值共 steps+2 个，步长为区间/(steps+1)
 
 ## 何时使用
 

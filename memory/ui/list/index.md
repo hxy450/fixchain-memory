@@ -6,7 +6,7 @@
 
 ## 本级经验
 
-- [ExpandableListView 未设组点击监听时组头仍按默认切换展开；按 isExpanded 切换的资源由可变展开状态驱动](lesson-e01c6f821d631fad5383.lesson.md)
+- [ExpandableListView 未设组点击监听、组头无可聚焦子控件时组头仍按默认切换展开；按 isExpanded 切换的资源由可变展开状态驱动](lesson-e01c6f821d631fad5383.lesson.md)
   - 时机：界面实现及对齐修复阶段，把 ExpandableListView + BaseExpandableListAdapter 翻译为 ArkUI 列表，确定组头交互与展开状态时
   - 情境：源 Activity 只调用 expandGroup(n) 设定初始展开，没有 setOnGroupClickListener（或监听返回 false）；getGroupView 按 isExpanded 切换上下箭头等资源；目标用 List/ForEach 渲染分组。
   - 例外：源端注册了 OnGroupClickListener 并返回 true 拦截默认行为，此时按监听体实现；默认切换的前提是组头布局里没有可获得焦点的子控件：getGroupView 返回的布局里有 Button、CheckBox、EditText 等可聚焦控件（或显式 focusable=true 的子 View）时，点组头不走列表的条目点击，默认的展开/折叠不会发生，按源端真实表现迁移，不补组头切换
@@ -33,7 +33,7 @@
   - 时机：列表页与弹层接线阶段，源宿主或子类 adapter 改配共享行内的按钮或显隐，或要给多页共享的组件新增宿主须接的事件时
   - 情境：子类用另一动作按钮配置改写次级按钮（图标、文案、点击一起换），宿主按状态把按钮设为 GONE，或为某个宿主给共享面板新增回调事件；目标行组件或面板被多页共享，写者常受写盘边界限制。
 - [会换位或增删的列表，位置相关值（首尾标记、序号、上移/下移可用态、首尾圆角）在渲染时按当前位置计算，不取 ForEach/Repeat 生成时的闭包 index](lesson-09a0bceae55d05616ecc.lesson.md)
-  - 时机：界面实现阶段，把 Compose itemsIndexed 一类按当前 index 计算行参数的列表迁成 ForEach/Repeat，且列表会换位（上移、下移、拖动）、插入或删除条目时
+  - 时机：界面实现阶段，把 Compose itemsIndexed 一类按当前 index 计算行参数的列表迁成 ForEach/Repeat，且列表会换位（上移、下移、拖动）、插入或删除条目时（前提：键不含位置；用默认键或自动拼 index 的不用改）
   - 情境：源端每次重组把当前 index 传给条目（isFirst/isLast、序号、首尾行形状、移动按钮可用态）；目标 ForEach/Repeat 以实例 id 或内容为键（不含位置），在 itemGenerator 中用闭包 index 计算这些值并作为子组件的构造参数。
   - 例外：ForEach 的键里本来就含位置时（没写 keyGenerator 用默认键 index + '__' + JSON.stringify(item)，或 itemGenerator 声明了 index 而 keyGenerator 没声明、框架会自动拼上 index），换位或增删会让位置变了的项重新生成，闭包 index 就是当前位置，已有写法不用按这条改。
 - [侧栏分类页的右侧做成承载全部一级分组的 List + Scroller：点击 scrollToIndex、onScrollIndex 回写，并迁移程序滚动保护](lesson-7723af3766fb843a2577.lesson.md)

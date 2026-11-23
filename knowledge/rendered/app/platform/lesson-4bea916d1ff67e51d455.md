@@ -2,7 +2,7 @@
 
 ## 何时使用
 
-系统能力实现阶段，为“打开系统设置/应用权限页”编写 startAbility 显式 Want（bundleName/abilityName）时；维护迁移 skill 参考中的系统应用包名时
+系统能力实现阶段，为“打开系统设置/应用权限页”编写 startAbility 显式 Want（bundleName/abilityName）时；维护迁移 skill 参考中的系统应用包名时；只为重开被拒权限时改用 requestPermissionOnSetting
 
 ## 适用情境
 

@@ -1,12 +1,12 @@
 # 打开系统设置的显式 Want 包名随设备与系统版本变化：写前在目标设备核对，启动失败要可观察，不照抄参考里标“已验证”的值
 
-ID：`lesson-4bea916d1ff67e51d455` · 版本：2
+ID：`lesson-4bea916d1ff67e51d455` · 版本：3
 
 [本主题](index.md)
 
 ## 何时使用
 
-系统能力实现阶段，为“打开系统设置/应用权限页”编写 startAbility 显式 Want（bundleName/abilityName）时；维护迁移 skill 参考中的系统应用包名时
+系统能力实现阶段，为“打开系统设置/应用权限页”编写 startAbility 显式 Want（bundleName/abilityName）时；维护迁移 skill 参考中的系统应用包名时；只为重开被拒权限时改用 requestPermissionOnSetting
 
 ## 适用情境
 

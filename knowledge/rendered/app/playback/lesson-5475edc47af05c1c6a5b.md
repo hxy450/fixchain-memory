@@ -1,4 +1,4 @@
-# MediaPlayer 短提示音迁 AVPlayer 时保留源端隐式语义：未申请音频焦点就与其他音频混播，start() 在播放中调用不重启；源端为 SoundPool 时不适用
+# MediaPlayer 短提示音迁 AVPlayer 时保留源端隐式语义：未申请音频焦点就与其他音频混播，复用同一实例时 start() 在播放中调用不重启；源端为 SoundPool 时不适用
 
 ## 何时使用
 

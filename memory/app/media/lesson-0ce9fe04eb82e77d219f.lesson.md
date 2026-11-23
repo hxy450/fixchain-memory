@@ -1,12 +1,12 @@
 # 保存媒体到相册或文件：缺写入权限时用 showAssetsCreationDialog，picker 返回的 URI 先 openSync 取 fd
 
-ID：`lesson-0ce9fe04eb82e77d219f` · 版本：4
+ID：`lesson-0ce9fe04eb82e77d219f` · 版本：5
 
 [本主题](index.md)
 
 ## 何时使用
 
-系统能力与媒体功能实现阶段，编写下载到缓存、保存到相册或文件、复制到剪贴板的调用代码时
+系统能力与媒体功能实现阶段，编写下载到缓存、保存到相册或文件、复制到剪贴板的调用代码时；保存由 SaveButton 安全控件触发、已获临时授权的不在此列
 
 ## 适用情境
 

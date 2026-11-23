@@ -13,7 +13,7 @@
   - 时机：资源迁移或页面转换阶段，为源码引用的 Material 库图标生成目标 SVG 资源时
   - 情境：源码通过 Compose Icons.Rounded.*、Icons.AutoMirrored.Rounded.*（或 Outlined、Sharp 等变体）引用 material-icons 库矢量，工程 res 下没有对应 drawable；派工要求使用官方 path 数据、缺失写 MISSING 占位；本机可能有 Android Studio 自带的 android.jar 或 Gradle 缓存中的 material-icons 包，生成环境能否读取需当场确认。 也包括 Icons.Outlined、Icons.Filled 等常规变体，而资源 skill 的参考把下载源指向 Material Symbols。
   - 例外：Icons.AutoMirrored.* 的矢量带自动镜像标记，在从右到左的布局里会左右翻转；转成静态 SVG 后这一行为不在资源里了，换路径时保留镜像：显示它的 Image 设 matchTextDirection(true)，或保留已有的按布局方向翻转处理，不因路径已取自官方就删掉。
-- [VectorDrawable 转 SVG 时 viewBox 取 viewport、width/height 取显示尺寸，vector 根的 android:tint 按解析色烘焙到每个可见 path](lesson-4e306a66aba5f1d76fdf.lesson.md)
+- [VectorDrawable 转 SVG 时 viewBox 取 viewport、width/height 取显示尺寸，vector 根的 android:tint（tintMode 为默认 src_in 时）按解析色烘焙到每个可见 path](lesson-4e306a66aba5f1d76fdf.lesson.md)
   - 时机：资源迁移阶段，编写 VectorDrawable 到 SVG 的批量转换脚本时
   - 情境：源 vector 的 android:width/height（dp 显示尺寸）与 viewportWidth/Height（路径坐标系）常不相等，部分 fillColor 引用主题属性；也有 vector 根写 android:tint（含框架 color state list，如 control_checkable_material），path 的 fillColor 却是字面色（如不透明黑），并带 fillAlpha=0 的动画用 path。
   - 例外：第 3 步的整体替换只在 vector 根没有另设 android:tintMode（按默认 src_in 混合）时成立；另设了 multiply、screen 等其他模式时，tint 是和原填色混合而不是替换，不能直接把 tint 色写进每个 path。tint 链里的主题属性（如 colorControlActivated、colorControlNormal）按应用实际使用的主题逐层解析，应用或其父主题覆盖过 colorAccent 等属性时取覆盖值，不直接套框架主题的默认。；烘焙进 SVG 的颜色是静态的：源端 tint 随深浅色或主题变化（如 colorControlNormal 取 textColorSecondary，明暗主题下不同）时，目标代码层已有的、引用随深浅色变化的颜色资源的 fillColor 要保留，不因 SVG 已烘焙就删掉或改成字面色。

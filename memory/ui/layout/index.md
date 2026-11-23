@@ -20,7 +20,7 @@
 - [导航图标与菜单分区按实际生效者实现：DrawerToggle 画汉堡、parentActivityName 默认 Up，showAsAction 按名额宽度分流](lesson-a6121cc7eaf207b702f7.lesson.md)
   - 时机：界面实现阶段，转换工具栏菜单 XML、自绘 ActionBar 或标题栏，决定导航图标（返回箭头或汉堡）、图标位与溢出菜单时；自绘框架主题提供的 ActionBar（应用图标、Up 尖角、溢出按钮、横竖屏高度与标题字号）时；同一菜单复用到自绘多选 CAB（ActionMode）时
   - 情境：源菜单项带图标与 showAsAction=ifRoom/always，或带 checkable=true。也包括 Activity 基于 AppCompat、菜单 XML 写的是 android:showAsAction（常带 tools:ignore="AppCompatResource"）。也包括判断导航图标的输入：Manifest 是否为 Activity 声明 parentActivityName 或 PARENT_ACTIVITY meta-data、代码是否调用 setDisplayHomeAsUpEnabled、基类 onPostCreate 是否以同一 Toolbar 构造 ActionBarDrawerToggle 并 syncState；目标套用自带返回箭头的标题栏模板、兄弟页标题栏，或保留自定义 Up 标题栏。除第 1 步①的 DrawerToggle 情形外，自建 Toolbar 不经 setSupportActionBar、直接在自身上设了导航图标（布局 app:navigationIcon 或代码 setNavigationIcon）的，导航图标和点击按 Toolbar 自己的设置与 setNavigationOnClickListener 实现，不套第 1 步的 Up 判定。也包括框架 ActionBar（Theme.Holo 等）带 manifest android:icon、setDisplayHomeAsUpEnabled 与 showAsAction="ifRoom|withText"，目标多个页面各自用 hideTitleBar 自绘标题栏。 也包括同一菜单 XML 在多选 CAB（ActionMode）里复用，部分项未声明 showAsAction；目标自绘工具栏与 CAB 栏，规格只登记了菜单 id 清单与显隐规则。
-- [源 manifest 未声明 android:supportsRtl 时布局方向恒为 LTR：有顺序或对齐语义的容器逐个显式 Direction.Ltr](lesson-148a3e67bd557bafd722.lesson.md)
+- [源 manifest 未声明 android:supportsRtl 时布局方向恒为 LTR：有顺序或对齐语义的容器逐个显式 Direction.Ltr（Column 上不生效）](lesson-148a3e67bd557bafd722.lesson.md)
   - 时机：规格提取与界面实现阶段，为带多语言资源的应用确定布局方向契约，新建按钮条、对话框面板等有顺序或起止对齐语义的容器时（含返修中用自绘面板替换系统弹窗）
   - 情境：AndroidManifest 的 &lt;application&gt; 未声明 android:supportsRtl（安卓布局方向恒为 LTR）；应用含 fa 等 RTL 语言资源，或可能在 RTL 系统语言下运行；目标用 Row/Column 等容器实现按钮条、对话框或起始对齐的内容，未设 direction。
   - 例外：源端声明 android:supportsRtl="true"：按源布局的 start/end 语义让容器随语言方向翻转

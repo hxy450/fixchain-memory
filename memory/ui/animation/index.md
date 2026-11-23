@@ -17,7 +17,7 @@
 - [sharedBounds 包住 sharedElement 的两层共享转场，每端只挂一个 geometryTransition（外层容器），不逐层各配一对](lesson-cf45ff2e03a84ab1a0a4.lesson.md)
   - 时机：界面实现与规格提取阶段，把 Compose SharedTransitionLayout 内的 sharedBounds/sharedElement 落为 ArkUI geometryTransition，确定每端挂几个配对键、挂在哪个节点时
   - 情境：源端在 SharedTransitionLayout 内用 sharedBounds("${id}-bounds") 包住带 sharedElement(id) 的内容，两层 key 不同，列表卡与同页详情浮层两端各有这两层；目标用同页条件浮层加 geometryTransition 做展开和收起，规格页面结构一节可能把源端两层 key 原样列出。
-- [帧时钟动画（Animatable、ValueAnimator）改自驱 ticker 时，时间分数取“当前帧时间 − 起始时间”再套源端插值：后台停帧、回前台按真实流逝追平，不钳制单次增量](lesson-6d6ba721c81206d45fbe.lesson.md)
+- [帧时钟动画（Animatable、ValueAnimator）改自驱 ticker 时，时间分数取“当前帧时间 − 起始时间”再套源端插值：后台停帧、回前台按真实流逝追平（无限重复的 Animator 除外），不钳制单次增量](lesson-6d6ba721c81206d45fbe.lesson.md)
   - 时机：计时或动画引擎的规格与实现阶段，把 Animatable.animateTo(tween)、ValueAnimator/ObjectAnimator 等由帧时钟驱动的进度改写为 setInterval、displaySync、postFrameCallback 等自驱 ticker，确定进度曲线、刷新周期与退后台、回前台的时间推进时
   - 情境：源端进度由 Compose Animatable.animateTo(tween(duration, easing)) 一类帧时钟动画驱动，或由 Android ValueAnimator/ObjectAnimator 逐帧写入绘制用的进度字段；插值曲线可能显式设置，也可能取框架默认。Compose 的帧时钟随宿主 ON_STOP 暂停、ON_START 恢复（只到 ON_PAUSE 时不暂停）；ValueAnimator 不随生命周期暂停，只有无限重复的 Animator 自 Android 13 起在应用窗口全部不可见一段时间后（Android 13 为 10s，14 起 1s）被暂停，恢复时扣除暂停时长、不追平后台时间；目标没有可直接复用的同语义帧时钟，自写 ticker 复刻进度推进与前后台切换。同一应用可能另有后台 Worker 以固定周期（如 tickerFlow + elapsedRealtime）推进，其周期与补偿方式不属于前台动画。 「回前台按真实流逝追平」针对按帧时间减起始时间算播放时间的源端（Compose 帧时钟、有限时长的 Animator）；源端是无限重复的 Animator 并被系统后台暂停时，源端恢复后把暂停时长从进度里扣掉、不追平，目标端恢复时把起始时间后移同样的时长，不按本条追平。
 - [把 AnimatedVisibility 等条件块改成常驻折叠容器时，只把源 lambda 内的节点放进容器，lambda 外的兄弟留在容器外常驻](lesson-fef54f39225a043ac692.lesson.md)

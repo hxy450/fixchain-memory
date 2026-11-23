@@ -7,7 +7,7 @@
 ## 本级经验
 
 - [AlarmManager 到点通知改用代理提醒时，按 reminderAgentManager 自身接口落实按钮路由、贪睡与发布失败回退](lesson-5990184d75275f4df4ff.lesson.md)
-  - 时机：规格提取与服务实现阶段，把 AlarmManager 定时加自绘通知（按钮各带 PendingIntent）映射到 reminderAgentManager 或 notificationManager，并决定按钮路由、贪睡间隔、失败回退与到点副作用时
+  - 时机：规格提取与服务实现阶段，把 AlarmManager 定时加自绘通知（按钮各带 PendingIntent）映射到 reminderAgentManager 或 notificationManager，并决定按钮路由、贪睡间隔、失败回退与到点副作用时；源端按钮只关闭或按固定间隔贪睡时用代理提醒自带按钮即可，不在此列
   - 情境：源端用精确闹钟到点后自绘通知，按钮各带 PendingIntent（贪睡按偏好分钟重挂、改期弹选择器），到点在接收器里执行副作用并链式重挂下一次（如按 RRULE），动作可能经无 UI 的透明 Activity 分派；目标拟交系统代理提醒托管：reminderAgentManager.ActionButton 只有 title/titleResource/type，按钮级 wantAgent 只在 notificationManager 的 NotificationActionButton 上，ReminderRequest 提供 snoozeTimes/timeInterval 与提醒级 wantAgent，publishReminder 有条数上限与失败码，到点不回调应用。
   - 例外：源端按钮只做关闭，或只按固定、偏好间隔贪睡而不带别的参数时，代理提醒自带的关闭型、贪睡型按钮（贪睡间隔由 timeInterval 给）已经对上，不必改走本地通知的按钮 wantAgent；点通知本体打开应用的跳转由提醒级 wantAgent 承载即可。只有源端按钮要各自路由或带参数（如弹选择器改期、带记录参数）时，才按本条换承载方式。
 - [Android 依赖厂商 SDK（地图、登录、支付、账号等）时，先查鸿蒙系统 Kit 与厂商 ohpm 包，再在 Kit、厂商包、H5 与受控降级之间取舍；查证前不写“鸿蒙无等价”](lesson-e9890889e591196c3d0d.lesson.md)
@@ -32,7 +32,7 @@
   - 情境：源端在页面初始化时注册一次事件监听且不注销，回调在开关为真时用固定 ID 更新 ongoing 通知；二级页的监听随页面注销且不发通知。目标主壳以条件渲染承载 Tab，或页面在 NavDestination 中出栈，页面 ViewModel 在 aboutToAppear/aboutToDisappear 激活、释放订阅。
   - 例外：源端某个监听本就随页面注销、回调里也不发通知时（如二级页只刷新自己的列表、弹窗），它按页面周期激活、释放是对的，不搬到应用级服务，也不让它发通知；本条只管源端在开关为真时发布、更新常驻通知的那一路订阅。
 - [打开系统设置的显式 Want 包名随设备与系统版本变化：写前在目标设备核对，启动失败要可观察，不照抄参考里标“已验证”的值](lesson-4bea916d1ff67e51d455.lesson.md)
-  - 时机：系统能力实现阶段，为“打开系统设置/应用权限页”编写 startAbility 显式 Want（bundleName/abilityName）时；维护迁移 skill 参考中的系统应用包名时
+  - 时机：系统能力实现阶段，为“打开系统设置/应用权限页”编写 startAbility 显式 Want（bundleName/abilityName）时；维护迁移 skill 参考中的系统应用包名时；只为重开被拒权限时改用 requestPermissionOnSetting
   - 情境：源端经 Settings.ACTION_* 一类 Intent 跳转系统设置（全部文件访问、应用详情等）；目标为 HarmonyOS NEXT 应用，需要以显式 Want 指定系统设置应用，规格与源码都不给目标包名，可查到的参考文档给出硬编码的厂商设置包名并标注已验证。跳设置只是为了让用户重新打开已被拒绝的运行时权限时，目标可以用 abilityAccessCtrl 的 requestPermissionOnSetting（API 12 起）由系统弹出权限设置框，不需要设置应用的包名；代码已经这样写的照留，不改成显式 Want。
 - [接入 identifier.getOAID 时同批声明 APP_TRACKING_CONSENT 并在隐私同意后申请；全零串按未授权处理](lesson-2b00c4ffaeb442d87e5e.lesson.md)
   - 时机：服务层实现阶段，把源端 OAID（MSA 或厂商通道）采集迁到鸿蒙 identifier.getOAID 时
@@ -58,7 +58,7 @@
 - [源端拉起系统能力前的可用性预检、权限申请与无接收方回退逐段落成目标显式步骤，不用 pick/startAbility 的 catch 代替](lesson-4b5903a870344121e97e.lesson.md)
   - 时机：规格提取与服务层实现阶段，把源端拉起相机、外部应用或隐式 Intent 前的能力检查、权限申请与失败回退翻译为目标契约和代码时
   - 情境：源方法在 startActivity 或拍照前先用 IntentChecker.isAvailable、PackageManager.hasSystemFeature、resolveActivity 判可用，经权限工具申请运行时权限，无接收方时走回退（如 geo: 打不开改走网页地图）或提示；目标用 cameraPicker、startAbility/openLink 的隐式 Want 等实现，参考样例只给“调用 + catch”。目标改用 cameraPicker 这类由用户在系统界面确认的 picker 时，平台不要求应用申请相机权限；源端的权限申请与拒绝分支这时不是第 1 步的必做段，按第 4 步在规格里写明取舍，预检与回退两段仍要落成显式步骤。
-- [源端通知迁到 NotificationRequest：按钮与每次构建用不同 requestCode，正文不给空串，builder 默认图标照填](lesson-716d06e75b7c2102c36c.lesson.md)
+- [源端通知迁到 NotificationRequest：按钮与每次构建用不同 requestCode，正文不给空串，builder 默认 largeIcon 照填（smallIcon 系统生成）](lesson-716d06e75b7c2102c36c.lesson.md)
   - 时机：实现阶段，把源端通知构造（多个 PendingIntent 动作按钮、可为 null 的 setContentText、helper 里 builder 预设的图标）映射为 wantAgent.getWantAgent 与 NotificationRequest 时
   - 情境：源端每次构建通知都给按钮取不同的 requestCode（如逐次取 elapsedRealtime），按钮 Intent 载荷随运行状态变化；部分通知（完成通知、没有文本的步骤）contentText 为 null。目标用 WantAgentInfo（wants、operationType、requestCode、wantAgentFlags）与 NotificationBasicContent（title、text）发布。 源端通知 helper 的 builder 先设默认 smallIcon/largeIcon，再由调用方按需覆盖。
   - 例外：目标代码没有设 smallIcon 不算漏：通知左侧图标由系统自动生成，不需要应用配置；第 3 步要补齐的是会显示出来的源端默认值，主要是右侧的 largeIcon。content 用图片型内容（NotificationPictureContent）时 largeIcon 设了也不生效，不必为它补。

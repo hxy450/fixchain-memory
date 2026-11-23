@@ -66,7 +66,7 @@ ArkUI V2 状态刷新与订阅：@Builder 参数（含异步重赋值的数组�
   - 情境：源 Fragment 用 EventBus @Subscribe（登录成功、记录变化等）和 ActivityResult 回调重拉数据；目标页是 Navigation 下常驻的根内容或 Tab 页，登录、详情等子页用 pushPathByName 覆盖后 pop 返回；工程已有会话状态与应用事件总线。 也包括列表页经 router.pushUrl 打开新增/编辑页，对方保存后 router.back 返回，列表数据只在 aboutToAppear 拉取。也包括源 Activity 在 onStart/onResume 每次可见时重读 Intent、重建列表或校验目录，目标挂在一次性的 onReady/aboutToAppear；以及只应在页面可见时接收的监听（如 NFC 标签监听）挂在 aboutToAppear/aboutToDisappear，被覆盖的页面仍在接收。
   - 例外：每次进入都重新 push 创建的页面（不是返回到栈里已有的实例），aboutToAppear 每次都会执行，首次加载放在里面即可，不在这条的改动范围内。；按 Ability 注册的能力（如 NFC 前台派发 registerForegroundDispatch）不随单个页面开关：注册放在 Ability 的前后台回调里，页面只在 onShown/onHidden 登记、注销自己的接收；不要让某个页面的 onHidden 注销整个应用的派发。
 - [用 @Monitor 监听数组路径代替 collect 时，生产方按源端以新数组重新赋值发出变更](lesson-0cc7ae4eec0a59086202.lesson.md)
-  - 时机：状态模型与 ViewModel 实现阶段，把 StateFlow/Flow 的列表或消息队列迁成 @Trace 数组，并由消费方用 @Monitor 监听数组属性路径时
+  - 时机：状态模型与 ViewModel 实现阶段，把 StateFlow/Flow 的列表或消息队列迁成 @Trace 数组，并由消费方用 @Monitor 监听数组属性路径时（只管数组本身增删，且监听的是数组整体而非 length 路径）
   - 情境：源端以 StateFlow.update { list + item } 一类写法每次发射新列表；目标生产方准备原位 push（出队却重新赋值），消费方以 @Monitor('model.items') 一类路径模拟 collect。
   - 例外：这条只管数组本身的增删（入队、出队）。列表项字段的更新不在内：ForEach 的 key 只含稳定 id、行组件以 @Param 接收整个元素时，已有的「原位修改该项的 @Trace 字段」写法保留，不改成生成新对象再重新赋值数组——同 key 的行不会重建，行内显示会停在旧对象上。；消费方 @Monitor 监听的是数组长度路径（如 'model.items.length'）时，push 引起的长度变化能被观测到，不属于这条要改的情形。
 - [翻译“离开组合即销毁”的状态复位时，同时列出目标框架会替用户恢复的界面状态](lesson-1f6e36f8e8bf9df951da.lesson.md)

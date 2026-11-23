@@ -1,12 +1,12 @@
 # relationalStore 事务体含 await 时用 createTransaction，不用 beginTransaction；单语句直接 await
 
-ID：`lesson-a078efd3361b4abe58e3` · 版本：4
+ID：`lesson-a078efd3361b4abe58e3` · 版本：5
 
 [本主题](index.md)
 
 ## 何时使用
 
-数据层实现阶段，为 relationalStore 的 DAO 共享写入口选择单语句执行或事务接口时
+数据层实现阶段，为 relationalStore 普通（非向量）库的 DAO 共享写入口选择单语句执行或事务接口时
 
 ## 适用情境
 

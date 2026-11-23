@@ -43,7 +43,7 @@
   - 时机：界面实现阶段，为按钮、背景、文字与渐变色阶设置颜色资源引用，或为文本绑定字号资源令牌时
   - 情境：源端颜色以 shapeSolidColor、background、textColor 等硬编码色值或色值资源给出；目标工程已有多组语义名相近但色值不同的颜色资源（如脚手架留下的 color_accent 与迁移出的 brand_accent）。也包括 Compose 源端以主题语义色（如 colors.textPrimary）或排版样式（如 MaterialTheme.typography.titleMedium）取值，而目标 color.json/float.json 只有部分令牌：有名称相近或其他页面前缀的键（text_secondary、feed_font_title），缺同值键，流程要求缺令牌时报告 design_tokens_missing。也包括用 text_size_large、text_size_small 一类名称暗示大小的命名资源承载源端数值（如 16sp 标题、12sp 信息条），或同一组件中语义不同的颜色（进度轨道与选中行底色）准备共用一个已有 token。也包括 Java 以 Color.GREEN、Color.RED 等框架颜色常量着色，规格映射成名称相近、色值不同的应用色（如 light_green #FF66FF66）。 ## 例外与边界 - 源端颜色随深浅色变化（values-night 资源、主题按深浅色切换调色板）时，浅色、深色两套值都要对上：目标键在基础目录与 dark 限定目录里的值分别等于源端两套值才算同值键；目标已有随深浅色变化、两套值都对的引用，不换成只在浅色下同值的键或字面色值。源端颜色固定、不随深浅色变时，不选在 dark 目录里另有取值的键。
 - [深浅主题与应用内色板状态放在可观察对象里并由入口同步，组件在渲染期从主题对象读取主题色：应用内切换色板时 build() 里的 $r 资源色不算](lesson-7b19b801e0f21481d1d6.lesson.md)
-  - 时机：主题层实现深浅色切换，以及组件、页面读取主题色（含对主题色做插值等数值运算）时
+  - 时机：主题层实现深浅色切换，以及组件、页面读取主题色（含对主题色做插值等数值运算）时（源端有多套色板、应用内切换或对主题色做数值运算时）
   - 情境：源端 Theme(darkTheme = isSystemInDarkTheme()) 经 CompositionLocal 下发两套颜色，组件在组合期读取；目标用模块级主题函数与 $r 颜色资源实现，由入口读取系统 colorMode。也包括源端对 MaterialTheme.colorScheme 的颜色做数值插值（如按折叠比例 lerp 顶栏容器色），而 $r 资源不能直接参与运算。 也包括源端 MaterialTheme.colorScheme/typography 随多套色板、明暗与字号缩放在运行时取值，而页面转换时目标还没有全局响应式主题状态，或主题运行时归另一切片负责。源端只跟随系统深浅、只有一套色板、也不对主题色做数值运算时，目标颜色全部经 base/dark 同名的 $r 资源取值就会随系统切换自动换值，不必为此改成主题对象；已是这种写法的代码不在本条改动范围内。
 - [源为 Ionic/Web 组件库时，先取组件 mode 样式与库默认 CSS，再合并应用 css 与 inline style；库控件不套应用 accent](lesson-ab14c9f0e0bf983385e9.lesson.md)
   - 时机：规格提取与界面实现阶段，把 Ionic 卡片、卡片头、工具栏、按钮等组件，或第三方 Web UI 库控件（如 Swiper 的 navigation/pagination）自建为 ArkUI 控件，确定渲染顺序、颜色、形状、尺寸与位置时
@@ -59,7 +59,7 @@
   - 时机：界面转换与视觉返修阶段，确定标题栏背景、文字颜色与字号、周末与选中样式、item 尺寸、胶囊圆角、行高与分隔线时；把弹出菜单行、列表分组标题与批量操作底栏转成组件时
   - 情境：页面规格只给合成的结构（无颜色与尺寸），视觉数值分散在 Fragment 布局、include 布局、item 布局与适配器 convert 分支里；转换者可能只读到部分文件，或读到了却按经验取整。 也包括增量迁移的差异清单与规格只按功能行为描述新入口，菜单行或操作按钮由 ImageView 加 TextView 组成、标题用 drawableLeft 图标与专用颜色资源，部分图标随选中状态切换。
 - [追加主题颜色资源时同一次写深色限定目录的同名键，已存在的资源文件只追加不覆盖](lesson-1e972af4bc7e27b23d9c.lesson.md)
-  - 时机：页面转换或资源阶段，为主题色追加颜色资源键时
+  - 时机：页面转换或资源阶段，为主题色追加颜色资源键时（源端有按深浅色选用的两套调色板时）
   - 情境：源主题有 Light/Dark 两套调色板，并按系统深浅色选用（如 Compose 用 isSystemInDarkTheme() 选调色板）；目标颜色资源分 base 与 dark 限定目录，多个任务会分别追加，部分文件由模板预置。dark 目录里的值按应用当前的颜色模式选取：应用没调 setColorMode 时跟随系统，调了则以设定为准；源端只有一套调色板或固定一种外观的，不在这条范围内，不为它补 dark 值。
 - [颜色插值或混合按 ARGB 四通道拆分并输出同一格式：#AARRGGBB 串与 getColorSync 数值不按 #RRGGBB 偏移取子串](lesson-b742fb724345e4cfeb50.lesson.md)
   - 时机：界面实现阶段，对主题色等颜色值做插值、混合或其他按通道的运算（折叠顶栏背景、状态色过渡、按压混色）时

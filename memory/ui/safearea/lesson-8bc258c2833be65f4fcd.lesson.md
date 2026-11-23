@@ -1,12 +1,12 @@
 # 源端只在三键导航时给导航栏着色：以 TYPE_SYSTEM 底部避让高度判定导航方式，非手势时用 navigationBarColor 着色并随避让区变化更新
 
-ID：`lesson-8bc258c2833be65f4fcd` · 版本：2
+ID：`lesson-8bc258c2833be65f4fcd` · 版本：3
 
 [本主题](index.md)
 
 ## 何时使用
 
-规格提取与入口窗口实现阶段，把源 Activity 按导航方式设置导航栏颜色的分支映射到目标窗口系统栏属性时
+规格提取与入口窗口实现阶段，把源 Activity 按导航方式设置导航栏颜色的分支映射到目标窗口系统栏属性时（源应用 targetSdkVersion 低于 35 时；35 起着色不生效）
 
 ## 适用情境
 

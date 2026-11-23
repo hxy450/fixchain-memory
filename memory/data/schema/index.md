@@ -14,7 +14,7 @@ Room 到 relationalStore 的库名、schema 版本、建表语句（含标识符
   - 时机：规格提取与数据层实现阶段，把继承 SQLiteOpenHelper 的 helper 与其调用方映射为 relationalStore 初始化时
   - 情境：源 helper 继承 SQLiteOpenHelper，构造只调 super，启动路径只 new helper，DAO 可能没有调用方；目标准备在入口或服务构造里 getRdbStore/init 建库，备份读写依赖库文件是否存在。
 - [relationalStore 事务体含 await 时用 createTransaction，不用 beginTransaction；单语句直接 await](lesson-a078efd3361b4abe58e3.lesson.md)
-  - 时机：数据层实现阶段，为 relationalStore 的 DAO 共享写入口选择单语句执行或事务接口时
+  - 时机：数据层实现阶段，为 relationalStore 普通（非向量）库的 DAO 共享写入口选择单语句执行或事务接口时
   - 情境：ArkTS 用 @kit.ArkData relationalStore 普通（非向量）关系库，DAO 的单条 INSERT/DELETE 经共享写入口执行；规格要求“写完才返回、失败不留半条记录、异常回滚”；SDK d.ts 中同时有 beginTransaction()/commit()/rollBack() 与 beginTrans(): Promise&lt;number&gt;、execute(sql, txId, args)、commit(txId)、rollback(txId) 两套事务写法，后者列出 801（Capability not supported）；data-layer skill 参考只给出前一套（API 14+ 另有 createTransaction()）。也包括事务体内要多次 await 异步写接口（insert/update/delete 或其他 DAO 方法），而同一 store 上可能同时有其他异步库操作或同一流程的并发调用。
   - 例外：单语句直接 await 只针对写入口本身：源端用 Room @Transaction 方法或 runInTransaction 把多条写入包成一体的，外层事务照留（按第 2 步用事务对象执行），不因每条语句各自原子就拆掉。；StoreConfig 配置 vector 为 true 的向量库上，beginTrans() 与带事务 ID 的 execute、commit、rollback 是文档支持的写法，不在这条的替换范围内。
 - [relationalStore 写操作返回受影响行数时取 update/delete 的返回值，不在 executeSql 后另查 changes()](lesson-4ada94833c1fdf169dfe.lesson.md)

@@ -1,12 +1,12 @@
 # 全屏窗口下先确认路由页的内容原点：已在状态栏 inset 之下就只补源端顶距的剩余部分，背景需延伸到状态栏时在背景节点自身 expandSafeArea
 
-ID：`lesson-c7ee1769ca29abd236d3` · 版本：2
+ID：`lesson-c7ee1769ca29abd236d3` · 版本：3
 
 [本主题](index.md)
 
 ## 何时使用
 
-界面实现阶段，为全屏窗口中的路由页（NavDestination/HMRouter 页，含 Tab 子页）确定顶部起点、状态栏 inset 的消费位置以及背景是否延伸到状态栏时
+界面实现阶段，为全屏窗口中的路由页（NavDestination/HMRouter 页，含 Tab 子页）确定顶部起点、状态栏 inset 的消费位置以及背景是否延伸到状态栏时（减去已消费 inset 只用于源端顶距自屏幕顶部起算时）
 
 ## 适用情境
 

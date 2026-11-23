@@ -17,7 +17,7 @@
   - 情境：源端经媒体库查询（MediaStore，或 photo_manager 一类插件）列出并读取相册图片，依赖媒体库读写权限；目标应用为普通应用，功能只需用户主动选择的图片。 也包括选出的图片要作为背景等持久配置反复读取，而工程里另有依赖 getAlbums 全量查询、带未完成权限或相册绑定 TODO 的自建选择页。
   - 例外：应用已确认具备申请 READ_IMAGEVIDEO 所需的签名等级与权限审批，且功能确需浏览整个媒体库；改用 PhotoViewPicker 时照源端设选择范围：源端只选图片就设 MIMEType 为图片类型，单选就设 maxSelectNumber 为 1（不设时图片和视频都可选、最多 50 张）
 - [保存媒体到相册或文件：缺写入权限时用 showAssetsCreationDialog，picker 返回的 URI 先 openSync 取 fd](lesson-0ce9fe04eb82e77d219f.lesson.md)
-  - 时机：系统能力与媒体功能实现阶段，编写下载到缓存、保存到相册或文件、复制到剪贴板的调用代码时
+  - 时机：系统能力与媒体功能实现阶段，编写下载到缓存、保存到相册或文件、复制到剪贴板的调用代码时；保存由 SaveButton 安全控件触发、已获临时授权的不在此列
   - 情境：源端用 OkHttp 下载、MediaStore 入库、SAF CreateDocument 存 Downloads、FileProvider URI 复制；目标改用 request.agent、photoAccessHelper、DocumentViewPicker 与 pasteboard，实现者依据参考模板片段或规格映射落码。
   - 例外：保存的是相机会话刚拍摄的照片或录像：走相机系统资产路线（photoAssetAvailable + saveCameraPhoto、AVRecorder AUTO_CREATE_CAMERA_SCENE），不逐张弹授权框，也不用 createAsset 系列；保存由安全控件 SaveButton 的点击触发、在其回调里调 createImageAssetRequest / applyChanges 的：平台已按这次点击临时授权，不需要 WRITE_IMAGEVIDEO，这条写法照留，不改成 showAssetsCreationDialog；工程签名配置里已有受限权限授权、createAsset 能写入的，同样不必换
 - [媒体 URI 交给外部查看或分享的 Want：type 取该条媒体的精确 MIME，并附 FLAG_AUTH_READ_URI_PERMISSION](lesson-c78d27d0ebcb9885f3a0.lesson.md)

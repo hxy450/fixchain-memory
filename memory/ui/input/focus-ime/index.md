@@ -18,5 +18,5 @@
   - 情境：源端 AlertDialog/DialogFragment 用 setView 承载 EditText，靠布局 &lt;requestFocus/&gt; 或首个可获焦视图获焦，onCreateDialog 里 setText 预填；源码与 manifest 都没有 showSoftInput、setSoftInputMode 或 windowSoftInputMode。目标以 openCustomDialog 承载 TextInput/TextArea 内容组件，用 defaultFocus 或宿主 requestFocus 获焦。
   - 例外：源码显式请求输入法（showSoftInput，setSoftInputMode 为 STATE_VISIBLE/ALWAYS_VISIBLE，或 DialogPreference/EditTextPreference 打开时请求输入法）：按源端打开即弹键盘
 - [首屏输入框按源端平台缺省获焦时，在窗口获焦后再 requestFocus：冷启动窗口激活晚于首屏查询，提前请求不会拉起输入法](lesson-9d42548ee3c075de3330.lesson.md)
-  - 时机：界面实现阶段，为首屏含输入框的页面落实冷启动初始焦点与软键盘时
+  - 时机：界面实现阶段，为首屏含输入框的页面落实冷启动初始焦点与软键盘时；源端声明隐藏键盘的 stateHidden 类时不拉起输入法
   - 情境：源端靠平台缺省给第一个可获焦的 EditText 焦点并自动弹键盘（源码没有 requestFocus/showSoftInput），获焦条件随数据分支变化（如列表为空时）；目标为 NavDestination 页 + TextInput，ArkUI 不会自动给输入框焦点。前提是源端 Activity 的 windowSoftInputMode 没有声明键盘状态（或为 stateUnspecified），系统才会在窗口获焦时自行决定弹出键盘；声明了 stateHidden 或 stateAlwaysHidden 时源端进入页面不弹键盘，这条的“拉起输入法”不适用，目标仍要给焦点时设 enableKeyboardOnFocus(false)。

@@ -1,12 +1,12 @@
 # 源窗口按 adjustResize 避让软键盘（声明 adjustResize，或未声明 windowSoftInputMode 而窗口含可滚动视图）时设 KeyboardAvoidMode.RESIZE：各页都如此时在窗口级统一设置，否则在该页显示期间设置、离开时还原；不以默认 OFFSET 记作等价
 
-ID：`lesson-f86b02e97cc77e31d51a` · 版本：3
+ID：`lesson-f86b02e97cc77e31d51a` · 版本：4
 
 [本主题](index.md)
 
 ## 何时使用
 
-页面实现阶段，为含文本输入的页面（编辑表单等 NavDestination 子页）落实源端软键盘避让方式时；为未声明 windowSoftInputMode 的含输入框窗口确定目标避让方式时
+页面实现阶段，为含文本输入的页面（编辑表单等 NavDestination 子页）落实源端软键盘避让方式时；为未声明 windowSoftInputMode 的含输入框窗口确定目标避让方式时（源窗口非 windowFullscreen/FLAG_FULLSCREEN）
 
 ## 适用情境
 

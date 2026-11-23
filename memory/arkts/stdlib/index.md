@@ -6,7 +6,7 @@ Java 标准库与语言语义到 ArkTS 的等价实现：读行、split/trim、B
 
 ## 本级经验
 
-- [DecimalFormat、BigDecimal 舍入与 Float 转字符串按源 API 语义复刻：HALF_EVEN，小数点与数字符号取应用偏好语言（Locale.getDefault 跟随应用语言，不是系统区域），Float.toString 的十进制串与“.0”；不用 Math.round、toFixed、无参 intl.NumberFormat 或模板串顶替](lesson-ae093dedda604fddf17e.lesson.md)
+- [DecimalFormat、BigDecimal 舍入与 Float 转字符串按源 API 语义复刻：HALF_EVEN，未传 Locale 时小数点与数字符号取应用偏好语言（Locale.getDefault 跟随应用语言，不是系统区域），Float.toString 的十进制串与“.0”；不用 Math.round、toFixed、无参 intl.NumberFormat 或模板串顶替](lesson-ae093dedda604fddf17e.lesson.md)
   - 时机：实现阶段把 Kotlin/Android 的数值转文本函数（DecimalFormat 模式串、Float.toBigDecimal().setScale、Float 的 toString 或字符串模板）翻译成 ArkTS 共享工具或页面内函数时；规格提取阶段为这些格式化函数写映射与验收判例时；修改已有共享数值工具时
   - 情境：源端用 android.icu.text.DecimalFormat 或 java.text.DecimalFormat（"0.#"、"0.00"、",##0.00" 等模式）生成显示文本且未传 Locale，用 Float.toBigDecimal().setScale(n, RoundingMode.HALF_EVEN).toFloat() 舍入，或把 Float 值直接 toString、写进字符串模板或字符串资源参数；应用可单独设置应用语言；目标 number 为双精度，准备用 Math.round(v*10)/10、toFixed(n)、无参 intl.NumberFormat 或模板字符串实现；共享数值工具与页面可能各有一份同名函数。源端构造时传了 Locale 或 DecimalFormatSymbols 的（如 new DecimalFormat(pattern, DecimalFormatSymbols(Locale.US))、NumberFormat.getInstance(Locale.ROOT)），符号按传入的 Locale 取，目标写死对应符号（如“.”）是对的，不改成应用偏好语言；按应用偏好语言取只针对没传 Locale 的调用。
 - [Java 文本读行、split/trim、BOM、String.format、SimpleDateFormat/Calendar 的时区与周规则不用同名 JS API 近似：按 Java 语义集中实现兼容函数，未 setTimeZone 的格式化按构造时默认时区取本地字段](lesson-237091b9b04bc4cd340b.lesson.md)

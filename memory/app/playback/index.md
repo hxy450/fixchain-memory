@@ -7,18 +7,18 @@
 ## 本级经验
 
 - [AVPlayer 播放应用包内 rawfile 资源时用 getRawFd(Sync) 的 {fd, offset, length} 设 fdSrc，不把描述符拼成 fd://N?offset= 形式的 url；源端 SoundPool 短音效改用 media.SoundPool，三个字段传给 load](lesson-1267d6cabb117824c67a.lesson.md)
-  - 时机：规格提取阶段为音视频资源加载写平台 API 契约时；播放服务实现阶段为 AVPlayer 绑定应用包内 rawfile 资源时；为源端短音效选择目标播放 API 时
+  - 时机：规格提取阶段为音视频资源加载写平台 API 契约时；播放服务实现阶段为 AVPlayer 绑定应用包内 rawfile 资源时；为源端短音效（解码后 1MB 以内）选择目标播放 API 时
   - 情境：源端用 SoundPool.load(context, R.raw.x) 或 MediaPlayer.create(context, R.raw.x) 播放 res/raw 资源，资源迁到 resources/rawfile：MediaPlayer 与较长音频目标用 AVPlayer，SoundPool 预加载的短音效目标用 media.SoundPool；resourceManager.getRawFd/getRawFdSync 返回整个 HAP 的 fd 加该资源在 HAP 内的 offset/length；AVPlayer 有 url 与 fdSrc（AVFileDescriptor）两种设源方式。 SoundPool.load 有 uri 与 (fd, offset, length) 两种重载。改用 media.SoundPool 的前提是源端那条音效解码后在 1MB 以内（44.1kHz、16bit 立体声约 5.6 秒）；源端拿 SoundPool 放更长的音频（如循环背景音）时，超出部分会被截掉，这一条走 AVPlayer，不按第 1 步改成 SoundPool。
 - [AVPlayer 错误只经一条通道上报，Promise 调用接 catch 并按状态表调用](lesson-d0736ecd82af68edb87a.lesson.md)
   - 时机：播放服务实现阶段，映射 ExoPlayer 的单次 onPlayerError，并调用 AVPlayer 的 prepare/play/pause/stop/reset 时
   - 情境：AVPlayer 同时有 on('error') 与 stateChange('error') 两条错误通道，控制方法返回 Promise；参考模板可能同时处理两条通道、prepare() 也不接 catch。
   - 例外：“stateChange('error') 只做状态处理”指不在这里再发一次错误事件，不是删掉它：状态切到 error 时用 reset()（仍为 error 再 release()）退出播放的处理要保留；on('error') 触发而状态没有切到 error 时，只做提示、不必停止播控。
-- [MediaPlayer 短提示音迁 AVPlayer 时保留源端隐式语义：未申请音频焦点就与其他音频混播，start() 在播放中调用不重启；源端为 SoundPool 时不适用](lesson-5475edc47af05c1c6a5b.lesson.md)
+- [MediaPlayer 短提示音迁 AVPlayer 时保留源端隐式语义：未申请音频焦点就与其他音频混播，复用同一实例时 start() 在播放中调用不重启；源端为 SoundPool 时不适用](lesson-5475edc47af05c1c6a5b.lesson.md)
   - 时机：规格提取与服务实现阶段，把 MediaPlayer.create(...).start() 一类短提示音映射到 AVPlayer 并写映射行、实现播放封装时
   - 情境：源端用 MediaPlayer.create(context, R.raw.x) 加 start() 播放计时提示音等短音效，没有调用 requestAudioFocus；同一实例可能在上一次未播完时再次 start()。目标用 AVPlayer 播 rawfile，规格映射行只写“AVPlayer + rawfile，play() 重置重播”。 不包括源端 SoundPool（先 load 预解码、事件时 play、maxStreams 多路叠播）。
   - 例外：源端申请了音频焦点（requestAudioFocus/AudioFocusRequest），此时按其焦点类型映射目标的焦点与打断策略；第 3 步“播放中再次触发直接忽略”只适用于源端复用同一个 MediaPlayer 实例再调 start()：源端每次触发都 MediaPlayer.create(...) 新建实例时，连续触发是几个实例各自从头播、彼此重叠，不是忽略，目标照这种重入语义映射，不改成忽略；源端用 android.media.SoundPool（new SoundPool(...) 或 SoundPool.Builder，load 与 play 分开调用）播放短音效：目标用 media.createSoundPool，按 lesson-1267d6cabb117824c67a 的 SoundPool 分支处理，不用“每次播放新建 AVPlayer 实例”模拟叠播
 - [异步 AVPlayer 装载使用代数令牌与实例归属，停止服务时显式复位](lesson-511385674c16eb68c88c.lesson.md)
-  - 时机：播放服务实现阶段，把源端在调用线程同步完成的停止、重建、设源、prepare 改写为含 await 的 AVPlayer 封装，并迁移前台服务停止生命周期时
+  - 时机：播放服务实现阶段，把源端在调用线程同步完成的停止、重建、设源、prepare 改写为含 await 的 AVPlayer 封装，并迁移前台服务停止生命周期时；目标播放封装为常驻单例、不随每次启动服务新建时
   - 情境：源播放器在单线程上串行装载，服务停止时 shutdown 置 STOPPED、下次启动重建；目标为常驻单例、方法返回 Promise。
   - 例外：第 2 步只针对常驻单例：目标每次启动服务都新建播放封装和实例、停止时整个丢弃的，复位已由重建完成，不必另写；第 1 步的代数令牌只在装载路径里有 await、可能被下一次装载插入时才需要。
 - [把一套实现的切换步骤接到另一套实现的入口时，不提前改写入口守卫读取的状态](lesson-6b2879705254045a49c5.lesson.md)

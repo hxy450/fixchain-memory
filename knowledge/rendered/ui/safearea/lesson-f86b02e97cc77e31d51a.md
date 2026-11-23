@@ -2,7 +2,7 @@
 
 ## 何时使用
 
-页面实现阶段，为含文本输入的页面（编辑表单等 NavDestination 子页）落实源端软键盘避让方式时；为未声明 windowSoftInputMode 的含输入框窗口确定目标避让方式时
+页面实现阶段，为含文本输入的页面（编辑表单等 NavDestination 子页）落实源端软键盘避让方式时；为未声明 windowSoftInputMode 的含输入框窗口确定目标避让方式时（源窗口非 windowFullscreen/FLAG_FULLSCREEN）
 
 ## 适用情境
 

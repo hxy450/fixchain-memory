@@ -14,7 +14,7 @@
   - 情境：源工程（如 targetSdk 35）未定义 windowSplashScreen* 主题属性，在 Android 12+ 设备上显示系统启动画面；启动器图标是 adaptive-icon（前景层加背景）；主题是没有夜间变体的 Light 系主题，或 AppCompat 等库的 DayNight 主题（窗口背景取库默认的浅、深两态）；目标工程仍是脚手架 startIcon 与 start_window_background（base 白、dark 黑），身份技能只写“复制前景或 ic_launcher”。“源主题”指启动器 Activity 的 android:theme，它没设时才取 application 的主题。#FAFAFA、#303030 只是 AppCompat 一系 DayNight 在主题链没有覆盖 windowBackground 时的默认值：Theme.MaterialComponents.DayNight 一系在 API 21 起默认为日间 #FFFFFF、夜间 #121212，Material3 等其他主题族也按应用依赖的库版本另行解析，不套 AppCompat 的值。
   - 例外：源端用 windowSplashScreen* 属性或 SplashScreen API 自定义了启动画面，按其声明映射
 - [应用级图标只认 app.json5 里写的引用，AppScope 同名资源会盖掉模块的：身份落地时把 app.json5 icon 改指迁移后的分层图标，并在 AppScope 补齐它及其前景/背景（与 entry 用同一组文件），不把脚手架现值当作“不变”](lesson-feec63f65102f5396e51.lesson.md)
-  - 时机：执行阶段应用身份落地（资源迁移之后），确定 AppScope/app.json5 的应用级 icon 引用，以及 AppScope 与入口模块分层图标的前景/背景资源时
+  - 时机：执行阶段应用身份落地（资源迁移之后），确定 AppScope/app.json5 的应用级 icon 引用，以及 AppScope 与入口模块分层图标的前景/背景资源时；源图标不是 adaptive-icon、只有栅格图时不拆前景/背景两层
   - 情境：脚手架 AppScope/app.json5 的 icon 仍指向模板占位图（如 $media:app_icon，AppScope media 下只有 1KB 以内的占位 PNG）；源 App 的启动图标（自适应前景/背景，矢量或位图）已由资源迁移落到 entry 模块并被入口 Ability 的 icon（如 $media:layered_image）引用；身份步骤的说明只描述 PNG 来源，或把 icon 写成“保持目标值（不变）”。也包括 entry 侧 layered_image 的前景/背景本身仍是脚手架 PNG（源前景为 ic_launcher_foreground 矢量、背景为 @color），资源迁移把启动图标层留给身份步骤，身份步骤只改了显示名。
   - 例外：AppScope 的 icon 已指向能解析到源 App 图标的资源；此时只需核对引用在 AppScope media 内闭合；源图标以 Manifest 上 application（或启动器 Activity）的 android:icon 实际引用的资源为准，不默认是 mipmap/ic_launcher；它在 anydpi-v26 下不是 adaptive-icon、只有各密度栅格图时，不硬拆前景/背景两层，app.json5 的 icon 可以指向取自最高密度源图的单层图标
 - [沿用脚手架 bundleName/vendor 前核对所引部署期决策与签名配置：查不到就按源包名写入，vendor 按源端落地](lesson-fb996956b33a1ba65861.lesson.md)

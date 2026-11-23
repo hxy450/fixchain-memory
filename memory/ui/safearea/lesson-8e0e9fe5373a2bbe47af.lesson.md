@@ -1,12 +1,12 @@
 # 页面级安全区订阅从承载页面的主窗口取窗口对象：复用工程主窗口入口或入口 Ability 已维护的避让状态，不用 window.getLastWindow
 
-ID：`lesson-8e0e9fe5373a2bbe47af` · 版本：4
+ID：`lesson-8e0e9fe5373a2bbe47af` · 版本：5
 
 [本主题](index.md)
 
 ## 何时使用
 
-界面实现或巡检修复阶段，为全屏页订阅 avoidAreaChange、调用 getWindowAvoidArea 取顶部与底部避让值并选择窗口对象时
+界面实现或巡检修复阶段，为全屏页订阅 avoidAreaChange、调用 getWindowAvoidArea 取顶部与底部避让值并选择窗口对象时（前提：页面由主窗口承载，不是自建子窗口或悬浮窗）
 
 ## 适用情境
 

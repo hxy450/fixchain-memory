@@ -4,9 +4,9 @@
 
 派生自 main `369bbbf3`（store `e797fb15`，active 651 条、retired 1 条）。相对 main：
 
-1. **store**：照维护流程写提案、apply（共 8 次：建分支时一次，之后每并入一批带正文改动的知识一次，见「并入记录」），store 版本 `e797fb15` → `94c9b166`（`94c9b166782107a02edb8d71125392de699c050b475ff8d0d237287a29894316`）。
+1. **store**：照维护流程写提案、apply（共 9 次：建分支时一次，之后每并入一批带正文改动的知识一次，见「并入记录」），store 版本 `e797fb15` → `34ad0c12`（`34ad0c1201ff8c5b1a8f7c2be60e5cad11abbe5376a65f73d50cde42c576912a`）。
    - 退役 4 条通用审查式经验（没有具体触发情景，要求把某一类东西全部核一遍或交付前做通用动作）：`lesson-6e558834938be19c04e2`、`lesson-25bc0b7518d335a947d6`、`lesson-42df1ac4d4030421da34`、`lesson-0c9e222422d81871b464`；理由写在 store 快照的 `retirement_reason` 里。
-   - 238 条经验按本目录知识文件里核实过的 `changes` 改正文（各次的处数见「并入记录」；被换掉的知识文件的改句仍在正文里，不在现在的知识文件里），版本比 main 高 1–2（先后被两批知识改过正文的经验高不止 1）；`evidence`、`requires`、`topic`、`status` 原样。
+   - 238 条经验按本目录知识文件里核实过的 `changes` 改正文（各次的处数见「并入记录」；被换掉的知识文件的改句仍在正文里，不在现在的知识文件里），版本比 main 高 1–3（先后被两批知识改过正文的经验高不止 1）；`evidence`、`requires`、`topic`、`status` 原样。
    - 现在 active 647 条、retired 5 条（其中 1 条在 main 上就已退役）。
 2. **memory/**：从新 store 用维护脚本重新导出（开发版，带卡片链接，`--link-cards`），通过发布脚本用的严格校验（manifest 的版本等于 store HEAD、每个文件 sha256 对得上、没有多余文件）；`MEMORY.md` 的发布版本行同步改了。和 main 比：4 个退役经验的文件没了，238 个经验文件和 59 个索引 / manifest 文件变了，其余经验文件逐字节相同。
 3. **新增两个目录**：`knowledge/`（本目录）和 `shadow/`（定向核对版影子的提示词和用法）；`.gitignore` 放行这两个目录。仓库根 `README.md` 没改。
@@ -24,6 +24,7 @@
 | 5 | 2026-11-22 | 28 条：`033b8254`、`0457a04c`、`22432022`、`29744eb6`、`2e636699`、`368c4592`、`396d5447`、`51651155`、`5a82d62f`、`5d1c2c78`、`652974ce`、`75f4743d`、`771d1ba1`、`8335bc40`、`943544ce`、`9c4de55a`、`9fa98065`、`a23ad0b5`、`a58ebfe7`、`ad1db0aa`、`ae093ded`、`b1916207`、`cf111aad`、`d80ced7b`、`dcb3c5e6`、`e3077bf6`、`edc9465d`、`fde79829`（其中覆盖已有的 21 个） | 355 | 72 处、28 条经验：`033b8254` 5、`0457a04c` 3、`22432022` 2、`29744eb6` 3、`2e636699` 1、`368c4592` 4、`396d5447` 4、`51651155` 1、`5a82d62f` 5、`5d1c2c78` 2、`652974ce` 3、`75f4743d` 5、`771d1ba1` 4、`8335bc40` 3、`943544ce` 2、`9c4de55a` 3、`9fa98065` 1、`a23ad0b5` 2、`a58ebfe7` 2、`ad1db0aa` 3、`ae093ded` 2、`b1916207` 3、`cf111aad` 2、`d80ced7b` 1、`dcb3c5e6` 1、`e3077bf6` 1、`edc9465d` 2、`fde79829` 2 | `fc763e4c` → `6fe45861` | 照第三版的写法写（每条经验最多 24 条、只留编译查不出来的那类）；另核过适用情境和例外与边界，有依据的补进正文 |
 | 6 | 2026-11-22 | 23 条：`08b9064f`、`0e1c8468`、`0ef2cd00`、`11e9d15d`、`1a66114f`、`447ba581`、`47785524`、`4da9eabc`、`4e9507a2`、`51bf52bc`、`68023ac5`、`73894333`、`7708f650`、`803ba029`、`80dd4e62`、`843a70af`、`94715d0d`、`a2f6a4ae`、`a8452bfe`、`b1991f63`、`bdc493f5`、`c3bd9c8b`、`cce58a15`（其中覆盖已有的 23 个） | 271 | 25 处、20 条经验：`08b9064f` 3、`0e1c8468` 1、`0ef2cd00` 1、`11e9d15d` 1、`1a66114f` 1、`447ba581` 1、`47785524` 1、`4da9eabc` 2、`4e9507a2` 1、`73894333` 1、`7708f650` 1、`803ba029` 1、`80dd4e62` 2、`843a70af` 1、`94715d0d` 1、`a2f6a4ae` 1、`a8452bfe` 1、`b1991f63` 2、`bdc493f5` 1、`cce58a15` 1 | `6fe45861` → `8d2cf9a9` | 照第三版的写法写（每条经验最多 24 条、只留编译查不出来的那类）；另核过适用情境和例外与边界，有依据的补进正文 |
 | 7 | 2026-11-22 | 5 条：`09a0bcea`、`39f137ee`、`4e306a66`、`b3f534eb`、`f88b9c82`（其中覆盖已有的 5 个） | 29 | 4 处、4 条经验：`09a0bcea` 1、`39f137ee` 1、`4e306a66` 1、`b3f534eb` 1 | `8d2cf9a9` → `94c9b166` | 照第三版的写法写（每条经验最多 24 条、只留编译查不出来的那类）；另核过适用情境和例外与边界，有依据的补进正文 |
+| 8 | 2026-11-22 | 39 条：`033b8254`、`09a0bcea`、`0cc7ae4e`、`0ce9fe04`、`1267d6ca`、`148a3e67`、`1e972af4`、`1f366fe4`、`22432022`、`2a2924aa`、`2cf26148`、`4bea916d`、`4e306a66`、`5034b56b`、`51138567`、`5475edc4`、`5990184d`、`67118603`、`6d6ba721`、`716d06e7`、`74295d12`、`7b19b801`、`824031d5`、`836a5414`、`871d3751`、`8bc258c2`、`8e0e9fe5`、`9147be4d`、`9d42548e`、`a078efd3`、`ae093ded`、`c7ee1769`、`d715fa78`、`e01c6f82`、`eb4de4fd`、`f64afc22`、`f6b95d7d`、`f86b02e9`、`feec63f6`（其中覆盖已有的 39 个） | 208 | 39 处、39 条经验：`033b8254` 1、`09a0bcea` 1、`0cc7ae4e` 1、`0ce9fe04` 1、`1267d6ca` 1、`148a3e67` 1、`1e972af4` 1、`1f366fe4` 1、`22432022` 1、`2a2924aa` 1、`2cf26148` 1、`4bea916d` 1、`4e306a66` 1、`5034b56b` 1、`51138567` 1、`5475edc4` 1、`5990184d` 1、`67118603` 1、`6d6ba721` 1、`716d06e7` 1、`74295d12` 1、`7b19b801` 1、`824031d5` 1、`836a5414` 1、`871d3751` 1、`8bc258c2` 1、`8e0e9fe5` 1、`9147be4d` 1、`9d42548e` 1、`a078efd3` 1、`ae093ded` 1、`c7ee1769` 1、`d715fa78` 1、`e01c6f82` 1、`eb4de4fd` 1、`f64afc22` 1、`f6b95d7d` 1、`f86b02e9` 1、`feec63f6` 1 | `94c9b166` → `34ad0c12` | 把前面已核实并写进正文的前提简短地写进标题和何时使用，没有新增事实 |
 
 ## 是什么
 
@@ -72,7 +73,7 @@
 | `lesson-2fcb6612ee4106b34e17` | app/base-page | 新格式 | 7（0） | 2（是） | Android 业务基类的横切行为逐方法映射到组合式 BasePag… |
 | `lesson-7ed00c55221c0f935d95` | app/bluetooth | 新格式 | 4（0） | 0 | 封装 startBLEScan 等声明为 void 的同步系统接口时… |
 | `lesson-51651155ed8226212e55` | app/entry | 新格式 | 9（0） | 1（是） | 源 Activity 的 SEND 分享接收入口（standard … |
-| `lesson-67118603fcc769a5edc9` | app/entry | 新格式 | 5（0） | 1（是） | ohos.ability.shortcuts 挂在承载快捷方式的 U… |
+| `lesson-67118603fcc769a5edc9` | app/entry | 新格式 | 5（0） | 2（是） | ohos.ability.shortcuts 挂在承载快捷方式的 U… |
 | `lesson-8a881c2e07f80f83447c` | app/entry | 新格式 | 5（0） | 3（是） | 源端靠依赖注入或全局静态工具就绪的基础设施改成需显式 init 的封… |
 | `lesson-94715d0df4c03a8fb5a5` | app/entry | 新格式 | 14（0） | 1（是） | 源 Activity 未声明 configChanges 时，旋转（… |
 | `lesson-a23ad0b53c75e49ca117` | app/entry | 新格式 | 10（0） | 2（是） | intent-filter 逐条映射为 module.json5 s… |
@@ -86,9 +87,9 @@
 | `lesson-a6ed8a9c6017ddb73beb` | app/identity | 新格式 | 2（0） | 1（是） | 源端 BuildConfig.VERSION_NAME/VERSIO… |
 | `lesson-c4af68b3ee1456525e8e` | app/identity | 新格式 | 8（0） | 1（是） | 启动窗按源端实际启动画面映射：未自定义 SplashScreen 时… |
 | `lesson-fb996956b33a1ba65861` | app/identity | 新格式 | 6（0） | 1（是） | 沿用脚手架 bundleName/vendor 前核对所引部署期决策… |
-| `lesson-feec63f65102f5396e51` | app/identity | 新格式 | 6（0） | 1（是） | 应用级图标只认 app.json5 里写的引用，AppScope 同… |
+| `lesson-feec63f65102f5396e51` | app/identity | 新格式 | 6（0） | 2（是） | 应用级图标只认 app.json5 里写的引用，AppScope 同… |
 | `lesson-11e9d15d947b30d2ce7e` | app/logging | 新格式 | 4（0） | 1（是） | 新增错误日志沿用工程的 hilog 约定，不写 console.* |
-| `lesson-0ce9fe04eb82e77d219f` | app/media | 新格式 | 9（0） | 1（是） | 保存媒体到相册或文件：缺写入权限时用 showAssetsCreat… |
+| `lesson-0ce9fe04eb82e77d219f` | app/media | 新格式 | 9（0） | 2（是） | 保存媒体到相册或文件：缺写入权限时用 showAssetsCreat… |
 | `lesson-ad1db0aa0434c2e766fd` | app/media | 新格式 | 11（0） | 3（是） | 从图库选图用系统 PhotoViewPicker 并复制进应用目录：… |
 | `lesson-3af52968ce5762501cd3` | app/modules | 新格式 | 2（0） | 0 | BuildConfig.DEBUG 映射为 hvigor 生成的 B… |
 | `lesson-b58f26f0fdb7fb00db9e` | app/modules | 新格式 | 1（0） | 1（是） | 页面与组件共用的非 UI 函数放进普通模块：不从路由页面模块具名导出… |
@@ -97,22 +98,22 @@
 | `lesson-30643cd3f209b896ffd1` | app/platform | 新格式 | 7（0） | 1（是） | 后台 Worker 计时与带动作的进度通知迁到 HarmonyOS … |
 | `lesson-35a684862ee500f08912` | app/platform | 新格式 | 4（0） | 0 | 用应用内计时加长时任务替代后台 Worker 时，恢复入口共用逐步扣… |
 | `lesson-4b5903a870344121e97e` | app/platform | 新格式 | 6（0） | 1（是） | 源端拉起系统能力前的可用性预检、权限申请与无接收方回退逐段落成目标显… |
-| `lesson-4bea916d1ff67e51d455` | app/platform | 新格式 | 2（0） | 1（是） | 打开系统设置的显式 Want 包名随设备与系统版本变化：写前在目标设… |
-| `lesson-5990184d75275f4df4ff` | app/platform | 新格式 | 9（0） | 1（是） | AlarmManager 到点通知改用代理提醒时，按 reminde… |
+| `lesson-4bea916d1ff67e51d455` | app/platform | 新格式 | 2（0） | 2（是） | 打开系统设置的显式 Want 包名随设备与系统版本变化：写前在目标设… |
+| `lesson-5990184d75275f4df4ff` | app/platform | 新格式 | 9（0） | 2（是） | AlarmManager 到点通知改用代理提醒时，按 reminde… |
 | `lesson-652974ce64a9243faebc` | app/platform | 新格式 | 17（0） | 3（是） | 写目标权限清单时按每个已映射系统 API 在 SDK d.ts 中的… |
-| `lesson-716d06e75b7c2102c36c` | app/platform | 新格式 | 4（0） | 2（是） | 源端通知迁到 NotificationRequest：按钮与每次构建… |
+| `lesson-716d06e75b7c2102c36c` | app/platform | 新格式 | 4（0） | 3（是） | 源端通知迁到 NotificationRequest：按钮与每次构建… |
 | `lesson-9769c8f754044944d3ad` | app/platform | 新格式 | 2（0） | 1（是） | 源端 Material You 动态取色迁到 HarmonyOS：用… |
 | `lesson-a45be20055d942e12052` | app/platform | 新格式 | 3（0） | 1（是） | 源端 Activity 画中画映射到 @ohos.PiPWindow… |
 | `lesson-e9890889e591196c3d0d` | app/platform | 新格式 | 2（0） | 0 | Android 依赖厂商 SDK（地图、登录、支付、账号等）时，先查… |
 | `lesson-e9f03fcc7f1e781c4b24` | app/platform | 新格式 | 3（0） | 1（是） | 开关控制的常驻通知由应用级服务订阅与发布，不绑在页面 ViewMod… |
 | `lesson-ea9a6cfecca9e091c7ea` | app/platform | 新格式 | 5（0） | 2（是） | 源端 Activity 对自身 getWindow() 加的标志（F… |
 | `lesson-efb94f2d70d4df1c65d7` | app/platform | 新格式 | 7（0） | 1（是） | 决策已批准等价实现的平台能力要真实现，只在运行期按实际结果降级；判定… |
-| `lesson-1267d6cabb117824c67a` | app/playback | 新格式 | 11（0） | 1（是） | AVPlayer 播放应用包内 rawfile 资源时用 getRa… |
+| `lesson-1267d6cabb117824c67a` | app/playback | 新格式 | 11（0） | 2（是） | AVPlayer 播放应用包内 rawfile 资源时用 getRa… |
 | `lesson-1a3150939a5e45c02b0e` | app/playback | 新格式 | 3（0） | 0 | 源端同一 release() 用在不同作用域时，目标封装拆成两个方法… |
-| `lesson-511385674c16eb68c88c` | app/playback | 新格式 | 2（0） | 1（是） | 异步 AVPlayer 装载使用代数令牌与实例归属，停止服务时显式复… |
-| `lesson-5475edc47af05c1c6a5b` | app/playback | 新格式 | 5（0） | 1（是） | MediaPlayer 短提示音迁 AVPlayer 时保留源端隐式… |
+| `lesson-511385674c16eb68c88c` | app/playback | 新格式 | 2（0） | 2（是） | 异步 AVPlayer 装载使用代数令牌与实例归属，停止服务时显式复… |
+| `lesson-5475edc47af05c1c6a5b` | app/playback | 新格式 | 5（0） | 2（是） | MediaPlayer 短提示音迁 AVPlayer 时保留源端隐式… |
 | `lesson-d0736ecd82af68edb87a` | app/playback | 新格式 | 5（0） | 1（是） | AVPlayer 错误只经一条通道上报，Promise 调用接 ca… |
-| `lesson-4e306a66aba5f1d76fdf` | app/resources | 新格式 | 5（0） | 1（是） | VectorDrawable 转 SVG 时 viewBox 取 v… |
+| `lesson-4e306a66aba5f1d76fdf` | app/resources | 新格式 | 5（0） | 2（是） | VectorDrawable 转 SVG 时 viewBox 取 v… |
 | `lesson-66e082374dc8992f48ae` | app/resources | 新格式 | 1（0） | 1（是） | 转换快捷方式等图标资源时同时落实画布尺寸与图形显示区；测量墨迹范围后… |
 | `lesson-74d535afb21b2270119e` | app/resources | 新格式 | 2（0） | 1（是） | Compose Material 图标（Icons.Rounded、… |
 | `lesson-783faf2767a952034514` | app/resources | 新格式 | 3（0） | 1（是） | 8 位颜色保持 #AARRGGBB 字节序，转换后与源逐项往返核对 |
@@ -140,7 +141,7 @@
 | `lesson-5f669c379cfcdb14ad10` | arkts/numeric | 新格式 | 3（0） | 1（是） | Java long 常量进入 SQL 或字符串时检查 JS 安全整数… |
 | `lesson-0cbafc2ad4096001d0e8` | arkts/stdlib | 新格式 | 16（0） | 0 | Java/ICU 正则、String/List 方法与 Androi… |
 | `lesson-237091b9b04bc4cd340b` | arkts/stdlib | 新格式 | 15（0） | 1（是） | Java 文本读行、split/trim、BOM、String.fo… |
-| `lesson-ae093dedda604fddf17e` | arkts/stdlib | 新格式 | 8（0） | 2（是） | DecimalFormat、BigDecimal 舍入与 Float… |
+| `lesson-ae093dedda604fddf17e` | arkts/stdlib | 新格式 | 8（0） | 3（是） | DecimalFormat、BigDecimal 舍入与 Float… |
 | `lesson-ecbaa1723e2beb9b1aec` | arkts/stdlib | 新格式 | 3（0） | 0 | 手写 getString/String.format 的位置参数插入… |
 | `lesson-1696967d1320c7735732` | arkts/strict-mode | 新格式 | 1（0） | 1（是） | ArkTS 里给对象字面量写显式 class/interface 类… |
 | `lesson-6e74f064efe2649fc295` | arkts/strict-mode | 新格式 | 0（0） | 1（是） | SDK 把观察者或回调类型声明为 class 时不写 impleme… |
@@ -164,11 +165,11 @@
 | `lesson-faec7be031b7f64752c4` | data/network | 新格式 | 5（0） | 1（是） | 源端声明 INTERNET（及 ACCESS_NETWORK_STA… |
 | `lesson-0caaa4efc70dad90a15f` | data/parsing | 新格式 | 6（0） | 1（是） | 备份/导出 JSON 按 org.json 或 Gson 库语义序列… |
 | `lesson-2622bc32995ac62389c3` | data/parsing | 新格式 | 3（0） | 1（是） | 自写 fromJson 从宽类型输入取值时用 typeof/inst… |
-| `lesson-5034b56be6fd828164c9` | data/parsing | 新格式 | 6（0） | 1（是） | 翻译源端 JSON 解析时按源解析器与取值 API 的语义定规则：o… |
-| `lesson-871d3751cadde6dda1dc` | data/parsing | 新格式 | 3（0） | 1（是） | 显式 JSON 解码器按源解析器的接受范围和源数据的实际类型定规则：… |
+| `lesson-5034b56be6fd828164c9` | data/parsing | 新格式 | 6（0） | 2（是） | 翻译源端 JSON 解析时按源解析器与取值 API 的语义定规则：安… |
+| `lesson-871d3751cadde6dda1dc` | data/parsing | 新格式 | 3（0） | 2（是） | 显式 JSON 解码器按源解析器的接受范围和源数据的实际类型定规则：… |
 | `lesson-5c101b4b3f08ab317202` | data/schema | 新格式 | 1（0） | 1（是） | 手写 relationalStore 插入语句时省略 Room au… |
 | `lesson-65358a02b1bf9ef652d3` | data/schema | 新格式 | 5（0） | 1（是） | 用 relationalStore 重写 SQLiteOpenHel… |
-| `lesson-a078efd3361b4abe58e3` | data/schema | 新格式 | 8（0） | 3（是） | relationalStore 事务体含 await 时用 crea… |
+| `lesson-a078efd3361b4abe58e3` | data/schema | 新格式 | 8（0） | 4（是） | relationalStore 事务体含 await 时用 crea… |
 | `lesson-a6f300f9295ba538f23b` | data/schema | 新格式 | 4（0） | 1（是） | Room 数据库落成 relationalStore 时保留库名、s… |
 | `lesson-c55c56444f5271471a64` | data/schema | 新格式 | 1（0） | 0 | 手写 relationalStore 建表 SQL 时给表名与列名统… |
 | `lesson-488a3bd782acef92f5cf` | data/seeding | 新格式 | 1（0） | 1（是） | 源端在首次建库回调里播种时，目标把播种放进建表分支的同一事务并写入种… |
@@ -179,12 +180,12 @@
 | `lesson-6dae0bf2657b0e339742` | process/build | 新格式 | 2（0） | 0 | 用 shell 一行命令或脚本改写含 $ 或反斜杠转义的 ArkTS… |
 | `lesson-776ed5eb216833c6b002` | process/gates | 新格式 | 2（0） | 1（是） | 写文件以真实执行回执为准：只有文本形式的工具调用即未写入；覆盖模板入… |
 | `lesson-8390913de64b0adc00fc` | process/gates | 新格式 | 0（0） | 0 | 处理孤儿检测报出的无调用方页面或弹窗时，已登记为范围内的产物不删除：… |
-| `lesson-9147be4d87153de9c5b6` | process/gates | 新格式 | 0（0） | 1（是） | 功能对齐与验收结论逐项以代码落点为准：按规格验收项与导航出口检索实际… |
+| `lesson-9147be4d87153de9c5b6` | process/gates | 新格式 | 0（0） | 2（是） | 功能对齐与验收结论逐项以代码落点为准：按规格验收项与导航出口检索实际… |
 | `lesson-ad6f23b88f09b55dd92a` | process/gates | 新格式 | 2（0） | 0 | 用共享组件替换页面已实现片段前（关闭孤儿组件检查或按计划收口），完整… |
 | `lesson-afae8d13e00941efe808` | process/gates | 新格式 | 3（0） | 1（是） | 交互问题先复现并分层定位、确认触摸可达再改约束；未经设备验证、被阻断… |
 | `lesson-bdb97da6a6eb8d68435f` | process/gates | 新格式 | 5（0） | 0 | 运行会改写源码的自愈脚本后先审阅其改动；异常尺寸、与已有显式尺寸重复… |
-| `lesson-f6b95d7d6d0159cb0436` | process/gates | 新格式 | 3（0） | 1（是） | 修复安全区等按关键字判定的结构检查时逐页落实实现，不用含检查关键字的… |
-| `lesson-033b8254b5b6de0bd9e1` | process/input-loading | 新格式 | 22（0） | 5（是） | 页面、控件、算法或实体基类由二进制三方库承载时，按依赖坐标取库制品核… |
+| `lesson-f6b95d7d6d0159cb0436` | process/gates | 新格式 | 3（0） | 2（是） | 修复安全区等按关键字判定的结构检查时逐页落实实现，不用含检查关键字的… |
+| `lesson-033b8254b5b6de0bd9e1` | process/input-loading | 新格式 | 22（0） | 6（是） | 页面、控件、算法或实体基类由二进制三方库承载时，按依赖坐标取库制品核… |
 | `lesson-35f4f9b3cf566d33e79c` | process/input-loading | 新格式 | 0（0） | 0 | 依据另一文件的返回语义改写调用方前，重读该文件当前版本；编辑回执提示… |
 | `lesson-6a3a7f46c8fec282affa` | process/input-loading | 新格式 | 0（0） | 0 | Windows PowerShell 5.1 读取 UTF-8 中文… |
 | `lesson-b3f534eb740a768d95a6` | process/input-loading | 新格式 | 10（0） | 1（是） | 源端行为依赖的辅助方法、谓词、getter 与框架约定，要读到定义再… |
@@ -198,19 +199,19 @@
 | `lesson-8a7d25959b954ffb9215` | process/task-handoff | 新格式 | 0（0） | 1（是） | 把 fragment 内容交给共享组件、宿主页另建容器时，fragm… |
 | `lesson-a2f6a4ae9a72be740de6` | process/task-handoff | 新格式 | 8（0） | 1（是） | “不确定”“待补资源”“无等价”“延期”“契约未确认”这类占位只登记… |
 | `lesson-ae78da6f1a3669f6ef59` | process/task-handoff | 新格式 | 0（0） | 0 | 子代理派发失败先按报错修正参数重试；确需改由主线程执行时，按 ski… |
-| `lesson-eb4de4fd7452308a0483` | process/task-handoff | 新格式 | 1（0） | 1（是） | 解决前向占位时按登记的触发文本逐项兑现：只接一半、写成常量或删掉标记… |
+| `lesson-eb4de4fd7452308a0483` | process/task-handoff | 新格式 | 1（0） | 2（是） | 解决前向占位时按登记的触发文本逐项兑现：只接一半、写成常量（源端本非… |
 | `lesson-5bc9af19bedaecaf627c` | process/testing | 新格式 | 1（0） | 1（是） | 为迁移代码定预期值或写验收样例时按源端实现逐步手算（源式含 floa… |
 | `lesson-42364ad323112c3342ae` | process/visual-review | 新格式 | 6（0） | 2（是） | 按源端截图复刻控件尺寸时，先判断实测值是内容测量结果还是框架 min… |
 | `lesson-aae5f345ed2ced099757` | process/visual-review | 新格式 | 0（0） | 1（是） | 为颜色差异立单时，用像素均值和源端算式给出期望值，再建议混合方式 |
 | `lesson-5caf7eadb69e940926f9` | ui/accessibility | 新格式 | 4（0） | 1（是） | 转写 Compose 可点击行与卡片时一并落实无障碍语义：role … |
 | `lesson-d80ced7be82765244889` | ui/accessibility | 新格式 | 2（0） | 1（是） | 图标无障碍文本按源 contentDescription 转写：nu… |
-| `lesson-6d6ba721c81206d45fbe` | ui/animation | 新格式 | 6（0） | 2（是） | 帧时钟动画（Animatable、ValueAnimator）改自驱… |
+| `lesson-6d6ba721c81206d45fbe` | ui/animation | 新格式 | 6（0） | 3（是） | 帧时钟动画（Animatable、ValueAnimator）改自驱… |
 | `lesson-a4e6bcfb28597691c028` | ui/animation | 新格式 | 6（0） | 2（是） | Compose 的显隐、内容切换、尺寸与条目位移动画（Animate… |
 | `lesson-fef54f39225a043ac692` | ui/animation | 新格式 | 2（0） | 0 | 把 AnimatedVisibility 等条件块改成常驻折叠容器时… |
 | `lesson-0a26e0cfc44a183d3a02` | ui/dialog | 新格式 | 8（0） | 0 | 用页内覆层承载 Activity 级 Dialog 时挂在覆盖整窗的… |
 | `lesson-18fca50f9c801cb282ec` | ui/dialog | 新格式 | 9（0） | 1（是） | 源对话框带目标系统弹窗没有的槽位（setView 注入的复选框等自定… |
 | `lesson-1c27b6c7cf05c05733d9` | ui/dialog | 新格式 | 2（0） | 1（是） | ComponentContent 构造即执行 builder：构造后… |
-| `lesson-1f366fe4ccdc917ce0fc` | ui/dialog | 新格式 | 8（0） | 1（是） | 源弹窗按它实际加载的布局 XML、函数全文或依赖库模板逐控件还原并接… |
+| `lesson-1f366fe4ccdc917ce0fc` | ui/dialog | 新格式 | 8（0） | 2（是） | 源弹窗按它实际加载的布局 XML、函数全文或依赖库模板逐控件还原并接… |
 | `lesson-21db515a505be4845497` | ui/dialog | 新格式 | 10（0） | 1（是） | 按源弹层类型逐个选呈现形态：居中 CustomDialog/Aler… |
 | `lesson-29f62d177a17d08b4e4f` | ui/dialog | 新格式 | 6（0） | 0 | 依附式弹窗（AttachPopup）的宿主按锚点视图所在页面确定：提… |
 | `lesson-368c4592e4c7075c1871` | ui/dialog | 新格式 | 19（0） | 4（是） | 源端 XPopup/DialogFragment 真弹窗（居中、锚点… |
@@ -245,7 +246,7 @@
 | `lesson-4da9eabca745b3b2be91` | ui/graphics/canvas | 新格式 | 13（0） | 2（是） | SurfaceView 自建线程的 lockCanvas 循环按线程… |
 | `lesson-68717b80482f4bd12825` | ui/graphics/canvas | 新格式 | 4（0） | 0 | Canvas.drawText 移植为 fillText 时按每串首… |
 | `lesson-7083c6ad69ab19ad17dd` | ui/graphics/canvas | 新格式 | 16（0） | 1（是） | 按 Android px 公式移植自绘 View 时先定画布上下文单… |
-| `lesson-74295d12b4edc025569f` | ui/graphics/canvas | 新格式 | 5（0） | 1（是） | Canvas 字体串按注册字族名原样引用、不加源端没有的 bold；… |
+| `lesson-74295d12b4edc025569f` | ui/graphics/canvas | 新格式 | 5（0） | 2（是） | Canvas 字体串按注册字族名原样引用、不加源端没有的 bold；… |
 | `lesson-c3bd9c8b2f24c209a659` | ui/graphics/canvas | 新格式 | 11（0） | 0 | 源端位图按密度解码、createScaledBitmap 预缩放后原… |
 | `lesson-f876887b216b6caf9f39` | ui/graphics/canvas | 新格式 | 8（0） | 0 | 移植 Paint 文字度量前先按源 API 分层：getTextBo… |
 | `lesson-0457a04c31208e1fb916` | ui/input | 新格式 | 14（0） | 3（是） | EditText 的 inputType 键盘与候选提示和内容约束分… |
@@ -256,10 +257,10 @@
 | `lesson-bc79621b279ff82517ab` | ui/input | 新格式 | 1（0） | 1（是） | 受控值含文本与选区（TextFieldValue）时，选区经 Tex… |
 | `lesson-c3a3797da8b412c31aa7` | ui/input | 新格式 | 3（0） | 1（是） | Compose Switch 的 thumbContent（如选中时… |
 | `lesson-d53223f43ad454261f26` | ui/input | 新格式 | 1（0） | 1（是） | 源码用 selectable 行加条件尾部勾选表示选中时按同一结构实… |
-| `lesson-d715fa78ada2e79a5fd2` | ui/input | 新格式 | 3（0） | 1（是） | Compose Slider 的 steps 是两端之间的离散值个数… |
+| `lesson-d715fa78ada2e79a5fd2` | ui/input | 新格式 | 3（0） | 2（是） | Compose Slider 的 steps 是两端之间的离散值个数… |
 | `lesson-edc9465d3902807c386b` | ui/input | 新格式 | 10（0） | 2（是） | 菜单 SearchView 迁成自绘搜索栏时把展开、焦点、提交、收起… |
 | `lesson-ef93bb2086aef9604aa1` | ui/input | 新格式 | 4（0） | 0 | 源端同一控件既可编辑又分段着色（EditText + Spannab… |
-| `lesson-9d42548ee3c075de3330` | ui/input/focus-ime | 新格式 | 2（0） | 1（是） | 首屏输入框按源端平台缺省获焦时，在窗口获焦后再 requestFoc… |
+| `lesson-9d42548ee3c075de3330` | ui/input/focus-ime | 新格式 | 2（0） | 2（是） | 首屏输入框按源端平台缺省获焦时，在窗口获焦后再 requestFoc… |
 | `lesson-edae4e2795ec169255bb` | ui/input/focus-ime | 新格式 | 5（0） | 1（是） | 只收键盘不清焦点用 hideTextInput：show/hideS… |
 | `lesson-4a4f8d845a204ffa244b` | ui/interaction | 新格式 | 13（0） | 1（是） | Stack 上层全尺寸容器和页面级遮罩会参与命中测试：不处理点击的覆… |
 | `lesson-68023ac5f088c72a775a` | ui/interaction | 新格式 | 14（0） | 0 | 源端 onTouch 自己按未掩码 getAction 只跟随首指时… |
@@ -274,7 +275,7 @@
 | `lesson-f3e614f295aa409485fd` | ui/interaction | 新格式 | 1（0） | 1（是） | 源端监听回调体被注释时按无响应控件迁移；审计不因“已裁定/集成点”注… |
 | `lesson-fd3add7128663eb9998f` | ui/interaction | 新格式 | 5（0） | 1（是） | 点击事件挂在源端真正持有点击的节点上：源端只绑整栏就挂外层，只绑行内… |
 | `lesson-fde79829831c2269e925` | ui/interaction | 新格式 | 17（0） | 2（是） | 源端可点击容器自带的按压反馈（Compose clickable、C… |
-| `lesson-148a3e67bd557bafd722` | ui/layout | 新格式 | 5（0） | 1（是） | 源 manifest 未声明 android:supportsRtl… |
+| `lesson-148a3e67bd557bafd722` | ui/layout | 新格式 | 5（0） | 2（是） | 源 manifest 未声明 android:supportsRtl… |
 | `lesson-51bf52bc666b921ef2e9` | ui/layout | 新格式 | 7（0） | 0 | values-sw<N>dp(-land) 覆盖按设备屏幕短边 mi… |
 | `lesson-786a04847bf10d364d9d` | ui/layout | 新格式 | 7（0） | 0 | 源应用声明 supportsRtl=true 时保留逻辑方向：sta… |
 | `lesson-a6121cc7eaf207b702f7` | ui/layout | 新格式 | 21（0） | 3（是） | 导航图标与菜单分区按实际生效者实现：DrawerToggle 画汉堡… |
@@ -298,8 +299,8 @@
 | `lesson-adad817f2c3c8f1eaa09` | ui/layout/sizing | 新格式 | 11（0） | 2（是） | LinearLayout 的 weightSum 与子权重之和不等，… |
 | `lesson-b73a1ac8908f74856a02` | ui/layout/sizing | 新格式 | 2（0） | 0 | 区分 Material 按钮的布局占位、背景实绘与触控范围：不只凭调… |
 | `lesson-e3077bf60cfc3f34d0a2` | ui/layout/sizing | 新格式 | 3（0） | 1（是） | layout_marginStart/End 写成 margin 的… |
-| `lesson-09a0bceae55d05616ecc` | ui/list | 新格式 | 2（0） | 1（是） | 会换位或增删的列表，位置相关值（首尾标记、序号、上移/下移可用态、首… |
-| `lesson-e01c6f821d631fad5383` | ui/list | 新格式 | 1（0） | 1（是） | ExpandableListView 未设组点击监听时组头仍按默认切… |
+| `lesson-09a0bceae55d05616ecc` | ui/list | 新格式 | 2（0） | 2（是） | 会换位或增删的列表，位置相关值（首尾标记、序号、上移/下移可用态、首… |
+| `lesson-e01c6f821d631fad5383` | ui/list | 新格式 | 1（0） | 2（是） | ExpandableListView 未设组点击监听、组头无可聚焦子… |
 | `lesson-e17b45a28a8d92ecbd01` | ui/list | 新格式 | 2（0） | 0 | 多类型 Adapter 承载的页面按全部 item 布局和 hand… |
 | `lesson-396d54479492828eeea3` | ui/navigation/back-stack | 新格式 | 14（0） | 4（是） | 源端对话框、底部弹层或下拉菜单改成页内覆盖层后，在宿主 onBack… |
 | `lesson-39f137ee173e50363f79` | ui/navigation/back-stack | 新格式 | 9（0） | 1（是） | 底部 tab 的 popUpTo(start){saveState}… |
@@ -328,19 +329,19 @@
 | `lesson-dfcdbb19cd93d29159b2` | ui/navigation/parameters | 新格式 | 0（0） | 0 | 源端跳转前写入的共享状态（如播放队列）是跳转契约的一部分，按原顺序迁… |
 | `lesson-ccccf83dc93ae809ccfb` | ui/pager | 新格式 | 3（0） | 1（是） | 分页容器的初始页用 Swiper.index 状态绑定，不在 onR… |
 | `lesson-0e1c846868f2683cc280` | ui/safearea | 新格式 | 24（0） | 1（是） | 仅当源窗口内容延伸到系统栏下，或窗口背景是按窗口尺寸拉伸或定位的位图… |
-| `lesson-2cf2614847a8dba832b3` | ui/safearea | 新格式 | 3（0） | 1（是） | 向子页或页内浮层下发状态栏高度参数时写明消费方式，挂在同一 Stac… |
-| `lesson-824031d5fddf81036b54` | ui/safearea | 新格式 | 6（0） | 2（是） | 系统栏图标深浅按源端浅色状态栏标志推导：未设标志时安卓图标为白色，不… |
-| `lesson-8bc258c2833be65f4fcd` | ui/safearea | 新格式 | 4（0） | 1（是） | 源端只在三键导航时给导航栏着色：以 TYPE_SYSTEM 底部避让… |
-| `lesson-8e0e9fe5373a2bbe47af` | ui/safearea | 新格式 | 5（0） | 2（是） | 页面级安全区订阅从承载页面的主窗口取窗口对象：复用工程主窗口入口或入… |
+| `lesson-2cf2614847a8dba832b3` | ui/safearea | 新格式 | 3（0） | 2（是） | 向子页或页内浮层下发状态栏高度参数时写明消费方式，挂在同一 Stac… |
+| `lesson-824031d5fddf81036b54` | ui/safearea | 新格式 | 6（0） | 3（是） | 系统栏图标深浅按源端浅色状态栏标志推导（导航栏图标按其自己的标志）：… |
+| `lesson-8bc258c2833be65f4fcd` | ui/safearea | 新格式 | 4（0） | 2（是） | 源端只在三键导航时给导航栏着色：以 TYPE_SYSTEM 底部避让… |
+| `lesson-8e0e9fe5373a2bbe47af` | ui/safearea | 新格式 | 5（0） | 3（是） | 页面级安全区订阅从承载页面的主窗口取窗口对象：复用工程主窗口入口或入… |
 | `lesson-a8452bfea5d42d3dcae3` | ui/safearea | 新格式 | 15（0） | 1（是） | 开启全屏布局前逐边核对源端系统栏：只沉浸状态栏（透明状态栏、未设 n… |
-| `lesson-c7ee1769ca29abd236d3` | ui/safearea | 新格式 | 6（0） | 2（是） | 全屏窗口下先确认路由页的内容原点：已在状态栏 inset 之下就只补… |
+| `lesson-c7ee1769ca29abd236d3` | ui/safearea | 新格式 | 6（0） | 3（是） | 全屏窗口下先确认路由页的内容原点：已在状态栏 inset 之下就只补… |
 | `lesson-cde4120ab9ad7412b1da` | ui/safearea | 新格式 | 11（0） | 0 | 自绘标题栏接入顶部安全区前先判定源端由谁避让：根 fitsSyste… |
 | `lesson-cf111aadb8804649b578` | ui/safearea | 新格式 | 8（0） | 2（是） | getWindowAvoidArea 与 windowRect 的数… |
-| `lesson-f64afc22d41b130f1628` | ui/safearea | 新格式 | 3（0） | 1（是） | Compose Scaffold 无 topBar 时 innerP… |
-| `lesson-f86b02e97cc77e31d51a` | ui/safearea | 新格式 | 6（0） | 1（是） | 源窗口按 adjustResize 避让软键盘（声明 adjustR… |
+| `lesson-f64afc22d41b130f1628` | ui/safearea | 新格式 | 3（0） | 2（是） | Compose Material3 Scaffold 无 topBa… |
+| `lesson-f86b02e97cc77e31d51a` | ui/safearea | 新格式 | 6（0） | 2（是） | 源窗口按 adjustResize 避让软键盘（声明 adjustR… |
 | `lesson-fe10bd2491ca4ba82cb5` | ui/safearea | 新格式 | 1（0） | 1（是） | 状态栏实色避让带挂在只承担避让的外层 Column：宿主是 Tabs… |
 | `lesson-08c38f950b69e991607d` | ui/state | 新格式 | 12（0） | 1（是） | 页面直接读共享 @ObservedV2 模型的 @Trace 字段，… |
-| `lesson-0cc7ae4eec0a59086202` | ui/state | 新格式 | 2（0） | 3（是） | 用 @Monitor 监听数组路径代替 collect 时，生产方按… |
+| `lesson-0cc7ae4eec0a59086202` | ui/state | 新格式 | 2（0） | 4（是） | 用 @Monitor 监听数组路径代替 collect 时，生产方按… |
 | `lesson-14b7f4090b7b83873b22` | ui/state | 新格式 | 3（0） | 1（是） | 页面向单例仓库或偏好注册监听时，把回调或句柄存成字段，在 about… |
 | `lesson-1f6e36f8e8bf9df951da` | ui/state | 新格式 | 2（0） | 1（是） | 翻译“离开组合即销毁”的状态复位时，同时列出目标框架会替用户恢复的界… |
 | `lesson-1fa08bf929cfced0ff34` | ui/state | 新格式 | 0（0） | 0 | 源端用带兜底的访问器取显示值时，目标调用已移植的等价访问器，不改读原… |
@@ -358,13 +359,13 @@
 | `lesson-c883a0ff96c32dfbd9ba` | ui/state | 新格式 | 2（0） | 1（是） | 共享单例 ViewModel 按规格的键丢弃过期响应，页面各加载入口… |
 | `lesson-d7c148c4a233c59ff151` | ui/state | 新格式 | 2（0） | 0 | 把源界面的生命周期回调迁入 ViewModel 刷新方法时逐条迁移全… |
 | `lesson-d9143de006714935afe2` | ui/state | 新格式 | 0（0） | 0 | 源端 Activity 实例字段承载的会话态映射为页面实例作用域：服… |
-| `lesson-22432022455bff6f849b` | ui/text | 新格式 | 6（0） | 2（是） | resourceManager 代码内取值（字符串、数组、复数、颜色… |
-| `lesson-2a2924aaebbfbea80780` | ui/text | 新格式 | 7（0） | 1（是） | 分开单行文本盒与多行行距，不把 Compose lineHeight… |
+| `lesson-22432022455bff6f849b` | ui/text | 新格式 | 6（0） | 3（是） | resourceManager 代码内取值（字符串、数组、复数、颜色… |
+| `lesson-2a2924aaebbfbea80780` | ui/text | 新格式 | 7（0） | 2（是） | 分开单行文本盒与多行行距，不把 Compose lineHeight… |
 | `lesson-31ab9f59945e5f0259ea` | ui/text | 新格式 | 0（0） | 1（是） | Tab 标签、页面标题与设置行等可见文案沿资源引用链取源端 stri… |
 | `lesson-4567f9f77f4280ec1747` | ui/text | 新格式 | 1（0） | 1（是） | 可见文案改为资源引用时值取自源端原文：目标字符串表缺键就新建专属键并… |
 | `lesson-57a52be767730880cbba` | ui/text | 新格式 | 5（0） | 1（是） | 移植文本组件时先确认显示的是原始字符串还是加工后的富文本（Compo… |
 | `lesson-605038b091e03c26c005` | ui/text | 新格式 | 3（0） | 1（是） | Compose FontWeight 按数值字重写入 ArkUI：S… |
-| `lesson-836a5414b52f0e062f1f` | ui/text | 新格式 | 12（0） | 2（是） | maxLines + Ellipsis 两端截断粒度不同：单行补 w… |
+| `lesson-836a5414b52f0e062f1f` | ui/text | 新格式 | 12（0） | 3（是） | maxLines + Ellipsis 两端截断粒度不同：单行补 w… |
 | `lesson-b58df29f032cc6a8c9d6` | ui/text | 新格式 | 3（0） | 0 | 字符串语言目录与键集按源端实际存在的 values-<语言>（含依赖… |
 | `lesson-c61ac79c7db81729a544` | ui/text | 新格式 | 7（0） | 1（是） | Compose 可折叠正文（onTextLayout 的 didOv… |
 | `lesson-cce58a1538fedfda3695` | ui/text | 新格式 | 9（0） | 1（是） | 源端 textAllCaps（含 Material、AppCompa… |
@@ -372,13 +373,13 @@
 | `lesson-d442eb6e9aab4d77db18` | ui/text | 新格式 | 5（0） | 1（是） | 源端在代码里格式化的含固定措辞文案（SimpleDateFormat… |
 | `lesson-ff19b09146b57d0f91a8` | ui/text | 新格式 | 5（0） | 1（是） | 源端文案来自框架（android.R.string.*，或偏好对话框… |
 | `lesson-1856958fc6d369f0e2bb` | ui/theme | 新格式 | 9（0） | 2（是） | 主题提供的颜色按各主题与深浅两态取值导出成对 base/dark 键… |
-| `lesson-1e972af4bc7e27b23d9c` | ui/theme | 新格式 | 2（0） | 1（是） | 追加主题颜色资源时同一次写深色限定目录的同名键，已存在的资源文件只追… |
+| `lesson-1e972af4bc7e27b23d9c` | ui/theme | 新格式 | 2（0） | 2（是） | 追加主题颜色资源时同一次写深色限定目录的同名键，已存在的资源文件只追… |
 | `lesson-2e4279c4b82f06af64fd` | ui/theme | 新格式 | 4（0） | 0 | “页面零硬编码色值”只禁止字面色值，不禁止用 $r 引用语义色 |
 | `lesson-47785524c7f132ea7efe` | ui/theme | 新格式 | 24（0） | 1（是） | 把主题、控件默认样式或依赖库隐式提供的外观写成目标显式样式：按“控件… |
 | `lesson-4e9507a2a793c5583aa8` | ui/theme | 新格式 | 9（0） | 1（是） | 按源端实际色值与字号在资源里反查同值键：主题语义色、排版样式先解析到… |
 | `lesson-5a82d62ff7e087616968` | ui/theme | 新格式 | 24（0） | 5（是） | 委托 Material/AppCompat 库或平台框架（Theme… |
 | `lesson-771d1ba1a032b769097a` | ui/theme | 新格式 | 19（0） | 4（是） | 布局引用的 @drawable（progressDrawable、背… |
-| `lesson-7b19b801e0f21481d1d6` | ui/theme | 新格式 | 5（0） | 1（是） | 深浅主题与应用内色板状态放在可观察对象里并由入口同步，组件在渲染期从… |
+| `lesson-7b19b801e0f21481d1d6` | ui/theme | 新格式 | 5（0） | 2（是） | 深浅主题与应用内色板状态放在可观察对象里并由入口同步，组件在渲染期从… |
 | `lesson-8b7c4ece5e5bf7704a44` | ui/theme | 新格式 | 2（0） | 0 | 同时需要圆角与描边时把 radius 写进 .border() |
 | `lesson-b742fb724345e4cfeb50` | ui/theme | 新格式 | 2（0） | 1（是） | 颜色插值或混合按 ARGB 四通道拆分并输出同一格式：#AARRGG… |
 | `lesson-bc5b8558ab086168b462` | ui/theme | 新格式 | 16（0） | 1（是） | 引用 style 或抽成共享 @Builder 的控件：先展开共享默… |
@@ -426,6 +427,6 @@ python knowledge/check.py knowledge/lessons --only <id 前 8 位,…>     # 配�
 
 新格式的文件（没有 `lesson` 键、`sdk` 里有 `verified_on` / `docs_commit` / `docs_date`）按写知识时的检查规则查，`--legacy-ok` 对它不起作用：顶层键齐全、`id` 和文件名一致；`sdk` 的核实日期、文档日期写成 YYYY-MM-DD，文档提交号是十六进制，`harmony` 写明 API 几；条目五栏非空，kind 四选一（含「卡里验证」）、origin 二选一、step 是正文的部分名，条数不设上限；卡里验证的事实不写返修怎么改，事实不带返修经过和做法建议的尾巴；文档出处写成文档仓库 master 的链接，网址只认一手来源，fact / after / note 里不放链接；没有本机路径、行号写法和应用名；改句已在正文里的同上，没进正文的按顺序要套得上。默认值缺「应用没有另设」一类限定、提到高于本机 SDK 的 API、新句提到设备或截图的只列出，给人看。出处和本机 SDK、文档的逐条核对不在这里做。
 
-本分支的结果：319 个文件 0 处错误（加 `--legacy-ok`，只列出 55 处 = 旧格式 12 处 + 新格式 39 处（要人看的）+ 4 个退役经验）；第七版的 0 个文件、新格式的 315 个文件不加 `--legacy-ok` 也是 0 处错误。
+本分支的结果：319 个文件 0 处错误（加 `--legacy-ok`，只列出 57 处 = 旧格式 12 处 + 新格式 41 处（要人看的）+ 4 个退役经验）；第七版的 0 个文件、新格式的 315 个文件不加 `--legacy-ok` 也是 0 处错误。
 
 效果数据见 `shadow/README.md`。

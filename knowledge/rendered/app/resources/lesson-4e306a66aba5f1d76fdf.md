@@ -1,4 +1,4 @@
-# VectorDrawable 转 SVG 时 viewBox 取 viewport、width/height 取显示尺寸，vector 根的 android:tint 按解析色烘焙到每个可见 path
+# VectorDrawable 转 SVG 时 viewBox 取 viewport、width/height 取显示尺寸，vector 根的 android:tint（tintMode 为默认 src_in 时）按解析色烘焙到每个可见 path
 
 ## 何时使用
 

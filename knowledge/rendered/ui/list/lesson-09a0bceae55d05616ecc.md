@@ -2,7 +2,7 @@
 
 ## 何时使用
 
-界面实现阶段，把 Compose itemsIndexed 一类按当前 index 计算行参数的列表迁成 ForEach/Repeat，且列表会换位（上移、下移、拖动）、插入或删除条目时
+界面实现阶段，把 Compose itemsIndexed 一类按当前 index 计算行参数的列表迁成 ForEach/Repeat，且列表会换位（上移、下移、拖动）、插入或删除条目时（前提：键不含位置；用默认键或自动拼 index 的不用改）
 
 ## 适用情境
 

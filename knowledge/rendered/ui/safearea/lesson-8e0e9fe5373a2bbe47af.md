@@ -2,7 +2,7 @@
 
 ## 何时使用
 
-界面实现或巡检修复阶段，为全屏页订阅 avoidAreaChange、调用 getWindowAvoidArea 取顶部与底部避让值并选择窗口对象时
+界面实现或巡检修复阶段，为全屏页订阅 avoidAreaChange、调用 getWindowAvoidArea 取顶部与底部避让值并选择窗口对象时（前提：页面由主窗口承载，不是自建子窗口或悬浮窗）
 
 ## 适用情境
 

@@ -21,14 +21,14 @@
   - 时机：界面实现阶段，为 Tab 标签、页面/路由标题、设置入口行等可见文案取值并写入页面与路由表时；以及派发侦察或规格任务、确定导航与标题字段的形态时
   - 情境：源端可见文案经资源键间接引用（导航目的地的 label、配置路由的标题资源、顶栏 title），常与目的地枚举名或功能名不同（如 Map 目的地显示“Mesh Map”、Messages 目的地的页面标题为“Conversations”）；目标以硬编码字符串或自建资源表承载；上游 brief 或页面规格已给出、或可从 strings.xml 解析出逐字值。源端还有按语言区分的 strings（values-&lt;语言&gt; 目录）时，第 2 步的集中文案要用按语言限定词分目录的资源文件承载、各语言的逐字值都迁过去，页面经资源引用取值；不要把默认语言的字面值写成常量，把已有的多语言丢掉。
 - [maxLines + Ellipsis 两端截断粒度不同：单行补 wordBreak(BREAK_ALL)，多行写明差异、确需字符级一致才测量截断](lesson-836a5414b52f0e062f1f.lesson.md)
-  - 时机：规格提取阶段为带 maxLines(N) + TextOverflow.Ellipsis（或 android:ellipsize、singleLine）的单行或多行文本写转换决策，以及界面实现阶段落实标题行与折叠态末行时
+  - 时机：规格提取阶段为带 maxLines(N) + TextOverflow.Ellipsis（或 android:ellipsize、singleLine）的单行或多行文本写转换决策，以及界面实现阶段落实标题行与折叠态末行时（文本含英文等按空格分词的文字时；纯中文等 CJK 不必）
   - 情境：源端多行正文以 maxLines + Ellipsis 折叠；目标用 .maxLines() + .textOverflow({ overflow: TextOverflow.Ellipsis })，默认 wordBreak 为 BREAK_WORD；映射参考只记 ellipsize → textOverflow 的 API 对应；项目可能要求完整复刻源端可观察行为。 也包括单行用户内容（标题、分类名、工具栏标题）：Android 的 TextUtils.ellipsize 按字符截断，ArkUI 默认先按词断行再省略；以及源控件是三方 TextView 子类（布局声明了库命名空间、未写 android:ellipsize），截断由库自身实现（例如取前 N 行、按空格回退、去尾标点再加省略号）。
   - 例外：项目允许平台差异、不要求逐字复刻末行时，直接使用内置行为，不引入运行期测量；粒度差异只出在英文等以空格分词的文字上：中文等 CJK 文本在默认设置下本就按字截断，BREAK_ALL 对 CJK 与 NORMAL 相同，纯 CJK 文案不必为此补 wordBreak 或测量
-- [resourceManager 代码内取值（字符串、数组、复数、颜色）一律传 $r(...).id 数字重载，不用 Resource 对象重载](lesson-22432022455bff6f849b.lesson.md)
+- [resourceManager 代码内取值（字符串、数组、复数、颜色）一律传 $r(...).id 数字重载（HAR 内取自身资源先核版本与时机），不用 Resource 对象重载](lesson-22432022455bff6f849b.lesson.md)
   - 时机：界面与服务实现阶段，把安卓命令式取资源（getString、getStringArray、getQuantityString、getColor，如自绘 View 里 drawText、measureText 的文案）改写为 ArkTS 代码内取值并选择 resourceManager 接口时；新写取值辅助函数，或把已有取值写法扩展到更多调用点、其他取值方法时
   - 情境：源端在自绘 View 或代码里按当前资源配置取文案、字符串数组、复数串或颜色；目标需要在 ArkTS 中拿到纯值（Canvas 绘制、测宽、拼接、菜单与选择器文案），同一屏还有走声明式 $r 的组件文本（组件属性里直接写的 $r(...) 本身随应用偏好语言切换，不在这条的改写范围，保持原样，不改成代码内取值）；应用带多个 locale 资源目录，可能以应用偏好语言运行（i18n.System.setAppPreferredLanguage）；SDK 对 getStringSync、getStringArrayValue(Sync)、getIntPluralStringValueSync、getColorSync 等同时提供 (resId: number) 与 (resource: Resource) 两种重载。取值代码和资源同在 HAP 或 HSP 模块里时直接适用；代码在中间码 HAR 或字节码 HAR 里取 HAR 自身资源时，compatibleSdkVersion 低于 23、或取值发生在本模块 AbilityStage 的 onCreate 回调之前，按资源 ID 取会因 ID 无效抛异常，这时改用按资源名取的接口（如 getStringByNameSync），不套 .id；跨 HAP、HSP 取资源要先用 createModuleContext 拿到对应模块的 resourceManager，再按 ID 或资源名取。
 - [分开单行文本盒与多行行距，不把 Compose lineHeight 同名直映为 ArkUI .lineHeight](lesson-2a2924aaebbfbea80780.lesson.md)
-  - 时机：规格提取、主题实现或页面转换阶段，把 Compose 排版令牌落成 ArkUI 文本属性或据文本高度推算容器尺寸时；视觉修复阶段改写主题层行高公式时
+  - 时机：规格提取、主题实现或页面转换阶段，把 Compose 排版令牌落成 ArkUI 文本属性或据文本高度推算容器尺寸时；视觉修复阶段改写主题层行高公式时（前提：最终生效的样式未设 lineHeightStyle）
   - 情境：源 TextStyle 声明 fontSize/lineHeight、未设 lineHeightStyle；目标准备给所有 Text 无条件设置 .lineHeight()，或把 lineHeight 数值当单行文本的实际盒高来推算横向列表等容器的显式高度；映射参考可能给出 lineHeight → .lineHeight() 的 1:1 对应。
   - 例外：当前源端的 LineHeightStyle、字体内边距或已有明确契约要求固定行盒时，保留该契约，不默认改成自然高度。；「未设 lineHeightStyle」要看最终生效的样式，不只看源码里的 TextStyle(...) 字面：未设时安卓端套用默认 LineHeightStyle（Proportional、Trim.Both）；而直接用 Material3 默认排版令牌、或在其上 copy 出的样式，带的是 LineHeightStyle（Center、Trim.None）（material3 1.4.0 如此，其他版本先查），不属于这条的前提——单行盒高以安卓端 dump 的盒高为准，不照这条删掉 .lineHeight。
 - [动态布局文本的字号、行距按源端 dp × 文字倍率落成 vp，只有 bounds、padding、背景等几何乘设计画布比例](lesson-4c494b9f89c7e9db2b55.lesson.md)

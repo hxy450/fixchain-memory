@@ -1,12 +1,12 @@
 # 会换位或增删的列表，位置相关值（首尾标记、序号、上移/下移可用态、首尾圆角）在渲染时按当前位置计算，不取 ForEach/Repeat 生成时的闭包 index
 
-ID：`lesson-09a0bceae55d05616ecc` · 版本：3
+ID：`lesson-09a0bceae55d05616ecc` · 版本：4
 
 [本主题](index.md)
 
 ## 何时使用
 
-界面实现阶段，把 Compose itemsIndexed 一类按当前 index 计算行参数的列表迁成 ForEach/Repeat，且列表会换位（上移、下移、拖动）、插入或删除条目时
+界面实现阶段，把 Compose itemsIndexed 一类按当前 index 计算行参数的列表迁成 ForEach/Repeat，且列表会换位（上移、下移、拖动）、插入或删除条目时（前提：键不含位置；用默认键或自动拼 index 的不用改）
 
 ## 适用情境
 
