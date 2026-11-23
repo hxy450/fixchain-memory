@@ -9,7 +9,7 @@ Navigation/@Entry宿主与页面注册（含根 Navigation 默认标题栏与工
 - [Fragment 事务与生命周期迁到 Navigation：按调用点与覆盖类型逐条映射，不压成同步 pop 与 onShown/onHidden](lesson-dedd435cae5c3c976be2.lesson.md)
   - 时机：规格提取与页面实现阶段，把单 Activity 的 FragmentTransaction（replace+addToBackStack、popBackStack(Immediate)、finish）与 onPostCreate、onResume、onPause、onStop、onActivityCreated、onDestroyView 等回调映射到 NavPathStack 与 NavDestination 时
   - 情境：源 Activity 用一个 fragment_container 承载列表与详情 Fragment：切换时 replace（每次新建 Fragment）并 addToBackStack，详情返回走 popBackStack，外部入口直达时 finish()；Fragment 依赖 onActivityCreated→init 在每次视图创建时重建界面，onResume/onPause 负责注册与挂起。目标用 pushPathByName/pop 与 NavDestination 的 onShown/onHidden/onReady，同名页面可能被栈复用。
-  - 例外：源端以 hide + add 叠加子 Fragment、视图不销毁时，不套用视图重建分支
+  - 例外：源端以 hide + add 叠加子 Fragment、视图不销毁时，不套用视图重建分支；「replace 恒新实例」以源端每次 replace 都新建 Fragment 为前提；调用点传入的是缓存复用的同一个 Fragment 对象时，返回后实例字段仍在、只重建视图，按这一点映射，不改成 NEW_INSTANCE 新建页面。；用 VisibilityChangeReason 区分覆盖类型要求 API 21 及以上；工程最低 API 低于 21 时 onShown、onHidden 不带这个参数，只用 navDestinationSwitch 的目标页与窗口焦点事件区分。
 - [NavHost 的 enter/exit/popEnter/popExit 自定义转场迁到 Navigation：用 customNavContentTransition 驱动，各 NavDestination 把位移、透明度与缩放绑定到共享转场状态](lesson-9de3322165e533d6b790.lesson.md)
   - 时机：规格提取、计划派工与界面实现阶段，把 Compose NavHost（或目的地）上的 enterTransition/exitTransition/popEnterTransition/popExitTransition 落到 ArkUI Navigation 时
   - 情境：源端 NavHost 定义四向自定义转场（scaleIn/scaleOut、slideIn/slideOut、tween 时长与延迟等）；目标为 Navigation + NavDestination，在已观察的 API 中 customNavContentTransition 回调拿到的 NavContentInfo 不提供页面的 opacity、translate 属性；规格或派工可能写“customNavContentTransition 或默认转场”二选一，验收只核转场常量是否与源相等。
@@ -17,7 +17,7 @@ Navigation/@Entry宿主与页面注册（含根 Navigation 默认标题栏与工
 - [SideBarContainer 承接源端抽屉、源端无悬浮切换钮时显式写 showControlButton(false)：默认内置按钮会盖住左上角返回键](lesson-018324ca86305ee5c669.lesson.md)
   - 时机：界面实现阶段，把源端模态抽屉（Compose ModalNavigationDrawer、DrawerLayout）映射为 ArkUI SideBarContainer 并编写其属性链时；规格提取阶段写抽屉转换决策时
   - 情境：源端抽屉只经页内导航图标回调（openDrawer、汉堡键）或边缘手势打开，内容之上没有常驻的切换按钮；目标用 SideBarContainer（常见 Overlay 类型）包住 Navigation 等内容宿主，被包裹页面在左上角有返回键或菜单键。
-  - 例外：源端确有常驻在内容之上的抽屉切换按钮时，保留内置按钮，并按源端位置与图标设置 controlButton 样式
+  - 例外：源端确有常驻在内容之上的抽屉切换按钮时，保留内置按钮，并按源端位置与图标设置 controlButton 样式；关掉内置按钮后，源端的每个打开入口都要在目标留下对应实现：页内菜单键改写 showSideBar 绑定的状态，并用 $$ 双向绑定或 onChange 把组件自己造成的显隐变化（分割线拖拽触发 autoHide、按尺寸自适应）同步回这个状态，否则下一次点菜单键开不出侧栏；源端的边缘手势 SideBarContainer 默认不提供，showSideBarWithGesture 自 API 26 起才有（超出本机 SDK 的 API 23），默认 false。
 - [main_pages.json 只登记经 router 进入或由 loadContent 按路径加载的 @Entry 页：被 Tabs/父页导入的子组件与 @CustomDialog 不登记，10905402 与 @Entry+export 警告先判定角色](lesson-c4a6eaaf6a22c0b8823f.lesson.md)
   - 时机：入口装配阶段写 main_pages.json 路由登记时；编译修复遇到“登记页面须有且仅有一个 @Entry”（10905402）或“export struct with @Entry”警告时
   - 情境：源端单 Activity 以底部导航承载多个 Fragment，另有 DialogFragment 与经导航跳转的二级页；目标主页面用 Tabs/TabContent import 并实例化页面 struct，弹窗写成 @CustomDialog，这些文件都放在 pages/ 目录；工程用 main_pages.json 登记路由页。工程改用 Navigation 路由时，经 NavPathStack 进入的 NavDestination 子页注册在 navDestination 映射或系统路由表 router_map.json 里，同样不是 main_pages 的登记对象，不为它们补 @Entry；main_pages 只留按路径加载的入口页和仍经 router 进入的页。
@@ -31,9 +31,11 @@ Navigation/@Entry宿主与页面注册（含根 Navigation 默认标题栏与工
 - [半透明卡片式 Activity 迁移为透明 DIALOG 路由，遮罩只作页内一层](lesson-22c2a8f0e6b782b95448.lesson.md)
   - 时机：界面实现与规格提取阶段，迁移 windowIsTranslucent 主题的卡片式 Activity 及其内嵌子页时
   - 情境：源主题 windowIsTranslucent=true、windowBackground 透明、backgroundDimEnabled=true，以卡片内的容器承载 Fragment；目标为 Navigation/NavDestination。
+  - 例外：改成 DIALOG 路由后，下层页面原来在卡片关闭时要做的处理不能丢：源端半透明 Activity 盖在上面时下层只失去焦点、仍处于可见状态，回到前台只走 onResume；目标 DIALOG 页进出不触发下层的 onShown、onHidden，只触发 onActive、onInactive（API 17 起），这类刷新挂在 onActive，不挂 onShown。
 - [单 Activity 壳内的 loadChildFragment 子页映射为壳内回退栈，不改成独立路由或清栈切页](lesson-7bcb44f0e376ec67e5a8.lesson.md)
-  - 时机：壳层导航实现与页面形态决策阶段，为源端在内容区压栈加载的子 Fragment 确定承载方式、返回与底部导航选中语义时
+  - 时机：壳层导航实现与页面形态决策阶段，为源端在内容区压栈加载、且子页期间底栏等壳元素仍可见的子 Fragment 确定承载方式、返回与底部导航选中语义时
   - 情境：源主 Activity 用 loadChildFragment（hide 加 add 加 addToBackStack）打开详情、搜索等子页，子页期间底栏与迷你播放条仍在，工具栏随栈深显示上箭头，带 navigationTag 时同步底栏选中；启动器构造时写入默认 extras。目标同时有 Navigation 路由与壳内容槽。
+  - 例外：返回时要回到上一页原来的样子：源端 hide 只隐藏上一页、不销毁，弹栈后显示的是同一个实例（输入、滚动位置、已加载的数据都在）；壳内容区若用 if/else 按 tag 切换，切走的分支组件会被删除、其中的状态随之丢失，需保留上一页的组件实例，或把要恢复的状态放在壳状态里随子栈一起记录。
 - [外部入口的宿主导航守卫按“目标已注册或路由命中”判断，不用导航栈成员检查](lesson-1b05b8d5cc528d5dc5bc.lesson.md)
   - 时机：入口接线阶段，为推送、桌面快捷方式、通知点击等外部 Want 编写宿主导航执行器（路由器回调里的 pushPathByName）的可用性守卫时
   - 情境：源端跳转前用 isIntentAvailable 一类判断目标是否可用；目标由单一 EntryAbility 加 Navigation pageMap 承载，外部 Want 冷启时暂存、热启时直跳，由宿主页 pushPathByName 入栈；守卫可能先写在跨切片草稿里，再被复制到闪屏页、主页等多个宿主。
@@ -50,7 +52,7 @@ Navigation/@Entry宿主与页面注册（含根 Navigation 默认标题栏与工
 - [源工具栏无返回键、标题居中或带右侧动作时，用 hideTitleBar 加页内头部，不塞系统标题栏的 title/menus 槽](lesson-d1cf63055d6991eeb2b5.lesson.md)
   - 时机：界面实现阶段，把源页面工具栏（标题、动作按钮、有无返回键）落成 NavDestination 系统标题栏或页内头部时；验证或返修发现自定义标题槽运行期为空时
   - 情境：源页面头部是自定义工具栏（如 Ionic iOS 模式的 IonToolbar：居中图标加标题、slot=end 一组图标按钮、没有 IonBackButton），目标页是 Navigation 下 push 的 NavDestination，需要在系统标题栏 title/menus 的 CustomBuilder 槽与 hideTitleBar(true) 后在内容区自绘头部之间选择。
-  - 例外：源头部与系统标题栏语义一致（有返回键、普通文本标题、无自定义动作区）时，直接用 .title() 字符串标题
+  - 例外：源头部与系统标题栏语义一致（有返回键、普通文本标题、无自定义动作区）时，直接用 .title() 字符串标题；源工具栏有返回键（上箭头），只是标题居中或带右侧动作而改用页内头部时，头部里要画出这个返回键并接到出栈：hideTitleBar(true) 会把系统标题栏连同其中的返回键一起隐藏，「不附加返回键」只针对源端本来没有返回键的页面。
 - [源端一个 Composable 内多屏共享的清理，拆成多页面后归属外层生命周期，切屏不释放](lesson-2ed8c21943925bf0ae9a.lesson.md)
   - 时机：规格提取与计划阶段，把源端 DisposableEffect/onDispose 等清理映射成目标多页面的生命周期契约时；实现阶段把共享服务的 stop/dispose 挂到页面回调时
   - 情境：源端单 Activity 在同一个 Composable 里用状态变量切换多个屏幕，播放器等资源和 DisposableEffect 清理挂在这个外层 Composable；目标端拆成 Navigation 下的多个页面，共享服务需要重新确定由哪一层、在什么时机停止和释放。

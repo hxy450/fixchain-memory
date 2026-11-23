@@ -1,6 +1,6 @@
 # Fragment 事务与生命周期迁到 Navigation：按调用点与覆盖类型逐条映射，不压成同步 pop 与 onShown/onHidden
 
-ID：`lesson-dedd435cae5c3c976be2` · 版本：1
+ID：`lesson-dedd435cae5c3c976be2` · 版本：2
 
 [本主题](index.md)
 
@@ -15,6 +15,8 @@ ID：`lesson-dedd435cae5c3c976be2` · 版本：1
 ## 例外与边界
 
 - 源端以 hide + add 叠加子 Fragment、视图不销毁时，不套用视图重建分支
+- 「replace 恒新实例」以源端每次 replace 都新建 Fragment 为前提；调用点传入的是缓存复用的同一个 Fragment 对象时，返回后实例字段仍在、只重建视图，按这一点映射，不改成 NEW_INSTANCE 新建页面。
+- 用 VisibilityChangeReason 区分覆盖类型要求 API 21 及以上；工程最低 API 低于 21 时 onShown、onHidden 不带这个参数，只用 navDestinationSwitch 的目标页与窗口焦点事件区分。
 
 ## 原因
 

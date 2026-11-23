@@ -13,6 +13,7 @@
 - [Tab 宿主不给承载全部 Tab 的内容区统一加顶部安全区：按各 Tab 源 Fragment 的状态栏处理分别落实，背景延伸的 Tab 只让前景避让；只加在底栏的 padding 只加到 tabBar](lesson-48e9408812c28e934db8.lesson.md)
   - 时机：规格与界面实现阶段，实现 MainActivity/Tab 宿主的内容区内边距、为作为 Tab 子组件的 Fragment 写安全区分工或转换其顶部布局时
   - 情境：Android 主 Activity 以 ViewPager/Tab 承载多个 Fragment，主题 windowTranslucentStatus 或 ImmersionBar 让状态栏透明；各 Fragment 自行决定是否为状态栏让位：有的头图直接铺到状态栏下（未设 statusBarView，或用 titleBarMarginTop/fitsSystemWindows），有的在顶对父容器的背景上放一个由 statusBarView 撑成状态栏高度的占位 View（如 v_status_bar），只把前景内容约束在占位之下；MainActivity 的内边距可能只加在底栏容器上。目标用单个宿主页承载各 Tab，可能给承载全部 Tab 槽位的容器统一加顶部 windowTopPadding 和左右 padding；页面规格按 page_type（sub_component）标“无需沉浸”，或把页内占位概括成“安全区由宿主统一处理”。
+  - 例外：本条以目标窗口开了全屏布局、内容从窗口顶端排起为前提；窗口没开全屏布局时，界面默认就布局在安全区内、不与状态栏重叠，宿主和子页都不用再加顶部避让，背景要铺到状态栏下的 Tab 只给背景层设 expandSafeArea，前景位置不动。
 - [getWindowAvoidArea 与 windowRect 的数值是 px：在 windowStage.loadContent 成功回调里取 UIContext、先 px2vp 再写入供 padding 消费的窗口模型（loadContent 之前调 getUIContext 抛 1300002）](lesson-cf111aadb8804649b578.lesson.md)
   - 时机：沉浸式安全区实现阶段，在 EntryAbility 或窗口服务里把避让区、窗口尺寸写进共享窗口模型时；安排 EntryAbility.onWindowStageCreate 中依赖 UIContext 的步骤相对 loadContent 的时机时
   - 情境：目标用 setWindowLayoutFullScreen(true) 全屏，EntryAbility 通过 getWindowAvoidArea 取状态栏、导航条高度，通过 getWindowProperties().windowRect 取窗口尺寸，写入 AppStorageV2 共享的窗口模型；各页把这些值直接放进 .padding()/.height()，按 vp 解释。on('avoidAreaChange') 与 on('windowSizeChange') 回调给出的避让区、窗口尺寸同样是 px，回调里更新同一模型时同样先换算；改从以 vp 计的避让区环境变量（UIEnvWindowAvoidAreaInfoVP，API 23 起）取值的已经是 vp，不再换算。 也包括换算或其他依赖 UIContext 的步骤（如 setKeyboardAvoidMode）写在 onWindowStageCreate 中、位于 loadContent 调用之前或在其回调之外同步执行。换算只做一次：页面自己调 getWindowAvoidArea 并已用 px2vp 换算的保持原样；页面改读发布端已换成 vp 的模型字段时，去掉页面上原有的那次 px2vp，不在同一个值上换算两次。
@@ -37,7 +38,7 @@
   - 时机：规格提取与入口窗口实现阶段，把源 Activity 按导航方式设置导航栏颜色的分支映射到目标窗口系统栏属性时（源应用 targetSdkVersion 低于 35 时；35 起着色不生效）
   - 情境：源端在 Activity 中按是否手势导航决定导航栏底色（如非手势导航时 setNavigationBarColor(背景色带透明度)），判定依赖隐藏系统资源（config_navBarInteractionMode）或系统设置；目标为全屏沉浸窗口，入口用 getWindowAvoidArea 测避让区、用 setWindowSystemBarProperties 设置系统栏。前提是源端的着色调用真的生效：源应用 targetSdkVersion 为 35（Android 15）及以上时，setNavigationBarColor 的颜色固定为透明、改不了（窗口要求导航栏对比度时由系统自己决定是否加遮罩），这时源端导航栏实际是透明的（是否加遮罩由系统决定），目标也保持透明，不按代码里的调用着色。
 - [源端给根视图设状态栏高度的顶部 padding 并自绘底色时：目标在页面容器上设 padding 与背景色、系统栏保持透明，子内容按扣除状态栏后的尺寸布局](lesson-baf0ca22a69e7b76f636.lesson.md)
-  - 时机：规格提取与界面实现阶段，把源端根视图（DecorView 或内容根）的状态栏 insets padding 与背景设色翻译为目标页面的避让方式和状态栏底色时
+  - 时机：规格提取与界面实现阶段，目标窗口为全屏沉浸布局时，把源端根视图（DecorView 或内容根）的状态栏 insets padding 与背景设色翻译为目标页面的避让方式和状态栏底色时
   - 情境：源 Activity（常见于 Android 15+ 边到边分支）给 DecorView 或根布局 setBackgroundColor，并 setPadding(top = 状态栏 inset)，内容 View 在 onSizeChanged 中按自身宽高布局；目标为全屏沉浸窗口，页面里可能有带遮罩的弹窗。
 - [状态栏实色避让带挂在只承担避让的外层 Column：宿主是 Tabs 时把 Tabs 包进该 Column，不在 Tabs 上挂 padding 加背景色](lesson-fe10bd2491ca4ba82cb5.lesson.md)
   - 时机：界面实现或修复阶段，为带 Tabs 等子页铺满容器的主框架页补源端状态栏实色带，决定避让 padding 与背景色挂在哪个组件时

@@ -7,7 +7,7 @@
 ## 本级经验
 
 - [NavHost 起点是会重组作用域里每次求值、会话内会变的表达式时，起点一变就换图清栈并以新起点重进：目标在等价时机重算起点，不冻结首压](lesson-43459cb01320674b2864.lesson.md)
-  - 时机：规格提取与导航壳实现阶段，把 Compose NavHost 的 startDestination 映射成目标的首屏压栈和顶级切换回退基准，或推演会话内返回栈时
+  - 时机：规格提取与导航壳实现阶段，把 Compose NavHost 的 startDestination 映射成目标的首屏压栈和顶级切换回退基准，或推演会话内返回栈，且起点是在会重组的作用域里求值、没有 remember、读到的状态会话内会变的表达式时
   - 情境：源端 NavHost(startDestination = 读偏好或状态的函数) 写在会重组的壳层内容 lambda 里（抽屉、Rail、常驻抽屉），没有 remember，读到的标记在同一会话内会变（完成引导、登录）；目标用单个 Navigation + NavPathStack，首屏在空栈时压入，顶级切换以起点为 popTo 基准。
   - 例外：起点表达式被 remember 固定，或读到的状态在会话内不会变化时，一次压栈即可
 - [唯一页面被压在空的 Navigation 首页之上时，由栈底 NavDestination 自身的 onBackPressed 接管返回（不写在 @Entry 页，@Entry.onBackPress 收不到）：size()&lt;=1 时 moveAbilityToBackground 退后台、不出栈露出空白宿主；源端未覆写返回时按 Activity finish() 同时执行 onDestroy 的释放并复位页面实例态，参照设备实测为 HOT 恢复时才保留实例](lesson-efff93743d668b55b55a.lesson.md)
@@ -23,6 +23,7 @@
 - [源端对同一次成功有多条导航响应时，目标只保留一个导航出口，并按净效果定义返回栈](lesson-683d8f5070802c518020.lesson.md)
   - 时机：规格提取与接线阶段，把源页面对同一业务结果的多条响应（事件订阅里 finish、成功回调里 startActivity）翻译成目标 NavPathStack 操作时
   - 情境：源 Activity 对同一次成功既在全局事件订阅里关闭本页，又在回调里启动主页（可能带 FLAG_ACTIVITY_NEW_TASK）；全局管理器在回调前发布成功事件；目标由单一 NavPathStack 管理页面，Navigation 根内容可能是启动页。
+  - 例外：只合并导航动作：全局成功事件的发布，以及其他订阅者对它的非导航处理（刷新登录态、更新数据等）照旧保留；去掉的只是本页订阅里对导航栈的出栈或入栈。；两条响应不是由同一次成功触发的（例如订阅的是另一个业务结果，或只在别的入口生效），各自保留，不合并。
 - [源端对话框、底部弹层或下拉菜单改成页内覆盖层后，在宿主 onBackPressed 里自顶向下逐层关闭，全部关闭后才进未保存门禁或出栈](lesson-396d54479492828eeea3.lesson.md)
   - 时机：页面转换阶段，把源端 Dialog/AlertDialog/ModalBottomSheet/ExposedDropdownMenu（以及可能存在的 BackHandler）改写成 NavDestination 页内覆盖层、确定系统返回如何处理时
   - 情境：源页的对话框、底部弹层或下拉菜单以 onDismissRequest 关闭；源页可能另有 BackHandler 处理行内编辑器或未保存门禁，也可能完全没有 BackHandler。目标把这些弹层做成 NavDestination 内 Stack 条件渲染的覆盖层或由 activeDialog 一类状态驱动的组件，而不是自带返回关闭的弹窗机制，系统返回统一交给宿主。也包括源端 ContextMenu 窗口、ActionMode 多选态被改写成页面 @Local 浮层或选择态，页面是嵌入宿主的组件。也包括 View 体系 AlertDialog（默认可取消、带 setOnCancelListener）被写成自带蒙层的共享页内浮层组件，只接蒙层点击，页面的返回拦截不感知弹窗。
@@ -34,6 +35,7 @@
 - [源端经 TaskStackBuilder.addNextIntentWithParentStack(...).startActivities() 跳转时，按 Manifest 父链清栈重建 \[父…, 目标\]：目标 NavPathStack 先 clear 再依次 push 父页与目标，返回落到父页而非来源页](lesson-2986423250986124d039.lesson.md)
   - 时机：规格提取与基座实现阶段，把基类的父栈跳转方法（抽屉导航等）翻译成 NavPathStack 操作与返回验收时
   - 情境：源基类被多个页面继承，抽屉等跳转经 TaskStackBuilder 发起，Manifest 为目标声明 parentActivityName 或 PARENT_ACTIVITY；目标是单个 Navigation + NavPathStack，跳转可从栈底以外的任意宿主页发起；页面规格里可能有“pushPathByName（主页为根天然在栈底）”一类只在来源页是主页时成立的映射。
+  - 例外：父链的根（主页）在目标端是 Navigation 自己的首页内容（Navigation 的子组件），而不是栈里的 NavDestination 时，clear 清掉栈里所有页面后显示的就是它，不再 push 主页，只依次 push 根以下的父页和目标；否则栈里会多出第二个主页。
 - [源端返回按钮与 onBackPressed 执行同一逻辑时共用同一处理分支，按源端启动来源标志执行、不默认 pop；返回按钮直接调 super.onBackPressed()、finish() 时两路分开实现](lesson-f19632971e470d55c543.lesson.md)
   - 时机：页面转换阶段，把 Activity 的返回按钮点击（含 ActionBar Up 的 android.R.id.home 分支）与 onBackPressed 翻译成 NavDestination 的返回处理时；规格提取阶段为导航表写 Up 与系统返回行时
   - 情境：源 Activity 按启动来源标志（如 isFromSplash）改变返回行为：首启进入时返回会先执行补救动作（如添加默认城市）再进主页，其他来源才 finish；目标页用 NavPathStack 管理，返回按钮默认写成 pop()，系统返回未处理。 也包括源端返回按钮直接调 super.onBackPressed()、finish() 或跳转，绕过子类 onBackPressed 覆写里的分支（如先回跳上一项），与系统返回不是同一逻辑。

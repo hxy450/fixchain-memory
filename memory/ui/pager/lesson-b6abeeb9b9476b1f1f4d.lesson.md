@@ -1,6 +1,6 @@
 # 源端“首批数据到达后默认选中首项并通知父级”迁成 @Param 子组件时只初始化一次：items 引用更新只同步高亮，不重置初始化标志、不回调第 0 项
 
-ID：`lesson-b6abeeb9b9476b1f1f4d` · 版本：1
+ID：`lesson-b6abeeb9b9476b1f1f4d` · 版本：2
 
 [本主题](index.md)
 
@@ -11,6 +11,10 @@ ID：`lesson-b6abeeb9b9476b1f1f4d` · 版本：1
 ## 适用情境
 
 源端 Tab Fragment 只在一次性装载分类后选中首项并回调父 ViewPager，翻页时父级只调用 setSelect(position) 同步；目标子组件接收 @Param items/selectedIndex，并经 @Event 让父 Swiper 切页，父组件可能每次渲染都重新映射出 items 数组。
+
+## 例外与边界
+
+- 「只初始化一次」以源端只在一次性装载后默认选中为前提；源端在重新装载出另一批数据（下拉刷新、切换数据源后重新取分类）时会再次默认选中并通知父级的，目标在对应的重新装载事件里重做这一步，判断依据是源端的装载调用点，不是 items 引用有没有变。
 
 ## 原因
 

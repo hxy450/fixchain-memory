@@ -1,6 +1,6 @@
 # 源页面从 arguments、Intent extras 或缓存接收的实体键与数据，在目标以显式入参承接并由宿主真实传入
 
-ID：`lesson-289cab2abd4268b26ce0` · 版本：4
+ID：`lesson-289cab2abd4268b26ce0` · 版本：5
 
 [本主题](index.md)
 
@@ -11,6 +11,10 @@ ID：`lesson-289cab2abd4268b26ce0` · 版本：4
 ## 适用情境
 
 源 Fragment 经 newInstance/arguments 或宿主 setCurrentCity 获得城市、ID 等实体键，详情 Activity 经 Intent Serializable 或首页缓存拿到首页数据；目标子组件以 @Param 或路由参数接收，宿主可能新增无参 Builder 挂载，或子组件改读全局选中状态。也包括子页面声明带默认值的状态参数（如当前分组类型），源端据此切换新增按钮与条目元信息，宿主在接线中写了该参数又删掉。
+
+## 例外与边界
+
+- 「不让子组件改读全局选中状态」针对源端由宿主或启动方逐个传入实体键的子页；源端子页本来就从与宿主共享的状态读取（同一 Activity 级的共享 ViewModel、全局单例），且同一时刻只有一个实例时，目标照源端读共享状态，不强行改成入参。多实例子页仍按各自的入参承接。
 
 ## 原因
 

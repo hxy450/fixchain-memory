@@ -1,6 +1,6 @@
 # SpannableString.setSpan(start, end) 拆成 ArkUI Span 时按 end 为开区间逐字核对着色范围
 
-ID：`lesson-eb59a95e5eb219c238b0` · 版本：1
+ID：`lesson-eb59a95e5eb219c238b0` · 版本：2
 
 [本主题](index.md)
 
@@ -11,6 +11,11 @@ ID：`lesson-eb59a95e5eb219c238b0` · 版本：1
 ## 适用情境
 
 源端用 SpannableString.setSpan(span, start, end, flags) 按字符索引给一段文字着色，常见“固定前缀 + 动态值 + 后缀”的拼接，终点按前缀长度加动态值长度再加偏移计算。
+
+## 例外与边界
+
+- 目标改用属性字符串（StyledString）而不是 Text + Span 时，SpanStyle 用 start 加 length 表示范围：length 取 end − start，不要把源端的 end 直接填进 length。
+- 源端几个 span 的范围互相重叠（如着色和加粗各管一段）时，Span 下不能再嵌套子组件，要按所有边界切成互不重叠的平铺段，每段带上覆盖它的全部样式，不能为了对齐某一个 span 的边界丢掉另一个的样式。
 
 ## 原因
 

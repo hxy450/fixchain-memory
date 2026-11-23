@@ -1,6 +1,6 @@
 # Compose 以 Brush 渐变着色的背景迁为 linearGradient：把调色板名解析成具体色序，透明 Surface 背景设透明，不压成单一品牌色
 
-ID：`lesson-46805f8bf5da7b0c914b` · 版本：1
+ID：`lesson-46805f8bf5da7b0c914b` · 版本：2
 
 [本主题](index.md)
 
@@ -11,6 +11,11 @@ ID：`lesson-46805f8bf5da7b0c914b` · 版本：1
 ## 适用情境
 
 源组件用主题中的渐变列表（如 JetsnackTheme.colors.interactivePrimary、gradient2_2）经 Brush 着色，常配 Surface(color = Transparent)；目标要求颜色走 color.json 资源引用，而 color.json 只收录了调色板的部分色阶。
+
+## 例外与边界
+
+- GradientDirection.Right 只对应 Brush.horizontalGradient；源端是 Brush.verticalGradient 时用 GradientDirection.Bottom（自上而下，也是 linearGradient 不写方向时的默认值），带起止坐标的 Brush.linearGradient 按坐标换算方向或角度，不统一写成 Right。
+- linearGradient 的 colors 每项都要带位置：源端没给色标位置时颜色沿渐变线均匀分布，n 个颜色的第 i 个位置取 i/(n−1)；源端给了 colorStops 的按源端的位置写，不要改成等分。
 
 ## 原因
 

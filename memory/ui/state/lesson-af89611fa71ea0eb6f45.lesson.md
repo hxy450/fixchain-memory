@@ -1,6 +1,6 @@
 # 在回调中设置的状态连同时机移植，并补齐源控件自带的前置过滤
 
-ID：`lesson-af89611fa71ea0eb6f45` · 版本：2
+ID：`lesson-af89611fa71ea0eb6f45` · 版本：3
 
 [本主题](index.md)
 
@@ -11,6 +11,10 @@ ID：`lesson-af89611fa71ea0eb6f45` · 版本：2
 ## 适用情境
 
 源在搜索执行等回调里才设置尾部按钮与进度条；SearchView 只在去空白后非空时回调 onQueryTextSubmit，映射参考只给出监听名到事件名的对应。
+
+## 例外与边界
+
+- 补上的过滤只判断去掉首尾空白后是否为空；SearchView 交给 onQueryTextSubmit 的是输入框里的原文，不是去空白后的文本，目标过滤后仍把原文交给后续处理，源端监听里自己 trim 的才 trim。androidx.appcompat 的 SearchView 提交前同样有这道去空白判空。
 
 ## 原因
 

@@ -1,6 +1,6 @@
 # 负责上抛自身可见性的组件必须常建，不被条件构建或 Visibility.None 包住
 
-ID：`lesson-3a00fd66c5188f5cfdf4` · 版本：1
+ID：`lesson-3a00fd66c5188f5cfdf4` · 版本：2
 
 [本主题](index.md)
 
@@ -11,6 +11,10 @@ ID：`lesson-3a00fd66c5188f5cfdf4` · 版本：1
 ## 适用情境
 
 源容器 visibility=gone，但内部 Fragment 在 onCreate 即挂载，并由它调用宿主的可见性方法；目标用 if 或 Visibility 控制容器。
+
+## 例外与边界
+
+- 常建之后仍要保住源端 gone 的两点：不占位、不可点。opacity 设为 0 只是透明，组件在布局中照样占位，要同时把高度压到 0 或移出布局流；命中要另外关，整棵子树都不响应用 hitTestBehavior(HitTestMode.BLOCK_DESCENDANTS)（API 20 起），HitTestMode.None 只让自身不响应、不挡子节点。
 
 ## 原因
 

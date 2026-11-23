@@ -1,12 +1,12 @@
 # 可能为空的 wrap_content TextView 仍占一行高：ArkUI 空串 Text 高为 0，空态用零宽空格或行高兜底并保留节点
 
-ID：`lesson-73ffccca482a384c3435` · 版本：1
+ID：`lesson-73ffccca482a384c3435` · 版本：2
 
 [本主题](index.md)
 
 ## 何时使用
 
-界面实现阶段，为文本可能为空的 Text 节点（列表卡片标题、正文预览、附件文字条）确定渲染条件与行高时
+界面实现阶段，源端对应的是 wrap_content 的 TextView、空态时为 VISIBLE 或 INVISIBLE（不是 GONE），为这类文本可能为空的 Text 节点（列表卡片标题、正文预览、附件文字条）确定渲染条件与行高时
 
 ## 适用情境
 

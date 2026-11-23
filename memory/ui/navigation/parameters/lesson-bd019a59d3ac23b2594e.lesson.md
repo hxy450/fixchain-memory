@@ -1,6 +1,6 @@
 # 子页回传结果：来源页用 pushPathByName 的 onPop 接收时，子页成功出栈必须 pop(result)，裸 pop() 不触发 onPop
 
-ID：`lesson-bd019a59d3ac23b2594e` · 版本：1
+ID：`lesson-bd019a59d3ac23b2594e` · 版本：2
 
 [本主题](index.md)
 
@@ -11,6 +11,10 @@ ID：`lesson-bd019a59d3ac23b2594e` · 版本：1
 ## 适用情境
 
 源端用 savedStateHandle 的 addReturn/ConsumeReturn 在子页返回后把结果交给来源页；目标来源页用 NavPathStack.pushPathByName(name, param, onPop) 或共享返回值通道接收，生产页与消费页由不同任务分别实现。
+
+## 例外与边界
+
+- 只给源端会写回传结果的出栈点补 result：源端取消、系统返回等路径不调用 addReturn 时，目标保持不带 result 的出栈，来源页 onPop 不触发正对应源端没有回传；系统返回、侧滑返回本身不带 result，不触发 onPop，需要在取消时也收到通知的，要单独写取消分支，不靠给所有出栈点硬塞 result。
 
 ## 原因
 

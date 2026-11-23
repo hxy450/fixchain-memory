@@ -1,6 +1,6 @@
 # 多 viewType 列表按每类 holder 的根布局与运行时挂入的子视图定卡片外观：某一类专属的背景、圆角、描边不写进各类共用的 Builder
 
-ID：`lesson-9de4c7648d23db5d7f86` · 版本：1
+ID：`lesson-9de4c7648d23db5d7f86` · 版本：2
 
 [本主题](index.md)
 
@@ -11,6 +11,10 @@ ID：`lesson-9de4c7648d23db5d7f86` · 版本：1
 ## 适用情境
 
 Android 列表同时有多类 holder：普通项的外观来自 holder 运行时 addView/inflate 的组件根视图（如 CardView 的 cardCornerRadius），推广项另有带圆角描边的背景 drawable；目标准备用一个共用 Builder 渲染各类卡片，或照搬兄弟页面已有的“白底 + 描边 + 圆角”卡片。
+
+## 例外与边界
+
+- 普通项外观来自 androidx 的 CardView 时，圆角之外还有两样默认行为要一起保留：API 21 起子视图按卡片圆角轮廓裁剪（目标端 borderRadius 要配 clip(true)，否则铺满卡片的图片会露出直角）；没另设 cardElevation 时卡片带 2dp 阴影。
 
 ## 原因
 

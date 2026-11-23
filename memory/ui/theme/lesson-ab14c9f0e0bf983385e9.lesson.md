@@ -1,6 +1,6 @@
 # 源为 Ionic/Web 组件库时，先取组件 mode 样式与库默认 CSS，再合并应用 css 与 inline style；库控件不套应用 accent
 
-ID：`lesson-ab14c9f0e0bf983385e9` · 版本：2
+ID：`lesson-ab14c9f0e0bf983385e9` · 版本：3
 
 [本主题](index.md)
 
@@ -15,6 +15,8 @@ ID：`lesson-ab14c9f0e0bf983385e9` · 版本：2
 ## 例外与边界
 
 - 源工程用应用 css 或 CSS 变量显式覆盖了对应属性时，按覆盖后的值取
+- 读哪一套 <组件>.<mode>.css 取决于源端实际生效的 mode：本条的来源是用 setupIonicReact({mode:'ios'}) 一类配置固定了 mode；源工程没有固定 mode 时，先确认源应用在它运行的平台上实际用的是哪个 mode，再取那个 mode 的样式，不默认读 ios。
+- 把 CSS 的 letter-spacing（px）写成 Text 的 letterSpacing 时，传纯数字会按 fp 解释、随系统字体大小变化，CSS 的 px 不随它变；要保持源端的固定字距，写成带 vp 单位的字符串。
 
 ## 原因
 

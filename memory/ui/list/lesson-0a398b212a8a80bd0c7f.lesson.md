@@ -1,6 +1,6 @@
 # SmartRefreshLayout 的加载更多转成 onReachEnd 时，显式建立“加载中不重入、刷新中不派发”的门闩
 
-ID：`lesson-0a398b212a8a80bd0c7f` · 版本：1
+ID：`lesson-0a398b212a8a80bd0c7f` · 版本：2
 
 [本主题](index.md)
 
@@ -11,6 +11,10 @@ ID：`lesson-0a398b212a8a80bd0c7f` · 版本：1
 ## 适用情境
 
 源页面由 SmartRefreshLayout 驱动分页（setOnLoadMoreListener、观察者里 finishRefresh/finishLoadMore），页面本身没有 isLoading 变量；ViewModel 的页码在响应成功后才自增；目标用 Refresh + onReachEnd 并以 concat 追加。
+
+## 例外与边界
+
+- 门闩里读的 isRefreshing 应当就是以 $$ 双向绑定给 Refresh 的 refreshing 的那个状态变量：下拉手势触发时由组件把它置 true，不必在 onRefreshing 里重复置位；没有用 $$ 传入时组件的刷新状态不会写回这个变量，门闩读不到下拉刷新。
 
 ## 原因
 

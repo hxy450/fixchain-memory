@@ -14,5 +14,6 @@
 ## 本级经验
 
 - [把“另起 Activity”的跳转翻成同窗口 push 时补方向隔离：横屏可触发的入口先切到目标页方向，返回后恢复原方向再续做](lesson-17b47c23f2d25008c808.lesson.md)
-  - 时机：交互实现阶段，把 Android 启动独立 Activity 的跳转（如登录拦截）翻译成同窗口 Navigation push，且该入口在横屏界面也能触发时
+  - 时机：交互实现阶段，把 Android 启动独立 Activity 的跳转（如登录拦截）翻译成同窗口 Navigation push，该入口在横屏界面也能触发、而目标页只按竖屏设计时
   - 情境：源端页面可在运行时切横屏（setRequestedOrientation），并在其中调用 startActivity、userService.login 等另起页面；目标用 Navigation 在同一窗口 push，方向由 window.setPreferredOrientation 在窗口级控制，目标页按竖屏设计。
+  - 例外：目标页该用的方向以源端被启动 Activity 自己的方向声明为准（清单里的 android:screenOrientation）；源端被启动的 Activity 也允许横屏、目标页同样适配横屏时，不切方向，也不改动原页面的方向设置。

@@ -1,6 +1,6 @@
 # Row 中位于定宽兄弟之后的 wrap_content 多行文字要加 flexShrink(1)（或 layoutWeight(1)）才会在剩余宽度内折行：Row 设了满宽，子项也默认不收缩
 
-ID：`lesson-8566839cffc9e9e7fa30` · 版本：1
+ID：`lesson-8566839cffc9e9e7fa30` · 版本：2
 
 [本主题](index.md)
 
@@ -11,6 +11,11 @@ ID：`lesson-8566839cffc9e9e7fa30` · 版本：1
 ## 适用情境
 
 源横向 LinearLayout（常见于 layout-land）中，固定 dp 的 ImageView 之后跟 wrap_content 宽、带左右 padding 的多行 TextView；文本长于剩余宽度时 Android 以 AT_MOST 取行内剩余宽折行。目标 Row 本身可能已设 width('100%')。
+
+## 例外与边界
+
+- flexShrink 只在 Row 设了主轴宽度（width 或 size）时生效；Row 没设宽度时按子项尺寸自适应、不会挤压文字，要先让 Row 取得确定宽度，单加 flexShrink(1) 不会折行。
+- 源 TextView 是 wrap_content 宽：短文案时文字只占自然宽度。用 layoutWeight(1) 会忽略 Text 自身宽度、占满剩余空间，文字带背景、边框或 Row 设了主轴对齐方式时会改变短文案的显示，这类情况用 flexShrink(1) 保留自然宽度。
 
 ## 原因
 

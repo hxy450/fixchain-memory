@@ -17,6 +17,7 @@
 - [SpannableString.setSpan(start, end) 拆成 ArkUI Span 时按 end 为开区间逐字核对着色范围](lesson-eb59a95e5eb219c238b0.lesson.md)
   - 时机：界面实现阶段，把源端 setSpan 着色、加粗的文字拆成 ArkUI Text + Span 时
   - 情境：源端用 SpannableString.setSpan(span, start, end, flags) 按字符索引给一段文字着色，常见“固定前缀 + 动态值 + 后缀”的拼接，终点按前缀长度加动态值长度再加偏移计算。
+  - 例外：目标改用属性字符串（StyledString）而不是 Text + Span 时，SpanStyle 用 start 加 length 表示范围：length 取 end − start，不要把源端的 end 直接填进 length。；源端几个 span 的范围互相重叠（如着色和加粗各管一段）时，Span 下不能再嵌套子组件，要按所有边界切成互不重叠的平铺段，每段带上覆盖它的全部样式，不能为了对齐某一个 span 的边界丢掉另一个的样式。
 - [Tab 标签、页面标题与设置行等可见文案沿资源引用链取源端 strings 资源的逐字值，不用枚举名、路由名或自拟英文](lesson-31ab9f59945e5f0259ea.lesson.md)
   - 时机：界面实现阶段，为 Tab 标签、页面/路由标题、设置入口行等可见文案取值并写入页面与路由表时；以及派发侦察或规格任务、确定导航与标题字段的形态时
   - 情境：源端可见文案经资源键间接引用（导航目的地的 label、配置路由的标题资源、顶栏 title），常与目的地枚举名或功能名不同（如 Map 目的地显示“Mesh Map”、Messages 目的地的页面标题为“Conversations”）；目标以硬编码字符串或自建资源表承载；上游 brief 或页面规格已给出、或可从 strings.xml 解析出逐字值。源端还有按语言区分的 strings（values-&lt;语言&gt; 目录）时，第 2 步的集中文案要用按语言限定词分目录的资源文件承载、各语言的逐字值都迁过去，页面经资源引用取值；不要把默认语言的字面值写成常量，把已有的多语言丢掉。
@@ -32,14 +33,15 @@
   - 情境：源 TextStyle 声明 fontSize/lineHeight、未设 lineHeightStyle；目标准备给所有 Text 无条件设置 .lineHeight()，或把 lineHeight 数值当单行文本的实际盒高来推算横向列表等容器的显式高度；映射参考可能给出 lineHeight → .lineHeight() 的 1:1 对应。
   - 例外：当前源端的 LineHeightStyle、字体内边距或已有明确契约要求固定行盒时，保留该契约，不默认改成自然高度。；「未设 lineHeightStyle」要看最终生效的样式，不只看源码里的 TextStyle(...) 字面：未设时安卓端套用默认 LineHeightStyle（Proportional、Trim.Both）；而直接用 Material3 默认排版令牌、或在其上 copy 出的样式，带的是 LineHeightStyle（Center、Trim.None）（material3 1.4.0 如此，其他版本先查），不属于这条的前提——单行盒高以安卓端 dump 的盒高为准，不照这条删掉 .lineHeight。
 - [动态布局文本的字号、行距按源端 dp × 文字倍率落成 vp，只有 bounds、padding、背景等几何乘设计画布比例](lesson-4c494b9f89c7e9db2b55.lesson.md)
-  - 时机：动态或灵活组件的渲染实现阶段，把源端动态布局文本的字号、行距换算成 ArkUI 预览、测量或原生绘制尺寸时
+  - 时机：动态或灵活组件的渲染实现阶段，源端字号按 dp 乘应用自己的文字倍率计算、几何另按画布比例缩放，把这类动态布局文本的字号、行距换算成 ArkUI 预览、测量或原生绘制尺寸时
   - 情境：源端动态文本以 fontSize.dpF × dynamicTextScale × fontSizeScale 设字号、以 lineSpacing.dpF 设行距，只有节点宽高、位置、padding、背景按根尺寸与设计宽度之比缩放；目标预览用 renderWidth / document.width 一类画布比例统一换算几何。
-- [单行 ellipsize=middle/start 在目标 TextOverflow 没有同名成员时实现测量式中间截断，不降级为尾部省略](lesson-a184209501ba02cb62e7.lesson.md)
+  - 例外：“落成 vp”要带单位写：Text、TextInput 的 fontSize，Text 的 lineHeight、minFontSize、maxFontSize 传纯数字时按 fp 解释，会再随系统字体大小设置变化，要按 vp 落值须传带单位的字符串（如 `${v}vp`）；@ohos.graphics.text 的 TextStyle.fontSize（Paragraph 排版）单位是 px，用 vp2px 换算；文本测量的 MeasureOptions.fontSize 传纯数字时 API 12 起按 fp、之前按 vp，同样用带单位的字符串指明。；源端的文字倍率（如动态文字缩放、字号缩放）不等于 1 时照乘，不因为“不乘画布比例”把它们一起去掉。
+- [单行 ellipsize=middle/start 在目标 TextOverflow 没有同名成员时先用 Text 的 ellipsisMode、满足不了再实现测量式中间截断，不降级为尾部省略](lesson-a184209501ba02cb62e7.lesson.md)
   - 时机：界面实现阶段，转换单行文本的省略位置（ellipsize），而目标 TextOverflow 枚举没有对应成员时
   - 情境：源 TextView 用 android:ellipsize="middle"（或 start）配合 lines=1/maxLines=1 显示文件名等尾部有意义的文本，可能还有关键字 Span 高亮；ArkUI Text 的 TextOverflow 只有尾部 Ellipsis 等模式，映射参考只给 end → Ellipsis 示例。
-  - 例外：项目已批准以尾部省略作为平台差异
+  - 例外：项目已批准以尾部省略作为平台差异；Text 里有 Span 子组件做关键字高亮时，ellipsisMode 的 START、CENTER 是否照样生效、省略号位置是否正确没有核实过：这种情形按做法第 2 步先截断纯文本再切分 Span，不单靠 ellipsisMode；源端是多行（maxLines 大于 1）时 START、CENTER 不生效，不适用本条的单行做法。
 - [可能为空的 wrap_content TextView 仍占一行高：ArkUI 空串 Text 高为 0，空态用零宽空格或行高兜底并保留节点](lesson-73ffccca482a384c3435.lesson.md)
-  - 时机：界面实现阶段，为文本可能为空的 Text 节点（列表卡片标题、正文预览、附件文字条）确定渲染条件与行高时
+  - 时机：界面实现阶段，源端对应的是 wrap_content 的 TextView、空态时为 VISIBLE 或 INVISIBLE（不是 GONE），为这类文本可能为空的 Text 节点（列表卡片标题、正文预览、附件文字条）确定渲染条件与行高时
   - 情境：源布局里 wrap_content 的 TextView 可能拿到空串（无标题、空正文、名称缺失），XML 或 Adapter 把它置为 VISIBLE 或 INVISIBLE 而不是 GONE；相邻元素（日期行、正文起始行、文字条底色）依赖它的一行字体高度定位；目标用 ArkUI Text 渲染。
   - 例外：源端在文本为空时把该 TextView 设为 GONE：按不渲染处理
 - [可见文案改为资源引用时值取自源端原文：目标字符串表缺键就新建专属键并连同原值移交，补值者回查源布局，不用语义相近的现成资源或按键名自拟](lesson-4567f9f77f4280ec1747.lesson.md)
@@ -49,6 +51,7 @@
 - [复用基类的显示格式化 getter 前核对精度：品类精度不同（如 ETF 三位小数）时在子类覆写全部相关 getter，同一字段的各分支用同一精度](lesson-042445ba332611e04a80.lesson.md)
   - 时机：界面实现阶段，把源端十字光标、高亮联动等显示接入目标页面，决定复用基类 ViewModel 的格式化 getter 还是在子类覆写时；修改同一显示字段的任一分支（静态值、无数据兜底、高亮值）时
   - 情境：多个品类详情页共用一个基类 ViewModel，基类显示 getter 用通用精度格式化（如 formatPrice 保留两位）；某一品类的静态字段与源端联动代码使用不同精度（如 getPrice(..., 3)），子类尚未覆写对应 getter。
+  - 例外：子类覆写只换精度：基类 getter 里已有的无数据兜底（如空值或无高亮时返回“--”）等格式化以外的处理要在覆写里原样保留，不要覆写成只调用高精度 formatter 的一行。
 - [字符串语言目录与键集按源端实际存在的 values-&lt;语言&gt;（含依赖库合并资源）镜像：限定词粒度照源，不合成译文，缺键回落 base](lesson-b58df29f032cc6a8c9d6.lesson.md)
   - 时机：规格提取与资源迁移阶段，确定要迁移哪些 values-* 语言目录及其目标限定词、目标生成哪些语言限定字符串目录及各键取值、源 locale 缺键如何处理时
   - 情境：Android 源只有默认 res/values/strings.xml（常为英文），没有 values-zh 等语言限定目录；规格要求与源应用逐屏对齐或写明“不擅自翻译”；资源转换 skill 带有“至少生成两套语言、默认英文则补 zh_CN”一类通用规则；设备可能使用中文系统语言。也包括源端有多个 values-xx（如 es/fr/it/pt/ru/zh/zh-rTW）并提供应用内语言切换，规格或主会话却自定“默认只迁 values + values-zh”，并以“项目决策优先”覆盖资源 skill 的“全部转换”硬规则；部分语言目录键集不全，skill 要求键集一致并自动补译。也包括源端只有仅语言限定的 values-zh，skill 正文写“values-zh-rCN 或 values-zh → zh_CN 或 zh”并要求最少生成 zh_CN，而详细映射表写 values-zh→zh、values-zh-rCN→zh_CN。
@@ -74,9 +77,12 @@
 - [系统语言映射按 BCP 47 的 script/region 逐类写到语言包，不把源端对裸 'zh' 等精确值的特判扩成前缀匹配](lesson-b853123dbef8142607fd.lesson.md)
   - 时机：规格提取与实现阶段，把源端初始语言选择翻译成目标端系统语言解析函数及其验收判据时
   - 情境：源端按设备返回的语言代码挑选语言包，并对某个精确值做特判（如 === 'zh' 时改用 zh-TW），或由 navigator.language 等检测结果直接匹配语言包名（如 zh-CN）；目标系统语言 API 返回 zh-Hans-CN、zh-Hant-TW 这类带 script/region 的标签。
+  - 例外：“保留严格相等”的前提是源端拿来比较的值本身可能带 region 或 script（如 navigator.language 一类返回 zh-CN 的检测结果），裸 zh 只是其中一种。源端取值的接口只返回语言子标签时（如安卓 Locale.getLanguage() 对简体、繁体都返回 zh），源端的 === 'zh' 实际命中所有中文变体，按它在源端实际命中的范围写映射，不能据本条把目标端改成只认裸 zh。
 - [自研 Markdown 或富文本把文本按多条规则切成 run 时，命中与间隔文本按原位置顺序输出、未闭合的分隔符按字面保留；契约同时覆盖解析库的核心语法](lesson-25f9eea8c9ed9b361d4f.lesson.md)
-  - 时机：Markdown 渲染的规格提取与解析实现阶段，确定语法覆盖、文本切分后 run 的拼装顺序与自动链接规则时；为共用首字符的长短分隔符（** 与 *）编写未闭合回退路径时
+  - 时机：源端用 CommonMark 类渲染库（如 Markwon、react-markdown）、目标改为自研解析器时，Markdown 渲染的规格提取与解析实现阶段，确定语法覆盖、文本切分后 run 的拼装顺序与自动链接规则时；为共用首字符的长短分隔符（** 与 *）编写未闭合回退路径时
   - 情境：源端用 Markwon 一类库（CommonMark 核心解析，加 Linkify、提及简写等文本插件，按触点命中 span）渲染 Markdown；目标自研解析器，把文本切成有序 run 序列交给 StyledString/Span 渲染。 也包括以单趟扫描替代 react-markdown/remark-gfm 等 CommonMark 渲染器，依次判断 `code`、\[text\](url)、**bold**、*italic*，并承诺不成对标记按字面文本输出。
+  - 例外：同一次 Linkify.addLinks 里几种规则的命中互相重叠时，源端不按注册顺序取舍，而是按起点排序去重：被包含的命中丢掉，部分重叠时留较长的一个；“按源端监听注册顺序处理”只用于各自单独挂 span 的不同插件或文本监听之间。移植网址规则时，命中起点前一个字符是 @ 就不生成网址链接这条过滤要一并保留。
 - [说明类静态页按源布局逐卡迁移：文案逐字取自源 XML，标题条背景与插图一并迁入](lesson-0197307e63e8d848ba02.lesson.md)
   - 时机：界面实现阶段，依据源布局 XML 生成规则、说明、注意事项一类静态图文页时
   - 情境：源静态页由多张卡片组成，标题条使用 drawable 背景，正文是写在布局 XML 里的长文案，卡内或页首尾有插图；规格只要求“展示说明并可返回”，不复述内容。
+  - 例外：清单里的 drawable 若是 XML drawable（shape、selector、layer-list、vector 等），不能原样放进 media（media 只收 .jpg、.png、.gif、.svg、.webp、.bmp 文件）：shape 背景改用组件的背景色、圆角、渐变等属性还原同样效果，vector 先转成 svg 再放入；对照时这类资源算作效果已还原，不要因为 media 里没有同名文件就换成别的图或删掉标题条背景。

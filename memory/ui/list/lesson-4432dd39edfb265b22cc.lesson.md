@@ -1,6 +1,6 @@
 # WaterFlow 多列时每个 FlowItem 先写 width('100%') 再加 padding：否则子卡片按瀑布流整宽测量、被列边界裁切
 
-ID：`lesson-4432dd39edfb265b22cc` · 版本：1
+ID：`lesson-4432dd39edfb265b22cc` · 版本：2
 
 [本主题](index.md)
 
@@ -11,6 +11,10 @@ ID：`lesson-4432dd39edfb265b22cc` · 版本：1
 ## 适用情境
 
 源端用 LazyVerticalStaggeredGrid（Adaptive/Fixed 列）、StaggeredGridLayoutManager 等多列瀑布流；目标 WaterFlow 的 columnsTemplate 在宽窗下为两列及以上，FlowItem 内是根节点 width('100%') 的卡片或整块内容（头部引导块、尾部占位），FlowItem 上只加了 padding/margin 表达项间距。单列窗口下两者等宽，看不出问题。
+
+## 例外与边界
+
+- 项间距原本写成 FlowItem 的 margin 时，补 width('100%') 的同时把它改成 FlowItem 的 padding，或改用 WaterFlow 的 columnsGap、rowsGap；不要让 width('100%') 和 margin 同时留在 FlowItem 上：外边距在计算位置时算作组件大小的一部分，会把项撑出列宽。
 
 ## 原因
 

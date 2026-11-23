@@ -9,6 +9,7 @@
 - [Compose 以 Brush 渐变着色的背景迁为 linearGradient：把调色板名解析成具体色序，透明 Surface 背景设透明，不压成单一品牌色](lesson-46805f8bf5da7b0c914b.lesson.md)
   - 时机：界面实现与共享组件实现阶段，把 Compose 按钮、卡片的 Brush.horizontalGradient(colors.xxx) 背景，或页面里已有的渐变字面色值落为 ArkUI linearGradient 与颜色资源时
   - 情境：源组件用主题中的渐变列表（如 JetsnackTheme.colors.interactivePrimary、gradient2_2）经 Brush 着色，常配 Surface(color = Transparent)；目标要求颜色走 color.json 资源引用，而 color.json 只收录了调色板的部分色阶。
+  - 例外：GradientDirection.Right 只对应 Brush.horizontalGradient；源端是 Brush.verticalGradient 时用 GradientDirection.Bottom（自上而下，也是 linearGradient 不写方向时的默认值），带起止坐标的 Brush.linearGradient 按坐标换算方向或角度，不统一写成 Right。；linearGradient 的 colors 每项都要带位置：源端没给色标位置时颜色沿渐变线均匀分布，n 个颜色的第 i 个位置取 i/(n−1)；源端给了 colorStops 的按源端的位置写，不要改成等分。
 - [“页面零硬编码色值”只禁止字面色值，不禁止用 $r 引用语义色](lesson-2e4279c4b82f06af64fd.lesson.md)
   - 时机：规格提取阶段书写颜色约束，或页面实现阶段解读规格里的颜色约束时
   - 情境：规格或功能说明写有“页面代码零硬编码色值”“深浅色由资源限定词目录负责”等全局约束，而具体控件仍需要与源端一致的颜色。 也包括源端由应用内设置选择深浅档或多套调色板（经 MaterialTheme(colorScheme = …) 下发给所有页面），目标的色板令牌放在稍后建立的可观察主题对象里，而 color.json 只有一套 base/dark 资源色。
@@ -25,6 +26,7 @@
 - [字体文件逐个 registerFont（多字重按“族-字重”命名），排版样式与对应 Text 引用注册名；不以 fontWeight 合成粗体代替字体文件](lesson-046baeb5ffbb10a6abc5.lesson.md)
   - 时机：主题令牌与界面实现阶段，把 Compose FontFamily(Font(R.font.x, weight), ...) 或 View 布局里按控件指定的字体文件（三方 TextView 的 typeface 属性、android:fontFamily）迁到 ArkUI，或确定全局字体注册由谁调用时
   - 情境：源字族为同一族声明多个字重文件，资源阶段已把字体文件放进 rawfile；目标要先 registerFont 才能用 fontFamily 引用；主题令牌、公共组件、页面与入口由不同任务分批生成。 也包括 View 布局用三方库属性（如 pixlui:typeface）或 android:fontFamily 给不同 TextView 指定不同字体文件，映射基线只写“→ fontFamily，字体入 rawfile/fonts”。
+  - 例外：字体要在整个应用生效时，文档要求在 EntryAbility 的 onWindowStageCreate 里、windowStage.loadContent 的回调中注册；工程已在那里注册的，保留原调用点，不要挪到入口页 aboutToAppear，也不要在两处重复注册（registerFont 是异步接口，不支持并发调用）。“入口页 aboutToAppear 调用一次”只用于还没有任何真实调用点的情形。；familyName 文档建议只用字母、数字和下划线：“族-字重”指每个文件一个名字的命名结构，注册名写成 Family_Bold 这类形式即可，已按此注册的名字不必改成连字符。
 - [布局引用的 @drawable（progressDrawable、背景 shape、标签背景、光标 shape）先打开取数值：高度、圆角、轨道色、渐变、描边与光标宽色写进规格与实现](lesson-771d1ba1a032b769097a.lesson.md)
   - 时机：规格提取与界面实现阶段，为进度条、搜索框、分组标签等引用 drawable 的控件确定高度、圆角、颜色与描边时
   - 情境：源布局以 progressDrawable=@drawable/xxx、background=@drawable/bg_xxx 引用 layer-list/shape 资源，尺寸、圆角、轨道色、渐变和描边写在被引用文件里；目标工程可能已有名称相近、含义不同的颜色资源。也包括 EditText 用 textCursorDrawable 引用 shape 定义光标宽度与颜色，且只设在部分字段上。
@@ -48,10 +50,11 @@
 - [源为 Ionic/Web 组件库时，先取组件 mode 样式与库默认 CSS，再合并应用 css 与 inline style；库控件不套应用 accent](lesson-ab14c9f0e0bf983385e9.lesson.md)
   - 时机：规格提取与界面实现阶段，把 Ionic 卡片、卡片头、工具栏、按钮等组件，或第三方 Web UI 库控件（如 Swiper 的 navigation/pagination）自建为 ArkUI 控件，确定渲染顺序、颜色、形状、尺寸与位置时
   - 情境：源为 Ionic React/Angular 或其他 Web 应用：以 setupIonicReact({mode:'ios'}) 一类配置固定组件模式，tsx 只写少量 inline style，其余视觉由 node_modules/@ionic/core 中各组件 &lt;组件&gt;.&lt;mode&gt;.css 的 :host 规则决定；或组件只引入第三方库默认 CSS（swiper/css/navigation、swiper/css/pagination），没有主题变量覆盖；组件的 color 属性只绑定在部分子元素上。目标用 Column/Text/Image 手写对等结构。
-  - 例外：源工程用应用 css 或 CSS 变量显式覆盖了对应属性时，按覆盖后的值取
+  - 例外：源工程用应用 css 或 CSS 变量显式覆盖了对应属性时，按覆盖后的值取；读哪一套 &lt;组件&gt;.&lt;mode&gt;.css 取决于源端实际生效的 mode：本条的来源是用 setupIonicReact({mode:'ios'}) 一类配置固定了 mode；源工程没有固定 mode 时，先确认源应用在它运行的平台上实际用的是哪个 mode，再取那个 mode 的样式，不默认读 ios。；把 CSS 的 letter-spacing（px）写成 Text 的 letterSpacing 时，传纯数字会按 fp 解释、随系统字体大小变化，CSS 的 px 不随它变；要保持源端的固定字距，写成带 vp 单位的字符串。
 - [源主题以 CSS 变量加深色覆盖块提供中性色时，背景、正文、卡片、分隔线导出成对 base/dark 资源，页面不写 hex](lesson-eafa5f24acae0a19559b.lesson.md)
   - 时机：规格与计划阶段划分设计令牌与深色资源职责时；页面转换阶段为页面底色、文字、卡片、分隔线等中性色取值时；拥有深色验收的切片或收口检查交付前
   - 情境：源工程用主题 CSS 变量提供页面级中性色（--ion-background-color、--ion-text-color、--ion-card-background 等），在 body.dark、.ios body.dark 或 prefers-color-scheme 块里给出深色值；目标靠 base/dark 资源限定符与 ColorMode 切换深浅，页面转换与设计令牌任务可能并行。
+  - 例外：dark 目录里没有的颜色键在深色模式下会回落到 base 的值：源主题深浅两值相同的键只在 base 定义即可，交付前的覆盖比对针对深色值与浅色值不同的键，不为两值相同的键补 dark 条目或记成缺口；引用的是随深浅切换的系统资源（sys.color.*）的颜色也不需要另建 dark 条目。
 - [源端一个背景选择对象同时表达图片、单色与渐变时，逐分支迁移到目标渲染绑定：url 非空用图片，否则按颜色数与方向生成纯色或渐变](lesson-2dc88a09f6cfbbe3393c.lesson.md)
   - 时机：渲染实现阶段，把编辑器的背景选择对象绑定到预览或组件的背景渲染节点时
   - 情境：源端一个选择对象同时承载 url、colors、orientation，渲染方法按 url 非空→图片、colors 长度 1→纯色、长度 2→按方向渐变分支；目标在模型层把选择对象映射到运行时渲染属性，外观配置模块已能保存与恢复 colors 和 orientation。

@@ -1,6 +1,6 @@
 # WebView 排版与缩放按源端 WebSettings（未做设置时取 Android WebView 默认值）在 ArkWeb 中显式落实：HTML 声明 viewport，缩放与 JS 逐项对齐
 
-ID：`lesson-65ebab594a9dabe77ac2` · 版本：3
+ID：`lesson-65ebab594a9dabe77ac2` · 版本：4
 
 [本主题](index.md)
 
@@ -12,6 +12,11 @@ ID：`lesson-65ebab594a9dabe77ac2` · 版本：3
 
 源 WebView 通过设置按设备宽排版；目标 HTML 由独立服务产出，可能没有 viewport 声明。也包括源 Activity 只 loadUrl 本地 asset HTML、未修改任何 WebSettings，本地 HTML 没有 viewport meta；写者提出“对齐 Android 默认值”，只落实了 JS 一项。
 
+## 例外与边界
+
+- HTML 已有 viewport meta 的保留原样（包括其中的 width、initial-scale、user-scalable 等），只给没有声明的输出路径补，不要统一覆盖成 width=device-width, initial-scale=1。
+- 补的 viewport meta 只在 Web 解析它时起作用：在 2in1 上不管怎么设都不解析；工程改过 User-Agent、其中没有 Mobile 字段时默认也不解析，这时要显式写 metaViewport(true)，“保持默认解析”不够。
+
 ## 原因
 
 ArkWeb 无 viewport 时按桌面宽排版再整体缩小，正文字极小；规格笼统标“行为等价”时，这些设置不会传到 HTML 产出方。源端未做设置时，目标行为就是 Android WebView 的全部默认值：按 WebView 宽度排版（useWideViewPort=false）、没有缩放手势、JS 关闭；ArkWeb 在页面没有 viewport meta 时不按组件宽度排版，zoomAccess 默认为 true。
@@ -20,7 +25,7 @@ ArkWeb 无 viewport 时按桌面宽排版再整体缩小，正文字极小；规
 
 1. 规格逐项写出 WebSettings 与回调触发范围的差异；无一对一属性时给出替代，如 head 注入 width=device-width, initial-scale=1 的 viewport。
 2. 每条 HTML 输出路径（含空文案兜底）都在 head 中声明 viewport。
-3. 源未修改 WebSettings 时逐项列出影响布局与交互的 Android 默认值，与 ArkWeb 默认值对照并显式设置：JS、缩放手势（Android 默认没有，写 zoomAccess(false)）、useWideViewPort/loadWithOverviewMode、文本自动缩放（overviewModeAccess、textAutosizing 按 Android 默认值显式设置）。
+3. 源未修改 WebSettings 时逐项列出影响布局与交互的 Android 默认值，与 ArkWeb 默认值对照并显式设置：JS、缩放手势（Android 默认没有，写 zoomAccess(false)）、useWideViewPort/loadWithOverviewMode、总览模式与文本自动缩放（Android 未设置时 setLoadWithOverviewMode 为 false、布局算法为 NARROW_COLUMNS 而不是 TEXT_AUTOSIZING，对应写 overviewModeAccess(false)、textAutosizing(false)）。
 4. 本地 HTML 没有 viewport meta 时，在 rawfile HTML 的 head 补 width=device-width, initial-scale=1，并保持 metaViewport 默认解析，不用 metaViewport(false) 模拟 useWideViewPort=false。
 
 ## 可选检查

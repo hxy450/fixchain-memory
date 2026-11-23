@@ -1,16 +1,21 @@
 # 动态布局文本的字号、行距按源端 dp × 文字倍率落成 vp，只有 bounds、padding、背景等几何乘设计画布比例
 
-ID：`lesson-4c494b9f89c7e9db2b55` · 版本：1
+ID：`lesson-4c494b9f89c7e9db2b55` · 版本：2
 
 [本主题](index.md)
 
 ## 何时使用
 
-动态或灵活组件的渲染实现阶段，把源端动态布局文本的字号、行距换算成 ArkUI 预览、测量或原生绘制尺寸时
+动态或灵活组件的渲染实现阶段，源端字号按 dp 乘应用自己的文字倍率计算、几何另按画布比例缩放，把这类动态布局文本的字号、行距换算成 ArkUI 预览、测量或原生绘制尺寸时
 
 ## 适用情境
 
 源端动态文本以 fontSize.dpF × dynamicTextScale × fontSizeScale 设字号、以 lineSpacing.dpF 设行距，只有节点宽高、位置、padding、背景按根尺寸与设计宽度之比缩放；目标预览用 renderWidth / document.width 一类画布比例统一换算几何。
+
+## 例外与边界
+
+- “落成 vp”要带单位写：Text、TextInput 的 fontSize，Text 的 lineHeight、minFontSize、maxFontSize 传纯数字时按 fp 解释，会再随系统字体大小设置变化，要按 vp 落值须传带单位的字符串（如 `${v}vp`）；@ohos.graphics.text 的 TextStyle.fontSize（Paragraph 排版）单位是 px，用 vp2px 换算；文本测量的 MeasureOptions.fontSize 传纯数字时 API 12 起按 fp、之前按 vp，同样用带单位的字符串指明。
+- 源端的文字倍率（如动态文字缩放、字号缩放）不等于 1 时照乘，不因为“不乘画布比例”把它们一起去掉。
 
 ## 原因
 

@@ -1,6 +1,6 @@
 # 源主题以 CSS 变量加深色覆盖块提供中性色时，背景、正文、卡片、分隔线导出成对 base/dark 资源，页面不写 hex
 
-ID：`lesson-eafa5f24acae0a19559b` · 版本：2
+ID：`lesson-eafa5f24acae0a19559b` · 版本：3
 
 [本主题](index.md)
 
@@ -11,6 +11,10 @@ ID：`lesson-eafa5f24acae0a19559b` · 版本：2
 ## 适用情境
 
 源工程用主题 CSS 变量提供页面级中性色（--ion-background-color、--ion-text-color、--ion-card-background 等），在 body.dark、.ios body.dark 或 prefers-color-scheme 块里给出深色值；目标靠 base/dark 资源限定符与 ColorMode 切换深浅，页面转换与设计令牌任务可能并行。
+
+## 例外与边界
+
+- dark 目录里没有的颜色键在深色模式下会回落到 base 的值：源主题深浅两值相同的键只在 base 定义即可，交付前的覆盖比对针对深色值与浅色值不同的键，不为两值相同的键补 dark 条目或记成缺口；引用的是随深浅切换的系统资源（sys.color.*）的颜色也不需要另建 dark 条目。
 
 ## 原因
 

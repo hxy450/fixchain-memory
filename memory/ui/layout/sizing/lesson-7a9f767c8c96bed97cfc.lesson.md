@@ -1,12 +1,12 @@
 # ContentScale.FillWidth 无 ImageFit 对应值：宽度铺满、高按图片比例、容器 clip，不用 Fill/Cover
 
-ID：`lesson-7a9f767c8c96bed97cfc` · 版本：2
+ID：`lesson-7a9f767c8c96bed97cfc` · 版本：3
 
 [本主题](index.md)
 
 ## 何时使用
 
-界面实现阶段，把 Compose Image/AsyncImage 的 contentScale 映射为 ArkUI Image 属性时
+界面实现阶段，把 Compose Image/AsyncImage 的 contentScale 映射为 ArkUI Image 属性、且源端取值为 ContentScale.FillWidth 或由调用方传入时
 
 ## 适用情境
 

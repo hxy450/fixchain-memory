@@ -1,16 +1,20 @@
 # Row(height(IntrinsicSize.Min)) 先算出固有高度写成显式高度，再让子项按百分比撑满并保留源偏移
 
-ID：`lesson-cb1a12afca61db08ed9a` · 版本：1
+ID：`lesson-cb1a12afca61db08ed9a` · 版本：2
 
 [本主题](index.md)
 
 ## 何时使用
 
-页面转换阶段，遇到 Row(height(IntrinsicSize.Min)) 且子项 fillMaxHeight、带 padding(top) 等偏移时
+页面转换阶段，遇到 Row(height(IntrinsicSize.Min)) 且子项 fillMaxHeight、带 padding(top) 等偏移，固有高度由尺寸固定的子项（如按钮的最小触控尺寸）决定时
 
 ## 适用情境
 
 源 Row 以固有最小高度定高，高度由最高的子项（如按钮的最小触控尺寸）决定；子项用 fillMaxHeight 并在内部偏移；目标端没有固有尺寸测量，迁移陷阱表提示不定高父级下的百分比子项会撑满。
+
+## 例外与边界
+
+- 源 Row 没写 verticalAlignment 时 Compose 按顶部对齐，ArkUI Row 的 alignItems 不写时默认 VerticalAlign.Center；给 Row 定高后，不撑满高度的子项要显式写 alignItems(VerticalAlign.Top) 才保留源端的纵向位置。
 
 ## 原因
 

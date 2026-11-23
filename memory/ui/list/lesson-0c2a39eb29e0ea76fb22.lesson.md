@@ -1,6 +1,6 @@
 # 滚动中计算条目可见比例或离顶最近的可见项时，用 onVisibleAreaChange 加即时位置查询，不用 onAreaChange
 
-ID：`lesson-0c2a39eb29e0ea76fb22` · 版本：1
+ID：`lesson-0c2a39eb29e0ea76fb22` · 版本：2
 
 [本主题](index.md)
 
@@ -11,6 +11,10 @@ ID：`lesson-0c2a39eb29e0ea76fb22` · 版本：1
 ## 适用情境
 
 源端在 LazyColumn 条目上用 onGloballyPositioned + boundsInWindow 在滚动中计算可见比例并选最近项自动播放；目标准备在条目上挂 onAreaChange。
+
+## 例外与边界
+
+- onVisibleAreaChange 的可见比例只按父组件范围裁剪，不扣除叠在列表上的兄弟组件（悬浮标题栏、底栏等）和窗口遮挡；源端可见性计算要扣掉这类遮挡区域时，选最近项那一步用即时查询到的窗口位置自行扣除，不能只凭回调的比例。
 
 ## 原因
 

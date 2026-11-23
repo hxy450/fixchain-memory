@@ -1,6 +1,6 @@
 # 整页 ScrollView 内的 wrap_content WebView 转 ArkWeb：分别实现“高度跟随文档”和“Web 自身不滚”，锁 H5 滚动并对后加载内容复测
 
-ID：`lesson-fd2dd522fdb03b3e5385` · 版本：1
+ID：`lesson-fd2dd522fdb03b3e5385` · 版本：2
 
 [本主题](index.md)
 
@@ -11,6 +11,10 @@ ID：`lesson-fd2dd522fdb03b3e5385` · 版本：1
 ## 适用情境
 
 安卓 WebView layout_height=wrap_content，位于整页 ScrollView 内，加载含图片等后续资源的远程 H5；目标用 Scroll 包裹 Web，要求滚动全部交给外层页面。
+
+## 例外与边界
+
+- Web 已设 layoutMode(WebLayoutMode.FIT_CONTENT)（API 11 起，Web 高度按前端页面高度自适应）时，“高度跟随文档”这一半由平台完成，不要再叠加 onPageEnd 测高或改回手动设高（这种模式下改高度属性也不起作用）；“Web 自身不滚”仍按做法第 1 步确认。用这种模式时注意它的限制：创建后不能切换模式，宽或高超过 7680px 要在创建时指定 RenderMode.SYNC_RENDER，否则白屏；不支持下拉到底部加载更多的网页。
 
 ## 原因
 

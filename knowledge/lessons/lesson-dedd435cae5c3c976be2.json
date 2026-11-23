@@ -1,0 +1,93 @@
+{
+ "id": "lesson-dedd435cae5c3c976be2",
+ "sdk": {
+  "verified_on": "2026-11-23",
+  "docs_commit": "e42bd18a89ff75e48e3effdf3d58748376c2caec",
+  "docs_date": "2026-11-21",
+  "harmony": "HarmonyOS 6.1.0（API 23，SDK 6.1.0.105）",
+  "android": "android-36.1 的源码"
+ },
+ "changes": [
+  {
+   "where": "例外与边界",
+   "before": "源端以 hide + add 叠加子 Fragment、视图不销毁时，不套用视图重建分支",
+   "after": "源端以 hide + add 叠加子 Fragment、视图不销毁时，不套用视图重建分支\n- 「replace 恒新实例」以源端每次 replace 都新建 Fragment 为前提；调用点传入的是缓存复用的同一个 Fragment 对象时，返回后实例字段仍在、只重建视图，按这一点映射，不改成 NEW_INSTANCE 新建页面。\n- 用 VisibilityChangeReason 区分覆盖类型要求 API 21 及以上；工程最低 API 低于 21 时 onShown、onHidden 不带这个参数，只用 navDestinationSwitch 的目标页与窗口焦点事件区分。",
+   "basis": "android.app.FragmentTransaction#replace（替换为调用方传入的 Fragment 对象）；卡里成立的前提：源端每次切换都新建 Fragment 再 replace（case-aebac48fa7acdb86e57e）；https://gitcode.com/openharmony/docs/blob/master/zh-cn/application-dev/reference/apis-arkui/arkui-ts/ts-basic-components-navdestination.md，onShown",
+   "type": "加条件"
+  }
+ ],
+ "entries": [
+  {
+   "step": "原因 / 做法第 1 步",
+   "fact": "FragmentManager.popBackStack() 是异步的：只把出栈请求排队，等应用回到事件循环时才执行",
+   "source": "android.app.FragmentManager#popBackStack",
+   "kind": "安卓平台",
+   "origin": "沿用并复核"
+  },
+  {
+   "step": "原因 / 做法第 1 步",
+   "fact": "FragmentManager.popBackStackImmediate() 在调用内立即执行出栈，效果相当于随后调用 executePendingTransactions",
+   "source": "android.app.FragmentManager#popBackStackImmediate",
+   "kind": "安卓平台",
+   "origin": "沿用并复核"
+  },
+  {
+   "step": "原因 / 做法第 2 步",
+   "fact": "Fragment.onDestroyView 在 onCreateView 创建的视图已从 Fragment 分离时调用；下次这个 Fragment 要显示时会创建新视图",
+   "source": "android.app.Fragment#onDestroyView",
+   "kind": "安卓平台",
+   "origin": "沿用并复核"
+  },
+  {
+   "step": "做法第 3 步",
+   "fact": "Activity.onPostCreate 在 Activity 启动完成时调用（onStart、onRestoreInstanceState 之后），随创建走一次；onResume 则在每次回到前台时调用",
+   "source": "android.app.Activity#onPostCreate；android.app.Activity#onResume",
+   "kind": "安卓平台",
+   "origin": "沿用并复核"
+  },
+  {
+   "step": "原因 / 做法第 1 步",
+   "fact": "NavigationOptions.launchMode 没有另设时为 LaunchMode.STANDARD；NEW_INSTANCE 与 STANDARD 相比不复用栈中的同名实例，新建页面默认执行 push 动效",
+   "source": "https://gitcode.com/openharmony/docs/blob/master/zh-cn/application-dev/reference/apis-arkui/arkui-ts/ts-basic-components-navigation.md，LaunchMode；鸿蒙 SDK 的 ets/component/navigation.d.ts，NavigationOptions.launchMode、LaunchMode.NEW_INSTANCE",
+   "kind": "鸿蒙接口",
+   "origin": "沿用并复核"
+  },
+  {
+   "step": "原因",
+   "fact": "设备上同一帧内先 pop 再 pushPathByName 同名页面（默认 STANDARD 模式）时，复用了栈中的同名 NavDestination 实例，新页的 onReady 不触发",
+   "source": "卡里上机实测（case-aebac48fa7acdb86e57e，返修实测）",
+   "kind": "卡里验证",
+   "origin": "沿用并复核"
+  },
+  {
+   "step": "做法第 1 步",
+   "fact": "NavPathStack.pop() 返回出栈的栈顶 NavPathInfo；栈为空时返回 undefined",
+   "source": "鸿蒙 SDK 的 ets/component/navigation.d.ts，NavPathStack.pop",
+   "kind": "鸿蒙接口",
+   "origin": "沿用并复核"
+  },
+  {
+   "step": "做法第 1 步",
+   "fact": "UIAbilityContext.terminateSelf() 销毁当前 UIAbility，不是路由栈的出栈",
+   "source": "鸿蒙 SDK 的 ets/api/application/UIAbilityContext.d.ts，UIAbilityContext.terminateSelf",
+   "kind": "鸿蒙接口",
+   "origin": "沿用并复核"
+  },
+  {
+   "step": "做法第 2 步",
+   "fact": "NavDestination 的 onShown、onHidden 自 API 21 起带 VisibilityChangeReason：TRANSITION 表示页面跳转、CONTENT_COVER 表示全模态的开启和关闭、APP_STATE 表示前后台切换引起的可见性变化",
+   "source": "https://gitcode.com/openharmony/docs/blob/master/zh-cn/application-dev/reference/apis-arkui/arkui-ts/ts-basic-components-navdestination.md，VisibilityChangeReason；鸿蒙 SDK 的 ets/component/nav_destination.d.ts，VisibilityChangeReason",
+   "kind": "鸿蒙接口",
+   "origin": "沿用并复核"
+  },
+  {
+   "step": "做法第 2 步",
+   "fact": "Window.on('windowEvent') 回调的 WindowEventType 中 WINDOW_ACTIVE 表示窗口获焦、WINDOW_INACTIVE 表示失焦",
+   "source": "https://gitcode.com/openharmony/docs/blob/master/zh-cn/application-dev/reference/apis-arkui/arkts-apis-window-e.md，WindowEventType；鸿蒙 SDK 的 ets/api/@ohos.window.d.ts，WindowEventType",
+   "kind": "鸿蒙接口",
+   "origin": "沿用并复核"
+  }
+ ],
+ "device_todo": [],
+ "dropped_notes": 4
+}

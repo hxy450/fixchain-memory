@@ -15,7 +15,7 @@
   - 情境：有限宽度的 Row 中，无 weight 子项使用 fillMaxWidth()，后面还有兄弟（按钮、文字）；规格或派工可能用“近乎不可见、按源码保留”描述该兄弟，实现者准备把该子项换成 layoutWeight(1)。
   - 例外：fillMaxWidth 带比例、主轴约束无上限或子项使用 weight 时，按当前分配规则处理，不套“占满剩余宽度”。；后续子项含 requiredWidth/requiredSize、无界 wrapContent 或自定义测量/绘制时，零宽约束仍不足以判断实际是否绘制。
 - [ContentScale.FillWidth 无 ImageFit 对应值：宽度铺满、高按图片比例、容器 clip，不用 Fill/Cover](lesson-7a9f767c8c96bed97cfc.lesson.md)
-  - 时机：界面实现阶段，把 Compose Image/AsyncImage 的 contentScale 映射为 ArkUI Image 属性时
+  - 时机：界面实现阶段，把 Compose Image/AsyncImage 的 contentScale 映射为 ArkUI Image 属性、且源端取值为 ContentScale.FillWidth 或由调用方传入时
   - 情境：源端图片用 ContentScale.FillWidth（如模糊缩略图、横幅），或由调用方传入 contentScale；目标 ArkUI Image 只有 objectFit 的 Fill、Cover、Contain 等取值。
 - [LinearLayout 以 gravity=center 摆放的 wrap_content 子项组转成 Row 时保留居中与按内容定宽，不给中间输入框 layoutWeight(1) 拉满](lesson-02b2fcd7d157d97f95c8.lesson.md)
   - 时机：界面实现阶段，把数量步进器（减号、数量框、加号）一类居中的 wrap_content 子项组翻译成 ArkUI Row 时
@@ -28,9 +28,11 @@
 - [Row 中位于定宽兄弟之后的 wrap_content 多行文字要加 flexShrink(1)（或 layoutWeight(1)）才会在剩余宽度内折行：Row 设了满宽，子项也默认不收缩](lesson-8566839cffc9e9e7fa30.lesson.md)
   - 时机：界面实现阶段，把横向 LinearLayout 中位于固定尺寸兄弟之后的 wrap_content 文字转成 ArkUI Row 子项时
   - 情境：源横向 LinearLayout（常见于 layout-land）中，固定 dp 的 ImageView 之后跟 wrap_content 宽、带左右 padding 的多行 TextView；文本长于剩余宽度时 Android 以 AT_MOST 取行内剩余宽折行。目标 Row 本身可能已设 width('100%')。
+  - 例外：flexShrink 只在 Row 设了主轴宽度（width 或 size）时生效；Row 没设宽度时按子项尺寸自适应、不会挤压文字，要先让 Row 取得确定宽度，单加 flexShrink(1) 不会折行。；源 TextView 是 wrap_content 宽：短文案时文字只占自然宽度。用 layoutWeight(1) 会忽略 Text 自身宽度、占满剩余空间，文字带背景、边框或 Row 设了主轴对齐方式时会改变短文案的显示，这类情况用 flexShrink(1) 保留自然宽度。
 - [Row(height(IntrinsicSize.Min)) 先算出固有高度写成显式高度，再让子项按百分比撑满并保留源偏移](lesson-cb1a12afca61db08ed9a.lesson.md)
-  - 时机：页面转换阶段，遇到 Row(height(IntrinsicSize.Min)) 且子项 fillMaxHeight、带 padding(top) 等偏移时
+  - 时机：页面转换阶段，遇到 Row(height(IntrinsicSize.Min)) 且子项 fillMaxHeight、带 padding(top) 等偏移，固有高度由尺寸固定的子项（如按钮的最小触控尺寸）决定时
   - 情境：源 Row 以固有最小高度定高，高度由最高的子项（如按钮的最小触控尺寸）决定；子项用 fillMaxHeight 并在内部偏移；目标端没有固有尺寸测量，迁移陷阱表提示不定高父级下的百分比子项会撑满。
+  - 例外：源 Row 没写 verticalAlignment 时 Compose 按顶部对齐，ArkUI Row 的 alignItems 不写时默认 VerticalAlign.Center；给 Row 定高后，不撑满高度的子项要显式写 alignItems(VerticalAlign.Top) 才保留源端的纵向位置。
 - [TableLayout 列宽取各列单行自然宽的最大值（含零高 fake header），stretchColumns 只均分余量：不写等分、fr 比例或权重](lesson-6cb9ad45093ce2ca28af.lesson.md)
   - 时机：规格提取与页面转换阶段，把 Android TableLayout 表格（含 stretchColumns/shrinkColumns，或滚动表体外另有固定表头）翻译为 ArkUI 列宽时
   - 情境：源页面在 ScrollView 外放一行固定表头 TableRow，表体 TableLayout 首行是 height=0、文案与 paddingRight 同表头的 fake header 行（注释说明用于对齐外部表头列宽）；单元格是默认 wrap_content 的 TextView 逐行 addView，没有设定列宽；合成 view.xml 会丢掉 padding 与 height；规格可能写“fake header 删除（Grid 定宽列天然对齐）”并自拟 columnsTemplate 或权重。 也包括 TableLayout 设 stretchColumns/shrinkColumns（如 "*"），单元格带左右内边距，容易被理解为各列等分并写成 layoutWeight(1) 或 50%。
@@ -55,6 +57,7 @@
 - [把原由 Tabs、Grid 等容器分配槽位的子项搬进自绘 Row/Column 时重新确定主轴尺寸：等分用 layoutWeight(1)，不保留依赖旧容器的 width('100%')](lesson-c572346f0be19acf5579.lesson.md)
   - 时机：公共组件或页面实现阶段，把 Tabs 内置 tabBar、Grid 等由容器分配槽位的子项改写为自绘 Row/Column + ForEach（如自绘底部导航），确定每个子项的主轴尺寸时
   - 情境：源端底栏是水平 LinearLayout，子项由代码以 LayoutParams(0, MATCH_PARENT) 与 weight=1 动态添加，布局 XML 里没有静态子项；目标原先用 Tabs BarMode.Fixed 承载页签、页签 builder 写 width('100%')/height('100%')，新组件把该 builder 原样搬进 Row。
+  - 例外：layoutWeight(1) 只对应源端主轴写 0 加 weight 的等分：源端子项主轴是 wrap_content 等自然尺寸再加 weight（最终宽 = 自然宽 + 分到的余量），或父容器写了 android:weightSum 时，layoutWeight 不在自然尺寸上叠加、也没有总权重参数，不能直接写 layoutWeight，要按源端算出的宽度写。；只改主轴上的 '100%'；交叉轴（Row 里子项的 height）的 '100%' 对应源端 LayoutParams 的 MATCH_PARENT，保留不动。
 - [把靠 layoutWeight 填满并居中的内容移进 Refresh、Stack 等非 Row/Column/Flex 父级时，改用 height('100%') 等显式尺寸](lesson-1c3d6367be48f70bb001.lesson.md)
   - 时机：界面实现阶段，把已有空态、未登录引导等内容 builder 放进下拉刷新组件或其他封装容器的 content 时，确定内容根节点的高度约束
   - 情境：内容根节点原本在 Column 中用 layoutWeight(1) + justifyContent(Center) 占满剩余空间并居中；新父级是封装了原生 Refresh（或 Stack、Scroll 等）的组件，经 @BuilderParam 注入内容；工程里可能已有同样写法可以照搬。
@@ -77,3 +80,4 @@
 - [随选中进度收放的图标与文本位置：源端为 0 的间距按同一选中条件归零](lesson-c39245065cc26d8c9f64.lesson.md)
   - 时机：界面实现阶段，把源端自定义 Layout 中随动画进度收放的图标、文本位置公式翻成 ArkUI 属性时
   - 情境：源端导航项等按 animationProgress 计算文本宽度（含其两侧间距），未选中时为 0、图标在槽内居中；目标用 Row 居中加 constraintSize、opacity、scale 折叠文本来模拟。
+  - 例外：只把源端公式里乘了动画进度（未选中时为 0）的那几段间距按选中条件归零；源端不随进度变化的间距（槽位自身的内边距、图标的外边距等）在两种状态下都保留，不跟着一起取 0。

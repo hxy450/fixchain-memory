@@ -23,6 +23,7 @@ ArkUI V2 状态刷新与订阅：@Builder 参数（含异步重赋值的数组�
 - [在回调中设置的状态连同时机移植，并补齐源控件自带的前置过滤](lesson-af89611fa71ea0eb6f45.lesson.md)
   - 时机：界面实现阶段，把 Android 回调中的命令式状态（尾部按钮、进度、空态）和控件监听映射为 ArkUI 声明式条件与事件时
   - 情境：源在搜索执行等回调里才设置尾部按钮与进度条；SearchView 只在去空白后非空时回调 onQueryTextSubmit，映射参考只给出监听名到事件名的对应。
+  - 例外：补上的过滤只判断去掉首尾空白后是否为空；SearchView 交给 onQueryTextSubmit 的是输入框里的原文，不是去空白后的文本，目标过滤后仍把原文交给后续处理，源端监听里自己 trim 的才 trim。androidx.appcompat 的 SearchView 提交前同样有这道去空白判空。
 - [复用开关组件的变更事件给出目标值时，把它原样写入该开关的 setter，不改成无参回调再按旧值取反](lesson-40fc63b124b4a44e7a9f.lesson.md)
   - 时机：界面接线阶段，把开关行接入带 @Param isOn 与 @Event onToggleChange(nextState) 的复用组件，并连到 ViewModel 的开关接口时
   - 情境：源端每个开关点击时翻转自身字段、写偏好并刷新自身图标；目标复用组件在事件里给出下一状态，ViewModel 提供 toggleX() 取反接口，页面本地 @Local 与 ViewModel 各持一份开关值。
@@ -39,6 +40,7 @@ ArkUI V2 状态刷新与订阅：@Builder 参数（含异步重赋值的数组�
 - [拆除共享 ViewModel 单例或让弹窗与宿主各持实例时，跨页面状态显式传递或从持久化重读，不只把 getInstance() 换成 new](lesson-fc724027e2c995632733.lesson.md)
   - 时机：架构重构阶段把跨页面共享的 ViewModel 单例改为页面级实例时；修复阶段为页面补传筛选参数，或让弹窗与宿主页各自持有 ViewModel 实例时
   - 情境：多个页面经全局单例（如 AppStorageV2）共用一个 ViewModel，其中的筛选或显示状态（当前空间、选中日期、显示偏好）由某个页面的动作写入，其他页面的查询只隐式读这份状态；重构要求改为页面级实例，或弹窗内改动的持久化偏好只经回调通知宿主，宿主刷新时又用自己实例的快照回填。
+  - 例外：拆单例时还要保住它的存活期：AppStorageV2 里的对象在应用运行期间一直保留，页面关掉再进来拿到的仍是同一份状态；改成页面级实例后每次进入都从初值开始，原来靠单例跨次进入保留的筛选、选中项，要在创建实例时从持久化重读或由上层持有后传入，不让它悄悄回到初值。
 - [源端 Activity 实例字段承载的会话态映射为页面实例作用域：服务需要持有会话态时按页面实例创建，只有源端本就静态全局的状态才做单例](lesson-d9143de006714935afe2.lesson.md)
   - 时机：规格提取与服务实现阶段，为页面编排服务确定作用域（单例还是页面实例），并迁移源 Activity 的实例字段（待写数据、密钥映射、挂起状态）时
   - 情境：源 Activity 把本次会话的数据放在实例字段里，Activity 重建或另开一个实例就是全新状态；目标规格把页面编排服务写成单例，实现者用 getInstance() 持有这些字段，并以 attach 时复位来近似实例重建。
@@ -50,7 +52,7 @@ ArkUI V2 状态刷新与订阅：@Builder 参数（含异步重赋值的数组�
 - [源端 onCreate 里 findViewById 后立即调用的 View setter，在子组件登记时回调宿主完成首次接线，不在 NavDestination.onReady 中读子组件句柄](lesson-f9be21096154da5890b5.lesson.md)
   - 时机：界面实现与跨组件接线阶段，决定宿主页何时、经什么机制拿到子组件实例并完成首次接线时
   - 情境：源 Activity.onCreate 中 findViewById 取到自定义 View 后立即调用 setter（设置状态对象、注册触摸或回调监听）；目标父页不能直接取得子 struct 实例，改由子组件在 aboutToAppear 把自身写入宿主传入的句柄，宿主的初始化链放在 NavDestination.onReady 等生命周期回调里。
-  - 例外：子组件通过 @Param/@Event 等声明式参数直接接收状态与回调，宿主不需要命令式取得实例
+  - 例外：子组件通过 @Param/@Event 等声明式参数直接接收状态与回调，宿主不需要命令式取得实例；子组件处在 if/else 等会切换分支的位置时，分支切换会删掉旧实例、再建新实例：子组件在 aboutToDisappear 里清掉句柄，新实例登记时同一个接线函数再走一遍；「只执行一次」指每个实例只接一次，不是整个页面只接一次。
 - [源端以引用比较判断“有未保存改动”时，先确认未改动时两侧是同一对象；ArkUI V2 中改用显式改动标志，不拿 @Local 数组与另存的原数组或新字面量做 ===](lesson-5d6e099ff0c8965f2b3c.lesson.md)
   - 时机：界面实现阶段，把编辑页的未保存检测（离开前确认、canSafelyExit 一类）从 Compose 翻译到 ArkUI V2 状态时
   - 情境：源端编辑页以 remember(x){ mutableStateOf(x) } 一类写法让编辑状态的初值就是入参对象，修改时整体替换成新列表，再用 !== / === 引用比较判断是否改动；目标用 @Local 数组承载编辑状态，另存一份初始数组，或在新增模式把两者各自初始化为 \[\]。
@@ -76,9 +78,11 @@ ArkUI V2 状态刷新与订阅：@Builder 参数（含异步重赋值的数组�
 - [规格要求乐观更新时，先本地翻转状态再发请求，回调只用服务端真值回填](lesson-18c8e7630a96d66540bc.lesson.md)
   - 时机：界面交互实现阶段，编写收藏、点赞类切换的点击处理，确定本地状态翻转与服务端调用的先后时
   - 情境：验收要求点击后状态翻转、界面即时刷新（乐观更新）；源端把选中态设置写在网络接口的成功回调里；目标用状态变量驱动图标并异步调用接口。
+  - 例外：挪到请求之前的只是选中态的翻转；源端回调里的其他处理（未登录时去登录、失败提示、计数更新等）照旧按源端的成功、失败分支保留，不因改成乐观更新而删掉。；规格没有要求乐观更新时，按源端在成功回调里设置选中态，不套用本条。
 - [负责上抛自身可见性的组件必须常建，不被条件构建或 Visibility.None 包住](lesson-3a00fd66c5188f5cfdf4.lesson.md)
   - 时机：界面实现阶段，翻译“容器初始隐藏、内部组件常驻并自行通知宿主显示”的结构，或向他人预留的条件槽位嵌入组件时
   - 情境：源容器 visibility=gone，但内部 Fragment 在 onCreate 即挂载，并由它调用宿主的可见性方法；目标用 if 或 Visibility 控制容器。
+  - 例外：常建之后仍要保住源端 gone 的两点：不占位、不可点。opacity 设为 0 只是透明，组件在布局中照样占位，要同时把高度压到 0 或移出布局流；命中要另外关，整棵子树都不响应用 hitTestBehavior(HitTestMode.BLOCK_DESCENDANTS)（API 20 起），HitTestMode.None 只让自身不响应、不挡子节点。
 - [迁移 Compose remember 状态时按源端的求值与重建时机落实：无键 remember 只在首次组合求值，remember(key) 只在 key 变化时重算，条件挂载的子组件每次显示都是新状态，无 key 惰性项随位置重建](lesson-3b4a96141329db62a6af.lesson.md)
   - 时机：界面实现或公共组件抽取阶段，把 Compose 中 remember、derivedStateOf、LaunchedEffect 持有或算出的局部状态迁到 ArkUI（写成 @Computed、getter 或缓存字段，提升为页级 @Local，放进常驻的 ListItem 或子组件，或改成选择 handler 里的直接赋值），并决定何时求值、何时复位时
   - 情境：源端状态写在无键 remember { … } 或 remember { derivedStateOf { … } } 包住的一次性判定（如按目标值是否含小数点决定是否显示小数）、remember(k1, k2){…} 派生值、条件挂载（if (show) Dialog/卡片）子组件内的 remember 与 LaunchedEffect，或 LazyColumn 中不设 key 的 item{}/items 项里；源码没有显式重算或清空，时机依赖组合身份。目标准备写成每次渲染都重算的 @Computed、getter，或把状态放到页级 @Local、常驻组件，或在每次点击时重写派生值。

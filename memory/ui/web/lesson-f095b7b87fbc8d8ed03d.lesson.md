@@ -1,6 +1,6 @@
 # ArkWeb 导航拦截按请求属性区分用户导航，loadData 在控制器挂接后调用
 
-ID：`lesson-f095b7b87fbc8d8ed03d` · 版本：1
+ID：`lesson-f095b7b87fbc8d8ed03d` · 版本：2
 
 [本主题](index.md)
 
@@ -12,9 +12,13 @@ ID：`lesson-f095b7b87fbc8d8ed03d` · 版本：1
 
 源 shouldOverrideUrlLoading 只处理用户点开的链接，不为程序装载回调；目标 onLoadIntercept 对初始装载同样回调。
 
+## 例外与边界
+
+- 先判 isRequestGesture() 的前提是源端拦截只针对用户点开的链接。安卓 shouldOverrideUrlLoading 除用户点击外，也为网页脚本发起的导航和 HTTP 重定向回调（只是不为应用自己 loadUrl 的装载回调）；源端靠它把这类非点击导航也分发出去时，不能只处理手势请求，其余主框架导航按源端的 URL 规则判断，规则对照打印出的真实 getRequestUrl() 来写。
+
 ## 原因
 
-按猜测的 loadData 请求 URL 逐字放行，会把正文自身的导航当外链拦掉，页面停在空白；控制器未挂接时调用 loadData 不生效。
+按猜测的 loadData 请求 URL 逐字放行，会把正文自身的导航当外链拦掉，页面停在空白；控制器未挂接时调用 loadData 不会装载，而是抛出 17100001 错误。
 
 ## 做法
 

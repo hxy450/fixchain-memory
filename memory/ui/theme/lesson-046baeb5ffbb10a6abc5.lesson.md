@@ -1,6 +1,6 @@
 # 字体文件逐个 registerFont（多字重按“族-字重”命名），排版样式与对应 Text 引用注册名；不以 fontWeight 合成粗体代替字体文件
 
-ID：`lesson-046baeb5ffbb10a6abc5` · 版本：2
+ID：`lesson-046baeb5ffbb10a6abc5` · 版本：3
 
 [本主题](index.md)
 
@@ -11,6 +11,11 @@ ID：`lesson-046baeb5ffbb10a6abc5` · 版本：2
 ## 适用情境
 
 源字族为同一族声明多个字重文件，资源阶段已把字体文件放进 rawfile；目标要先 registerFont 才能用 fontFamily 引用；主题令牌、公共组件、页面与入口由不同任务分批生成。 也包括 View 布局用三方库属性（如 pixlui:typeface）或 android:fontFamily 给不同 TextView 指定不同字体文件，映射基线只写“→ fontFamily，字体入 rawfile/fonts”。
+
+## 例外与边界
+
+- 字体要在整个应用生效时，文档要求在 EntryAbility 的 onWindowStageCreate 里、windowStage.loadContent 的回调中注册；工程已在那里注册的，保留原调用点，不要挪到入口页 aboutToAppear，也不要在两处重复注册（registerFont 是异步接口，不支持并发调用）。“入口页 aboutToAppear 调用一次”只用于还没有任何真实调用点的情形。
+- familyName 文档建议只用字母、数字和下划线：“族-字重”指每个文件一个名字的命名结构，注册名写成 Family_Bold 这类形式即可，已按此注册的名字不必改成连字符。
 
 ## 原因
 
