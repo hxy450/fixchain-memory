@@ -13,9 +13,9 @@
 - [View 动画调用（fade、startAnimation、setCustomAnimations）按行为迁移：取源动画资源与时长，动画结束才切显隐](lesson-284e67e299e71fc63095.lesson.md)
   - 时机：实现与接线阶段，为源端用 View 动画完成的行显隐、列表项进入详情、Fragment 切换等状态变化选择 ArkUI 过渡时；规格提取阶段为导航与显隐验收项登记转场契约时
   - 情境：源端在置 VISIBLE/GONE 或 replace Fragment 前后调用自有动画辅助类（淡入淡出、缩放进入详情）、View.startAnimation 或 FragmentTransaction.setCustomAnimations，动画取 res/anim 资源、config_mediumAnimTime 等平台时长或代码常量，常在动画结束回调里才切 visibility；目标用 if 条件渲染与 Navigation/NavDestination，未写 transition、animateTo 或 customTransition。
-  - 例外：决策记录以编号批准省略该动画并写明差异验收
+  - 例外：决策记录以编号批准省略该动画并写明差异验收；第 3 步“事务没有设动画”要连 Fragment 本身一起看：事务没调 setCustomAnimations、setTransition，但 Fragment 自己设了进入或退出 Transition（setEnterTransition、setExitTransition 等）或覆写 onCreateAnimator 返回了动画的，切换时仍有动画，按第 1 步取这些动画迁移，不关闭转场
 - [sharedBounds 包住 sharedElement 的两层共享转场，每端只挂一个 geometryTransition（外层容器），不逐层各配一对](lesson-cf45ff2e03a84ab1a0a4.lesson.md)
-  - 时机：界面实现与规格提取阶段，把 Compose SharedTransitionLayout 内的 sharedBounds/sharedElement 落为 ArkUI geometryTransition，确定每端挂几个配对键、挂在哪个节点时
+  - 时机：界面实现与规格提取阶段，把 Compose SharedTransitionLayout 内 sharedBounds 包住 sharedElement、两层 key 不同的共享转场落为 ArkUI geometryTransition，确定每端挂几个配对键、挂在哪个节点时
   - 情境：源端在 SharedTransitionLayout 内用 sharedBounds("${id}-bounds") 包住带 sharedElement(id) 的内容，两层 key 不同，列表卡与同页详情浮层两端各有这两层；目标用同页条件浮层加 geometryTransition 做展开和收起，规格页面结构一节可能把源端两层 key 原样列出。
 - [帧时钟动画（Animatable、ValueAnimator）改自驱 ticker 时，时间分数取“当前帧时间 − 起始时间”再套源端插值：后台停帧、回前台按真实流逝追平（无限重复的 Animator 除外），不钳制单次增量](lesson-6d6ba721c81206d45fbe.lesson.md)
   - 时机：计时或动画引擎的规格与实现阶段，把 Animatable.animateTo(tween)、ValueAnimator/ObjectAnimator 等由帧时钟驱动的进度改写为 setInterval、displaySync、postFrameCallback 等自驱 ticker，确定进度曲线、刷新周期与退后台、回前台的时间推进时

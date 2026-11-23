@@ -1,6 +1,6 @@
 # ImageView tint 着色的渐变装饰层用容器 linearGradient 实现
 
-ID：`lesson-fcd86aeea6209ea0718b` · 版本：1
+ID：`lesson-fcd86aeea6209ea0718b` · 版本：2
 
 [本主题](index.md)
 
@@ -11,6 +11,10 @@ ID：`lesson-fcd86aeea6209ea0718b` · 版本：1
 ## 适用情境
 
 源 ImageView 用 tint=?attr/colorBackground 一类主题色给渐变 shape 着色，目标准备改用 SVG 加 fillColor；目标有深色资源目录。
+
+## 例外与边界
+
+- “主题色到其透明变体”的渐变只对应默认着色模式 SRC_IN（结果是主题色乘以原图形的 alpha）；源端另设了 tintMode（如 multiply、screen）时，着色结果还取决于原图形的颜色，要按该模式另算色标
 
 ## 原因
 

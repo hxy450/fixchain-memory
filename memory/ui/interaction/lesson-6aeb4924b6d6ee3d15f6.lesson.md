@@ -1,6 +1,6 @@
 # 源端 clickable 吞触摸或组件实例带通用属性时显式写 hitTestBehavior：空 onClick 不阻断，实例外有缺省命中的包装节点
 
-ID：`lesson-6aeb4924b6d6ee3d15f6` · 版本：2
+ID：`lesson-6aeb4924b6d6ee3d15f6` · 版本：3
 
 [本主题](index.md)
 
@@ -12,13 +12,17 @@ ID：`lesson-6aeb4924b6d6ee3d15f6` · 版本：2
 
 源端条体或按钮 clickable=true 吞掉触摸、不下穿到下层列表，或不可点击的提示条覆盖工具栏而不拦截；目标在 Stack 中叠放自定义组件，宿主层可能已设 Transparent，组件实例上写了 margin、padding、position 等通用属性，或用 OverlayManager 挂 ComponentContent；写者准备用空 .onClick 表示“吞触摸”，或依赖组件缺省命中模式。
 
+## 例外与边界
+
+- 源端触摸归属随状态变的叠放层（例如抽屉打开时拦截、关闭时让下层可点），按各状态分别写命中模式并随状态切换；代码里已有按状态切换的 hitTestBehavior 保留，不统一改成某个固定值。
+
 ## 原因
 
 ArkUI 是否拦截由命中测试决定，与有没有 onClick 无关：空 onClick 不改变命中模式，Transparent 宿主下的条体仍会让下层同时命中，下层的按下回调可能先执行并改掉状态。给自定义组件实例写通用属性时框架会生成缺省命中的 __Common__ 包装节点，它按自身区域参与命中、盖住其他控件；OverlayManager 上以自定义组件为根的 ComponentContent 也被包进缺省命中的代理节点（BuilderProxyNode），只给内层设 None 不起作用。
 
 ## 做法
 
-1. 按源端触摸归属给每个叠放节点显式写 hitTestBehavior，不依赖缺省值：源端吞触摸、没有可点击子控件的节点用 HitTestMode.Block；含可点击子控件，或位于 Transparent 宿主下仍要阻断下层的条体，用 HitTestMode.BLOCK_HIERARCHY（自身与子节点响应、阻止优先级更低的兄弟与父节点，以本机 SDK 的 HitTestMode 声明为准）；只做定位或占位的包装节点用 None 或 Transparent。不用空 onClick 表示吞触摸。
+1. 按源端触摸归属给每个叠放节点显式写 hitTestBehavior，不依赖缺省值：源端吞触摸、没有可点击子控件的节点用 HitTestMode.Block；含可点击子控件，或位于 Transparent 宿主下仍要阻断下层的条体，用 HitTestMode.BLOCK_HIERARCHY（自身与子节点响应、阻止优先级更低的兄弟与父节点，API 20 起提供）；只做定位或占位的包装节点用 None 或 Transparent。不用空 onClick 表示吞触摸。
 2. 给自定义组件实例写 margin、padding、position 等通用属性时，同时在该实例上写 hitTestBehavior：只展示、不接收触摸的覆盖条用 None，子控件要可点而空白处透传的用 Transparent；也可以把这些属性移到外层系统容器上，再给该容器设命中模式。 width/height/zIndex 同样会生成包装节点；组件作者写层契约或头注释时写明“挂载实例上写命中模式，或调用处不写通用属性”，不声称组件内部根节点已不拦截；替换或换装挂载的组件时保留挂载点已有的 hitTestBehavior，组件契约不作为删除它的依据。
 3. 用 OverlayManager.addComponentContent 挂窗口级图层时，只在需要显示的时段挂载，结束即 removeComponentContent；必须常驻时用 Stack 等系统组件作 ComponentContent 的根，并按交互态切换根节点的 hitTestBehavior，不依赖内层自定义组件上的 None。
 

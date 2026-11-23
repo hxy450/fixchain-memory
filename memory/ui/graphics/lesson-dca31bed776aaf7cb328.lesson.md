@@ -1,16 +1,20 @@
 # 自绘图表的折线点与节点标签共用同一坐标原点：点坐标已含顶部留白时，不再给图形节点加同向 position 偏移
 
-ID：`lesson-dca31bed776aaf7cb328` · 版本：1
+ID：`lesson-dca31bed776aaf7cb328` · 版本：2
 
 [本主题](index.md)
 
 ## 何时使用
 
-界面实现阶段，把 Android 自定义 ItemDecoration/Canvas 图表（温度折线、趋势图）转换为 ArkUI Canvas、Polyline 或 Shape 时
+界面实现阶段，把 Android 自定义 ItemDecoration/Canvas 图表（温度折线、趋势图）转换为 ArkUI Canvas、Polyline 或 Shape、且点坐标沿用源端已含顶部留白的映射函数时
 
 ## 适用情境
 
 源端在同一画布坐标里用 valToY 一类函数（已含 paddingTop 与文字高度）画折线和节点标签；目标把折线画在 Polyline/Shape 上并用 position 定位，标签另用 Text 定位。
+
+## 例外与边界
+
+- 点坐标是按图形节点自身区域算的（映射里没有计入顶部留白）时，图形节点上的 position 偏移正是和标签对齐所需，不要删掉；留白只在点坐标和 position 两处中的一处计入
 
 ## 原因
 

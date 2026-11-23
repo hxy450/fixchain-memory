@@ -1,16 +1,20 @@
 # 对话框几何由三方库或 Dialog 主题决定时，自绘窗口宽度按提供方公式计算并随窗口重算，不写容器 100%
 
-ID：`lesson-dcd9ca5a3ac384a1b6b7` · 版本：1
+ID：`lesson-dcd9ca5a3ac384a1b6b7` · 版本：2
 
 [本主题](index.md)
 
 ## 何时使用
 
-规格提取与界面实现阶段，为三方库对话框封装（如 material-dialogs）、MaterialAlertDialog 或 Dialog 主题 Activity 改成的卡片页确定窗口宽度，以及遮罩、点外关闭、底色与圆角等窗口属性时
+规格提取与界面实现阶段，为三方库对话框封装（如 material-dialogs）、MaterialAlertDialog 或 Dialog 主题 Activity 改成的卡片页确定窗口宽度，以及遮罩、点外关闭、底色与圆角等窗口属性，且源码只给出库或主题、没有窗口宽度数值时
 
 ## 适用情境
 
 源码只出现库的 Builder、库名或 manifest 的 Theme.*.Dialog 主题，源码树里没有宽度等数值；目标用 openCustomDialog 自绘，或把 Dialog 主题 Activity 做成 NavDestination 卡片页，需要显式给出卡片宽度；同族页面或共享弹窗组件可能已按 width('100%')、固定比例或工程里现成的半透明颜色资源写成先例。
+
+## 例外与边界
+
+- 源码在对话框显示后自己设了窗口宽度（Window.setLayout，或改 window 的 LayoutParams.width，如设为 MATCH_PARENT 或具体像素值）时，以代码设的宽度为准，不再套第 1 步的库或主题公式；设成 MATCH_PARENT 的，目标写整窗宽是对的
 
 ## 原因
 

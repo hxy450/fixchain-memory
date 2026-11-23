@@ -1,6 +1,6 @@
 # 对话框里的 EditText 把焦点、软键盘与预填光标分三项迁移：只获焦不弹键盘时 TextInput/TextArea 设 enableKeyboardOnFocus(false)，setText 预填后光标置于开头
 
-ID：`lesson-b8d75f1de6a5d144f6fc` · 版本：3
+ID：`lesson-b8d75f1de6a5d144f6fc` · 版本：4
 
 [本主题](index.md)
 
@@ -15,10 +15,11 @@ ID：`lesson-b8d75f1de6a5d144f6fc` · 版本：3
 ## 例外与边界
 
 - 源码显式请求输入法（showSoftInput，setSoftInputMode 为 STATE_VISIBLE/ALWAYS_VISIBLE，或 DialogPreference/EditTextPreference 打开时请求输入法）：按源端打开即弹键盘
+- 光标在开头只是 setText 后没有另设选区时的默认：源码在 setText 之后自己调了 setSelection（如放到末尾或全选）或换了 movementMethod 的，按源码的选区实现，不一律 caretPosition(0)
 
 ## 原因
 
-<requestFocus/> 只决定焦点：手机上的普通对话框窗口软输入模式为 STATE_UNSPECIFIED|ADJUST_PAN，只获焦、不弹键盘，点按输入框才弹（参照机 dumpsys input_method 实测 mShowRequested=false）。ArkUI TextInput/TextArea 的 enableKeyboardOnFocus 默认 true，defaultFocus 或 requestFocus 获焦就会绑定输入法：首次打开可能不弹，再次打开就弹。安卓 setText 预填后光标在开头、长文本从首行显示；ArkUI 以 text 预填时光标在末尾并滚到末尾，直接键入会接在旧文本之后。把“打开即聚焦”写成“打开即弹软键盘”或不写光标位置时，实现照目标默认走。
+<requestFocus/> 只决定焦点：手机上的普通对话框窗口软输入模式为 STATE_UNSPECIFIED|ADJUST_PAN，只获焦、不弹键盘，点按输入框才弹（参照机 dumpsys input_method 实测 mShowRequested=false）。ArkUI TextInput/TextArea 的 enableKeyboardOnFocus 默认 true（文档写明 TextInput 在 TV 设备上默认 false），defaultFocus 或 requestFocus 获焦就会绑定输入法：首次打开可能不弹，再次打开就弹。安卓 setText 预填后光标在开头、长文本从首行显示；ArkUI 以 text 预填时光标在末尾并滚到末尾，直接键入会接在旧文本之后。把“打开即聚焦”写成“打开即弹软键盘”或不写光标位置时，实现照目标默认走。
 
 ## 做法
 

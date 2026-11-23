@@ -1,16 +1,20 @@
 # 根背景是按产品 flavor 覆盖的 layer-list 时按生效版本逐层落成组件；位图暂缺也保留 Image 引用并申报，不降成纯色底
 
-ID：`lesson-0da8733ee0a6c52924da` · 版本：1
+ID：`lesson-0da8733ee0a6c52924da` · 版本：2
 
 [本主题](index.md)
 
 ## 何时使用
 
-页面界面转换阶段，迁移根布局的背景 drawable，尤其所需位图尚未进入目标 media 时
+页面界面转换阶段，迁移根布局的 layer-list 背景 drawable（含产品 flavor 覆盖 main 的情形），尤其所需位图尚未进入目标 media 时
 
 ## 适用情境
 
 源页面根背景是 layer-list（纯色底、全屏位图、定位的品牌图），main 与产品 flavor 的 sourceSet 各有一份，flavor 版覆盖 main；规格要求 Stack 加全屏 Image 背景；目标工程缺失的资源由后续批次统一补源，转换期不编译。
+
+## 例外与边界
+
+- 逐层落成组件时保持 layer-list 的层序：layer-list 按 item 顺序绘制、后面的 item 盖在上面，Stack 也是后声明的子组件盖在前面，所以 Stack 子组件按 item 原顺序排列，不要为了把背景放在一起而调换顺序；纯色底用 Stack 自身的 backgroundColor 时它始终在所有子组件之下
 
 ## 原因
 
@@ -18,7 +22,7 @@ ID：`lesson-0da8733ee0a6c52924da` · 版本：1
 
 ## 做法
 
-1. 按构建配置选中的产品 flavor 解析背景 drawable，把每层落成组件：纯色底用 backgroundColor；gravity=fill 的位图用 100%×100% 的 Image 加 ImageFit.Fill；带 gravity 与 top 偏移的品牌图按固有尺寸放 Image，用 padding 或 position 摆位。
+1. 按构建配置选中的产品 flavor 解析背景 drawable，把每层落成组件：纯色底用 backgroundColor；gravity=fill（或 item 既没写 gravity 也没写 width/height）的位图用 100%×100% 的 Image 加 ImageFit.Fill（Image 不写 objectFit 时按 Cover 等比裁切）；带 gravity 与 top 偏移的品牌图按固有尺寸放 Image，用 padding 或 position 摆位（Stack 的 alignContent 默认 Alignment.Center，用 padding 按顶部偏移摆位时先把对齐设成顶部）。
 2. 位图暂缺而编译在补资源后才跑时，照常写目标资源名的 $r 引用并在报告中申报缺口，或直接从源 sourceSet 拷贝；确需延后时用带负责方和可机读触发条件（如断言工程中存在该资源引用）的移交。
 3. 补资源的步骤落盘后，检查代码槽是否已引用该资源；只有注释时把接线交给明确负责方。
 

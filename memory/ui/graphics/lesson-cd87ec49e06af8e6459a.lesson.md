@@ -1,16 +1,20 @@
 # 源端 Adapter 中被注释掉的数据绑定视为未启用行为：按 XML 的静态属性实现，不据注释代码或 ViewModel 重建动态效果
 
-ID：`lesson-cd87ec49e06af8e6459a` · 版本：1
+ID：`lesson-cd87ec49e06af8e6459a` · 版本：2
 
 [本主题](index.md)
 
 ## 何时使用
 
-界面实现阶段，转换 item 布局中的自定义绘制 View（曲线、进度、图表）并决定其数据绑定时
+界面实现阶段，转换 item 布局中的自定义绘制 View（曲线、进度、图表）、且源 Adapter 对它的数据绑定被注释掉时，决定其数据绑定时
 
 ## 适用情境
 
 源 Adapter 对自定义 View 的数据绑定整段被注释，只剩 XML 中的静态属性（颜色、点色、尺寸）；ViewModel 仍计算着可能用于绑定的值（如 maxTop/minTop）；决策账本规定注释和死代码不迁移。
+
+## 例外与边界
+
+- 只在 Adapter 里被注释不等于整个 View 没有数据：同一 View 在 ViewHolder 其他方法、Fragment 或 View 自身初始化里仍有未注释的设置的，那部分照常迁移；静态外观按该 View 在没收到数据时 onDraw 实际画出的样子（各字段的初始值）实现，不只看 XML 属性名猜
 
 ## 原因
 

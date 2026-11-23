@@ -1,6 +1,6 @@
 # LinearLayout 以 gravity=center 摆放的 wrap_content 子项组转成 Row 时保留居中与按内容定宽，不给中间输入框 layoutWeight(1) 拉满
 
-ID：`lesson-02b2fcd7d157d97f95c8` · 版本：1
+ID：`lesson-02b2fcd7d157d97f95c8` · 版本：2
 
 [本主题](index.md)
 
@@ -11,6 +11,10 @@ ID：`lesson-02b2fcd7d157d97f95c8` · 版本：1
 ## 适用情境
 
 源端 LinearLayout 设 gravity=center 与固定外边距，子项是 wrap_content 的按钮与 EditText；控件可能叠在带装饰的背景图（票券存根、竖虚线）上。
+
+## 例外与边界
+
+- 只针对源端子项都是 wrap_content 的情形；源端中间项本来就是 layout_width=0dp 加 layout_weight，或 match_parent 撑满时，目标给它 layoutWeight(1) 是对的，保留，不改成按内容定宽。
 
 ## 原因
 

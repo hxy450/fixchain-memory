@@ -1,12 +1,12 @@
 # 整体着色的气泡用 bindPopup 的 popupColor，而不是只给内容加背景
 
-ID：`lesson-05dc4eb9548bf3fef6ae` · 版本：2
+ID：`lesson-05dc4eb9548bf3fef6ae` · 版本：3
 
 [本主题](index.md)
 
 ## 何时使用
 
-界面实现阶段，把 Balloon、Tooltip 等带箭头的气泡迁移为 bindPopup 自定义 builder 时
+界面实现阶段，把 Balloon、Tooltip 等带箭头、源端背景色作用于整个气泡（含箭头）的气泡迁移为 bindPopup 自定义 builder 时
 
 ## 适用情境
 

@@ -41,8 +41,9 @@
   - 情境：源端通过 DialogFragment、XPopup CenterPopupView/AttachPopupView 等在当前 Activity 上弹出提示、升级、菜单或锚点气泡，点击遮罩或返回即关闭（这条只管源端以独立窗口弹出的这几类；源端本身就是 Activity 布局里按 visibility 显隐的 View，如页内遮罩、加载层、展开面板，目标用条件渲染叠层承载是对的，保持原样）；目标工程里已有以 @Local visible/visibility 或 if 条件渲染的 Stack + 遮罩叠层，或派工只写“接到现有弹窗”“恢复可关闭的页面内弹层”。也包括源弹窗继承 BottomPopupView 一类底部弹窗基类，计划或决策已写明映射到 showBindSheet/系统半模态，而现有实现是 NavDestination 路由页或由 @Param 可见性驱动、内嵌在宿主页的全屏 Stack（自绘遮罩、PanGesture 下拉关闭、返回信号参数）。 也包括 BottomSheetDialogFragment 被写成标准模式的 NavDestination 路由页，在页内自绘蒙层与底板，调用方随之 pushPathByName。也包括源端 BottomSheetDialogFragment 的宿主页在目标中嵌在壳内容区（标题栏、底部导航由外层提供），写者为回避同节点第二个 bindSheet 改用页内浮层。也包括 AlertDialog.Builder 构造、默认可取消的对话框，为满足“每个组件 @ComponentV2 导出”被写成自带蒙层的共享页内浮层，注释称覆盖返回键而实现只接蒙层点击。
   - 例外：项目决策明确采用页内浮层，且浮层已实现遮罩点击、返回键与页面离开关闭并只回调一次；源端关掉了某种关闭方式的（setCancelable(false)、setCanceledOnTouchOutside(false)，或弹窗库里关掉点外、返回关闭的开关），目标照样关掉对应方式（autoCancel: false，或在 onWillDismiss 里按 reason 只放行源端允许的那种），不统一打开遮罩与返回关闭；换成系统弹窗或半模态时只换承载：弹层内容、按钮的个数与文案、各按钮的回调、点选后关不关（如源端点排序项只原地刷新、不 dismiss）都照源端，不借换形态增减按钮或改关闭时机
 - [源端在当前页 show 的底部弹窗保持叠在宿主页上：“路由统一用某框架”只约束页面跳转，不把弹窗改成路由页](lesson-7ef02de8bbc10734c3d2.lesson.md)
-  - 时机：规格提取阶段把 Android Dialog/BottomSheet 的呈现方式映射到 ArkUI 承载方式时；界面实现阶段落实弹窗内的二级日历或选择弹层时
+  - 时机：规格提取阶段把在当前 Activity 上 show、不入返回栈的 Android Dialog/BottomSheet 的呈现方式映射到 ArkUI 承载方式时；界面实现阶段落实弹窗内的二级日历或选择弹层时
   - 情境：Android 入口经 bottomDialog/Dialog 在当前 Activity 上 show 全宽底部面板（遮罩下仍见宿主页、点背景关闭、不入返回栈），面板内再弹同类底部选择器；目标工程有“路由统一使用 HMRouter/Navigation”的约束，且已有同名路由页可复用。
+  - 例外：目标用 Navigation 承载、把这个路由页设为 NavDestinationMode.DIALOG 时，页面默认透明，入栈出栈不影响下层页面的生命周期，下层宿主页保持可见，满足第 2 步的“宿主页可见”，不必为此改回同页叠层；遮罩与点背景关闭仍按第 2 步逐项确认
 - [源端应用内分享面板按交互形态复用目标的应用内分享弹层，并逐渠道映射（含发动态等 App 内渠道）；不以系统分享面板整体替代](lesson-b366cf7ae68525577f57.lesson.md)
   - 时机：规格提取、能力核对与功能实现阶段，为源端分享入口选定目标工程已有的分享能力，并把面板的各渠道接到目标入口时；按用户要求更换分享面板时
   - 情境：Android 源端用应用内分享面板（如 ShareUtil.shareImage 加 ShareItem 渠道列表，按 platformName 分发到 QQ 空间、动态、蓝牙等），其中可能有把截图带进 App 内发布页的渠道；目标工程同时有 systemShare 封装（ShareTool、ShareController）和应用内“分享至”Sheet 组件及微信、QQ 图片发送工具；需求要求复用现有能力，规格的依赖接缝可能已写明各渠道与承接页参数，验收条目却只写“分享截图”。
@@ -57,6 +58,7 @@
 - [源端每次调用都新建的对话框，目标按调用创建独立弹窗实例并只关闭自身，不收敛为单例句柄](lesson-4d577c6a9451bd996e78.lesson.md)
   - 时机：服务层或页面实现阶段，把源端封装的“请求输入/确认”类对话框方法（每次调用 new Builder()…show()）翻译成目标弹窗时
   - 情境：源端帮助方法每次调用都新建一个对话框并在其回调里交付结果；目标准备在服务单例里保存一个 ComponentContent 或弹窗控制器字段，新调用前先关闭旧弹窗再打开。
+  - 例外：源端在弹出前自己查重、已有同一个框在显示就不再弹（如先判 Dialog.isShowing，或按 tag 用 findFragmentByTag 找到已有的 DialogFragment 就返回）时，目标保留这一“不重复弹出”的判断；这条经验只管源端每次调用都会新弹一个框的情形
 - [用页内覆层承载 Activity 级 Dialog 时挂在覆盖整窗的宿主根，按钮行先按源取值定高再让分隔线撑满（平台 AlertDialog 的按钮条取平台样式或实测，不默认 48vp）](lesson-0a26e0cfc44a183d3a02.lesson.md)
   - 时机：界面实现阶段，按项目已采用的页内覆层写法（条件渲染的全幅遮罩 + 卡片）改写 Android Dialog，确定覆层挂载层级与卡片、按钮行的高度约束时
   - 情境：源弹窗由 Activity 创建（如 Fragment 中 new XxxDialog(getActivity(), ...)），样式继承 Theme.Dialog、windowIsFloating=true，布局是固定宽、wrap_content 高的卡片，按钮行内有 layout_height=match_parent 的竖分隔 View；触发按钮位于 Tabs 子页或嵌套组件内。 也包括按钮由 AlertDialog.Builder 的 setPositive/Negative/NeutralButton 生成、源布局里没有按钮行，按钮条外观来自主题的平台对话框样式。
@@ -67,6 +69,7 @@
 - [页内对话框的可见性状态逐一落实打开触发点：卡片整体点击与卡内关闭按钮分开实现，留给后续任务的触发点要登记](lesson-f0d5a447e645bc253019.lesson.md)
   - 时机：界面转换与页内接线阶段，把源页面中可点击的卡片、按钮及其打开的页内对话框转换为 ArkUI 触发器与可见性状态时
   - 情境：源端 Compose Card 以 Modifier.clickable 打开对话框，卡内另有关闭或忽略按钮；目标以 @Local 可见性标志加 @Builder 覆盖层实现页内对话框，部分处理器以前向占位留给后续切片；页面规格的导航关系表列出“触发 → 对话框”。
+  - 例外：卡片根容器与卡内关闭/忽略按钮都写 onClick 时，平台已按“子组件优先”处理：点卡内按钮只触发按钮自己的点击，不会连带触发卡片打开，不需要为此另加阻止冒泡或改触摸测试设置；只有父容器改用 priorityGesture 等方式抢先识别点击时才要另行处理
 - [页内遮罩承载源端对话框时，显示期间把背景内容移出无障碍树：accessibilityLevel('no-hide-descendants')](lesson-96eea0feeae116ef9262.lesson.md)
   - 时机：界面实现阶段，为源端独立窗口对话框选择承载方式，或按项目已有写法用页内 Stack 遮罩加卡片实现对话框时
   - 情境：源端对话框是独立窗口（Compose Dialog/AlertDialog、Android Dialog），读屏焦点限制在对话框内；目标以可见性状态在页面根 Stack 中条件渲染遮罩与卡片，背景页面仍在同一组件树；规格或共享弹窗组件头注可能已指定 openCustomDialog、@CustomDialog 等系统通道，兄弟页已有同款页内遮罩可参照。

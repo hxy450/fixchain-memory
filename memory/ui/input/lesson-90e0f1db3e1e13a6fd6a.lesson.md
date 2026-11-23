@@ -1,16 +1,21 @@
 # Android 平台公开正则常量按定义逐段移植并保持全串匹配语义
 
-ID：`lesson-90e0f1db3e1e13a6fd6a` · 版本：2
+ID：`lesson-90e0f1db3e1e13a6fd6a` · 版本：3
 
 [本主题](index.md)
 
 ## 何时使用
 
-界面实现阶段，移植 Patterns.WEB_URL、Patterns.EMAIL_ADDRESS 等平台正则对用户输入的校验时
+界面实现阶段，移植 Patterns.WEB_URL、Patterns.EMAIL_ADDRESS 等平台正则对用户输入的全串校验（String.matches 或 matcher().matches()）时
 
 ## 适用情境
 
 源以 String.matches(Patterns.X.pattern()) 做全串校验，目标没有同名 API，需要自行提供正则。
+
+## 例外与边界
+
+- 源端用 matcher(text).find() 或 Linkify 一类在文本里查找链接的，是子串查找语义，移植同一正则时不要加首尾锚定
+- 不加源端没有的输入规范化：源端校验和后续传递的都是原始文本（未 trim、未改大小写）时，目标也校验并传递原始文本
 
 ## 原因
 

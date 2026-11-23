@@ -1,6 +1,6 @@
 # TableLayout 列宽取各列单行自然宽的最大值（含零高 fake header），stretchColumns 只均分余量：不写等分、fr 比例或权重
 
-ID：`lesson-6cb9ad45093ce2ca28af` · 版本：2
+ID：`lesson-6cb9ad45093ce2ca28af` · 版本：3
 
 [本主题](index.md)
 
@@ -12,9 +12,13 @@ ID：`lesson-6cb9ad45093ce2ca28af` · 版本：2
 
 源页面在 ScrollView 外放一行固定表头 TableRow，表体 TableLayout 首行是 height=0、文案与 paddingRight 同表头的 fake header 行（注释说明用于对齐外部表头列宽）；单元格是默认 wrap_content 的 TextView 逐行 addView，没有设定列宽；合成 view.xml 会丢掉 padding 与 height；规格可能写“fake header 删除（Grid 定宽列天然对齐）”并自拟 columnsTemplate 或权重。 也包括 TableLayout 设 stretchColumns/shrinkColumns（如 "*"），单元格带左右内边距，容易被理解为各列等分并写成 layoutWeight(1) 或 50%。
 
+## 例外与边界
+
+- measureText 量出的文字宽是 px，onAreaChange 给的宽是 vp：两种来源混用求最大值、或写进 width 之前，先把 px 换算成 vp（如 UIContext 的 px2vp，API 22 起提供），否则列宽在高密度屏上成倍放大。
+
 ## 原因
 
-TableLayout 的列宽由该列所有行（含零高的 fake header）的自然宽决定，fake header 让表体列宽不小于外部表头，两者因此对齐；改成固定比例或权重，列宽与内容脱钩，长内容折行或留出大片空白，表头与表体也不再对齐。合成 view.xml 会丢掉 padding 与零高行，只读它写成的比例列规格，又会被读到原始 XML 的实现者当作“规格权威决策”沿用。 stretchColumns/shrinkColumns 也不是等分：TableLayout 先按各列最大自然宽排布，总宽不足时把余量按可拉伸列数平分加到各列，超出时按可收缩列数平分扣减（本机 SDK android-36.1 源码 TableLayout.shrinkAndStretchColumns、mutateColumnsWidth）；写成等权重会抹掉自然宽不同的列之间的宽度差。
+TableLayout 的列宽由该列所有行（含零高的 fake header）的自然宽决定，fake header 让表体列宽不小于外部表头，两者因此对齐；改成固定比例或权重，列宽与内容脱钩，长内容折行或留出大片空白，表头与表体也不再对齐。合成 view.xml 会丢掉 padding 与零高行，只读它写成的比例列规格，又会被读到原始 XML 的实现者当作“规格权威决策”沿用。 stretchColumns/shrinkColumns 也不是等分：TableLayout 先按各列最大自然宽排布，总宽不足时把余量按可拉伸列数平分加到各列，超出时按可收缩列数平分扣减（Android 源码 TableLayout.shrinkAndStretchColumns、mutateColumnsWidth）；写成等权重会抹掉自然宽不同的列之间的宽度差。
 
 ## 做法
 

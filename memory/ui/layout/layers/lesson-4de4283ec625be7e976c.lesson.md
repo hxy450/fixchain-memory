@@ -1,6 +1,6 @@
 # 为已转换页面接线时保留“全屏底层 + 按状态切换的前景层”骨架；地图 SDK 不可用也不把全屏承载改成自绘小卡
 
-ID：`lesson-4de4283ec625be7e976c` · 版本：2
+ID：`lesson-4de4283ec625be7e976c` · 版本：3
 
 [本主题](index.md)
 
@@ -11,6 +11,11 @@ ID：`lesson-4de4283ec625be7e976c` · 版本：2
 ## 适用情境
 
 Android 页面以全屏 MapView/导航视图为底层，前景由 ViewModel 布尔状态（如 showRoute）切换两套覆盖层；导航页 FEATURE_NO_TITLE、只承载导航视图；目标地图/导航 SDK 暂不可用，页面转换阶段已写出带全屏占位底图与两态覆盖层的骨架。
+
+## 例外与边界
+
+- 保留骨架的前提是转换阶段的骨架与源布局的层级一致；骨架本身和源布局对不上时，按源布局改，不以“保留原骨架”为由留下偏差。
+- 目标页是 NavDestination 时，不设 hideTitleBar 就会显示系统标题栏；源端 FEATURE_NO_TITLE 的页要显式写 hideTitleBar(true)，只删掉自绘的标题栏不够。
 
 ## 原因
 

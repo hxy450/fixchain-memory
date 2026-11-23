@@ -1,6 +1,6 @@
 # 源端在触发瞬间读取锚点窗口位置时，目标在点击回调里取本次手势坐标或即时查询，onAreaChange 缓存只作兜底；锚点取源端传入的同一元素
 
-ID：`lesson-963bf871aa4e910a8fc8` · 版本：3
+ID：`lesson-963bf871aa4e910a8fc8` · 版本：4
 
 [本主题](index.md)
 
@@ -11,6 +11,10 @@ ID：`lesson-963bf871aa4e910a8fc8` · 版本：3
 ## 适用情境
 
 源端在动效或弹窗被调用时用 getLocationInWindow 读取传入锚点 View 的当下窗口中心；目标列表项存在 translate 平移、LazyForEach/Repeat 节点复用或弹层内滚动，写者准备用 onAreaChange 缓存控件位置。
+
+## 例外与边界
+
+- 触发写在 onClick 上时，回调参数 ClickEvent 自带本次点击相对应用窗口左上角的 windowX、windowY，取它就是本次手势坐标，不必为了拿 fingerList 改成 TapGesture；代码里已经在点击回调中取事件坐标的写法保留。
 
 ## 原因
 

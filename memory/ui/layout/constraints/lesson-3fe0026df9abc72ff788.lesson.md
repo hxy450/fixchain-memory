@@ -1,6 +1,6 @@
 # ConstraintLayout 改写成 Column 顺序流前先列出各子项锚点：锚父底、锚兄弟与双 0dp 比例子项都要保留语义
 
-ID：`lesson-3fe0026df9abc72ff788` · 版本：2
+ID：`lesson-3fe0026df9abc72ff788` · 版本：3
 
 [本主题](index.md)
 
@@ -11,6 +11,10 @@ ID：`lesson-3fe0026df9abc72ff788` · 版本：2
 ## 适用情境
 
 源 ConstraintLayout 中有多个子项 constraintBottom_toBottomOf=parent（含 invisible 仍占位的行）、按钮上方的文字以 constraintBottom_toTopOf 锚在兄弟上、0dp×0dp 加 dimensionRatio 的子项夹在上下锚点之间；目标用 Column 顺序流、layoutWeight、Visibility.Hidden 或父 Stack 的 BottomStart。
+
+## 例外与边界
+
+- 第 2 步的常数底距只适用于兄弟行高度固定的情形；兄弟是 wrap_content、高度随文字、padding 或角标变化时，改用 RelativeContainer，以兄弟的 id 作锚（底边锚到兄弟顶边），margin 照源端写，不把当下量到的高度写成常数。
 
 ## 原因
 

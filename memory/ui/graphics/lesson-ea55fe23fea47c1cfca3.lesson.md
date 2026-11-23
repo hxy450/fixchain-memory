@@ -1,6 +1,6 @@
 # 源布局有按状态切换的 Lottie 动画层时接入 @ohos/lottie 并迁移动画 JSON，不以静态兜底图静默替代
 
-ID：`lesson-ea55fe23fea47c1cfca3` · 版本：1
+ID：`lesson-ea55fe23fea47c1cfca3` · 版本：2
 
 [本主题](index.md)
 
@@ -11,6 +11,11 @@ ID：`lesson-ea55fe23fea47c1cfca3` · 版本：1
 ## 适用情境
 
 Android 页面在静态背景 ImageView 之上叠加 LottieAnimationView，代码按天气、昼夜等状态选择 assets/json 中的动画文件；目标工程尚无 lottie 依赖，静态兜底图已迁移。
+
+## 例外与边界
+
+- 接入动画时保留源端的播放方式和来源：布局里的 lottie_autoPlay、lottie_loop（以及代码里对播放、循环次数的设置）决定是否自动播放、是否循环，不要一律改成自动循环；动画文件按源端 lottie_fileName、lottie_rawRes、lottie_url 或 setAnimation 实际指向的那一份迁移
+- 已迁移的静态背景图保留在动画层下面作为兜底，不因接入动画而删掉
 
 ## 原因
 

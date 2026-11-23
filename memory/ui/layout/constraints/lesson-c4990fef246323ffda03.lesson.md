@@ -1,16 +1,20 @@
 # 摘要行、价格行一类 Row 组：自定义组件不靠 Flex 基线对齐，内距逐行复制，靠右标签补文本对齐
 
-ID：`lesson-c4990fef246323ffda03` · 版本：1
+ID：`lesson-c4990fef246323ffda03` · 版本：2
 
 [本主题](index.md)
 
 ## 何时使用
 
-页面转换阶段，翻译摘要行、价格行等由若干 Row 组成的列表块时
+页面转换阶段，翻译源端为 Compose 的摘要行、价格行等由若干 Row 组成的列表块时
 
 ## 适用情境
 
 源 Row 用 alignBy(LastBaseline) 对齐文本与自定义组件（如数量选择器）；各子 Row 各自 padding(horizontal)，分隔线在行外全宽；标签用 weight(1) + wrapContentWidth(End) 靠右。
+
+## 例外与边界
+
+- 第 1 步只管基线对齐的一端是自定义组件的情形；两端都是 Text 时，Flex 加 ItemAlign.Baseline 能按文本基线对齐，原有这样的写法保留，不改成居中近似。
 
 ## 原因
 

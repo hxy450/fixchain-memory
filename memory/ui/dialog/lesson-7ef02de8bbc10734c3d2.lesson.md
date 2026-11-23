@@ -1,16 +1,20 @@
 # 源端在当前页 show 的底部弹窗保持叠在宿主页上：“路由统一用某框架”只约束页面跳转，不把弹窗改成路由页
 
-ID：`lesson-7ef02de8bbc10734c3d2` · 版本：1
+ID：`lesson-7ef02de8bbc10734c3d2` · 版本：2
 
 [本主题](index.md)
 
 ## 何时使用
 
-规格提取阶段把 Android Dialog/BottomSheet 的呈现方式映射到 ArkUI 承载方式时；界面实现阶段落实弹窗内的二级日历或选择弹层时
+规格提取阶段把在当前 Activity 上 show、不入返回栈的 Android Dialog/BottomSheet 的呈现方式映射到 ArkUI 承载方式时；界面实现阶段落实弹窗内的二级日历或选择弹层时
 
 ## 适用情境
 
 Android 入口经 bottomDialog/Dialog 在当前 Activity 上 show 全宽底部面板（遮罩下仍见宿主页、点背景关闭、不入返回栈），面板内再弹同类底部选择器；目标工程有“路由统一使用 HMRouter/Navigation”的约束，且已有同名路由页可复用。
+
+## 例外与边界
+
+- 目标用 Navigation 承载、把这个路由页设为 NavDestinationMode.DIALOG 时，页面默认透明，入栈出栈不影响下层页面的生命周期，下层宿主页保持可见，满足第 2 步的“宿主页可见”，不必为此改回同页叠层；遮罩与点背景关闭仍按第 2 步逐项确认
 
 ## 原因
 

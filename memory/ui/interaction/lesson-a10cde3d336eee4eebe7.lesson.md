@@ -1,6 +1,6 @@
 # 根级键盘快捷键不假定聚焦的输入框会吞掉全部按键事件
 
-ID：`lesson-a10cde3d336eee4eebe7` · 版本：1
+ID：`lesson-a10cde3d336eee4eebe7` · 版本：2
 
 [本主题](index.md)
 
@@ -11,6 +11,10 @@ ID：`lesson-a10cde3d336eee4eebe7` · 版本：1
 ## 适用情境
 
 源 onKeyUp 在当前焦点为 EditText 时放行；目标在入口页根组件 onKeyEvent 统一处理按键。
+
+## 例外与边界
+
+- 这里的漏洞出在按抬起事件触发：快捷键是字符键、目标根上只按按下（KeyType.Down）触发时，聚焦的 TextInput 已消费了按下，根收不到，不需要再加按下配对的判据；根上按抬起触发的写法才要补。
 
 ## 原因
 

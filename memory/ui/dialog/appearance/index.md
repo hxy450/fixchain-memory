@@ -14,11 +14,13 @@
   - 情境：源码用 AlertDialog.Builder 内联构造确认框，只设 title、message、setPositiveButton、setNegativeButton，无自定义布局或样式，外观由应用主题继承的平台默认警告框决定（指框架 android.app.AlertDialog 的 Builder；源端用 androidx.appcompat.app.AlertDialog 时布局是 AppCompat 库的 abc_alert_dialog_material，用 MaterialAlertDialogBuilder 时是 Material 库的对话框样式（Material3 主题下为 m3_alert_dialog），这两类的契约从对应库的 res 取，不套第 1 步的框架资源值）；目标准备用 ArkUI AlertDialog.show(primaryButton/secondaryButton) 等系统弹窗替代，项目要求与源端逐屏一致。 也包括应用主题为 Theme.Holo 等框架主题，多个对话框都由 Builder 或 DialogPreference 构造、没有自定义样式；规格只按经验摘要写了“标题左对齐、负左正右、遮罩、cancelable”几项，各页写者凭记忆或兄弟页先例自绘面板。 也包括 targetSdk≤20 或 values-v11/v14 中应用主题继承 Theme.Holo/Theme 的旧应用：Builder 未调用 setCancelable、setCanceledOnTouchOutside，源端可能同时叠放两个以上对话框；目标用页内遮罩加自绘面板复刻，同时要防止点击穿透到下层画面。
   - 例外：项目明确接受目标系统弹窗的固有外观、只要求文案与按键行为一致；此时仍按角色核对按钮槽位
 - [对话框几何由三方库或 Dialog 主题决定时，自绘窗口宽度按提供方公式计算并随窗口重算，不写容器 100%](lesson-dcd9ca5a3ac384a1b6b7.lesson.md)
-  - 时机：规格提取与界面实现阶段，为三方库对话框封装（如 material-dialogs）、MaterialAlertDialog 或 Dialog 主题 Activity 改成的卡片页确定窗口宽度，以及遮罩、点外关闭、底色与圆角等窗口属性时
+  - 时机：规格提取与界面实现阶段，为三方库对话框封装（如 material-dialogs）、MaterialAlertDialog 或 Dialog 主题 Activity 改成的卡片页确定窗口宽度，以及遮罩、点外关闭、底色与圆角等窗口属性，且源码只给出库或主题、没有窗口宽度数值时
   - 情境：源码只出现库的 Builder、库名或 manifest 的 Theme.*.Dialog 主题，源码树里没有宽度等数值；目标用 openCustomDialog 自绘，或把 Dialog 主题 Activity 做成 NavDestination 卡片页，需要显式给出卡片宽度；同族页面或共享弹窗组件可能已按 width('100%')、固定比例或工程里现成的半透明颜色资源写成先例。
+  - 例外：源码在对话框显示后自己设了窗口宽度（Window.setLayout，或改 window 的 LayoutParams.width，如设为 MATCH_PARENT 或具体像素值）时，以代码设的宽度为准，不再套第 1 步的库或主题公式；设成 MATCH_PARENT 的，目标写整窗宽是对的
 - [整体着色的气泡用 bindPopup 的 popupColor，而不是只给内容加背景](lesson-05dc4eb9548bf3fef6ae.lesson.md)
-  - 时机：界面实现阶段，把 Balloon、Tooltip 等带箭头的气泡迁移为 bindPopup 自定义 builder 时
+  - 时机：界面实现阶段，把 Balloon、Tooltip 等带箭头、源端背景色作用于整个气泡（含箭头）的气泡迁移为 bindPopup 自定义 builder 时
   - 情境：源 setBackgroundColor 作用于整个气泡（含箭头），目标的箭头与外框由 popup 容器绘制。
 - [非全屏窗口用 openCustomDialog 承载源对话框窗口时，遮罩压不到系统绘制的状态栏、卡片按整窗居中：弹窗期间按 dim 切状态栏底色，按避让差下移卡片](lesson-4f60c8233a03d4676c92.lesson.md)
-  - 时机：界面实现阶段，用 openCustomDialog（或其他系统弹窗）承载 Android 对话框、确定遮罩与显示位置参数时，包括共享弹窗工具与各页宿主的打开处
-  - 情境：源主题由应用窗口绘制状态栏底色（Theme.Material 及以后 windowDrawsSystemBarBackgrounds=true、statusBarColor 不透明），对话框窗口 dim（主题 backgroundDimAmount，Material 为 0.6）覆盖整块屏幕，窗口在状态栏与导航栏之间居中；目标窗口保持非全屏，状态栏由系统按 statusBarColor 绘制，对话框用 openCustomDialog 加 maskColor 与 DialogAlignment.Center 打开。
+  - 时机：界面实现阶段，目标窗口保持非全屏、用 openCustomDialog（或其他系统弹窗）承载 Android 对话框、确定遮罩与显示位置参数时，包括共享弹窗工具与各页宿主的打开处
+  - 情境：源主题由应用窗口绘制状态栏底色（Theme.Material 及以后 windowDrawsSystemBarBackgrounds=true、statusBarColor 不透明；且源应用 targetSdk 低于 35，35 及以上时主题里的 statusBarColor 被忽略，状态栏底色要另看源端怎么画），对话框窗口 dim（主题 backgroundDimAmount，Material 为 0.6）覆盖整块屏幕，窗口在状态栏与导航栏之间居中；目标窗口保持非全屏，状态栏由系统按 statusBarColor 绘制，对话框用 openCustomDialog 加 maskColor 与 DialogAlignment.Center 打开。
+  - 例外：源对话框窗口不压暗（主题里 backgroundDimEnabled 为 false，或代码清掉了 FLAG_DIM_BEHIND）时，不切状态栏底色；源端改了对话框窗口的 gravity（不再居中，如贴底）时，第 2 步按系统栏之间居中算的偏移不适用

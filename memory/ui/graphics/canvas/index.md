@@ -35,6 +35,7 @@
 - [源端绘制函数从 Paint 读回字号或对齐时，目标在组件内自记字体与对齐，不读回 ctx.font、ctx.textAlign](lesson-8b1a03e44c59e371ff57.lesson.md)
   - 时机：渲染实现阶段，把依赖 Paint getter（getTextSize、getTextAlign 等）读回状态的绘制辅助函数（如带底衬的文字绘制）移植到 ArkUI Canvas 时；规格提取阶段写 Paint→Canvas 映射行时
   - 情境：源端多个绘制调用共用一个 Paint：调用方先 setTextSize/setTextAlign/setTypeface，被调的辅助函数再用 getter 读回当前字号与对齐，计算底衬框、内边距或文字偏移；目标把 Paint 设置译成 ctx.font、ctx.textAlign 赋值，规格映射只写“Paint 属性映射 Canvas 等价属性”。
+  - 例外：包装后仍要照常给 ctx.font、ctx.textAlign 赋值（绘制效果靠它生效），自记字段只是多存一份可读的副本，不要用自记字段代替赋值；辅助函数还读回 textBaseline、fillStyle、strokeStyle、lineWidth、globalAlpha 等其他上下文属性的，同样只写不读、一并自记
 - [移植 Paint 文字度量前先按源 API 分层：getTextBounds/Rect 包围盒直接对应 actualBoundingBox*（各自 Math.ceil）；Paint.ascent/descent 字体级基线修正才实测选与 hhea 吻合的 TextMetrics 字段，不凭字段名或先例推定；源式取整原样保留](lesson-f876887b216b6caf9f39.lesson.md)
   - 时机：渲染实现阶段，把源端 Canvas 文字居中或基线修正（如 (int)((descent+ascent)/2)）移植为 measureText 的 TextMetrics 计算，或决定能否关闭“需实测校正”的字段映射标记时；规格提取阶段写文字基线映射时；把 Paint.getTextBounds 取得的文字高度映射为行高或间距时
   - 情境：源端以 Paint.ascent()/descent()（字体级上/下伸，ascent 为负）计算基线偏移，供数字、标题、说明等文字使用；目标用 CanvasRenderingContext2D.measureText 返回的 fontBoundingBox*、emHeight*、actualBoundingBox* 取等价度量，并注册了自定义字体。 也包括源端用 Paint.getTextBounds(text, start, end, Rect) 取一段具体字符的墨迹包围盒高度来定行高或间距（如 HUD 标签与数值的行距、自适应字号循环）。

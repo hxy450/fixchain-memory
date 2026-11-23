@@ -1,6 +1,6 @@
 # 自定义 View 上的 android:* 属性只有被该类读取才生效：控件初值取运行时生效值
 
-ID：`lesson-a6edef3bb44e01a82b72` · 版本：1
+ID：`lesson-a6edef3bb44e01a82b72` · 版本：2
 
 [本主题](index.md)
 
@@ -11,6 +11,10 @@ ID：`lesson-a6edef3bb44e01a82b72` · 版本：1
 ## 适用情境
 
 源布局在继承 View 的自定义控件（非 CheckBox/CompoundButton）上声明 android:checked 等框架属性，该类构造只读取自己的 styleable 属性；目标用状态变量表示勾选或开关的首显状态。
+
+## 例外与边界
+
+- 由 View 自己的构造读取的通用属性（android:background、padding、alpha、focusable、visibility 等）在任何继承 View 的自定义控件上都生效，layout_* 由父布局读取也生效，照常迁移；要逐个核是否被读取的，是定义在某个子类 styleable 里的属性（如 checked、enabled 这类由 CompoundButton、TextView 等读取的属性）
 
 ## 原因
 

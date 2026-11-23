@@ -39,9 +39,11 @@
 - [根级键盘快捷键不假定聚焦的输入框会吞掉全部按键事件](lesson-a10cde3d336eee4eebe7.lesson.md)
   - 时机：实现根级硬件键盘快捷键（媒体控制、导航），并要求输入框聚焦时放行时
   - 情境：源 onKeyUp 在当前焦点为 EditText 时放行；目标在入口页根组件 onKeyEvent 统一处理按键。
+  - 例外：这里的漏洞出在按抬起事件触发：快捷键是字符键、目标根上只按按下（KeyType.Down）触发时，聚焦的 TextInput 已消费了按下，根收不到，不需要再加按下配对的判据；根上按抬起触发的写法才要补。
 - [源端 clickable 吞触摸或组件实例带通用属性时显式写 hitTestBehavior：空 onClick 不阻断，实例外有缺省命中的包装节点](lesson-6aeb4924b6d6ee3d15f6.lesson.md)
   - 时机：界面实现阶段，把 Android 的 clickable、不可点击 View 与 FrameLayout 层序翻成 ArkUI 叠放层（撤销条、浮动按钮组、提示条、窗口级图层），决定触摸由谁消费、是否透传时
   - 情境：源端条体或按钮 clickable=true 吞掉触摸、不下穿到下层列表，或不可点击的提示条覆盖工具栏而不拦截；目标在 Stack 中叠放自定义组件，宿主层可能已设 Transparent，组件实例上写了 margin、padding、position 等通用属性，或用 OverlayManager 挂 ComponentContent；写者准备用空 .onClick 表示“吞触摸”，或依赖组件缺省命中模式。
+  - 例外：源端触摸归属随状态变的叠放层（例如抽屉打开时拦截、关闭时让下层可点），按各状态分别写命中模式并随状态切换；代码里已有按状态切换的 hitTestBehavior 保留，不统一改成某个固定值。
 - [源端 onTouch 自己按未掩码 getAction 只跟随首指时，先看手指由谁接收再过滤 ArkUI 逐指派发：Up 事件的 touches 仍含正在抬起的手指（末指抬起为 touches.length === 1）；单个视图独占全部手指才按 touches 计数，兄弟控件各自监听时按 pointer id 集合；源端交给 GestureDetector/ScaleGestureDetector 时按本机 SDK 源码逐段移植该检测器](lesson-68023ac5f088c72a775a.lesson.md)
   - 时机：输入控制的规格提取与实现阶段，把 Android onTouch 的 MotionEvent 动作分支和坐标读取映射为 ArkUI onTouch 的 TouchType 分支与触点来源时
   - 情境：源端 OnTouchListener 用未掩码的 event.getAction() 只匹配 ACTION_DOWN/MOVE/UP，以无索引的 getX()/getY()（指针索引 0）读坐标，附加手指的 POINTER_DOWN/UP 不进入任何分支；目标 ArkUI .onTouch 对每根手指都派发 TouchType.Down/Up，TouchEvent 同时提供 touches（含本次抬起手指在内的全部触点）与 changedTouches（本次变化的触点）。也包括源端多个兄弟控件（方向键、旋转键等）各自 setOnTouchListener，未设 splitMotionEvents=false（ViewGroup 构造时默认开启分指），窗口默认分指，每个控件只收落在自己身上的指针流；目标每个按钮各挂 .onTouch，而 TouchEvent.touches 列出屏幕上全部手指。也包括源端 onTouch 只 return gestureDetector.onTouchEvent(event)，方向写在 SimpleOnGestureListener.onFling/onScroll 中。
@@ -53,9 +55,11 @@
 - [源端在触发瞬间读取锚点窗口位置时，目标在点击回调里取本次手势坐标或即时查询，onAreaChange 缓存只作兜底；锚点取源端传入的同一元素](lesson-963bf871aa4e910a8fc8.lesson.md)
   - 时机：界面实现与修复阶段，为从点击处发出的动效或气泡（完成彩纸、锚点提示）确定起点坐标与锚点元素时
   - 情境：源端在动效或弹窗被调用时用 getLocationInWindow 读取传入锚点 View 的当下窗口中心；目标列表项存在 translate 平移、LazyForEach/Repeat 节点复用或弹层内滚动，写者准备用 onAreaChange 缓存控件位置。
+  - 例外：触发写在 onClick 上时，回调参数 ClickEvent 自带本次点击相对应用窗口左上角的 windowX、windowY，取它就是本次手势坐标，不必为了拿 fingerList 改成 TapGesture；代码里已经在点击回调中取事件坐标的写法保留。
 - [源端用键盘或遥控逐行逐项导航弹层与面板时，行/项选择与展开态放进可观察模型由按键处理层驱动，不存在组件 @Local](lesson-583f996e5a7bad4f5735.lesson.md)
   - 时机：规格提取与菜单、弹层、参数面板实现阶段，迁移源端遥控或键盘导航模式（方向键在行间移动、确认键选中、行与项高亮）并确定选择态归属时
   - 情境：源端以遥控模式一类状态在按键回调里调用 processRemoteUp/Down、commandMenu* 与 init*ForRemote 等方法，逐行、逐项高亮弹层与曝光面板并跳过不可见行；BLE 遥控与键盘共用这套导航。目标弹层把当前行索引、展开态写在组件 @Local 或不可观察的普通类里，按键分发与面板分属不同文件或 feature。
+  - 例外：模型放对了还要有按键入口：按键事件只投给获焦组件，目标页面要有可获焦的组件（默认不可获焦的容器设 focusable，并设 defaultFocus）挂 onKeyEvent 或 onKeyPreIme 交给按键处理层；处理层只把自己处理了的键标为已消费（返回 true），没处理的键返回 false，留给冒泡、输入法和框架默认的方向键走焦，不要一律吞掉。
 - [源端监听回调体被注释时按无响应控件迁移；审计不因“已裁定/集成点”注释放行与源端运行态相背的接线](lesson-f3e614f295aa409485fd.lesson.md)
   - 时机：1:1 对齐审计与修复阶段，判定目标端交互接线是否与安卓运行态一致，或重写组件时决定是否保留随行的 onClick 时
   - 情境：安卓控件注册了 setOnClickListener，但回调体被整段注释（如选图调用被注释），XML 也可能写着 clickable；目标端按规格集成点把它接成可用功能，代码注释自述源码为死码并写着“裁定/集成点”；项目要求 1:1 忠实复刻（含源码缺陷）。
@@ -67,7 +71,7 @@
 - [源端自写触摸状态机或用框架手势助手（ItemTouchHelper 等）时按阈值、跟手与取消逐项移植，不换成识别器手势](lesson-1da902462560b389f0c6.lesson.md)
   - 时机：规格提取与界面实现阶段，为源端 onInterceptTouchEvent/onTouch 状态机、ItemTouchHelper 滑删、ScaleGestureDetector 缩放或三方查看器手势选择 ArkUI 承接方式（onClick、SwipeGesture/PanGesture/PinchGesture 或 onTouch 逐事件）时
   - 情境：源码里有带阈值、按压时序、跟手位移、速度判定或 CANCEL 的触摸处理（DOWN 记点、MOVE 超过阈值取消点击、UP 时仍按下才算点击），或交给 ItemTouchHelper、ScaleGestureDetector、ViewPager 等框架或三方手势类；规格写「目标点击与滑动天然分离，无需迁移」，映射参考把它们列为「SwipeGesture」「PinchGesture 直接映射」。
-  - 例外：源端只用识别器式回调（setOnClickListener、setOnLongClickListener），没有附加阈值或取消逻辑
+  - 例外：源端只用识别器式回调（setOnClickListener、setOnLongClickListener），没有附加阈值或取消逻辑；逐事件移植时保留源阈值的单位：onTouch 里 TouchObject 的 x、y 单位是 vp，源端按像素写的阈值（如位移 ≥30px）要先换成 vp 再比较；源端 ACTION_CANCEL 分支对应 TouchType.Cancel，同样复位按压状态、不触发点击
 - [点击事件挂在源端真正持有点击的节点上：源端只绑整栏就挂外层，只绑行内子 View 就只挂该子控件；带文字的 CheckBox/RadioButton 拆成勾选控件加 Text 时整体可点、命中区按源宽度](lesson-fd3add7128663eb9998f.lesson.md)
   - 时机：界面实现与返修阶段，为由多个子控件拼成的搜索栏、入口条或设置行决定 onClick 挂在哪一层，或清理、重写其中的点击绑定时；把带文字的 CheckBox/RadioButton 拆成 ArkUI 勾选控件加 Text 时
   - 情境：源布局只在整条容器上绑定点击（如 LinearLayout 的 onClick 或 DataBinding 点击），内部图标、提示文字、“搜索”字样只负责展示；目标用 Row + Image + Text 模拟占位搜索框（不是 TextInput），点击后压栈进入目标页。也包括源端 Java 只对行内某个子 View（如右侧值文本）setOnClickListener，同页其他行绑定整行 layout；目标用 Row 承载这些设置行。也包括带文字的 CheckBox/RadioButton（XML 声明或代码动态创建，宽度来自 wrap_content、match_parent、alignParentLeft 加 toLeftOf 两端锚定或父容器默认 LayoutParams），目标 Checkbox/Radio 不带文字、需另配 Text；为折行给 Text 加 layoutWeight(1) 时连同点击挂在整行上。
@@ -79,3 +83,4 @@
 - [迁移带点击绑定的控件时按源点击处理器的分支逐项迁移副作用，不只做状态取反和换图](lesson-55e33a0621c3008ab8b3.lesson.md)
   - 时机：界面迁移阶段，为布局中带 onClick 绑定、状态选图或滑动面板的控件编写 ArkUI 事件与状态逻辑时
   - 情境：源布局控件用 android:onClick/数据绑定声明点击，或按 ViewModel 状态选图；实际行为（按键音、振动、偏好持久化、历史面板展开与回填）写在 Fragment 统一点击处理器、ViewModel 或第三方面板组件中；目标页需复刻这些开关与面板。 也包括源端 ViewModel 的选择与写操作（再次点击同一项即取消、前置为空即失败、同商品同规格累加写入本地购物车）由页面弹层触发。
+  - 例外：迁移“写哪个偏好键”时保留源端的键名和读取默认值：Preferences.getSync 的 defValue 取源端读取该键时给的默认值（值缺失时返回它），putSync 只改内存、要 flush 才写到文件，源端用 apply/commit 持久化的开关目标也要 flush

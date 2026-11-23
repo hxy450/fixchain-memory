@@ -1,6 +1,6 @@
 # 播放器面等运行时 addView 挂到根部的层，按运行时层级实现，不按 XML 里的占位区域定几何
 
-ID：`lesson-c3dcc5a25a0ad59c53c1` · 版本：2
+ID：`lesson-c3dcc5a25a0ad59c53c1` · 版本：3
 
 [本主题](index.md)
 
@@ -11,6 +11,10 @@ ID：`lesson-c3dcc5a25a0ad59c53c1` · 版本：2
 ## 适用情境
 
 源 Fragment/Adapter 在播放时通过 addView/LayoutParams 把视图挂到根容器（如 addView(videoView, 0) 无约束铺满），XML 里同名区域只是封面或控制视图；目标用 Stack/Column 重建层级。
+
+## 例外与边界
+
+- 放到最底层只对插在子视图列表开头（addView(view, 0)）的情形成立；不带 index 或 index 靠后的 addView 把视图画在已有子项之上，按插入位置放到 Stack 的对应层；addView 带了有尺寸或约束的 LayoutParams 时按那份参数定几何，不一律铺满。
 
 ## 原因
 

@@ -1,6 +1,6 @@
 # RelativeLayout 中没有相对规则的子 View 叠放在同一区域：用 Stack 或同一坐标定位，不改成 Column 顺序排列
 
-ID：`lesson-7dcf2d92c689c96c190b` · 版本：2
+ID：`lesson-7dcf2d92c689c96c190b` · 版本：3
 
 [本主题](index.md)
 
@@ -15,6 +15,7 @@ ID：`lesson-7dcf2d92c689c96c190b` · 版本：2
 ## 例外与边界
 
 - 子 View 之间写有 layout_below/above/toStartOf 等相对规则，此时按规则排布
+- 改成 Stack 时要保留源端的贴边位置：RelativeLayout 中无规则的子项和 FrameLayout 中不写 layout_gravity 的子项都贴起始边和顶部，而 Stack 不写 alignContent 时子项居中，需写 alignContent: Alignment.TopStart 并保留各子项原有的 margin，或改用 position 给出同一坐标。
 
 ## 原因
 

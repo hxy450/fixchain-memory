@@ -20,6 +20,7 @@
 - [LinearLayout 以 gravity=center 摆放的 wrap_content 子项组转成 Row 时保留居中与按内容定宽，不给中间输入框 layoutWeight(1) 拉满](lesson-02b2fcd7d157d97f95c8.lesson.md)
   - 时机：界面实现阶段，把数量步进器（减号、数量框、加号）一类居中的 wrap_content 子项组翻译成 ArkUI Row 时
   - 情境：源端 LinearLayout 设 gravity=center 与固定外边距，子项是 wrap_content 的按钮与 EditText；控件可能叠在带装饰的背景图（票券存根、竖虚线）上。
+  - 例外：只针对源端子项都是 wrap_content 的情形；源端中间项本来就是 layout_width=0dp 加 layout_weight，或 match_parent 撑满时，目标给它 layoutWeight(1) 是对的，保留，不改成按内容定宽。
 - [LinearLayout 的 weightSum 与子权重之和不等，或 wrap_content 子项带权重时，不用 layoutWeight 归一化：余量（可用尺寸减各子项自然尺寸）按 w/剩余 weightSum 依次分配，份额耗尽的子项只留自然尺寸，超出 weightSum 的末块被裁](lesson-adad817f2c3c8f1eaa09.lesson.md)
   - 时机：界面实现阶段，把 Android LinearLayout 的 layout_weight/weightSum 分配翻译成 ArkUI 尺寸时；规格提取阶段写权重布局时
   - 情境：源布局声明 weightSum 且与子权重之和不等（如根 weightSum=10 而子权重 4/1/9，列 weightSum=6 而 8 个 wrap_content 子项各权重 1），或 wrap_content 子项带权重、自然尺寸各不相同。 也包括带权重的 wrap_content ImageView 未设 adjustViewBounds、位图按密度放大后宽于父级，各子项自然尺寸之和可能超过可用尺寸（横屏、小屏）。
@@ -33,6 +34,7 @@
 - [TableLayout 列宽取各列单行自然宽的最大值（含零高 fake header），stretchColumns 只均分余量：不写等分、fr 比例或权重](lesson-6cb9ad45093ce2ca28af.lesson.md)
   - 时机：规格提取与页面转换阶段，把 Android TableLayout 表格（含 stretchColumns/shrinkColumns，或滚动表体外另有固定表头）翻译为 ArkUI 列宽时
   - 情境：源页面在 ScrollView 外放一行固定表头 TableRow，表体 TableLayout 首行是 height=0、文案与 paddingRight 同表头的 fake header 行（注释说明用于对齐外部表头列宽）；单元格是默认 wrap_content 的 TextView 逐行 addView，没有设定列宽；合成 view.xml 会丢掉 padding 与 height；规格可能写“fake header 删除（Grid 定宽列天然对齐）”并自拟 columnsTemplate 或权重。 也包括 TableLayout 设 stretchColumns/shrinkColumns（如 "*"），单元格带左右内边距，容易被理解为各列等分并写成 layoutWeight(1) 或 50%。
+  - 例外：measureText 量出的文字宽是 px，onAreaChange 给的宽是 vp：两种来源混用求最大值、或写进 width 之前，先把 px 换算成 vp（如 UIContext 的 px2vp，API 22 起提供），否则列宽在高密度屏上成倍放大。
 - [layout_marginStart/End 写成 margin 的 start/end 时同一对象各边都用 LengthMetrics；不需要随语言方向翻转时改用 left/right 数值](lesson-e3077bf60cfc3f34d0a2.lesson.md)
   - 时机：界面实现阶段，把 layout_marginStart/End、paddingStart/End 或 Compose padding(start/end) 一类方向相关边距写成 ArkUI margin/padding 时；维护映射参考的边距示例时
   - 情境：源布局用 marginEnd/marginStart（常与 marginBottom 等写在同一控件上）；映射参考把它对到 .margin({ end }) 并给出纯数字示例。
@@ -47,7 +49,7 @@
   - 时机：界面实现阶段，为图片组件确定宽高约束时；校准阶段处理图片比例、宽度类的不确定占位时
   - 情境：源 ImageView 为 wrap_content + adjustViewBounds（可带 layout_constrainedWidth 与 bias），宽度受同行兄弟和边距约束，高度应随位图固有比例跟随；目标用 Row 内的 Image 承接。 也包括 Web/Ionic 源端块级内容流里未设宽高的 IonImg/img（满宽、按资源固有比例），后续兄弟（分页点、按钮）紧随其后，源容器没有 flex-grow、height 或 padding；目标在 Column/Swiper 里可能引入 Contain 加 layoutWeight 撑满剩余高度。
   - 例外：当前父布局或明确的尺寸规则已给出图片盒的宽高，此时只需设置盒内缩放；本征宽上限只对应宽为 wrap_content 的 ImageView：源宽是 match_parent、固定值或约束布局里的 0dp 时，宽度就是父布局给的宽，不加 constraintSize({ maxWidth: 本征宽 })，只用 aspectRatio 让高度跟随；源端另写了 android:maxWidth、maxHeight 时，上限取它和本征尺寸中较小的一个
-- [并排 wrap_content 图片列不按固有 dp 写死宽度：按固有宽度比例分列，高度用 aspectRatio](lesson-0618cdf331560d389f0e.lesson.md)
+- [并排 wrap_content 图片列固有宽加边距接近或超过屏宽时，不按固有 dp 写死宽度：按固有宽度比例分列，高度用 aspectRatio](lesson-0618cdf331560d389f0e.lesson.md)
   - 时机：界面实现阶段，把 match_parent 父行中并排的 wrap_content 图片列转换为 ArkUI Row/Column 并确定列宽时；修复“右侧顶满/被遮挡”时
   - 情境：源布局在 match_parent 的水平 LinearLayout 中并排放置 wrap_content 图片列，列宽来自 drawable 固有尺寸与左右、列间 margin，其总和接近或超过常见手机屏宽；目标要在宽度不同的设备上与源截图对齐。
 - [把原由 Tabs、Grid 等容器分配槽位的子项搬进自绘 Row/Column 时重新确定主轴尺寸：等分用 layoutWeight(1)，不保留依赖旧容器的 width('100%')](lesson-c572346f0be19acf5579.lesson.md)
@@ -56,6 +58,7 @@
 - [把靠 layoutWeight 填满并居中的内容移进 Refresh、Stack 等非 Row/Column/Flex 父级时，改用 height('100%') 等显式尺寸](lesson-1c3d6367be48f70bb001.lesson.md)
   - 时机：界面实现阶段，把已有空态、未登录引导等内容 builder 放进下拉刷新组件或其他封装容器的 content 时，确定内容根节点的高度约束
   - 情境：内容根节点原本在 Column 中用 layoutWeight(1) + justifyContent(Center) 占满剩余空间并居中；新父级是封装了原生 Refresh（或 Stack、Scroll 等）的组件，经 @BuilderParam 注入内容；工程里可能已有同样写法可以照搬。
+  - 例外：height('100%') 取的是直接父组件的高度，前提是封装容器自身已有确定高度（如它在 Column 里用 layoutWeight 或显式写了高度）；封装容器自己没有确定高度时，先给它定高，否则内容根节点改成 '100%' 也撑不满剩余区域。
 - [权重行里非权重兄弟要有确定尺寸：未设宽高的网络图片会挤掉 layoutWeight 列，拆槽时保留源端尺寸](lesson-38c0b5ba6a929a7cb67c.lesson.md)
   - 时机：界面实现与槽位接线阶段，把调用方经 Modifier 传给子组件的尺寸、以及 Row{ Column.weight(1); 图片 } 一类权重布局转成 ArkUI 时
   - 情境：源端图片尺寸由调用方 Modifier（如 Modifier.size(常量)）传给图片子组件；目标把该子组件拆成 @Builder 占位槽由后续接线者填入，被嵌组件本身没有尺寸参数；行内另一列用 layoutWeight(1)。

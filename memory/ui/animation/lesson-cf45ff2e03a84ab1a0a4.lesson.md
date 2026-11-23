@@ -1,12 +1,12 @@
 # sharedBounds 包住 sharedElement 的两层共享转场，每端只挂一个 geometryTransition（外层容器），不逐层各配一对
 
-ID：`lesson-cf45ff2e03a84ab1a0a4` · 版本：1
+ID：`lesson-cf45ff2e03a84ab1a0a4` · 版本：2
 
 [本主题](index.md)
 
 ## 何时使用
 
-界面实现与规格提取阶段，把 Compose SharedTransitionLayout 内的 sharedBounds/sharedElement 落为 ArkUI geometryTransition，确定每端挂几个配对键、挂在哪个节点时
+界面实现与规格提取阶段，把 Compose SharedTransitionLayout 内 sharedBounds 包住 sharedElement、两层 key 不同的共享转场落为 ArkUI geometryTransition，确定每端挂几个配对键、挂在哪个节点时
 
 ## 适用情境
 

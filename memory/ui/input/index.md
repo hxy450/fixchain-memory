@@ -11,8 +11,9 @@
 ## 本级经验
 
 - [Android 平台公开正则常量按定义逐段移植并保持全串匹配语义](lesson-90e0f1db3e1e13a6fd6a.lesson.md)
-  - 时机：界面实现阶段，移植 Patterns.WEB_URL、Patterns.EMAIL_ADDRESS 等平台正则对用户输入的校验时
+  - 时机：界面实现阶段，移植 Patterns.WEB_URL、Patterns.EMAIL_ADDRESS 等平台正则对用户输入的全串校验（String.matches 或 matcher().matches()）时
   - 情境：源以 String.matches(Patterns.X.pattern()) 做全串校验，目标没有同名 API，需要自行提供正则。
+  - 例外：源端用 matcher(text).find() 或 Linkify 一类在文本里查找链接的，是子串查找语义，移植同一正则时不要加首尾锚定；不加源端没有的输入规范化：源端校验和后续传递的都是原始文本（未 trim、未改大小写）时，目标也校验并传递原始文本
 - [Compose Slider 的 steps 是两端之间的离散值个数：steps&gt;0 时取值共 steps+2 个，步长为区间/(steps+1)](lesson-d715fa78ada2e79a5fd2.lesson.md)
   - 时机：规格提取或界面实现阶段，把 Compose Slider 的 valueRange 与 steps 翻成目标滑杆步长和验收条款时
   - 情境：源端 Slider(valueRange = a..b, steps = n) 做离散取值，n 可能由表达式算出（如 (区间 / 某个名为 step 的常量).roundToInt() + 1）；当前值标签可能以 Float.toString 输出；目标用 ArkUI Slider 的 min、max、step。steps 为 0 时源端没有刻度、连续取值，不套本条的步长公式；这时 ArkUI 的 step 不写就按 1 处理（最小可设 0.01），源端区间小（如 0..1）时要显式写小步长，否则只剩两端两个值。
@@ -43,6 +44,7 @@
 - [源端以只读字段加选择器一次回填的多级值（省市区等），目标实现选择流程并一次写入各级字段，不退化成并列自由输入](lesson-b845647090bfeac053ed.lesson.md)
   - 时机：界面实现阶段，迁移表单中由选择器回填的地区等字段，确定输入方式与写回方式时
   - 情境：源端表单字段是只读文本框，点击覆盖层打开级联选择弹窗，选中后通过回调把省、市、区等多级值一次写回模型；目标准备用多个 TextInput 分别绑定。
+  - 例外：只把源端由选择器回填的字段改成选择流程；源端本来就可自由输入的字段（如详细地址、门牌号）保持输入框，不一并改成选择；编辑已有记录时，选择流程要带出已保存的各级值作为当前显示，不因改成选择器而清空
 - [源端受控输入框的拒绝条件要阻止文本显示：长度上限用 TextInput.maxLength，其他拒绝条件在 onWillChange 返回 false，不靠 onChange 里不写回](lesson-617ffbd840398cf95efc.lesson.md)
   - 时机：界面实现阶段，把源端输入框的长度上限等输入约束翻译成 ArkUI TextInput 属性与事件时
   - 情境：源端 Compose TextField/OutlinedTextField 以 value = 状态受控，在 onValueChange 中按条件决定是否写回（如 if (it.length &lt;= N) name = it，或数值格式不合法时直接 return、不回调上层）；目标端用 TextInput({ text: this.x }) 加 onChange 实现同一个输入框，可能由父组件持有值并以“父值不变即回退”设计公共输入组件。
@@ -52,19 +54,22 @@
 - [源端未显式定制的光标外观以用户指定页面的真机取证为基准：不借其他页面代取样，用帧差分定位光标](lesson-fb5a092e750a3101b862.lesson.md)
   - 时机：界面还原修复阶段，为输入框光标这类源端未显式定制、取决于页面主题或系统渲染的外观选取安卓基准，并写入 caretStyle 时
   - 情境：源 EditText 没有 textCursorDrawable，外观取决于所在 Activity 的主题和系统渲染；同一应用其他页面已有不同的光标配置；需要真机像素取证；目标为 TextInput 的 caretStyle({ width, color })。
-  - 例外：源端显式设置了 textCursorDrawable，此时打开该 drawable 取宽度与颜色
+  - 例外：源端显式设置了 textCursorDrawable，此时打开该 drawable 取宽度与颜色；一时无法真机取证时，可先按页面主题静态解析作为待核基准并注明：所在 Activity 主题属 Theme.Material 系且没有另设时，默认光标是 text_cursor_material（2dp 宽，颜色取 colorControlActivated，未设时取 colorAccent）；AppCompat、MaterialComponents 主题由依赖库覆盖，仍以取证为准
 - [自定义 View 上的 android:* 属性只有被该类读取才生效：控件初值取运行时生效值](lesson-a6edef3bb44e01a82b72.lesson.md)
   - 时机：界面实现阶段，把源布局中自定义控件的 XML 属性转换为目标组件初始状态时；联调修复判断是否为复刻缺陷时
   - 情境：源布局在继承 View 的自定义控件（非 CheckBox/CompoundButton）上声明 android:checked 等框架属性，该类构造只读取自己的 styleable 属性；目标用状态变量表示勾选或开关的首显状态。
+  - 例外：由 View 自己的构造读取的通用属性（android:background、padding、alpha、focusable、visibility 等）在任何继承 View 的自定义控件上都生效，layout_* 由父布局读取也生效，照常迁移；要逐个核是否被读取的，是定义在某个子类 styleable 里的属性（如 checked、enabled 这类由 CompoundButton、TextView 等读取的属性）
 - [色板、渐变方案、边框素材这类选项列表按源 Fragment/ViewModel 的数据源迁移，截图只核视觉；调色盘、相册、图库等动作项按源接到对应页面并写回编辑会话](lesson-60c1c37b0703e5d3b8d6.lesson.md)
   - 时机：界面实现阶段，为编辑页背景色、文字颜色、边框等选择区确定选项列表与点击行为时，尤其任务要求“根据截图转换”时
   - 情境：Android 选择区由各自 Fragment + ViewModel 以 RecyclerView 列表提供（背景含渐变方案与图片素材、文字为纯色列表、边框为位图素材且首项是调色盘），Fragment 泛型参数或布局 data-binding 指向对应 ViewModel；迁移任务同时给出设备截图作为视觉参考。
+  - 例外：“原样迁移”指迁移源端产生列表的方式：源 ViewModel 的选项写在代码或本地资源里的，按项数、顺序、色值照搬；选项来自网络接口或下发的资源包的，迁移取数逻辑和源端的兜底默认项，不把某一次取到的结果写死成常量
 - [菜单 SearchView 迁成自绘搜索栏时把展开、焦点、提交、收起与菜单重建分成独立状态和事件，焦点态取自 TextInput 焦点回调](lesson-edc9465d3902807c386b.lesson.md)
   - 时机：规格提取与界面实现阶段，把菜单 actionView 的 SearchView（collapseActionView）翻成自绘标题栏搜索框、决定工具栏菜单随搜索状态切换时
   - 情境：源端菜单项以 SearchView 为 actionView 且 showAsAction 含 collapseActionView，代码注册 OnActionExpandListener、OnQueryTextFocusChangeListener 与 OnQueryTextListener（onQueryTextSubmit 返回 false 才由 SearchView 投递 ACTION_SEARCH），收起时 invalidateOptionsMenu 重建菜单，提交后只收键盘不清焦点；目标为自绘标题栏加按条件构建的 TextInput。展开、收起回调只在菜单项带 collapseActionView 时存在：源端菜单项没有这个标志时 OnActionExpandListener 不回调，不给目标补展开态和收起时的清空、重载、菜单重建副作用，按源端实际注册的监听列状态。
 - [透明 TextInput 叠在掩码格上时，输入层铺满格区并显式获焦，多段输入各用独立节点](lesson-90a7888a65eefb3e94b3.lesson.md)
-  - 时机：界面实现阶段，把格子式密码框等自定义输入控件转成“透明 TextInput + 掩码格”叠层时
+  - 时机：界面实现阶段，把格子式密码框等自定义输入控件转成“透明 TextInput + 掩码格”叠层、尤其由页内条件挂载的浮层承载时
   - 情境：源端弹窗内是固定尺寸的格子式输入控件（如 4 位数字密码），多段流程（设置、再次确认）各弹独立 Dialog 并各带新输入框；目标用页内条件挂载的浮层，透明 TextInput 与掩码 Row 叠放，外层卡片有吞点击的 onClick。
+  - 例外：defaultFocus 只在 Page、NavDestination、Dialog、PopUp 等层级容器初次创建后第一次进入时生效；目标用弹窗容器承载、每次打开都新建的，已有的 defaultFocus 不算错，第 3 步的 onAppear 里 requestFocus 针对的是页内条件挂载的子树；改成透明 TextInput 时保留源控件的输入约束（位数上限、数字输入类型等），不因换成叠层写法丢掉
 - [金额类输入可含小数时不用 InputType.Number：按源端解析函数选择允许小数点的输入方式](lesson-a5aeed3d4c376cd085d1.lesson.md)
   - 时机：界面实现阶段，把源端输入弹窗的 EditText 转成 ArkUI TextInput 并确定输入类型时
   - 情境：源端 EditText 未设数字 inputType（或为 numberDecimal），保存时用 toDoubleOrNull 一类解析允许小数；目标 TextInput 准备用 InputType.Number。源端只收非负整数（inputType 为 number 且不带 numberDecimal、numberSigned，按 toIntOrNull 一类解析）时，InputType.Number 本来就对，不在这条范围。

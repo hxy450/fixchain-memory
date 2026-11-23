@@ -7,11 +7,13 @@
 ## 本级经验
 
 - [BottomSheetBehavior 面板映射：容器可见性与面板状态分离，位于底栏之上的面板用布局内实现](lesson-9f45b5d79206b5654aff.lesson.md)
-  - 时机：界面实现与规格提取阶段，把由 BottomSheetBehavior 管理、初始收起的播放器等面板翻译为 ArkUI 壳布局与状态机时
+  - 时机：界面实现与规格提取阶段，把由 BottomSheetBehavior 管理、初始收起且不可隐藏（setHideable(false)）的播放器等面板翻译为 ArkUI 壳布局与状态机时
   - 情境：源面板位于 CoordinatorLayout 内、底部导航之上，不可隐藏，可见性方法只切换容器 VISIBLE/GONE；目标可选窗口级 bindSheet 或 Stack 加 translate。
+  - 例外：第 1 步“回到 COLLAPSED”只适用于源端不可隐藏的面板；源端允许隐藏、HIDDEN 是真实去向时，按源端保留 HIDDEN 及其出口。；容器初始 GONE、但里面的组件常驻挂载并自己上抛可见性时，这个组件要常建（如高度 0 加 clip，或用透明度与命中模式控制显示），不用 if 或 Visibility.None 包住；否则唯一能把可见性置真的组件永远不会被构建。
 - [为已转换页面接线时保留“全屏底层 + 按状态切换的前景层”骨架；地图 SDK 不可用也不把全屏承载改成自绘小卡](lesson-4de4283ec625be7e976c.lesson.md)
   - 时机：功能切片为已转换页面接入 ViewModel、Service 与跳转，决定保留还是重写布局骨架时；巡检修复处理“缺少全屏地图承载”一类发现时
   - 情境：Android 页面以全屏 MapView/导航视图为底层，前景由 ViewModel 布尔状态（如 showRoute）切换两套覆盖层；导航页 FEATURE_NO_TITLE、只承载导航视图；目标地图/导航 SDK 暂不可用，页面转换阶段已写出带全屏占位底图与两态覆盖层的骨架。
+  - 例外：保留骨架的前提是转换阶段的骨架与源布局的层级一致；骨架本身和源布局对不上时，按源布局改，不以“保留原骨架”为由留下偏差。；目标页是 NavDestination 时，不设 hideTitleBar 就会显示系统标题栏；源端 FEATURE_NO_TITLE 的页要显式写 hideTitleBar(true)，只删掉自绘的标题栏不够。
 - [同一源控件既有只构造不绘制的底层实例、又有经绘制方法刷新的活动实例时，共享组件要能表达构造态：按层分别写可见状态，不把绘制方法里的隐藏分支无条件化](lesson-1e279118c32645022ac2.lesson.md)
   - 时机：规格提取与共享组件实现阶段，为棋盘、网格等分层控件定义组件状态参数，以及页面给各层传参时
   - 情境：源端自定义 View 构造时就设好背景与底色、保持 VISIBLE；页面为背景层逐格 new 实例并 addView，但只对活动层调用 drawItem 一类方法，该方法才在空值时 setVisibility(INVISIBLE)（背景层的 setVisibility 可能被注释掉）；目标把两层交给同一共享组件、按数值决定可见性。
@@ -21,3 +23,4 @@
 - [播放器面等运行时 addView 挂到根部的层，按运行时层级实现，不按 XML 里的占位区域定几何](lesson-c3dcc5a25a0ad59c53c1.lesson.md)
   - 时机：界面实现阶段，转换含运行时挂载子视图（播放器面等）的列表项或页面、确定视频层与浮层关系时
   - 情境：源 Fragment/Adapter 在播放时通过 addView/LayoutParams 把视图挂到根容器（如 addView(videoView, 0) 无约束铺满），XML 里同名区域只是封面或控制视图；目标用 Stack/Column 重建层级。
+  - 例外：放到最底层只对插在子视图列表开头（addView(view, 0)）的情形成立；不带 index 或 index 靠后的 addView 把视图画在已有子项之上，按插入位置放到 Stack 的对应层；addView 带了有尺寸或约束的 LayoutParams 时按那份参数定几何，不一律铺满。

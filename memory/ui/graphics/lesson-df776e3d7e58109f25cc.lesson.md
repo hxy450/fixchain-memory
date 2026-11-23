@@ -1,6 +1,6 @@
 # Bitmap.recycle 迁成 PixelMap.release 前先定唯一所有者：成品只释放一次，多方持有时各自 cloneSync
 
-ID：`lesson-df776e3d7e58109f25cc` · 版本：1
+ID：`lesson-df776e3d7e58109f25cc` · 版本：2
 
 [本主题](index.md)
 
@@ -11,6 +11,10 @@ ID：`lesson-df776e3d7e58109f25cc` · 版本：1
 ## 适用情境
 
 源端后处理函数返回新位图并释放输入，调用处把返回值赋回同一变量，缩略图与末尾 recycle 都针对成品；调用方另外再 recycle（Java 的 recycle 可重复调用，冗余调用无害）。目标 PixelMap.release 后对象不再可用，同一张图还可能经回调分发给多个组件。
+
+## 例外与边界
+
+- PixelMap 的 cloneSync 与 clone 都从 API 18 起提供，对 YUV、ASTC 格式的 PixelMap 会抛错（62980103）；工程最低 API 低于 18，或要分发的图是这些格式时，改用“一方持有并负责释放、其余只借用不释放”的方式，不要硬写 cloneSync
 
 ## 原因
 

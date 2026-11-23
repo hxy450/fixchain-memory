@@ -1,6 +1,6 @@
 # 规格提取把 AndroidManifest 声明（含未声明的平台缺省）解析成实际行为与鸿蒙目标值并指派实现：未声明 screenOrientation 时 EntryAbility 写 orientation: auto_rotation_restricted；未声明 windowSoftInputMode 时按是否含可滚动视图取 RESIZE/OFFSET，并写出首屏焦点与是否弹键盘；“默认”不能作目标值
 
-ID：`lesson-c1d7ec16bb02aa152c33` · 版本：5
+ID：`lesson-c1d7ec16bb02aa152c33` · 版本：6
 
 [本主题](index.md)
 
@@ -12,6 +12,12 @@ ID：`lesson-c1d7ec16bb02aa152c33` · 版本：5
 
 窗口方向（如 screenOrientation=sensorLandscape）只声明在 AndroidManifest，Java 源码只见全屏标志一类调用；页面规格模板与元数据可能没有方向字段。也包括 application 显式 allowBackup=false，activity 未声明 screenOrientation、windowSoftInputMode 而依赖平台缺省；界面图谱把它们记为 unspecified/unknown，功能基线与计划都没有对应任务，目标备份配置保持模板值。 也包括各 activity 未声明 screenOrientation、源有 layout-land/values-land，规格只写“横竖屏双布局全支持”，module.json5 的 abilities 没有 orientation；以及未声明 windowSoftInputMode、布局含 EditText 和 ListView/ScrollView（或 Activity 继承 ListActivity），规格只写“无 windowSoftInputMode（默认弹出）”。
 
+## 例外与边界
+
+- 第 2 步的“可滚动视图”指安卓登记的滚动容器，不是能滚动的视图都算：显式写了 android:isScrollContainer 的按它；没写时开了竖直滚动条的才算，ListView、GridView、ScrollView 的平台样式开了竖直滚动条、RecyclerView 构造时自己登记，都算；androidx 的 NestedScrollView 不自己登记、库里也没有默认样式，布局和应用主题都没给它开竖直滚动条（android:scrollbars="vertical"）或 isScrollContainer 时不算，这时安卓取 adjustPan，目标写 OFFSET
+- 窗口带全屏标志（FLAG_FULLSCREEN，主题 windowFullscreen 或代码设置）时，安卓忽略 adjustResize、窗口保持全屏不缩小，按“含可滚动视图取 RESIZE”推出的目标值不成立；这类页不写 RESIZE，源端实际表现上机看过再定目标值
+- 源码在运行时调 setRequestedOrientation 时，以运行时设的方向为准写目标值（锁定值按第 1 步写进入页设方向、离开恢复），不按“未声明即随系统旋转”写 auto_rotation_restricted
+
 ## 原因
 
 只读 Java 源码会漏掉 manifest 属性；规格与页面元数据都没有方向字段时，实现者会以“规格未覆盖”跳过。记为 unspecified/unknown 的项没有目标值，下游没有写者，模板默认值（如允许备份）会保留到交付。鸿蒙 EntryAbility 不写 orientation 就不随传感器旋转，只迁两套布局时横屏分支永不出现；未声明 windowSoftInputMode 时安卓缺省 adjustUnspecified 由系统按窗口是否含可滚动视图取 adjustResize 或 adjustPan，而 ArkUI 缺省 OFFSET 整页上推；状态半 stateUnspecified 让首个可获焦视图为 EditText 时自动弹键盘，ArkUI 不会自动给输入框焦点。另一应用中注入的一行提醒只剩“无screenOrientation=跟随旋转”“无windowSoftInputMode（默认）”，写者照写安卓语义就算交差，目标值没有进入任何任务。
@@ -19,7 +25,7 @@ ID：`lesson-c1d7ec16bb02aa152c33` · 版本：5
 ## 做法
 
 1. 逐个 activity 列出 manifest 属性，把未声明项解析成实际行为再写鸿蒙目标值，“默认/按系统缺省”不能作结论：未声明 screenOrientation（随系统旋转）时，module.json5 的 EntryAbility 写 orientation: auto_rotation_restricted，与权限并列为 module.json5 必做项；sensorLandscape 等锁定值写成“进入页 setPreferredOrientation(对应方向)、离开恢复”的验收条目。
-2. 未声明 windowSoftInputMode 且含 EditText 时拆成两条验收并各自指派：调整方式——窗口含 ListView/ListActivity/ScrollView 等可滚动视图为 adjustResize（目标窗口级 setKeyboardAvoidMode(KeyboardAvoidMode.RESIZE)），否则为 adjustPan（OFFSET）；状态——首屏焦点给布局顺序中第一个可获焦视图（AdapterView 只在有数据时可获焦），写清各数据分支谁获焦、是否自动弹键盘。
+2. 未声明 windowSoftInputMode 且含 EditText 时拆成两条验收并各自指派：调整方式——窗口含 ListView/ListActivity/ScrollView 等可滚动视图为 adjustResize（目标窗口级 setKeyboardAvoidMode(KeyboardAvoidMode.RESIZE)），否则为 adjustPan（OFFSET）；状态——首屏焦点给布局顺序中第一个可获焦视图（AdapterView 只在有数据时可获焦），写清各数据分支谁获焦、是否自动弹键盘；要自动弹键盘的分支，目标端等窗口获焦（WINDOW_ACTIVE）以后才给输入框请求焦点。
 3. application 级属性同样逐项映射（如 allowBackup → allowToBackupRestore）并为每项指派实现任务，不留 unknown。
 
 ## 可选检查

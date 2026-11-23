@@ -20,6 +20,6 @@
   - 时机：界面实现阶段，把源页面并列的多个底部弹窗映射为 ArkUI bindSheet、安排绑定节点时；修复“点击后弹层不出现”时
   - 情境：源页面并列存在两个及以上由各自 visible 状态控制的底部弹窗（如规格选择与优惠券）；目标页面用 @Local 状态加 bindSheet 实现，并把它们写在同一个容器的修饰链上。也包括同一页面要挂章节、定时、分享、日志、排序等多个半模态，或沿用这样连写的先例页。
 - [自绘底部弹窗改成 bindSheet 时迁移原手势门禁：含列表的面板按手势起点是否在顶部决定下拉关闭，不照搬无列表模板的无条件 dismiss](lesson-f35f4912277e0c9a1b14.lesson.md)
-  - 时机：弹窗改造阶段，把页面内自绘底部弹窗替换为系统 bindSheet/showBindSheet、配置 SheetOptions 与内部滚动时
+  - 时机：弹窗改造阶段，把含可滚动列表、带下拉关闭手势门禁的页面内自绘底部弹窗替换为系统 bindSheet/showBindSheet、配置 SheetOptions 与内部滚动时
   - 情境：旧的自绘面板含可滚动 List，用 PanGesture 记录手势起点是否在列表顶部，只有在顶部才跟手下拉、达阈值关闭、否则回弹；参考的现有 Sheet 模板是无列表的固定高度选择器，onWillDismiss 无条件关闭。
-  - 例外：面板内没有可滚动内容，下拉关闭不需要与列表滚动区分
+  - 例外：面板内没有可滚动内容，下拉关闭不需要与列表滚动区分；平台已处理的部分：内部滚动容器按半模态默认的嵌套模式设 nestedScroll（scrollForward 为 PARENT_FIRST、scrollBackward 为 SELF_FIRST）后，内容在中部时下滑先滚内容、到顶后才收缩挡位或关闭面板，这一段不用在 onWillDismiss 里重做；onWillDismiss 的门禁只用来挡住本次手势起点不在顶部、滑到顶后接着关闭的情形

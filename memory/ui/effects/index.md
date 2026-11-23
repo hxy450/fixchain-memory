@@ -12,25 +12,29 @@
 - [Compose 叠在已画内容上的 blendMode 着色：参与混合的底色、字形和渐变放进同一离屏组，或把源算式预混进色标](lesson-3024193e4816229c5370.lesson.md)
   - 时机：规格提取与界面实现阶段，把 drawWithContent { drawContent(); drawRect(brush, blendMode) } 这类图标渐变着色映射成 ArkUI 结构，或在修复阶段改写其混合方式时
   - 情境：源组件先画图标内容，再用渐变矩形以 Plus、Darken 等混合模式叠加着色，可能按深浅主题切换模式；结果依赖画布上已画好的底色（底盘、按钮背景）与字形像素。目标端渐变层、图标、底盘是 Stack 里的兄弟节点，ArkUI 提供 blendMode 与 BlendApplyType。
-  - 例外：源端混合只依赖自身 alpha（SRC_IN、DST_IN 一类）时，不需要纳入底色，也不需要预混
+  - 例外：源端混合只依赖自身 alpha（SRC_IN、DST_IN 一类）时，不需要纳入底色，也不需要预混；第 3 步的逐通道式 Plus = min(255, 字形 + stop)、Darken = min(字形, stop) 只在字形底色和渐变色标都不透明时成立；色标带 alpha 时 Darken 还有 (1 − α) 项，要按安卓 BlendMode 的完整算式预混
 - [Compose 渐变按端点几何换算成 ArkUI linearGradient：默认对角按宽高算角度，端点周期按渐变线长缩放 stop，Mirror 用回文 stop](lesson-4ce3a1c186651285f362.lesson.md)
   - 时机：界面实现阶段，把 Brush.linearGradient/horizontalGradient 翻成 ArkUI linearGradient，确定方向角、stop 位置与平铺、平移写法时
   - 情境：源渐变或未指定 start/end（默认从组件左上 (0,0) 到右下 (w,h)），或以端点距离（startX/endX、start/end）定义图案周期并配 TileMode.Mirror 与随滚动、动画的平移；ArkUI linearGradient 只有角度或方向、按组件自身渐变线长取比例的 stop 和 repeating 开关；目标组件可能宽高不等（胶囊、卡片）。 只有源端是 Repeated / Mirror 平铺时才开 repeating：源端用默认 TileMode.Clamp 时，端点之外延续端色、不重复，stop 照样按端点距离 / 渐变线长换算，但不开 repeating。horizontalGradient、verticalGradient 不给端点时铺满组件宽或高（startX 为 0、endX 为无穷大），ArkUI direction Right、Bottom 已经等价，不在角度换算范围内。
 - [ImageView tint 着色的渐变装饰层用容器 linearGradient 实现](lesson-fcd86aeea6209ea0718b.lesson.md)
   - 时机：界面实现阶段，迁移以 app:tint 主题色着色的白到透明渐变装饰层时
   - 情境：源 ImageView 用 tint=?attr/colorBackground 一类主题色给渐变 shape 着色，目标准备改用 SVG 加 fillColor；目标有深色资源目录。
+  - 例外：“主题色到其透明变体”的渐变只对应默认着色模式 SRC_IN（结果是主题色乘以原图形的 alpha）；源端另设了 tintMode（如 multiply、screen）时，着色结果还取决于原图形的颜色，要按该模式另算色标
 - [Modifier.blur(dp) 迁到 ArkUI blur 时先确认数值单位，并处理模糊边缘淡出](lesson-6be3938453498c25e9a5.lesson.md)
   - 时机：界面实现阶段，把 Compose Modifier.blur(N.dp) 写成 ArkUI blur 时
-  - 情境：源端 blur 半径带 dp，默认 BlurredEdgeTreatment.Rectangle、边缘不淡出；ArkUI blur(value) 的类型注释没有写单位。
+  - 情境：源端 blur 半径带 dp，默认 BlurredEdgeTreatment.Rectangle、边缘不淡出；ArkUI blur(value) 的类型注释没有写单位，文档写明模糊半径单位是 px。
+  - 例外：源端模糊来自图片加载库的位图变换（如 BlurTransformation 的 radius）而不是 Modifier.blur 时，那个半径作用在解码后的位图上，不是组件滤镜半径，不按本条的 vp2px 换算照搬到 ArkUI blur
 - [TextView 的 shadowColor/shadowRadius 映射为 Text.textShadow](lesson-2f1af636a29b131071b3.lesson.md)
   - 时机：界面实现阶段，转换带文字阴影的 TextView 时
   - 情境：源 TextView 设 shadowColor 与 shadowRadius，映射参考把它对应到 .shadow()。
+  - 例外：源端 shadowRadius 为 0 或没写时，安卓移除阴影层、文字没有阴影，即使写了 shadowColor、shadowDx、shadowDy 也不加 textShadow
 - [elevation 投影写入 ShadowOptions 时按 px 换算，并集中到一个按 elevation 推导的共享函数](lesson-d0aad947e26220fb43fa.lesson.md)
   - 时机：规格提取阶段写阴影配方，以及界面实现、收敛阶段把 Modifier.shadow(elevation) 或 Surface 的 elevation 写成 ArkUI .shadow() 时
   - 情境：源端以 dp 表示阴影高度；目标 ShadowOptions 的 radius/offsetX/offsetY 数值按 px 解释，而 width、padding 等长度属性默认是 vp。工程可能已有共享的 elevation→shadow 映射函数，个别页面也可能用预置 ShadowStyle 或字面值。也包括源视图带 elevation 但 outlineProvider=background 且没有背景，实际不投影。
 - [linearGradient 遮罩条模拟边缘淡出：angle 按 CSS 语义或用 direction，终点取同色 alpha 0，不用透明黑](lesson-956f14dab0397768dc95.lesson.md)
   - 时机：界面实现与共享组件实现阶段，用 ArkUI linearGradient 写滚动边缘渐隐遮罩条（模拟 fadingEdges、FadeClip），确定渐变方向、终点色以及遮罩层尺寸与命中时
   - 情境：源端用 fadingEdges 一类修饰让横滑行或纵向滚动区的内容在边缘淡出、不着色；目标改用叠在内容上、从容器底色渐变到透明的 linearGradient 遮罩条，按左右或上下边分别放置，底色常是运行期解析出的 '#AARRGGBB' 主题色；生成期不能上机看效果。
+  - 例外：渐隐的是 List、Grid、Scroll、WaterFlow 这类滚动容器本身、且目标已用其 fadingEdge 属性（API 14 起，默认渐隐长度 32vp）实现时，平台按透明度淡出内容、不依赖底色，不要换成本条的遮罩条；fadingEdge 生效时会覆盖该组件自己的 overlay 与 blendMode，该组件上也不宜再设 background；遮罩条要求边缘下方是单一的容器底色：底下是图片或渐变背景时，从底色到透明的遮罩条会盖出一道色带，不能当作淡出
 - [位图着色（ColorFilter.tint、setColorFilter）用 Image.colorFilter：fillColor 只对 SVG 图源生效](lesson-1a66114fb7523a1f9af1.lesson.md)
   - 时机：界面实现阶段为源端着色的图片写 ArkUI Image 修饰链、选择着色 API 时；规格提取阶段为 ColorFilter.tint 一类着色写转换决策时
   - 情境：源端 Compose Image 的 colorFilter = ColorFilter.tint(color)（默认 SrcIn），或 ImageView 的 tint、setColorFilter（XML android:tint 未写 tintMode 与 setColorFilter(int) 默认 SRC_ATOP，app:tint、setImageTintList 默认 SRC_IN），作用在 png/jpg/webp 位图上（常见白色加透明通道、靠着色才可见的示意图）；目标资源仍是同一位图；规格转换行可能把 fillColor 与 colorFilter 列成并列选项。
@@ -38,3 +42,4 @@
 - [源端图像模糊、乘法压暗与折叠态着色按参数等价实现](lesson-55cac970ada4ca8fd3f1.lesson.md)
   - 时机：界面实现阶段，迁移折叠头部等使用图片模糊、LightingColorFilter 压暗和按折叠状态切换工具栏图标颜色的页面时
   - 情境：源背景图经模糊变换与 LightingColorFilter(mul, 0) 处理，工具栏图标由专门的着色管理类按折叠阈值切换颜色。
+  - 例外：第 1 步的纯黑覆盖层只在 LightingColorFilter 的 mul 三个通道相等（灰色乘数）、add 为 0、且图片在覆盖范围内不透明时与源端等价：mul 各通道不同（带色相）或 add 不为 0 时要按通道算式另行实现；图片有透明区域时，黑色覆盖层会把透明处下方的内容也压暗，而源端滤镜不改 alpha，覆盖层要限定在图片不透明的区域

@@ -35,6 +35,7 @@ ScrollView/NestedScrollView 与 weight 剩余区列表的滚动范围（固定�
 - [源端“右列 match_parent 跟随左卡等高”在 Scroll 内用实测高度传递实现，不用估算常量](lesson-8334433bea644f2a89ae.lesson.md)
   - 时机：界面实现与验证期修复阶段，为并排卡片确定跟随等高约束，而整行位于 Scroll 等纵向无界容器中时
   - 情境：Android 水平行里右列 height=match_parent 随左侧 wrap_content 卡片等高；整行在 NestedScrollView（ArkUI Scroll）中；目标在 Scroll 内用纵向 layoutWeight 或 height('100%') 会被撑高失控。
+  - 例外：onSizeChange 从 API 12 起提供；工程最低兼容版本低于 12 时，改在左卡 onAreaChange 里取新区域的 height 写入状态，做法不变。代码里已用这两种回调之一把左卡量得的高度传给右卡的，保留，不改回常量或百分比。
 - [转换滚动区时只把源滚动容器内的子节点放进 Scroll/List，固定头部留在外面；weight 剩余区里与列表叠放的空态放在有确定高度的区域内居中](lesson-46a0d7f239efac925d33.lesson.md)
   - 时机：界面实现阶段，把 Android 页面转成 ArkUI 时确定固定区域与 Scroll/List 的包含范围，或借用相邻页面的页面骨架时；以及规格提取阶段书写滚动容器的转换决策时
   - 情境：源布局根为纵向 LinearLayout 或 RelativeLayout，顶部用户栏、工具栏或横幅位于 NestedScrollView 之前（RelativeLayout 中滚动容器以 layout_below 排在其下），滚动容器承载地图、主按钮、卡片、宫格等主体；目标用 ArkUI Scroll 实现。 也包括源根为纵向 LinearLayout：固定高度标题栏与 layout_height=0dp、layout_weight=1 的列表容器同级，容器内 RecyclerView 与 match_parent、gravity=center 的空态 TextView 叠放、按数据显隐；同工程相邻页面按其自身源码采用整页单一 Scroll，可能被当作骨架照搬。

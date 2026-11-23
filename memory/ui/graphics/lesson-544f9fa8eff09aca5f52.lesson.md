@@ -1,16 +1,21 @@
 # Coil 全局 ImageLoader 的占位、错误图与解码器写进图片契约：没装 GIF 解码器时只显示动图首帧
 
-ID：`lesson-544f9fa8eff09aca5f52` · 版本：2
+ID：`lesson-544f9fa8eff09aca5f52` · 版本：3
 
 [本主题](index.md)
 
 ## 何时使用
 
-规格提取阶段整理图片加载管线与设置位归属时；界面实现阶段把 Coil AsyncImage 映射为 ArkUI Image 时
+规格提取阶段整理图片加载管线与设置位归属时；界面实现阶段把经应用自定义全局 ImageLoader 加载的 Coil AsyncImage 映射为 ArkUI Image 时
 
 ## 适用情境
 
 Android 图片组件经应用的 ImageLoaderFactory 或 Coil.setImageLoader 加载，默认 loader 设 placeholder、error、crossfade 并只装部分解码器，autoPlayGifs 一类设置位切换到带 GIF 解码器的 loader；目标用 ArkUI Image（默认播放动图）与 alt 实现。
+
+## 例外与边界
+
+- 只对动图源取首帧，静态图照常用 Image；设置位打开、或界面本来就用带 GIF 解码器的 loader 时，直接用 Image 播放，Image 会在节点不可见时自行停止动画，不需要另写暂停逻辑
+- 用 ImageSource 取首帧时 DecodingOptions.index 不写就是第 0 帧，不需要另设
 
 ## 原因
 
