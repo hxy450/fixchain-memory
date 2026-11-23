@@ -1,6 +1,6 @@
 # 诊断日志上传按源端上传函数的打包清单与协议实现：收窄为 HTTPS 或快照前先列差异交用户确认，动态预签名地址按端点允许协议
 
-ID：`lesson-d434bb5c16bc721d9a00` · 版本：1
+ID：`lesson-d434bb5c16bc721d9a00` · 版本：2
 
 [本主题](index.md)
 
@@ -15,6 +15,7 @@ ID：`lesson-d434bb5c16bc721d9a00` · 版本：1
 ## 例外与边界
 
 - 用户已确认与源端不同的安全或隐私取舍，此时按确认结果实现，并在报告中写明差异
+- 第 2 步放开 http 的前提是源端确实允许明文：清单没写 usesCleartextTraffic、也没有 networkSecurityConfig 时，targetSdkVersion 低于 28 才默认允许明文，28 起默认不允许；源端默认就不允许明文的，上传端点照样只走 HTTPS
 
 ## 原因
 

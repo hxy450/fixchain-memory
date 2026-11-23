@@ -1,6 +1,6 @@
 # onPreferenceChange 返回 true 即接受并持久化新值：其中发起的验证按源顺序先落值再补偿，取消不回滚
 
-ID：`lesson-8b84279c4ecbeaf26e3e` · 版本：1
+ID：`lesson-8b84279c4ecbeaf26e3e` · 版本：2
 
 [本主题](index.md)
 
@@ -11,6 +11,10 @@ ID：`lesson-8b84279c4ecbeaf26e3e` · 版本：1
 ## 适用情境
 
 源端在 onPreferenceChange 里发起异步验证后立即 return true，验证成功的回调只做补偿动作（如再次 setChecked 同值），取消没有回滚分支；目标用受控 Toggle 与回调实现，写者倾向“先回滚、验证成功才落值”。
+
+## 例外与边界
+
+- 源端这项 Preference 设了 android:persistent="false" 或没有 key 时，返回 true 只更新这项的显示状态、不写入偏好；目标照样先更新开关显示，但不新增一条持久化写入。
 
 ## 原因
 

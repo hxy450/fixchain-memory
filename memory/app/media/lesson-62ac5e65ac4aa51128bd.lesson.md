@@ -1,6 +1,6 @@
 # 本地音频导入用 AudioViewPicker 并复制进沙箱；photoAccessHelper 只覆盖图片和视频，不作为音频来源
 
-ID：`lesson-62ac5e65ac4aa51128bd` · 版本：1
+ID：`lesson-62ac5e65ac4aa51128bd` · 版本：2
 
 [本主题](index.md)
 
@@ -11,6 +11,10 @@ ID：`lesson-62ac5e65ac4aa51128bd` · 版本：1
 ## 适用情境
 
 源端申请 READ_EXTERNAL_STORAGE/READ_MEDIA_AUDIO 后查询 MediaStore.Audio 列出本地音频；目标受“不申请图片/视频媒体权限、优先 picker”约束，候选方案涉及 photoAccessHelper(MediaLibraryKit)、READ_AUDIO 与 AudioViewPicker。
+
+## 例外与边界
+
+- 换成 AudioViewPicker 后要保留源端一次拿到多首音频的能力：AudioSelectOptions.maxSelectNumber 不设时只能选 1 首，要按需设大（上限 500）；select 返回的 URI 只有临时只读权限、应用退到后台就失效，复制进沙箱要在拿到结果后立即完成，不只保存 URI
 
 ## 原因
 

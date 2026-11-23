@@ -1,6 +1,6 @@
-# 视频页按对应源 Activity 绑定 surface，XComponent 按视频宽高比内接
+# 视频页按对应源 Activity 绑定 surface，源端等比适配时 XComponent 按视频宽高比内接
 
-ID：`lesson-6b4950ca1655ae7bcb8f` · 版本：1
+ID：`lesson-6b4950ca1655ae7bcb8f` · 版本：2
 
 [本主题](index.md)
 
@@ -11,6 +11,11 @@ ID：`lesson-6b4950ca1655ae7bcb8f` · 版本：1
 ## 适用情境
 
 源新版播放视图在控制器就绪后即挂接播放器、默认等比适配，旧版页另有“surface 就绪且 PLAYING”双守卫；目标用 XComponent(SURFACE) 加共享 AVPlayer 引擎。
+
+## 例外与边界
+
+- 源端 PlayerView 设了 resize_mode（fill、zoom、fixed_width、fixed_height）或源页本来就铺满拉伸时，按源端那一种映射，不一律改成内接；裁切铺满对应 AVPlayer 的 VIDEO_SCALE_TYPE_FIT_CROP。
+- 工程已把 AVPlayer.videoScaleType 设为 VIDEO_SCALE_TYPE_SCALED_ASPECT（API 20 起，等比缩放、短边居中）时，平台已经按宽高比内接，XComponent 可以铺满根区域，不必再按宽高比计算尺寸。
 
 ## 原因
 

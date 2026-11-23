@@ -1,16 +1,20 @@
 # System.exit/killProcess 式“重启”迁为 ApplicationContext.restartApp，并携带系统原本重建的界面状态
 
-ID：`lesson-0880ecd4fe9a29885ba7` · 版本：1
+ID：`lesson-0880ecd4fe9a29885ba7` · 版本：2
 
 [本主题](index.md)
 
 ## 何时使用
 
-规格提取与入口实现阶段，为源端进程退出类调用（System.exit、Runtime.exit、Process.killProcess）确定目标行为与状态保留要求时
+规格提取与入口实现阶段，为源端进程退出类调用（System.exit、Runtime.exit、Process.killProcess）确定目标行为与状态保留要求时（方法注释或调用点表明意图是重启）
 
 ## 适用情境
 
 源方法注释或调用点表明意图是重启（语言切换、数据恢复或重置后、导入完成通知点击），实现只有 System.exit(0)；源前台进程被杀后，Android 按残留任务栈重建 Activity 并交回 savedInstanceState（抽屉开合、列表位置、搜索条件等）；目标在 UIAbility.terminateSelf 与 ApplicationContext.restartApp 之间选择。
+
+## 例外与边界
+
+- 调用点的用户可见终态就是离开应用（如“退出”菜单、上报后结束的致命错误处理），或调用时应用已在后台、没有前台任务可重建的，按退出处理，不改成 restartApp。
 
 ## 原因
 

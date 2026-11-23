@@ -1,6 +1,6 @@
 # 源端 getter 读打开期缓存或逐帧回调写入的相机元数据时，目标改为提交后快照或事件订阅缓存，不在 getter 里调同步相机服务接口
 
-ID：`lesson-2fd3f5f24a7571d3eded` · 版本：1
+ID：`lesson-2fd3f5f24a7571d3eded` · 版本：2
 
 [本主题](index.md)
 
@@ -11,6 +11,10 @@ ID：`lesson-2fd3f5f24a7571d3eded` · 版本：1
 ## 适用情境
 
 源端打开时缓存 CameraCharacteristics 派生的能力，或由 onCaptureCompleted 写入 capture_result_* 字段，调用方在 UI 访问、定时绘制或会话切换中高频读取；目标对应接口（getSupportedOutputCapability、session.isFocusModeSupported/getSupportedIsoRange、getIso/getExposureDuration）是同步相机服务调用，另有 ISO/曝光信息变化事件可订阅。
+
+## 例外与边界
+
+- 逐帧结果的事件有版本条件：拍照会话的 onIsoInfoChange、onExposureInfoChange 自 API 24 起，录像会话的 onIsoInfoChange 自 API 22 起。运行设备上没有对应事件时，这一项按“未就绪”处理（返回源端字段未写入时的值），不退回到在 getter、定时器或绘制回调里同步调用 getIso/getExposureDuration。
 
 ## 原因
 

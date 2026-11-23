@@ -1,6 +1,6 @@
 # Flutter 插件标记可用前，按应用实际调用追到执行的原生实现，核对它请求的权限与返回状态；纯 Dart 上层包、同 API 的 OHOS 分支都不等于行为等价
 
-ID：`lesson-4b7012d4bdceef5e8c36` · 版本：1
+ID：`lesson-4b7012d4bdceef5e8c36` · 版本：2
 
 [本主题](index.md)
 
@@ -11,6 +11,10 @@ ID：`lesson-4b7012d4bdceef5e8c36` · 版本：1
 ## 适用情境
 
 业务经纯 Dart 上层包（如选图 UI）调用读系统媒体库的原生插件，或经权限插件请求 Android 专用权限组（如 Permission.storage）并以授予结果门控下载、保存等流程；插件已换成同 Dart API 的 OHOS 实现，pub get、HAP 构建与插件注册均通过。
+
+## 例外与边界
+
+- 第 2 步的系统选择器只覆盖“读”（让用户选图、选视频）；链路是把图片、视频写进图库时，普通应用改用保存安全控件或授权弹窗（showAssetsCreationDialog）保存，同样不申请 WRITE_IMAGEVIDEO，Dart API 与返回类型照样保持
 
 ## 原因
 

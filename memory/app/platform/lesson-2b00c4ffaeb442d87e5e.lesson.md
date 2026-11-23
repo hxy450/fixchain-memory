@@ -1,6 +1,6 @@
 # 接入 identifier.getOAID 时同批声明 APP_TRACKING_CONSENT 并在隐私同意后申请；全零串按未授权处理
 
-ID：`lesson-2b00c4ffaeb442d87e5e` · 版本：1
+ID：`lesson-2b00c4ffaeb442d87e5e` · 版本：2
 
 [本主题](index.md)
 
@@ -11,6 +11,10 @@ ID：`lesson-2b00c4ffaeb442d87e5e` · 版本：1
 ## 适用情境
 
 源端在隐私协议同意后静默采集 OAID，写缓存、上送归因接口并发布就绪事件；鸿蒙 getOAID 需要 user_grant 权限 ohos.permission.APP_TRACKING_CONSENT，未授权时返回全零串；Android 端没有对应的运行期授权。
+
+## 例外与边界
+
+- 用户拒绝过 APP_TRACKING_CONSENT 后，再次调用 requestPermissionsFromUser 不会再弹窗；之后的启动照常走全零串（未授权）分支继续，不把申请没成功当作阻塞启动或报错的条件。
 
 ## 原因
 

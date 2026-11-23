@@ -1,6 +1,6 @@
 # MessageDigest 改用 cryptoFramework Md 时，空输入不调用 update，直接返回该算法的空输入摘要
 
-ID：`lesson-31b2022cb16eba3d9f1e` · 版本：2
+ID：`lesson-31b2022cb16eba3d9f1e` · 版本：3
 
 [本主题](index.md)
 
@@ -12,9 +12,13 @@ ID：`lesson-31b2022cb16eba3d9f1e` · 版本：2
 
 源端对可能为空的字段（标题、摘要文本等）无条件求摘要，空串是正常路径；目标用 cryptoFramework.createMd + update({ data }) + digest()。
 
+## 例外与边界
+
+- 第 1 步给的常量是 SHA-256 的小写十六进制形式；源端用的是别的算法（如 MD5、SHA-1），或把摘要编码成大写十六进制、Base64 等其他形式时，空输入要返回同一算法、同一编码下的值，和非空路径的输出格式一致，否则同一内容得到的键与源端不同。
+
 ## 原因
 
-已观察到 Md.update 传入零长度 DataBlob 时运行期抛错（build context fail.），而源端对空串照常返回摘要；空字段在目标中断整个调用。只调用 digest() 不调用 update 是否可行尚未在干净构建上验证。
+已观察到 Md.update 传入零长度 DataBlob 时运行期抛错（build context fail.），而源端对空串照常返回摘要；空字段在目标中断整个调用。文档写明 Md 的 digest 必选、update 可选，只调用 digest() 不调用 update 符合接口约定，卡里尚未在干净构建上验证。
 
 ## 做法
 

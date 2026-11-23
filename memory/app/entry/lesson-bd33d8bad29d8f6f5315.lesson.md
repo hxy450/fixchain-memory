@@ -1,6 +1,6 @@
 # 被第三方拉起并回传结果的入口：setResult+finish 映射为一次 terminateSelfWithResult，最终状态确定后从唯一出口回传
 
-ID：`lesson-bd33d8bad29d8f6f5315` · 版本：1
+ID：`lesson-bd33d8bad29d8f6f5315` · 版本：2
 
 [本主题](index.md)
 
@@ -11,6 +11,11 @@ ID：`lesson-bd33d8bad29d8f6f5315` · 版本：1
 ## 适用情境
 
 源端以 setResult(RESULT_OK/RESULT_CANCELED, data)+finish() 回传，可能在多处调用 setResult（后一次覆盖前一次，finish 幂等），并按 EXTRA_OUTPUT、时长/大小/质量限制或内联数据分支处理；目标由 Want 拉起，结果经 UIAbilityContext.terminateSelfWithResult 以 AbilityResult 一次性返回。
+
+## 例外与边界
+
+- 写调用方给的输出 URI 依赖调用方在 Want 的 flags 里临时授予写权限（FLAG_AUTH_WRITE_URI_PERMISSION）；打开或写入失败时按取消回传，不改写到本应用自选的位置再报成功。
+- 只有经 startAbilityForResult 拉起时结果才会回到调用方；普通拉起的同一入口照样走唯一出口结束，不另写一条只 terminateSelf 的分支。
 
 ## 原因
 

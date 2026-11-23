@@ -1,12 +1,12 @@
 # 相机拍摄的照片与录像走相机系统资产保存，不默认用需受限写权限 WRITE_IMAGEVIDEO 的 createAsset 系列
 
-ID：`lesson-262681f65adf4aeb0ce3` · 版本：1
+ID：`lesson-262681f65adf4aeb0ce3` · 版本：2
 
 [本主题](index.md)
 
 ## 何时使用
 
-相机拍照与录像的保存实现阶段，为相机产出的照片、视频选择媒体库写入接口与 PhotoOutput、AVRecorder 输出回调时；规格提取写 MediaStore → photoAccessHelper 映射行时
+相机拍照与录像的保存实现阶段，为相机产出的照片、视频选择媒体库写入接口与 PhotoOutput、AVRecorder 输出回调时（源端存进系统相册、目标没有 WRITE_IMAGEVIDEO 受限权限签名授权）；规格提取写 MediaStore → photoAccessHelper 映射行时
 
 ## 适用情境
 
@@ -16,6 +16,7 @@ ID：`lesson-262681f65adf4aeb0ce3` · 版本：1
 
 - 工程已具备 ohos.permission.WRITE_IMAGEVIDEO 的受限权限签名授权，且当前决策要求应用自建资产
 - 调用方（如外部拍照/录像请求）显式给出输出 URI 时，写入该 URI
+- 源端把照片或录像只写在应用私有目录、不进系统相册的，目标照源端写应用沙箱（照片走 photoAvailable 取字节、录像用 APP_CREATE + 沙箱文件 fd），不改成相机系统资产：saveCameraPhoto 与 AUTO_CREATE_CAMERA_SCENE 会把文件存进相册。
 
 ## 原因
 

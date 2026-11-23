@@ -1,6 +1,6 @@
 # HAR 模块不引用宿主 BuildProfile：构建模式由壳层入口注入，跨模块只从包名入口导入
 
-ID：`lesson-6bd9ae0de39cecc06744` · 版本：1
+ID：`lesson-6bd9ae0de39cecc06744` · 版本：2
 
 [本主题](index.md)
 
@@ -11,6 +11,10 @@ ID：`lesson-6bd9ae0de39cecc06744` · 版本：1
 ## 适用情境
 
 工程拆为 products 壳 HAP 与 features/components 等 HAR 模块；迁移或新增的 HAR 代码需要构建模式常量（裸模块名 'BuildProfile' 只在宿主 HAP 可解析，每个 HAR 另有自己生成的 BuildProfile），或宿主页要使用其他模块的类；整包 assembleHap 能通过，IDE 按模块做 ArkTS 检查。
+
+## 例外与边界
+
+- 把跨模块相对路径改回包名入口导入时，被引用的类须已在对方模块的入口声明文件（oh-package.json5 的 main 指定，默认 Index.ets）导出，且引用方模块已配置对该 HAR 的依赖；缺哪一项就补哪一项，不退回相对路径。
 
 ## 原因
 

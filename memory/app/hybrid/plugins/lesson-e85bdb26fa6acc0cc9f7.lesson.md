@@ -1,6 +1,6 @@
 # 兼容层交给冻结业务的对象，按全部消费方保留尺寸等元数据语义，并按下游处理上限先在原生侧缩放大图
 
-ID：`lesson-e85bdb26fa6acc0cc9f7` · 版本：1
+ID：`lesson-e85bdb26fa6acc0cc9f7` · 版本：2
 
 [本主题](index.md)
 
@@ -19,7 +19,7 @@ Flutter 应用 Dart 冻结；本地兼容包把系统选择器结果包装成 As
 ## 做法
 
 1. 改写兼容层返回对象前，在整个 lib 中检索该对象及其字段的消费方（如 .width/.height、assets.first.width、传给下游页的 imageWidth/imageHeight），并打开会压缩、上传或编辑原图的代表性链路，记下依赖的字段与业务自身的尺寸上限；不只过滤到报告的流程。
-2. 下游在 UI isolate 同步处理原图时，在兼容层用原生图片引擎（ImageSource，或 flutter_image_compress 的 compressAndGetFile）按业务上限等比缩放到两边都不超界，失败回退原文件；不在 Dart 侧整图解码。
+2. 下游在 UI isolate 同步处理原图时，在兼容层用原生图片引擎（ImageSource，或 flutter_image_compress 的 compressAndGetFile）按业务上限等比缩放到两边都不超界（用 ImageSource 解码时 desiredSize 不保持宽高比，要先按原图宽高比算出目标宽高再传），失败回退原文件；不在 Dart 侧整图解码。
 3. 宽高从文件头读取（ImageSource.getImageInfo 或读取头信息的库），需要时按 EXIF 方向交换；读取失败给非零兜底，不用 0 占位。
 
 ## 可选检查

@@ -1,6 +1,6 @@
 # 源端退后台不停播时，AVPlayer 接入 AVSession 与音频长时任务，并声明后台模式与权限
 
-ID：`lesson-598d3bd04a676dfa11ae` · 版本：1
+ID：`lesson-598d3bd04a676dfa11ae` · 版本：2
 
 [本主题](index.md)
 
@@ -12,9 +12,13 @@ ID：`lesson-598d3bd04a676dfa11ae` · 版本：1
 
 源端在页面或宿主里内联播放音频（录音附件等），宿主 onPause/onStop 不调用 pause/stop/release，只有显式停止、播完或退出才停，退后台后继续播到结束；目标 AVPlayer 未接 AVSession、未申请长时任务，module.json5 也没有 backgroundModes 与 KEEP_BACKGROUND_RUNNING。
 
+## 例外与边界
+
+- AVPlayer 没有另设 audioRendererInfo 时，纯音频源的 usage 默认是 STREAM_USAGE_MUSIC（含视频的源默认 STREAM_USAGE_MOVIE），都属于媒体类，第 2 步的 AVSession 不能省；只有工程已把 usage 设成媒体类、游戏类以外的类型时，才只需音频播放类长时任务、不必接 AVSession。不要为省掉 AVSession 去改原有的 usage。
+
 ## 原因
 
-HarmonyOS 的后台音频要同时具备 AVSession 与音频播放类长时任务（含 module.json5 的 backgroundModes 与 KEEP_BACKGROUND_RUNNING 权限），缺一项退后台就被系统静音暂停。映射行不看宿主生命周期就写成“行为等价”，源端跨后台的播放在目标成了缺失功能。
+HarmonyOS 在后台播放媒体类（流类型 STREAM_USAGE_MUSIC、STREAM_USAGE_MOVIE、STREAM_USAGE_AUDIOBOOK）和游戏类音频时，要同时具备 AVSession 与音频播放类长时任务（含 module.json5 的 backgroundModes 与 KEEP_BACKGROUND_RUNNING 权限），缺一项退后台就被系统静音挂起，切回前台才恢复；其他用户可感知的播放只需音频播放类长时任务。映射行不看宿主生命周期就写成“行为等价”，源端跨后台的播放在目标成了缺失功能。
 
 ## 做法
 

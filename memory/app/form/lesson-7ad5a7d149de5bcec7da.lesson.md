@@ -1,6 +1,6 @@
 # 服务卡片按实际宽高选布局：由 FormExtensionAbility 取尺寸下发，V1 卡片页的派生值写成普通方法
 
-ID：`lesson-7ad5a7d149de5bcec7da` · 版本：1
+ID：`lesson-7ad5a7d149de5bcec7da` · 版本：2
 
 [本主题](index.md)
 
@@ -11,6 +11,10 @@ ID：`lesson-7ad5a7d149de5bcec7da` · 版本：1
 ## 适用情境
 
 源端 Glance AppWidget 用 SizeMode.Exact/LocalSize 按卡片实际宽高选布局（宽度断点、按高度显示标题栏等）；目标为 ArkTS 服务卡片（V1 卡片页 + FormExtensionAbility + form_config 离散规格），实现者准备在卡片页用通用尺寸事件取宽高，或只按 FormDimension 档位一档对一形态。
+
+## 例外与边界
+
+- getFormRect 与 onSizeChanged 自 API 20 起才有，且 getFormRect 在能力不支持时抛错误码 801：工程最低兼容版本低于 API 20 或调用失败时拿不到实际宽高，这时保留第 2 步按离散规格换算出的档位作为卡片的初始数据，不让卡片因缺尺寸停在默认分支
 
 ## 原因
 

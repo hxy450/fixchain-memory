@@ -9,10 +9,11 @@
 - [ArkTS intl.NumberFormat 用 style: 'currency' 时必须给 currency 代码，不会像 Java getCurrencyInstance 那样按 locale 推导币种](lesson-19cedec8ad1bc4b08b2c.lesson.md)
   - 时机：实现或修复阶段，把 Android NumberFormat.getCurrencyInstance() 的价格格式化改写为 @kit.LocalizationKit 的 intl.NumberFormat，并确定币种来源与显示形式时
   - 情境：源端用不带币种参数的 NumberFormat.getCurrencyInstance() 按默认 locale 格式化金额；目标用 intl.NumberFormat(locale, { style: 'currency', ... })；任务或巡检要求“随系统 locale 选择币种”，而 SDK 声明里查不到 region→currency 的接口。
-  - 例外：应用需要多币种或按用户地区切换币种时，不能用固定前缀代替格式化器
+  - 例外：应用需要多币种或按用户地区切换币种时，不能用固定前缀代替格式化器；基线显示 $ 而 currencyDisplay 默认的 symbol 显示成 US$ 时，先改用 currencyDisplay: 'narrowSymbol'（文档以 USD 为例：symbol 为 -US$12,300.00，narrowSymbol 为 -$12,300.00），保留格式化器的分组和小数规则；它也拿不到基线形式时，才按第 2 步直接格式化。
 - [MessageDigest 改用 cryptoFramework Md 时，空输入不调用 update，直接返回该算法的空输入摘要](lesson-31b2022cb16eba3d9f1e.lesson.md)
   - 时机：实现阶段，把对可能为空的字符串求摘要（缓存键、内容哈希）的 MessageDigest 调用改写为 cryptoFramework.createMd 时
   - 情境：源端对可能为空的字段（标题、摘要文本等）无条件求摘要，空串是正常路径；目标用 cryptoFramework.createMd + update({ data }) + digest()。
+  - 例外：第 1 步给的常量是 SHA-256 的小写十六进制形式；源端用的是别的算法（如 MD5、SHA-1），或把摘要编码成大写十六进制、Base64 等其他形式时，空输入要返回同一算法、同一编码下的值，和非空路径的输出格式一致，否则同一内容得到的键与源端不同。
 - [TabContent.tabBar 只接受字符串、资源、CustomBuilder、TabBarOptions 与 SubTabBarStyle/BottomTabBarStyle，不传 { title } 对象](lesson-b402fa546504a1dd6db7.lesson.md)
   - 时机：页面实现或编译修复阶段，为 Tabs 的 TabContent 编写或改写页签时
   - 情境：目标主页用 Tabs + TabContent 做底部导航，页签为纯文字、文字加图标或带选中色的自定义样式；写者准备以对象字面量表达页签标题。

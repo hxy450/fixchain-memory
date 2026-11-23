@@ -1,6 +1,6 @@
 # 本地文件路径接到 ArkUI Video 前规范成 file:// URI，并分清缓存接口返回的是路径还是播放地址
 
-ID：`lesson-2b3d45c1a89dc1ead7e3` · 版本：1
+ID：`lesson-2b3d45c1a89dc1ead7e3` · 版本：2
 
 [本主题](index.md)
 
@@ -11,6 +11,10 @@ ID：`lesson-2b3d45c1a89dc1ead7e3` · 版本：1
 ## 适用情境
 
 源端把缓存文件路径交给第三方播放器 setUrl(path)（其内部把本地文件转成 Uri）；目标用 ArkUI Video；工程缓存单例可能同时提供返回裸沙箱路径和返回 file:// 播放地址的两个方法。
+
+## 例外与边界
+
+- 已经带 file:// 前缀的播放地址、网络地址和 $rawfile 资源原样传入，不再补前缀；把沙箱路径转成 URI 时优先用 fileUri.getUriFromPath，Video 文档写明的形式是 file://<bundleName>/<沙箱路径>，手工拼接的结果要和这个形式一致
 
 ## 原因
 

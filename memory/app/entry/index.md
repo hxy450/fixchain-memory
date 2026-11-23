@@ -7,8 +7,9 @@
 ## 本级经验
 
 - [System.exit/killProcess 式“重启”迁为 ApplicationContext.restartApp，并携带系统原本重建的界面状态](lesson-0880ecd4fe9a29885ba7.lesson.md)
-  - 时机：规格提取与入口实现阶段，为源端进程退出类调用（System.exit、Runtime.exit、Process.killProcess）确定目标行为与状态保留要求时
+  - 时机：规格提取与入口实现阶段，为源端进程退出类调用（System.exit、Runtime.exit、Process.killProcess）确定目标行为与状态保留要求时（方法注释或调用点表明意图是重启）
   - 情境：源方法注释或调用点表明意图是重启（语言切换、数据恢复或重置后、导入完成通知点击），实现只有 System.exit(0)；源前台进程被杀后，Android 按残留任务栈重建 Activity 并交回 savedInstanceState（抽屉开合、列表位置、搜索条件等）；目标在 UIAbility.terminateSelf 与 ApplicationContext.restartApp 之间选择。
+  - 例外：调用点的用户可见终态就是离开应用（如“退出”菜单、上报后结束的致命错误处理），或调用时应用已在后台、没有前台任务可重建的，按退出处理，不改成 restartApp。
 - [intent-filter 逐条映射为 module.json5 skills：有对应 action 的不合并，载荷键不自造，源端没有的不加](lesson-a23ad0b53c75e49ca117.lesson.md)
   - 时机：规格提取阶段把 AndroidManifest 的 intent-filter 与入口 Intent 载荷翻成 module.json5 skills 与 Want 参数契约时；接线阶段按笔记或 skill 参考给出的片段修改 skills 时；集成阶段在入口 Ability 实现外部 Want 的参数解析时
   - 情境：源 Activity 声明多条 intent-filter（SEARCH、VIEW 自定义 scheme、SEND/SEND_MULTIPLE */*、PROCESS_TEXT 等），入口分发读取 Intent.EXTRA_* 键，并可能在初始化或验密门之后才处理 Intent；目标为 UIAbility 的 module.json5 skills（actions、entities、uris，分享目标需 utd 与 maxFileSupported）与 Want parameters、systemShare 载荷；skill 参考或交接笔记可能给出“调用某系统能力须声明某 skill”的片段。源端 MAIN/LAUNCHER 对应的入口 skill（ohos.want.action.home 加 entity.system.home）留在入口 Ability 上，不在“源端没有的不加”之列。也包括集成者在入口 Ability 解析第三方拉起 Want 的 extras：多个键表达同一选项、源端按固定顺序短路判定，且取值限定在少数几个值。源端某条 intent-filter 的 action 在鸿蒙没有对应值（如 PROCESS_TEXT）时，不自造 ohos.want.action.* 字符串当作已映射（skills 的 actions 收任意字符串，写错也不报错），在规格里写明鸿蒙没有对应入口。
@@ -27,7 +28,7 @@
 - [源 Activity 为 standard、目标入口为 singleton 时，onNewWant 送达的外部请求要被已存在页面观察并重放](lesson-dc66a65d3ec6e3619046.lesson.md)
   - 时机：规格提取与入口接线阶段，确定第三方拉起请求（拍摄、选择等带结果回传的 Want）在已运行实例上的承接方式，以及设计 Want 快照的写入点与消费点时
   - 情境：源 Activity 未声明 launchMode（standard）且没有 onNewIntent，每次外部请求都新建实例、在 onCreate 一次性读取 Intent extras 并经自己的结果通道回传；目标沿用 singleton 入口 UIAbility，新 Want 经 onNewWant 到达已运行实例，Want 解析写进共享快照，页面或 ViewModel 只在构造时读取一次。
-  - 例外：每次外部请求已由独立的 multiton Ability 实例承接、每个实例只处理自己的 Want 时，不需要本条的重放与失效处理
+  - 例外：每次外部请求已由独立的 multiton Ability 实例承接、每个实例只处理自己的 Want 时，不需要本条的重放与失效处理；onNewWant 不只在外部拉起请求到达时触发：用户把已在后台的实例切回前台、showAbility 等场景也会触发，这时传入的 Want 不带新的拉起请求；只有 Want 里确实带有新请求（action、请求参数）时才递增修订号并结束旧请求的工作，不带新请求的 onNewWant 要保留进行中的采集、录制和旧请求的结果通道
 - [源 Activity 未声明 configChanges 时，旋转（未被 screenOrientation 锁定）、语言、深浅色、字号、显示大小变化都会重建它：目标 UIAbility 与页面不重建，逐页按源端重建时序显式处理——直接 show() 的非托管对话框关闭、托管对话框以新实例重显（setter 注入的监听与参数丢失）、文案与一次性状态刷新、新实例 onCreate/onResume 的可见效果重放；configChanges 不含 orientation 时旋转同样重建](lesson-94715d0df4c03a8fb5a5.lesson.md)
   - 时机：规格提取阶段把 Activity 生命周期回调与 Manifest 属性映射为目标生命周期契约时；实现阶段接线 UIAbility、页面生命周期，以及资源文案与一次性状态的缓存时；为只有静态列表与弹窗的页面写配置变化行为时
   - 情境：源 Activity 在 AndroidManifest 中未声明 android:configChanges，实现了 onSaveInstanceState/savedInstanceState 恢复分支，或在 View 构造、onSizeChanged、绘制时读取资源文案与 firstRun 等一次性状态；目标 HarmonyOS UIAbility 在语言、深浅色、字号、显示大小变化时不重建，只回调 onConfigurationUpdate 或发出 display 'change'。 也包括页面用 AlertDialog.Builder.show()/Dialog.show() 直接弹出非托管对话框（不经 DialogFragment、showDialog 或 DialogPreference），目标用页内状态驱动的浮层承载，页面没有动态文案。 也包括 configChanges 已声明但不含 orientation（如只写 screenSize），Activity 持有 SurfaceView 与自建渲染线程，监听器里用 setBackgroundResource/setImageResource 等代码设置界面状态。 也包括源界面是 Compose（setContent），组合内以 LaunchedEffect(key)、remember 或 BoxWithConstraints 读取窗口约束做一次性计算（如按宽度算格数、列数），ViewModel 跨重建存活；目标在启动或重放中调用设置应用语言的接口（setLanguage、setAppPreferredLanguage）；页面用 getStringSync 等把资源文案取成字符串存进状态。不论源端是 View 还是 Compose，跨重建保留的东西不在复位和重放范围：ViewModel 里的数据、onRetainNonConfigurationInstance 或保留实例的 Fragment 持有的对象、onSaveInstanceState 与 rememberSaveable 存下的值，重建后仍是原值，目标对应的状态保持不动；要复位的只是 Activity 字段、代码设置且未存档的视图属性和非 Saveable 的 remember。
@@ -38,12 +39,13 @@
 - [源端“getLast(Custom)NonConfigurationInstance 为空才按启动参数建立状态”只在配置变化重建时取回实例：目标按“本次是否由配置变化重建”区分，正常进入一律按入口参数分支，不用单例是否存在代替](lesson-ed571550c44efdeb321e.lesson.md)
   - 时机：规格提取与页面实现阶段，翻译源 Activity.onCreate 中“取回保留实例为空才读启动参数”的建局或建状态逻辑时
   - 情境：源 Activity 未声明 configChanges，用 onRetain(Custom)NonConfigurationInstance 与 getLast(Custom)NonConfigurationInstance 跨配置变化保留对象，该对象可能同时是静态单例（只在退出时 destroy）；目标页面不因配置变化重建，单例跨页面常驻，同一页面有多个入口模式（如新开与续局）。
+  - 例外：源 onCreate 另外还按 savedInstanceState（进程被回收后重建时非空）恢复状态的，那条路径上取回保留实例同样为空，但它不是“正常进入”：把它单独保留为恢复分支，不并进按入口参数新建的分支
 - [源端在入口 onCreate 首帧前按偏好设主题时，目标在 EntryAbility.onCreate 同步读取偏好并在 loadContent 前 setColorMode；恢复函数返回 Promise 而调用方不等待，就是首帧后才生效](lesson-dcb3c5e66dec2d126234.lesson.md)
   - 时机：入口与应用级配置阶段，规格提取或实现冷启动时应用持久化外观设置（深浅色等）的时机，并为启动恢复写移交或接线时
   - 情境：源入口 Activity 在 onCreate 首行（super.onCreate 之前）按 SharedPreferences 同步设置 DayNight 主题；目标 ApplicationContext.setColorMode 是进程态，偏好仓库只提供异步 init；功能规格只写“保存后即时生效”，没有冷启动恢复要求；恢复函数由一个任务写成 async，并以 HANDOFF 交给入口接线者调用。
   - 例外：源端存的是 AppCompatDelegate 的夜间模式整数时按含义对应、不照搬数值：MODE_NIGHT_YES（2）→ COLOR_MODE_DARK（0），MODE_NIGHT_NO（1）→ COLOR_MODE_LIGHT（1），MODE_NIGHT_FOLLOW_SYSTEM（-1）→ COLOR_MODE_NOT_SET（-1，跟随系统）；「跟随系统」不写成浅色；setColorMode 只承接深浅色；源端按偏好切换的是主题色、字号等其他 style 时，首帧前生效的要求照样成立，但目标的承接方式另定，不套用 setColorMode
 - [源端在设备或会话就绪回调（如相机打开）里读后即清的一次性入口请求，目标在同类就绪回调消费，不用页面显示时机代替](lesson-49ea8b0d74b224c316af.lesson.md)
-  - 时机：规格提取与跨切片接线阶段，为桌面卡片、快捷方式等外部入口置位的一次性请求确定目标消费时点与挂载点时
+  - 时机：规格提取与跨切片接线阶段，为桌面卡片、快捷方式等外部入口置位的一次性请求确定目标消费时点与挂载点时（源端在设备或会话就绪回调里读取并清除该请求；源端在页面创建、恢复时就消费的不在此列）
   - 情境：源端由小部件或快捷入口置位一次性标志，在设备或会话就绪回调（如相机打开后进入 setup）中读取并清除，再按就绪后的分支延时执行；目标把入口分发、页面生命周期（aboutToAppear/onPageShow/onShown）与引擎回调分给不同切片或文件。
 - [源端返回栈靠框架在进程回收后重建（rememberNavController、savedInstanceState、Activity 任务栈）时，规格单列“回收后重建”分支：只在系统回收后恢复整栈并保留各页原参数，强停、划掉、覆盖安装后按冷启分流；目标显式开启 UIAbility 恢复与 Navigation recoverable](lesson-b0405a29415547485ecb.lesson.md)
   - 时机：规格提取阶段为宿主 Activity 生命周期与导航容器编写验收项、为“进程回收后重建”铸平台差异决策时；入口装配阶段实现 UIAbility 与根 Navigation 的恢复路由时
@@ -54,6 +56,7 @@
 - [被第三方拉起并回传结果的入口：setResult+finish 映射为一次 terminateSelfWithResult，最终状态确定后从唯一出口回传](lesson-bd33d8bad29d8f6f5315.lesson.md)
   - 时机：功能实现与接线阶段，移植源 Activity 响应第三方带结果请求（如 ACTION_IMAGE_CAPTURE、ACTION_VIDEO_CAPTURE）的结果回传、输出位置与限制参数时；判定这类入口的平台缺口时
   - 情境：源端以 setResult(RESULT_OK/RESULT_CANCELED, data)+finish() 回传，可能在多处调用 setResult（后一次覆盖前一次，finish 幂等），并按 EXTRA_OUTPUT、时长/大小/质量限制或内联数据分支处理；目标由 Want 拉起，结果经 UIAbilityContext.terminateSelfWithResult 以 AbilityResult 一次性返回。
+  - 例外：写调用方给的输出 URI 依赖调用方在 Want 的 flags 里临时授予写权限（FLAG_AUTH_WRITE_URI_PERMISSION）；打开或写入失败时按取消回传，不改写到本应用自选的位置再报成功。；只有经 startAbilityForResult 拉起时结果才会回到调用方；普通拉起的同一入口照样走唯一出口结束，不另写一条只 terminateSelf 的分支。
 - [裁定“大字体”是否迁移时看源端是否有随系统字号缩放的文本，而不是有无 fontScale 代码；需要时在 AppScope 声明 configuration 跟随系统字号](lesson-ea965b7baf2488be23cd.lesson.md)
   - 时机：规格的横切能力裁定阶段（i18n、深色、大字体、无障碍）判断系统字号缩放是否迁移时；派发应用身份或应用外壳任务、落定 AppScope/app.json5 的 configuration 时
   - 情境：源应用主体可能是固定 px 字号的 Canvas 自绘，但仍有系统 AlertDialog、Toast、菜单或 sp 单位文本；Activity 是否在 configChanges 声明 fontScale 决定字号变化时重建还是回调；目标 HarmonyOS 应用默认不跟随系统字号（nonFollowSystem），需在 AppScope 配置 configuration profile 才会跟随并下发配置变化。改成跟随后，目标里不带单位的 fontSize（按 fp 计）和写成 fp 的字号都会随系统字号放大；源端用 px 或 dp 固定的字号（自绘文字、固定尺寸标签），在目标要写成 px 或 vp 才保持不随系统字号变化，不要随这次改动一起变成 fp。

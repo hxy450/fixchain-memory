@@ -1,6 +1,6 @@
 # 相机能力位与可选值按已提交会话的 isXxxSupported/getXxxRange 查询填写，SDK 声明了枚举或 setter 不等于支持
 
-ID：`lesson-1c175988beebe0d7c4dc` · 版本：1
+ID：`lesson-1c175988beebe0d7c4dc` · 版本：2
 
 [本主题](index.md)
 
@@ -11,6 +11,10 @@ ID：`lesson-1c175988beebe0d7c4dc` · 版本：1
 ## 适用情境
 
 源端能力位来自 Camera2 CameraCharacteristics（可用 AE/AWB 模式、硬件等级、RAW_SENSOR 输出尺寸），或由源码硬编码为常量；目标 @ohos.multimedia.camera 的 d.ts 里可见 ExposureMode、WhiteBalanceMode 的 LOCKED、MANUAL 等枚举与对应 setter，会话接口以 interface Xxx extends XxxQuery 分出查询方法；规格可能给出条件式能力规则（多个条件缺一即 false、按硬件等级、尺寸只列 JPEG），也可能把源端常量写成“恒为 true”。
+
+## 例外与边界
+
+- 源端条件式能力里不属于相机特性的那部分（应用自己的开关、偏好、按机型的例外判断）照源端保留，并与目标查询结果相与；“找不到等价查询就置为不支持”只针对相机特性那部分，不要因此丢掉或改写应用侧条件。
 
 ## 原因
 

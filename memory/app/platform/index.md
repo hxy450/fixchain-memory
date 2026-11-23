@@ -37,6 +37,7 @@
 - [接入 identifier.getOAID 时同批声明 APP_TRACKING_CONSENT 并在隐私同意后申请；全零串按未授权处理](lesson-2b00c4ffaeb442d87e5e.lesson.md)
   - 时机：服务层实现阶段，把源端 OAID（MSA 或厂商通道）采集迁到鸿蒙 identifier.getOAID 时
   - 情境：源端在隐私协议同意后静默采集 OAID，写缓存、上送归因接口并发布就绪事件；鸿蒙 getOAID 需要 user_grant 权限 ohos.permission.APP_TRACKING_CONSENT，未授权时返回全零串；Android 端没有对应的运行期授权。
+  - 例外：用户拒绝过 APP_TRACKING_CONSENT 后，再次调用 requestPermissionsFromUser 不会再弹窗；之后的启动照常走全零串（未授权）分支继续，不把申请没成功当作阻塞启动或报错的条件。
 - [源端 Activity 对自身 getWindow() 加的标志（FLAG_KEEP_SCREEN_ON、FLAG_SECURE 等）随该 Activity 窗口失效；映射到应用共享的 UIAbility 主窗口时按页面可见性成对开关（onShown 开、onHidden 关）](lesson-ea9a6cfecca9e091c7ea.lesson.md)
   - 时机：规格提取与页面实现阶段，把 Activity 的窗口标志映射为鸿蒙窗口 API 并写验收时
   - 情境：源端某个 Activity 在 onCreate 给 getWindow() 加标志且没有清除代码，靠该 Activity 不可见或 finish 时随窗口失效；目标各页以 Navigation/NavDestination 共用一个主窗口，经 window.getLastWindow 调 setWindowKeepScreenOn 等窗口级 API。页面是 router 管理的 @Entry 页而不是 NavDestination 时，成对的时机换成该页的 onPageShow / onPageHide；该页面对应独立的窗口（单独的 UIAbility 主窗口或子窗口）时，窗口标志随那个窗口失效，不在本条范围内。
@@ -52,6 +53,7 @@
 - [源端 await 分享结果再提示时，systemShare 的 show() 只代表面板已拉起：按 shareCompleted/dismiss 结算成功与取消](lesson-9abd54b8acda9f2b1983.lesson.md)
   - 时机：平台能力实现阶段，把源端会等待用户结果的分享调用映射为目标 API，并安排其后的成功/失败提示时
   - 情境：源代码先 await 插件的分享调用（如 Capacitor Share.share），之后弹成功提示、catch 中弹失败提示；目标用 HarmonyOS systemShare.ShareController，show() 返回 Promise&lt;void&gt;，另有 on('shareCompleted') 与 on('dismiss') 事件。
+  - 例外：on('shareCompleted') 从 API 18 起才有（show() 与 on('dismiss') 从 API 11 起）；工程兼容的最低版本低于 API 18 时只拿得到面板关闭，区分不了完成和取消，此时照第 3 步把这一差异记为缺口，不把 dismiss 当作分享成功。
 - [源端“先读当前系统值、再按位移增量写回”的手势（如亮度）分别映射读写两侧；异步读取在页面就绪时预读基线](lesson-33791daf74fc4298779e.lesson.md)
   - 时机：界面实现阶段，把源端按下时读取窗口亮度等系统值、移动时按增量写回的手势迁到鸿蒙时
   - 情境：源端手势在 ACTION_DOWN 读取窗口当前亮度，未覆写时回退系统亮度设置，移动时按位移增量写回窗口；规格只给出写入接口（setWindowBrightness），读取侧要实现者确定。

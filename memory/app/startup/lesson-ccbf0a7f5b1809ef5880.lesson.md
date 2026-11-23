@@ -1,6 +1,6 @@
 # 首屏依赖异步装配的服务时，用可等待、失败可复位的就绪门，await 后再计算路由；读到空服务不静默沿用默认路由
 
-ID：`lesson-ccbf0a7f5b1809ef5880` · 版本：1
+ID：`lesson-ccbf0a7f5b1809ef5880` · 版本：2
 
 [本主题](index.md)
 
@@ -11,6 +11,10 @@ ID：`lesson-ccbf0a7f5b1809ef5880` · 版本：1
 ## 适用情境
 
 EntryAbility.onCreate 以不等待的方式启动异步装配（先 await 数据库等初始化再写服务槽），随即 loadContent 入口页；首屏在 onReady 同步读取服务槽并按启动决策路由；启动 ViewModel 有指向首屏自身的默认路由。
+
+## 例外与边界
+
+- 工程是等装配的 Promise 完成后才调用 windowStage.loadContent 加载入口页的，首屏出现时服务已经就绪，不需要再加就绪门；这时只保留第 3 步对空服务和路由仍等于首屏的失败处理。
 
 ## 原因
 

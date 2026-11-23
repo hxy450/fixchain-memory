@@ -30,12 +30,15 @@
 - [源端依赖缓冲态、缓冲位或多卡共享播放器时用 AVPlayer + XComponent，不选 ArkUI Video 组件](lesson-cf077549fd5c1fa1a49a.lesson.md)
   - 时机：规格提取与界面、功能实现阶段，为视频查看器与列表内嵌视频选定播放器路线，并映射缓冲状态、缓冲位置、共享播放器与前后台暂停时
   - 情境：源端用 ExoPlayer/media3：Player.Listener 区分 BUFFERING/READY、轮询 bufferedPosition、Lifecycle ON_PAUSE/ON_RESUME 暂停恢复，列表内多张卡共享一个播放器；目标决策基线写 AVPlayer，但页面规格或先生成的页面把 Video 组件列为可选或先例。
+  - 例外：AVPlayer 的 on('bufferingUpdate') 只在网络播放场景上报；源端播放的是本地文件或本地 fd 时，第 2 步的缓冲态、缓冲位映射拿不到数据，不能单凭它选路线，按共享实例、前后台暂停恢复等其余能力判断；源端这些能力都没用到时，原有的 Video 组件实现不必改。
 - [源端同一 release() 用在不同作用域时，目标封装拆成两个方法：重载前只释放实例并作废令牌，宿主销毁时才清空宿主 context 与事件](lesson-1a3150939a5e45c02b0e.lesson.md)
   - 时机：服务层实现阶段，把源端播放器等资源的释放调用（重载开头丢弃旧实例、宿主销毁时全清）映射到目标封装类的释放方法时
   - 情境：源端在 loadMusic 一类重载方法开头用 player.release(); player = null 只丢弃旧实例，宿主引用只在整体 release() 中置空；目标把播放器实例、宿主 context、代数令牌封装进一个通道类，由同一类提供释放方法。
 - [源端退后台不停播时，AVPlayer 接入 AVSession 与音频长时任务，并声明后台模式与权限](lesson-598d3bd04a676dfa11ae.lesson.md)
   - 时机：规格提取阶段为 MediaPlayer/ExoPlayer 写 AVPlayer 映射行与生命周期验收时；服务实现阶段接入 AVPlayer，并向配置写者交接 module.json5 声明时
   - 情境：源端在页面或宿主里内联播放音频（录音附件等），宿主 onPause/onStop 不调用 pause/stop/release，只有显式停止、播完或退出才停，退后台后继续播到结束；目标 AVPlayer 未接 AVSession、未申请长时任务，module.json5 也没有 backgroundModes 与 KEEP_BACKGROUND_RUNNING。
-- [视频页按对应源 Activity 绑定 surface，XComponent 按视频宽高比内接](lesson-6b4950ca1655ae7bcb8f.lesson.md)
+  - 例外：AVPlayer 没有另设 audioRendererInfo 时，纯音频源的 usage 默认是 STREAM_USAGE_MUSIC（含视频的源默认 STREAM_USAGE_MOVIE），都属于媒体类，第 2 步的 AVSession 不能省；只有工程已把 usage 设成媒体类、游戏类以外的类型时，才只需音频播放类长时任务、不必接 AVSession。不要为省掉 AVSession 去改原有的 usage。
+- [视频页按对应源 Activity 绑定 surface，源端等比适配时 XComponent 按视频宽高比内接](lesson-6b4950ca1655ae7bcb8f.lesson.md)
   - 时机：功能实现阶段，移植视频播放页的 surface 绑定时机与画面尺寸时
   - 情境：源新版播放视图在控制器就绪后即挂接播放器、默认等比适配，旧版页另有“surface 就绪且 PLAYING”双守卫；目标用 XComponent(SURFACE) 加共享 AVPlayer 引擎。
+  - 例外：源端 PlayerView 设了 resize_mode（fill、zoom、fixed_width、fixed_height）或源页本来就铺满拉伸时，按源端那一种映射，不一律改成内接；裁切铺满对应 AVPlayer 的 VIDEO_SCALE_TYPE_FIT_CROP。；工程已把 AVPlayer.videoScaleType 设为 VIDEO_SCALE_TYPE_SCALED_ASPECT（API 20 起，等比缩放、短边居中）时，平台已经按宽高比内接，XComponent 可以铺满根区域，不必再按宽高比计算尺寸。

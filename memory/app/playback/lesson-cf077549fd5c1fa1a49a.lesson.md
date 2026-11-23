@@ -1,6 +1,6 @@
 # 源端依赖缓冲态、缓冲位或多卡共享播放器时用 AVPlayer + XComponent，不选 ArkUI Video 组件
 
-ID：`lesson-cf077549fd5c1fa1a49a` · 版本：1
+ID：`lesson-cf077549fd5c1fa1a49a` · 版本：2
 
 [本主题](index.md)
 
@@ -11,6 +11,10 @@ ID：`lesson-cf077549fd5c1fa1a49a` · 版本：1
 ## 适用情境
 
 源端用 ExoPlayer/media3：Player.Listener 区分 BUFFERING/READY、轮询 bufferedPosition、Lifecycle ON_PAUSE/ON_RESUME 暂停恢复，列表内多张卡共享一个播放器；目标决策基线写 AVPlayer，但页面规格或先生成的页面把 Video 组件列为可选或先例。
+
+## 例外与边界
+
+- AVPlayer 的 on('bufferingUpdate') 只在网络播放场景上报；源端播放的是本地文件或本地 fd 时，第 2 步的缓冲态、缓冲位映射拿不到数据，不能单凭它选路线，按共享实例、前后台暂停恢复等其余能力判断；源端这些能力都没用到时，原有的 Video 组件实现不必改。
 
 ## 原因
 

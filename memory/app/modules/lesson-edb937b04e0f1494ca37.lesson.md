@@ -1,6 +1,6 @@
 # 页面迁入或在 HAR 之间移动时带走资源闭包：静态 $r 与按名取资源都要在本模块或已声明依赖中可解析
 
-ID：`lesson-edb937b04e0f1494ca37` · 版本：1
+ID：`lesson-edb937b04e0f1494ca37` · 版本：2
 
 [本主题](index.md)
 
@@ -11,6 +11,11 @@ ID：`lesson-edb937b04e0f1494ca37` · 版本：1
 ## 适用情境
 
 多模块工程（壳 HAP + HAR）里页面或组件移入某个 HAR；页面用 $r('app.string/media/color.x') 或 getStringByNameSync/localized('x') 使用资源，定义可能仍只在壳模块、AppScope 或另一个 feature；整包构建会合并资源，只有按模块分析才报 Unknown resource name。
+
+## 例外与边界
+
+- 复制进 HAR 的资源不要沿用壳模块或 AppScope 里已有、但取值不同的名称：整包合并时 AppScope、HAP 自身的同名资源优先于 HAR，HAR 里的值在运行时会被覆盖；取值完全相同的才可以同名。
+- 壳模块、AppScope 或原 feature 里的资源还被留在原处的页面引用时，只复制、不删除原条目；确认原处已无引用后才整体迁走。
 
 ## 原因
 

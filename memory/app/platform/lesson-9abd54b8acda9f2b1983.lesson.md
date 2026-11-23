@@ -1,6 +1,6 @@
 # 源端 await 分享结果再提示时，systemShare 的 show() 只代表面板已拉起：按 shareCompleted/dismiss 结算成功与取消
 
-ID：`lesson-9abd54b8acda9f2b1983` · 版本：2
+ID：`lesson-9abd54b8acda9f2b1983` · 版本：3
 
 [本主题](index.md)
 
@@ -11,6 +11,10 @@ ID：`lesson-9abd54b8acda9f2b1983` · 版本：2
 ## 适用情境
 
 源代码先 await 插件的分享调用（如 Capacitor Share.share），之后弹成功提示、catch 中弹失败提示；目标用 HarmonyOS systemShare.ShareController，show() 返回 Promise<void>，另有 on('shareCompleted') 与 on('dismiss') 事件。
+
+## 例外与边界
+
+- on('shareCompleted') 从 API 18 起才有（show() 与 on('dismiss') 从 API 11 起）；工程兼容的最低版本低于 API 18 时只拿得到面板关闭，区分不了完成和取消，此时照第 3 步把这一差异记为缺口，不把 dismiss 当作分享成功。
 
 ## 原因
 

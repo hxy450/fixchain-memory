@@ -1,6 +1,6 @@
 # 源端“getLast(Custom)NonConfigurationInstance 为空才按启动参数建立状态”只在配置变化重建时取回实例：目标按“本次是否由配置变化重建”区分，正常进入一律按入口参数分支，不用单例是否存在代替
 
-ID：`lesson-ed571550c44efdeb321e` · 版本：1
+ID：`lesson-ed571550c44efdeb321e` · 版本：2
 
 [本主题](index.md)
 
@@ -11,6 +11,10 @@ ID：`lesson-ed571550c44efdeb321e` · 版本：1
 ## 适用情境
 
 源 Activity 未声明 configChanges，用 onRetain(Custom)NonConfigurationInstance 与 getLast(Custom)NonConfigurationInstance 跨配置变化保留对象，该对象可能同时是静态单例（只在退出时 destroy）；目标页面不因配置变化重建，单例跨页面常驻，同一页面有多个入口模式（如新开与续局）。
+
+## 例外与边界
+
+- 源 onCreate 另外还按 savedInstanceState（进程被回收后重建时非空）恢复状态的，那条路径上取回保留实例同样为空，但它不是“正常进入”：把它单独保留为恢复分支，不并进按入口参数新建的分支
 
 ## 原因
 

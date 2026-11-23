@@ -1,6 +1,6 @@
 # ArkTS intl.NumberFormat 用 style: 'currency' 时必须给 currency 代码，不会像 Java getCurrencyInstance 那样按 locale 推导币种
 
-ID：`lesson-19cedec8ad1bc4b08b2c` · 版本：1
+ID：`lesson-19cedec8ad1bc4b08b2c` · 版本：2
 
 [本主题](index.md)
 
@@ -15,10 +15,11 @@ ID：`lesson-19cedec8ad1bc4b08b2c` · 版本：1
 ## 例外与边界
 
 - 应用需要多币种或按用户地区切换币种时，不能用固定前缀代替格式化器
+- 基线显示 $ 而 currencyDisplay 默认的 symbol 显示成 US$ 时，先改用 currencyDisplay: 'narrowSymbol'（文档以 USD 为例：symbol 为 -US$12,300.00，narrowSymbol 为 -$12,300.00），保留格式化器的分组和小数规则；它也拿不到基线形式时，才按第 2 步直接格式化。
 
 ## 原因
 
-ES Intl 与 @ohos.intl 声明都规定 style 为 currency 时必须提供 ISO-4217 的 currency，没有默认值；省略后当前运行时退化为普通数字（4.99），不是本地货币串。补上 USD 后，在非美区系统语言下又可能显示 US$ 而不是基线的 $。来源中巡检修复者已读到这两处声明，也确认查不到 region→币种接口，仍删掉 currency 来表示“随 locale”，价格从此没有货币符号；返修先补 USD 得到 US$，最后按基线显示改为固定 $ 前缀加两位小数。
+ES Intl 的声明规定 style 为 currency 时必须提供 ISO-4217 的 currency、没有默认值；@ohos.intl 的声明和文档只写 currency 须符合 ISO-4217、需配合 style 为 currency 使用，也没有按区域推导的默认值；省略后当前运行时退化为普通数字（4.99），不是本地货币串。补上 USD 后，在非美区系统语言下又可能显示 US$ 而不是基线的 $。来源中巡检修复者已读到这两处声明，也确认查不到 region→币种接口，仍删掉 currency 来表示“随 locale”，价格从此没有货币符号；返修先补 USD 得到 US$，最后按基线显示改为固定 $ 前缀加两位小数。
 
 ## 做法
 

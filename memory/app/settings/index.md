@@ -13,9 +13,11 @@
 - [onPreferenceChange 返回 true 即接受并持久化新值：其中发起的验证按源顺序先落值再补偿，取消不回滚](lesson-8b84279c4ecbeaf26e3e.lesson.md)
   - 时机：设置页实现阶段，把 Preference 的 onPreferenceChange 监听（含其中发起的验密、确认弹窗）翻译成目标开关回调时；规格提取阶段描述这类联动流程时
   - 情境：源端在 onPreferenceChange 里发起异步验证后立即 return true，验证成功的回调只做补偿动作（如再次 setChecked 同值），取消没有回滚分支；目标用受控 Toggle 与回调实现，写者倾向“先回滚、验证成功才落值”。
+  - 例外：源端这项 Preference 设了 android:persistent="false" 或没有 key 时，返回 true 只更新这项的显示状态、不写入偏好；目标照样先更新开关显示，但不新增一条持久化写入。
 - [同一偏好键在不同读点用不同缺省值时按读点保留，不收敛成键常量上的单一默认](lesson-0c355313bc2e9e0cb7ab.lesson.md)
   - 时机：偏好键表与访问器设计阶段，以及页面实现中修改某个偏好读取的缺省值时
   - 情境：源端同一键在不同调用点以不同 defValue 读取（如过滤逻辑读 false、菜单显隐读 true）；目标准备在键常量或单一访问器里集中定义一个默认值，键表或规格摘要只写了一个缺省。
+  - 例外：源端启动时调用 PreferenceManager.setDefaultValues 把偏好 XML 里各项的 android:defaultValue 写入存储的，这些键在首次启动后已经有值，读点缺省只在写入之前起作用；目标要在首次启动时同样写入这批初值，读点缺省照样按读点保留，不能拿 XML 初值替换读点缺省，也不能因为保留了读点缺省就省掉初值写入。
 - [源端 SharedPreferences.Editor 累积 put 后一次 commit 的流程（恢复、导入），目标先暂存、全部校验通过后再 put 并 flush：preferences.putSync 立即改共享实例，中途失败不能留下部分写入](lesson-24bc4929b771a9a33ef4.lesson.md)
   - 时机：数据层实现阶段，迁移 Editor 批量写入后 commit/apply 的恢复或导入流程时
   - 情境：源端遍历输入逐键 editor.putX，遇到未知键或格式错误时抛出，末尾才 commit；目标准备逐键 putSync 到共享 preferences 实例。
@@ -23,6 +25,7 @@
 - [源端用 getString(key, null) 区分缺键、空串又是合法值时，偏好封装提供 has 判断，不以空串作缺省哨兵](lesson-463f8ca86a0d06dd5022.lesson.md)
   - 时机：数据层与设置实现阶段，迁移以 null 默认值区分“键不存在”的偏好读取（历史列表、可选路径等）时
   - 情境：源端 SharedPreferences.getString(key, null) 只把缺键当作不存在，空串是合法值（例如表示根目录或默认位置）；目标偏好封装只提供 get(key, def)，没有存在性判断。
+  - 例外：源端写入一侧用 putString(key, null) 清除条目时，那等同删除这个键；目标对应 delete/deleteSync，不改写成存空串——空串在这里是合法值，存进去会被当成有效条目读回。
 - [源端选项只经 setter 改会话字段、不写持久偏好时，目标落成会话态并接到读取它的流程，不新建偏好键](lesson-372d4a11039d986a573d.lesson.md)
   - 时机：规格提取阶段整理“读写偏好键”清单，以及实现与接线阶段为弹层或设置选项确定写入目标（持久偏好还是会话状态）时
   - 情境：源端选项回调里写偏好的 editor.putString 被注释或不存在，只调用应用接口的 setXxx 改会话字段，业务流程经对应 getter 读取；目标的偏好键表、会话状态与应用接口由不同切片产出，规格可能把该项列入持久键或引用并不包含它的权威键表，实现者在目标端找不到对应的会话 setter。

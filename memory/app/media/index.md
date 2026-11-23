@@ -9,9 +9,11 @@
 - [SaveButton 授权后的回调里只做快速写入：下载等耗时准备放在点击之前](lesson-089bb378b1ec034a3e84.lesson.md)
   - 时机：实现或改造 SaveButton 保存链（如把多步流程改成主按钮直接保存）时
   - 情境：页面用 SaveButton 临时授权经 photoAccessHelper 写系统相册；保存前需要下载或缓存网络文件；原链路先准备好文件再显示或启用 SaveButton。
+  - 例外：把准备工作移出回调时，回调里非 SUCCESS 的分支要保留：首次点击会先弹系统授权弹窗，用户取消或授权失败时回调结果为 TEMPORARY_AUTHORIZATION_FAILED（开启 userCancelEvent 后取消为 CANCELED_BY_USER），这时不写相册，并保留原有的失败或取消提示，不当作已保存
 - [SaveButton 的底色与圆角设在控件自身，不设透明底再靠外层容器画外观](lesson-e1211056a34f58403e3a.lesson.md)
   - 时机：界面实现阶段，用 SaveButton 等安全控件替代源端自绘样式按钮（渐变、半透明胶囊、圆角描边）时
   - 情境：源端主操作按钮带渐变或半透明底、圆角或描边；迁移要求改成 SaveButton 安全控件（文案只能用系统预设，样式能力受限，如不支持渐变），实现者打算让外层容器画外观、控件自身设 Color.Transparent。
+  - 例外：源端是半透明底时不必改成纯色：背景色高八位的 α 不低于 0x1a 的半透明色直接设在 SaveButton 上就会保留；只有 α 低于 0x1a（含 Color.Transparent）时才会被系统改成不透明
 - [从图库选图用系统 PhotoViewPicker 并复制进应用目录：一次性处理放缓存，要写进持久配置的复制到 filesDir 并校验非空；不以申请 READ_IMAGEVIDEO 读媒体库或经权限未接通的自建相册页实现](lesson-ad1db0aa0434c2e766fd.lesson.md)
   - 时机：平台能力映射与实现阶段，为“从相册选择图片导入”选择 HarmonyOS 读取方式与权限声明时，包括在 Flutter 本地兼容插件中实现选图时；为背景等持久配置接入“从相册选一张图”并保存结果时
   - 情境：源端经媒体库查询（MediaStore，或 photo_manager 一类插件）列出并读取相册图片，依赖媒体库读写权限；目标应用为普通应用，功能只需用户主动选择的图片。 也包括选出的图片要作为背景等持久配置反复读取，而工程里另有依赖 getAlbums 全量查询、带未完成权限或相册绑定 TODO 的自建选择页。
@@ -37,13 +39,16 @@
 - [本地文件路径接到 ArkUI Video 前规范成 file:// URI，并分清缓存接口返回的是路径还是播放地址](lesson-2b3d45c1a89dc1ead7e3.lesson.md)
   - 时机：页面转换与跨页接线阶段，把路由参数或缓存/预载接口给出的本地文件接到 Video src 时
   - 情境：源端把缓存文件路径交给第三方播放器 setUrl(path)（其内部把本地文件转成 Uri）；目标用 ArkUI Video；工程缓存单例可能同时提供返回裸沙箱路径和返回 file:// 播放地址的两个方法。
+  - 例外：已经带 file:// 前缀的播放地址、网络地址和 $rawfile 资源原样传入，不再补前缀；把沙箱路径转成 URI 时优先用 fileUri.getUriFromPath，Video 文档写明的形式是 file://&lt;bundleName&gt;/&lt;沙箱路径&gt;，手工拼接的结果要和这个形式一致
 - [本地音频导入用 AudioViewPicker 并复制进沙箱；photoAccessHelper 只覆盖图片和视频，不作为音频来源](lesson-62ac5e65ac4aa51128bd.lesson.md)
   - 时机：平台能力映射与实现阶段，为 Android MediaStore 本地音频扫描选择 HarmonyOS 读取方式与权限链时；编译修复遇到缺失的媒体类型枚举时
   - 情境：源端申请 READ_EXTERNAL_STORAGE/READ_MEDIA_AUDIO 后查询 MediaStore.Audio 列出本地音频；目标受“不申请图片/视频媒体权限、优先 picker”约束，候选方案涉及 photoAccessHelper(MediaLibraryKit)、READ_AUDIO 与 AudioViewPicker。
+  - 例外：换成 AudioViewPicker 后要保留源端一次拿到多首音频的能力：AudioSelectOptions.maxSelectNumber 不设时只能选 1 首，要按需设大（上限 500）；select 返回的 URI 只有临时只读权限、应用退到后台就失效，复制进沙箱要在拿到结果后立即完成，不只保存 URI
 - [源端写公共目录并做媒体扫描的产物，目标改落沙箱后每条链路都要写出用户可见的导出步骤](lesson-b59097ee968fe827f70d.lesson.md)
   - 时机：规格提取阶段，把源端下载或导出产物的落点及“沙箱 + picker 导出”替代方案映射到各条业务链时；实现者把公共目录换成沙箱路径时
   - 情境：源端申请 WRITE_EXTERNAL_STORAGE 写公共目录并发 ACTION_MEDIA_SCANNER_SCAN_FILE，使产物在文件管理或媒体库中可见；目标不申请媒体权限，改为下载到应用沙箱；同一功能中可能只有某一条链写了 DocumentViewPicker 导出。
+  - 例外：产物是图片或视频、源端媒体扫描的目的是让它出现在相册里时，导出步骤要写进图库：用保存安全控件或授权弹窗（showAssetsCreationDialog）保存，同样不申请媒体写权限；DocumentViewPicker.save 只把文件存到用户选的目录，不能替代进相册这一可见性
 - [源端推进后主动预取后续图片时，目标用图片解码真实预取并限定缓存，不以 Image 组件缓存替代或只在差异清单里注销](lesson-cde53c6eab199d1262b2.lesson.md)
   - 时机：ViewModel 或页面逻辑迁移阶段，处理源端图片预加载、缓存预热等性能行为，决定实现、平台替代还是登记缺口时
   - 情境：源端 ViewModel 在加载或每次推进后按规则挑出后续若干项（如跳过已处理、已跳过项和视频）并主动预取（如 Coil imageLoader.enqueue），规格含对应的性能验收项；目标页面只用 Image 组件按需显示当前项，没有独立的预加载服务。
-  - 例外：已有批准的决策放弃该性能行为，并在迁移报告或占位登记中留有记录
+  - 例外：已有批准的决策放弃该性能行为，并在迁移报告或占位登记中留有记录；第 1 步的 createImageSource(uri) 只接受应用沙箱路径：后续项是媒体库 URI 时先用 fileIo 按 URI 打开取得 fd，再用 createImageSource(fd) 解码；是网络地址时先下载进沙箱再解码，不把这类地址直接传给 uri 重载

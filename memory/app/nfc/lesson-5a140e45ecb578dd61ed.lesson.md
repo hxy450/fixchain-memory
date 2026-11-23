@@ -1,16 +1,20 @@
 # NFC 能力前置检查按源端三分支迁移：不支持、已关闭（打开系统 NFC 设置）、可用分别建模，不用一个布尔可用门折叠
 
-ID：`lesson-5a140e45ecb578dd61ed` · 版本：1
+ID：`lesson-5a140e45ecb578dd61ed` · 版本：2
 
 [本主题](index.md)
 
 ## 何时使用
 
-规格提取与服务、ViewModel 实现阶段，把源端读卡入口前的 NFC 能力检查转写为服务接口、状态枚举、提示文案与验收条款时
+规格提取与服务、ViewModel 实现阶段，把源端读卡入口前的 NFC 能力检查（源端分别判断设备不支持与开关关闭）转写为服务接口、状态枚举、提示文案与验收条款时
 
 ## 适用情境
 
 Android 入口先判 NfcAdapter 是否为 null（设备不支持，提示后不导航），再判 isEnabled()（开关关闭时跳 Settings.ACTION_NFC_SETTINGS，返回后需再次点击），都通过才进入读卡；目标以 HarmonyOS 的 canIUse 系统能力与 nfcController 开关状态实现；用来取证的设备可能只覆盖其中一种结果（如测试机不支持 NFC）。
+
+## 例外与边界
+
+- 源端入口只做了其中一项检查（例如只判 NfcAdapter 是否为 null、没有判开关并跳设置页）时，按源端实际有的分支建模，不补出源端没有的分支和提示。
 
 ## 原因
 
@@ -20,7 +24,7 @@ Android 入口先判 NfcAdapter 是否为 null（设备不支持，提示后不�
 
 1. 规格按源码分支逐一写服务接口、状态与验收：不支持 → 原提示且不导航；已关闭 → 打开系统 NFC 设置页并提示返回后再试；可用 → 进入读卡。标注“源:某函数()”的条款对照该函数全部 if/else 写全；设备只观察到部分分支时，其余仍按源码契约保留。
 2. 服务层拆成可区分的结果（如 isSupported() 与开关状态、openSettings()，或返回 unsupported/disabled/available），调用异常单独处理；ViewModel 为每种结果设独立状态与反馈，不复用“不支持”文案。
-3. 关闭分支用目标 SDK 的设置页接口实现（来源在 API 24 用 settings.openNfcSettingsPage）；实现时发现规格缺这一分支，按源码实现或作为阻塞缺口写进回执交裁决，不并入相邻分支。
+3. 关闭分支用目标 SDK 的设置页接口实现（来源在 API 24 用 settings.openNfcSettingsPage；该接口 API 24 起提供，只在 Phone、Tablet、Wearable 上生效，目标 SDK 低于 API 24 时把这一分支作为缺口回报）；实现时发现规格缺这一分支，按源码实现或作为阻塞缺口写进回执交裁决，不并入相邻分支。
 
 来源支持：1 张卡 · 1 次迁移 · 1 个应用
 

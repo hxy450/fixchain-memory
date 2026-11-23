@@ -1,16 +1,20 @@
 # CameraKit 会话先加齐输入与预览、拍照（录像时加视频）输出再 commitConfig，不提交仅含输入的会话、不在运行中惰性挂输出
 
-ID：`lesson-1c5ea21b7b8c1c2615bd` · 版本：1
+ID：`lesson-1c5ea21b7b8c1c2615bd` · 版本：2
 
 [本主题](index.md)
 
 ## 何时使用
 
-相机功能实现与跨文件接线阶段，为 CameraKit PhotoSession/VideoSession 确定输入输出组合、提交时机、录像档位与录像中拍照入口时
+相机功能实现与跨文件接线阶段，为 CameraKit PhotoSession/VideoSession 确定输入输出组合、提交时机、录像档位与录像中拍照入口时（源端在创建会话时一次传入全部输出 surface）
 
 ## 适用情境
 
 源端 Camera2 createCaptureSession 一次传入预览 surface、拍照 ImageReader 及录像时的录制 surface；目标用 beginConfig → addInput/addOutput → commitConfig → start 配置会话，用 AVRecorder 的输入 surface 建 VideoOutput；开流前要读取能力，或拍照与录像切换要重建会话；源端按硬件等级推出“录像中拍照”一类能力位。
+
+## 例外与边界
+
+- “加齐”以源端该状态的 surfaces 清单为准：源端会话只有预览（如只取景、扫码不拍照），或录像态只在设备支持录像中拍照时才带拍照 surface 的，目标照源端配，不额外加拍照输出。
 
 ## 原因
 
