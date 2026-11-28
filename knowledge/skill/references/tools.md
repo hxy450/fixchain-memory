@@ -1,6 +1,6 @@
 # 工具用法和已知限制
 
-`scripts/` 下八个脚本都只用 Python 标准库（`sync_ohdocs.py` 和 `check.py --docs` 调 git），都只读（`render.py --out`、`candidates.py --out` 只写指定的地方）。本机路径一律从参数或环境变量来，脚本里不写。下面尖括号里换成自己机器上的路径。
+`scripts/` 下十个脚本都只用 Python 标准库（`sync_ohdocs.py` 和 `check.py --docs` 调 git），都只读（`render.py --out`、`candidates.py --out`、`publish_plan.py --out` 只写指定的地方，`gate.py readme` 只改 `knowledge/README.md` 的覆盖表）。本机路径一律从参数或环境变量来，脚本里不写。下面尖括号里换成自己机器上的路径。
 
 ## 1 常用命令
 
@@ -18,9 +18,19 @@ py -3.12 -B -X utf8 scripts/android_res.py attr <名字> [--theme <主题> …] 
 py -3.12 -B -X utf8 scripts/check.py <知识文件或目录 …> --memory <memory> --require-new --docs <文档同步目录> [--app-name <被迁移应用名> …]
         [--sources --oh-ets <鸿蒙 SDK>/openharmony/ets --hms-ets <鸿蒙 SDK>/hms/ets --android-platforms <安卓 SDK>/platforms --android-src <安卓 SDK>/sources/android-<N>]
 py -3.12 -B -X utf8 scripts/render.py <知识文件或目录> [--memory <memory>] [--out <目录>]
+py -3.12 -B -X utf8 scripts/gate.py plan  --store <store> --base <归并开始时的版本> --knowledge <仓库的 knowledge/> [--json]
+py -3.12 -B -X utf8 scripts/gate.py check --store <store> --base <归并开始时的版本> --knowledge <仓库的 knowledge/> --memory <最新版本的导出>
+        [--since YYYY-MM-DD] [--lessons <经验号> …] [--docs … --app-name … --sources … 等，原样传给 check.py]
+py -3.12 -B -X utf8 scripts/gate.py readme --repo <仓库>
+py -3.12 -B -X utf8 scripts/publish_plan.py --store <store> --knowledge <仓库的 knowledge/> --out <提案.json> [--lessons <经验号> …]
 ```
 
-每个脚本 `--help` 打印用法。
+每个脚本 `--help` 打印用法。版本号、经验号可以写 8 位以上的前缀。
+
+- `gate.py plan`：对照 `--base` 和 HEAD 两个快照，把变了的经验分成新增 / 正文改了 / 只补来源（topic 变了的标「换了目录」）/ 退役，列出每条现有知识文件的格式（没有 / 旧格式 / 新格式及 `verified_on`）和该做什么（入口 ① 的 1–3）。只读；退出码 0，参数或 store 读不了时 2。
+- `gate.py check`：入口 ① 的门槛。对象是新增和正文改了、现在 active 的经验（入口 ② 用 `--lessons` 指定）：知识文件在、新格式、`verified_on` 不早于 `--since`（默认 = base 之后第一个快照的 `created_at` 换成本机时区的日期）；对着 `--memory` 的正文没有未发布的改句（判法同 `render.py` 的 `published`）；`check.py --require-new --memory …` 加透传选项退出码 0；`shadow/exclude.json`（仓库里有才核）的经验都在 HEAD 里且 active。`--memory` 给 `export` 的输出目录本身（里面直接是 `index.md` 和各主题目录）。退出码 0 = 全过，1 = 有没过的（输出里逐项写明），2 = 参数或 store 读不了。输出的几行可以直接贴进 REPORT.md。
+- `gate.py readme`：重生成 `knowledge/README.md` 的逐条覆盖表（只动表头下面以「| `lesson-…` |」开头的那些行，按主题路径、经验号排），表外的数字和并入记录照它打印的提示手改。退出码 0 = 写好（或本来就一样，打印「README 没变」），1 = 表头找不到，或有知识文件对应的经验不是 active / 不在 `memory/`（列出，不进表）。
+- `publish_plan.py`：「并入经验库」第 2 步。HEAD 里 active、知识文件里有未发布改句的经验，取全部字段套上改句，写成 `{"base_revision": HEAD, "upsert": […], "retire": []}`；每处原句在这条经验的各字段里合起来要恰好一处（落在做法、例外、检查的某一项里的新句不能带换行），否则逐处列出、不写文件。退出码 0 = 写好了，或没有未发布的改句（打印「无」、不写文件）；1 = 有原句对不上；2 = 参数或 store 读不了。之后照第 7 节 apply、lint、export。
 
 ## 2 两个检查脚本、两个渲染脚本的分工
 

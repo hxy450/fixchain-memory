@@ -24,9 +24,9 @@ description: 给安卓 → 鸿蒙（ArkTS）迁移经验配「已核实的平台
 
 **归并时写新句的人要做的（归并维护 skill 第 3 步）：** 新卡要并进已有知识文件的经验，先读这条经验渲染后的知识段（`scripts/render.py <知识目录>/lesson-<id>.json --memory <归并前的阅读包>`），再写新句；新句里的具体值、接口照 `references/rules.md` T4b–T4d 写。新句和已核实的事实对不上的，记进归并的 REPORT.md「交知识裁决」（经验号、新句、对不上的那条事实），不凭记忆改。这几条交给写这条经验的人，当 doubts（V10）照 U1 裁决成改句（任务书 `briefs/write-new-cards.md` 的 `{交知识裁决}`）。新建的经验没有知识，照常写。
 
-**取正文：** 用作者脚本把刚 apply 的版本开发版导出到一个新的临时目录：`python scripts/memory.py export --store <store> --out <临时目录> --link-cards`（作者 skill 的脚本；export 只读 store，输出目录必须是新的）。下面的 `<memory>` 都指这个临时目录下的 `memory/`；`<归并前的阅读包>` 是归并开工前库里现成的 `memory/`（或 ingest 之前先 `export --link-cards` 一份）。
+**取正文：** 用作者脚本把刚 apply 的版本开发版导出到一个新的临时目录：`python scripts/memory.py export --store <store> --out <临时目录>/memory --link-cards`（作者 skill 的脚本；export 只读 store，输出目录必须是新的）。下面的 `<memory>` 都指这个临时目录下的 `memory/`；`<归并前的阅读包>` 是归并开工前库里现成的 `memory/`（或 ingest 之前先 `export --link-cards` 一份）。
 
-**一次归并里三种经验怎么做。** 先分类：提案 `upsert` 里没有 `id` 的是新增；有 `id` 的跑 `scripts/candidates.py --from-case-files links --memory <memory> --base-memory <归并前的阅读包> lesson-<id>`，「改动的部分」不是「无」的是加了句子，是「无」（只多了来源卡）的是只补来源。
+**一次归并里三种经验怎么做。** 先分类：`scripts/gate.py plan --store <store> --base <归并开始时的版本> --knowledge <知识目录的上一级，即仓库的 knowledge/>` 对照两个版本的 store 快照，列出新增、正文改了、只补来源、退役四类和每条现有知识文件的格式；正文改了哪几部分，再用 `scripts/candidates.py --from-case-files links --memory <memory> --base-memory <归并前的阅读包> lesson-<id>` 看「改动的部分」。
 
 1. **新增：全做。** 下面「共用步骤」全走一遍；候选从卡收，卡全算新卡。
 2. **加了句子：**
@@ -40,7 +40,7 @@ description: 给安卓 → 鸿蒙（ArkTS）迁移经验配「已核实的平台
 
 **任务书和份量：** 写的人用 `briefs/write-new-cards.md`（一人一组 3–6 条，按候选行数配平）；专门复核用 `briefs/review.md`（每人不超过约 60 条要复核的条目）；每批抽查用 `briefs/audit.md`（一批一人，没参与这批的写和复核）。
 
-**门槛：** 全部知识文件过检查脚本、错误为 0，抽查过线（安卓平台和依赖库两类里中等以上的有出入不超过一成，没有和出处相反的），才照下面「并入经验库」把知识文件拷进 `knowledge/lessons/`（改句要进正文的另写提案 apply、lint），再回到归并维护 skill 第 5 步 export。不过线的这批不进第 5 步：按抽查报出的毛病类型返工，换一个没参与过的人重抽。
+**门槛：** 全部知识文件过检查脚本、错误为 0，抽查过线（安卓平台和依赖库两类里中等以上的有出入不超过一成，没有和出处相反的），才照下面「并入经验库」把知识文件拷进 `knowledge/lessons/`、把改句发布进正文，再跑 `scripts/gate.py check`，退出码 0 才回到归并维护 skill 第 5 步 export。不过线的这批不进第 5 步：按抽查报出的毛病类型返工，换一个没参与过的人重抽。
 
 ### ② 给库里现有的经验补知识
 
@@ -74,8 +74,8 @@ description: 给安卓 → 鸿蒙（ArkTS）迁移经验配「已核实的平台
 ## 并入经验库
 
 1. 知识文件拷进 `knowledge/lessons/`；已有同名文件的（旧格式）替换。
-2. **改句进正文（要的话）：** 照库的维护流程写一份 upsert 提案——取 store 里这条经验的全部字段，把改句套进对应字段（每处 `before` 在字段里恰好一处），`evidence`、`requires`、`topic`、`status` 原样——`apply`、`lint`、`export --link-cards`（`references/tools.md` 第 7 节的注意事项）。发布以后知识文件里的改句原样留着，渲染和检查脚本认它「已发布」，不再套、不报错。不发布的改句只在渲染时套。
-3. 跑仓库的 `knowledge/check.py`（不加 `--legacy-ok`，留作评测的应用名用 `--app-name` 传）和 `knowledge/render.py`（重渲染 `knowledge/rendered/`）。
+2. **改句进正文（默认全部发布）：** `scripts/publish_plan.py --store <store> --knowledge <仓库的 knowledge/> --out <提案.json>` 取 store 里有未发布改句的经验的全部字段，把改句套进对应字段（每处 `before` 在这条经验的各字段里合起来恰好一处，否则报出、不生成提案），`evidence`、`requires`、`topic`、`status` 原样；再 `apply`、`lint`、`export --link-cards`（`references/tools.md` 第 7 节的注意事项）。发布以后知识文件里的改句原样留着，渲染和检查脚本认它「已发布」，不再套、不报错。默认全部发布的理由：交出去的经验只有一个说法，直接读阅读包的人和下一次归并看到的也是改过的正文。要上机才能定的不写成改句（进 `device_todo`）。
+3. 跑 `scripts/gate.py check`（入口 ① 必跑；入口 ② 用 `--lessons` 给这批的经验号），再跑仓库的 `knowledge/check.py`（不加 `--legacy-ok`，留作评测的应用名用 `--app-name` 传）和 `knowledge/render.py`（重渲染 `knowledge/rendered/`）；`knowledge/README.md` 的覆盖表用 `scripts/gate.py readme --repo <仓库>` 重生成，并入记录加一行。
 
 **两套脚本的分工：** `knowledge/skill/scripts/check.py`、`render.py` 是写知识的人用的，`check.py` 带 `--sources`、`--docs` 等核对本机出处的选项；`knowledge/check.py`、`knowledge/render.py` 是仓库一侧的检查和渲染，同一套新格式规则外加两种旧格式，只对仓库里的 `memory/` 核改句，不核本机出处。两个渲染脚本对新格式文件的输出逐字节相同。详见 `references/tools.md` 第 2 节。
 
